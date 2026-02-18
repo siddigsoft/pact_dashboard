@@ -5,7 +5,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import '../models/location_log_model.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
-import 'offline_data_service.dart';
+import 'offline/offline_db.dart';
+import 'offline/models.dart';
 
 class StaffTrackingService {
   final SupabaseClient _supabase;
@@ -114,7 +115,16 @@ class StaffTrackingService {
       final connectivity = await Connectivity().checkConnectivity();
       final hasConnection = connectivity != ConnectivityResult.none;
       if (!hasConnection) {
-        await OfflineDataService().queueSiteLocation(payload);
+        // Queue location update using OfflineDb
+        final offlineDb = OfflineDb();
+        final syncAction = PendingSyncAction(
+          id: 'location_${DateTime.now().millisecondsSinceEpoch}',
+          type: 'location_update',
+          payload: payload,
+          timestamp: DateTime.now().millisecondsSinceEpoch,
+          status: 'pending',
+        );
+        await offlineDb.addPendingSync(syncAction);
         return true; // queued successfully
       }
 

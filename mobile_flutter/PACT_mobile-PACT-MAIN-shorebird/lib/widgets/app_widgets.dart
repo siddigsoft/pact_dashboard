@@ -20,7 +20,7 @@ class AppSnackBar {
     VoidCallback? onAction,
   }) {
     final config = _getConfig(type);
-    
+
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Row(
@@ -31,19 +31,13 @@ class AppSnackBar {
                 color: Colors.white.withOpacity(0.2),
                 borderRadius: BorderRadius.circular(AppDesignSystem.radiusSM),
               ),
-              child: Icon(
-                config.icon,
-                color: Colors.white,
-                size: 20,
-              ),
+              child: Icon(config.icon, color: Colors.white, size: 20),
             ),
             const SizedBox(width: AppDesignSystem.spaceMD),
             Expanded(
               child: Text(
                 message,
-                style: AppDesignSystem.bodyMedium.copyWith(
-                  color: Colors.white,
-                ),
+                style: AppDesignSystem.bodyMedium.copyWith(color: Colors.white),
               ),
             ),
           ],
@@ -74,20 +68,14 @@ class AppSnackBar {
           icon: Icons.check_circle,
         );
       case SnackBarType.error:
-        return _SnackBarConfig(
-          color: AppColors.accentRed,
-          icon: Icons.error,
-        );
+        return _SnackBarConfig(color: AppColors.accentRed, icon: Icons.error);
       case SnackBarType.warning:
         return _SnackBarConfig(
           color: AppColors.accentYellow,
           icon: Icons.warning_amber_rounded,
         );
       case SnackBarType.info:
-        return _SnackBarConfig(
-          color: AppColors.primaryBlue,
-          icon: Icons.info,
-        );
+        return _SnackBarConfig(color: AppColors.primaryBlue, icon: Icons.info);
     }
   }
 }
@@ -149,23 +137,23 @@ class AppErrorDialog extends StatelessWidget {
           children: [
             // Error Icon
             Container(
-              padding: const EdgeInsets.all(AppDesignSystem.spaceLG),
-              decoration: BoxDecoration(
-                color: AppColors.accentRed.withOpacity(0.1),
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(
-                Icons.error_outline,
-                size: 48,
-                color: AppColors.accentRed,
-              ),
-            )
+                  padding: const EdgeInsets.all(AppDesignSystem.spaceLG),
+                  decoration: BoxDecoration(
+                    color: AppColors.accentRed.withOpacity(0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.error_outline,
+                    size: 48,
+                    color: AppColors.accentRed,
+                  ),
+                )
                 .animate()
                 .scale(duration: 400.ms, curve: Curves.elasticOut)
                 .shake(hz: 2, duration: 400.ms),
-            
+
             const SizedBox(height: AppDesignSystem.spaceLG),
-            
+
             // Title
             Text(
               title,
@@ -174,9 +162,9 @@ class AppErrorDialog extends StatelessWidget {
               ),
               textAlign: TextAlign.center,
             ).animate().fadeIn(delay: 200.ms),
-            
+
             const SizedBox(height: AppDesignSystem.spaceSM),
-            
+
             // Message
             Text(
               message,
@@ -185,9 +173,9 @@ class AppErrorDialog extends StatelessWidget {
               ),
               textAlign: TextAlign.center,
             ).animate().fadeIn(delay: 300.ms),
-            
+
             const SizedBox(height: AppDesignSystem.spaceLG),
-            
+
             // Actions
             Row(
               children: [
@@ -278,12 +266,10 @@ class AppSuccessDialog extends StatelessWidget {
                 size: 48,
                 color: AppColors.accentGreen,
               ),
-            )
-                .animate()
-                .scale(duration: 400.ms, curve: Curves.elasticOut),
-            
+            ).animate().scale(duration: 400.ms, curve: Curves.elasticOut),
+
             const SizedBox(height: AppDesignSystem.spaceLG),
-            
+
             // Title
             Text(
               title,
@@ -292,9 +278,9 @@ class AppSuccessDialog extends StatelessWidget {
               ),
               textAlign: TextAlign.center,
             ).animate().fadeIn(delay: 200.ms),
-            
+
             const SizedBox(height: AppDesignSystem.spaceSM),
-            
+
             // Message
             Text(
               message,
@@ -303,9 +289,9 @@ class AppSuccessDialog extends StatelessWidget {
               ),
               textAlign: TextAlign.center,
             ).animate().fadeIn(delay: 300.ms),
-            
+
             const SizedBox(height: AppDesignSystem.spaceLG),
-            
+
             // Action
             SizedBox(
               width: double.infinity,
@@ -362,7 +348,9 @@ class _LoadingDialog extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             const CircularProgressIndicator(
-              valueColor: AlwaysStoppedAnimation<Color>(AppColors.primaryOrange),
+              valueColor: AlwaysStoppedAnimation<Color>(
+                AppColors.primaryOrange,
+              ),
             ),
             if (message != null) ...[
               const SizedBox(height: AppDesignSystem.spaceMD),
@@ -462,21 +450,15 @@ class SectionHeader extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    title,
-                    style: AppDesignSystem.titleLarge,
-                  ),
+                  Text(title, style: AppDesignSystem.titleLarge),
                   if (subtitle != null) ...[
                     const SizedBox(height: 2),
-                    Text(
-                      subtitle!,
-                      style: AppDesignSystem.bodySmall,
-                    ),
+                    Text(subtitle!, style: AppDesignSystem.bodySmall),
                   ],
                 ],
               ),
             ),
-            if (trailing != null) trailing!,
+            ?trailing,
           ],
         ),
       ),
@@ -503,11 +485,11 @@ class StatusBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final config = _getStatusConfig(type);
-    
-  final horizontalPadding = compact ? 6.0 : 12.0;
-  final verticalPadding = compact ? 2.0 : 6.0;
-  final dotSize = compact ? 5.0 : 8.0;
-  final gap = compact ? 4.0 : 8.0;
+
+    final horizontalPadding = compact ? 6.0 : 12.0;
+    final verticalPadding = compact ? 2.0 : 6.0;
+    final dotSize = compact ? 5.0 : 8.0;
+    final gap = compact ? 4.0 : 8.0;
 
     return Container(
       padding: EdgeInsets.symmetric(
@@ -517,10 +499,7 @@ class StatusBadge extends StatelessWidget {
       decoration: BoxDecoration(
         color: config.color.withOpacity(0.1),
         borderRadius: BorderRadius.circular(AppDesignSystem.radiusFull),
-        border: Border.all(
-          color: config.color.withOpacity(0.3),
-          width: 1,
-        ),
+        border: Border.all(color: config.color.withOpacity(0.3), width: 1),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -536,14 +515,15 @@ class StatusBadge extends StatelessWidget {
           SizedBox(width: gap),
           Text(
             text,
-            style: (compact
-                    ? AppDesignSystem.labelSmall
-                    : AppDesignSystem.labelMedium)
-                .copyWith(
-              color: config.color,
-              fontWeight: FontWeight.w600,
-              fontSize: compact ? 10 : null,
-            ),
+            style:
+                (compact
+                        ? AppDesignSystem.labelSmall
+                        : AppDesignSystem.labelMedium)
+                    .copyWith(
+                      color: config.color,
+                      fontWeight: FontWeight.w600,
+                      fontSize: compact ? 10 : null,
+                    ),
           ),
         ],
       ),
@@ -609,10 +589,7 @@ class IconButtonWithBadge extends StatelessWidget {
                 color: AppColors.accentRed,
                 shape: BoxShape.circle,
               ),
-              constraints: const BoxConstraints(
-                minWidth: 16,
-                minHeight: 16,
-              ),
+              constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
               child: Text(
                 badgeCount! > 99 ? '99+' : badgeCount.toString(),
                 style: AppDesignSystem.labelSmall.copyWith(

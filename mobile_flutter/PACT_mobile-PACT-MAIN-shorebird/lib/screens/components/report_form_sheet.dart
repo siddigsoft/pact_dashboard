@@ -10,7 +10,9 @@ import '../../models/report_model.dart';
 import '../../models/site_visit.dart';
 import '../../services/site_visit_service.dart';
 import '../../services/storage_service.dart';
-import '../../services/offline_data_service.dart';
+import '../../services/offline/offline_db.dart';
+import '../../services/offline/models.dart';
+import 'package:connectivity_plus/connectivity_plus.dart';
 import '../../theme/app_colors.dart';
 
 class ReportFormSheet extends StatefulWidget {
@@ -112,12 +114,12 @@ class _ReportFormSheetState extends State<ReportFormSheet> {
     try {
       // Show inline progress overlay (snackbar with spinner)
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          duration: const Duration(minutes: 1),
+        const SnackBar(
+          duration: Duration(minutes: 1),
           behavior: SnackBarBehavior.floating,
           backgroundColor: AppColors.primaryBlue,
           content: Row(
-            children: const [
+            children: [
               SizedBox(
                 width: 18,
                 height: 18,
@@ -134,8 +136,8 @@ class _ReportFormSheetState extends State<ReportFormSheet> {
           ),
         ),
       );
-      final offlineService = OfflineDataService();
-      final isOnline = await offlineService.isOnline();
+      final connectivity = await Connectivity().checkConnectivity();
+      final isOnline = !connectivity.contains(ConnectivityResult.none);
 
       print('🔄 Starting report submission - Online: $isOnline');
 
@@ -175,7 +177,7 @@ class _ReportFormSheetState extends State<ReportFormSheet> {
           print('📸 Uploading ${_photoUrls.length} photos to storage...');
           final storage = StorageService();
           final reportId = reportResponse['id'];
-          final bucket = 'report_photos';
+          const bucket = 'report_photos';
 
           final List<Map<String, dynamic>> photoInserts = [];
           for (final localPath in _photoUrls) {
@@ -223,7 +225,21 @@ class _ReportFormSheetState extends State<ReportFormSheet> {
                 })
             .toList();
 
-        await offlineService.saveReportOffline(reportData);
+        final offlineDb = OfflineDb();
+        final actionId = 'report_${DateTime.now().millisecondsSinceEpoch}';
+        await offlineDb.addPendingSync(PendingSyncAction(
+          id: actionId,
+          type: 'report',
+          payload: reportData,
+          timestamp: DateTime.now().millisecondsSinceEpoch,
+          status: 'pending',
+        ));
+        await offlineDb.cacheItem(
+          OfflineDb.reportsCacheBox,
+          'reports_${widget.visit.id}',
+          data: {'reports': [reportData]},
+          ttl: const Duration(hours: 24),
+        );
         print('✅ Report saved offline for later sync');
 
         // Note: Visit status will be updated when sync happens
@@ -340,7 +356,7 @@ class _ReportFormSheetState extends State<ReportFormSheet> {
             padding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
             child: Row(
               children: [
-                Expanded(
+                const Expanded(
                   child: Text(
                     'Submit Visit Report',
                     style: TextStyle(
@@ -550,7 +566,7 @@ class _ReportFormSheetState extends State<ReportFormSheet> {
                   disabledBackgroundColor: Colors.grey.shade300,
                 ),
                 child: _isSubmitting
-                    ? Row(
+                    ? const Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           SizedBox(
@@ -563,8 +579,8 @@ class _ReportFormSheetState extends State<ReportFormSheet> {
                               ),
                             ),
                           ),
-                          const SizedBox(width: 8),
-                          const Text('Submitting...'),
+                          SizedBox(width: 8),
+                          Text('Submitting...'),
                         ],
                       )
                     : const Text('Submit Report'),

@@ -5,8 +5,6 @@ import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'dart:developer' as developer;
 import '../theme/app_colors.dart';
-import '../theme/app_design_system.dart';
-import '../widgets/app_widgets.dart';
 import '../models/site_visit.dart';
 
 class ReportPhoto {
@@ -88,18 +86,24 @@ class VisitReportDetail {
     );
   }
 
-  double? get latitude => (coordinates?['latitude'] as num?)?.toDouble();
-  double? get longitude => (coordinates?['longitude'] as num?)?.toDouble();
-  double? get accuracy => (coordinates?['accuracy'] as num?)?.toDouble();
+  double? get latitude {
+    final v = coordinates?['latitude'];
+    return v == null ? null : (v is num ? v.toDouble() : null);
+  }
+  double? get longitude {
+    final v = coordinates?['longitude'];
+    return v == null ? null : (v is num ? v.toDouble() : null);
+  }
+  double? get accuracy {
+    final v = coordinates?['accuracy'];
+    return v == null ? null : (v is num ? v.toDouble() : null);
+  }
 }
 
 class VisitReportDetailScreen extends ConsumerStatefulWidget {
   final SiteVisit visit;
 
-  const VisitReportDetailScreen({
-    super.key,
-    required this.visit,
-  });
+  const VisitReportDetailScreen({super.key, required this.visit});
 
   @override
   ConsumerState<VisitReportDetailScreen> createState() =>
@@ -153,7 +157,8 @@ class _VisitReportDetailScreenState
       if (!_hasAccess) {
         setState(() {
           _isLoading = false;
-          _error = 'Access denied. Only Admin, FOM, and ICT roles can view visit reports.';
+          _error =
+              'Access denied. Only Admin, FOM, and ICT roles can view visit reports.';
         });
         return;
       }
@@ -204,13 +209,11 @@ class _VisitReportDetailScreenState
           .eq('report_id', report.id)
           .order('created_at', ascending: true);
 
-      if (photosResponse != null) {
-        setState(() {
-          _photos = (photosResponse as List)
-              .map((p) => ReportPhoto.fromJson(p))
-              .toList();
-        });
-      }
+      setState(() {
+        _photos = (photosResponse as List)
+            .map((p) => ReportPhoto.fromJson(p))
+            .toList();
+      });
 
       if (report.submittedBy.isNotEmpty) {
         final profileResponse = await supabase
@@ -253,10 +256,10 @@ class _VisitReportDetailScreenState
   String _getSubmissionSource() {
     if (_report?.submittedVia == 'mobile') return 'Mobile';
     if (_report?.submittedVia == 'web') return 'Web';
-    
+
     if (_report?.coordinates != null) {
       final coords = _report!.coordinates!;
-      if (coords.containsKey('locked') || 
+      if (coords.containsKey('locked') ||
           (coords['accuracy'] != null && (coords['accuracy'] as num) < 50)) {
         return 'Mobile';
       }
@@ -266,11 +269,11 @@ class _VisitReportDetailScreenState
 
   Future<void> _openMap() async {
     if (_report?.latitude == null || _report?.longitude == null) return;
-    
+
     final url = Uri.parse(
-      'https://www.google.com/maps?q=${_report!.latitude},${_report!.longitude}'
+      'https://www.google.com/maps?q=${_report!.latitude},${_report!.longitude}',
     );
-    
+
     if (await canLaunchUrl(url)) {
       await launchUrl(url, mode: LaunchMode.externalApplication);
     }
@@ -280,7 +283,7 @@ class _VisitReportDetailScreenState
     setState(() {
       _selectedPhotoIndex = index;
     });
-    
+
     showDialog(
       context: context,
       barrierColor: Colors.black87,
@@ -296,7 +299,7 @@ class _VisitReportDetailScreenState
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('Visit Report'),
+        title: const Text('Visit Report'),
         backgroundColor: AppColors.primary,
         foregroundColor: Colors.white,
         actions: [
@@ -314,9 +317,7 @@ class _VisitReportDetailScreenState
 
   Widget _buildBody() {
     if (_isLoading) {
-      return const Center(
-        child: CircularProgressIndicator(),
-      );
+      return const Center(child: CircularProgressIndicator());
     }
 
     if (_error != null) {
@@ -351,7 +352,11 @@ class _VisitReportDetailScreenState
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(Icons.description_outlined, size: 48, color: Colors.grey[400]),
+              Icon(
+                Icons.description_outlined,
+                size: 48,
+                color: Colors.grey[400],
+              ),
               const SizedBox(height: 16),
               Text(
                 'No visit report found for this site.',
@@ -393,10 +398,7 @@ class _VisitReportDetailScreenState
                 padding: const EdgeInsets.only(top: 8),
                 child: Text(
                   'GPS Accuracy: ±${_report!.accuracy!.toStringAsFixed(1)}m',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.grey[600],
-                  ),
+                  style: TextStyle(fontSize: 12, color: Colors.grey[600]),
                 ),
               ),
             ],
@@ -409,7 +411,7 @@ class _VisitReportDetailScreenState
 
   Widget _buildSiteHeader() {
     final submissionSource = _getSubmissionSource();
-    
+
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -418,7 +420,7 @@ class _VisitReportDetailScreenState
           children: [
             Row(
               children: [
-                Icon(Icons.description, color: AppColors.primary),
+                const Icon(Icons.description, color: AppColors.primary),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
@@ -436,16 +438,12 @@ class _VisitReportDetailScreenState
               spacing: 8,
               runSpacing: 8,
               children: [
-                _buildChip(
-                  widget.visit.siteCode,
-                  Icons.qr_code,
-                  Colors.blue,
-                ),
+                _buildChip(widget.visit.siteCode, Icons.qr_code, Colors.blue),
                 if (submissionSource != 'Unknown')
                   _buildChip(
                     submissionSource,
-                    submissionSource == 'Mobile' 
-                        ? Icons.smartphone 
+                    submissionSource == 'Mobile'
+                        ? Icons.smartphone
                         : Icons.computer,
                     Colors.purple,
                   ),
@@ -564,10 +562,7 @@ class _VisitReportDetailScreenState
               children: [
                 Text(
                   label,
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: Colors.grey[600],
-                  ),
+                  style: TextStyle(fontSize: 11, color: Colors.grey[600]),
                 ),
                 Text(
                   value,
@@ -608,10 +603,7 @@ class _VisitReportDetailScreenState
             color: Colors.grey[100],
             borderRadius: BorderRadius.circular(8),
           ),
-          child: Text(
-            content,
-            style: const TextStyle(fontSize: 14),
-          ),
+          child: Text(content, style: const TextStyle(fontSize: 14)),
         ),
       ],
     );
@@ -793,7 +785,7 @@ class _PhotoViewerDialogState extends State<_PhotoViewerDialog> {
                 child: IconButton(
                   icon: Container(
                     padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
+                    decoration: const BoxDecoration(
                       color: Colors.black38,
                       shape: BoxShape.circle,
                     ),
@@ -821,7 +813,7 @@ class _PhotoViewerDialogState extends State<_PhotoViewerDialog> {
                 child: IconButton(
                   icon: Container(
                     padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
+                    decoration: const BoxDecoration(
                       color: Colors.black38,
                       shape: BoxShape.circle,
                     ),

@@ -87,9 +87,7 @@ class StorageService {
 
       // Upload new avatar with upsert to replace existing
       final path = '$userId/avatar';
-      await supabase.storage
-          .from(avatarBucket)
-          .uploadBinary(
+      await supabase.storage.from(avatarBucket).uploadBinary(
             path,
             imageBytes,
             fileOptions: const FileOptions(
@@ -102,13 +100,10 @@ class StorageService {
       final publicUrl = supabase.storage.from(avatarBucket).getPublicUrl(path);
 
       // Update user's profile with new avatar URL
-      await supabase
-          .from('profiles')
-          .update({
-            'avatar_url': publicUrl,
-            'updated_at': DateTime.now().toIso8601String(),
-          })
-          .eq('id', userId);
+      await supabase.from('profiles').update({
+        'avatar_url': publicUrl,
+        'updated_at': DateTime.now().toIso8601String(),
+      }).eq('id', userId);
 
       debugPrint('Profile photo uploaded successfully: $publicUrl');
       return publicUrl;
@@ -125,13 +120,10 @@ class StorageService {
       await supabase.storage.from(avatarBucket).remove(['$userId/avatar']);
 
       // Clear avatar_url in profile
-      await supabase
-          .from('profiles')
-          .update({
-            'avatar_url': null,
-            'updated_at': DateTime.now().toIso8601String(),
-          })
-          .eq('id', userId);
+      await supabase.from('profiles').update({
+        'avatar_url': null,
+        'updated_at': DateTime.now().toIso8601String(),
+      }).eq('id', userId);
 
       debugPrint('Profile photo deleted successfully');
     } catch (e) {
@@ -195,17 +187,14 @@ class StorageService {
       final timestamp = DateTime.now().millisecondsSinceEpoch;
       final path = '$userId/$documentType/$timestamp-$fileName';
 
-      await supabase.storage
-          .from(documentsBucket)
-          .uploadBinary(
+      await supabase.storage.from(documentsBucket).uploadBinary(
             path,
             fileBytes,
             fileOptions: const FileOptions(cacheControl: '3600'),
           );
 
-      final publicUrl = supabase.storage
-          .from(documentsBucket)
-          .getPublicUrl(path);
+      final publicUrl =
+          supabase.storage.from(documentsBucket).getPublicUrl(path);
 
       // Store document reference in database
       await supabase.from('user_documents').insert({
@@ -229,13 +218,11 @@ class StorageService {
     String? documentType,
   }) async {
     try {
-      var query =
-          supabase
-                  .from('user_documents')
-                  .select()
-                  .eq('user_id', userId)
-                  .order('uploaded_at', ascending: false)
-              as PostgrestQueryBuilder;
+      var query = supabase
+          .from('user_documents')
+          .select()
+          .eq('user_id', userId)
+          .order('uploaded_at', ascending: false) as PostgrestQueryBuilder;
 
       if (documentType != null && documentType.isNotEmpty) {
         final filtered = await supabase
@@ -293,17 +280,14 @@ class StorageService {
       final timestamp = DateTime.now().millisecondsSinceEpoch;
       final path = '$userId/$siteVisitId/$mediaType/$timestamp-$fileName';
 
-      await supabase.storage
-          .from(siteVisitMediaBucket)
-          .uploadBinary(
+      await supabase.storage.from(siteVisitMediaBucket).uploadBinary(
             path,
             fileBytes,
             fileOptions: const FileOptions(cacheControl: '3600'),
           );
 
-      final publicUrl = supabase.storage
-          .from(siteVisitMediaBucket)
-          .getPublicUrl(path);
+      final publicUrl =
+          supabase.storage.from(siteVisitMediaBucket).getPublicUrl(path);
 
       // Store media reference in database
       await supabase.from('site_visit_media').insert({
@@ -346,17 +330,14 @@ class StorageService {
       final fileName = path.basename(file.path);
       final filePath = folder != null ? '$folder/$fileName' : fileName;
 
-      await supabase.storage
-          .from(bucket)
-          .upload(
+      await supabase.storage.from(bucket).upload(
             filePath,
             file,
             fileOptions: const FileOptions(cacheControl: '3600', upsert: true),
           );
 
-      final String publicUrl = supabase.storage
-          .from(bucket)
-          .getPublicUrl(filePath);
+      final String publicUrl =
+          supabase.storage.from(bucket).getPublicUrl(filePath);
       return publicUrl;
     } on StorageException catch (e) {
       if (kDebugMode) {
@@ -364,7 +345,8 @@ class StorageService {
       }
       throw StorageException('Failed to upload file: ${e.message}');
     } catch (e) {
-      throw StorageException('An unexpected error occurred while uploading');
+      throw const StorageException(
+          'An unexpected error occurred while uploading');
     }
   }
 
@@ -380,7 +362,7 @@ class StorageService {
       await file.writeAsBytes(bytes);
       return file;
     } catch (e) {
-      throw StorageException('Failed to download file');
+      throw const StorageException('Failed to download file');
     }
   }
 
@@ -389,19 +371,18 @@ class StorageService {
     try {
       await supabase.storage.from(bucket).remove([path]);
     } catch (e) {
-      throw StorageException('Failed to delete file');
+      throw const StorageException('Failed to delete file');
     }
   }
 
   // List files in a bucket/folder
   Future<List<FileObject>> listFiles(String bucket, {String? folder}) async {
     try {
-      final List<FileObject> files = await supabase.storage
-          .from(bucket)
-          .list(path: folder);
+      final List<FileObject> files =
+          await supabase.storage.from(bucket).list(path: folder);
       return files;
     } catch (e) {
-      throw StorageException('Failed to list files');
+      throw const StorageException('Failed to list files');
     }
   }
 }

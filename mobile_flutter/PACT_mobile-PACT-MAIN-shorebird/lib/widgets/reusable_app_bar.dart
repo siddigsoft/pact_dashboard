@@ -265,8 +265,7 @@ class ReusableAppBar extends StatelessWidget {
       builder: (context, snapshot) {
         final profile = snapshot.data;
         final profileAvatarUrl = profile?['avatar_url'] as String?;
-        final profileName =
-            profile?['full_name'] as String? ??
+        final profileName = profile?['full_name'] as String? ??
             profile?['username'] as String? ??
             userName ??
             currentUser.email?.split('@').first ??
@@ -299,9 +298,8 @@ class ReusableAppBar extends StatelessWidget {
     String? userName,
   ) {
     final String finalUserName = userName ?? 'User';
-    final String userInitial = finalUserName.isNotEmpty
-        ? finalUserName[0].toUpperCase()
-        : 'U';
+    final String userInitial =
+        finalUserName.isNotEmpty ? finalUserName[0].toUpperCase() : 'U';
 
     return GestureDetector(
       onTap: () {
@@ -336,7 +334,7 @@ class ReusableAppBar extends StatelessWidget {
           child: avatarUrl == null || avatarUrl.isEmpty
               ? Text(
                   userInitial,
-                  style: TextStyle(
+                  style: const TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
                     color: AppColors.primaryOrange,
@@ -405,13 +403,13 @@ class _AccountDropdownMenu extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final double dropdownWidth = 200.0;
+    const double dropdownWidth = 200.0;
 
     // Position at top right, below the app bar (aligned with avatar position)
     // App bar is typically around 56-60px, plus status bar
     final double topOffset =
         MediaQuery.of(context).padding.top + 56 + 8; // App bar + spacing
-    final double rightOffset =
+    const double rightOffset =
         16.0; // Margin from right edge (aligned with avatar)
 
     return Stack(

@@ -9,7 +9,7 @@ import '../../theme/app_colors.dart';
 
 class EmailTrackingScreen extends StatefulWidget {
   final bool isArabic;
-  
+
   const EmailTrackingScreen({super.key, this.isArabic = false});
 
   @override
@@ -19,16 +19,16 @@ class EmailTrackingScreen extends StatefulWidget {
 class _EmailTrackingScreenState extends State<EmailTrackingScreen> {
   final _supabase = Supabase.instance.client;
   final _searchController = TextEditingController();
-  
+
   List<Map<String, dynamic>> _emails = [];
   bool _isLoading = true;
   String _selectedStatus = 'all';
-  
+
   int _totalEmails = 0;
   int _sentEmails = 0;
   int _deliveredEmails = 0;
   int _failedEmails = 0;
-  
+
   RealtimeChannel? _emailChannel;
   bool _hasAccess = false;
 
@@ -45,29 +45,33 @@ class _EmailTrackingScreenState extends State<EmailTrackingScreen> {
         if (mounted) Navigator.pop(context);
         return;
       }
-      
+
       final profile = await _supabase
           .from('profiles')
           .select('role')
           .eq('id', user.id)
           .maybeSingle();
-      
+
       final role = (profile?['role'] as String?)?.toLowerCase() ?? '';
       final isSuperAdmin = role == 'super_admin' || role == 'superadmin';
-      
+
       if (!mounted) return;
-      
+
       if (!isSuperAdmin) {
         Navigator.pop(context);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(widget.isArabic ? 'الوصول مرفوض - للمشرف العام فقط' : 'Access Denied - Super Admin Only'),
+            content: Text(
+              widget.isArabic
+                  ? 'الوصول مرفوض - للمشرف العام فقط'
+                  : 'Access Denied - Super Admin Only',
+            ),
             backgroundColor: Colors.red,
           ),
         );
         return;
       }
-      
+
       setState(() => _hasAccess = true);
       _loadEmails();
       _setupRealtimeSubscription();
@@ -85,42 +89,42 @@ class _EmailTrackingScreenState extends State<EmailTrackingScreen> {
   }
 
   void _setupRealtimeSubscription() {
-    _emailChannel = _supabase.channel('email-tracking-realtime')
-      .onPostgresChanges(
-        event: PostgresChangeEvent.all,
-        schema: 'public',
-        table: 'email_logs',
-        callback: (payload) {
-          debugPrint('[EmailTracking] Update received');
-          _loadEmails();
-        },
-      )
-      .subscribe();
+    _emailChannel = _supabase
+        .channel('email-tracking-realtime')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'email_logs',
+          callback: (payload) {
+            debugPrint('[EmailTracking] Update received');
+            _loadEmails();
+          },
+        )
+        .subscribe();
   }
 
   Future<void> _loadEmails() async {
     if (!mounted) return;
     setState(() => _isLoading = true);
     try {
-      var query = _supabase
-          .from('email_logs')
-          .select()
-          .order('created_at', ascending: false)
-          .limit(100);
+      final baseQuery = _supabase.from('email_logs').select();
 
-      if (_selectedStatus != 'all') {
-        query = query.eq('status', _selectedStatus);
-      }
+      dynamic query = _selectedStatus != 'all'
+          ? baseQuery.eq('status', _selectedStatus)
+          : baseQuery;
+
+      query = query.order('created_at', ascending: false).limit(100);
 
       final response = await query;
       final emails = List<Map<String, dynamic>>.from(response as List);
-      
+
       if (!mounted) return;
       setState(() {
         _emails = emails;
         _totalEmails = emails.length;
         _sentEmails = emails.where((e) => e['status'] == 'sent').length;
-        _deliveredEmails = emails.where((e) => e['status'] == 'delivered').length;
+        _deliveredEmails =
+            emails.where((e) => e['status'] == 'delivered').length;
         _failedEmails = emails.where((e) => e['status'] == 'failed').length;
         _isLoading = false;
       });
@@ -137,7 +141,8 @@ class _EmailTrackingScreenState extends State<EmailTrackingScreen> {
   @override
   Widget build(BuildContext context) {
     return Directionality(
-      textDirection: widget.isArabic ? ui.TextDirection.rtl : ui.TextDirection.ltr,
+      textDirection:
+          widget.isArabic ? ui.TextDirection.rtl : ui.TextDirection.ltr,
       child: Scaffold(
         backgroundColor: AppColors.backgroundGray,
         appBar: AppBar(
@@ -178,7 +183,8 @@ class _EmailTrackingScreenState extends State<EmailTrackingScreen> {
                                 child: ListView.builder(
                                   padding: const EdgeInsets.all(16),
                                   itemCount: _emails.length,
-                                  itemBuilder: (context, index) => _buildEmailCard(_emails[index]),
+                                  itemBuilder: (context, index) =>
+                                      _buildEmailCard(_emails[index]),
                                 ),
                               ),
                   ),
@@ -240,13 +246,7 @@ class _EmailTrackingScreenState extends State<EmailTrackingScreen> {
                 color: color,
               ),
             ),
-            Text(
-              label,
-              style: GoogleFonts.poppins(
-                fontSize: 10,
-                color: color,
-              ),
-            ),
+            Text(label, style: GoogleFonts.poppins(fontSize: 10, color: color)),
           ],
         ),
       ),
@@ -269,7 +269,10 @@ class _EmailTrackingScreenState extends State<EmailTrackingScreen> {
                   borderRadius: BorderRadius.circular(12),
                   borderSide: BorderSide(color: Colors.grey.shade300),
                 ),
-                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 12,
+                ),
                 isDense: true,
               ),
               onChanged: (_) => setState(() {}),
@@ -286,10 +289,22 @@ class _EmailTrackingScreenState extends State<EmailTrackingScreen> {
               value: _selectedStatus,
               underline: const SizedBox(),
               items: [
-                DropdownMenuItem(value: 'all', child: Text(widget.isArabic ? 'الكل' : 'All')),
-                DropdownMenuItem(value: 'sent', child: Text(widget.isArabic ? 'مرسل' : 'Sent')),
-                DropdownMenuItem(value: 'delivered', child: Text(widget.isArabic ? 'مستلم' : 'Delivered')),
-                DropdownMenuItem(value: 'failed', child: Text(widget.isArabic ? 'فشل' : 'Failed')),
+                DropdownMenuItem(
+                  value: 'all',
+                  child: Text(widget.isArabic ? 'الكل' : 'All'),
+                ),
+                DropdownMenuItem(
+                  value: 'sent',
+                  child: Text(widget.isArabic ? 'مرسل' : 'Sent'),
+                ),
+                DropdownMenuItem(
+                  value: 'delivered',
+                  child: Text(widget.isArabic ? 'مستلم' : 'Delivered'),
+                ),
+                DropdownMenuItem(
+                  value: 'failed',
+                  child: Text(widget.isArabic ? 'فشل' : 'Failed'),
+                ),
               ],
               onChanged: (value) {
                 setState(() => _selectedStatus = value ?? 'all');
@@ -311,10 +326,7 @@ class _EmailTrackingScreenState extends State<EmailTrackingScreen> {
           const SizedBox(height: 16),
           Text(
             widget.isArabic ? 'لا توجد رسائل' : 'No emails found',
-            style: GoogleFonts.poppins(
-              fontSize: 18,
-              color: Colors.grey[600],
-            ),
+            style: GoogleFonts.poppins(fontSize: 18, color: Colors.grey[600]),
           ),
         ],
       ),
@@ -322,20 +334,26 @@ class _EmailTrackingScreenState extends State<EmailTrackingScreen> {
   }
 
   Widget _buildEmailCard(Map<String, dynamic> email) {
-    final recipient = email['recipient'] as String? ?? email['to_email'] as String? ?? 'Unknown';
+    final recipient = email['recipient'] as String? ??
+        email['to_email'] as String? ??
+        'Unknown';
     final subject = email['subject'] as String? ?? 'No Subject';
     final status = email['status'] as String? ?? 'unknown';
-    final emailType = email['email_type'] as String? ?? email['type'] as String? ?? '';
-    final createdAt = DateTime.tryParse(email['created_at'] ?? '') ?? DateTime.now();
-    
+    final emailType =
+        email['email_type'] as String? ?? email['type'] as String? ?? '';
+    final createdAt =
+        DateTime.tryParse(email['created_at'] ?? '') ?? DateTime.now();
+
     final statusColor = _getStatusColor(status);
     final statusIcon = _getStatusIcon(status);
-    
+
     final query = _searchController.text.toLowerCase();
-    if (query.isNotEmpty && !recipient.toLowerCase().contains(query) && !subject.toLowerCase().contains(query)) {
+    if (query.isNotEmpty &&
+        !recipient.toLowerCase().contains(query) &&
+        !subject.toLowerCase().contains(query)) {
       return const SizedBox.shrink();
     }
-    
+
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -388,7 +406,10 @@ class _EmailTrackingScreenState extends State<EmailTrackingScreen> {
               children: [
                 if (emailType.isNotEmpty) ...[
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 2,
+                    ),
                     decoration: BoxDecoration(
                       color: AppColors.primaryBlue.withOpacity(0.1),
                       borderRadius: BorderRadius.circular(12),
@@ -438,7 +459,7 @@ class _EmailTrackingScreenState extends State<EmailTrackingScreen> {
       default:
         label = status;
     }
-    
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(

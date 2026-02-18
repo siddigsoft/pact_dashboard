@@ -9,7 +9,7 @@ class MovableOnlineOfflineToggle extends ConsumerStatefulWidget {
   final ToggleVariant variant;
   final Offset? initialPosition;
   final bool
-  snappy; // If true, disables drag-time animations for maximum responsiveness
+      snappy; // If true, disables drag-time animations for maximum responsiveness
 
   const MovableOnlineOfflineToggle({
     super.key,
@@ -43,7 +43,7 @@ class _MovableOnlineOfflineToggleState
     const double toggleWidth = 140.0; // Pill variant is smaller
 
     // Position it in the bottom-left area, above the bottom navigation
-    final defaultX = padding;
+    const defaultX = padding;
     final defaultY = screenSize.height - 180.0; // Above bottom nav bar
 
     return Offset(defaultX, defaultY);

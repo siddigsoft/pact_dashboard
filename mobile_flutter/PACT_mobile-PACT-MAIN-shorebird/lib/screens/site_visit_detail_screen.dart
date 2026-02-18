@@ -9,11 +9,8 @@ import '../l10n/app_localizations.dart';
 
 class SiteVisitDetailScreen extends StatefulWidget {
   final String siteVisitId;
-  
-  const SiteVisitDetailScreen({
-    super.key,
-    required this.siteVisitId,
-  });
+
+  const SiteVisitDetailScreen({super.key, required this.siteVisitId});
 
   @override
   State<SiteVisitDetailScreen> createState() => _SiteVisitDetailScreenState();
@@ -35,7 +32,7 @@ class _SiteVisitDetailScreenState extends State<SiteVisitDetailScreen> {
 
   Future<void> _loadSiteVisitDetails() async {
     setState(() => _isLoading = true);
-    
+
     try {
       final response = await Supabase.instance.client
           .from('site_visits')
@@ -45,7 +42,7 @@ class _SiteVisitDetailScreenState extends State<SiteVisitDetailScreen> {
 
       if (response != null) {
         _siteVisit = response;
-        
+
         if (response['assignedTo'] != null) {
           final userResponse = await Supabase.instance.client
               .from('profiles')
@@ -148,7 +145,9 @@ class _SiteVisitDetailScreenState extends State<SiteVisitDetailScreen> {
     final lat = _siteVisit?['latitude'];
     final lng = _siteVisit?['longitude'];
     if (lat != null && lng != null) {
-      final url = Uri.parse('https://www.google.com/maps/search/?api=1&query=$lat,$lng');
+      final url = Uri.parse(
+        'https://www.google.com/maps/search/?api=1&query=$lat,$lng',
+      );
       if (await canLaunchUrl(url)) {
         await launchUrl(url, mode: LaunchMode.externalApplication);
       }
@@ -172,7 +171,8 @@ class _SiteVisitDetailScreenState extends State<SiteVisitDetailScreen> {
             onPressed: () => Navigator.pop(context),
           ),
           title: Text(
-            l10n?.visitDetails ?? (isArabic ? 'تفاصيل الزيارة الميدانية' : 'Site Visit Details'),
+            l10n?.visitDetails ??
+                (isArabic ? 'تفاصيل الزيارة الميدانية' : 'Site Visit Details'),
             style: GoogleFonts.poppins(
               color: Colors.white,
               fontSize: 18,
@@ -200,42 +200,45 @@ class _SiteVisitDetailScreenState extends State<SiteVisitDetailScreen> {
         body: _isLoading
             ? const Center(child: CircularProgressIndicator())
             : _siteVisit == null
-                ? Center(
-                    child: Text(
-                      l10n?.noData ?? (isArabic ? 'لم يتم العثور على الزيارة' : 'Site visit not found'),
-                      style: GoogleFonts.poppins(fontSize: 16, color: Colors.grey),
-                    ),
-                  )
-                : RefreshIndicator(
-                    onRefresh: _loadSiteVisitDetails,
-                    child: SingleChildScrollView(
-                      physics: const AlwaysScrollableScrollPhysics(),
-                      padding: const EdgeInsets.all(16),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          _buildStatusHeader(isArabic),
-                          const SizedBox(height: 16),
-                          _buildSiteInfoCard(isArabic),
-                          const SizedBox(height: 16),
-                          _buildLocationCard(isArabic),
-                          const SizedBox(height: 16),
-                          _buildAssignmentCard(isArabic),
-                          const SizedBox(height: 16),
-                          _buildDatesCard(isArabic),
-                          if (_costSubmissions.isNotEmpty) ...[
-                            const SizedBox(height: 16),
-                            _buildCostsCard(isArabic),
-                          ],
-                          if (_auditTrail.isNotEmpty) ...[
-                            const SizedBox(height: 16),
-                            _buildAuditTrailCard(isArabic),
-                          ],
-                          const SizedBox(height: 32),
-                        ],
-                      ),
-                    ),
+            ? Center(
+                child: Text(
+                  l10n?.noData ??
+                      (isArabic
+                          ? 'لم يتم العثور على الزيارة'
+                          : 'Site visit not found'),
+                  style: GoogleFonts.poppins(fontSize: 16, color: Colors.grey),
+                ),
+              )
+            : RefreshIndicator(
+                onRefresh: _loadSiteVisitDetails,
+                child: SingleChildScrollView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _buildStatusHeader(isArabic),
+                      const SizedBox(height: 16),
+                      _buildSiteInfoCard(isArabic),
+                      const SizedBox(height: 16),
+                      _buildLocationCard(isArabic),
+                      const SizedBox(height: 16),
+                      _buildAssignmentCard(isArabic),
+                      const SizedBox(height: 16),
+                      _buildDatesCard(isArabic),
+                      if (_costSubmissions.isNotEmpty) ...[
+                        const SizedBox(height: 16),
+                        _buildCostsCard(isArabic),
+                      ],
+                      if (_auditTrail.isNotEmpty) ...[
+                        const SizedBox(height: 16),
+                        _buildAuditTrailCard(isArabic),
+                      ],
+                      const SizedBox(height: 32),
+                    ],
                   ),
+                ),
+              ),
       ),
     );
   }
@@ -262,11 +265,7 @@ class _SiteVisitDetailScreenState extends State<SiteVisitDetailScreen> {
               color: Colors.white.withOpacity(0.2),
               borderRadius: BorderRadius.circular(12),
             ),
-            child: Icon(
-              _getStatusIcon(status),
-              color: Colors.white,
-              size: 32,
-            ),
+            child: Icon(_getStatusIcon(status), color: Colors.white, size: 32),
           ),
           const SizedBox(width: 16),
           Expanded(
@@ -429,7 +428,9 @@ class _SiteVisitDetailScreenState extends State<SiteVisitDetailScreen> {
                     Icon(Icons.location_off, size: 48, color: Colors.grey[400]),
                     const SizedBox(height: 8),
                     Text(
-                      isArabic ? 'لا توجد إحداثيات' : 'No coordinates available',
+                      isArabic
+                          ? 'لا توجد إحداثيات'
+                          : 'No coordinates available',
                       style: GoogleFonts.poppins(color: Colors.grey[600]),
                     ),
                   ],
@@ -620,7 +621,10 @@ class _SiteVisitDetailScreenState extends State<SiteVisitDetailScreen> {
                   ],
                 ),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 6,
+                  ),
                   decoration: BoxDecoration(
                     color: AppColors.primaryGreen.withOpacity(0.1),
                     borderRadius: BorderRadius.circular(20),
@@ -664,7 +668,9 @@ class _SiteVisitDetailScreenState extends State<SiteVisitDetailScreen> {
                         children: [
                           Text(
                             cost['cost_type'] ?? (isArabic ? 'تكلفة' : 'Cost'),
-                            style: GoogleFonts.poppins(fontWeight: FontWeight.w500),
+                            style: GoogleFonts.poppins(
+                              fontWeight: FontWeight.w500,
+                            ),
                           ),
                           Text(
                             _formatDate(cost['created_at']),

@@ -9,10 +9,11 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../theme/app_colors.dart';
 import '../services/presence_service.dart';
 import '../services/webrtc_service.dart';
+import '../services/agora_call_service.dart';
 import '../services/chat_service.dart';
-import '../widgets/incoming_call_overlay.dart';
 import '../models/call_state.dart';
 import 'call_screen.dart';
+import 'agora_call_screen.dart';
 
 class CommunicationsScreen extends StatefulWidget {
   const CommunicationsScreen({super.key});
@@ -25,6 +26,7 @@ class _CommunicationsScreenState extends State<CommunicationsScreen>
     with SingleTickerProviderStateMixin {
   final PresenceService _presenceService = PresenceService();
   final WebRTCService _webrtcService = WebRTCService();
+  final AgoraCallService _agoraService = AgoraCallService();
   final ChatService _chatService = ChatService();
   final TextEditingController _searchController = TextEditingController();
 
@@ -45,13 +47,33 @@ class _CommunicationsScreenState extends State<CommunicationsScreen>
   String? _currentUserState;
   String? _currentUserHub;
 
-  final List<String> _tabs = ['All', 'Online', 'Coordinators', 'Data Collectors', 'Admins'];
+  final List<String> _tabs = [
+    'All',
+    'Online',
+    'Coordinators',
+    'Data Collectors',
+    'Admins',
+  ];
 
   // Roles that can call anyone in the system
-  static const List<String> _unrestrictedRoles = ['admin', 'super_admin', 'fom', 'super admin', 'supervisor'];
-  
+  static const List<String> _unrestrictedRoles = [
+    'admin',
+    'super_admin',
+    'fom',
+    'super admin',
+    'supervisor',
+  ];
+
   // Roles that can be called by anyone (supervisory roles)
-  static const List<String> _supervisoryRoles = ['admin', 'super_admin', 'coordinator', 'supervisor', 'hub coordinator', 'fom', 'super admin'];
+  static const List<String> _supervisoryRoles = [
+    'admin',
+    'super_admin',
+    'coordinator',
+    'supervisor',
+    'hub coordinator',
+    'fom',
+    'super admin',
+  ];
 
   @override
   void initState() {
@@ -66,7 +88,7 @@ class _CommunicationsScreenState extends State<CommunicationsScreen>
     // Reset any stuck call states when entering the screen
     _resetStuckCallState();
   }
-  
+
   Future<void> _resetStuckCallState() async {
     try {
       await _webrtcService.forceResetIfNotInActiveCall();
@@ -94,7 +116,9 @@ class _CommunicationsScreenState extends State<CommunicationsScreen>
           _currentUserState = profileResponse['state_id'] as String?;
           _currentUserHub = profileResponse['hub_id'] as String?;
         });
-        debugPrint('[CommunicationsScreen] Loaded user info: role=$_currentUserRole, state=$_currentUserState, hub=$_currentUserHub');
+        debugPrint(
+          '[CommunicationsScreen] Loaded user info: role=$_currentUserRole, state=$_currentUserState, hub=$_currentUserHub',
+        );
       }
     } catch (e) {
       debugPrint('[CommunicationsScreen] Error loading current user info: $e');
@@ -128,12 +152,16 @@ class _CommunicationsScreenState extends State<CommunicationsScreen>
     final currentHub = _currentUserHub?.toLowerCase() ?? '';
 
     // Check if same state
-    if (currentState.isNotEmpty && targetState.isNotEmpty && currentState == targetState) {
+    if (currentState.isNotEmpty &&
+        targetState.isNotEmpty &&
+        currentState == targetState) {
       return true;
     }
 
     // Check if same hub
-    if (currentHub.isNotEmpty && targetHub.isNotEmpty && currentHub == targetHub) {
+    if (currentHub.isNotEmpty &&
+        targetHub.isNotEmpty &&
+        currentHub == targetHub) {
       return true;
     }
 
@@ -180,11 +208,11 @@ class _CommunicationsScreenState extends State<CommunicationsScreen>
 
   Future<void> _loadUsers() async {
     setState(() => _isLoading = true);
-    
+
     try {
       // Check connectivity first
       await _checkConnectivity();
-      
+
       // Check if user is authenticated
       final currentUserId = _chatService.getCurrentUserId();
       if (currentUserId == null) {
@@ -195,7 +223,7 @@ class _CommunicationsScreenState extends State<CommunicationsScreen>
         }
         return;
       }
-      
+
       if (!_isOnline) {
         // OFFLINE: Load cached users
         debugPrint('[CommunicationsScreen] Offline - loading cached users');
@@ -208,125 +236,157 @@ class _CommunicationsScreenState extends State<CommunicationsScreen>
         setState(() => _isLoading = false);
         return;
       }
-      
+
       // ONLINE: Always try direct fetch first for reliability
-      debugPrint('[CommunicationsScreen] Fetching contacts directly from database...');
+      debugPrint(
+        '[CommunicationsScreen] Fetching contacts directly from database...',
+      );
       await _fetchUsersDirect();
-      
+
       if (_allUsers.isNotEmpty) {
-        debugPrint('[CommunicationsScreen] Direct fetch successful: ${_allUsers.length} users');
+        debugPrint(
+          '[CommunicationsScreen] Direct fetch successful: ${_allUsers.length} users',
+        );
         _filterUsers();
-        
+
         // Initialize WebRTC in background (don't block on it)
         _initializeWebRTCService().catchError((e) {
           debugPrint('[CommunicationsScreen] Background WebRTC init error: $e');
         });
       } else {
         // Direct fetch failed, try PresenceService as fallback
-        debugPrint('[CommunicationsScreen] Direct fetch returned empty, trying PresenceService...');
-        
+        debugPrint(
+          '[CommunicationsScreen] Direct fetch returned empty, trying PresenceService...',
+        );
+
         try {
           await _initializeWebRTCService();
           final users = await _presenceService.fetchAllUsers();
           if (users.isNotEmpty) {
             _allUsers = _presenceService.getAllUsersList();
-            debugPrint('[CommunicationsScreen] PresenceService fallback: ${_allUsers.length} users');
+            debugPrint(
+              '[CommunicationsScreen] PresenceService fallback: ${_allUsers.length} users',
+            );
           }
         } catch (e) {
-          debugPrint('[CommunicationsScreen] PresenceService fallback failed: $e');
+          debugPrint(
+            '[CommunicationsScreen] PresenceService fallback failed: $e',
+          );
         }
-        
+
         // Also try loading cached users as last resort
         if (_allUsers.isEmpty) {
           debugPrint('[CommunicationsScreen] Trying cached users...');
           await _presenceService.loadCachedUsers();
           _allUsers = _presenceService.getAllUsersList();
         }
-        
+
         _filterUsers();
       }
-      
-      debugPrint('[CommunicationsScreen] Total users loaded: ${_allUsers.length}');
-      
+
+      debugPrint(
+        '[CommunicationsScreen] Total users loaded: ${_allUsers.length}',
+      );
+
       // Show clear feedback to user based on result
       if (_allUsers.isEmpty && mounted) {
-        _showMessage('No contacts found. Please check your internet connection and try refreshing.', isError: true);
+        _showMessage(
+          'No contacts found. Please check your internet connection and try refreshing.',
+          isError: true,
+        );
       }
-      
+
       // Sync any pending messages in background
-      _chatService.syncPendingMessages().then((syncedCount) {
-        if (syncedCount > 0 && mounted) {
-          _showMessage('Synced $syncedCount pending messages');
-        }
-      }).catchError((e) {
-        debugPrint('[CommunicationsScreen] Message sync error: $e');
-      });
+      _chatService
+          .syncPendingMessages()
+          .then((syncedCount) {
+            if (syncedCount > 0 && mounted) {
+              _showMessage('Synced $syncedCount pending messages');
+            }
+          })
+          .catchError((e) {
+            debugPrint('[CommunicationsScreen] Message sync error: $e');
+          });
     } catch (e) {
       debugPrint('[CommunicationsScreen] Error loading users: $e');
       // Fallback to cached data
       _allUsers = _presenceService.getAllUsersList();
       _filterUsers();
       if (mounted && _allUsers.isEmpty) {
-        _showMessage('Could not load contacts. Please try again.', isError: true);
+        _showMessage(
+          'Could not load contacts. Please try again.',
+          isError: true,
+        );
       }
     }
-    
+
     if (mounted) {
       setState(() => _isLoading = false);
     }
   }
-  
+
   /// Direct fetch from profiles as fallback
   Future<void> _fetchUsersDirect() async {
     try {
       final currentUserId = _chatService.getCurrentUserId();
-      
+
       final supabase = Supabase.instance.client;
-      
+
       // Build query for all users from profiles
       // Note: Database uses state_id and hub_id columns (not state/hub)
       var query = supabase
           .from('profiles')
-          .select('id, full_name, avatar_url, role, phone, email, state_id, hub_id, status');
-      
+          .select(
+            'id, full_name, avatar_url, role, phone, email, state_id, hub_id, status',
+          );
+
       // Only exclude current user if we have a valid ID
       if (currentUserId != null && currentUserId.isNotEmpty) {
         query = query.neq('id', currentUserId);
       }
-      
+
       final response = await query.order('full_name');
-      
-      debugPrint('[CommunicationsScreen] Direct fetch returned ${(response as List).length} profiles');
-      
-      _allUsers = response.map((item) {
-        final map = item as Map<String, dynamic>;
-        return UserPresence(
-          odId: map['id'] as String? ?? '',
-          userName: map['full_name'] as String? ?? 'Unknown User',
-          userAvatar: map['avatar_url'] as String?,
-          role: map['role'] as String?,
-          phone: map['phone'] as String?,
-          email: map['email'] as String?,
-          state: map['state_id'] as String?,
-          hub: map['hub_id'] as String?,
-          isOnline: false,
-        );
-      }).where((u) => u.odId.isNotEmpty).toList();
-      
-      debugPrint('[CommunicationsScreen] Loaded ${_allUsers.length} users via direct fetch');
+
+      debugPrint(
+        '[CommunicationsScreen] Direct fetch returned ${(response as List).length} profiles',
+      );
+
+      _allUsers = response
+          .map((item) {
+            final map = item;
+            return UserPresence(
+              odId: map['id'] as String? ?? '',
+              userName: map['full_name'] as String? ?? 'Unknown User',
+              userAvatar: map['avatar_url'] as String?,
+              role: map['role'] as String?,
+              phone: map['phone'] as String?,
+              email: map['email'] as String?,
+              state: map['state_id'] as String?,
+              hub: map['hub_id'] as String?,
+              isOnline: false,
+            );
+          })
+          .where((u) => u.odId.isNotEmpty)
+          .toList();
+
+      debugPrint(
+        '[CommunicationsScreen] Loaded ${_allUsers.length} users via direct fetch',
+      );
     } catch (e) {
       debugPrint('[CommunicationsScreen] Error in direct fetch: $e');
     }
   }
-  
+
   Future<void> _initializeWebRTCService() async {
     try {
       final currentUserId = _chatService.getCurrentUserId();
       if (currentUserId == null) {
-        debugPrint('[CommunicationsScreen] Cannot initialize WebRTC - no user ID');
+        debugPrint(
+          '[CommunicationsScreen] Cannot initialize WebRTC - no user ID',
+        );
         return;
       }
-      
+
       // First ensure PresenceService is initialized with the current user
       if (!_presenceService.isInitialized) {
         // Fetch user profile data from Supabase
@@ -336,11 +396,11 @@ class _CommunicationsScreenState extends State<CommunicationsScreen>
             .select('id, full_name, avatar_url, role')
             .eq('id', currentUserId)
             .maybeSingle();
-        
+
         final userName = profileResponse?['full_name'] as String? ?? 'User';
         final userAvatar = profileResponse?['avatar_url'] as String?;
         final userRole = profileResponse?['role'] as String?;
-        
+
         // Initialize PresenceService first
         await _presenceService.initialize(
           odId: currentUserId,
@@ -348,36 +408,37 @@ class _CommunicationsScreenState extends State<CommunicationsScreen>
           userAvatar: userAvatar,
           userRole: userRole,
         );
-        debugPrint('[CommunicationsScreen] PresenceService initialized for $userName');
-        
+        debugPrint(
+          '[CommunicationsScreen] PresenceService initialized for $userName',
+        );
+
         // Now initialize WebRTC with the same data
         if (!_webrtcService.isInitialized) {
-          await _webrtcService.initialize(
-            currentUserId,
-            userName,
-            userAvatar: userAvatar,
+          await _webrtcService.initialize(currentUserId, userName, userAvatar: userAvatar);
+          debugPrint(
+            '[CommunicationsScreen] WebRTC service initialized for $userName',
           );
-          debugPrint('[CommunicationsScreen] WebRTC service initialized for $userName');
         }
       } else {
         // PresenceService already initialized, use its data for WebRTC
         final currentUserData = _presenceService.getCurrentUserPresence();
         final userName = currentUserData?.userName ?? 'User';
         final userAvatar = currentUserData?.userAvatar;
-        
+
         if (!_webrtcService.isInitialized) {
-          await _webrtcService.initialize(
-            currentUserId,
-            userName,
-            userAvatar: userAvatar,
+          await _webrtcService.initialize(currentUserId, userName, userAvatar: userAvatar);
+          debugPrint(
+            '[CommunicationsScreen] WebRTC service initialized for $userName',
           );
-          debugPrint('[CommunicationsScreen] WebRTC service initialized for $userName');
         }
       }
     } catch (e) {
       debugPrint('[CommunicationsScreen] Error initializing WebRTC: $e');
       if (mounted) {
-        _showMessage('Failed to initialize communications. Please try again.', isError: true);
+        _showMessage(
+          'Failed to initialize communications. Please try again.',
+          isError: true,
+        );
       }
     }
   }
@@ -386,7 +447,9 @@ class _CommunicationsScreenState extends State<CommunicationsScreen>
     _allUsersSubscription = _presenceService.allUsersStream.listen((users) {
       if (mounted) {
         setState(() {
-          _allUsers = users.where((u) => u.odId != _presenceService.currentUserId).toList();
+          _allUsers = users
+              .where((u) => u.odId != _presenceService.currentUserId)
+              .toList();
         });
         _filterUsers();
       }
@@ -408,29 +471,45 @@ class _CommunicationsScreenState extends State<CommunicationsScreen>
         filtered = filtered.where((u) => u.isOnline).toList();
         break;
       case 2: // Coordinators
-        filtered = filtered.where((u) => 
-            u.role?.toLowerCase() == 'coordinator' || 
-            u.role?.toLowerCase() == 'hub coordinator').toList();
+        filtered = filtered
+            .where(
+              (u) =>
+                  u.role?.toLowerCase() == 'coordinator' ||
+                  u.role?.toLowerCase() == 'hub coordinator',
+            )
+            .toList();
         break;
       case 3: // Data Collectors
-        filtered = filtered.where((u) => 
-            u.role?.toLowerCase() == 'data collector' || 
-            u.role?.toLowerCase() == 'enumerator').toList();
+        filtered = filtered
+            .where(
+              (u) =>
+                  u.role?.toLowerCase() == 'data collector' ||
+                  u.role?.toLowerCase() == 'enumerator',
+            )
+            .toList();
         break;
       case 4: // Admins
-        filtered = filtered.where((u) => 
-            u.role?.toLowerCase() == 'admin' || 
-            u.role?.toLowerCase() == 'super admin').toList();
+        filtered = filtered
+            .where(
+              (u) =>
+                  u.role?.toLowerCase() == 'admin' ||
+                  u.role?.toLowerCase() == 'super admin',
+            )
+            .toList();
         break;
     }
 
     // Filter by search query
     if (_searchQuery.isNotEmpty) {
       final lowerQuery = _searchQuery.toLowerCase();
-      filtered = filtered.where((u) =>
-          u.userName.toLowerCase().contains(lowerQuery) ||
-          (u.role?.toLowerCase().contains(lowerQuery) ?? false) ||
-          (u.email?.toLowerCase().contains(lowerQuery) ?? false)).toList();
+      filtered = filtered
+          .where(
+            (u) =>
+                u.userName.toLowerCase().contains(lowerQuery) ||
+                (u.role?.toLowerCase().contains(lowerQuery) ?? false) ||
+                (u.email?.toLowerCase().contains(lowerQuery) ?? false),
+          )
+          .toList();
     }
 
     // Sort: online users first, then alphabetically
@@ -464,80 +543,125 @@ class _CommunicationsScreenState extends State<CommunicationsScreen>
 
     // Check if target user is online
     if (!user.isOnline) {
-      _showMessage('${user.userName} is offline. Send a message instead.', isError: true);
+      _showMessage(
+        '${user.userName} is offline. Send a message instead.',
+        isError: true,
+      );
       return;
     }
 
     if (user.isInCall) {
-      _showMessage('${user.userName} is currently in another call', isError: true);
+      _showMessage(
+        '${user.userName} is currently in another call',
+        isError: true,
+      );
       return;
     }
 
-    // Check if already in a call - force reset if stuck
-    if (_webrtcService.callState.isInCall) {
-      // Try to reset stuck state first
-      await _webrtcService.forceResetIfNotInActiveCall();
-      
-      // Check again after reset
-      if (_webrtcService.callState.isInCall) {
-        _showMessage('You are already in a call', isError: true);
-        return;
-      }
+    // Check if already in a call (Agora)
+    if (_agoraService.isInCall) {
+      _showMessage('You are already in a call', isError: true);
+      return;
     }
 
     HapticFeedback.mediumImpact();
-    
-    // Ensure WebRTC is initialized before making call
-    if (!_webrtcService.isInitialized) {
-      debugPrint('[CommunicationsScreen] WebRTC not initialized, initializing now...');
-      _showMessage('Connecting call service...', isError: false);
-      await _initializeWebRTCService();
-      
-      // Check again after initialization
-      if (!_webrtcService.isInitialized) {
-        _showMessage('Could not initialize call service. Please try again.', isError: true);
-        return;
-      }
-    }
-    
-    // If signaling not ready, let initiateCall handle the setup/retry internally
-    // initiateCall has built-in logic to setup signaling if not ready
-    if (!_webrtcService.isSignalingReady) {
-      debugPrint('[CommunicationsScreen] Signaling channel not ready, initiateCall will handle setup');
-      _showMessage('Connecting...', isError: false);
-      // Don't block here - let initiateCall attempt to setup signaling
-    }
-    
-    final success = await _webrtcService.initiateCall(
-      user.odId,
-      user.userName,
-      targetUserAvatar: user.userAvatar,
-      isAudioOnly: true,
+
+    // Agora is initialized in main_screen; start call
+    final result = await _agoraService.startCall(
+      remoteUserId: user.odId,
+      remoteUserName: user.userName,
+      remoteUserAvatar: user.userAvatar,
+      audioOnly: true,
     );
 
-    if (success && mounted) {
-      // Navigate to call screen
+    if (result.success && result.channelName != null && mounted) {
       Navigator.of(context).push(
         MaterialPageRoute(
-          builder: (context) => CallScreen(
+          builder: (context) => AgoraCallScreen(
+            channelName: result.channelName!,
+            remoteUserId: user.odId,
             remoteUserName: user.userName,
             remoteUserAvatar: user.userAvatar,
+            isAudioOnly: true,
+            isOutgoing: true,
           ),
         ),
       );
-    } else if (!success && mounted) {
-      final callState = _webrtcService.callState;
-      String message = 'Could not start call. Please try again.';
-      if (callState.status == CallStatus.busy) {
-        message = '${user.userName} is busy on another call';
-      }
+    } else if (!result.success && mounted) {
+      final message = result.error ?? 'Could not start call. Please try again.';
       _showMessage(message, isError: true);
+    }
+  }
+
+  /// Initiate an Agora video/audio call
+  Future<void> _initiateJitsiCall(
+    UserPresence user, {
+    bool audioOnly = false,
+  }) async {
+    if (!_isOnline) {
+      _showOfflineMessage('Calls require an internet connection');
+      return;
+    }
+
+    if (!_canCallUser(user)) {
+      _showMessage(_getCallRestrictionMessage(user), isError: true);
+      return;
+    }
+
+    if (!user.isOnline) {
+      _showMessage(
+        '${user.userName} is offline. Send a message instead.',
+        isError: true,
+      );
+      return;
+    }
+
+    if (user.isInCall) {
+      _showMessage(
+        '${user.userName} is currently in another call',
+        isError: true,
+      );
+      return;
+    }
+
+    if (_agoraService.isInCall) {
+      _showMessage('You are already in a call', isError: true);
+      return;
+    }
+
+    HapticFeedback.mediumImpact();
+
+    final result = await _agoraService.startCall(
+      remoteUserId: user.odId,
+      remoteUserName: user.userName,
+      remoteUserAvatar: user.userAvatar,
+      audioOnly: audioOnly,
+    );
+
+    if (result.success && result.channelName != null && mounted) {
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (context) => AgoraCallScreen(
+            channelName: result.channelName!,
+            remoteUserId: user.odId,
+            remoteUserName: user.userName,
+            remoteUserAvatar: user.userAvatar,
+            isAudioOnly: audioOnly,
+            isOutgoing: true,
+          ),
+        ),
+      );
+    } else if (!result.success && mounted) {
+      _showMessage(
+        result.error ?? 'Could not start call. Please try again.',
+        isError: true,
+      );
     }
   }
 
   Future<void> _initiateChat(UserPresence user) async {
     HapticFeedback.lightImpact();
-    
+
     // Check if user is authenticated
     final currentUserId = _chatService.getCurrentUserId();
     if (currentUserId == null) {
@@ -545,42 +669,55 @@ class _CommunicationsScreenState extends State<CommunicationsScreen>
       _showMessage('Please log in again to start a chat.', isError: true);
       return;
     }
-    
+
     try {
-      debugPrint('[CommunicationsScreen] Initiating chat with user: ${user.odId}');
-      
+      debugPrint(
+        '[CommunicationsScreen] Initiating chat with user: ${user.odId}',
+      );
+
       if (!_isOnline) {
         // OFFLINE: Try to find cached chat first
         debugPrint('[CommunicationsScreen] Offline - looking for cached chat');
         final cachedChats = await _chatService.getCachedUserChats();
-        final existingChat = cachedChats.where((c) => 
-          c.participants?.any((p) => p.userId == user.odId) ?? false
-        ).toList();
-        
+        final existingChat = cachedChats
+            .where(
+              (c) => c.participants.any((p) => p.userId == user.odId) ?? false,
+            )
+            .toList();
+
         if (existingChat.isNotEmpty && mounted) {
-          debugPrint('[CommunicationsScreen] Found cached chat: ${existingChat.first.id}');
+          debugPrint(
+            '[CommunicationsScreen] Found cached chat: ${existingChat.first.id}',
+          );
           Navigator.pushNamed(context, '/chat', arguments: existingChat.first);
           _showMessage('Offline mode - messages will sync when online');
           return;
         } else {
-          _showOfflineMessage('No existing chat found. Start a chat when online.');
+          _showOfflineMessage(
+            'No existing chat found. Start a chat when online.',
+          );
           return;
         }
       }
-      
+
       // ONLINE: Find or create chat with user
       final chat = await _chatService.findOrCreateDirectChat(user.odId);
-      
+
       if (chat != null && mounted) {
         debugPrint('[CommunicationsScreen] Chat created/found: ${chat.id}');
         Navigator.pushNamed(context, '/chat', arguments: chat);
       } else {
-        debugPrint('[CommunicationsScreen] Chat returned null for user: ${user.odId}');
+        debugPrint(
+          '[CommunicationsScreen] Chat returned null for user: ${user.odId}',
+        );
         _showMessage('Could not open chat. Please try again.', isError: true);
       }
     } catch (e) {
       debugPrint('[CommunicationsScreen] Error initiating chat: $e');
-      _showMessage('Could not open chat: ${e.toString().split('\n').first}', isError: true);
+      _showMessage(
+        'Could not open chat: ${e.toString().split('\n').first}',
+        isError: true,
+      );
     }
   }
 
@@ -624,7 +761,11 @@ class _CommunicationsScreenState extends State<CommunicationsScreen>
           _buildOnlineIndicator(),
           Expanded(
             child: _isLoading
-                ? const Center(child: CircularProgressIndicator(color: AppColors.primaryOrange))
+                ? const Center(
+                    child: CircularProgressIndicator(
+                      color: AppColors.primaryOrange,
+                    ),
+                  )
                 : _buildUsersList(),
           ),
         ],
@@ -634,7 +775,7 @@ class _CommunicationsScreenState extends State<CommunicationsScreen>
 
   PreferredSizeWidget _buildAppBar() {
     final onlineCount = _allUsers.where((u) => u.isOnline).length;
-    
+
     return AppBar(
       backgroundColor: AppColors.primaryBlue,
       elevation: 0,
@@ -668,8 +809,8 @@ class _CommunicationsScreenState extends State<CommunicationsScreen>
           margin: const EdgeInsets.only(right: 8),
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
           decoration: BoxDecoration(
-            color: _webrtcService.isFullyReady 
-                ? Colors.green.withOpacity(0.2) 
+            color: _agoraService.isReady
+                ? Colors.green.withOpacity(0.2)
                 : Colors.orange.withOpacity(0.2),
             borderRadius: BorderRadius.circular(12),
           ),
@@ -677,13 +818,17 @@ class _CommunicationsScreenState extends State<CommunicationsScreen>
             mainAxisSize: MainAxisSize.min,
             children: [
               Icon(
-                _webrtcService.isFullyReady ? Icons.phone_enabled : Icons.phone_disabled,
-                color: _webrtcService.isFullyReady ? Colors.greenAccent : Colors.orangeAccent,
+                _agoraService.isReady
+                    ? Icons.phone_enabled
+                    : Icons.phone_disabled,
+                color: _agoraService.isReady
+                    ? Colors.greenAccent
+                    : Colors.orangeAccent,
                 size: 14,
               ),
               const SizedBox(width: 4),
               Text(
-                _webrtcService.isFullyReady ? 'Ready' : 'Connecting',
+                _agoraService.isReady ? 'Ready' : 'Connecting',
                 style: GoogleFonts.poppins(
                   color: Colors.white,
                   fontSize: 10,
@@ -728,7 +873,10 @@ class _CommunicationsScreenState extends State<CommunicationsScreen>
             borderRadius: BorderRadius.circular(12),
             borderSide: BorderSide.none,
           ),
-          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 16,
+            vertical: 12,
+          ),
         ),
         style: GoogleFonts.poppins(fontSize: 14),
       ),
@@ -745,8 +893,14 @@ class _CommunicationsScreenState extends State<CommunicationsScreen>
         unselectedLabelColor: Colors.grey[600],
         indicatorColor: AppColors.primaryBlue,
         indicatorWeight: 3,
-        labelStyle: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 13),
-        unselectedLabelStyle: GoogleFonts.poppins(fontWeight: FontWeight.w500, fontSize: 13),
+        labelStyle: GoogleFonts.poppins(
+          fontWeight: FontWeight.w600,
+          fontSize: 13,
+        ),
+        unselectedLabelStyle: GoogleFonts.poppins(
+          fontWeight: FontWeight.w500,
+          fontSize: 13,
+        ),
         tabs: _tabs.map((tab) {
           int count = 0;
           switch (tab) {
@@ -757,19 +911,31 @@ class _CommunicationsScreenState extends State<CommunicationsScreen>
               count = _allUsers.where((u) => u.isOnline).length;
               break;
             case 'Coordinators':
-              count = _allUsers.where((u) => 
-                  u.role?.toLowerCase() == 'coordinator' || 
-                  u.role?.toLowerCase() == 'hub coordinator').length;
+              count = _allUsers
+                  .where(
+                    (u) =>
+                        u.role?.toLowerCase() == 'coordinator' ||
+                        u.role?.toLowerCase() == 'hub coordinator',
+                  )
+                  .length;
               break;
             case 'Data Collectors':
-              count = _allUsers.where((u) => 
-                  u.role?.toLowerCase() == 'data collector' || 
-                  u.role?.toLowerCase() == 'enumerator').length;
+              count = _allUsers
+                  .where(
+                    (u) =>
+                        u.role?.toLowerCase() == 'data collector' ||
+                        u.role?.toLowerCase() == 'enumerator',
+                  )
+                  .length;
               break;
             case 'Admins':
-              count = _allUsers.where((u) => 
-                  u.role?.toLowerCase() == 'admin' || 
-                  u.role?.toLowerCase() == 'super admin').length;
+              count = _allUsers
+                  .where(
+                    (u) =>
+                        u.role?.toLowerCase() == 'admin' ||
+                        u.role?.toLowerCase() == 'super admin',
+                  )
+                  .length;
               break;
           }
           return Tab(text: '$tab ($count)');
@@ -780,7 +946,7 @@ class _CommunicationsScreenState extends State<CommunicationsScreen>
 
   Widget _buildOnlineIndicator() {
     if (_isOnline) return const SizedBox.shrink();
-    
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       color: Colors.orange.withOpacity(0.1),
@@ -817,8 +983,8 @@ class _CommunicationsScreenState extends State<CommunicationsScreen>
               _searchQuery.isNotEmpty
                   ? 'No users found for "$_searchQuery"'
                   : _allUsers.isEmpty
-                      ? 'No contacts available'
-                      : 'No users in this category',
+                  ? 'No contacts available'
+                  : 'No users in this category',
               style: GoogleFonts.poppins(
                 color: Colors.grey[600],
                 fontSize: 16,
@@ -845,7 +1011,10 @@ class _CommunicationsScreenState extends State<CommunicationsScreen>
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.primaryBlue,
                   foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 24,
+                    vertical: 12,
+                  ),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(8),
                   ),
@@ -924,7 +1093,9 @@ class _CommunicationsScreenState extends State<CommunicationsScreen>
                         height: 14,
                         decoration: BoxDecoration(
                           color: user.isOnline
-                              ? (user.isInCall ? Colors.orange : AppColors.primaryGreen)
+                              ? (user.isInCall
+                                    ? Colors.orange
+                                    : AppColors.primaryGreen)
                               : Colors.grey,
                           shape: BoxShape.circle,
                           border: Border.all(color: Colors.white, width: 2),
@@ -934,7 +1105,7 @@ class _CommunicationsScreenState extends State<CommunicationsScreen>
                   ],
                 ),
                 const SizedBox(width: 12),
-                
+
                 // User info
                 Expanded(
                   child: Column(
@@ -956,7 +1127,10 @@ class _CommunicationsScreenState extends State<CommunicationsScreen>
                           ),
                           if (user.isInCall)
                             Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 6,
+                                vertical: 2,
+                              ),
                               decoration: BoxDecoration(
                                 color: Colors.orange.withOpacity(0.1),
                                 borderRadius: BorderRadius.circular(4),
@@ -1000,7 +1174,7 @@ class _CommunicationsScreenState extends State<CommunicationsScreen>
                     ],
                   ),
                 ),
-                
+
                 // Action buttons
                 Row(
                   mainAxisSize: MainAxisSize.min,
@@ -1028,8 +1202,30 @@ class _CommunicationsScreenState extends State<CommunicationsScreen>
                       tooltip: !_isOnline
                           ? 'You are offline'
                           : (!user.isOnline
-                              ? 'User is offline'
-                              : (user.isInCall ? 'User is busy' : 'Direct Call')),
+                                ? 'User is offline'
+                                : (user.isInCall
+                                      ? 'User is busy'
+                                      : 'Direct Call')),
+                    ),
+                    // Video Call button
+                    IconButton(
+                      icon: Icon(
+                        Icons.video_camera_front,
+                        color: (user.isOnline && !user.isInCall && _isOnline)
+                            ? Colors.green
+                            : Colors.grey.withOpacity(0.5),
+                      ),
+                      iconSize: 22,
+                      onPressed: (user.isOnline && !user.isInCall && _isOnline)
+                          ? () => _initiateJitsiCall(user)
+                          : null,
+                      tooltip: !_isOnline
+                          ? 'You are offline'
+                          : (!user.isOnline
+                                ? 'User is offline - send a message instead'
+                                : (user.isInCall
+                                      ? 'User is currently in a call'
+                                      : 'Video Call')),
                     ),
                   ],
                 ),
@@ -1063,7 +1259,7 @@ class _CommunicationsScreenState extends State<CommunicationsScreen>
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
-              
+
               // User header
               Padding(
                 padding: const EdgeInsets.all(16),
@@ -1073,7 +1269,9 @@ class _CommunicationsScreenState extends State<CommunicationsScreen>
                       children: [
                         CircleAvatar(
                           radius: 30,
-                          backgroundColor: AppColors.primaryBlue.withOpacity(0.1),
+                          backgroundColor: AppColors.primaryBlue.withOpacity(
+                            0.1,
+                          ),
                           backgroundImage: user.userAvatar != null
                               ? NetworkImage(user.userAvatar!)
                               : null,
@@ -1098,7 +1296,9 @@ class _CommunicationsScreenState extends State<CommunicationsScreen>
                             height: 16,
                             decoration: BoxDecoration(
                               color: user.isOnline
-                                  ? (user.isInCall ? Colors.orange : AppColors.primaryGreen)
+                                  ? (user.isInCall
+                                        ? Colors.orange
+                                        : AppColors.primaryGreen)
                                   : Colors.grey,
                               shape: BoxShape.circle,
                               border: Border.all(color: Colors.white, width: 2),
@@ -1133,7 +1333,9 @@ class _CommunicationsScreenState extends State<CommunicationsScreen>
                                 height: 8,
                                 decoration: BoxDecoration(
                                   color: user.isOnline
-                                      ? (user.isInCall ? Colors.orange : AppColors.primaryGreen)
+                                      ? (user.isInCall
+                                            ? Colors.orange
+                                            : AppColors.primaryGreen)
                                       : Colors.grey,
                                   shape: BoxShape.circle,
                                 ),
@@ -1145,7 +1347,9 @@ class _CommunicationsScreenState extends State<CommunicationsScreen>
                                     : 'Offline',
                                 style: GoogleFonts.poppins(
                                   color: user.isOnline
-                                      ? (user.isInCall ? Colors.orange : AppColors.primaryGreen)
+                                      ? (user.isInCall
+                                            ? Colors.orange
+                                            : AppColors.primaryGreen)
                                       : Colors.grey,
                                   fontSize: 12,
                                   fontWeight: FontWeight.w500,
@@ -1159,9 +1363,9 @@ class _CommunicationsScreenState extends State<CommunicationsScreen>
                   ],
                 ),
               ),
-              
+
               const Divider(height: 1),
-              
+
               // Actions
               ListTile(
                 leading: Container(
@@ -1170,16 +1374,25 @@ class _CommunicationsScreenState extends State<CommunicationsScreen>
                     color: AppColors.primaryBlue.withOpacity(0.1),
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: const Icon(Icons.chat_bubble_outline, color: AppColors.primaryBlue),
+                  child: const Icon(
+                    Icons.chat_bubble_outline,
+                    color: AppColors.primaryBlue,
+                  ),
                 ),
-                title: Text('Send Message', style: GoogleFonts.poppins(fontWeight: FontWeight.w500)),
-                subtitle: Text('Start a chat conversation', style: GoogleFonts.poppins(fontSize: 12, color: Colors.grey)),
+                title: Text(
+                  'Send Message',
+                  style: GoogleFonts.poppins(fontWeight: FontWeight.w500),
+                ),
+                subtitle: Text(
+                  'Start a chat conversation',
+                  style: GoogleFonts.poppins(fontSize: 12, color: Colors.grey),
+                ),
                 onTap: () {
                   Navigator.pop(context);
                   _initiateChat(user);
                 },
               ),
-              
+
               ListTile(
                 leading: Container(
                   padding: const EdgeInsets.all(8),
@@ -1209,10 +1422,10 @@ class _CommunicationsScreenState extends State<CommunicationsScreen>
                   !_isOnline
                       ? 'You are offline'
                       : (!user.isOnline
-                          ? 'User is offline - send a message instead'
-                          : (user.isInCall
-                              ? 'User is currently in a call'
-                              : 'WebRTC call - faster on good networks')),
+                            ? 'User is offline - send a message instead'
+                            : (user.isInCall
+                                  ? 'User is currently in a call'
+                                  : 'WebRTC call - faster on good networks')),
                   style: GoogleFonts.poppins(fontSize: 12, color: Colors.grey),
                 ),
                 onTap: (user.isOnline && !user.isInCall && _isOnline)
@@ -1222,8 +1435,51 @@ class _CommunicationsScreenState extends State<CommunicationsScreen>
                       }
                     : null,
               ),
-              
-              
+
+              // Video Call option
+              ListTile(
+                leading: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: (user.isOnline && !user.isInCall && _isOnline)
+                        ? Colors.green.withOpacity(0.1)
+                        : Colors.grey.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(
+                    Icons.video_camera_front,
+                    color: (user.isOnline && !user.isInCall && _isOnline)
+                        ? Colors.green
+                        : Colors.grey,
+                  ),
+                ),
+                title: Text(
+                  'Video Call',
+                  style: GoogleFonts.poppins(
+                    fontWeight: FontWeight.w500,
+                    color: (user.isOnline && !user.isInCall && _isOnline)
+                        ? null
+                        : Colors.grey,
+                  ),
+                ),
+                subtitle: Text(
+                  !_isOnline
+                      ? 'You are offline'
+                      : (!user.isOnline
+                            ? 'User is offline - send a message instead'
+                            : (user.isInCall
+                                  ? 'User is currently in a call'
+                                  : 'More reliable - works on poor networks')),
+                  style: GoogleFonts.poppins(fontSize: 12, color: Colors.grey),
+                ),
+                onTap: (user.isOnline && !user.isInCall && _isOnline)
+                    ? () {
+                        Navigator.pop(context);
+                        _initiateJitsiCall(user);
+                      }
+                    : null,
+              ),
+
               const SizedBox(height: 16),
             ],
           ),
@@ -1235,7 +1491,7 @@ class _CommunicationsScreenState extends State<CommunicationsScreen>
   String _formatLastSeen(DateTime lastSeen) {
     final now = DateTime.now();
     final diff = now.difference(lastSeen);
-    
+
     if (diff.inMinutes < 1) return 'just now';
     if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
     if (diff.inHours < 24) return '${diff.inHours}h ago';

@@ -12,7 +12,10 @@ class StartVisitDialog extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final siteName = site['site_name'] ?? site['siteName'] ?? 'Unknown Site';
-    final siteCode = site['site_code'] ?? site['siteCode'] ?? site['id']?.toString().substring(0, 8) ?? '';
+    final siteCode = site['site_code'] ??
+        site['siteCode'] ??
+        site['id']?.toString().substring(0, 8) ??
+        '';
     final state = site['state'] ?? '';
     final locality = site['locality'] ?? '';
     final status = site['status'] ?? 'Pending';
@@ -43,7 +46,8 @@ class StartVisitDialog extends StatelessWidget {
                       color: Colors.white,
                       shape: BoxShape.circle,
                     ),
-                    child: const Icon(Icons.directions_car, color: Colors.black, size: 20),
+                    child: const Icon(Icons.directions_car,
+                        color: Colors.black, size: 20),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
@@ -97,7 +101,11 @@ class StartVisitDialog extends StatelessWidget {
                           _buildInfoRow(
                             icon: Icons.location_on,
                             label: 'Location',
-                            value: locality.isNotEmpty ? '$locality, $state' : state.isNotEmpty ? state : 'N/A',
+                            value: locality.isNotEmpty
+                                ? '$locality, $state'
+                                : state.isNotEmpty
+                                    ? state
+                                    : 'N/A',
                           ),
                           const SizedBox(height: 16),
                           _buildInfoRow(
@@ -158,13 +166,17 @@ class StartVisitDialog extends StatelessWidget {
                             ),
                           ),
                           const SizedBox(height: 16),
-                          _buildNextStepItem('Visit duration will start counting automatically'),
+                          _buildNextStepItem(
+                              'Visit duration will start counting automatically'),
                           const SizedBox(height: 12),
-                          _buildNextStepItem('Location monitoring will begin for accuracy tracking'),
+                          _buildNextStepItem(
+                              'Location monitoring will begin for accuracy tracking'),
                           const SizedBox(height: 12),
-                          _buildNextStepItem('You can add photos and observations during the visit'),
+                          _buildNextStepItem(
+                              'You can add photos and observations during the visit'),
                           const SizedBox(height: 12),
-                          _buildNextStepItem('Complete the detailed visit report when finished'),
+                          _buildNextStepItem(
+                              'Complete the detailed visit report when finished'),
                         ],
                       ),
                     ),
@@ -176,7 +188,7 @@ class StartVisitDialog extends StatelessWidget {
             // Footer - Action Buttons
             Container(
               padding: const EdgeInsets.all(24),
-              decoration: BoxDecoration(
+              decoration: const BoxDecoration(
                 border: Border(
                   top: BorderSide(color: AppColors.backgroundGray),
                 ),
@@ -251,7 +263,7 @@ class StartVisitDialog extends StatelessWidget {
         Container(
           width: 40,
           height: 40,
-          decoration: BoxDecoration(
+          decoration: const BoxDecoration(
             color: Colors.black,
             shape: BoxShape.circle,
           ),
@@ -345,4 +357,3 @@ class StartVisitDialog extends StatelessWidget {
     );
   }
 }
-

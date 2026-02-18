@@ -54,7 +54,12 @@ class SignatureConfirmationDialog extends StatefulWidget {
   final String? userRole;
   final List<SignatureMethod> allowedMethods;
   final bool isArabic;
-  final Future<SignatureResult> Function(SignatureMethod method, String? signatureData, String? otpCode) onSignatureComplete;
+  final Future<SignatureResult> Function(
+    SignatureMethod method,
+    String? signatureData,
+    String? otpCode,
+  )
+  onSign;
 
   const SignatureConfirmationDialog({
     super.key,
@@ -64,16 +69,21 @@ class SignatureConfirmationDialog extends StatefulWidget {
     this.userEmail,
     this.userPhone,
     this.userRole,
-    this.allowedMethods = const [SignatureMethod.uuid, SignatureMethod.handwriting],
+    this.allowedMethods = const [
+      SignatureMethod.uuid,
+      SignatureMethod.handwriting,
+    ],
     this.isArabic = false,
-    required this.onSignatureComplete,
+    required this.onSign,
   });
 
   @override
-  State<SignatureConfirmationDialog> createState() => _SignatureConfirmationDialogState();
+  State<SignatureConfirmationDialog> createState() =>
+      _SignatureConfirmationDialogState();
 }
 
-class _SignatureConfirmationDialogState extends State<SignatureConfirmationDialog>
+class _SignatureConfirmationDialogState
+    extends State<SignatureConfirmationDialog>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
   SignatureMethod _selectedMethod = SignatureMethod.uuid;
@@ -119,34 +129,38 @@ class _SignatureConfirmationDialogState extends State<SignatureConfirmationDialo
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(widget.isArabic 
-              ? 'تم إرسال رمز التحقق'
-              : 'Verification code sent'),
+          content: Text(
+            widget.isArabic ? 'تم إرسال رمز التحقق' : 'Verification code sent',
+          ),
         ),
       );
     }
   }
 
   Future<void> _submitSignature() async {
-    if (_selectedMethod == SignatureMethod.handwriting && _signatureData == null) {
+    if (_selectedMethod == SignatureMethod.handwriting &&
+        _signatureData == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(widget.isArabic 
-              ? 'يرجى رسم توقيعك'
-              : 'Please draw your signature'),
+          content: Text(
+            widget.isArabic ? 'يرجى رسم توقيعك' : 'Please draw your signature',
+          ),
           backgroundColor: Colors.red,
         ),
       );
       return;
     }
 
-    if ((_selectedMethod == SignatureMethod.email || _selectedMethod == SignatureMethod.phone) 
-        && _otpCode.isEmpty) {
+    if ((_selectedMethod == SignatureMethod.email ||
+            _selectedMethod == SignatureMethod.phone) &&
+        _otpCode.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(widget.isArabic 
-              ? 'يرجى إدخال رمز التحقق'
-              : 'Please enter verification code'),
+          content: Text(
+            widget.isArabic
+                ? 'يرجى إدخال رمز التحقق'
+                : 'Please enter verification code',
+          ),
           backgroundColor: Colors.red,
         ),
       );
@@ -156,7 +170,7 @@ class _SignatureConfirmationDialogState extends State<SignatureConfirmationDialo
     setState(() => _isSubmitting = true);
 
     try {
-      final result = await widget.onSignatureComplete(
+      final result = await widget.onSign(
         _selectedMethod,
         _signatureData,
         _otpCode.isNotEmpty ? _otpCode : null,
@@ -168,9 +182,11 @@ class _SignatureConfirmationDialogState extends State<SignatureConfirmationDialo
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(widget.isArabic 
-                ? 'فشل التوقيع: ${e.toString()}'
-                : 'Signature failed: ${e.toString()}'),
+            content: Text(
+              widget.isArabic
+                  ? 'فشل التوقيع: ${e.toString()}'
+                  : 'Signature failed: ${e.toString()}',
+            ),
             backgroundColor: Colors.red,
           ),
         );
@@ -249,10 +265,7 @@ class _SignatureConfirmationDialogState extends State<SignatureConfirmationDialo
               widget.isArabic
                   ? 'انقر "توقيع وتأكيد" للتوقيع فوراً باستخدام بيانات حسابك الآمنة'
                   : 'Click "Sign & Confirm" to instantly sign with your secure account credentials.',
-              style: TextStyle(
-                fontSize: 13,
-                color: Colors.grey[700],
-              ),
+              style: TextStyle(fontSize: 13, color: Colors.grey[700]),
             ),
           ),
         ],
@@ -276,7 +289,7 @@ class _SignatureConfirmationDialogState extends State<SignatureConfirmationDialo
 
   Widget _buildOtpContent(bool isEmail) {
     final destination = isEmail ? widget.userEmail : widget.userPhone;
-    
+
     return Column(
       children: [
         Container(
@@ -328,9 +341,9 @@ class _SignatureConfirmationDialogState extends State<SignatureConfirmationDialo
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
                   : Icon(isEmail ? Icons.email : Icons.phone),
-              label: Text(widget.isArabic 
-                  ? 'إرسال رمز التحقق'
-                  : 'Send Verification Code'),
+              label: Text(
+                widget.isArabic ? 'إرسال رمز التحقق' : 'Send Verification Code',
+              ),
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.primaryBlue,
                 foregroundColor: Colors.white,
@@ -379,21 +392,14 @@ class _SignatureConfirmationDialogState extends State<SignatureConfirmationDialo
       padding: const EdgeInsets.all(24),
       child: Column(
         children: [
-          Icon(
-            Icons.fingerprint,
-            size: 64,
-            color: AppColors.primaryBlue,
-          ),
+          Icon(Icons.fingerprint, size: 64, color: AppColors.primaryBlue),
           const SizedBox(height: 16),
           Text(
             widget.isArabic
                 ? 'ضع إصبعك على حساس البصمة'
                 : 'Place your finger on the fingerprint sensor',
             textAlign: TextAlign.center,
-            style: TextStyle(
-              fontSize: 14,
-              color: Colors.grey[600],
-            ),
+            style: TextStyle(fontSize: 14, color: Colors.grey[600]),
           ),
         ],
       ),
@@ -430,7 +436,7 @@ class _SignatureConfirmationDialogState extends State<SignatureConfirmationDialo
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          widget.isArabic 
+                          widget.isArabic
                               ? 'تأكيد الاستلام بالتوقيع'
                               : 'Confirm Receipt with Signature',
                           style: const TextStyle(
@@ -440,7 +446,7 @@ class _SignatureConfirmationDialogState extends State<SignatureConfirmationDialo
                           ),
                         ),
                         Text(
-                          widget.isArabic 
+                          widget.isArabic
                               ? 'راجع ووقّع لتأكيد هذه المعاملة'
                               : 'Review and sign to confirm this transaction',
                           style: TextStyle(
@@ -479,8 +485,11 @@ class _SignatureConfirmationDialogState extends State<SignatureConfirmationDialo
                             children: [
                               Row(
                                 children: [
-                                  Icon(Icons.description, 
-                                      size: 16, color: Colors.grey[600]),
+                                  Icon(
+                                    Icons.description,
+                                    size: 16,
+                                    color: Colors.grey[600],
+                                  ),
                                   const SizedBox(width: 8),
                                   Text(
                                     transaction.title,
@@ -493,7 +502,9 @@ class _SignatureConfirmationDialogState extends State<SignatureConfirmationDialo
                               ),
                               Container(
                                 padding: const EdgeInsets.symmetric(
-                                    horizontal: 8, vertical: 2),
+                                  horizontal: 8,
+                                  vertical: 2,
+                                ),
                                 decoration: BoxDecoration(
                                   color: AppColors.primaryBlue.withOpacity(0.1),
                                   borderRadius: BorderRadius.circular(8),
@@ -511,11 +522,17 @@ class _SignatureConfirmationDialogState extends State<SignatureConfirmationDialo
                           const Divider(height: 16),
                           Row(
                             children: [
-                              Icon(Icons.attach_money,
-                                  size: 20, color: Colors.green[600]),
+                              Icon(
+                                Icons.attach_money,
+                                size: 20,
+                                color: Colors.green[600],
+                              ),
                               const SizedBox(width: 8),
                               Text(
-                                _formatAmount(transaction.amount, transaction.currency),
+                                _formatAmount(
+                                  transaction.amount,
+                                  transaction.currency,
+                                ),
                                 style: TextStyle(
                                   fontSize: 18,
                                   fontWeight: FontWeight.bold,
@@ -528,8 +545,11 @@ class _SignatureConfirmationDialogState extends State<SignatureConfirmationDialo
                             const SizedBox(height: 8),
                             Row(
                               children: [
-                                Icon(Icons.person,
-                                    size: 16, color: Colors.grey[500]),
+                                Icon(
+                                  Icons.person,
+                                  size: 16,
+                                  color: Colors.grey[500],
+                                ),
                                 const SizedBox(width: 8),
                                 Text(transaction.counterparty!),
                               ],
@@ -575,12 +595,17 @@ class _SignatureConfirmationDialogState extends State<SignatureConfirmationDialo
                       decoration: BoxDecoration(
                         color: Colors.amber.withOpacity(0.1),
                         borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: Colors.amber.withOpacity(0.3)),
+                        border: Border.all(
+                          color: Colors.amber.withOpacity(0.3),
+                        ),
                       ),
                       child: Row(
                         children: [
-                          Icon(Icons.warning_amber,
-                              size: 20, color: Colors.amber[700]),
+                          Icon(
+                            Icons.warning_amber,
+                            size: 20,
+                            color: Colors.amber[700],
+                          ),
                           const SizedBox(width: 12),
                           Expanded(
                             child: Text(
@@ -631,9 +656,9 @@ class _SignatureConfirmationDialogState extends State<SignatureConfirmationDialo
                               ),
                             )
                           : const Icon(Icons.check_circle),
-                      label: Text(widget.isArabic 
-                          ? 'توقيع وتأكيد'
-                          : 'Sign & Confirm'),
+                      label: Text(
+                        widget.isArabic ? 'توقيع وتأكيد' : 'Sign & Confirm',
+                      ),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: AppColors.primaryBlue,
                         foregroundColor: Colors.white,

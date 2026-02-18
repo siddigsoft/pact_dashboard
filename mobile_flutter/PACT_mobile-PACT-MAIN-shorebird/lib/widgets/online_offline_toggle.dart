@@ -14,7 +14,7 @@ class OnlineOfflineToggle extends ConsumerStatefulWidget {
 
   const OnlineOfflineToggle({
     super.key,
-    this.variant = ToggleVariant.pill,  // Default to pill for smaller size
+    this.variant = ToggleVariant.pill, // Default to pill for smaller size
     this.mobileBottomOffset = true,
   });
 
@@ -25,7 +25,7 @@ class OnlineOfflineToggle extends ConsumerStatefulWidget {
 
 class _OnlineOfflineToggleState extends ConsumerState<OnlineOfflineToggle> {
   bool _isLoading = false;
-  bool _isSyncing = false;  // Guard against concurrent syncs
+  bool _isSyncing = false; // Guard against concurrent syncs
   // Local override for immediate UI feedback when offline
   UserAvailability? _localAvailabilityOverride;
 
@@ -66,7 +66,7 @@ class _OnlineOfflineToggleState extends ConsumerState<OnlineOfflineToggle> {
     // Guard against concurrent syncs
     if (_isSyncing) return;
     _isSyncing = true;
-    
+
     try {
       final connectivityResult = await Connectivity().checkConnectivity();
       final isOnline = !connectivityResult.contains(ConnectivityResult.none);
@@ -79,33 +79,33 @@ class _OnlineOfflineToggleState extends ConsumerState<OnlineOfflineToggle> {
       final profile = ref.read(currentUserProfileProvider);
       if (profile == null) return;
 
-      debugPrint('[OnlineOfflineToggle] Syncing pending availability: $pendingChange');
+      debugPrint(
+          '[OnlineOfflineToggle] Syncing pending availability: $pendingChange');
 
       final supabase = Supabase.instance.client;
-      await supabase
-          .from('profiles')
-          .update({
-            'availability': pendingChange,
-            'updated_at': DateTime.now().toIso8601String(),
-          })
-          .eq('id', profile.id);
+      await supabase.from('profiles').update({
+        'availability': pendingChange,
+        'updated_at': DateTime.now().toIso8601String(),
+      }).eq('id', profile.id);
 
       // Clear pending change after successful sync
       await prefs.remove(_pendingAvailabilityKey);
       await prefs.remove(_localAvailabilityKey);
-      
+
       if (mounted) {
         setState(() {
           _localAvailabilityOverride = null;
         });
       }
-      
+
       // Refresh profile provider
       ref.invalidate(currentUserProfileProvider);
-      
-      debugPrint('[OnlineOfflineToggle] Pending availability synced successfully');
+
+      debugPrint(
+          '[OnlineOfflineToggle] Pending availability synced successfully');
     } catch (e) {
-      debugPrint('[OnlineOfflineToggle] Error syncing pending availability: $e');
+      debugPrint(
+          '[OnlineOfflineToggle] Error syncing pending availability: $e');
     } finally {
       _isSyncing = false;
     }
@@ -118,19 +118,20 @@ class _OnlineOfflineToggleState extends ConsumerState<OnlineOfflineToggle> {
 
     try {
       final profile = ref.read(currentUserProfileProvider);
-      
+
       // Handle null profile gracefully - use cached local availability
       if (profile == null) {
         // Check if we have a local override we can toggle
         if (_localAvailabilityOverride != null) {
-          final newAvailability = _localAvailabilityOverride == UserAvailability.online
-              ? UserAvailability.offline
-              : UserAvailability.online;
-          
+          final newAvailability =
+              _localAvailabilityOverride == UserAvailability.online
+                  ? UserAvailability.offline
+                  : UserAvailability.online;
+
           final prefs = await SharedPreferences.getInstance();
           await prefs.setString(_pendingAvailabilityKey, newAvailability.value);
           await prefs.setString(_localAvailabilityKey, newAvailability.value);
-          
+
           if (mounted) {
             setState(() {
               _localAvailabilityOverride = newAvailability;
@@ -148,13 +149,14 @@ class _OnlineOfflineToggleState extends ConsumerState<OnlineOfflineToggle> {
           }
           return;
         }
-        
+
         // No profile and no local override - show friendly message
         if (mounted) {
           setState(() => _isLoading = false);
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text('Please wait for profile to load or check your connection'),
+              content: Text(
+                  'Please wait for profile to load or check your connection'),
               backgroundColor: Colors.orange,
               duration: Duration(seconds: 3),
             ),
@@ -164,7 +166,7 @@ class _OnlineOfflineToggleState extends ConsumerState<OnlineOfflineToggle> {
       }
 
       // Use local override if available, otherwise use profile
-      final currentAvailability = _localAvailabilityOverride ?? 
+      final currentAvailability = _localAvailabilityOverride ??
           UserAvailability.fromString(profile.availability.name);
       final newAvailability = currentAvailability == UserAvailability.online
           ? UserAvailability.offline
@@ -195,7 +197,7 @@ class _OnlineOfflineToggleState extends ConsumerState<OnlineOfflineToggle> {
         final prefs = await SharedPreferences.getInstance();
         await prefs.remove(_pendingAvailabilityKey);
         await prefs.remove(_localAvailabilityKey);
-        
+
         if (mounted) {
           setState(() {
             _localAvailabilityOverride = null;
@@ -209,14 +211,15 @@ class _OnlineOfflineToggleState extends ConsumerState<OnlineOfflineToggle> {
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString(_pendingAvailabilityKey, newAvailability.value);
         await prefs.setString(_localAvailabilityKey, newAvailability.value);
-        
+
         if (mounted) {
           setState(() {
             _localAvailabilityOverride = newAvailability;
           });
         }
-        
-        debugPrint('[OnlineOfflineToggle] Offline - queued availability change: ${newAvailability.value}');
+
+        debugPrint(
+            '[OnlineOfflineToggle] Offline - queued availability change: ${newAvailability.value}');
       }
 
       if (mounted) {
@@ -227,7 +230,7 @@ class _OnlineOfflineToggleState extends ConsumerState<OnlineOfflineToggle> {
             : (newAvailability == UserAvailability.online
                 ? 'You are now Online (will sync when connected)'
                 : 'You are now Offline (will sync when connected)');
-        
+
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(message),
@@ -259,7 +262,7 @@ class _OnlineOfflineToggleState extends ConsumerState<OnlineOfflineToggle> {
     final profile = ref.watch(currentUserProfileProvider);
 
     // Use local override if available (for offline mode), otherwise use profile
-    final availability = _localAvailabilityOverride ?? 
+    final availability = _localAvailabilityOverride ??
         (profile != null
             ? UserAvailability.fromString(profile.availability.name)
             : UserAvailability.offline);
@@ -322,7 +325,7 @@ class _OnlineOfflineToggleState extends ConsumerState<OnlineOfflineToggle> {
                   ),
                   child: Center(
                     child: _isLoading
-                        ? SizedBox(
+                        ? const SizedBox(
                             width: 16,
                             height: 16,
                             child: CircularProgressIndicator(

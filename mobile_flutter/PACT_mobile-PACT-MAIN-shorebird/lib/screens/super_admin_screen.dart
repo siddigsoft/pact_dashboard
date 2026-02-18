@@ -82,7 +82,9 @@ class _SuperAdminScreenState extends State<SuperAdminScreen>
     try {
       final response = await _supabase
           .from('profiles')
-          .select('id, full_name, email, role, status, avatar_url, created_at, state_id, locality_id')
+          .select(
+            'id, full_name, email, role, status, avatar_url, created_at, state_id, locality_id',
+          )
           .order('created_at', ascending: false);
 
       _allUsers = (response as List).cast<Map<String, dynamic>>();
@@ -125,9 +127,7 @@ class _SuperAdminScreenState extends State<SuperAdminScreen>
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
-      return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
-      );
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
     if (!_isSuperAdmin) {
@@ -187,11 +187,7 @@ class _SuperAdminScreenState extends State<SuperAdminScreen>
           Expanded(
             child: TabBarView(
               controller: _tabController,
-              children: [
-                _buildUsersTab(),
-                _buildRolesTab(),
-                _buildSystemTab(),
-              ],
+              children: [_buildUsersTab(), _buildRolesTab(), _buildSystemTab()],
             ),
           ),
         ],
@@ -204,7 +200,10 @@ class _SuperAdminScreenState extends State<SuperAdminScreen>
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         gradient: LinearGradient(
-          colors: [AppColors.primaryBlue, AppColors.primaryBlue.withOpacity(0.8)],
+          colors: [
+            AppColors.primaryBlue,
+            AppColors.primaryBlue.withOpacity(0.8),
+          ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
@@ -220,7 +219,11 @@ class _SuperAdminScreenState extends State<SuperAdminScreen>
                   color: Colors.white.withOpacity(0.2),
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: const Icon(Icons.admin_panel_settings, color: Colors.white, size: 28),
+                child: const Icon(
+                  Icons.admin_panel_settings,
+                  color: Colors.white,
+                  size: 28,
+                ),
               ),
               const SizedBox(width: 16),
               Expanded(
@@ -250,11 +253,23 @@ class _SuperAdminScreenState extends State<SuperAdminScreen>
           const SizedBox(height: 16),
           Row(
             children: [
-              _buildMiniStat('Active', _statusStats['active']?.toString() ?? '0', Colors.green),
+              _buildMiniStat(
+                'Active',
+                _statusStats['active']?.toString() ?? '0',
+                Colors.green,
+              ),
               const SizedBox(width: 12),
-              _buildMiniStat('Pending', _statusStats['pending_approval']?.toString() ?? '0', Colors.orange),
+              _buildMiniStat(
+                'Pending',
+                _statusStats['pending_approval']?.toString() ?? '0',
+                Colors.orange,
+              ),
               const SizedBox(width: 12),
-              _buildMiniStat('Suspended', _statusStats['suspended']?.toString() ?? '0', Colors.red),
+              _buildMiniStat(
+                'Suspended',
+                _statusStats['suspended']?.toString() ?? '0',
+                Colors.red,
+              ),
             ],
           ),
         ],
@@ -274,10 +289,7 @@ class _SuperAdminScreenState extends State<SuperAdminScreen>
           Container(
             width: 8,
             height: 8,
-            decoration: BoxDecoration(
-              color: color,
-              shape: BoxShape.circle,
-            ),
+            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
           ),
           const SizedBox(width: 8),
           Text(
@@ -374,7 +386,9 @@ class _SuperAdminScreenState extends State<SuperAdminScreen>
             CircleAvatar(
               radius: 24,
               backgroundColor: AppColors.primaryBlue.withOpacity(0.1),
-              backgroundImage: avatarUrl != null ? NetworkImage(avatarUrl) : null,
+              backgroundImage: avatarUrl != null
+                  ? NetworkImage(avatarUrl)
+                  : null,
               child: avatarUrl == null
                   ? Text(
                       name.isNotEmpty ? name[0].toUpperCase() : '?',
@@ -420,14 +434,23 @@ class _SuperAdminScreenState extends State<SuperAdminScreen>
               onSelected: (value) => _handleUserAction(value, user),
               itemBuilder: (context) => [
                 const PopupMenuItem(value: 'view', child: Text('View Details')),
-                const PopupMenuItem(value: 'edit_role', child: Text('Change Role')),
+                const PopupMenuItem(
+                  value: 'edit_role',
+                  child: Text('Change Role'),
+                ),
                 if (status != 'suspended')
                   const PopupMenuItem(
                     value: 'suspend',
-                    child: Text('Suspend', style: TextStyle(color: Colors.orange)),
+                    child: Text(
+                      'Suspend',
+                      style: TextStyle(color: Colors.orange),
+                    ),
                   ),
                 if (status == 'suspended')
-                  const PopupMenuItem(value: 'activate', child: Text('Activate')),
+                  const PopupMenuItem(
+                    value: 'activate',
+                    child: Text('Activate'),
+                  ),
                 const PopupMenuItem(
                   value: 'delete',
                   child: Text('Delete', style: TextStyle(color: Colors.red)),
@@ -602,12 +625,7 @@ class _SuperAdminScreenState extends State<SuperAdminScreen>
               ),
             ),
           ),
-          Expanded(
-            child: Text(
-              value,
-              style: GoogleFonts.poppins(),
-            ),
-          ),
+          Expanded(child: Text(value, style: GoogleFonts.poppins())),
         ],
       ),
     );
@@ -615,7 +633,15 @@ class _SuperAdminScreenState extends State<SuperAdminScreen>
 
   void _showChangeRoleDialog(Map<String, dynamic> user) {
     String? selectedRole = user['role'] as String?;
-    final roles = ['super_admin', 'admin', 'coordinator', 'field_coordinator', 'datacollector', 'enumerator', 'user'];
+    final roles = [
+      'super_admin',
+      'admin',
+      'coordinator',
+      'field_coordinator',
+      'datacollector',
+      'enumerator',
+      'user',
+    ];
 
     showDialog(
       context: context,
@@ -630,14 +656,16 @@ class _SuperAdminScreenState extends State<SuperAdminScreen>
                 style: GoogleFonts.poppins(fontSize: 14),
               ),
               const SizedBox(height: 16),
-              ...roles.map((role) => RadioListTile<String>(
-                    title: Text(role.replaceAll('_', ' ').toUpperCase()),
-                    value: role,
-                    groupValue: selectedRole,
-                    onChanged: (value) {
-                      setDialogState(() => selectedRole = value);
-                    },
-                  )),
+              ...roles.map(
+                (role) => RadioListTile<String>(
+                  title: Text(role.replaceAll('_', ' ').toUpperCase()),
+                  value: role,
+                  groupValue: selectedRole,
+                  onChanged: (value) {
+                    setDialogState(() => selectedRole = value);
+                  },
+                ),
+              ),
             ],
           ),
           actions: [
@@ -650,7 +678,9 @@ class _SuperAdminScreenState extends State<SuperAdminScreen>
                 Navigator.pop(context);
                 await _updateUserRole(user['id'], selectedRole);
               },
-              style: ElevatedButton.styleFrom(backgroundColor: AppColors.primaryBlue),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primaryBlue,
+              ),
               child: const Text('Save', style: TextStyle(color: Colors.white)),
             ),
           ],
@@ -663,10 +693,13 @@ class _SuperAdminScreenState extends State<SuperAdminScreen>
     if (newRole == null) return;
 
     try {
-      await _supabase.from('profiles').update({
-        'role': newRole,
-        'updated_at': DateTime.now().toIso8601String(),
-      }).eq('id', userId);
+      await _supabase
+          .from('profiles')
+          .update({
+            'role': newRole,
+            'updated_at': DateTime.now().toIso8601String(),
+          })
+          .eq('id', userId);
 
       await _loadData();
 
@@ -689,17 +722,22 @@ class _SuperAdminScreenState extends State<SuperAdminScreen>
 
   Future<void> _updateUserStatus(String userId, String newStatus) async {
     try {
-      await _supabase.from('profiles').update({
-        'status': newStatus,
-        'updated_at': DateTime.now().toIso8601String(),
-      }).eq('id', userId);
+      await _supabase
+          .from('profiles')
+          .update({
+            'status': newStatus,
+            'updated_at': DateTime.now().toIso8601String(),
+          })
+          .eq('id', userId);
 
       await _loadData();
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('User ${newStatus == 'suspended' ? 'suspended' : 'activated'}'),
+            content: Text(
+              'User ${newStatus == 'suspended' ? 'suspended' : 'activated'}',
+            ),
             backgroundColor: AppColors.primaryGreen,
           ),
         );
@@ -718,7 +756,9 @@ class _SuperAdminScreenState extends State<SuperAdminScreen>
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Delete User'),
-        content: Text('Are you sure you want to delete ${user['full_name']}? This action cannot be undone.'),
+        content: Text(
+          'Are you sure you want to delete ${user['full_name']}? This action cannot be undone.',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
@@ -770,7 +810,9 @@ class _SuperAdminScreenState extends State<SuperAdminScreen>
             ),
           ),
           const SizedBox(height: 16),
-          ..._roleStats.entries.map((entry) => _buildRoleStatCard(entry.key, entry.value)),
+          ..._roleStats.entries.map(
+            (entry) => _buildRoleStatCard(entry.key, entry.value),
+          ),
         ],
       ),
     );
@@ -818,10 +860,26 @@ class _SuperAdminScreenState extends State<SuperAdminScreen>
             ),
           ),
           const SizedBox(height: 16),
-          _buildSystemCard('Total Users', _allUsers.length.toString(), Icons.people),
-          _buildSystemCard('Active Users', (_statusStats['active'] ?? 0).toString(), Icons.check_circle),
-          _buildSystemCard('Pending Approvals', (_statusStats['pending_approval'] ?? 0).toString(), Icons.pending),
-          _buildSystemCard('Suspended Users', (_statusStats['suspended'] ?? 0).toString(), Icons.block),
+          _buildSystemCard(
+            'Total Users',
+            _allUsers.length.toString(),
+            Icons.people,
+          ),
+          _buildSystemCard(
+            'Active Users',
+            (_statusStats['active'] ?? 0).toString(),
+            Icons.check_circle,
+          ),
+          _buildSystemCard(
+            'Pending Approvals',
+            (_statusStats['pending_approval'] ?? 0).toString(),
+            Icons.pending,
+          ),
+          _buildSystemCard(
+            'Suspended Users',
+            (_statusStats['suspended'] ?? 0).toString(),
+            Icons.block,
+          ),
           const SizedBox(height: 24),
           Text(
             'Quick Actions',
@@ -1001,7 +1059,10 @@ class _SuperAdminScreenState extends State<SuperAdminScreen>
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text('Auto-Release Settings', style: GoogleFonts.poppins(fontWeight: FontWeight.bold)),
+        title: Text(
+          'Auto-Release Settings',
+          style: GoogleFonts.poppins(fontWeight: FontWeight.bold),
+        ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -1023,7 +1084,10 @@ class _SuperAdminScreenState extends State<SuperAdminScreen>
           ],
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close')),
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
         ],
       ),
     );
@@ -1037,7 +1101,9 @@ class _SuperAdminScreenState extends State<SuperAdminScreen>
 
   void _showPermitRequirements() {
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Permit requirements settings - Coming soon')),
+      const SnackBar(
+        content: Text('Permit requirements settings - Coming soon'),
+      ),
     );
   }
 
@@ -1067,7 +1133,9 @@ class _SuperAdminScreenState extends State<SuperAdminScreen>
 
   void _showEmailNotificationSettings() {
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Email notification settings - Coming soon')),
+      const SnackBar(
+        content: Text('Email notification settings - Coming soon'),
+      ),
     );
   }
 
@@ -1075,7 +1143,10 @@ class _SuperAdminScreenState extends State<SuperAdminScreen>
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text('Broadcast Message', style: GoogleFonts.poppins(fontWeight: FontWeight.bold)),
+        title: Text(
+          'Broadcast Message',
+          style: GoogleFonts.poppins(fontWeight: FontWeight.bold),
+        ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -1096,12 +1167,18 @@ class _SuperAdminScreenState extends State<SuperAdminScreen>
           ],
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
           ElevatedButton(
             onPressed: () {
               Navigator.pop(context);
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Message broadcast sent'), backgroundColor: Colors.green),
+                const SnackBar(
+                  content: Text('Message broadcast sent'),
+                  backgroundColor: Colors.green,
+                ),
               );
             },
             child: const Text('Send'),
@@ -1157,7 +1234,10 @@ class _SuperAdminScreenState extends State<SuperAdminScreen>
           ),
           child: Icon(icon, color: color),
         ),
-        title: Text(title, style: GoogleFonts.poppins(fontWeight: FontWeight.w600)),
+        title: Text(
+          title,
+          style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
+        ),
         subtitle: Text(subtitle, style: GoogleFonts.poppins(fontSize: 12)),
         trailing: Icon(Icons.chevron_right, color: Colors.grey[400]),
       ),
@@ -1165,7 +1245,9 @@ class _SuperAdminScreenState extends State<SuperAdminScreen>
   }
 
   Future<void> _approveAllPending() async {
-    final pendingUsers = _allUsers.where((u) => u['status'] == 'pending_approval').toList();
+    final pendingUsers = _allUsers
+        .where((u) => u['status'] == 'pending_approval')
+        .toList();
 
     if (pendingUsers.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -1178,7 +1260,9 @@ class _SuperAdminScreenState extends State<SuperAdminScreen>
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Approve All Pending'),
-        content: Text('This will approve ${pendingUsers.length} pending users. Continue?'),
+        content: Text(
+          'This will approve ${pendingUsers.length} pending users. Continue?',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
@@ -1186,8 +1270,13 @@ class _SuperAdminScreenState extends State<SuperAdminScreen>
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(context, true),
-            style: ElevatedButton.styleFrom(backgroundColor: AppColors.primaryGreen),
-            child: const Text('Approve All', style: TextStyle(color: Colors.white)),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primaryGreen,
+            ),
+            child: const Text(
+              'Approve All',
+              style: TextStyle(color: Colors.white),
+            ),
           ),
         ],
       ),
@@ -1196,10 +1285,13 @@ class _SuperAdminScreenState extends State<SuperAdminScreen>
     if (confirmed == true) {
       try {
         for (final user in pendingUsers) {
-          await _supabase.from('profiles').update({
-            'status': 'active',
-            'updated_at': DateTime.now().toIso8601String(),
-          }).eq('id', user['id']);
+          await _supabase
+              .from('profiles')
+              .update({
+                'status': 'active',
+                'updated_at': DateTime.now().toIso8601String(),
+              })
+              .eq('id', user['id']);
         }
 
         await _loadData();

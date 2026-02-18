@@ -20,7 +20,7 @@ class MapTileCacheService {
       await FMTCObjectBoxBackend().initialise();
 
       // Get or create the store
-      _store = FMTCStore(_storeName);
+      _store = const FMTCStore(_storeName);
       await _store.manage.create();
 
       debugPrint('Map tile cache initialized successfully');

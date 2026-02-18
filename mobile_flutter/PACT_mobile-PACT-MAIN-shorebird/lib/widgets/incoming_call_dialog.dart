@@ -2,7 +2,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:audioplayers/audioplayers.dart';
-import '../services/webrtc_service.dart';
+import '../services/jitsi_call_service.dart';
 import '../screens/call_screen.dart';
 
 class IncomingCallDialog extends StatefulWidget {
@@ -45,7 +45,9 @@ class _IncomingCallDialogState extends State<IncomingCallDialog> {
   Future<void> _playRingingSound() async {
     try {
       await _audioPlayer.setReleaseMode(ReleaseMode.loop);
-      await _audioPlayer.play(AssetSource('sounds/Phone Dial Tone - Sound Effect (HD).mp3'));
+      await _audioPlayer.play(
+        AssetSource('sounds/Phone Dial Tone - Sound Effect (HD).mp3'),
+      );
     } catch (e) {
       debugPrint('Error playing incoming call sound: $e');
     }
@@ -77,7 +79,9 @@ class _IncomingCallDialogState extends State<IncomingCallDialog> {
               radius: 50,
               backgroundColor: Colors.black,
               child: Text(
-                widget.callerName.isNotEmpty ? widget.callerName[0].toUpperCase() : 'U',
+                widget.callerName.isNotEmpty
+                    ? widget.callerName[0].toUpperCase()
+                    : 'U',
                 style: const TextStyle(
                   fontSize: 36,
                   color: Colors.white,
@@ -110,11 +114,10 @@ class _IncomingCallDialogState extends State<IncomingCallDialog> {
                 ),
                 const SizedBox(width: 8),
                 Text(
-                  widget.isAudioOnly ? 'Incoming audio call' : 'Incoming video call',
-                  style: TextStyle(
-                    fontSize: 16,
-                    color: Colors.grey[600],
-                  ),
+                  widget.isAudioOnly
+                      ? 'Incoming audio call'
+                      : 'Incoming video call',
+                  style: TextStyle(fontSize: 16, color: Colors.grey[600]),
                 ),
               ],
             ),
@@ -130,7 +133,7 @@ class _IncomingCallDialogState extends State<IncomingCallDialog> {
                     GestureDetector(
                       onTap: () async {
                         await _stopRingingSound();
-                        await WebRTCService().rejectCall(widget.callerId, widget.callId);
+                        await JitsiCallService().rejectCall();
                         if (mounted && context.mounted) {
                           Navigator.of(context).pop();
                         }
@@ -152,10 +155,7 @@ class _IncomingCallDialogState extends State<IncomingCallDialog> {
                     const SizedBox(height: 8),
                     const Text(
                       'Decline',
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: Colors.black,
-                      ),
+                      style: TextStyle(fontSize: 14, color: Colors.black),
                     ),
                   ],
                 ),
@@ -166,24 +166,22 @@ class _IncomingCallDialogState extends State<IncomingCallDialog> {
                     GestureDetector(
                       onTap: () async {
                         await _stopRingingSound();
-                        
+
                         // Store navigator reference before async operations
                         final navigator = Navigator.of(context);
-                        
+
                         if (mounted && context.mounted) {
                           navigator.pop();
                         }
-                        
-                        await WebRTCService()
-                            .acceptCall(widget.callerId, widget.callId, widget.callToken);
-                        
+
+                        await JitsiCallService().answerCall(videoEnabled: true);
+
                         // Navigate to call screen using stored navigator
                         if (mounted) {
                           navigator.push(
                             MaterialPageRoute(
-                              builder: (ctx) => CallScreen(
-                                remoteUserName: widget.callerName,
-                              ),
+                              builder: (ctx) =>
+                                  CallScreen(targetUserName: widget.callerName),
                             ),
                           );
                         }
@@ -205,10 +203,7 @@ class _IncomingCallDialogState extends State<IncomingCallDialog> {
                     const SizedBox(height: 8),
                     const Text(
                       'Accept',
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: Colors.black,
-                      ),
+                      style: TextStyle(fontSize: 14, color: Colors.black),
                     ),
                   ],
                 ),

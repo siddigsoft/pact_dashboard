@@ -9,51 +9,56 @@ final siteVisitServiceProvider = Provider<SiteVisitService>((ref) {
 });
 
 /// Stream provider for assigned site visits (real-time)
-final assignedSiteVisitsStreamProvider = StreamProvider.autoDispose<List<Map<String, dynamic>>>((ref) {
-  final userId = ref.watch(currentUserIdProvider);
-  if (userId == null) {
-    return Stream.value([]);
-  }
+final assignedSiteVisitsStreamProvider =
+    StreamProvider.autoDispose<List<Map<String, dynamic>>>((ref) {
+      final userId = ref.watch(currentUserIdProvider);
+      if (userId == null) {
+        return Stream.value([]);
+      }
 
-  final service = ref.watch(siteVisitServiceProvider);
-  return service.watchAssignedSiteVisits(userId);
-});
+      final service = ref.watch(siteVisitServiceProvider);
+      return service.watchAssignedSiteVisits(userId);
+    });
 
 /// Stream provider for available site visits (real-time)
-final availableSiteVisitsStreamProvider = StreamProvider.autoDispose<List<SiteVisit>>((ref) {
-  final service = ref.watch(siteVisitServiceProvider);
-  return service.watchAvailableSiteVisits();
-});
+final availableSiteVisitsStreamProvider =
+    StreamProvider.autoDispose<List<SiteVisit>>((ref) {
+      final service = ref.watch(siteVisitServiceProvider);
+      return service.watchAvailableSiteVisits();
+    });
 
 /// Stream provider for accepted site visits (real-time)
-final acceptedSiteVisitsStreamProvider = StreamProvider.autoDispose<List<SiteVisit>>((ref) {
-  final userId = ref.watch(currentUserIdProvider);
-  if (userId == null) {
-    return Stream.value([]);
-  }
+final acceptedSiteVisitsStreamProvider =
+    StreamProvider.autoDispose<List<SiteVisit>>((ref) {
+      final userId = ref.watch(currentUserIdProvider);
+      if (userId == null) {
+        return Stream.value([]);
+      }
 
-  final service = ref.watch(siteVisitServiceProvider);
-  return service.watchAcceptedSiteVisits(userId);
-});
+      final service = ref.watch(siteVisitServiceProvider);
+      return service.watchAcceptedSiteVisits(userId);
+    });
 
 /// Stream provider for ongoing site visits (real-time)
-final ongoingSiteVisitsStreamProvider = StreamProvider.autoDispose<List<SiteVisit>>((ref) {
-  final userId = ref.watch(currentUserIdProvider);
-  if (userId == null) {
-    return Stream.value([]);
-  }
+final ongoingSiteVisitsStreamProvider =
+    StreamProvider.autoDispose<List<SiteVisit>>((ref) {
+      final userId = ref.watch(currentUserIdProvider);
+      if (userId == null) {
+        return Stream.value([]);
+      }
 
-  final service = ref.watch(siteVisitServiceProvider);
-  return service.watchOngoingSiteVisits(userId);
-});
+      final service = ref.watch(siteVisitServiceProvider);
+      return service.watchOngoingSiteVisits(userId);
+    });
 
 /// Stream provider for completed site visits (real-time)
-final completedSiteVisitsStreamProvider = StreamProvider.autoDispose<List<SiteVisit>>((ref) {
-  final userId = ref.watch(currentUserIdProvider);
-  if (userId == null) {
-    return Stream.value([]);
-  }
+final completedSiteVisitsStreamProvider =
+    StreamProvider.autoDispose<List<SiteVisit>>((ref) {
+      final userId = ref.watch(currentUserIdProvider);
+      if (userId == null) {
+        return Stream.value([]);
+      }
 
-  final service = ref.watch(siteVisitServiceProvider);
-  return service.watchCompletedSiteVisits(userId);
-});
+      final service = ref.watch(siteVisitServiceProvider);
+      return service.watchCompletedSiteVisits(userId);
+    });

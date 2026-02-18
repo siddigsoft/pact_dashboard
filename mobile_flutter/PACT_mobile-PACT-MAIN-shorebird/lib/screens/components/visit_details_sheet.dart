@@ -8,7 +8,7 @@ import 'package:geolocator/geolocator.dart';
 import '../../services/staff_tracking_service.dart';
 import '../../services/location_tracking_service.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../../services/offline_data_service.dart';
+import '../../services/offline/offline_db.dart';
 import 'report_form_sheet.dart';
 import '../../widgets/claim_site_button.dart';
 import '../../widgets/start_visit_button.dart';
@@ -85,8 +85,13 @@ class _VisitDetailsSheetState extends State<VisitDetailsSheet> {
       } catch (_) {}
 
       // Fallback to offline cache
-      final offline = OfflineDataService();
-      final cached = await offline.getCachedReports();
+      final offlineDb = OfflineDb();
+      final cachedItem = offlineDb.getCachedItem(
+        OfflineDb.reportsCacheBox,
+        'reports_${_visit.id}',
+      );
+      final cachedData = cachedItem?.data as Map<String, dynamic>?;
+      final cached = cachedData?['reports'] as List? ?? [];
       final exists = cached.any((r) => r['site_visit_id'] == _visit.id);
       if (mounted) {
         setState(() {
@@ -237,9 +242,9 @@ class _VisitDetailsSheetState extends State<VisitDetailsSheet> {
       // Surface error
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
+          const SnackBar(
             content: Row(
-              children: const [
+              children: [
                 Icon(Icons.error, color: Colors.white),
                 SizedBox(width: 8),
                 Expanded(child: Text('Failed to update visit status')),
@@ -417,9 +422,8 @@ class _VisitDetailsSheetState extends State<VisitDetailsSheet> {
                     icon: Icons.qr_code,
                     iconColor: Colors.purple.shade400,
                     title: 'Site Code',
-                    content: _visit.siteCode.isNotEmpty
-                        ? _visit.siteCode
-                        : 'N/A',
+                    content:
+                        _visit.siteCode.isNotEmpty ? _visit.siteCode : 'N/A',
                   ),
                   const Divider(),
 
@@ -512,8 +516,8 @@ class _VisitDetailsSheetState extends State<VisitDetailsSheet> {
                       icon: Icons.visibility,
                       iconColor: Colors.indigo.shade400,
                       title: 'Monitoring By',
-                      content: _visit.additionalData!['monitoring_by']
-                          .toString(),
+                      content:
+                          _visit.additionalData!['monitoring_by'].toString(),
                     ),
                     const Divider(),
                   ],
@@ -845,13 +849,13 @@ class _VisitDetailsSheetState extends State<VisitDetailsSheet> {
             ),
             child: Row(
               children: [
-                Icon(Icons.navigation, color: AppColors.primaryOrange),
+                const Icon(Icons.navigation, color: AppColors.primaryOrange),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
+                      const Text(
                         'Journey in Progress',
                         style: TextStyle(
                           fontSize: 14,
@@ -914,13 +918,14 @@ class _VisitDetailsSheetState extends State<VisitDetailsSheet> {
           ),
           child: Row(
             children: [
-              Icon(Icons.check_circle, color: AppColors.success, size: 28),
+              const Icon(Icons.check_circle,
+                  color: AppColors.success, size: 28),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
+                    const Text(
                       'Visit Completed',
                       style: TextStyle(
                         fontSize: 16,
@@ -955,10 +960,10 @@ class _VisitDetailsSheetState extends State<VisitDetailsSheet> {
             borderRadius: BorderRadius.circular(12),
             border: Border.all(color: AppColors.primaryOrange.withOpacity(0.3)),
           ),
-          child: Row(
+          child: const Row(
             children: [
               Icon(Icons.timer, color: AppColors.primaryOrange, size: 28),
-              const SizedBox(width: 12),
+              SizedBox(width: 12),
               Expanded(
                 child: Text(
                   'Visit in progress - use the timer overlay to complete',

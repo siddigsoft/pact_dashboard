@@ -140,7 +140,7 @@ class ModernCard extends StatelessWidget {
                 ),
               ),
             ),
-          if (headerTrailing != null) headerTrailing!,
+          ?headerTrailing,
         ],
       ),
     );

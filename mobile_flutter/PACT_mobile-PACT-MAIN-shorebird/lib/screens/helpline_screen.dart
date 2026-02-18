@@ -113,7 +113,7 @@ class HelplineScreen extends StatelessWidget {
                           color: AppColors.primaryOrange.withOpacity(0.1),
                           shape: BoxShape.circle,
                         ),
-                        child: Icon(
+                        child: const Icon(
                           Icons.person,
                           color: AppColors.primaryOrange,
                         ),
@@ -163,7 +163,7 @@ class HelplineScreen extends StatelessWidget {
                             HapticFeedback.mediumImpact();
                             _makeCall(supervisor.phone);
                           },
-                          icon: Icon(
+                          icon: const Icon(
                             Icons.phone,
                             color: AppColors.primaryOrange,
                             size: 20,
@@ -177,8 +177,8 @@ class HelplineScreen extends StatelessWidget {
                           ),
                           style: TextButton.styleFrom(
                             padding: const EdgeInsets.all(12),
-                            backgroundColor: AppColors.primaryOrange
-                                .withOpacity(0.1),
+                            backgroundColor:
+                                AppColors.primaryOrange.withOpacity(0.1),
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(8),
                             ),
@@ -191,7 +191,8 @@ class HelplineScreen extends StatelessWidget {
                           HapticFeedback.mediumImpact();
                           _sendEmail(supervisor.email);
                         },
-                        icon: Icon(Icons.email, color: AppColors.primaryOrange),
+                        icon: const Icon(Icons.email,
+                            color: AppColors.primaryOrange),
                         style: IconButton.styleFrom(
                           backgroundColor: AppColors.primaryOrange.withOpacity(
                             0.1,

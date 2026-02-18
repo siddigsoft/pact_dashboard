@@ -17,15 +17,6 @@ class AdvanceReportService {
           .order('requested_at', ascending: false);
 
       return (response as List)
-          .where((json) {
-            if (json['status'] == 'cancelled') {
-              final metadata = json['metadata'];
-              if (metadata is Map && metadata['deleted'] == true) {
-                return false;
-              }
-            }
-            return true;
-          })
           .map((json) => AdvanceRequestData.fromJson(json))
           .toList();
     } catch (e) {
@@ -39,7 +30,7 @@ class AdvanceReportService {
       final response = await _supabase
           .from('profiles')
           .select('id, full_name, username, email');
-      
+
       final Map<String, dynamic> profileMap = {};
       for (var profile in response as List) {
         profileMap[profile['id']] = profile;
@@ -62,7 +53,7 @@ class AdvanceReportService {
 
     for (var req in requests) {
       totalRequested += req.requestedAmount;
-      
+
       switch (req.status.toLowerCase()) {
         case 'approved':
         case 'partially_paid':
@@ -95,9 +86,11 @@ class AdvanceReportService {
     );
   }
 
-  static List<ReportGroupData> groupByTeamMember(List<AdvanceRequestData> requests) {
+  static List<ReportGroupData> groupByTeamMember(
+    List<AdvanceRequestData> requests,
+  ) {
     final Map<String, List<AdvanceRequestData>> grouped = {};
-    
+
     for (var req in requests) {
       final key = req.requesterName ?? req.requestedBy;
       grouped.putIfAbsent(key, () => []).add(req);
@@ -105,12 +98,26 @@ class AdvanceReportService {
 
     return grouped.entries.map((entry) {
       final reqs = entry.value;
-      final totalRequested = reqs.fold<double>(0, (sum, r) => sum + r.requestedAmount);
+      final totalRequested = reqs.fold<double>(
+        0,
+        (sum, r) => sum + r.requestedAmount,
+      );
       final totalApproved = reqs
-          .where((r) => ['approved', 'partially_paid', 'fully_paid'].contains(r.status.toLowerCase()))
+          .where(
+            (r) => [
+              'approved',
+              'partially_paid',
+              'fully_paid',
+            ].contains(r.status.toLowerCase()),
+          )
           .fold<double>(0, (sum, r) => sum + r.requestedAmount);
       final pending = reqs
-          .where((r) => ['pending_supervisor', 'pending_admin'].contains(r.status.toLowerCase()))
+          .where(
+            (r) => [
+              'pending_supervisor',
+              'pending_admin',
+            ].contains(r.status.toLowerCase()),
+          )
           .length;
 
       return ReportGroupData(
@@ -120,13 +127,12 @@ class AdvanceReportService {
         totalApproved: totalApproved,
         pending: pending,
       );
-    }).toList()
-      ..sort((a, b) => b.totalRequested.compareTo(a.totalRequested));
+    }).toList()..sort((a, b) => b.totalRequested.compareTo(a.totalRequested));
   }
 
   static List<ReportGroupData> groupByHub(List<AdvanceRequestData> requests) {
     final Map<String, List<AdvanceRequestData>> grouped = {};
-    
+
     for (var req in requests) {
       final key = req.hubName ?? 'Unknown Hub';
       grouped.putIfAbsent(key, () => []).add(req);
@@ -134,12 +140,26 @@ class AdvanceReportService {
 
     return grouped.entries.map((entry) {
       final reqs = entry.value;
-      final totalRequested = reqs.fold<double>(0, (sum, r) => sum + r.requestedAmount);
+      final totalRequested = reqs.fold<double>(
+        0,
+        (sum, r) => sum + r.requestedAmount,
+      );
       final totalApproved = reqs
-          .where((r) => ['approved', 'partially_paid', 'fully_paid'].contains(r.status.toLowerCase()))
+          .where(
+            (r) => [
+              'approved',
+              'partially_paid',
+              'fully_paid',
+            ].contains(r.status.toLowerCase()),
+          )
           .fold<double>(0, (sum, r) => sum + r.requestedAmount);
       final pending = reqs
-          .where((r) => ['pending_supervisor', 'pending_admin'].contains(r.status.toLowerCase()))
+          .where(
+            (r) => [
+              'pending_supervisor',
+              'pending_admin',
+            ].contains(r.status.toLowerCase()),
+          )
           .length;
 
       return ReportGroupData(
@@ -149,13 +169,14 @@ class AdvanceReportService {
         totalApproved: totalApproved,
         pending: pending,
       );
-    }).toList()
-      ..sort((a, b) => b.totalRequested.compareTo(a.totalRequested));
+    }).toList()..sort((a, b) => b.totalRequested.compareTo(a.totalRequested));
   }
 
-  static List<ReportGroupData> groupByStatus(List<AdvanceRequestData> requests) {
+  static List<ReportGroupData> groupByStatus(
+    List<AdvanceRequestData> requests,
+  ) {
     final Map<String, List<AdvanceRequestData>> grouped = {};
-    
+
     for (var req in requests) {
       final key = req.status;
       grouped.putIfAbsent(key, () => []).add(req);
@@ -163,12 +184,26 @@ class AdvanceReportService {
 
     return grouped.entries.map((entry) {
       final reqs = entry.value;
-      final totalRequested = reqs.fold<double>(0, (sum, r) => sum + r.requestedAmount);
+      final totalRequested = reqs.fold<double>(
+        0,
+        (sum, r) => sum + r.requestedAmount,
+      );
       final totalApproved = reqs
-          .where((r) => ['approved', 'partially_paid', 'fully_paid'].contains(r.status.toLowerCase()))
+          .where(
+            (r) => [
+              'approved',
+              'partially_paid',
+              'fully_paid',
+            ].contains(r.status.toLowerCase()),
+          )
           .fold<double>(0, (sum, r) => sum + r.requestedAmount);
       final pending = reqs
-          .where((r) => ['pending_supervisor', 'pending_admin'].contains(r.status.toLowerCase()))
+          .where(
+            (r) => [
+              'pending_supervisor',
+              'pending_admin',
+            ].contains(r.status.toLowerCase()),
+          )
           .length;
 
       return ReportGroupData(
@@ -178,13 +213,12 @@ class AdvanceReportService {
         totalApproved: totalApproved,
         pending: pending,
       );
-    }).toList()
-      ..sort((a, b) => b.totalRequested.compareTo(a.totalRequested));
+    }).toList()..sort((a, b) => b.totalRequested.compareTo(a.totalRequested));
   }
 
   static List<ReportGroupData> groupByState(List<AdvanceRequestData> requests) {
     final Map<String, List<AdvanceRequestData>> grouped = {};
-    
+
     for (var req in requests) {
       final key = req.stateName ?? 'Unknown State';
       grouped.putIfAbsent(key, () => []).add(req);
@@ -192,12 +226,26 @@ class AdvanceReportService {
 
     return grouped.entries.map((entry) {
       final reqs = entry.value;
-      final totalRequested = reqs.fold<double>(0, (sum, r) => sum + r.requestedAmount);
+      final totalRequested = reqs.fold<double>(
+        0,
+        (sum, r) => sum + r.requestedAmount,
+      );
       final totalApproved = reqs
-          .where((r) => ['approved', 'partially_paid', 'fully_paid'].contains(r.status.toLowerCase()))
+          .where(
+            (r) => [
+              'approved',
+              'partially_paid',
+              'fully_paid',
+            ].contains(r.status.toLowerCase()),
+          )
           .fold<double>(0, (sum, r) => sum + r.requestedAmount);
       final pending = reqs
-          .where((r) => ['pending_supervisor', 'pending_admin'].contains(r.status.toLowerCase()))
+          .where(
+            (r) => [
+              'pending_supervisor',
+              'pending_admin',
+            ].contains(r.status.toLowerCase()),
+          )
           .length;
 
       return ReportGroupData(
@@ -207,13 +255,14 @@ class AdvanceReportService {
         totalApproved: totalApproved,
         pending: pending,
       );
-    }).toList()
-      ..sort((a, b) => b.totalRequested.compareTo(a.totalRequested));
+    }).toList()..sort((a, b) => b.totalRequested.compareTo(a.totalRequested));
   }
 
-  static List<ReportGroupData> groupByProject(List<AdvanceRequestData> requests) {
+  static List<ReportGroupData> groupByProject(
+    List<AdvanceRequestData> requests,
+  ) {
     final Map<String, List<AdvanceRequestData>> grouped = {};
-    
+
     for (var req in requests) {
       final key = req.projectName ?? 'Unknown Project';
       grouped.putIfAbsent(key, () => []).add(req);
@@ -221,12 +270,26 @@ class AdvanceReportService {
 
     return grouped.entries.map((entry) {
       final reqs = entry.value;
-      final totalRequested = reqs.fold<double>(0, (sum, r) => sum + r.requestedAmount);
+      final totalRequested = reqs.fold<double>(
+        0,
+        (sum, r) => sum + r.requestedAmount,
+      );
       final totalApproved = reqs
-          .where((r) => ['approved', 'partially_paid', 'fully_paid'].contains(r.status.toLowerCase()))
+          .where(
+            (r) => [
+              'approved',
+              'partially_paid',
+              'fully_paid',
+            ].contains(r.status.toLowerCase()),
+          )
           .fold<double>(0, (sum, r) => sum + r.requestedAmount);
       final pending = reqs
-          .where((r) => ['pending_supervisor', 'pending_admin'].contains(r.status.toLowerCase()))
+          .where(
+            (r) => [
+              'pending_supervisor',
+              'pending_admin',
+            ].contains(r.status.toLowerCase()),
+          )
           .length;
 
       return ReportGroupData(
@@ -236,8 +299,7 @@ class AdvanceReportService {
         totalApproved: totalApproved,
         pending: pending,
       );
-    }).toList()
-      ..sort((a, b) => b.totalRequested.compareTo(a.totalRequested));
+    }).toList()..sort((a, b) => b.totalRequested.compareTo(a.totalRequested));
   }
 
   static Future<bool> checkUserHasReportAccess() async {
@@ -254,7 +316,7 @@ class AdvanceReportService {
       if (profile == null) return false;
 
       final role = (profile['role'] as String?)?.toLowerCase() ?? '';
-      
+
       return role == 'admin' ||
           role == 'super_admin' ||
           role == 'supervisor' ||

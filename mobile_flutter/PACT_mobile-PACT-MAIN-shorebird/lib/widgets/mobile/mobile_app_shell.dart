@@ -6,9 +6,9 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:uuid/uuid.dart';
 import '../../services/offline/offline_db.dart';
 import '../../services/offline/models.dart';
-import '../../services/offline/sync_manager.dart';
 import '../../providers/offline_provider.dart';
-import '../offline/sync_status_widget.dart' show SyncStatusBar, SyncProgressToast, OfflineBanner;
+import '../offline/sync_status_widget.dart'
+    show SyncStatusBar, SyncProgressToast, OfflineBanner;
 
 /// Main app shell for mobile that sets up offline functionality
 class MobileAppShell extends ConsumerStatefulWidget {
@@ -64,17 +64,13 @@ class _MobileAppShellState extends ConsumerState<MobileAppShell>
       _connectivity = Connectivity();
       _connectivity.onConnectivityChanged.listen((result) {
         // Handle List<ConnectivityResult> from newer connectivity_plus
-        final isOnline = result is List
-            ? !(result as List).contains(ConnectivityResult.none)
-            : result != ConnectivityResult.none;
+        final isOnline = !(result as List).contains(ConnectivityResult.none);
         _handleNetworkChange(isOnline);
       });
 
       // Initial network check
       final result = await _connectivity.checkConnectivity();
-      _isOnline = result is List
-          ? !(result as List).contains(ConnectivityResult.none)
-          : result != ConnectivityResult.none;
+      _isOnline = !(result as List).contains(ConnectivityResult.none);
       _handleNetworkChange(_isOnline);
 
       debugPrint('[OfflineMode] Initialization complete. Online: $_isOnline');
@@ -280,9 +276,9 @@ class _MobileAppShellState extends ConsumerState<MobileAppShell>
         if (!_isOnline) {
           // App came to foreground, check if we're online again
           _connectivity.checkConnectivity().then((result) {
-            final isOnline = result is List
-                ? !(result as List).contains(ConnectivityResult.none)
-                : result != ConnectivityResult.none;
+            final isOnline = !(result as List).contains(
+              ConnectivityResult.none,
+            );
             if (isOnline) {
               _handleNetworkChange(true);
             }
@@ -344,9 +340,9 @@ class OfflineModeWrapper extends ConsumerWidget {
         if (showStatusBar)
           SyncStatusBar(
             onSyncPressed: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Starting sync...')),
-              );
+              ScaffoldMessenger.of(
+                context,
+              ).showSnackBar(const SnackBar(content: Text('Starting sync...')));
             },
           ),
         Expanded(

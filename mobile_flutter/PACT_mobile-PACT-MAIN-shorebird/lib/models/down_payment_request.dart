@@ -20,8 +20,7 @@ List<InstallmentPlan> _installmentPlanFromJson(List<dynamic>? json) {
   }
 }
 
-List<Map<String, dynamic>> _installmentPlanToJson(
-    List<InstallmentPlan> plans) {
+List<Map<String, dynamic>> _installmentPlanToJson(List<InstallmentPlan> plans) {
   return plans.map((p) => p.toJson()).toList();
 }
 
@@ -38,7 +37,8 @@ List<PaidInstallment> _paidInstallmentFromJson(List<dynamic>? json) {
 }
 
 List<Map<String, dynamic>> _paidInstallmentToJson(
-    List<PaidInstallment> installments) {
+  List<PaidInstallment> installments,
+) {
   return installments.map((p) => p.toJson()).toList();
 }
 
@@ -55,16 +55,16 @@ class DownPaymentRequest with _$DownPaymentRequest {
     @JsonKey(name: 'site_name') @Default('') String siteName,
     @JsonKey(name: 'requested_by') required String requestedBy,
     @JsonKey(name: 'requested_at') required DateTime requestedAt,
-    @JsonKey(name: 'requester_role') @Default('dataCollector')
+    @JsonKey(name: 'requester_role')
+    @Default('dataCollector')
     String requesterRole,
     @JsonKey(name: 'hub_id') String? hubId,
     @JsonKey(name: 'hub_name') String? hubName,
-    @JsonKey(name: 'total_transportation_budget') @Default(0.0)
+    @JsonKey(name: 'total_transportation_budget')
+    @Default(0.0)
     double totalTransportationBudget,
-    @JsonKey(name: 'requested_amount') @Default(0.0)
-    double requestedAmount,
-    @JsonKey(name: 'payment_type') @Default('full_advance')
-    String paymentType,
+    @JsonKey(name: 'requested_amount') @Default(0.0) double requestedAmount,
+    @JsonKey(name: 'payment_type') @Default('full_advance') String paymentType,
     @JsonKey(
       name: 'installment_plan',
       fromJson: _installmentPlanFromJson,
@@ -79,9 +79,9 @@ class DownPaymentRequest with _$DownPaymentRequest {
     )
     @Default([])
     List<PaidInstallment> paidInstallments,
-    @JsonKey(name: 'justification') @Default('')
-    String justification,
-    @JsonKey(name: 'supporting_documents') @Default([])
+    @JsonKey(name: 'justification') @Default('') String justification,
+    @JsonKey(name: 'supporting_documents')
+    @Default([])
     List<String> supportingDocuments,
     @JsonKey(name: 'supervisor_id') String? supervisorId,
     @JsonKey(name: 'supervisor_status') String? supervisorStatus,
@@ -95,13 +95,11 @@ class DownPaymentRequest with _$DownPaymentRequest {
     @JsonKey(name: 'admin_processed_at') DateTime? adminProcessedAt,
     @JsonKey(name: 'admin_notes') String? adminNotes,
     @JsonKey(name: 'admin_rejection_reason') String? adminRejectionReason,
-    @JsonKey(name: 'status') @Default('pending_supervisor')
-    String status,
-    @JsonKey(name: 'total_paid_amount') @Default(0.0)
-    double totalPaidAmount,
-    @JsonKey(name: 'remaining_amount') @Default(0.0)
-    double? remainingAmount,
-    @JsonKey(name: 'wallet_transaction_ids') @Default(<String>[])
+    @JsonKey(name: 'status') @Default('pending_supervisor') String status,
+    @JsonKey(name: 'total_paid_amount') @Default(0.0) double totalPaidAmount,
+    @JsonKey(name: 'remaining_amount') @Default(0.0) double? remainingAmount,
+    @JsonKey(name: 'wallet_transaction_ids')
+    @Default(<String>[])
     List<String> walletTransactionIds,
     @JsonKey(name: 'created_at') required DateTime createdAt,
     @JsonKey(name: 'updated_at') required DateTime updatedAt,
@@ -122,28 +120,22 @@ class DownPaymentRequest with _$DownPaymentRequest {
       status == DownPaymentStatus.pendingSupervisor.value;
 
   /// Check if request is pending admin approval
-  bool get isPendingAdmin =>
-      status == DownPaymentStatus.pendingAdmin.value;
+  bool get isPendingAdmin => status == DownPaymentStatus.pendingAdmin.value;
 
   /// Check if request is approved
-  bool get isApproved =>
-      status == DownPaymentStatus.approved.value;
+  bool get isApproved => status == DownPaymentStatus.approved.value;
 
   /// Check if request is rejected
-  bool get isRejected =>
-      status == DownPaymentStatus.rejected.value;
+  bool get isRejected => status == DownPaymentStatus.rejected.value;
 
   /// Check if payment is partially completed
-  bool get isPartiallyPaid =>
-      status == DownPaymentStatus.partiallyPaid.value;
+  bool get isPartiallyPaid => status == DownPaymentStatus.partiallyPaid.value;
 
   /// Check if payment is fully completed
-  bool get isFullyPaid =>
-      status == DownPaymentStatus.fullyPaid.value;
+  bool get isFullyPaid => status == DownPaymentStatus.fullyPaid.value;
 
   /// Check if request is cancelled
-  bool get isCancelled =>
-      status == DownPaymentStatus.cancelled.value;
+  bool get isCancelled => status == DownPaymentStatus.cancelled.value;
 
   /// Calculate remaining balance
   double get balanceRemaining =>

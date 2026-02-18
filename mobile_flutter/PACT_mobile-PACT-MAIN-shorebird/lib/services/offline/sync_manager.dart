@@ -2,9 +2,10 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'offline_db.dart';
 import 'models.dart';
-import '../offline_data_service.dart';
+// import '../offline_data_service.dart'; // DEPRECATED: Use OfflineDb instead
 import '../chat_service.dart';
 
 typedef SyncProgressCallback = void Function(SyncProgress progress);
@@ -23,7 +24,10 @@ class SyncManager {
   SyncManager._internal();
 
   final OfflineDb _db = OfflineDb();
-  late final SupabaseClient _supabase;
+  SupabaseClient? _supabase;
+
+  /// Current Supabase client; uses [Supabase.instance.client] if never set.
+  SupabaseClient get _client => _supabase ?? Supabase.instance.client;
 
   // Callbacks
   final List<SyncProgressCallback> _onProgressCallbacks = [];
@@ -41,6 +45,7 @@ class SyncManager {
   static const int maxRetryDelayMs = 60000; // 1 minute
   static const int autoSyncIntervalMs = 60000; // 1 minute
 
+  /// Set client (safe to call multiple times).
   void setSupabaseClient(SupabaseClient client) {
     _supabase = client;
   }
@@ -108,7 +113,9 @@ class SyncManager {
 
   /// Perform complete sync of all offline data
   Future<SyncResult> syncAll({bool force = false}) async {
+    debugPrint('[SyncManager] syncAll: called force=$force _isSyncing=$_isSyncing');
     if (_isSyncing && !force) {
+      debugPrint('[SyncManager] syncAll: skipping (already in progress)');
       return SyncResult(
         success: false,
         synced: 0,
@@ -125,11 +132,13 @@ class SyncManager {
     final errors = <String>[];
     int syncedCount = 0;
     int failedCount = 0;
+    debugPrint('[SyncManager] syncAll: starting full sync');
 
     try {
       const totalPhases = 5;
       
       // Phase 1: Sync site visits
+      debugPrint('[SyncManager] syncAll: Phase 1 site_visits');
       _notifyProgress(SyncProgress(
         phase: 'site_visits',
         current: 1,
@@ -141,8 +150,10 @@ class SyncManager {
       syncedCount += siteSynced;
       failedCount += siteFailed;
       errors.addAll(siteErrors);
+      debugPrint('[SyncManager] syncAll: Phase 1 done siteSynced=$siteSynced siteFailed=$siteFailed');
 
       // Phase 2: Sync locations
+      debugPrint('[SyncManager] syncAll: Phase 2 locations');
       _notifyProgress(SyncProgress(
         phase: 'locations',
         current: 2,
@@ -154,8 +165,10 @@ class SyncManager {
       syncedCount += locSynced;
       failedCount += locFailed;
       errors.addAll(locErrors);
+      debugPrint('[SyncManager] syncAll: Phase 2 done locSynced=$locSynced locFailed=$locFailed');
 
       // Phase 3: Sync pending actions
+      debugPrint('[SyncManager] syncAll: Phase 3 pending_actions');
       _notifyProgress(SyncProgress(
         phase: 'pending_actions',
         current: 3,
@@ -167,8 +180,10 @@ class SyncManager {
       syncedCount += actionSynced;
       failedCount += actionFailed;
       errors.addAll(actionErrors);
+      debugPrint('[SyncManager] syncAll: Phase 3 done actionSynced=$actionSynced actionFailed=$actionFailed');
 
       // Phase 4: Sync chat messages
+      debugPrint('[SyncManager] syncAll: Phase 4 chat_messages');
       _notifyProgress(SyncProgress(
         phase: 'chat_messages',
         current: 4,
@@ -180,8 +195,10 @@ class SyncManager {
       syncedCount += chatSynced;
       failedCount += chatFailed;
       errors.addAll(chatErrors);
+      debugPrint('[SyncManager] syncAll: Phase 4 done chatSynced=$chatSynced chatFailed=$chatFailed');
 
       // Phase 5: Cleanup
+      debugPrint('[SyncManager] syncAll: Phase 5 cleanup');
       _notifyProgress(SyncProgress(
         phase: 'cleanup',
         current: 5,
@@ -218,10 +235,16 @@ class SyncManager {
         },
       );
 
+      debugPrint(
+        '[SyncManager] syncAll: completed success=${result.success} '
+        'synced=${result.synced} failed=${result.failed} duration=${result.duration}ms',
+      );
       _notifyComplete(result);
       return result;
-    } catch (e) {
+    } catch (e, st) {
       _consecutiveFailures++;
+      debugPrint('[SyncManager] syncAll: ERROR $e');
+      debugPrint('[SyncManager] syncAll: stack $st');
       final result = SyncResult(
         success: false,
         synced: syncedCount,
@@ -244,6 +267,7 @@ class SyncManager {
 
   /// Force immediate sync, canceling any pending retries
   Future<SyncResult> forceSync() async {
+    debugPrint('[SyncManager] forceSync: forcing immediate sync');
     _retryTimer?.cancel();
     _consecutiveFailures = 0;
     return syncAll(force: true);
@@ -259,16 +283,31 @@ class SyncManager {
     final errors = <String>[];
 
     final unsyncedVisits = _db.getUnsyncedSiteVisits();
+    debugPrint(
+      '[SyncManager] _syncSiteVisits: found ${unsyncedVisits.length} unsynced site visits',
+    );
 
     for (int i = 0; i < unsyncedVisits.length; i++) {
       final visit = unsyncedVisits[i];
+      debugPrint(
+        '[SyncManager] _syncSiteVisits: processing ${i + 1}/${unsyncedVisits.length} '
+        'siteEntryId=${visit.siteEntryId} status=${visit.status}',
+      );
 
       try {
         // Check server state first
         final serverVisit = await _getServerSiteVisit(visit.siteEntryId);
+        debugPrint(
+          '[SyncManager] _syncSiteVisits: server state for ${visit.siteEntryId} '
+          'exists=${serverVisit != null} status=${serverVisit?['status']}',
+        );
 
-        if (serverVisit != null && _isTerminalOrAdvancedStatus(serverVisit['status'])) {
+        if (serverVisit != null &&
+            _isTerminalOrAdvancedStatus(serverVisit['status']?.toString())) {
           // Server is in a terminal state, skip update
+          debugPrint(
+            '[SyncManager] _syncSiteVisits: skipping ${visit.siteEntryId} (server already terminal)',
+          );
           await _db.markSiteVisitSynced(visit.id);
           synced++;
         } else {
@@ -281,17 +320,30 @@ class SyncManager {
 
           // Sync to server based on visit status
           if (visit.status == 'started') {
+            debugPrint(
+              '[SyncManager] _syncSiteVisits: syncing start for ${visit.siteEntryId}',
+            );
             await _syncSiteVisitStart(visit);
           } else if (visit.status == 'completed') {
+            debugPrint(
+              '[SyncManager] _syncSiteVisits: syncing complete for ${visit.siteEntryId}',
+            );
             await _syncSiteVisitComplete(visit);
           }
 
           await _db.markSiteVisitSynced(visit.id);
           synced++;
+          debugPrint(
+            '[SyncManager] _syncSiteVisits: marked ${visit.siteEntryId} as synced',
+          );
         }
-      } catch (e) {
+      } catch (e, st) {
         failed++;
         errors.add('Site visit sync failed: ${visit.id} - $e');
+        debugPrint(
+          '[SyncManager] _syncSiteVisits: ERROR for ${visit.siteEntryId}: $e',
+        );
+        debugPrint('[SyncManager] _syncSiteVisits: stack: $st');
       }
 
       // Update progress
@@ -304,11 +356,17 @@ class SyncManager {
       ));
     }
 
+    debugPrint(
+      '[SyncManager] _syncSiteVisits: done synced=$synced failed=$failed',
+    );
     return (synced, failed, errors);
   }
 
   Future<void> _syncSiteVisitStart(OfflineSiteVisit visit) async {
-    await _supabase.from('mmp_site_entries').update({
+    debugPrint(
+      '[SyncManager] _syncSiteVisitStart: siteEntryId=${visit.siteEntryId}',
+    );
+    await _client.from('mmp_site_entries').update({
       'status': 'in-progress',
       'visit_started_at': visit.startedAt.toIso8601String(),
       'additional_data': {
@@ -316,36 +374,180 @@ class SyncManager {
         'start_location': visit.startLocation,
       },
     }).eq('id', visit.siteEntryId);
+    debugPrint('[SyncManager] _syncSiteVisitStart: update done');
   }
 
   Future<void> _syncSiteVisitComplete(OfflineSiteVisit visit) async {
-    // Upload any photos first
+    debugPrint(
+      '[SyncManager] _syncSiteVisitComplete: start siteEntryId=${visit.siteEntryId}',
+    );
+
+    // Get payload for user_id, activities, duration_minutes (from queueCompleteVisit)
+    final payload = _db.getCompleteVisitPayloadForSite(visit.siteEntryId);
+    final userId = (payload?['user_id']?.toString() ??
+        _client.auth.currentUser?.id) as String?;
+    if (userId == null || userId.isEmpty) {
+      debugPrint(
+        '[SyncManager] _syncSiteVisitComplete: WARNING no userId for ${visit.siteEntryId}, skipping report',
+      );
+    }
+
+    // 1) Fetch existing additional_data and merge (do not overwrite)
+    Map<String, dynamic> existingData = {};
+    try {
+      final existing = await _client
+          .from('mmp_site_entries')
+          .select('additional_data')
+          .eq('id', visit.siteEntryId)
+          .maybeSingle();
+      if (existing != null && existing['additional_data'] != null) {
+        final raw = existing['additional_data'];
+        existingData = raw is Map
+            ? Map<String, dynamic>.from(raw as Map)
+            : <String, dynamic>{};
+      }
+      debugPrint(
+        '[SyncManager] _syncSiteVisitComplete: loaded existing additional_data keys=${existingData.keys.toList()}',
+      );
+    } catch (e) {
+      debugPrint(
+        '[SyncManager] _syncSiteVisitComplete: could not load existing row: $e',
+      );
+    }
+
+    final now = visit.completedAt ?? DateTime.now();
+    final mergedData = <String, dynamic>{
+      ...existingData,
+      'offline_complete': true,
+      'end_location': visit.endLocation,
+      'notes': visit.notes,
+      if (visit.startLocation != null) 'start_location': visit.startLocation,
+      if (payload?['activities'] != null) 'completed_activities': payload!['activities'],
+      if (payload?['duration_minutes'] != null) 'duration_minutes': payload!['duration_minutes'],
+    };
+
+    // 2) Upload photos and collect URLs
+    final photoUrls = <String>[];
     if (visit.photos != null && visit.photos!.isNotEmpty) {
+      debugPrint(
+        '[SyncManager] _syncSiteVisitComplete: uploading ${visit.photos!.length} photos',
+      );
       for (int i = 0; i < visit.photos!.length; i++) {
         final photoPath = visit.photos![i];
-        // If it's base64, upload it
         if (photoPath.startsWith('data:image')) {
-          // Extract base64 and upload
-          final base64Data = photoPath.split(',').last;
-          final fileName = '${visit.siteEntryId}_${DateTime.now().millisecondsSinceEpoch}_$i.jpg';
-          await _uploadPhotoToStorage(base64Data, fileName, visit.siteEntryId);
+          try {
+            final base64Data = photoPath.split(',').last;
+            final fileName =
+                '${visit.siteEntryId}_${now.millisecondsSinceEpoch}_$i.jpg';
+            final url = await _uploadPhotoToStorage(
+              base64Data,
+              fileName,
+              visit.siteEntryId,
+            );
+            photoUrls.add(url);
+          } catch (e) {
+            debugPrint(
+              '[SyncManager] _syncSiteVisitComplete: photo upload $i failed: $e',
+            );
+          }
         }
+      }
+      debugPrint(
+        '[SyncManager] _syncSiteVisitComplete: uploaded ${photoUrls.length} photos',
+      );
+    }
+
+    // 3) Insert report (schema: site_visit_id, notes, activities, duration_minutes, coordinates, submitted_by, is_synced, submitted_at)
+    dynamic savedReport;
+    if (userId != null && userId.isNotEmpty) {
+      try {
+        final coordinates = visit.endLocation != null &&
+                visit.endLocation!['latitude'] != null &&
+                visit.endLocation!['longitude'] != null
+            ? {
+                'latitude': (visit.endLocation!['latitude'] as num).toDouble(),
+                'longitude': (visit.endLocation!['longitude'] as num).toDouble(),
+                if (visit.endLocation!['accuracy'] != null)
+                  'accuracy': (visit.endLocation!['accuracy'] as num).toDouble(),
+              }
+            : <String, dynamic>{};
+
+        final reportInsert = <String, dynamic>{
+          'site_visit_id': visit.siteEntryId,
+          'notes': visit.notes?.trim() ?? '',
+          'activities': payload?['activities']?.toString(),
+          'duration_minutes': payload?['duration_minutes'] as int?,
+          'coordinates': coordinates,
+          'submitted_by': userId,
+          'submitted_at': now.toIso8601String(),
+          'is_synced': true,
+        };
+        debugPrint(
+          '[SyncManager] _syncSiteVisitComplete: inserting report for ${visit.siteEntryId}',
+        );
+        savedReport = await _client
+            .from('reports')
+            .insert(reportInsert)
+            .select()
+            .single();
+        debugPrint(
+          '[SyncManager] _syncSiteVisitComplete: report id=${savedReport['id']}',
+        );
+
+        // 4) Insert report_photos
+        if (photoUrls.isNotEmpty && savedReport != null) {
+          final reportPhotos = photoUrls
+              .map((url) => {
+                    'report_id': savedReport['id'],
+                    'photo_url': url,
+                    'storage_path': url,
+                  })
+              .toList();
+          await _client.from('report_photos').insert(reportPhotos);
+          debugPrint(
+            '[SyncManager] _syncSiteVisitComplete: inserted ${reportPhotos.length} report_photos',
+          );
+        }
+
+        // Merge report metadata into additional_data for UI "synced" detection
+        mergedData['visit_report_submitted'] = true;
+        mergedData['visit_report_id'] = savedReport['id'];
+        mergedData['visit_report_submitted_at'] = now.toIso8601String();
+      } catch (e, st) {
+        debugPrint(
+          '[SyncManager] _syncSiteVisitComplete: report insert failed: $e',
+        );
+        debugPrint('[SyncManager] _syncSiteVisitComplete: stack: $st');
+        rethrow;
       }
     }
 
-    // Update site visit
-    await _supabase.from('mmp_site_entries').update({
-      'status': 'completed',
-      'visit_completed_at': visit.completedAt?.toIso8601String(),
-      'additional_data': {
-        'offline_complete': true,
-        'end_location': visit.endLocation,
-        'notes': visit.notes,
-      },
-    }).eq('id', visit.siteEntryId);
+    // 5) Update mmp_site_entries: status 'Completed', visit_completed_at, visit_completed_by, additional_data (merged)
+    final updatePayload = <String, dynamic>{
+      'status': 'Completed',
+      'visit_completed_at': now.toIso8601String(),
+      'additional_data': mergedData,
+      'updated_at': DateTime.now().toIso8601String(),
+    };
+    if (userId != null && userId.isNotEmpty) {
+      updatePayload['visit_completed_by'] = userId;
+    }
+    debugPrint(
+      '[SyncManager] _syncSiteVisitComplete: updating mmp_site_entries ${visit.siteEntryId} '
+      'status=Completed visit_completed_by=$userId',
+    );
+    await _client
+        .from('mmp_site_entries')
+        .update(updatePayload)
+        .eq('id', visit.siteEntryId);
+    debugPrint('[SyncManager] _syncSiteVisitComplete: mmp_site_entries update done');
 
-    // Create wallet transaction if visit is for a site claim
+    // 6) Create wallet transaction if visit is for a site claim
     await _createWalletTransactionIfNeeded(visit.siteEntryId);
+
+    debugPrint(
+      '[SyncManager] _syncSiteVisitComplete: done siteEntryId=${visit.siteEntryId}',
+    );
   }
 
   // ============================================================================
@@ -369,7 +571,7 @@ class SyncManager {
 
       // Update user profile with latest location
       final userId = latest.userId;
-      await _supabase.from('profiles').update({
+      await _client.from('profiles').update({
         'location': {
           'lat': latest.lat,
           'lng': latest.lng,
@@ -407,9 +609,17 @@ class SyncManager {
     final errors = <String>[];
 
     final pendingActions = _db.getPendingSyncActions(status: 'pending');
+    debugPrint(
+      '[SyncManager] _syncPendingActions: ${pendingActions.length} pending actions '
+      'types=${pendingActions.map((a) => a.type).toSet().toList()}',
+    );
 
     for (int i = 0; i < pendingActions.length; i++) {
       final action = pendingActions[i];
+      debugPrint(
+        '[SyncManager] _syncPendingActions: ${i + 1}/${pendingActions.length} '
+        'id=${action.id} type=${action.type}',
+      );
 
       try {
         await _db.updateSyncActionStatus(action.id, status: 'syncing');
@@ -476,18 +686,8 @@ class SyncManager {
       ));
     }
 
-    // Also sync pending actions from OfflineDataService (accept_visit, start_visit, etc.)
-    try {
-      final offlineDataService = OfflineDataService();
-      final offlineSyncResults = await offlineDataService.syncAll();
-      
-      // Count synced items from OfflineDataService
-      for (final entry in offlineSyncResults.entries) {
-        synced += entry.value;
-      }
-    } catch (e) {
-      errors.add('OfflineDataService sync failed: $e');
-    }
+    // Note: All sync operations are now handled directly by SyncManager
+    // No separate OfflineDataService sync needed
 
     return (synced, failed, errors);
   }
@@ -528,7 +728,7 @@ class SyncManager {
     final userId = payload['userId'] as String;
 
     // Update site entry status to claimed
-    await _supabase.from('mmp_site_entries').update({
+    await _client.from('mmp_site_entries').update({
       'status': 'claimed',
       'claimed_by_user_id': userId,
       'claimed_at': DateTime.now().toIso8601String(),
@@ -546,12 +746,12 @@ class SyncManager {
     final storagePath = await _uploadPhotoToStorage(base64Data, fileName, siteEntryId);
 
     // Update site entry with photo
-    final response = await _supabase.from('mmp_site_entries').select().eq('id', siteEntryId).single();
+    final response = await _client.from('mmp_site_entries').select().eq('id', siteEntryId).single();
     final additionalData = response['additional_data'] ?? {};
     final photos = List<String>.from(additionalData['photos'] ?? []);
     photos.add(storagePath);
 
-    await _supabase.from('mmp_site_entries').update({
+    await _client.from('mmp_site_entries').update({
       'additional_data': {
         ...additionalData,
         'photos': photos,
@@ -564,7 +764,7 @@ class SyncManager {
   Future<bool> _processCostSubmission(PendingSyncAction action) async {
     final payload = action.payload;
 
-    await _supabase.from('cost_submissions').insert({
+    await _client.from('cost_submissions').insert({
       'user_id': payload['userId'],
       'site_visit_id': payload['siteVisitId'],
       'amount': payload['amount'],
@@ -581,7 +781,7 @@ class SyncManager {
   Future<bool> _processLocationUpdate(PendingSyncAction action) async {
     final payload = action.payload;
 
-    await _supabase.from('profiles').update({
+    await _client.from('profiles').update({
       'location': {
         'lat': payload['lat'],
         'lng': payload['lng'],
@@ -599,7 +799,7 @@ class SyncManager {
 
   Future<Map<String, dynamic>?> _getServerSiteVisit(String id) async {
     try {
-      final response = await _supabase.from('mmp_site_entries').select().eq('id', id).maybeSingle();
+      final response = await _client.from('mmp_site_entries').select().eq('id', id).maybeSingle();
       return response;
     } catch (e) {
       return null;
@@ -612,45 +812,64 @@ class SyncManager {
 
     // Upload to storage
     final path = 'site-photos/$siteEntryId/$fileName';
-    await _supabase.storage.from('site-visit-media').uploadBinary(path, bytes);
+    await _client.storage.from('site-visit-media').uploadBinary(path, bytes);
 
     // Get public URL
-    final publicUrl = _supabase.storage.from('site-visit-media').getPublicUrl(path);
+    final publicUrl = _client.storage.from('site-visit-media').getPublicUrl(path);
     return publicUrl;
   }
 
   Future<void> _createWalletTransactionIfNeeded(String siteEntryId) async {
     try {
+      debugPrint(
+        '[SyncManager] _createWalletTransactionIfNeeded: siteEntryId=$siteEntryId',
+      );
       // Check if transaction already exists
-      final existing = await _supabase
+      final existing = await _client
           .from('wallet_transactions')
           .select()
           .eq('reference_id', siteEntryId)
           .maybeSingle();
 
       if (existing != null) {
+        debugPrint(
+          '[SyncManager] _createWalletTransactionIfNeeded: already exists, skip',
+        );
         return; // Transaction already created
       }
 
-      // Get site entry to determine fee
-      final site = await _supabase
+      // Get site entry for user to credit (visit_completed_by or accepted_by)
+      final site = await _client
           .from('mmp_site_entries')
-          .select()
+          .select('visit_completed_by, accepted_by')
           .eq('id', siteEntryId)
           .single();
 
+      final userId = site['visit_completed_by'] ?? site['accepted_by'];
+      if (userId == null) {
+        debugPrint(
+          '[SyncManager] _createWalletTransactionIfNeeded: no user to credit, skip',
+        );
+        return;
+      }
+
       // Create transaction (fee logic would go here)
-      await _supabase.from('wallet_transactions').insert({
-        'user_id': site['user_id'],
+      await _client.from('wallet_transactions').insert({
+        'user_id': userId,
         'reference_id': siteEntryId,
         'type': 'visit_completion',
         'amount': 50, // Example fee
         'status': 'completed',
         'created_at': DateTime.now().toIso8601String(),
       });
+      debugPrint(
+        '[SyncManager] _createWalletTransactionIfNeeded: created for user=$userId',
+      );
     } catch (e) {
       // Log but don't fail the sync
-      print('Wallet transaction creation failed: $e');
+      debugPrint(
+        '[SyncManager] _createWalletTransactionIfNeeded: failed: $e',
+      );
     }
   }
 

@@ -38,18 +38,26 @@ class ScheduledCall {
     return ScheduledCall(
       id: json['id']?.toString() ?? '',
       schedulerId: json['scheduler_id']?.toString() ?? '',
-      schedulerName: json['scheduler_name']?.toString() ?? 
-                     json['scheduler']?['full_name']?.toString() ?? '',
+      schedulerName:
+          json['scheduler_name']?.toString() ??
+          json['scheduler']?['full_name']?.toString() ??
+          '',
       participantId: json['participant_id']?.toString() ?? '',
-      participantName: json['participant_name']?.toString() ?? 
-                       json['participant']?['full_name']?.toString() ?? '',
-      scheduledAt: DateTime.tryParse(json['scheduled_at']?.toString() ?? '') ?? DateTime.now(),
+      participantName:
+          json['participant_name']?.toString() ??
+          json['participant']?['full_name']?.toString() ??
+          '',
+      scheduledAt:
+          DateTime.tryParse(json['scheduled_at']?.toString() ?? '') ??
+          DateTime.now(),
       durationMinutes: json['duration_minutes'] as int? ?? 30,
       title: json['title']?.toString(),
       notes: json['notes']?.toString(),
       status: json['status']?.toString() ?? 'pending',
       isVideoCall: json['is_video_call'] as bool? ?? false,
-      createdAt: DateTime.tryParse(json['created_at']?.toString() ?? '') ?? DateTime.now(),
+      createdAt:
+          DateTime.tryParse(json['created_at']?.toString() ?? '') ??
+          DateTime.now(),
     );
   }
 
@@ -67,25 +75,29 @@ class ScheduledCall {
   }
 
   bool get isPast => scheduledAt.isBefore(DateTime.now());
-  bool get isUpcoming => scheduledAt.isAfter(DateTime.now()) && status == 'confirmed';
+  bool get isUpcoming =>
+      scheduledAt.isAfter(DateTime.now()) && status == 'confirmed';
 }
 
 class CallSchedulingService {
   final SupabaseClient _supabase = Supabase.instance.client;
-  final FlutterLocalNotificationsPlugin _notifications = FlutterLocalNotificationsPlugin();
-  
+  final FlutterLocalNotificationsPlugin _notifications =
+      FlutterLocalNotificationsPlugin();
+
   String? get _currentUserId => _supabase.auth.currentUser?.id;
 
   Future<void> initialize() async {
     tz_data.initializeTimeZones();
-    
-    const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
+
+    const androidSettings = AndroidInitializationSettings(
+      '@mipmap/ic_launcher',
+    );
     const iosSettings = DarwinInitializationSettings(
       requestAlertPermission: true,
       requestBadgePermission: true,
       requestSoundPermission: true,
     );
-    
+
     await _notifications.initialize(
       const InitializationSettings(android: androidSettings, iOS: iosSettings),
     );
@@ -102,16 +114,22 @@ class CallSchedulingService {
     bool isVideoCall = false,
   }) async {
     try {
-      final response = await _supabase.from('scheduled_calls').insert({
-        'scheduler_id': _currentUserId,
-        'participant_id': participantId,
-        'scheduled_at': scheduledAt.toIso8601String(),
-        'duration_minutes': durationMinutes,
-        'title': title,
-        'notes': notes,
-        'is_video_call': isVideoCall,
-        'status': 'pending',
-      }).select('*, scheduler:scheduler_id(full_name), participant:participant_id(full_name)').single();
+      final response = await _supabase
+          .from('scheduled_calls')
+          .insert({
+            'scheduler_id': _currentUserId,
+            'participant_id': participantId,
+            'scheduled_at': scheduledAt.toIso8601String(),
+            'duration_minutes': durationMinutes,
+            'title': title,
+            'notes': notes,
+            'is_video_call': isVideoCall,
+            'status': 'pending',
+          })
+          .select(
+            '*, scheduler:scheduler_id(full_name), participant:participant_id(full_name)',
+          )
+          .single();
 
       final scheduledCall = ScheduledCall.fromJson(response);
 
@@ -128,12 +146,18 @@ class CallSchedulingService {
     }
   }
 
-  Future<List<ScheduledCall>> getMyScheduledCalls({bool upcomingOnly = true}) async {
+  Future<List<ScheduledCall>> getMyScheduledCalls({
+    bool upcomingOnly = true,
+  }) async {
     try {
       var query = _supabase
           .from('scheduled_calls')
-          .select('*, scheduler:scheduler_id(full_name), participant:participant_id(full_name)')
-          .or('scheduler_id.eq.$_currentUserId,participant_id.eq.$_currentUserId');
+          .select(
+            '*, scheduler:scheduler_id(full_name), participant:participant_id(full_name)',
+          )
+          .or(
+            'scheduler_id.eq.$_currentUserId,participant_id.eq.$_currentUserId',
+          );
 
       if (upcomingOnly) {
         query = query
@@ -143,9 +167,7 @@ class CallSchedulingService {
 
       final response = await query.order('scheduled_at', ascending: true);
 
-      return (response as List)
-          .map((c) => ScheduledCall.fromJson(c))
-          .toList();
+      return (response as List).map((c) => ScheduledCall.fromJson(c)).toList();
     } catch (e) {
       debugPrint('[CallScheduling] Error getting scheduled calls: $e');
       return [];
@@ -154,17 +176,20 @@ class CallSchedulingService {
 
   Future<bool> confirmCall(String callId) async {
     try {
-      await _supabase.from('scheduled_calls').update({
-        'status': 'confirmed',
-      }).eq('id', callId);
+      await _supabase
+          .from('scheduled_calls')
+          .update({'status': 'confirmed'})
+          .eq('id', callId);
 
       // Update reminder notification
       final response = await _supabase
           .from('scheduled_calls')
-          .select('*, scheduler:scheduler_id(full_name), participant:participant_id(full_name)')
+          .select(
+            '*, scheduler:scheduler_id(full_name), participant:participant_id(full_name)',
+          )
           .eq('id', callId)
           .single();
-      
+
       await _scheduleReminder(ScheduledCall.fromJson(response));
       return true;
     } catch (e) {
@@ -175,10 +200,10 @@ class CallSchedulingService {
 
   Future<bool> cancelCall(String callId, {String? reason}) async {
     try {
-      await _supabase.from('scheduled_calls').update({
-        'status': 'cancelled',
-        'cancel_reason': reason,
-      }).eq('id', callId);
+      await _supabase
+          .from('scheduled_calls')
+          .update({'status': 'cancelled', 'cancel_reason': reason})
+          .eq('id', callId);
 
       // Cancel reminder notification
       await _notifications.cancel(callId.hashCode);
@@ -191,18 +216,23 @@ class CallSchedulingService {
 
   Future<bool> rescheduleCall(String callId, DateTime newTime) async {
     try {
-      await _supabase.from('scheduled_calls').update({
-        'scheduled_at': newTime.toIso8601String(),
-        'status': 'pending',
-      }).eq('id', callId);
+      await _supabase
+          .from('scheduled_calls')
+          .update({
+            'scheduled_at': newTime.toIso8601String(),
+            'status': 'pending',
+          })
+          .eq('id', callId);
 
       // Update reminder
       final response = await _supabase
           .from('scheduled_calls')
-          .select('*, scheduler:scheduler_id(full_name), participant:participant_id(full_name)')
+          .select(
+            '*, scheduler:scheduler_id(full_name), participant:participant_id(full_name)',
+          )
           .eq('id', callId)
           .single();
-      
+
       await _scheduleReminder(ScheduledCall.fromJson(response));
       return true;
     } catch (e) {
@@ -213,10 +243,10 @@ class CallSchedulingService {
 
   Future<bool> markCallCompleted(String callId, {int? actualDuration}) async {
     try {
-      await _supabase.from('scheduled_calls').update({
-        'status': 'completed',
-        'actual_duration': actualDuration,
-      }).eq('id', callId);
+      await _supabase
+          .from('scheduled_calls')
+          .update({'status': 'completed', 'actual_duration': actualDuration})
+          .eq('id', callId);
       return true;
     } catch (e) {
       debugPrint('[CallScheduling] Error marking call completed: $e');
@@ -229,12 +259,14 @@ class CallSchedulingService {
   Future<void> _scheduleReminder(ScheduledCall call) async {
     try {
       // Schedule 15 minutes before
-      final reminderTime = call.scheduledAt.subtract(const Duration(minutes: 15));
+      final reminderTime = call.scheduledAt.subtract(
+        const Duration(minutes: 15),
+      );
       if (reminderTime.isBefore(DateTime.now())) return;
 
       final tzReminderTime = tz.TZDateTime.from(reminderTime, tz.local);
-      final otherPerson = call.schedulerId == _currentUserId 
-          ? call.participantName 
+      final otherPerson = call.schedulerId == _currentUserId
+          ? call.participantName
           : call.schedulerName;
       final callType = call.isVideoCall ? 'Video call' : 'Call';
 
@@ -258,7 +290,8 @@ class CallSchedulingService {
           ),
         ),
         androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
-        uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
+        uiLocalNotificationDateInterpretation:
+            UILocalNotificationDateInterpretation.absoluteTime,
       );
     } catch (e) {
       debugPrint('[CallScheduling] Error scheduling reminder: $e');
@@ -272,7 +305,8 @@ class CallSchedulingService {
         'user_id': call.participantId,
         'type': 'scheduled_call',
         'title': call.isVideoCall ? 'Video Call Invitation' : 'Call Invitation',
-        'message': '${call.schedulerName} scheduled a ${call.isVideoCall ? 'video call' : 'call'} with you for ${_formatDateTime(call.scheduledAt)}',
+        'message':
+            '${call.schedulerName} scheduled a ${call.isVideoCall ? 'video call' : 'call'} with you for ${_formatDateTime(call.scheduledAt)}',
         'data': {
           'call_id': call.id,
           'scheduled_at': call.scheduledAt.toIso8601String(),
@@ -285,11 +319,14 @@ class CallSchedulingService {
 
   String _formatDateTime(DateTime dt) {
     final now = DateTime.now();
-    final isToday = dt.day == now.day && dt.month == now.month && dt.year == now.year;
-    final isTomorrow = dt.day == now.day + 1 && dt.month == now.month && dt.year == now.year;
+    final isToday =
+        dt.day == now.day && dt.month == now.month && dt.year == now.year;
+    final isTomorrow =
+        dt.day == now.day + 1 && dt.month == now.month && dt.year == now.year;
 
-    final time = '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
-    
+    final time =
+        '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
+
     if (isToday) return 'today at $time';
     if (isTomorrow) return 'tomorrow at $time';
     return '${dt.day}/${dt.month}/${dt.year} at $time';
@@ -313,7 +350,9 @@ class CallSchedulingService {
 
       final busySlots = (response as List).map((c) {
         final start = DateTime.parse(c['scheduled_at']);
-        final end = start.add(Duration(minutes: c['duration_minutes'] as int? ?? 30));
+        final end = start.add(
+          Duration(minutes: c['duration_minutes'] as int? ?? 30),
+        );
         return {'start': start, 'end': end};
       }).toList();
 
@@ -324,8 +363,10 @@ class CallSchedulingService {
 
       while (slot.isBefore(endTime)) {
         final slotEnd = slot.add(const Duration(minutes: 30));
-        final isAvailable = !busySlots.any((busy) =>
-            slot.isBefore(busy['end']!) && slotEnd.isAfter(busy['start']!));
+        final isAvailable = !busySlots.any(
+          (busy) =>
+              slot.isBefore(busy['end']!) && slotEnd.isAfter(busy['start']!),
+        );
 
         if (isAvailable && slot.isAfter(DateTime.now())) {
           availableSlots.add(slot);
@@ -422,10 +463,13 @@ class CallSchedulingService {
 
   Future<bool> markVoicemailRead(String voicemailId) async {
     try {
-      await _supabase.from('voicemails').update({
-        'is_read': true,
-        'read_at': DateTime.now().toIso8601String(),
-      }).eq('id', voicemailId);
+      await _supabase
+          .from('voicemails')
+          .update({
+            'is_read': true,
+            'read_at': DateTime.now().toIso8601String(),
+          })
+          .eq('id', voicemailId);
       return true;
     } catch (e) {
       return false;

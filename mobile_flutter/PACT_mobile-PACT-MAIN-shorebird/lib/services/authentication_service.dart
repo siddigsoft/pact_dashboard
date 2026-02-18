@@ -1,3 +1,4 @@
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/foundation.dart' show kIsWeb, kDebugMode;
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter/material.dart';
@@ -21,7 +22,7 @@ class AuthenticationService {
     if (_initialized) return;
 
     // Listen for auth state changes
-    supabase.auth.onAuthStateChange.listen((data) {
+    supabase.auth.onAuthStateChange.listen((data) async {
       // Debug logging to help trace unexpected sign-outs
       debugPrint(
         '[AuthenticationService] Auth state changed: ${data.event} at ${DateTime.now().toIso8601String()}',
@@ -59,12 +60,27 @@ class AuthenticationService {
         // Only clear if it's been a while or if explicitly requested
         // Also check if we had a previous session - if not, this might be a false alarm
         if (hasLocalAuthData && currentSession == null) {
+          // When offline, never clear local auth so user can keep using the app
+          final offline = await _isOffline();
+          if (offline) {
+            debugPrint(
+              '[AuthenticationService] Offline - keeping local auth, not clearing',
+            );
+            return;
+          }
           debugPrint(
             '[AuthenticationService] Detected potential transient auth error - delaying local data clear',
           );
           // Delay clearing to allow for potential recovery
           // Give it more time (5 seconds) for long operations like photo uploads
           Future.delayed(const Duration(seconds: 5), () async {
+            // If we went offline in the meantime, do not clear
+            if (await _isOffline()) {
+              debugPrint(
+                '[AuthenticationService] Offline after delay - keeping local auth',
+              );
+              return;
+            }
             // Try to refresh session before clearing
             try {
               final refreshedSession = await supabase.auth.refreshSession();
@@ -119,6 +135,20 @@ class AuthenticationService {
     });
 
     _initialized = true;
+  }
+
+  /// Returns true if the device has no usable network (offline).
+  Future<bool> _isOffline() async {
+    try {
+      final result = await Connectivity().checkConnectivity();
+      final list = result as List;
+      return list.every(
+        (r) =>
+            r == ConnectivityResult.none || r == ConnectivityResult.bluetooth,
+      );
+    } catch (e) {
+      return true; // assume offline on error
+    }
   }
 
   /// Check if local auth data exists (synchronous check)
@@ -759,11 +789,15 @@ class AuthenticationService {
 
       if (token == null || userId == null) return null;
 
-      // Check if token is expired
+      // Check if token is expired - when offline, keep cached auth so user can use app
       final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
       if (expiresAt != null && now > expiresAt) {
-        await _clearLocalAuthData();
-        return null;
+        final offline = await _isOffline();
+        if (!offline) {
+          await _clearLocalAuthData();
+          return null;
+        }
+        // When offline, keep returning cached auth so user stays "logged in"
       }
 
       return {

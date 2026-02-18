@@ -33,7 +33,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _locationSharing = false;
   bool _notificationsEnabled = true;
   bool _darkMode = false;
-  
+
   // App version
   String _appVersion = '';
   String _buildNumber = '';
@@ -67,7 +67,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       final offlineDb = OfflineDb();
       final pendingSync = offlineDb.getPendingSyncActions(status: 'pending');
       final pendingSiteVisits = offlineDb.getPendingSiteVisits();
-      
+
       setState(() {
         _pendingSyncCount = pendingSync.length;
         _pendingSiteVisitsCount = pendingSiteVisits.length;
@@ -77,23 +77,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
       debugPrint('Error loading sync status: $e');
     }
   }
-  
+
   Future<void> _loadAppVersion() async {
     try {
       final packageInfo = await PackageInfo.fromPlatform();
-      
+
       // Get Shorebird patch number
       int? patchNumber;
       try {
         final codePush = ShorebirdCodePush();
-        final isAvailable = await codePush.isShorebirdAvailable();
+        final isAvailable = codePush.isShorebirdAvailable();
         if (isAvailable) {
           patchNumber = await codePush.currentPatchNumber();
         }
       } catch (e) {
         debugPrint('Error getting Shorebird patch number: $e');
       }
-      
+
       setState(() {
         _appVersion = packageInfo.version;
         _buildNumber = packageInfo.buildNumber;
@@ -483,7 +483,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
               color: Colors.orange,
               borderRadius: BorderRadius.circular(8),
             ),
-            child: const Icon(Icons.cloud_upload, color: Colors.white, size: 20),
+            child: const Icon(
+              Icons.cloud_upload,
+              color: Colors.white,
+              size: 20,
+            ),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -573,7 +577,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           // Sync Status Banner
                           if (_pendingRequestsCount > 0)
                             _buildSyncStatusBanner(),
-                            
+
                           // Profile Section
                           _buildSection(
                             title: 'Profile',
@@ -784,7 +788,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           ),
 
                           const SizedBox(height: 24),
-                          
+
                           // App Version Display
                           if (_appVersion.isNotEmpty) ...[
                             Center(

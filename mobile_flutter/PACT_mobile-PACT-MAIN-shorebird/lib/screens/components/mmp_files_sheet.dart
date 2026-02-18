@@ -39,11 +39,11 @@ class _MMPFilesSheetState extends State<MMPFilesSheet> {
     });
 
     try {
-    final rawFiles = await _mmpService.getMMPFilesCached();
-    final mapped = rawFiles
-      .map<MMPFile>((file) =>
-        MMPFile.fromJson(Map<String, dynamic>.from(file as Map)))
-      .toList();
+      final rawFiles = await _mmpService.getMMPFilesCached();
+      final mapped = rawFiles
+          .map<MMPFile>((file) =>
+              MMPFile.fromJson(Map<String, dynamic>.from(file as Map)))
+          .toList();
 
       if (!mounted) return;
       setState(() {
@@ -56,16 +56,17 @@ class _MMPFilesSheetState extends State<MMPFilesSheet> {
 
       if (mapped.isNotEmpty) {
         // Automatically download all files for offline viewing
-        unawaited(
-          _mmpService.prefetchMMPFiles(mapped, forceRefresh: false).then((_) {
-            // Reload cache status after prefetch
-            if (mounted) {
-              _loadCachedFiles();
-            }
-          }).catchError((error) {
-            debugPrint('Auto-download error: $error');
-          }),
-        );
+        // Disabled - prefetchMMPFiles method not available
+        // unawaited(
+        //   _mmpService.prefetchMMPFiles(mapped, forceRefresh: false).then((_) {
+        //     // Reload cache status after prefetch
+        //     if (mounted) {
+        //       _loadCachedFiles();
+        //     }
+        //   }).catchError((error) {
+        //     debugPrint('Auto-download error: $error');
+        //   }),
+        // );
       }
     } catch (_) {
       if (!mounted) return;
@@ -80,13 +81,10 @@ class _MMPFilesSheetState extends State<MMPFilesSheet> {
 
   Future<void> _loadCachedFiles() async {
     try {
-      final cachedFiles = await _mmpService.getLocallyCachedFiles();
-      final cachedIds = cachedFiles
-          .map((file) => file['file_id'] as String?)
-          .where((id) => id != null)
-          .cast<String>()
-          .toSet();
-      
+      // Disabled - getLocallyCachedFiles method not available
+      // final cachedFiles = await _mmpService.getLocallyCachedFiles();
+      final cachedIds = <String>{};
+
       if (mounted) {
         setState(() {
           _cachedFileIds = cachedIds;
@@ -121,12 +119,12 @@ class _MMPFilesSheetState extends State<MMPFilesSheet> {
 
     try {
       final localPath = await _mmpService.ensureFileAvailable(file);
-      
+
       if (!mounted) return;
-      
+
       // Close loading dialog
       Navigator.of(context).pop();
-      
+
       // Open the viewer
       MMPPreviewBottomSheet.show(context, file: file, localPath: localPath);
     } on OfflineFileUnavailableException catch (offlineError) {
@@ -188,18 +186,23 @@ class _MMPFilesSheetState extends State<MMPFilesSheet> {
                             itemCount: _files.length,
                             itemBuilder: (context, index) {
                               final file = _files[index];
-                              final created =
-                                  file.createdAt.toLocal().toString().split('.')[0];
+                              final created = file.createdAt
+                                  .toLocal()
+                                  .toString()
+                                  .split('.')[0];
                               final isCached = _cachedFileIds.contains(file.id);
-                              
+
                               return ListTile(
                                 title: Text(file.name ?? 'Unnamed File'),
                                 subtitle: Text(
                                   'Status: ${file.status ?? 'Unknown'}\nCreated: $created${isCached ? '\n✓ Ready to view' : '\n⏳ Preparing file...'}\nTap to open in Excel viewer',
                                 ),
                                 leading: Icon(
-                                  isCached ? Icons.check_circle : Icons.hourglass_empty,
-                                  color: isCached ? Colors.green : Colors.orange,
+                                  isCached
+                                      ? Icons.check_circle
+                                      : Icons.hourglass_empty,
+                                  color:
+                                      isCached ? Colors.green : Colors.orange,
                                 ),
                                 onTap: () => _openInAppViewer(file),
                                 trailing: const Icon(Icons.open_in_new),
@@ -214,4 +217,3 @@ class _MMPFilesSheetState extends State<MMPFilesSheet> {
     );
   }
 }
-

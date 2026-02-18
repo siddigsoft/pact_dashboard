@@ -51,11 +51,13 @@ Future<void> _requestAllPermissionsOnStartup() async {
     debugPrint('[Permissions] Requesting all permissions on startup...');
     final permissionService = PermissionHandlerService();
     final statuses = await permissionService.requestAllPermissions();
-    
+
     // Log summary of permission results
     final granted = statuses.entries.where((e) => e.value.isGranted).length;
     final denied = statuses.entries.where((e) => e.value.isDenied).length;
-    debugPrint('[Permissions] Startup request complete: $granted granted, $denied denied');
+    debugPrint(
+      '[Permissions] Startup request complete: $granted granted, $denied denied',
+    );
   } else {
     debugPrint('Running on web - permissions not requested');
   }
@@ -74,7 +76,8 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
     if (type == 'incoming_call' ||
         data['call_id'] != null ||
         data['callId'] != null) {
-      final callerName = data['caller_name'] ??
+      final callerName =
+          data['caller_name'] ??
           data['fromName'] ??
           message.notification?.title ??
           'Unknown';
@@ -231,7 +234,7 @@ void main() async {
             '/main',
             arguments: {
               'costSubmissionId': submissionId,
-              'tab': 'cost_submissions'
+              'tab': 'cost_submissions',
             },
           );
         } else if (payload.startsWith('cost_submission_rejected:')) {
@@ -240,7 +243,7 @@ void main() async {
             '/main',
             arguments: {
               'costSubmissionId': submissionId,
-              'tab': 'cost_submissions'
+              'tab': 'cost_submissions',
             },
           );
         } else if (payload.startsWith('cost_submission_revision:')) {
@@ -249,7 +252,7 @@ void main() async {
             '/main',
             arguments: {
               'costSubmissionId': submissionId,
-              'tab': 'cost_submissions'
+              'tab': 'cost_submissions',
             },
           );
         } else if (payload.startsWith('budget_alert:')) {
@@ -295,7 +298,8 @@ void main() async {
       // Show biometric prompt screen for authentication
       initialRoute = '/biometric-prompt';
       debugPrint(
-          '🔐 Biometric authentication enabled, showing biometric prompt');
+        '🔐 Biometric authentication enabled, showing biometric prompt',
+      );
     } else if (currentUser != null) {
       // User is logged in but no biometrics, go to main
       initialRoute = '/main';
@@ -304,7 +308,8 @@ void main() async {
       // No biometrics and not logged in, go to login
       initialRoute = '/login';
       debugPrint(
-          '🔑 No biometrics enabled and user not logged in, showing login screen');
+        '🔑 No biometrics enabled and user not logged in, showing login screen',
+      );
     }
   } catch (e) {
     debugPrint('❌ Error checking biometric status: $e');
@@ -478,8 +483,11 @@ class MyApp extends StatelessWidget {
                         builder(context),
                     transitionsBuilder:
                         (context, animation, secondaryAnimation, child) {
-                      return FadeTransition(opacity: animation, child: child);
-                    },
+                          return FadeTransition(
+                            opacity: animation,
+                            child: child,
+                          );
+                        },
                   );
                 }
                 return null;
@@ -500,7 +508,7 @@ class MyApp extends StatelessWidget {
           },
 
           // Add route observer for logging navigation
-          navigatorObservers: [if (routeObserver != null) routeObserver!],
+          navigatorObservers: [?routeObserver],
 
           // Use global navigator key for navigation
           navigatorKey: navigatorKey,

@@ -7,9 +7,7 @@ import 'package:intl/intl.dart';
 import '../config/wallet_constants.dart';
 import '../models/wallet_models.dart';
 import '../providers/wallet/wallet_notifier.dart';
-import '../services/wallet_service.dart';
 import '../utils/currency_utils.dart';
-import '../utils/export_utils.dart';
 import '../widgets/transaction_search.dart';
 import '../widgets/payment_methods_card.dart';
 import '../providers/down_payment_provider.dart';
@@ -78,10 +76,10 @@ class _WalletPageEnhancedState extends ConsumerState<WalletPageEnhanced>
                 TextField(
                   controller: _withdrawalReasonController,
                   maxLines: 3,
-                  decoration: InputDecoration(
+                  decoration: const InputDecoration(
                     labelText: 'Reason',
                     hintText: 'Transportation costs, accommodation, etc.',
-                    border: const OutlineInputBorder(),
+                    border: OutlineInputBorder(),
                   ),
                 ),
                 const SizedBox(height: 16),
@@ -90,10 +88,10 @@ class _WalletPageEnhancedState extends ConsumerState<WalletPageEnhanced>
                 TextField(
                   onChanged: (value) =>
                       setState(() => _selectedPaymentMethod = value),
-                  decoration: InputDecoration(
+                  decoration: const InputDecoration(
                     labelText: 'Payment Method (Optional)',
                     hintText: 'Bank transfer, Mobile money, etc.',
-                    border: const OutlineInputBorder(),
+                    border: OutlineInputBorder(),
                   ),
                 ),
 
@@ -426,7 +424,7 @@ class _WalletPageEnhancedState extends ConsumerState<WalletPageEnhanced>
           _buildStatCard(
             'Pending Withdrawals',
             formatCurrency(
-              state.stats?.pendingWithdrawals ?? 0,
+              (state.stats?.pendingWithdrawals ?? 0).toDouble(),
               DEFAULT_CURRENCY,
             ),
             Icons.schedule,
@@ -539,7 +537,7 @@ class _WalletPageEnhancedState extends ConsumerState<WalletPageEnhanced>
               padding: const EdgeInsets.all(16),
               child: Row(
                 children: [
-                  Icon(Icons.check_circle, color: Colors.green, size: 32),
+                  const Icon(Icons.check_circle, color: Colors.green, size: 32),
                   const SizedBox(width: 16),
                   Expanded(
                     child: Column(
@@ -1290,11 +1288,11 @@ class _WalletPageEnhancedState extends ConsumerState<WalletPageEnhanced>
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'Requested: ${CurrencyUtils.formatCurrency(request.requestedAmount)}',
+                  'Requested: ${formatCurrency(request.requestedAmount)}',
                   style: const TextStyle(fontSize: 14),
                 ),
                 Text(
-                  'Budget: ${CurrencyUtils.formatCurrency(request.totalTransportationBudget)}',
+                  'Budget: ${formatCurrency(request.totalTransportationBudget)}',
                   style: const TextStyle(fontSize: 12, color: Colors.grey),
                 ),
                 const SizedBox(height: 8),

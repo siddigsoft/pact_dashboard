@@ -1,4 +1,5 @@
 import 'package:hive/hive.dart';
+import 'package:flutter/foundation.dart';
 import 'models.dart';
 import 'hive_adapters.dart';
 
@@ -92,11 +93,36 @@ class OfflineDb {
     if (status != null) {
       actions = actions.where((a) => a.status == status).toList();
     }
+
+    // Debug: Print pending sync actions
+    debugPrint('[OfflineDb] Found ${actions.length} pending sync actions (type: ${type ?? 'all'}, status: ${status ?? 'all'}):');
+    for (final action in actions) {
+      debugPrint('[OfflineDb]   - Action ID: ${action.id}, Type: ${action.type}, Status: ${action.status}');
+      debugPrint('[OfflineDb]     Retries: ${action.retries}, Timestamp: ${action.timestamp}');
+      if (action.type == 'site_visit_complete') {
+        debugPrint('[OfflineDb]     Visit ID: ${action.payload['visit_id']}');
+        debugPrint('[OfflineDb]     Notes: ${action.payload['notes'] ?? 'none'}');
+        debugPrint('[OfflineDb]     Photos: ${(action.payload['photos'] as List?)?.length ?? 0}');
+      }
+    }
+
     return actions;
   }
 
   PendingSyncAction? getPendingSyncAction(String id) {
     return _pendingSync.get(id);
+  }
+
+  /// Returns the payload of the first site_visit_complete action for this site entry (any status), or null.
+  /// Used during sync to get user_id, activities, duration_minutes, photos for report creation.
+  Map<String, dynamic>? getCompleteVisitPayloadForSite(String siteEntryId) {
+    final actions = _pendingSync.values
+        .where((a) => a.type == 'site_visit_complete')
+        .toList();
+    for (final a in actions) {
+      if (a.payload['visit_id'] == siteEntryId) return a.payload;
+    }
+    return null;
   }
 
   Future<void> updateSyncActionStatus(
@@ -150,9 +176,19 @@ class OfflineDb {
 
   /// Get unsynced site visits that are ready to sync (excludes drafts)
   List<OfflineSiteVisit> getUnsyncedSiteVisits() {
-    return _siteVisits.values
+    final unsynced = _siteVisits.values
         .where((v) => !v.synced && v.status != 'draft')
         .toList();
+
+    // Debug: Print all unsynced visits
+    debugPrint('[OfflineDb] Found ${unsynced.length} unsynced site visits:');
+    for (final visit in unsynced) {
+      debugPrint('[OfflineDb]   - Visit ID: ${visit.id}, Site: ${visit.siteEntryId}, Status: ${visit.status}, Synced: ${visit.synced}');
+      debugPrint('[OfflineDb]     Notes: ${visit.notes ?? 'none'}, Photos: ${visit.photos?.length ?? 0}');
+      debugPrint('[OfflineDb]     Started: ${visit.startedAt}, Completed: ${visit.completedAt}');
+    }
+
+    return unsynced;
   }
 
   List<OfflineSiteVisit> getAllSiteVisits() {
@@ -182,9 +218,23 @@ class OfflineDb {
 
   /// Get completed but unsynced visits (ready to sync when online)
   List<OfflineSiteVisit> getCompletedUnsyncedVisits() {
-    return _siteVisits.values
+    final completed = _siteVisits.values
         .where((v) => v.status == 'completed' && !v.synced)
         .toList();
+
+    // Debug: Print all completed unsynced visits
+    debugPrint('[OfflineDb] Found ${completed.length} completed unsynced visits:');
+    for (final visit in completed) {
+      debugPrint('[OfflineDb]   - Visit ID: ${visit.id}, Site: ${visit.siteEntryId}');
+      debugPrint('[OfflineDb]     Site Name: ${visit.siteName}, Code: ${visit.siteCode}');
+      debugPrint('[OfflineDb]     Notes: ${visit.notes ?? 'none'}');
+      debugPrint('[OfflineDb]     Photos: ${visit.photos?.length ?? 0} photos');
+      debugPrint('[OfflineDb]     Started: ${visit.startedAt}, Completed: ${visit.completedAt}');
+      debugPrint('[OfflineDb]     Start Location: ${visit.startLocation}');
+      debugPrint('[OfflineDb]     End Location: ${visit.endLocation}');
+    }
+
+    return completed;
   }
 
   Future<void> updateSiteVisitOffline(
@@ -217,6 +267,197 @@ class OfflineDb {
 
   Future<void> deleteSiteVisit(String id) async {
     await _siteVisits.delete(id);
+  }
+
+  // ============================================================================
+  // BUSINESS LOGIC METHODS (replaces OfflineDataService)
+  // ============================================================================
+
+  /// Queue a start visit operation using PendingSyncAction
+  Future<String> queueStartVisit({
+    required String visitId,
+    required String userId,
+    required Map<String, dynamic> startLocation,
+    String? siteName,
+    String? siteCode,
+    String? state,
+    String? locality,
+  }) async {
+    final id = 'start_visit_${DateTime.now().millisecondsSinceEpoch}';
+    final now = DateTime.now();
+
+    final syncAction = PendingSyncAction(
+      id: id,
+      type: 'site_visit_start',
+      payload: {
+        'visit_id': visitId,
+        'user_id': userId,
+        'start_location': startLocation,
+        'started_at': now.toIso8601String(),
+      },
+      timestamp: now.millisecondsSinceEpoch,
+      status: 'pending',
+    );
+    await addPendingSync(syncAction);
+
+    final offlineVisit = OfflineSiteVisit(
+      id: id,
+      siteEntryId: visitId,
+      siteName: siteName ?? 'Unknown Site',
+      siteCode: siteCode ?? '',
+      state: state ?? '',
+      locality: locality ?? '',
+      status: 'draft',
+      startedAt: now,
+      startLocation: startLocation.isNotEmpty ? startLocation : null,
+      synced: false,
+    );
+    await saveSiteVisitOffline(offlineVisit);
+
+    return id;
+  }
+
+  /// Queue a complete visit operation using PendingSyncAction
+  Future<String> queueCompleteVisit({
+    required String visitId,
+    required String userId,
+    required Map<String, dynamic> endLocation,
+    String? notes,
+    String? activities,
+    int? durationMinutes,
+    List<String>? photoDataUrls,
+    String? siteName,
+    String? siteCode,
+    String? state,
+    String? locality,
+    Map<String, dynamic>? startLocation,
+  }) async {
+    final id = 'complete_visit_${DateTime.now().millisecondsSinceEpoch}';
+    final now = DateTime.now();
+
+    debugPrint('[OfflineDb] queueCompleteVisit called for visit: $visitId');
+    debugPrint('[OfflineDb]   Notes: $notes, Photos: ${photoDataUrls?.length ?? 0}');
+
+    // Create PendingSyncAction for sync queue
+    final syncAction = PendingSyncAction(
+      id: id,
+      type: 'site_visit_complete',
+      payload: {
+        'visit_id': visitId,
+        'user_id': userId,
+        'end_location': endLocation,
+        'notes': notes,
+        'activities': activities,
+        'duration_minutes': durationMinutes,
+        'completed_at': now.toIso8601String(),
+        'photos': photoDataUrls ?? [],
+      },
+      timestamp: now.millisecondsSinceEpoch,
+      status: 'pending',
+    );
+    await addPendingSync(syncAction);
+    debugPrint('[OfflineDb] Created PendingSyncAction: $id (type: site_visit_complete)');
+
+    // Update or create OfflineDb entry
+    final existingDraft = getDraftForSite(visitId);
+
+    if (existingDraft != null) {
+      await updateSiteVisitOffline(
+        existingDraft.id,
+        status: 'completed',
+        completedAt: now,
+        endLocation: endLocation.isNotEmpty ? endLocation : null,
+        photos: photoDataUrls,
+        notes: notes,
+      );
+    } else {
+      final offlineVisit = OfflineSiteVisit(
+        id: id,
+        siteEntryId: visitId,
+        siteName: siteName ?? 'Unknown Site',
+        siteCode: siteCode ?? '',
+        state: state ?? '',
+        locality: locality ?? '',
+        status: 'completed',
+        startedAt: now.subtract(Duration(minutes: durationMinutes ?? 0)),
+        completedAt: now,
+        startLocation: startLocation,
+        endLocation: endLocation.isNotEmpty ? endLocation : null,
+        photos: photoDataUrls,
+        notes: notes,
+        synced: false,
+      );
+      await saveSiteVisitOffline(offlineVisit);
+    }
+
+    return id;
+  }
+
+  /// Queue an accept visit operation using PendingSyncAction
+  /// This replaces OfflineDataService.queueAcceptVisit()
+  Future<String> queueAcceptVisit({
+    required String visitId,
+    required String userId,
+    Map<String, dynamic>? locationData,
+  }) async {
+    final id = 'accept_visit_${DateTime.now().millisecondsSinceEpoch}';
+    final now = DateTime.now();
+
+    // Create PendingSyncAction for sync queue
+    final syncAction = PendingSyncAction(
+      id: id,
+      type: 'site_visit_accept',
+      payload: {
+        'visit_id': visitId,
+        'user_id': userId,
+        'accepted_at': now.toIso8601String(),
+        if (locationData != null) 'location_data': locationData,
+      },
+      timestamp: now.millisecondsSinceEpoch,
+      status: 'pending',
+    );
+    await addPendingSync(syncAction);
+
+    return id;
+  }
+
+  /// Get pending actions count by type
+  Map<String, int> getPendingActionsByType() {
+    final actions = getPendingSyncActions(status: 'pending');
+    final counts = <String, int>{};
+    for (final action in actions) {
+      counts[action.type] = (counts[action.type] ?? 0) + 1;
+    }
+    return counts;
+  }
+
+  /// Get all pending visit IDs that have offline changes
+  Set<String> getPendingVisitIds() {
+    final actions = getPendingSyncActions(status: 'pending');
+    final ids = <String>{};
+    for (final action in actions) {
+      final type = action.type;
+      if (type == 'site_visit_accept' ||
+          type == 'site_visit_start' ||
+          type == 'site_visit_complete') {
+        final visitId = action.payload['visit_id'] as String?;
+        if (visitId != null) {
+          ids.add(visitId);
+        }
+      }
+    }
+    return ids;
+  }
+
+  /// Get all draft visit IDs (saved but not completed)
+  Set<String> getDraftVisitIds() {
+    final drafts = getDraftSiteVisits();
+    return drafts.map((d) => d.siteEntryId).toSet();
+  }
+
+  /// Get total count of pending sync actions
+  int getPendingSyncCount() {
+    return getPendingSyncActions(status: 'pending').length;
   }
 
   // ============================================================================

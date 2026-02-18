@@ -42,11 +42,11 @@ class SupabaseService {
         OAuthProvider.google,
         redirectTo: 'io.supabase.pactmobile://login-callback/',
       );
-      if (!response) throw AuthException('Failed to sign in with Google');
+      if (!response) throw const AuthException('Failed to sign in with Google');
 
       // Wait for the session to be established
       final session = _client.auth.currentSession;
-      if (session == null) throw AuthException('No session established');
+      if (session == null) throw const AuthException('No session established');
 
       return AuthResponse(
         session: session,

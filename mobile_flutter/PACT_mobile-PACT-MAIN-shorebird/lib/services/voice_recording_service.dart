@@ -9,7 +9,7 @@ import 'package:permission_handler/permission_handler.dart';
 class VoiceRecordingService {
   final AudioRecorder _recorder = AudioRecorder();
   final AudioPlayer _audioPlayer = AudioPlayer();
-  
+
   bool _isRecording = false;
   bool _isPlaying = false;
   String? _currentRecordingPath;
@@ -17,8 +17,8 @@ class VoiceRecordingService {
   Duration _playbackPosition = Duration.zero;
   Duration _playbackDuration = Duration.zero;
   Timer? _durationTimer;
-  
-  final StreamController<VoiceRecordingState> _stateController = 
+
+  final StreamController<VoiceRecordingState> _stateController =
       StreamController<VoiceRecordingState>.broadcast();
 
   Stream<VoiceRecordingState> get stateStream => _stateController.stream;
@@ -32,12 +32,12 @@ class VoiceRecordingService {
       _playbackPosition = position;
       _emitState();
     });
-    
+
     _audioPlayer.onDurationChanged.listen((duration) {
       _playbackDuration = duration;
       _emitState();
     });
-    
+
     _audioPlayer.onPlayerComplete.listen((_) {
       _isPlaying = false;
       _playbackPosition = Duration.zero;
@@ -77,7 +77,7 @@ class VoiceRecordingService {
 
       _isRecording = true;
       _recordingDuration = Duration.zero;
-      
+
       _durationTimer = Timer.periodic(const Duration(seconds: 1), (_) {
         _recordingDuration += const Duration(seconds: 1);
         _emitState();
@@ -94,11 +94,11 @@ class VoiceRecordingService {
   Future<String?> stopRecording() async {
     try {
       _durationTimer?.cancel();
-      
+
       final path = await _recorder.stop();
       _isRecording = false;
       _emitState();
-      
+
       return path ?? _currentRecordingPath;
     } catch (e) {
       debugPrint('[VoiceRecording] Error stopping recording: $e');
@@ -111,14 +111,14 @@ class VoiceRecordingService {
     try {
       _durationTimer?.cancel();
       await _recorder.stop();
-      
+
       if (_currentRecordingPath != null) {
         final file = File(_currentRecordingPath!);
         if (await file.exists()) {
           await file.delete();
         }
       }
-      
+
       _isRecording = false;
       _currentRecordingPath = null;
       _recordingDuration = Duration.zero;
@@ -133,7 +133,7 @@ class VoiceRecordingService {
       if (_isPlaying) {
         await _audioPlayer.stop();
       }
-      
+
       await _audioPlayer.play(DeviceFileSource(path));
       _isPlaying = true;
       _emitState();
@@ -182,14 +182,16 @@ class VoiceRecordingService {
   }
 
   void _emitState() {
-    _stateController.add(VoiceRecordingState(
-      isRecording: _isRecording,
-      isPlaying: _isPlaying,
-      recordingDuration: _recordingDuration,
-      playbackPosition: _playbackPosition,
-      playbackDuration: _playbackDuration,
-      currentPath: _currentRecordingPath,
-    ));
+    _stateController.add(
+      VoiceRecordingState(
+        isRecording: _isRecording,
+        isPlaying: _isPlaying,
+        recordingDuration: _recordingDuration,
+        playbackPosition: _playbackPosition,
+        playbackDuration: _playbackDuration,
+        currentPath: _currentRecordingPath,
+      ),
+    );
   }
 
   String formatDuration(Duration duration) {

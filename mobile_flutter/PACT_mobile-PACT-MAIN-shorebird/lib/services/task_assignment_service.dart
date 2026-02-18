@@ -31,7 +31,7 @@ class TaskAssignmentService {
   late final SiteVisitAssignment _assignmentAlgorithm;
 
   TaskAssignmentService(this._supabase, this._service) {
-    _assignmentAlgorithm = SiteVisitAssignment(_supabase);
+    _assignmentAlgorithm = SiteVisitAssignment(_supabase.rpc);
   }
 
   /// Accept a task assignment
@@ -159,7 +159,9 @@ class TaskAssignmentService {
 
   /// Get cached assignment decision
   Future<Map<String, dynamic>?> getCachedAssignmentDecision(
-      String taskId, String userId) async {
+    String taskId,
+    String userId,
+  ) async {
     try {
       final box = await _getAssignmentDecisionsBox();
       return box.get('decision_${taskId}_$userId');
@@ -339,8 +341,9 @@ class TaskAssignmentService {
       await box.put('accepted_tasks_$userId', {
         'tasks': tasksData,
         'cached_at': DateTime.now().toIso8601String(),
-        'expires_at':
-            DateTime.now().add(const Duration(hours: 1)).toIso8601String(),
+        'expires_at': DateTime.now()
+            .add(const Duration(hours: 1))
+            .toIso8601String(),
       });
     } catch (e) {
       print('Error caching accepted tasks: $e');
@@ -376,9 +379,11 @@ class TaskAssignmentService {
       final box = await _getAssignmentDecisionsBox();
       final history = <Map<String, dynamic>>[];
 
-      final keys = box.keys.where((key) =>
-          key.toString().contains('_$userId') &&
-          key.toString().startsWith('decision_'));
+      final keys = box.keys.where(
+        (key) =>
+            key.toString().contains('_$userId') &&
+            key.toString().startsWith('decision_'),
+      );
 
       for (final key in keys) {
         final decision = box.get(key);
@@ -388,8 +393,11 @@ class TaskAssignmentService {
       }
 
       // Sort by timestamp (most recent first)
-      history.sort((a, b) => DateTime.parse(b['timestamp'])
-          .compareTo(DateTime.parse(a['timestamp'])));
+      history.sort(
+        (a, b) => DateTime.parse(
+          b['timestamp'],
+        ).compareTo(DateTime.parse(a['timestamp'])),
+      );
 
       return history;
     } catch (e) {
@@ -405,15 +413,17 @@ class TaskAssignmentService {
       final queueBox = await _getAssignmentQueueBox();
 
       // Remove user-specific decisions
-      final decisionKeys =
-          decisionsBox.keys.where((key) => key.toString().contains('_$userId'));
+      final decisionKeys = decisionsBox.keys.where(
+        (key) => key.toString().contains('_$userId'),
+      );
       for (final key in decisionKeys) {
         await decisionsBox.delete(key);
       }
 
       // Remove queued operations for user
-      final queueKeys =
-          queueBox.keys.where((key) => key.toString().contains('_$userId'));
+      final queueKeys = queueBox.keys.where(
+        (key) => key.toString().contains('_$userId'),
+      );
       for (final key in queueKeys) {
         await queueBox.delete(key);
       }

@@ -1,5 +1,6 @@
 /// Cost Outstanding Tab Widget
 /// Displays outstanding advances that need reconciliation
+library;
 
 import 'package:flutter/material.dart';
 import '../../models/operational_cost_submission.dart';
@@ -22,7 +23,8 @@ class CostOutstandingTab extends StatelessWidget {
     }
 
     final totalOutstanding = submissions.fold<double>(
-      0, (sum, s) => sum + s.amount,
+      0,
+      (sum, s) => sum + s.amount,
     );
 
     return Column(
@@ -54,7 +56,11 @@ class CostOutstandingTab extends StatelessWidget {
                   color: Colors.white.withOpacity(0.2),
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: const Icon(Icons.account_balance_wallet, color: Colors.white, size: 32),
+                child: const Icon(
+                  Icons.account_balance_wallet,
+                  color: Colors.white,
+                  size: 32,
+                ),
               ),
               const SizedBox(width: 16),
               Expanded(
@@ -62,7 +68,9 @@ class CostOutstandingTab extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      isArabic ? 'إجمالي السلف المعلقة' : 'Total Outstanding Advances',
+                      isArabic
+                          ? 'إجمالي السلف المعلقة'
+                          : 'Total Outstanding Advances',
                       style: const TextStyle(
                         color: Colors.white70,
                         fontSize: 13,
@@ -81,7 +89,10 @@ class CostOutstandingTab extends StatelessWidget {
                 ),
               ),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 6,
+                ),
                 decoration: BoxDecoration(
                   color: Colors.white.withOpacity(0.2),
                   borderRadius: BorderRadius.circular(20),
@@ -138,18 +149,18 @@ class CostOutstandingTab extends StatelessWidget {
             const SizedBox(height: 24),
             Text(
               isArabic ? 'لا توجد سلف معلقة' : 'No Outstanding Advances',
-              style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                fontWeight: FontWeight.bold,
-              ),
+              style: Theme.of(
+                context,
+              ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
             Text(
-              isArabic 
-                  ? 'جميع السلف تمت تسويتها' 
+              isArabic
+                  ? 'جميع السلف تمت تسويتها'
                   : 'All advances have been reconciled',
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: Colors.grey.shade600,
-              ),
+              style: Theme.of(
+                context,
+              ).textTheme.bodyMedium?.copyWith(color: Colors.grey.shade600),
               textAlign: TextAlign.center,
             ),
           ],
@@ -163,10 +174,7 @@ class _OutstandingCard extends StatelessWidget {
   final OperationalCostSubmission submission;
   final bool isArabic;
 
-  const _OutstandingCard({
-    required this.submission,
-    required this.isArabic,
-  });
+  const _OutstandingCard({required this.submission, required this.isArabic});
 
   @override
   Widget build(BuildContext context) {
@@ -180,7 +188,9 @@ class _OutstandingCard extends StatelessWidget {
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
         side: BorderSide(
-          color: isPastDue ? Colors.red.withOpacity(0.3) : Colors.orange.withOpacity(0.3),
+          color: isPastDue
+              ? Colors.red.withOpacity(0.3)
+              : Colors.orange.withOpacity(0.3),
           width: 1,
         ),
       ),
@@ -194,8 +204,8 @@ class _OutstandingCard extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: isPastDue 
-                        ? Colors.red.withOpacity(0.1) 
+                    color: isPastDue
+                        ? Colors.red.withOpacity(0.1)
                         : Colors.orange.withOpacity(0.1),
                     borderRadius: BorderRadius.circular(8),
                   ),
@@ -217,9 +227,7 @@ class _OutstandingCard extends StatelessWidget {
                         ),
                       ),
                       Text(
-                        isArabic 
-                            ? 'منذ $daysSince يوم'
-                            : '$daysSince days ago',
+                        isArabic ? 'منذ $daysSince يوم' : '$daysSince days ago',
                         style: theme.textTheme.bodySmall?.copyWith(
                           color: isPastDue ? Colors.red : Colors.grey,
                         ),
@@ -231,7 +239,7 @@ class _OutstandingCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
                     Text(
-                      '${submission.amount.toStringAsFixed(2)}',
+                      submission.amount.toStringAsFixed(2),
                       style: theme.textTheme.titleMedium?.copyWith(
                         fontWeight: FontWeight.bold,
                         color: Colors.green.shade700,
@@ -250,7 +258,10 @@ class _OutstandingCard extends StatelessWidget {
             if (isPastDue) ...[
               const SizedBox(height: 12),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
                 decoration: BoxDecoration(
                   color: Colors.red.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(8),
@@ -258,11 +269,15 @@ class _OutstandingCard extends StatelessWidget {
                 ),
                 child: Row(
                   children: [
-                    const Icon(Icons.error_outline, size: 16, color: Colors.red),
+                    const Icon(
+                      Icons.error_outline,
+                      size: 16,
+                      color: Colors.red,
+                    ),
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        isArabic 
+                        isArabic
                             ? 'تجاوز الموعد المحدد للتسوية'
                             : 'Past due for reconciliation',
                         style: const TextStyle(
@@ -279,7 +294,11 @@ class _OutstandingCard extends StatelessWidget {
             const SizedBox(height: 12),
             Row(
               children: [
-                Icon(Icons.calendar_today, size: 14, color: Colors.grey.shade500),
+                Icon(
+                  Icons.calendar_today,
+                  size: 14,
+                  color: Colors.grey.shade500,
+                ),
                 const SizedBox(width: 4),
                 Text(
                   dateFormat.format(submission.createdAt),

@@ -29,14 +29,17 @@ class ClaimFeeBreakdown {
     'currency': currency,
   };
 
-  String get formattedTransportBudget => '${transportBudget.toStringAsFixed(0)} $currency';
-  String get formattedEnumeratorFee => '${enumeratorFee.toStringAsFixed(0)} $currency';
-  String get formattedTotalPayout => '${totalPayout.toStringAsFixed(0)} $currency';
+  String get formattedTransportBudget =>
+      '${transportBudget.toStringAsFixed(0)} $currency';
+  String get formattedEnumeratorFee =>
+      '${enumeratorFee.toStringAsFixed(0)} $currency';
+  String get formattedTotalPayout =>
+      '${totalPayout.toStringAsFixed(0)} $currency';
 }
 
 class ClaimFeeService {
   static const double defaultEnumeratorFeeSDG = 50.0;
-  
+
   final SupabaseClient _supabase = Supabase.instance.client;
 
   Future<ClaimFeeBreakdown?> calculateFeeForClaim(
@@ -59,10 +62,13 @@ class ClaimFeeService {
           .limit(1)
           .maybeSingle();
 
-      final results = await Future.wait([siteEntryFuture, classificationFuture]);
-      
-      final siteEntry = results[0] as Map<String, dynamic>?;
-      final userClassification = results[1] as Map<String, dynamic>?;
+      final results = await Future.wait([
+        siteEntryFuture,
+        classificationFuture,
+      ]);
+
+      final siteEntry = results[0];
+      final userClassification = results[1];
 
       if (siteEntry == null) {
         print('Error: Site entry not found for id: $siteId');
@@ -77,13 +83,28 @@ class ClaimFeeService {
       String feeSource = 'default';
 
       if (userClassification != null) {
-        classificationLevel = userClassification['classification_level'] as String?;
+        classificationLevel =
+            userClassification['classification_level'] as String?;
         roleScope = userClassification['role_scope'] as String?;
+        print(
+          '[ClaimFeeService] user_classifications from DB: '
+          'classification_level=$classificationLevel, role_scope=$roleScope (raw)',
+        );
+
+        // Normalize role_scope to valid enum values for classification_role_scope.
+        // DB enum only allows: field_officer, team_leader, supervisor, coordinator.
+        final beforeNorm = roleScope;
+        roleScope = _normalizeRoleScopeForEnum(roleScope);
+        if (beforeNorm != roleScope) {
+          print('[ClaimFeeService] role_scope normalized: $beforeNorm -> $roleScope');
+        }
 
         if (classificationLevel != null && roleScope != null) {
           final feeStructure = await _supabase
               .from('classification_fee_structures')
-              .select('site_visit_base_fee_cents, complexity_multiplier, currency, is_active')
+              .select(
+                'site_visit_base_fee_cents, complexity_multiplier, currency, is_active',
+              )
               .eq('classification_level', classificationLevel)
               .eq('role_scope', roleScope)
               .eq('is_active', true)
@@ -93,8 +114,13 @@ class ClaimFeeService {
 
           if (feeStructure != null) {
             // Fees are stored directly in SDG, not cents (despite column name)
-            final baseFee = _parseDouble(feeStructure['site_visit_base_fee_cents']);
-            final multiplier = _parseDouble(feeStructure['complexity_multiplier'], defaultValue: 1.0);
+            final baseFee = _parseDouble(
+              feeStructure['site_visit_base_fee_cents'],
+            );
+            final multiplier = _parseDouble(
+              feeStructure['complexity_multiplier'],
+              defaultValue: 1.0,
+            );
             // Round to 2 decimal places: baseFee * multiplier, then round
             enumeratorFee = (baseFee * multiplier * 100).roundToDouble() / 100;
             feeSource = 'classification';
@@ -113,13 +139,16 @@ class ClaimFeeService {
         feeSource: feeSource,
         currency: 'SDG',
       );
-    } catch (e) {
+    } catch (e, stack) {
       print('Error calculating claim fee: $e');
+      print('Claim fee stack: $stack');
       return null;
     }
   }
 
-  Future<EnumeratorFeeResult> calculateEnumeratorFeeForUser(String userId) async {
+  Future<EnumeratorFeeResult> calculateEnumeratorFeeForUser(
+    String userId,
+  ) async {
     try {
       final userClassification = await _supabase
           .from('user_classifications')
@@ -138,8 +167,10 @@ class ClaimFeeService {
         );
       }
 
-      final classificationLevel = userClassification['classification_level'] as String?;
-      final roleScope = userClassification['role_scope'] as String?;
+      final classificationLevel =
+          userClassification['classification_level'] as String?;
+      final roleScope =
+          _normalizeRoleScopeForEnum(userClassification['role_scope'] as String?);
 
       if (classificationLevel == null || roleScope == null) {
         return EnumeratorFeeResult(
@@ -168,7 +199,10 @@ class ClaimFeeService {
       }
 
       final baseFee = _parseDouble(feeStructure['site_visit_base_fee_cents']);
-      final multiplier = _parseDouble(feeStructure['complexity_multiplier'], defaultValue: 1.0);
+      final multiplier = _parseDouble(
+        feeStructure['complexity_multiplier'],
+        defaultValue: 1.0,
+      );
       final calculatedFee = (baseFee * multiplier * 100).roundToDouble() / 100;
 
       return EnumeratorFeeResult(
@@ -183,6 +217,32 @@ class ClaimFeeService {
         classificationLevel: null,
         source: 'default',
       );
+    }
+  }
+
+  /// Maps app/UI role names to the database enum classification_role_scope.
+  /// Valid enum values: field_officer, team_leader, supervisor, coordinator.
+  /// Use this when sending p_role_scope to claim_site_visit RPC.
+  static String? normalizeRoleScopeForEnum(String? roleScope) {
+    return _normalizeRoleScopeForEnum(roleScope);
+  }
+
+  static String? _normalizeRoleScopeForEnum(String? roleScope) {
+    if (roleScope == null || roleScope.isEmpty) return roleScope;
+    final lower = roleScope.toLowerCase();
+    switch (lower) {
+      case 'enumerator':
+      case 'datacollector':
+      case 'data_collector':
+      case 'dc':
+        return 'field_officer';
+      case 'field_officer':
+      case 'team_leader':
+      case 'supervisor':
+      case 'coordinator':
+        return lower;
+      default:
+        return roleScope;
     }
   }
 

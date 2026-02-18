@@ -41,7 +41,7 @@ class WalletScreenWithPaymentMethods extends ConsumerWidget {
 
                 // 3. Payment Methods Card Widget
                 // This is the key integration point!
-                PaymentMethodsCardWidget(),
+                const PaymentMethodsCardWidget(),
                 const SizedBox(height: 24),
 
                 // 4. Recent Transactions
@@ -216,7 +216,7 @@ class PaymentMethodsScreen extends ConsumerWidget {
             const SizedBox(height: 24),
 
             // Payment Methods Card
-            PaymentMethodsCardWidget(),
+            const PaymentMethodsCardWidget(),
 
             const SizedBox(height: 24),
 
@@ -226,20 +226,21 @@ class PaymentMethodsScreen extends ConsumerWidget {
               decoration: BoxDecoration(
                 color: const Color(0xFFE3F2FD),
                 borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: const Color(0xFF1976D2).withOpacity(0.3)),
+                border:
+                    Border.all(color: const Color(0xFF1976D2).withOpacity(0.3)),
               ),
-              child: Column(
+              child: const Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
+                  Text(
                     'Tips for Payment Methods',
                     style: TextStyle(
                       fontWeight: FontWeight.w600,
                       color: Color(0xFF1976D2),
                     ),
                   ),
-                  const SizedBox(height: 8),
-                  const Text(
+                  SizedBox(height: 8),
+                  Text(
                     '• Ensure account details are correct\n'
                     '• Only one payment method can be default\n'
                     '• Use the same account for withdrawals\n'
@@ -280,19 +281,19 @@ class ProfileScreenWithPaymentMethods extends ConsumerWidget {
             ],
           ),
         ),
-        body: TabBarView(
+        body: const TabBarView(
           children: [
             // Personal Info Tab
-            const Center(child: Text('Personal Info')),
+            Center(child: Text('Personal Info')),
 
             // Payment Methods Tab - This is where PaymentMethodsCardWidget goes
             SingleChildScrollView(
-              padding: const EdgeInsets.all(16),
+              padding: EdgeInsets.all(16),
               child: PaymentMethodsCardWidget(),
             ),
 
             // Settings Tab
-            const Center(child: Text('Settings')),
+            Center(child: Text('Settings')),
           ],
         ),
       ),

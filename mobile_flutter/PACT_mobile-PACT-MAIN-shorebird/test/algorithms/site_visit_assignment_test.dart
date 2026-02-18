@@ -1,34 +1,45 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:pact_mobile/services/rpc_client.dart';
 import 'package:pact_mobile/algorithms/site_visit_assignment.dart';
 
-class MockSupabaseClient extends Mock implements SupabaseClient {}
+class MockRpcClient extends Mock implements RpcClient {}
+
+// Lightweight fake response object to avoid depending on Postgrest types
+class FakeError {
+  final String message;
+  const FakeError({required this.message});
+}
+
+class FakeResponse {
+  final dynamic data;
+  final FakeError? error;
+  const FakeResponse({this.data, this.error});
+}
 
 void main() {
   group('SiteVisitAssignment', () {
-    late MockSupabaseClient mockSupabase;
+    late MockRpcClient mockRpc;
     late SiteVisitAssignment assignment;
 
     setUp(() {
-      mockSupabase = MockSupabaseClient();
-      assignment = SiteVisitAssignment(mockSupabase);
+      mockRpc = MockRpcClient();
+      assignment = SiteVisitAssignment(mockRpc);
     });
 
     test('attemptAssign should handle successful assignment', () async {
       // Mock successful RPC response
-      when(() => mockSupabase.rpc(
-            'assign_site_visit',
-            params: any(named: 'params'),
-          )).thenAnswer((_) async => PostgrestResponse(
-            data: {
-              'success': true,
-              'assigned_to': 'testUserId',
-              'status': 'assigned',
-            },
-            status: 200,
-            count: null,
-          ));
+      when(
+        () => mockRpc.rpc('assign_site_visit', params: any(named: 'params')),
+      ).thenAnswer(
+        (_) async => const FakeResponse(
+          data: {
+            'success': true,
+            'assigned_to': 'testUserId',
+            'status': 'assigned',
+          },
+        ),
+      );
 
       final result = await assignment.attemptAssign(
         siteId: 'testSiteId',
@@ -43,18 +54,17 @@ void main() {
 
     test('attemptAssign should handle already assigned visits', () async {
       // Mock RPC response for already assigned visit
-      when(() => mockSupabase.rpc(
-            'assign_site_visit',
-            params: any(named: 'params'),
-          )).thenAnswer((_) async => PostgrestResponse(
-            data: {
-              'success': false,
-              'assigned_to': 'otherUserId',
-              'status': 'assigned',
-            },
-            status: 200,
-            count: null,
-          ));
+      when(
+        () => mockRpc.rpc('assign_site_visit', params: any(named: 'params')),
+      ).thenAnswer(
+        (_) async => const FakeResponse(
+          data: {
+            'success': false,
+            'assigned_to': 'otherUserId',
+            'status': 'assigned',
+          },
+        ),
+      );
 
       final result = await assignment.attemptAssign(
         siteId: 'testSiteId',
@@ -69,15 +79,14 @@ void main() {
 
     test('attemptAssign should handle network errors', () async {
       // Mock network error
-      when(() => mockSupabase.rpc(
-            'assign_site_visit',
-            params: any(named: 'params'),
-          )).thenAnswer((_) async => PostgrestResponse(
-            data: null,
-            status: 500,
-            error: PostgrestError(message: 'Network error'),
-            count: null,
-          ));
+      when(
+        () => mockRpc.rpc('assign_site_visit', params: any(named: 'params')),
+      ).thenAnswer(
+        (_) async => const FakeResponse(
+          data: null,
+          error: FakeError(message: 'Network error'),
+        ),
+      );
 
       final result = await assignment.attemptAssign(
         siteId: 'testSiteId',

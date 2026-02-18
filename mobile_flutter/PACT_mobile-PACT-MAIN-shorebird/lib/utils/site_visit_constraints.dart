@@ -24,8 +24,16 @@ class ConstraintCheckResult {
   factory ConstraintCheckResult.allow({double? distanceKm}) =>
       ConstraintCheckResult(allowed: true, distanceKm: distanceKm);
 
-  factory ConstraintCheckResult.deny(String reason, {String? action, double? distanceKm}) =>
-      ConstraintCheckResult(allowed: false, reason: reason, action: action, distanceKm: distanceKm);
+  factory ConstraintCheckResult.deny(
+    String reason, {
+    String? action,
+    double? distanceKm,
+  }) => ConstraintCheckResult(
+    allowed: false,
+    reason: reason,
+    action: action,
+    distanceKm: distanceKm,
+  );
 }
 
 /// Service for enforcing site visit constraints for data collectors and coordinators
@@ -224,14 +232,15 @@ class SiteVisitConstraints {
 
     // Get proximity configuration
     final config = await GeoDistanceUtils.getProximityConfig();
-    
+
     // If proximity check is disabled, allow
     if (!config.enabled) {
       return ConstraintCheckResult.allow();
     }
 
     // Check if GPS is available
-    final hasLocationPermission = await GeoDistanceUtils.hasLocationPermission();
+    final hasLocationPermission =
+        await GeoDistanceUtils.hasLocationPermission();
     final isLocationEnabled = await GeoDistanceUtils.isLocationServiceEnabled();
 
     // If location sharing is required but not available, deny
@@ -252,7 +261,7 @@ class SiteVisitConstraints {
 
     // Get user's current location
     final userLocation = await GeoDistanceUtils.getCurrentLocation();
-    
+
     // If we couldn't get user location but it's required, deny
     if (config.requireLocationSharing && userLocation == null) {
       return ConstraintCheckResult.deny(
@@ -262,8 +271,10 @@ class SiteVisitConstraints {
     }
 
     // Parse site coordinates
-    final siteLocation = GeoDistanceUtils.parseGpsCoordinates(visit.siteCoordinates);
-    
+    final siteLocation = GeoDistanceUtils.parseGpsCoordinates(
+      visit.siteCoordinates,
+    );
+
     // If site has no coordinates, allow (can't check proximity)
     if (siteLocation == null) {
       return ConstraintCheckResult.allow();
@@ -284,7 +295,9 @@ class SiteVisitConstraints {
     );
 
     if (proximityResult.canAccess) {
-      return ConstraintCheckResult.allow(distanceKm: proximityResult.distanceKm);
+      return ConstraintCheckResult.allow(
+        distanceKm: proximityResult.distanceKm,
+      );
     } else {
       return ConstraintCheckResult.deny(
         proximityResult.reason ?? 'Site is outside your allowed range.',

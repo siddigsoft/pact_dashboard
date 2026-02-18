@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import '../services/offline_data_service.dart';
+import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import '../services/offline/offline_db.dart';
+import '../services/offline/sync_manager.dart';
 import '../theme/app_colors.dart';
 
 /// Widget that shows offline sync status and allows manual sync
@@ -12,7 +15,7 @@ class OfflineSyncIndicator extends StatefulWidget {
 }
 
 class _OfflineSyncIndicatorState extends State<OfflineSyncIndicator> {
-  final _offlineService = OfflineDataService();
+  final _offlineDb = OfflineDb();
   bool _isOnline = false;
   int _pendingCount = 0;
   bool _isSyncing = false;
@@ -24,8 +27,9 @@ class _OfflineSyncIndicatorState extends State<OfflineSyncIndicator> {
   }
 
   Future<void> _checkStatus() async {
-    final isOnline = await _offlineService.isOnline();
-    final pendingCount = await _offlineService.getPendingSyncCount();
+    final connectivity = await Connectivity().checkConnectivity();
+    final isOnline = !connectivity.contains(ConnectivityResult.none);
+    final pendingCount = _offlineDb.getPendingSyncCount();
 
     if (mounted) {
       setState(() {
@@ -41,20 +45,34 @@ class _OfflineSyncIndicatorState extends State<OfflineSyncIndicator> {
     setState(() => _isSyncing = true);
 
     try {
-      final results = await _offlineService.syncAll();
-      final totalSynced = results.values.reduce((a, b) => a + b);
+      final syncManager = SyncManager();
+      try {
+        syncManager.setSupabaseClient(Supabase.instance.client);
+      } catch (e) {
+        debugPrint('[OfflineSyncIndicator] Error setting Supabase client: $e');
+      }
+      debugPrint('[OfflineSyncIndicator] Starting sync...');
+      final result = await syncManager.forceSync();
+      debugPrint('[OfflineSyncIndicator] Sync completed: ${result.success}, synced: ${result.synced}, failed: ${result.failed}');
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Synced $totalSynced items successfully'),
-            backgroundColor: Colors.green,
-            duration: const Duration(seconds: 2),
-          ),
-        );
-
-        // Clear synced items
-        await _offlineService.clearSyncedItems();
+        if (result.success && result.synced > 0) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Synced ${result.synced} items successfully'),
+              backgroundColor: Colors.green,
+              duration: const Duration(seconds: 2),
+            ),
+          );
+        } else if (result.failed > 0) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Sync completed with ${result.failed} error${result.failed > 1 ? 's' : ''}'),
+              backgroundColor: Colors.orange,
+              duration: const Duration(seconds: 3),
+            ),
+          );
+        }
         await _checkStatus();
       }
     } catch (e) {

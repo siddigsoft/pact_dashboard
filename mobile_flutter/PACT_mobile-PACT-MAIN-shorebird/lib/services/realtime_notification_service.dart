@@ -3,14 +3,15 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'notification_service.dart';
 
 class RealtimeNotificationService {
-  static final RealtimeNotificationService _instance = RealtimeNotificationService._internal();
+  static final RealtimeNotificationService _instance =
+      RealtimeNotificationService._internal();
   factory RealtimeNotificationService() => _instance;
   RealtimeNotificationService._internal();
 
   final SupabaseClient _supabase = Supabase.instance.client;
   RealtimeChannel? _chatChannel;
   RealtimeChannel? _mmpChannel;
-  
+
   String? _currentUserId;
   bool _isInitialized = false;
 
@@ -19,7 +20,7 @@ class RealtimeNotificationService {
     if (_isInitialized) return;
 
     _currentUserId = _supabase.auth.currentUser?.id;
-    
+
     if (_currentUserId == null) {
       print('User not logged in, cannot initialize notifications');
       return;
@@ -27,13 +28,13 @@ class RealtimeNotificationService {
 
     await _setupChatListener();
     await _setupMMPFileListener();
-    
+
     _isInitialized = true;
     print('Realtime notification service initialized');
   }
 
   // ==================== CHAT MESSAGE LISTENER ====================
-  
+
   Future<void> _setupChatListener() async {
     try {
       // Subscribe to chat_messages table for new messages
@@ -58,7 +59,7 @@ class RealtimeNotificationService {
   Future<void> _handleNewChatMessage(PostgresChangePayload payload) async {
     try {
       final newMessage = payload.newRecord;
-      
+
       // Don't notify for own messages
       if (newMessage['sender_id'] == _currentUserId) {
         return;
@@ -71,9 +72,8 @@ class RealtimeNotificationService {
           .eq('id', newMessage['sender_id'])
           .single();
 
-      final senderName = senderResponse['full_name'] ?? 
-                        senderResponse['email'] ?? 
-                        'Someone';
+      final senderName =
+          senderResponse['full_name'] ?? senderResponse['email'] ?? 'Someone';
 
       final message = newMessage['content'] ?? 'Sent a message';
       final chatId = newMessage['chat_id'];
@@ -92,7 +92,7 @@ class RealtimeNotificationService {
   }
 
   // ==================== MMP FILE LISTENER ====================
-  
+
   Future<void> _setupMMPFileListener() async {
     try {
       // Subscribe to reports table for new MMP files
@@ -117,7 +117,7 @@ class RealtimeNotificationService {
   Future<void> _handleNewMMPFile(PostgresChangePayload payload) async {
     try {
       final newFile = payload.newRecord;
-      
+
       // Don't notify for own uploads
       if (newFile['user_id'] == _currentUserId) {
         return;
@@ -130,9 +130,10 @@ class RealtimeNotificationService {
           .eq('id', newFile['user_id'])
           .single();
 
-      final uploaderName = uploaderResponse['full_name'] ?? 
-                          uploaderResponse['email'] ?? 
-                          'Someone';
+      final uploaderName =
+          uploaderResponse['full_name'] ??
+          uploaderResponse['email'] ??
+          'Someone';
 
       final fileName = newFile['title'] ?? 'New MMP File';
       final fileId = newFile['id'];
@@ -152,7 +153,7 @@ class RealtimeNotificationService {
   }
 
   // ==================== UTILITY METHODS ====================
-  
+
   // Stop all listeners
   void dispose() {
     _chatChannel?.unsubscribe();

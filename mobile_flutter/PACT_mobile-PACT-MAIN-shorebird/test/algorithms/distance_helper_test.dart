@@ -48,7 +48,7 @@ void main() {
       );
 
       // Test point exactly on radius
-      final lat2 = 0.008983; // Approximately 1000m north
+      const lat2 = 0.008983; // Approximately 1000m north
       expect(
         DistanceHelper.isWithinRadius(0, 0, lat2, 0, 1000),
         true,

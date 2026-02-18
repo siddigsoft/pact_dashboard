@@ -10,7 +10,7 @@ import '../widgets/sos_button.dart';
 import 'comprehensive_monitoring_form_screen.dart';
 import 'incident_report_screen.dart';
 import 'helpline_screen.dart';
-import '../l10n/app_localizations.dart';
+import 'package:flutter_gen/gen_l10n/app_localizations.dart';
 
 class SafetyHubScreen extends StatelessWidget {
   const SafetyHubScreen({super.key});
@@ -31,7 +31,8 @@ class SafetyHubScreen extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      _buildSectionTitle(AppLocalizations.of(context)!.quickAccess),
+                      _buildSectionTitle(
+                          AppLocalizations.of(context)!.quickAccess),
                       const SizedBox(height: 16),
                       _buildQuickAccessItems(),
                       const SizedBox(height: 24),
@@ -92,21 +93,24 @@ class SafetyHubScreen extends StatelessWidget {
             context: context,
             icon: Icons.checklist_rounded,
             title: AppLocalizations.of(context)!.safetyChecklist,
-            iconBackgroundColor: const Color(0xFFFF9800).withOpacity(0.15), // Orange background
+            iconBackgroundColor:
+                const Color(0xFFFF9800).withOpacity(0.15), // Orange background
             iconColor: const Color(0xFFFF9800), // Orange icon
           ),
           _buildSafetyItem(
             context: context,
             icon: Icons.warning_amber_rounded,
             title: AppLocalizations.of(context)!.incidentReport,
-            iconBackgroundColor: const Color(0xFF1976D2).withOpacity(0.15), // Blue background
+            iconBackgroundColor:
+                const Color(0xFF1976D2).withOpacity(0.15), // Blue background
             iconColor: const Color(0xFF1976D2), // Blue icon
           ),
           _buildSafetyItem(
             context: context,
             icon: Icons.support_agent,
             title: AppLocalizations.of(context)!.regionalHelplines,
-            iconBackgroundColor: const Color(0xFF4CAF50).withOpacity(0.15), // Green background
+            iconBackgroundColor:
+                const Color(0xFF4CAF50).withOpacity(0.15), // Green background
             iconColor: const Color(0xFF4CAF50), // Green icon
           ),
         ],
@@ -134,7 +138,8 @@ class SafetyHubScreen extends StatelessWidget {
           ),
         ],
         border: Border.all(
-          color: const Color(0xFFFF9800).withOpacity(0.1), // Light orange border
+          color:
+              const Color(0xFFFF9800).withOpacity(0.1), // Light orange border
           width: 1,
         ),
       ),
@@ -148,7 +153,8 @@ class SafetyHubScreen extends StatelessWidget {
               Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (context) => const ComprehensiveMonitoringFormScreen(),
+                  builder: (context) =>
+                      const ComprehensiveMonitoringFormScreen(),
                 ),
               );
             } else if (title == AppLocalizations.of(context)!.incidentReport) {
@@ -158,7 +164,8 @@ class SafetyHubScreen extends StatelessWidget {
                   builder: (context) => const IncidentReportScreen(),
                 ),
               );
-            } else if (title == AppLocalizations.of(context)!.regionalHelplines) {
+            } else if (title ==
+                AppLocalizations.of(context)!.regionalHelplines) {
               Navigator.push(
                 context,
                 MaterialPageRoute(builder: (context) => HelplineScreen()),
@@ -189,7 +196,8 @@ class SafetyHubScreen extends StatelessWidget {
                     ),
                   ),
                 ),
-                Icon(Icons.chevron_right, color: const Color(0xFFFF9800), size: 28), // Orange chevron
+                const Icon(Icons.chevron_right,
+                    color: Color(0xFFFF9800), size: 28), // Orange chevron
               ],
             ),
           ),
@@ -200,88 +208,87 @@ class SafetyHubScreen extends StatelessWidget {
 
   Widget _buildSafetyTips() {
     return Builder(
-      builder: (context) => Container(
-          padding: const EdgeInsets.all(20),
-          decoration: BoxDecoration(
-            gradient: const LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [
-                Color(0xFF1976D2), // Deep blue
-                Color(0xFF42A5F5), // Light blue
-              ],
-            ),
-            borderRadius: BorderRadius.circular(16),
-            boxShadow: [
-              BoxShadow(
-                color: const Color(0xFF1976D2).withOpacity(0.3),
-                blurRadius: 10,
-                offset: const Offset(0, 5),
-                spreadRadius: -2,
-              ),
-            ],
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  const Icon(
-                    Icons.tips_and_updates_outlined,
-                    color: Colors.white,
-                    size: 28,
+        builder: (context) => Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    Color(0xFF1976D2), // Deep blue
+                    Color(0xFF42A5F5), // Light blue
+                  ],
+                ),
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFF1976D2).withOpacity(0.3),
+                    blurRadius: 10,
+                    offset: const Offset(0, 5),
+                    spreadRadius: -2,
                   ),
-                  const SizedBox(width: 12),
+                ],
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(
+                        Icons.tips_and_updates_outlined,
+                        color: Colors.white,
+                        size: 28,
+                      ),
+                      const SizedBox(width: 12),
+                      Text(
+                        AppLocalizations.of(context)!.safetyTipOfTheDay,
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
                   Text(
-                    AppLocalizations.of(context)!.safetyTipOfTheDay,
-                    style: const TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.white,
+                    AppLocalizations.of(context)!.ladderInspectionTip,
+                    style: const TextStyle(fontSize: 15, color: Colors.white),
+                  ),
+                  const SizedBox(height: 16),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton(
+                      onPressed: () {
+                        HapticFeedback.lightImpact();
+                        // View more safety tips
+                      },
+                      style: TextButton.styleFrom(
+                        backgroundColor: Colors.white.withOpacity(0.3),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 8,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      child: Text(
+                        AppLocalizations.of(context)!.viewMoreTips,
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.white,
+                        ),
+                      ),
                     ),
                   ),
                 ],
               ),
-              const SizedBox(height: 12),
-              Text(
-                AppLocalizations.of(context)!.ladderInspectionTip,
-                style: const TextStyle(fontSize: 15, color: Colors.white),
-              ),
-              const SizedBox(height: 16),
-              Align(
-                alignment: Alignment.centerRight,
-                child: TextButton(
-                  onPressed: () {
-                    HapticFeedback.lightImpact();
-                    // View more safety tips
-                  },
-                  style: TextButton.styleFrom(
-                    backgroundColor: Colors.white.withOpacity(0.3),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 8,
-                    ),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                  child: Text(
-                    AppLocalizations.of(context)!.viewMoreTips,
-                    style: const TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.white,
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        )
-        .animate()
-        .fadeIn(duration: 400.ms, delay: 300.ms)
-        .slideY(begin: 0.2, end: 0, duration: 400.ms)
-    );
+            )
+                .animate()
+                .fadeIn(duration: 400.ms, delay: 300.ms)
+                .slideY(begin: 0.2, end: 0, duration: 400.ms));
   }
 
   Widget _buildEmergencyContact() {

@@ -45,11 +45,7 @@ class DocumentFolderCard extends StatelessWidget {
                 color: AppColors.primaryBlue.withOpacity(0.1),
                 borderRadius: BorderRadius.circular(8),
               ),
-              child: Icon(
-                Icons.folder,
-                color: AppColors.primaryBlue,
-                size: 28,
-              ),
+              child: Icon(Icons.folder, color: AppColors.primaryBlue, size: 28),
             ),
             const SizedBox(width: 12),
             Expanded(
@@ -70,10 +66,7 @@ class DocumentFolderCard extends StatelessWidget {
                     locale == 'ar'
                         ? '${folder.documentCount} مستند'
                         : '${folder.documentCount} documents',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Colors.grey.shade600,
-                    ),
+                    style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
                   ),
                 ],
               ),
@@ -105,12 +98,14 @@ class DocumentVersionTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isArabic = locale == 'ar';
-    
+
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: isCurrent ? AppColors.primaryBlue.withOpacity(0.05) : Colors.white,
+        color: isCurrent
+            ? AppColors.primaryBlue.withOpacity(0.05)
+            : Colors.white,
         borderRadius: BorderRadius.circular(8),
         border: Border.all(
           color: isCurrent ? AppColors.primaryBlue : Colors.grey.shade200,
@@ -144,7 +139,9 @@ class DocumentVersionTile extends StatelessWidget {
                 Row(
                   children: [
                     Text(
-                      isArabic ? 'الإصدار ${version.versionNumber}' : 'Version ${version.versionNumber}',
+                      isArabic
+                          ? 'الإصدار ${version.versionNumber}'
+                          : 'Version ${version.versionNumber}',
                       style: const TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.w600,
@@ -153,7 +150,10 @@ class DocumentVersionTile extends StatelessWidget {
                     if (isCurrent) ...[
                       const SizedBox(width: 8),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 2,
+                        ),
                         decoration: BoxDecoration(
                           color: AppColors.primaryBlue,
                           borderRadius: BorderRadius.circular(4),
@@ -173,12 +173,10 @@ class DocumentVersionTile extends StatelessWidget {
                 const SizedBox(height: 2),
                 Text(
                   _formatDate(version.createdAt),
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.grey.shade600,
-                  ),
+                  style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
                 ),
-                if (version.changeNotes != null && version.changeNotes!.isNotEmpty) ...[
+                if (version.changeNotes != null &&
+                    version.changeNotes!.isNotEmpty) ...[
                   const SizedBox(height: 4),
                   Text(
                     version.changeNotes!,
@@ -203,7 +201,10 @@ class DocumentVersionTile extends StatelessWidget {
           if (onView != null)
             IconButton(
               onPressed: onView,
-              icon: Icon(Icons.visibility_outlined, color: Colors.grey.shade600),
+              icon: Icon(
+                Icons.visibility_outlined,
+                color: Colors.grey.shade600,
+              ),
               tooltip: isArabic ? 'عرض' : 'View',
             ),
         ],
@@ -289,7 +290,9 @@ class DocumentAnnotationToolbar extends StatelessWidget {
         height: 40,
         margin: const EdgeInsets.symmetric(horizontal: 2),
         decoration: BoxDecoration(
-          color: isSelected ? AppColors.primaryBlue.withOpacity(0.1) : Colors.transparent,
+          color: isSelected
+              ? AppColors.primaryBlue.withOpacity(0.1)
+              : Colors.transparent,
           borderRadius: BorderRadius.circular(8),
         ),
         child: Icon(
@@ -339,9 +342,11 @@ class DocumentExpiryAlertCard extends StatelessWidget {
     final isArabic = locale == 'ar';
     final isUrgent = alert.daysUntilExpiry <= 7;
     final isWarning = alert.daysUntilExpiry <= 14;
-    
-    final color = isUrgent ? Colors.red : (isWarning ? Colors.orange : Colors.amber);
-    
+
+    final color = isUrgent
+        ? Colors.red
+        : (isWarning ? Colors.orange : Colors.amber);
+
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(8),
@@ -386,10 +391,7 @@ class DocumentExpiryAlertCard extends StatelessWidget {
                   ),
                   Text(
                     _getCategoryLabel(alert.category, isArabic),
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: Colors.grey.shade600,
-                    ),
+                    style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
                   ),
                 ],
               ),
@@ -424,9 +426,9 @@ class OfflineDocumentBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isArabic = locale == 'ar';
-    
+
     if (!isAvailableOffline) return const SizedBox.shrink();
-    
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
@@ -475,7 +477,7 @@ class _DocumentShareDialogState extends State<DocumentShareDialog> {
   @override
   Widget build(BuildContext context) {
     final isArabic = widget.locale == 'ar';
-    
+
     return AlertDialog(
       title: Text(isArabic ? 'مشاركة المستند' : 'Share Document'),
       content: SizedBox(
@@ -497,7 +499,7 @@ class _DocumentShareDialogState extends State<DocumentShareDialog> {
                   final user = widget.users[index];
                   final userId = user['id'] as String;
                   final isSelected = _selectedUsers.contains(userId);
-                  
+
                   return CheckboxListTile(
                     value: isSelected,
                     onChanged: (value) {
@@ -509,7 +511,9 @@ class _DocumentShareDialogState extends State<DocumentShareDialog> {
                         }
                       });
                     },
-                    title: Text(user['full_name'] ?? user['email'] ?? 'Unknown'),
+                    title: Text(
+                      user['full_name'] ?? user['email'] ?? 'Unknown',
+                    ),
                     subtitle: Text(user['email'] ?? ''),
                     dense: true,
                     controlAffinity: ListTileControlAffinity.leading,
@@ -524,12 +528,15 @@ class _DocumentShareDialogState extends State<DocumentShareDialog> {
             ),
             const SizedBox(height: 8),
             DropdownButtonFormField<String>(
-              value: _permission,
+              initialValue: _permission,
               decoration: InputDecoration(
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(8),
                 ),
-                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
               ),
               items: [
                 DropdownMenuItem(
@@ -545,7 +552,8 @@ class _DocumentShareDialogState extends State<DocumentShareDialog> {
                   child: Text(isArabic ? 'توقيع' : 'Sign'),
                 ),
               ],
-              onChanged: (value) => setState(() => _permission = value ?? 'view'),
+              onChanged: (value) =>
+                  setState(() => _permission = value ?? 'view'),
             ),
           ],
         ),

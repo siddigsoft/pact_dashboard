@@ -1,8 +1,9 @@
 // lib/data/sudan_locations.dart
 
-/// Complete list of Sudan's 18 states and 189 localities
+/// Complete list of Sudan's 18 states and localities
 /// Source: OCHA COD-AB (Common Operational Dataset - Administrative Boundaries)
-/// Last Updated: August 2024
+/// Last Updated: January 2026
+/// Note: Includes alternative spellings/names to match web (MMP) data
 /// Reference: https://data.humdata.org/dataset/cod-ab-sdn
 library;
 
@@ -43,7 +44,7 @@ class Hub {
 }
 
 final List<SudanState> sudanStates = [
-  // 1. Khartoum State - 7 localities
+  // 1. Khartoum State - 8 localities
   SudanState(
     id: 'khartoum',
     name: 'Khartoum',
@@ -51,6 +52,11 @@ final List<SudanState> sudanStates = [
     localities: [
       Locality(id: 'kh-khartoum', name: 'Khartoum', nameAr: 'الخرطوم'),
       Locality(id: 'kh-bahri', name: 'Bahri', nameAr: 'بحري'),
+      Locality(
+        id: 'kh-bahri-khartoum-north',
+        name: 'Bahri (Khartoum North)',
+        nameAr: 'بحري (الخرطوم شمال)',
+      ),
       Locality(id: 'kh-omdurman', name: 'Um Durman', nameAr: 'أم درمان'),
       Locality(id: 'kh-jebel-awlia', name: 'Jebel Awlia', nameAr: 'جبل أولياء'),
       Locality(id: 'kh-karrari', name: 'Karrari', nameAr: 'كرري'),
@@ -92,7 +98,7 @@ final List<SudanState> sudanStates = [
     ],
   ),
 
-  // 3. Red Sea State - 10 localities
+  // 3. Red Sea State - 13 localities
   SudanState(
     id: 'red-sea',
     name: 'Red Sea',
@@ -103,7 +109,9 @@ final List<SudanState> sudanStates = [
       Locality(id: 'rs-agig', name: 'Agig', nameAr: 'عقيق'),
       Locality(id: 'rs-al-ganab', name: 'Al Ganab', nameAr: 'القنب'),
       Locality(id: 'rs-dordieb', name: 'Dordieb', nameAr: 'درديب'),
+      Locality(id: 'rs-gunb-awlib', name: 'Gunb-Awlib', nameAr: 'قنب أوليب'),
       Locality(id: 'rs-halaib', name: "Hala'ib", nameAr: 'حلايب'),
+      Locality(id: 'rs-halaieb', name: 'Halaieb', nameAr: 'حلايب'),
       Locality(id: 'rs-haya', name: 'Haya', nameAr: 'هيا'),
       Locality(
         id: 'rs-jubayt-elmaadin',
@@ -112,10 +120,11 @@ final List<SudanState> sudanStates = [
       ),
       Locality(id: 'rs-sinkat', name: 'Sinkat', nameAr: 'سنكات'),
       Locality(id: 'rs-tawkar', name: 'Tawkar', nameAr: 'طوكر'),
+      Locality(id: 'rs-tokar', name: 'Tokar', nameAr: 'طوكر'),
     ],
   ),
 
-  // 4. Kassala State - 11 localities
+  // 4. Kassala State - 17 localities
   SudanState(
     id: 'kassala',
     name: 'Kassala',
@@ -126,6 +135,7 @@ final List<SudanState> sudanStates = [
         name: 'Madeinat Kassala',
         nameAr: 'مدينة كسلا',
       ),
+      Locality(id: 'ks-kassala', name: 'Kassala', nameAr: 'كسلا'),
       Locality(
         id: 'ks-halfa-aj-jadeedah',
         name: 'Halfa Aj Jadeedah',
@@ -138,6 +148,11 @@ final List<SudanState> sudanStates = [
         nameAr: 'ريفى غرب كسلا',
       ),
       Locality(
+        id: 'ks-west-kassala',
+        name: 'West Kassala',
+        nameAr: 'غرب كسلا',
+      ),
+      Locality(
         id: 'ks-reifi-hamashkureib',
         name: 'Reifi Hamashkureib',
         nameAr: 'ريفى همش كوريب',
@@ -148,14 +163,29 @@ final List<SudanState> sudanStates = [
         nameAr: 'ريفى كسلا',
       ),
       Locality(
+        id: 'ks-rural-kassala',
+        name: 'Rural Kassala',
+        nameAr: 'ريفى كسلا',
+      ),
+      Locality(
         id: 'ks-reifi-khashm-elgirba',
         name: 'Reifi Khashm Elgirba',
         nameAr: 'ريفى خشم القربة',
       ),
       Locality(
+        id: 'ks-khasm-el-girba',
+        name: 'Khasm El Girba',
+        nameAr: 'خشم القربة',
+      ),
+      Locality(
         id: 'ks-reifi-nahr-atbara',
         name: 'Reifi Nahr Atbara',
         nameAr: 'ريفى نهر عطبرة',
+      ),
+      Locality(
+        id: 'ks-nahr-atbara',
+        name: 'Nahr Atbara',
+        nameAr: 'نهر عطبرة',
       ),
       Locality(
         id: 'ks-reifi-shamal-ad-delta',
@@ -172,10 +202,15 @@ final List<SudanState> sudanStates = [
         name: 'Reifi Wad Elhilaiw',
         nameAr: 'ريفى ود الحليو',
       ),
+      Locality(
+        id: 'ks-wad-elheliew',
+        name: 'Wad Elheliew',
+        nameAr: 'ود الحليو',
+      ),
     ],
   ),
 
-  // 5. Gedaref (Al Qadarif) State - 12 localities
+  // 5. Gedaref (Al Qadarif) State - 13 localities
   SudanState(
     id: 'gedaref',
     name: 'Gedaref',
@@ -192,6 +227,7 @@ final List<SudanState> sudanStates = [
         nameAr: 'وسط القضارف',
       ),
       Locality(id: 'gd-al-butanah', name: 'Al Butanah', nameAr: 'البطانة'),
+      Locality(id: 'gd-al-butana', name: 'Al Butana', nameAr: 'البطانة'),
       Locality(id: 'gd-al-fao', name: 'Al Fao', nameAr: 'الفاو'),
       Locality(id: 'gd-al-fashaga', name: 'Al Fashaga', nameAr: 'الفشقة'),
       Locality(
@@ -201,6 +237,7 @@ final List<SudanState> sudanStates = [
       ),
       Locality(id: 'gd-al-mafaza', name: 'Al Mafaza', nameAr: 'المفازة'),
       Locality(id: 'gd-al-qureisha', name: 'Al Qureisha', nameAr: 'القريشة'),
+      Locality(id: 'gd-al-guraisha', name: 'Al Guraisha', nameAr: 'القريشة'),
       Locality(id: 'gd-ar-rahad', name: 'Ar Rahad', nameAr: 'الرهد'),
       Locality(id: 'gd-basundah', name: 'Basundah', nameAr: 'باسندة'),
       Locality(
@@ -216,7 +253,7 @@ final List<SudanState> sudanStates = [
     ],
   ),
 
-  // 6. White Nile State - 9 localities
+  // 6. White Nile State - 12 localities
   SudanState(
     id: 'white-nile',
     name: 'White Nile',
@@ -225,20 +262,24 @@ final List<SudanState> sudanStates = [
       Locality(id: 'wn-rabak', name: 'Rabak', nameAr: 'ربك'),
       Locality(id: 'wn-kosti', name: 'Kosti', nameAr: 'كوستي'),
       Locality(id: 'wn-ad-diwaim', name: 'Ad Diwaim', nameAr: 'الدويم'),
+      Locality(id: 'wn-el-duim', name: 'El Duim', nameAr: 'الدويم'),
       Locality(id: 'wn-aj-jabalain', name: 'Aj Jabalain', nameAr: 'الجبلين'),
+      Locality(id: 'wn-al-jabalain', name: 'Al Jabalain', nameAr: 'الجبلين'),
       Locality(id: 'wn-al-gitaina', name: 'Al Gitaina', nameAr: 'القطينة'),
       Locality(
         id: 'wn-as-salam-ar-rawat',
         name: 'As Salam / Ar Rawat',
         nameAr: 'السلام / الراوات',
       ),
+      Locality(id: 'wn-el-salam', name: 'El Salam', nameAr: 'السلام'),
       Locality(id: 'wn-guli', name: 'Guli', nameAr: 'قلي'),
       Locality(id: 'wn-tendalti', name: 'Tendalti', nameAr: 'تندلتي'),
+      Locality(id: 'wn-tandalti', name: 'Tandalti', nameAr: 'تندلتي'),
       Locality(id: 'wn-um-rimta', name: 'Um Rimta', nameAr: 'أم رمتة'),
     ],
   ),
 
-  // 7. Blue Nile State - 7 localities
+  // 7. Blue Nile State - 12 localities
   SudanState(
     id: 'blue-nile',
     name: 'Blue Nile',
@@ -246,14 +287,19 @@ final List<SudanState> sudanStates = [
     localities: [
       Locality(id: 'bn-ed-damazine', name: 'Ed Damazine', nameAr: 'الدمازين'),
       Locality(id: 'bn-ar-rusayris', name: 'Ar Rusayris', nameAr: 'الروصيرص'),
+      Locality(id: 'bn-alroseries', name: 'Alroseries', nameAr: 'الروصيرص'),
       Locality(id: 'bn-al-kurmuk', name: 'Al Kurmuk', nameAr: 'الكرمك'),
+      Locality(id: 'bn-alkurmouk', name: 'Alkurmouk', nameAr: 'الكرمك'),
+      Locality(id: 'bn-kurmuk', name: 'Kurmuk', nameAr: 'الكرمك'),
       Locality(
         id: 'bn-at-tadamon',
         name: 'At Tadamon - BN',
         nameAr: 'التضامن - ن ق',
       ),
+      Locality(id: 'bn-tadamon', name: 'Tadamon', nameAr: 'التضامن'),
       Locality(id: 'bn-baw', name: 'Baw', nameAr: 'باو'),
       Locality(id: 'bn-geisan', name: 'Geisan', nameAr: 'قيسان'),
+      Locality(id: 'bn-giessan', name: 'Giessan', nameAr: 'قيسان'),
       Locality(id: 'bn-wad-al-mahi', name: 'Wad Al Mahi', nameAr: 'ود الماحي'),
     ],
   ),
@@ -274,7 +320,7 @@ final List<SudanState> sudanStates = [
     ],
   ),
 
-  // 9. North Kordofan State - 8 localities
+  // 9. North Kordofan State - 11 localities
   SudanState(
     id: 'north-kordofan',
     name: 'North Kordofan',
@@ -283,6 +329,8 @@ final List<SudanState> sudanStates = [
       Locality(id: 'nk-sheikan', name: 'Sheikan', nameAr: 'شيكان'),
       Locality(id: 'nk-bara', name: 'Bara', nameAr: 'بارا'),
       Locality(id: 'nk-ar-rahad', name: 'Ar Rahad', nameAr: 'الرهد'),
+      Locality(id: 'nk-al-rahad', name: 'Al Rahad', nameAr: 'الرهد'),
+      Locality(id: 'nk-el-rahad', name: 'El Rahad', nameAr: 'الرهد'),
       Locality(
         id: 'nk-gebrat-al-sheikh',
         name: 'Gebrat Al Sheikh',
@@ -296,6 +344,7 @@ final List<SudanState> sudanStates = [
         nameAr: 'أم دم حاج أحمد',
       ),
       Locality(id: 'nk-um-rawaba', name: 'Um Rawaba', nameAr: 'أم روابة'),
+      Locality(id: 'nk-um-ruwaba', name: 'Um Ruwaba', nameAr: 'أم روابة'),
     ],
   ),
 
@@ -341,13 +390,14 @@ final List<SudanState> sudanStates = [
     ],
   ),
 
-  // 11. West Kordofan State - 14 localities
+  // 11. West Kordofan State - 18 localities
   SudanState(
     id: 'west-kordofan',
     name: 'West Kordofan',
     code: 'WK',
     localities: [
       Locality(id: 'wk-an-nuhud', name: 'An Nuhud', nameAr: 'النهود'),
+      Locality(id: 'wk-al-nuhod', name: 'Al Nuhod', nameAr: 'النهود'),
       Locality(id: 'wk-babanusa', name: 'Babanusa', nameAr: 'بابنوسة'),
       Locality(id: 'wk-abu-zabad', name: 'Abu Zabad', nameAr: 'أبو زبد'),
       Locality(id: 'wk-abyei', name: 'Abyei', nameAr: 'أبيي'),
@@ -356,15 +406,18 @@ final List<SudanState> sudanStates = [
       Locality(id: 'wk-al-khiwai', name: 'Al Khiwai', nameAr: 'الخوي'),
       Locality(id: 'wk-al-lagowa', name: 'Al Lagowa', nameAr: 'لقاوة'),
       Locality(id: 'wk-al-meiram', name: 'Al Meiram', nameAr: 'الميرم'),
+      Locality(id: 'wk-al-muglad', name: 'Al Muglad', nameAr: 'المقلد'),
       Locality(
         id: 'wk-as-salam',
         name: 'As Salam - WK',
         nameAr: 'السلام - غ ك',
       ),
       Locality(id: 'wk-as-sunut', name: 'As Sunut', nameAr: 'السنوط'),
+      Locality(id: 'wk-el-sunut', name: 'El Sunut', nameAr: 'السنوط'),
       Locality(id: 'wk-ghubaish', name: 'Ghubaish', nameAr: 'غبيش'),
       Locality(id: 'wk-keilak', name: 'Keilak', nameAr: 'كيلك'),
       Locality(id: 'wk-wad-bandah', name: 'Wad Bandah', nameAr: 'ود بندة'),
+      Locality(id: 'wk-wad-banda', name: 'Wad Banda', nameAr: 'ود بندة'),
     ],
   ),
 
@@ -452,13 +505,14 @@ final List<SudanState> sudanStates = [
     ],
   ),
 
-  // 14. West Darfur State - 8 localities
+  // 14. West Darfur State - 9 localities
   SudanState(
     id: 'west-darfur',
     name: 'West Darfur',
     code: 'WD',
     localities: [
       Locality(id: 'wd-ag-geneina', name: 'Ag Geneina', nameAr: 'الجنينة'),
+      Locality(id: 'wd-geneina', name: 'Geneina', nameAr: 'الجنينة'),
       Locality(id: 'wd-beida', name: 'Beida', nameAr: 'بيضا'),
       Locality(
         id: 'wd-foro-baranga',
@@ -525,23 +579,25 @@ final List<SudanState> sudanStates = [
     ],
   ),
 
-  // 17. River Nile State - 7 localities
+  // 17. River Nile State - 8 localities
   SudanState(
     id: 'river-nile',
     name: 'River Nile',
     code: 'RN',
     localities: [
       Locality(id: 'rn-ad-damar', name: 'Al Damar', nameAr: 'الدامر'),
+      Locality(id: 'rn-al-damar', name: 'Al Damar', nameAr: 'الدامر'),
       Locality(id: 'rn-atbara', name: 'Atbara', nameAr: 'عطبرة'),
       Locality(id: 'rn-abu-hamad', name: 'Abu Hamad', nameAr: 'أبو حمد'),
       Locality(id: 'rn-al-buhaira', name: 'Al Buhaira', nameAr: 'البحيرة'),
       Locality(id: 'rn-al-matama', name: 'Al Matama', nameAr: 'المتمة'),
+      Locality(id: 'rn-almatama', name: 'Almatama', nameAr: 'المتمة'),
       Locality(id: 'rn-barbar', name: 'Barbar', nameAr: 'بربر'),
       Locality(id: 'rn-shandi', name: 'Shandi', nameAr: 'شندي'),
     ],
   ),
 
-  // 18. Northern State - 8 localities
+  // 18. Northern State - 12 localities
   SudanState(
     id: 'northern',
     name: 'Northern',
@@ -549,12 +605,16 @@ final List<SudanState> sudanStates = [
     localities: [
       Locality(id: 'no-dongola', name: 'Dongola', nameAr: 'دنقلا'),
       Locality(id: 'no-halfa', name: 'Halfa', nameAr: 'حلفا'),
+      Locality(id: 'no-wadi-halfa', name: 'Wadi Halfa', nameAr: 'وادي حلفا'),
       Locality(id: 'no-ad-dabbah', name: 'Ad Dabbah', nameAr: 'الدبة'),
+      Locality(id: 'no-aldaba', name: 'Aldaba', nameAr: 'الدبة'),
       Locality(id: 'no-al-burgaig', name: 'Al Burgaig', nameAr: 'البرقيق'),
       Locality(id: 'no-al-borgag', name: 'Al Borgag', nameAr: 'البرقيق'),
       Locality(id: 'no-al-golid', name: 'Al Golid', nameAr: 'القولد'),
+      Locality(id: 'no-algolid', name: 'Algolid', nameAr: 'القولد'),
       Locality(id: 'no-delgo', name: 'Delgo', nameAr: 'دلقو'),
       Locality(id: 'no-merwoe', name: 'Merwoe', nameAr: 'مروي'),
+      Locality(id: 'no-marawai', name: 'Marawai', nameAr: 'مروي'),
     ],
   ),
 ];

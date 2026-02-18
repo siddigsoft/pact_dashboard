@@ -1,24 +1,10 @@
 import 'package:flutter/material.dart';
-import '../theme/app_colors.dart';
 
 /// Signature status types
-enum SignatureStatus {
-  pending,
-  signed,
-  verified,
-  expired,
-  revoked,
-  invalid,
-}
+enum SignatureStatus { pending, signed, verified, expired, revoked, invalid }
 
 /// Signature method types
-enum SignatureMethod {
-  uuid,
-  phone,
-  email,
-  handwriting,
-  biometric,
-}
+enum SignatureMethod { uuid, phone, email, handwriting, biometric }
 
 /// Configuration for signature status display
 class _StatusConfig {
@@ -218,15 +204,24 @@ class SignatureVerificationBadge extends StatelessWidget {
             style: const TextStyle(fontWeight: FontWeight.bold),
           ),
           if (signerName != null)
-            TextSpan(text: '${isArabic ? 'الموقع:' : 'Signed by:'} $signerName\n'),
+            TextSpan(
+              text: '${isArabic ? 'الموقع:' : 'Signed by:'} $signerName\n',
+            ),
           if (method != null)
             TextSpan(
-              text: '${isArabic ? 'الطريقة:' : 'Method:'} ${isArabic ? _methodLabelsAr[method]! : _methodLabels[method]!}\n',
+              text:
+                  '${isArabic ? 'الطريقة:' : 'Method:'} ${isArabic ? _methodLabelsAr[method]! : _methodLabels[method]!}\n',
             ),
           if (signedAt != null)
-            TextSpan(text: '${isArabic ? 'التوقيع:' : 'Signed:'} ${_formatDate(signedAt!)}\n'),
+            TextSpan(
+              text:
+                  '${isArabic ? 'التوقيع:' : 'Signed:'} ${_formatDate(signedAt!)}\n',
+            ),
           if (verifiedAt != null)
-            TextSpan(text: '${isArabic ? 'التحقق:' : 'Verified:'} ${_formatDate(verifiedAt!)}'),
+            TextSpan(
+              text:
+                  '${isArabic ? 'التحقق:' : 'Verified:'} ${_formatDate(verifiedAt!)}',
+            ),
         ],
       ),
       child: badge,

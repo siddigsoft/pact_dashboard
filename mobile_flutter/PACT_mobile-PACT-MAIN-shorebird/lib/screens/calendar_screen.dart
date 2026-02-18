@@ -17,7 +17,7 @@ class CalendarScreen extends StatefulWidget {
 
 class _CalendarScreenState extends State<CalendarScreen> {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
-  
+
   bool _isLoading = true;
   List<Map<String, dynamic>> _siteVisits = [];
   DateTime _focusedDay = DateTime.now();
@@ -83,7 +83,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
       final visitDate = DateTime.tryParse(visit['dueDate'] ?? '');
       if (visitDate == null) return false;
       return visitDate.isAfter(start.subtract(const Duration(days: 1))) &&
-             visitDate.isBefore(end.add(const Duration(days: 1)));
+          visitDate.isBefore(end.add(const Duration(days: 1)));
     }).toList();
   }
 
@@ -178,9 +178,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
                 children: [
                   _buildViewModeToggle(isArabic),
                   _buildCalendarCard(isArabic),
-                  Expanded(
-                    child: _buildVisitsList(selectedVisits, isArabic),
-                  ),
+                  Expanded(child: _buildVisitsList(selectedVisits, isArabic)),
                 ],
               ),
       ),
@@ -320,11 +318,11 @@ class _CalendarScreenState extends State<CalendarScreen> {
               color: AppColors.primaryBlue.withOpacity(0.3),
               shape: BoxShape.circle,
             ),
-            selectedDecoration: BoxDecoration(
+            selectedDecoration: const BoxDecoration(
               color: AppColors.primaryBlue,
               shape: BoxShape.circle,
             ),
-            markerDecoration: BoxDecoration(
+            markerDecoration: const BoxDecoration(
               color: AppColors.primaryGreen,
               shape: BoxShape.circle,
             ),
@@ -384,7 +382,10 @@ class _CalendarScreenState extends State<CalendarScreen> {
                 ),
               ),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 4,
+                ),
                 decoration: BoxDecoration(
                   color: AppColors.primaryBlue.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(20),
@@ -453,9 +454,8 @@ class _CalendarScreenState extends State<CalendarScreen> {
           Navigator.push(
             context,
             MaterialPageRoute(
-              builder: (context) => SiteVisitDetailScreen(
-                siteVisitId: visit['id'],
-              ),
+              builder: (context) =>
+                  SiteVisitDetailScreen(siteVisitId: visit['id']),
             ),
           );
         },
@@ -489,7 +489,11 @@ class _CalendarScreenState extends State<CalendarScreen> {
                     const SizedBox(height: 4),
                     Row(
                       children: [
-                        Icon(Icons.location_on, size: 14, color: Colors.grey[500]),
+                        Icon(
+                          Icons.location_on,
+                          size: 14,
+                          color: Colors.grey[500],
+                        ),
                         const SizedBox(width: 4),
                         Expanded(
                           child: Text(
@@ -507,7 +511,11 @@ class _CalendarScreenState extends State<CalendarScreen> {
                     const SizedBox(height: 4),
                     Row(
                       children: [
-                        Icon(Icons.access_time, size: 14, color: Colors.grey[500]),
+                        Icon(
+                          Icons.access_time,
+                          size: 14,
+                          color: Colors.grey[500],
+                        ),
                         const SizedBox(width: 4),
                         Text(
                           dueDate != null
@@ -524,7 +532,10 @@ class _CalendarScreenState extends State<CalendarScreen> {
                 ),
               ),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 4,
+                ),
                 decoration: BoxDecoration(
                   color: statusColor.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(20),
@@ -539,10 +550,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
                 ),
               ),
               const SizedBox(width: 8),
-              Icon(
-                Icons.chevron_right,
-                color: Colors.grey[400],
-              ),
+              Icon(Icons.chevron_right, color: Colors.grey[400]),
             ],
           ),
         ),

@@ -1,17 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:integration_test/integration_test.dart';
+// integration_test package is not available in unit test runner; use
+// standard widget binding for CI/unit runs.
 import 'package:pact_mobile/main.dart' as app;
-import 'package:pact_mobile/services/local_storage_service.dart';
-import 'package:pact_mobile/models/task.dart';
-import 'package:pact_mobile/models/equipment.dart';
-import 'package:pact_mobile/models/safety_report.dart';
 
 void main() {
-  IntegrationTestWidgetsFlutterBinding.ensureInitialized();
+  TestWidgetsFlutterBinding.ensureInitialized();
 
   group('Offline Functionality Integration Tests', () {
-    testWidgets('App should start and initialize offline services', (WidgetTester tester) async {
+    testWidgets('App should start and initialize offline services', (
+      WidgetTester tester,
+    ) async {
       // Start the app
       app.main();
       await tester.pumpAndSettle();
@@ -24,7 +23,9 @@ void main() {
       expect(find.byType(MaterialApp), findsOneWidget);
     });
 
-    testWidgets('Should be able to create and store offline data', (WidgetTester tester) async {
+    testWidgets('Should be able to create and store offline data', (
+      WidgetTester tester,
+    ) async {
       // This test would require navigating to specific screens
       // For now, just verify the app structure is correct
       app.main();

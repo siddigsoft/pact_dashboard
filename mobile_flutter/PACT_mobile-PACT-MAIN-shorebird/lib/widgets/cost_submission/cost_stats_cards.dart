@@ -1,5 +1,6 @@
 /// Cost Stats Cards Widget
 /// Displays submission statistics in a horizontal scrollable row
+library;
 
 import 'package:flutter/material.dart';
 import '../../models/operational_cost_submission.dart';
@@ -8,11 +9,7 @@ class CostStatsCards extends StatelessWidget {
   final OperationalCostStats stats;
   final bool isArabic;
 
-  const CostStatsCards({
-    super.key,
-    required this.stats,
-    this.isArabic = false,
-  });
+  const CostStatsCards({super.key, required this.stats, this.isArabic = false});
 
   @override
   Widget build(BuildContext context) {
@@ -144,10 +141,7 @@ class CostStatsCards extends StatelessWidget {
                 ),
                 Text(
                   subtitle,
-                  style: const TextStyle(
-                    color: Colors.white60,
-                    fontSize: 9,
-                  ),
+                  style: const TextStyle(color: Colors.white60, fontSize: 9),
                   overflow: TextOverflow.ellipsis,
                 ),
               ],

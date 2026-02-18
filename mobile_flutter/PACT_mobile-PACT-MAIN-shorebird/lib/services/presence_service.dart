@@ -84,8 +84,12 @@ class UserPresence {
   factory UserPresence.fromJson(Map<String, dynamic> json) {
     return UserPresence(
       odId: json['user_id'] as String? ?? json['id'] as String? ?? '',
-      userName: json['user_name'] as String? ?? json['full_name'] as String? ?? 'Unknown',
-      userAvatar: json['user_avatar'] as String? ?? json['avatar_url'] as String?,
+      userName:
+          json['user_name'] as String? ??
+          json['full_name'] as String? ??
+          'Unknown',
+      userAvatar:
+          json['user_avatar'] as String? ?? json['avatar_url'] as String?,
       role: json['role'] as String?,
       phone: json['phone'] as String?,
       email: json['email'] as String?,
@@ -93,8 +97,8 @@ class UserPresence {
       hub: json['hub'] as String?,
       isOnline: json['is_online'] as bool? ?? false,
       isInCall: json['in_call'] as bool? ?? false,
-      lastSeen: json['last_seen'] != null 
-          ? DateTime.tryParse(json['last_seen'] as String) 
+      lastSeen: json['last_seen'] != null
+          ? DateTime.tryParse(json['last_seen'] as String)
           : null,
       currentCallId: json['call_id'] as String?,
     );
@@ -108,35 +112,37 @@ class PresenceService {
   PresenceService._internal();
 
   final SupabaseClient _supabase = Supabase.instance.client;
-  
+
   // Use the same channel as WebRTCService for unified presence
   static const String _presenceChannelName = 'user-call-presence';
   static const String _usersCacheBoxName = 'pact_users_cache';
-  
+
   RealtimeChannel? _presenceChannel;
   Timer? _heartbeatTimer;
   StreamSubscription? _connectivitySubscription;
-  
+
   String? _currentUserId;
   String? _currentUserName;
   String? _currentUserAvatar;
   String? _currentUserRole;
-  
+
   final Map<String, UserPresence> _onlineUsers = {};
   List<UserPresence> _allUsers = [];
-  
-  final _onlineUsersController = StreamController<Map<String, UserPresence>>.broadcast();
-  Stream<Map<String, UserPresence>> get onlineUsersStream => _onlineUsersController.stream;
-  
+
+  final _onlineUsersController =
+      StreamController<Map<String, UserPresence>>.broadcast();
+  Stream<Map<String, UserPresence>> get onlineUsersStream =>
+      _onlineUsersController.stream;
+
   final _allUsersController = StreamController<List<UserPresence>>.broadcast();
   Stream<List<UserPresence>> get allUsersStream => _allUsersController.stream;
-  
+
   final _userStatusController = StreamController<UserPresence>.broadcast();
   Stream<UserPresence> get userStatusStream => _userStatusController.stream;
 
   bool _isInitialized = false;
   bool _presenceChannelReady = false;
-  
+
   bool get isInitialized => _isInitialized;
   bool get isPresenceChannelReady => _presenceChannelReady;
   String? get currentUserId => _currentUserId;
@@ -162,7 +168,7 @@ class PresenceService {
     await _setupPresenceChannel();
     _startHeartbeat();
     _setupConnectivityListener();
-    
+
     _isInitialized = true;
     debugPrint('[PresenceService] Initialized for user $userName');
   }
@@ -172,13 +178,16 @@ class PresenceService {
       final box = await Hive.openBox(_usersCacheBoxName);
       final cached = box.get('users');
       if (cached != null && cached is List) {
-        _allUsers = cached.map((item) {
-          if (item is Map) {
-            return UserPresence.fromJson(Map<String, dynamic>.from(item));
-          }
-          return null;
-        }).whereType<UserPresence>().toList();
-        
+        _allUsers = cached
+            .map((item) {
+              if (item is Map) {
+                return UserPresence.fromJson(Map<String, dynamic>.from(item));
+              }
+              return null;
+            })
+            .whereType<UserPresence>()
+            .toList();
+
         _allUsersController.add(_allUsers);
         debugPrint('[PresenceService] Loaded ${_allUsers.length} cached users');
       }
@@ -186,7 +195,7 @@ class PresenceService {
       debugPrint('[PresenceService] Error loading cached users: $e');
     }
   }
-  
+
   /// Public method to load cached users (for offline mode)
   Future<void> loadCachedUsers() async {
     await _loadCachedUsers();
@@ -217,38 +226,45 @@ class PresenceService {
       // Note: Database uses state_id and hub_id columns (not state/hub)
       var query = _supabase
           .from('profiles')
-          .select('id, full_name, avatar_url, role, phone, email, state_id, hub_id, updated_at, status');
-      
+          .select(
+            'id, full_name, avatar_url, role, phone, email, state_id, hub_id, updated_at, status',
+          );
+
       // Only exclude current user if we have a valid ID
       if (currentUserId != null && currentUserId.isNotEmpty) {
         query = query.neq('id', currentUserId);
       }
-      
+
       final response = await query.order('full_name');
 
-      debugPrint('[PresenceService] Fetched ${(response as List).length} profiles from database');
+      debugPrint(
+        '[PresenceService] Fetched ${(response as List).length} profiles from database',
+      );
 
-      _allUsers = response.map((item) {
-        final map = item as Map<String, dynamic>;
-        final odId = map['id'] as String? ?? '';
-        
-        return UserPresence(
-          odId: odId,
-          userName: map['full_name'] as String? ?? 'Unknown',
-          userAvatar: map['avatar_url'] as String?,
-          role: map['role'] as String?,
-          phone: map['phone'] as String?,
-          email: map['email'] as String?,
-          state: map['state_id'] as String?,
-          hub: map['hub_id'] as String?,
-          isOnline: _onlineUsers.containsKey(odId),
-          isInCall: _onlineUsers[odId]?.isInCall ?? false,
-        );
-      }).where((u) => u.odId.isNotEmpty).toList();
+      _allUsers = response
+          .map((item) {
+            final map = item;
+            final odId = map['id'] as String? ?? '';
+
+            return UserPresence(
+              odId: odId,
+              userName: map['full_name'] as String? ?? 'Unknown',
+              userAvatar: map['avatar_url'] as String?,
+              role: map['role'] as String?,
+              phone: map['phone'] as String?,
+              email: map['email'] as String?,
+              state: map['state_id'] as String?,
+              hub: map['hub_id'] as String?,
+              isOnline: _onlineUsers.containsKey(odId),
+              isInCall: _onlineUsers[odId]?.isInCall ?? false,
+            );
+          })
+          .where((u) => u.odId.isNotEmpty)
+          .toList();
 
       await _cacheUsers(_allUsers);
       _allUsersController.add(_allUsers);
-      
+
       debugPrint('[PresenceService] Loaded ${_allUsers.length} users');
       return _allUsers;
     } catch (e) {
@@ -261,27 +277,30 @@ class PresenceService {
     try {
       _presenceChannelReady = false;
       _presenceChannel?.unsubscribe();
-      
+
       _presenceChannel = _supabase.channel(
         _presenceChannelName,
         opts: const RealtimeChannelConfig(self: true),
       );
 
-      _presenceChannel!.onPresenceSync((payload) {
-        _handlePresenceSync();
-      }).onPresenceJoin((payload) {
-        _handlePresenceJoin(payload);
-      }).onPresenceLeave((payload) {
-        _handlePresenceLeave(payload);
-      });
+      _presenceChannel!
+          .onPresenceSync((payload) {
+            _handlePresenceSync();
+          })
+          .onPresenceJoin((payload) {
+            _handlePresenceJoin(payload);
+          })
+          .onPresenceLeave((payload) {
+            _handlePresenceLeave(payload);
+          });
 
-      await _presenceChannel!.subscribe((status, [error]) async {
+      _presenceChannel!.subscribe((status, [error]) async {
         if (status == RealtimeSubscribeStatus.subscribed) {
           _presenceChannelReady = true;
           await _trackPresence();
           debugPrint('[PresenceService] Presence channel ready');
         } else if (status == RealtimeSubscribeStatus.closed ||
-                   status == RealtimeSubscribeStatus.timedOut) {
+            status == RealtimeSubscribeStatus.timedOut) {
           _presenceChannelReady = false;
           debugPrint('[PresenceService] Presence channel closed/timed out');
         }
@@ -324,7 +343,7 @@ class PresenceService {
       }
 
       _onlineUsers.clear();
-      
+
       // presenceState() returns List<SinglePresenceState> in supabase_flutter 2.10.x
       // Each SinglePresenceState has presenceRef and presences list
       for (final singleState in presences) {
@@ -347,7 +366,9 @@ class PresenceService {
         }
       }
 
-      debugPrint('[PresenceService] Synced ${_onlineUsers.length} online users');
+      debugPrint(
+        '[PresenceService] Synced ${_onlineUsers.length} online users',
+      );
       _updateAllUsersOnlineStatus();
       _onlineUsersController.add(Map.from(_onlineUsers));
     } catch (e) {
@@ -368,7 +389,7 @@ class PresenceService {
       }
       return user.copyWith(isOnline: false, isInCall: false);
     }).toList();
-    
+
     _allUsersController.add(_allUsers);
   }
 
@@ -393,7 +414,7 @@ class PresenceService {
         _onlineUsers[odId] = userPresence;
         _userStatusController.add(userPresence);
       }
-      
+
       _updateAllUsersOnlineStatus();
       _onlineUsersController.add(Map.from(_onlineUsers));
     } catch (e) {
@@ -408,16 +429,18 @@ class PresenceService {
         final odId = data['user_id'] as String?;
         if (odId != null && odId.isNotEmpty) {
           _onlineUsers.remove(odId);
-          
-          _userStatusController.add(UserPresence(
-            odId: odId,
-            userName: data['user_name'] as String? ?? 'Unknown',
-            isOnline: false,
-            lastSeen: DateTime.now(),
-          ));
+
+          _userStatusController.add(
+            UserPresence(
+              odId: odId,
+              userName: data['user_name'] as String? ?? 'Unknown',
+              isOnline: false,
+              lastSeen: DateTime.now(),
+            ),
+          );
         }
       }
-      
+
       _updateAllUsersOnlineStatus();
       _onlineUsersController.add(Map.from(_onlineUsers));
     } catch (e) {
@@ -427,7 +450,9 @@ class PresenceService {
 
   void _setupConnectivityListener() {
     _connectivitySubscription?.cancel();
-    _connectivitySubscription = Connectivity().onConnectivityChanged.listen((results) async {
+    _connectivitySubscription = Connectivity().onConnectivityChanged.listen((
+      results,
+    ) async {
       if (!results.contains(ConnectivityResult.none)) {
         await _setupPresenceChannel();
         await fetchAllUsers();
@@ -471,7 +496,11 @@ class PresenceService {
 
   List<UserPresence> getUsersByRole(String role) {
     return _allUsers
-        .where((u) => u.role?.toLowerCase() == role.toLowerCase() && u.odId != _currentUserId)
+        .where(
+          (u) =>
+              u.role?.toLowerCase() == role.toLowerCase() &&
+              u.odId != _currentUserId,
+        )
         .toList();
   }
 
@@ -479,11 +508,13 @@ class PresenceService {
     if (query.isEmpty) return getAllUsersList();
     final lowerQuery = query.toLowerCase();
     return _allUsers
-        .where((u) => 
-            u.odId != _currentUserId &&
-            (u.userName.toLowerCase().contains(lowerQuery) ||
-             (u.role?.toLowerCase().contains(lowerQuery) ?? false) ||
-             (u.email?.toLowerCase().contains(lowerQuery) ?? false)))
+        .where(
+          (u) =>
+              u.odId != _currentUserId &&
+              (u.userName.toLowerCase().contains(lowerQuery) ||
+                  (u.role?.toLowerCase().contains(lowerQuery) ?? false) ||
+                  (u.email?.toLowerCase().contains(lowerQuery) ?? false)),
+        )
         .toList();
   }
 
@@ -493,7 +524,7 @@ class PresenceService {
   /// Get current user's presence info (for WebRTC initialization)
   UserPresence? getCurrentUserPresence() {
     if (_currentUserId == null) return null;
-    
+
     return UserPresence(
       odId: _currentUserId!,
       userName: _currentUserName ?? 'User',

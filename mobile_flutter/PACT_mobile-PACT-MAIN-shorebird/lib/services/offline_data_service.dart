@@ -33,15 +33,17 @@ class OfflineDataService {
       await _openBoxSafely(_chatMessagesBox);
       await _openBoxSafely(_syncQueueBox);
       await _openBoxSafely(_lastSyncBox);
-      
-      debugPrint('[OfflineDataService] All Hive boxes initialized successfully');
+
+      debugPrint(
+        '[OfflineDataService] All Hive boxes initialized successfully',
+      );
     } catch (e, stack) {
       debugPrint('[OfflineDataService] Error initializing Hive: $e');
       debugPrint('[OfflineDataService] Stack: $stack');
       // Continue anyway - individual box operations will handle errors
     }
   }
-  
+
   /// Safely open a Hive box with error recovery
   static Future<void> _openBoxSafely(String boxName) async {
     try {
@@ -85,17 +87,18 @@ class OfflineDataService {
     for (var visit in visits) {
       final id = visit['id']?.toString();
       if (id == null) continue;
-      
+
       // Check if we have a local modification that hasn't synced
       final existingData = box.get(id);
       if (existingData != null) {
         final existing = Map<String, dynamic>.from(jsonDecode(existingData));
-        if (existing['_offline_modified'] == true && existing['_synced'] != true) {
+        if (existing['_offline_modified'] == true &&
+            existing['_synced'] != true) {
           // Skip - local changes take priority until synced
           continue;
         }
       }
-      
+
       await box.put(id, jsonEncode(visit));
     }
 
@@ -111,35 +114,36 @@ class OfflineDataService {
     List<Map<String, dynamic>>? completed,
   }) async {
     final box = Hive.box(_siteVisitsBox);
-    
+
     // Cache each category with a category marker
     void cacheCategory(List<Map<String, dynamic>>? visits, String category) {
       if (visits == null) return;
       for (var visit in visits) {
         final id = visit['id']?.toString();
         if (id == null) continue;
-        
+
         // Check if we have a local modification that hasn't synced
         final existingData = box.get(id);
         if (existingData != null) {
           final existing = Map<String, dynamic>.from(jsonDecode(existingData));
-          if (existing['_offline_modified'] == true && existing['_synced'] != true) {
+          if (existing['_offline_modified'] == true &&
+              existing['_synced'] != true) {
             // Skip - local changes take priority until synced
             continue;
           }
         }
-        
+
         visit['_category'] = category;
         box.put(id, jsonEncode(visit));
       }
     }
-    
+
     cacheCategory(available, 'available');
     cacheCategory(claimed, 'claimed');
     cacheCategory(accepted, 'accepted');
     cacheCategory(ongoing, 'ongoing');
     cacheCategory(completed, 'completed');
-    
+
     await _updateLastSync('site_visits');
   }
 
@@ -159,26 +163,36 @@ class OfflineDataService {
   }
 
   /// Get cached site visits by category
-  Future<List<Map<String, dynamic>>> getCachedSiteVisitsByCategory(String category) async {
+  Future<List<Map<String, dynamic>>> getCachedSiteVisitsByCategory(
+    String category,
+  ) async {
     final allVisits = await getCachedSiteVisits();
     return allVisits.where((v) => v['_category'] == category).toList();
   }
 
   /// Get cached site visits for a specific user
-  Future<List<Map<String, dynamic>>> getCachedUserSiteVisits(String userId) async {
+  Future<List<Map<String, dynamic>>> getCachedUserSiteVisits(
+    String userId,
+  ) async {
     final allVisits = await getCachedSiteVisits();
-    return allVisits.where((v) => 
-      v['accepted_by'] == userId || 
-      v['claimed_by'] == userId ||
-      v['assigned_to'] == userId
-    ).toList();
+    return allVisits
+        .where(
+          (v) =>
+              v['accepted_by'] == userId ||
+              v['claimed_by'] == userId ||
+              v['assigned_to'] == userId,
+        )
+        .toList();
   }
 
   /// Update a cached site visit locally (for offline modifications)
-  Future<void> updateCachedSiteVisit(String visitId, Map<String, dynamic> updates) async {
+  Future<void> updateCachedSiteVisit(
+    String visitId,
+    Map<String, dynamic> updates,
+  ) async {
     final box = Hive.box(_siteVisitsBox);
     final existingData = box.get(visitId);
-    
+
     if (existingData != null) {
       final existing = Map<String, dynamic>.from(jsonDecode(existingData));
       existing.addAll(updates);
@@ -193,7 +207,7 @@ class OfflineDataService {
   Future<void> markSiteVisitSynced(String visitId) async {
     final box = Hive.box(_siteVisitsBox);
     final existingData = box.get(visitId);
-    
+
     if (existingData != null) {
       final existing = Map<String, dynamic>.from(jsonDecode(existingData));
       existing['_synced'] = true;
@@ -205,7 +219,9 @@ class OfflineDataService {
   /// Get unsynced site visits (locally modified)
   Future<List<Map<String, dynamic>>> getUnsyncedSiteVisits() async {
     final allVisits = await getCachedSiteVisits();
-    return allVisits.where((v) => v['_offline_modified'] == true && v['_synced'] != true).toList();
+    return allVisits
+        .where((v) => v['_offline_modified'] == true && v['_synced'] != true)
+        .toList();
   }
 
   /// Get site visits (online or offline)
@@ -313,7 +329,7 @@ class OfflineDataService {
         // Upload photos to storage and insert metadata
         if (photosRaw.isNotEmpty) {
           final reportId = reportResponse['id'];
-          final bucket = 'report_photos';
+          const bucket = 'report_photos';
           final List<Map<String, dynamic>> photoInserts = [];
           for (final item in photosRaw) {
             final photo = Map<String, dynamic>.from(item as Map);
@@ -367,7 +383,10 @@ class OfflineDataService {
 
   /// Cache MMP file data for offline access
   Future<void> cacheMMP(
-      String mmpId, Map<String, dynamic> mmpData, List<int>? fileBytes) async {
+    String mmpId,
+    Map<String, dynamic> mmpData,
+    List<int>? fileBytes,
+  ) async {
     final box = Hive.box(_mmpsBox);
 
     final cacheData = {
@@ -416,14 +435,17 @@ class OfflineDataService {
 
   /// Cache chat messages for offline access
   Future<void> cacheChatMessages(
-      String chatId, List<Map<String, dynamic>> messages) async {
+    String chatId,
+    List<Map<String, dynamic>> messages,
+  ) async {
     final box = Hive.box(_chatMessagesBox);
     await box.put(chatId, jsonEncode(messages));
   }
 
   /// Get cached chat messages
   Future<List<Map<String, dynamic>>> getCachedChatMessages(
-      String chatId) async {
+    String chatId,
+  ) async {
     final box = Hive.box(_chatMessagesBox);
     final data = box.get(chatId);
 
@@ -435,7 +457,8 @@ class OfflineDataService {
 
   /// Save chat message to local queue for syncing
   Future<String> saveChatMessageOffline(
-      Map<String, dynamic> messageData) async {
+    Map<String, dynamic> messageData,
+  ) async {
     final box = Hive.box(_syncQueueBox);
     final id = DateTime.now().millisecondsSinceEpoch.toString();
 
@@ -513,7 +536,7 @@ class OfflineDataService {
 
     final box = Hive.box(_syncQueueBox);
     int synced = 0;
-    
+
     for (final key in box.keys.toList()) {
       final data = box.get(key);
       if (data == null) continue;
@@ -539,10 +562,11 @@ class OfflineDataService {
             .eq('id', visitId)
             .maybeSingle();
 
-        final existingData = (existing?['additional_data'] as Map<String, dynamic>?) ?? {};
+        final existingData =
+            (existing?['additional_data'] as Map<String, dynamic>?) ?? {};
         final mergedData = {
           ...existingData,
-          if (endLocation != null) 'end_location': endLocation,
+          'end_location': ?endLocation,
           'visit_completed': true,
           'completed_notes': notes,
           'completed_activities': activities,
@@ -550,13 +574,16 @@ class OfflineDataService {
         };
 
         // Update site entry status
-        await _supabase.from('mmp_site_entries').update({
-          'status': 'Completed',
-          'visit_completed_by': userId,
-          'visit_completed_at': completedAt,
-          'additional_data': mergedData,
-          'updated_at': DateTime.now().toIso8601String(),
-        }).eq('id', visitId);
+        await _supabase
+            .from('mmp_site_entries')
+            .update({
+              'status': 'Completed',
+              'visit_completed_by': userId,
+              'visit_completed_at': completedAt,
+              'additional_data': mergedData,
+              'updated_at': DateTime.now().toIso8601String(),
+            })
+            .eq('id', visitId);
 
         // Upload photos if any (base64 encoded)
         if (photos.isNotEmpty) {
@@ -567,14 +594,17 @@ class OfflineDataService {
                 // Extract base64 data
                 final base64Data = photoData.split(',').last;
                 final bytes = base64Decode(base64Data);
-                final fileName = 'offline_${visitId}_${DateTime.now().millisecondsSinceEpoch}_$i.jpg';
+                final fileName =
+                    'offline_${visitId}_${DateTime.now().millisecondsSinceEpoch}_$i.jpg';
                 final storagePath = 'site_visits/$visitId/$fileName';
-                
-                await _supabase.storage.from('photos').uploadBinary(
-                  storagePath,
-                  bytes,
-                  fileOptions: const FileOptions(contentType: 'image/jpeg'),
-                );
+
+                await _supabase.storage
+                    .from('photos')
+                    .uploadBinary(
+                      storagePath,
+                      bytes,
+                      fileOptions: const FileOptions(contentType: 'image/jpeg'),
+                    );
                 debugPrint('Uploaded offline photo: $storagePath');
               }
             } catch (e) {
@@ -708,10 +738,13 @@ class OfflineDataService {
         final visitId = payload['visit_id'] as String;
         final status = payload['status'] as String;
 
-        await _supabase.from('mmp_site_entries').update({
-          'status': status,
-          'updated_at': DateTime.now().toIso8601String(),
-        }).eq('id', visitId);
+        await _supabase
+            .from('mmp_site_entries')
+            .update({
+              'status': status,
+              'updated_at': DateTime.now().toIso8601String(),
+            })
+            .eq('id', visitId);
 
         queueItem['synced'] = true;
         await box.put(key, jsonEncode(queueItem));
@@ -829,12 +862,15 @@ class OfflineDataService {
         final userId = payload['user_id'] as String;
         final acceptedAt = payload['accepted_at'] as String;
 
-        await _supabase.from('mmp_site_entries').update({
-          'status': 'Accepted',
-          'accepted_by': userId,
-          'accepted_at': acceptedAt,
-          'updated_at': DateTime.now().toIso8601String(),
-        }).eq('id', visitId);
+        await _supabase
+            .from('mmp_site_entries')
+            .update({
+              'status': 'Accepted',
+              'accepted_by': userId,
+              'accepted_at': acceptedAt,
+              'updated_at': DateTime.now().toIso8601String(),
+            })
+            .eq('id', visitId);
 
         // Mark as synced
         queueItem['synced'] = true;
@@ -942,19 +978,20 @@ class OfflineDataService {
             .eq('id', visitId)
             .maybeSingle();
 
-        final existingData = (existing?['additional_data'] as Map<String, dynamic>?) ?? {};
-        final mergedData = {
-          ...existingData,
-          'start_location': startLocation,
-        };
+        final existingData =
+            (existing?['additional_data'] as Map<String, dynamic>?) ?? {};
+        final mergedData = {...existingData, 'start_location': startLocation};
 
-        await _supabase.from('mmp_site_entries').update({
-          'status': 'Ongoing',
-          'visit_started_by': userId,
-          'visit_started_at': startedAt,
-          'additional_data': mergedData,
-          'updated_at': DateTime.now().toIso8601String(),
-        }).eq('id', visitId);
+        await _supabase
+            .from('mmp_site_entries')
+            .update({
+              'status': 'Ongoing',
+              'visit_started_by': userId,
+              'visit_started_at': startedAt,
+              'additional_data': mergedData,
+              'updated_at': DateTime.now().toIso8601String(),
+            })
+            .eq('id', visitId);
 
         // Mark as synced
         queueItem['synced'] = true;
@@ -1025,7 +1062,7 @@ class OfflineDataService {
       final offlineDb = OfflineDb();
       // Check if we have an existing draft for this site
       final existingDraft = offlineDb.getDraftForSite(visitId);
-      
+
       if (existingDraft != null) {
         // Update existing draft to completed
         await offlineDb.updateSiteVisitOffline(
@@ -1056,7 +1093,9 @@ class OfflineDataService {
           synced: false,
         );
         await offlineDb.saveSiteVisitOffline(offlineVisit);
-        debugPrint('[queueCompleteVisit] Created new completed visit: $visitId');
+        debugPrint(
+          '[queueCompleteVisit] Created new completed visit: $visitId',
+        );
       }
     } catch (e) {
       debugPrint('[queueCompleteVisit] Error saving offline visit: $e');
@@ -1097,7 +1136,10 @@ class OfflineDataService {
       if (queueItem['synced'] == true) continue;
 
       final type = queueItem['type'] as String?;
-      if (type == 'accept_visit' || type == 'start_visit' || type == 'complete_visit' || type == 'visit_status') {
+      if (type == 'accept_visit' ||
+          type == 'start_visit' ||
+          type == 'complete_visit' ||
+          type == 'visit_status') {
         final payload = queueItem['data'] as Map<String, dynamic>?;
         final visitId = payload?['visit_id'] as String?;
         if (visitId != null) {
@@ -1132,10 +1174,13 @@ class OfflineDataService {
         await Hive.openBox(_walletBox);
       }
       final box = Hive.box(_walletBox);
-      await box.put(key, jsonEncode({
-        'data': data,
-        'cachedAt': DateTime.now().toIso8601String(),
-      }));
+      await box.put(
+        key,
+        jsonEncode({
+          'data': data,
+          'cachedAt': DateTime.now().toIso8601String(),
+        }),
+      );
     } catch (e) {
       debugPrint('Error caching wallet data: $e');
     }
@@ -1160,20 +1205,24 @@ class OfflineDataService {
   }
 
   // ==================== PROFILE CACHING ====================
-
-  static const String _profileBox = 'profile_cache';
+  // Uses OfflineDb.profileCacheBox (Box<CachedItem>) so we don't conflict with
+  // the box opened at app startup. Key format: profile_$userId (same as
+  // dashboard_screen and profile_repository).
 
   /// Cache user profile for offline access
-  Future<void> cacheUserProfile(String userId, Map<String, dynamic> profile) async {
+  Future<void> cacheUserProfile(
+    String userId,
+    Map<String, dynamic> profile,
+  ) async {
     try {
-      if (!Hive.isBoxOpen(_profileBox)) {
-        await Hive.openBox(_profileBox);
-      }
-      final box = Hive.box(_profileBox);
-      await box.put(userId, jsonEncode({
-        'data': profile,
-        'cachedAt': DateTime.now().toIso8601String(),
-      }));
+      final offlineDb = OfflineDb();
+      await offlineDb.init();
+      await offlineDb.cacheItem(
+        OfflineDb.profileCacheBox,
+        'profile_$userId',
+        data: profile,
+        ttl: const Duration(days: 7),
+      );
     } catch (e) {
       debugPrint('Error caching user profile: $e');
     }
@@ -1182,14 +1231,15 @@ class OfflineDataService {
   /// Get cached user profile
   Future<Map<String, dynamic>?> getCachedUserProfile(String userId) async {
     try {
-      if (!Hive.isBoxOpen(_profileBox)) {
-        await Hive.openBox(_profileBox);
-      }
-      final box = Hive.box(_profileBox);
-      final cached = box.get(userId);
-      if (cached != null) {
-        final decoded = Map<String, dynamic>.from(jsonDecode(cached));
-        return Map<String, dynamic>.from(decoded['data']);
+      final offlineDb = OfflineDb();
+      await offlineDb.init();
+      final cached = offlineDb.getCachedItem(
+        OfflineDb.profileCacheBox,
+        'profile_$userId',
+      );
+      final data = cached?.data;
+      if (data != null) {
+        return Map<String, dynamic>.from(data);
       }
     } catch (e) {
       debugPrint('Error getting cached user profile: $e');
@@ -1202,23 +1252,31 @@ class OfflineDataService {
   static const String _completedVisitsBox = 'completed_visits_cache';
 
   /// Cache completed visits for offline access
-  Future<void> cacheCompletedVisits(String userId, List<Map<String, dynamic>> visits) async {
+  Future<void> cacheCompletedVisits(
+    String userId,
+    List<Map<String, dynamic>> visits,
+  ) async {
     try {
       if (!Hive.isBoxOpen(_completedVisitsBox)) {
         await Hive.openBox(_completedVisitsBox);
       }
       final box = Hive.box(_completedVisitsBox);
-      await box.put(userId, jsonEncode({
-        'data': visits,
-        'cachedAt': DateTime.now().toIso8601String(),
-      }));
+      await box.put(
+        userId,
+        jsonEncode({
+          'data': visits,
+          'cachedAt': DateTime.now().toIso8601String(),
+        }),
+      );
     } catch (e) {
       debugPrint('Error caching completed visits: $e');
     }
   }
 
   /// Get cached completed visits
-  Future<List<Map<String, dynamic>>> getCachedCompletedVisits(String userId) async {
+  Future<List<Map<String, dynamic>>> getCachedCompletedVisits(
+    String userId,
+  ) async {
     try {
       if (!Hive.isBoxOpen(_completedVisitsBox)) {
         await Hive.openBox(_completedVisitsBox);
@@ -1239,16 +1297,22 @@ class OfflineDataService {
   // ==================== WALLET STATS CACHING ====================
 
   /// Cache wallet stats for offline access
-  Future<void> cacheWalletStats(String userId, Map<String, dynamic> stats) async {
+  Future<void> cacheWalletStats(
+    String userId,
+    Map<String, dynamic> stats,
+  ) async {
     try {
       if (!Hive.isBoxOpen(_walletBox)) {
         await Hive.openBox(_walletBox);
       }
       final box = Hive.box(_walletBox);
-      await box.put('stats_$userId', jsonEncode({
-        'data': stats,
-        'cachedAt': DateTime.now().toIso8601String(),
-      }));
+      await box.put(
+        'stats_$userId',
+        jsonEncode({
+          'data': stats,
+          'cachedAt': DateTime.now().toIso8601String(),
+        }),
+      );
     } catch (e) {
       debugPrint('Error caching wallet stats: $e');
     }
@@ -1277,23 +1341,31 @@ class OfflineDataService {
   static const String _reportsCacheBox = 'reports_cache';
 
   /// Cache reports data for offline access (keyed by userId)
-  Future<void> cacheReports(String userId, Map<String, Map<String, dynamic>> reports) async {
+  Future<void> cacheReports(
+    String userId,
+    Map<String, Map<String, dynamic>> reports,
+  ) async {
     try {
       if (!Hive.isBoxOpen(_reportsCacheBox)) {
         await Hive.openBox(_reportsCacheBox);
       }
       final box = Hive.box(_reportsCacheBox);
-      await box.put('reports_$userId', jsonEncode({
-        'data': reports,
-        'cachedAt': DateTime.now().toIso8601String(),
-      }));
+      await box.put(
+        'reports_$userId',
+        jsonEncode({
+          'data': reports,
+          'cachedAt': DateTime.now().toIso8601String(),
+        }),
+      );
     } catch (e) {
       debugPrint('Error caching reports: $e');
     }
   }
 
   /// Get cached reports data
-  Future<Map<String, Map<String, dynamic>>?> getCachedReportsData(String userId) async {
+  Future<Map<String, Map<String, dynamic>>?> getCachedReportsData(
+    String userId,
+  ) async {
     try {
       if (!Hive.isBoxOpen(_reportsCacheBox)) {
         await Hive.openBox(_reportsCacheBox);
@@ -1303,7 +1375,9 @@ class OfflineDataService {
       if (cached != null) {
         final decoded = Map<String, dynamic>.from(jsonDecode(cached));
         final data = decoded['data'] as Map<String, dynamic>;
-        return data.map((key, value) => MapEntry(key, Map<String, dynamic>.from(value)));
+        return data.map(
+          (key, value) => MapEntry(key, Map<String, dynamic>.from(value)),
+        );
       }
     } catch (e) {
       debugPrint('Error getting cached reports: $e');
@@ -1316,23 +1390,31 @@ class OfflineDataService {
   static const String _siteLocationsCacheBox = 'site_locations_cache';
 
   /// Cache site locations for offline access
-  Future<void> cacheSiteLocations(String userId, Map<String, Map<String, dynamic>> locations) async {
+  Future<void> cacheSiteLocations(
+    String userId,
+    Map<String, Map<String, dynamic>> locations,
+  ) async {
     try {
       if (!Hive.isBoxOpen(_siteLocationsCacheBox)) {
         await Hive.openBox(_siteLocationsCacheBox);
       }
       final box = Hive.box(_siteLocationsCacheBox);
-      await box.put('locations_$userId', jsonEncode({
-        'data': locations,
-        'cachedAt': DateTime.now().toIso8601String(),
-      }));
+      await box.put(
+        'locations_$userId',
+        jsonEncode({
+          'data': locations,
+          'cachedAt': DateTime.now().toIso8601String(),
+        }),
+      );
     } catch (e) {
       debugPrint('Error caching site locations: $e');
     }
   }
 
   /// Get cached site locations
-  Future<Map<String, Map<String, dynamic>>?> getCachedSiteLocations(String userId) async {
+  Future<Map<String, Map<String, dynamic>>?> getCachedSiteLocations(
+    String userId,
+  ) async {
     try {
       if (!Hive.isBoxOpen(_siteLocationsCacheBox)) {
         await Hive.openBox(_siteLocationsCacheBox);
@@ -1342,7 +1424,9 @@ class OfflineDataService {
       if (cached != null) {
         final decoded = Map<String, dynamic>.from(jsonDecode(cached));
         final data = decoded['data'] as Map<String, dynamic>;
-        return data.map((key, value) => MapEntry(key, Map<String, dynamic>.from(value)));
+        return data.map(
+          (key, value) => MapEntry(key, Map<String, dynamic>.from(value)),
+        );
       }
     } catch (e) {
       debugPrint('Error getting cached site locations: $e');

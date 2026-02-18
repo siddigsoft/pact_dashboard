@@ -7,7 +7,6 @@ import 'package:latlong2/latlong.dart' as latlong;
 import 'package:hive_flutter/hive_flutter.dart';
 import '../models/site_visit.dart';
 import '../algorithms/route_optimizer.dart';
-import '../algorithms/nearest_site_visits.dart';
 import '../services/location_tracking_service.dart';
 import '../services/staff_tracking_service.dart';
 
@@ -64,22 +63,21 @@ class JourneyService {
   }) async {
     // Optimize route using route_optimizer algorithm
     final optimizedRoute = RouteOptimizer.optimizeRoute(
-      visits: assignedTasks,
-      startLocation: Location(
-        latitude: startPosition.latitude,
-        longitude: startPosition.longitude,
-      ),
+      assignedTasks,
+      startPosition,
     );
 
     // Create journey waypoints
     _currentJourney = [];
     for (int i = 0; i < optimizedRoute.length; i++) {
       final visit = optimizedRoute[i];
-      _currentJourney.add(JourneyWaypoint(
-        visit: visit,
-        position: latlong.LatLng(visit.latitude!, visit.longitude!),
-        order: i + 1,
-      ));
+      _currentJourney.add(
+        JourneyWaypoint(
+          visit: visit,
+          position: latlong.LatLng(visit.latitude!, visit.longitude!),
+          order: i + 1,
+        ),
+      );
     }
 
     // Start journey tracking
@@ -129,8 +127,10 @@ class JourneyService {
     if (currentWaypoint.isCompleted) return;
 
     // Calculate distance to current waypoint
-    final distance =
-        _calculateDistance(currentPosition, currentWaypoint.position);
+    final distance = _calculateDistance(
+      currentPosition,
+      currentWaypoint.position,
+    );
 
     // If within 50 meters of waypoint, mark as completed
     if (distance <= 50.0) {
@@ -153,7 +153,9 @@ class JourneyService {
 
   /// Update journey progress metrics
   void _updateJourneyProgress(
-      latlong.LatLng currentPosition, Position position) {
+    latlong.LatLng currentPosition,
+    Position position,
+  ) {
     // Calculate distance traveled since last update
     if (_lastDistance > 0) {
       final newDistance = _calculateDistanceFromLastPosition(currentPosition);
@@ -215,12 +217,17 @@ class JourneyService {
 
   /// Haversine distance calculation
   double _haversineDistance(
-      double lat1, double lon1, double lat2, double lon2) {
+    double lat1,
+    double lon1,
+    double lat2,
+    double lon2,
+  ) {
     const double earthRadius = 6371000; // meters
     final double dLat = _degreesToRadians(lat2 - lat1);
     final double dLon = _degreesToRadians(lon2 - lon1);
 
-    final double a = math.sin(dLat / 2) * math.sin(dLat / 2) +
+    final double a =
+        math.sin(dLat / 2) * math.sin(dLat / 2) +
         math.cos(lat1) *
             math.cos(lat2) *
             math.sin(dLon / 2) *
@@ -270,16 +277,18 @@ class JourneyService {
       final box = await _getJourneysBox();
 
       final waypointsData = waypoints
-          .map((waypoint) => {
-                'visit_id': waypoint.visit.id,
-                'visit_data': waypoint.visit.toJson(),
-                'position': {
-                  'latitude': waypoint.position.latitude,
-                  'longitude': waypoint.position.longitude,
-                },
-                'order': waypoint.order,
-                'is_completed': waypoint.isCompleted,
-              })
+          .map(
+            (waypoint) => {
+              'visit_id': waypoint.visit.id,
+              'visit_data': waypoint.visit.toJson(),
+              'position': {
+                'latitude': waypoint.position.latitude,
+                'longitude': waypoint.position.longitude,
+              },
+              'order': waypoint.order,
+              'is_completed': waypoint.isCompleted,
+            },
+          )
           .toList();
 
       await box.put('journey_$journeyId', {
@@ -334,11 +343,13 @@ class JourneyService {
       final box = await _getJourneyProgressBox();
 
       final waypointsData = progress.waypoints
-          .map((waypoint) => {
-                'visit_id': waypoint.visit.id,
-                'order': waypoint.order,
-                'is_completed': waypoint.isCompleted,
-              })
+          .map(
+            (waypoint) => {
+              'visit_id': waypoint.visit.id,
+              'order': waypoint.order,
+              'is_completed': waypoint.isCompleted,
+            },
+          )
           .toList();
 
       await box.put('progress_$journeyId', {
@@ -462,21 +473,24 @@ class JourneyService {
 
   /// Update journey progress with caching
   void updateJourneyProgressCached(
-      latlong.LatLng currentPosition, String journeyId) {
+    latlong.LatLng currentPosition,
+    String journeyId,
+  ) {
     _updateJourneyProgress(
-        currentPosition,
-        Position(
-          latitude: currentPosition.latitude,
-          longitude: currentPosition.longitude,
-          timestamp: DateTime.now(),
-          accuracy: 0.0,
-          altitude: 0.0,
-          heading: 0.0,
-          speed: 0.0,
-          speedAccuracy: 0.0,
-          altitudeAccuracy: 0.0,
-          headingAccuracy: 0.0,
-        ));
+      currentPosition,
+      Position(
+        latitude: currentPosition.latitude,
+        longitude: currentPosition.longitude,
+        timestamp: DateTime.now(),
+        accuracy: 0.0,
+        altitude: 0.0,
+        heading: 0.0,
+        speed: 0.0,
+        speedAccuracy: 0.0,
+        altitudeAccuracy: 0.0,
+        headingAccuracy: 0.0,
+      ),
+    );
 
     // Cache the progress
     final progress = getCurrentProgress(currentPosition);
@@ -486,7 +500,10 @@ class JourneyService {
   /// Stop journey with final cache update
   Future<void> stopJourneyCached(String journeyId) async {
     // Get final progress
-    final finalPosition = latlong.LatLng(0, 0); // Would need actual position
+    final finalPosition = const latlong.LatLng(
+      0,
+      0,
+    ); // Would need actual position
     final finalProgress = getCurrentProgress(finalPosition);
 
     // Cache final progress
@@ -520,24 +537,27 @@ class JourneyService {
       return {
         'journey_id': journeyId,
         'waypoints': route
-            .map((w) => {
-                  'visit_id': w.visit.id,
-                  'site_name': w.visit.siteName,
-                  'position': {
-                    'lat': w.position.latitude,
-                    'lng': w.position.longitude,
-                  },
-                  'order': w.order,
-                  'completed': w.isCompleted,
-                })
+            .map(
+              (w) => {
+                'visit_id': w.visit.id,
+                'site_name': w.visit.siteName,
+                'position': {
+                  'lat': w.position.latitude,
+                  'lng': w.position.longitude,
+                },
+                'order': w.order,
+                'completed': w.isCompleted,
+              },
+            )
             .toList(),
         'progress': progress != null
             ? {
                 'distance_traveled': progress.distanceTraveled,
                 'time_elapsed': progress.timeElapsed.inSeconds,
                 'progress_percentage': progress.progressPercentage,
-                'completed_waypoints':
-                    progress.waypoints.where((w) => w.isCompleted).length,
+                'completed_waypoints': progress.waypoints
+                    .where((w) => w.isCompleted)
+                    .length,
                 'total_waypoints': progress.waypoints.length,
               }
             : null,

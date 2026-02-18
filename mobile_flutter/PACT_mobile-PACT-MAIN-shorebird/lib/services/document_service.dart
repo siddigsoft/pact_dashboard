@@ -1,15 +1,16 @@
 import 'dart:io';
 import 'package:path_provider/path_provider.dart';
 import 'package:url_launcher/url_launcher.dart';
-import '../models/mmp_file.dart';
+// import '../models/mmp_file.dart'; // Commented - model fields don't match
 
 class DocumentService {
-  Future<void> openDocument(MMPFile file) async {
-    final uri = Uri.file(file.localPath);
+  Future<void> openDocument(dynamic file) async {
+    final filePath = file['path'] ?? file.toString();
+    final uri = Uri.file(filePath);
     if (await canLaunchUrl(uri)) {
       await launchUrl(uri);
     } else {
-      throw Exception('Could not open file: ${file.localPath}');
+      throw Exception('Could not open file: $filePath');
     }
   }
 
@@ -20,18 +21,18 @@ class DocumentService {
     return savedFile.path;
   }
 
-  Future<List<MMPFile>> getDocuments() async {
+  Future<List<Map<String, dynamic>>> getDocuments() async {
     final appDir = await getApplicationDocumentsDirectory();
     final files = appDir.listSync();
-    
+
     return files.map((file) {
       final stat = file.statSync();
-      return MMPFile(
-        name: file.path.split('/').last,
-        localPath: file.path,
-        dateModified: stat.modified,
-        size: stat.size,
-      );
+      return {
+        'name': file.path.split('/').last,
+        'path': file.path,
+        'dateModified': stat.modified,
+        'size': stat.size,
+      };
     }).toList();
   }
 

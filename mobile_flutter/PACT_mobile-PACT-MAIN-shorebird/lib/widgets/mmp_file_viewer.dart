@@ -13,42 +13,56 @@ class MMPFileViewer extends StatelessWidget {
 
   Future<void> _openFile() async {
     try {
-      // Request storage permission
-      var status = await Permission.storage.request();
+      // If a public URL exists, open it directly.
+      if (mmpFile.fileUrl != null) {
+        final uri = Uri.parse(mmpFile.fileUrl!);
+        if (await canLaunchUrl(uri)) {
+          await launchUrl(uri, mode: LaunchMode.externalApplication);
+          return;
+        }
+      }
+
+      // Fallback to downloading from storage when we have a storage path.
+      if (mmpFile.filePath == null) {
+        throw Exception('No file reference available');
+      }
+
+      final status = await Permission.storage.request();
       if (!status.isGranted) {
         throw Exception('Storage permission denied');
       }
 
-      // Get the local path where the file is stored
       final directory = await getApplicationDocumentsDirectory();
-      final filePath = '${directory.path}/${mmpFile.fileName}';
+      final localFileName = _displayName;
+      final localPath = '${directory.path}/$localFileName';
+      final file = File(localPath);
 
-      // Check if file exists locally, if not, download it
-      final file = File(filePath);
       if (!await file.exists()) {
-        // Download file from Supabase storage
         final supabase = Supabase.instance.client;
-        final bytes = await supabase.storage
-            .from('mmps')
-            .download(mmpFile.filePath);
+        final bytes =
+            await supabase.storage.from('mmps').download(mmpFile.filePath!);
         await file.writeAsBytes(bytes);
       }
 
-      // Open the file with system default application using url_launcher
-      final uri = Uri.file(filePath);
+      final uri = Uri.file(localPath);
       if (await canLaunchUrl(uri)) {
         await launchUrl(uri);
       } else {
-        throw Exception('Could not open file: $filePath');
+        throw Exception('Could not open file: $localPath');
       }
     } catch (e) {
       debugPrint('Error opening file: $e');
-      // Handle error appropriately
     }
   }
 
+  String get _displayName =>
+      mmpFile.originalFilename ?? mmpFile.name ?? 'MMP file';
+
   @override
   Widget build(BuildContext context) {
+    final status = mmpFile.status ?? 'unknown';
+    final uploadedDate = mmpFile.uploadedAt ?? mmpFile.createdAt;
+
     return Card(
       margin: const EdgeInsets.all(8.0),
       child: InkWell(
@@ -61,38 +75,32 @@ class MMPFileViewer extends StatelessWidget {
               Row(
                 children: [
                   Icon(
-                    _getFileIcon(mmpFile.fileType),
+                    _getFileIcon(_displayName),
                     size: 24,
                     color: Theme.of(context).primaryColor,
                   ),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      mmpFile.fileName,
+                      _displayName,
                       style: const TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.bold,
                       ),
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ),
                 ],
               ),
               const SizedBox(height: 8),
               Text(
-                'Date: ${_formatDate(mmpFile.dateSent)}',
+                'Date: ${_formatDate(uploadedDate)}',
                 style: const TextStyle(color: Colors.grey),
               ),
-              if (mmpFile.siteVisit != null) ...[
-                const SizedBox(height: 4),
-                Text(
-                  'Site: ${mmpFile.siteVisit!.siteName}',
-                  style: const TextStyle(color: Colors.grey),
-                ),
-              ],
               const SizedBox(height: 8),
               Text(
-                'Status: ${mmpFile.status}',
-                style: TextStyle(color: _getStatusColor(mmpFile.status)),
+                'Status: $status',
+                style: TextStyle(color: _getStatusColor(status)),
               ),
             ],
           ),
@@ -101,8 +109,9 @@ class MMPFileViewer extends StatelessWidget {
     );
   }
 
-  IconData _getFileIcon(String fileType) {
-    switch (fileType.toLowerCase()) {
+  IconData _getFileIcon(String? fileName) {
+    final ext = _fileExtension(fileName);
+    switch (ext) {
       case 'pdf':
         return Icons.picture_as_pdf;
       case 'doc':
@@ -116,7 +125,14 @@ class MMPFileViewer extends StatelessWidget {
     }
   }
 
-  String _formatDate(DateTime date) {
+  String? _fileExtension(String? fileName) {
+    if (fileName == null) return null;
+    final parts = fileName.split('.');
+    return parts.length > 1 ? parts.last.toLowerCase() : null;
+  }
+
+  String _formatDate(DateTime? date) {
+    if (date == null) return 'N/A';
     return '${date.day}/${date.month}/${date.year}';
   }
 

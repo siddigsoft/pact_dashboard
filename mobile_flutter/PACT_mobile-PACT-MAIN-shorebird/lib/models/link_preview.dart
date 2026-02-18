@@ -37,5 +37,6 @@ class LinkPreview {
     };
   }
 
-  bool get hasContent => title != null || description != null || imageUrl != null;
+  bool get hasContent =>
+      title != null || description != null || imageUrl != null;
 }

@@ -38,7 +38,7 @@ class WebRTCService {
   // Signaling channels
   RealtimeChannel? _signalingChannel;
   RealtimeChannel? _presenceChannel;
-  
+
   // Keep track of active outbound channels for reliable signaling
   final Map<String, RealtimeChannel> _outboundChannels = {};
 
@@ -48,7 +48,7 @@ class WebRTCService {
   // Call timeout timer (for unanswered calls)
   Timer? _callTimeoutTimer;
   static const Duration _callTimeoutDuration = Duration(seconds: 45);
-  
+
   // Connection retry settings
   int _retryCount = 0;
   static const int _maxRetries = 3;
@@ -63,7 +63,7 @@ class WebRTCService {
 
   final _localStreamController = StreamController<MediaStream?>.broadcast();
   Stream<MediaStream?> get localStreamStream => _localStreamController.stream;
-  
+
   // Error stream for UI feedback
   final _errorController = StreamController<String>.broadcast();
   Stream<String> get errorStream => _errorController.stream;
@@ -112,16 +112,16 @@ class WebRTCService {
     ],
     'iceCandidatePoolSize': 10,
   };
-  
+
   // Custom TURN server credentials (loaded from Supabase config)
   String? _customTurnUrl;
   String? _customTurnUsername;
   String? _customTurnCredential;
-  
+
   // Channel subscription state tracking
   bool _signalingChannelReady = false;
   bool _presenceChannelReady = false;
-  
+
   bool get isSignalingReady => _signalingChannelReady;
   bool get isPresenceReady => _presenceChannelReady;
 
@@ -138,7 +138,7 @@ class WebRTCService {
       debugPrint('[WebRTC] Already initialized for user: $userId');
       return;
     }
-    
+
     _userId = userId;
     _userName = userName;
     _userAvatar = userAvatar;
@@ -148,7 +148,9 @@ class WebRTCService {
     try {
       await Future.wait([
         _loadTurnCredentials().catchError((e) {
-          debugPrint('[WebRTC] TURN credentials load failed (using defaults): $e');
+          debugPrint(
+            '[WebRTC] TURN credentials load failed (using defaults): $e',
+          );
         }),
         _setupSignalingChannel().catchError((e) {
           debugPrint('[WebRTC] Signaling channel setup failed: $e');
@@ -160,10 +162,10 @@ class WebRTCService {
     } catch (e) {
       debugPrint('[WebRTC] Initialization error (continuing anyway): $e');
     }
-    
+
     debugPrint('[WebRTC] Initialized for user: $userName ($userId)');
   }
-  
+
   /// Load custom TURN server credentials from Supabase app_config table
   Future<void> _loadTurnCredentials() async {
     try {
@@ -171,38 +173,46 @@ class WebRTCService {
           .from('app_config')
           .select('key, value')
           .inFilter('key', ['turn_url', 'turn_username', 'turn_credential']);
-      
+
       final configs = List<Map<String, dynamic>>.from(response as List);
-      
+
       for (final config in configs) {
         final key = config['key'] as String?;
         final value = config['value'] as String?;
-        
+
         if (key == 'turn_url' && value != null && value.isNotEmpty) {
           _customTurnUrl = value;
-        } else if (key == 'turn_username' && value != null && value.isNotEmpty) {
+        } else if (key == 'turn_username' &&
+            value != null &&
+            value.isNotEmpty) {
           _customTurnUsername = value;
-        } else if (key == 'turn_credential' && value != null && value.isNotEmpty) {
+        } else if (key == 'turn_credential' &&
+            value != null &&
+            value.isNotEmpty) {
           _customTurnCredential = value;
         }
       }
-      
+
       // Add custom TURN server if credentials are available
-      if (_customTurnUrl != null && _customTurnUsername != null && _customTurnCredential != null) {
+      if (_customTurnUrl != null &&
+          _customTurnUsername != null &&
+          _customTurnCredential != null) {
         debugPrint('[WebRTC] Adding custom TURN server: $_customTurnUrl');
-        
-        final iceServers = List<Map<String, dynamic>>.from(_iceServers['iceServers'] as List);
-        
+
+        final iceServers = List<Map<String, dynamic>>.from(
+          _iceServers['iceServers'] as List,
+        );
+
         // Add custom TURN with multiple transport options
         iceServers.insert(0, {
           'urls': _customTurnUrl,
           'username': _customTurnUsername,
           'credential': _customTurnCredential,
         });
-        
+
         // Add TCP variant if not already TCP
         if (!_customTurnUrl!.contains('transport=tcp')) {
-          final tcpUrl = _customTurnUrl!.contains('?') 
+          final tcpUrl = _customTurnUrl!.contains('?')
               ? '$_customTurnUrl&transport=tcp'
               : '$_customTurnUrl?transport=tcp';
           iceServers.insert(1, {
@@ -211,22 +221,21 @@ class WebRTCService {
             'credential': _customTurnCredential,
           });
         }
-        
-        _iceServers = {
-          'iceServers': iceServers,
-          'iceCandidatePoolSize': 10,
-        };
-        
+
+        _iceServers = {'iceServers': iceServers, 'iceCandidatePoolSize': 10};
+
         debugPrint('[WebRTC] Custom TURN server added successfully');
       } else {
-        debugPrint('[WebRTC] Using default TURN servers (no custom config found)');
+        debugPrint(
+          '[WebRTC] Using default TURN servers (no custom config found)',
+        );
       }
     } catch (e) {
       debugPrint('[WebRTC] Error loading TURN credentials: $e');
       // Continue with default servers if loading fails
     }
   }
-  
+
   /// Configure custom TURN server programmatically
   void configureTurnServer({
     required String url,
@@ -236,32 +245,33 @@ class WebRTCService {
     _customTurnUrl = url;
     _customTurnUsername = username;
     _customTurnCredential = credential;
-    
-    final iceServers = List<Map<String, dynamic>>.from(_iceServers['iceServers'] as List);
-    
+
+    final iceServers = List<Map<String, dynamic>>.from(
+      _iceServers['iceServers'] as List,
+    );
+
     // Add at the beginning for priority
     iceServers.insert(0, {
       'urls': url,
       'username': username,
       'credential': credential,
     });
-    
+
     // Add TCP variant
-    final tcpUrl = url.contains('?') ? '$url&transport=tcp' : '$url?transport=tcp';
+    final tcpUrl = url.contains('?')
+        ? '$url&transport=tcp'
+        : '$url?transport=tcp';
     iceServers.insert(1, {
       'urls': tcpUrl,
       'username': username,
       'credential': credential,
     });
-    
-    _iceServers = {
-      'iceServers': iceServers,
-      'iceCandidatePoolSize': 10,
-    };
-    
+
+    _iceServers = {'iceServers': iceServers, 'iceCandidatePoolSize': 10};
+
     debugPrint('[WebRTC] Custom TURN server configured: $url');
   }
-  
+
   /// Get current ICE server configuration (for debugging)
   List<Map<String, dynamic>> getIceServers() {
     return List<Map<String, dynamic>>.from(_iceServers['iceServers'] as List);
@@ -288,8 +298,8 @@ class WebRTCService {
           if (status == RealtimeSubscribeStatus.subscribed) {
             _signalingChannelReady = true;
             debugPrint('[WebRTC] Signaling channel ready');
-          } else if (status == RealtimeSubscribeStatus.closed || 
-                     status == RealtimeSubscribeStatus.timedOut) {
+          } else if (status == RealtimeSubscribeStatus.closed ||
+              status == RealtimeSubscribeStatus.timedOut) {
             _signalingChannelReady = false;
             debugPrint('[WebRTC] Signaling channel closed/timed out');
           }
@@ -311,8 +321,8 @@ class WebRTCService {
         _presenceChannelReady = true;
         _updatePresence(inCall: false);
         debugPrint('[WebRTC] Presence channel ready');
-      } else if (status == RealtimeSubscribeStatus.closed || 
-                 status == RealtimeSubscribeStatus.timedOut) {
+      } else if (status == RealtimeSubscribeStatus.closed ||
+          status == RealtimeSubscribeStatus.timedOut) {
         _presenceChannelReady = false;
         debugPrint('[WebRTC] Presence channel closed/timed out');
       }
@@ -402,36 +412,46 @@ class WebRTCService {
       _errorController.add('Service not initialized. Please restart the app.');
       return false;
     }
-    
+
     if (_callState.isInCall) {
       _errorController.add('Already in a call');
       return false;
     }
-    
+
     // Check signaling channel readiness - retry setup if not ready
     if (!_signalingChannelReady) {
-      debugPrint('[WebRTC] Signaling channel not ready, attempting to reconnect...');
+      debugPrint(
+        '[WebRTC] Signaling channel not ready, attempting to reconnect...',
+      );
       try {
         await _setupSignalingChannel();
-        
+
         // Wait for subscription to complete with polling (up to 3 seconds)
         int attempts = 0;
         const maxAttempts = 6;
         while (!_signalingChannelReady && attempts < maxAttempts) {
           await Future.delayed(const Duration(milliseconds: 500));
           attempts++;
-          debugPrint('[WebRTC] Waiting for signaling channel... attempt $attempts/$maxAttempts');
+          debugPrint(
+            '[WebRTC] Waiting for signaling channel... attempt $attempts/$maxAttempts',
+          );
         }
-        
+
         if (!_signalingChannelReady) {
-          debugPrint('[WebRTC] Signaling channel still not ready after $maxAttempts attempts');
-          _errorController.add('Connection not ready. Please check your internet and try again.');
+          debugPrint(
+            '[WebRTC] Signaling channel still not ready after $maxAttempts attempts',
+          );
+          _errorController.add(
+            'Connection not ready. Please check your internet and try again.',
+          );
           return false;
         }
         debugPrint('[WebRTC] Signaling channel ready after $attempts attempts');
       } catch (e) {
         debugPrint('[WebRTC] Failed to setup signaling channel: $e');
-        _errorController.add('Connection error. Please check your internet and try again.');
+        _errorController.add(
+          'Connection error. Please check your internet and try again.',
+        );
         return false;
       }
     }
@@ -520,11 +540,13 @@ class WebRTCService {
     String callToken,
   ) async {
     if (_userId == null) return;
-    
+
     // Guard: Prevent double-accept
-    if (_callState.status == CallStatus.connected || 
+    if (_callState.status == CallStatus.connected ||
         _callState.status == CallStatus.calling) {
-      debugPrint('[WebRTC] Ignoring acceptCall - already in state: ${_callState.status}');
+      debugPrint(
+        '[WebRTC] Ignoring acceptCall - already in state: ${_callState.status}',
+      );
       return;
     }
 
@@ -572,12 +594,14 @@ class WebRTCService {
   /// Reject an incoming call
   Future<void> rejectCall(String callerId, String callId) async {
     if (_userId == null) return;
-    
+
     // Guard: Prevent multiple rejects
-    if (_callState.status == CallStatus.idle || 
+    if (_callState.status == CallStatus.idle ||
         _callState.status == CallStatus.rejected ||
         _callState.status == CallStatus.ended) {
-      debugPrint('[WebRTC] Ignoring rejectCall - already in state: ${_callState.status}');
+      debugPrint(
+        '[WebRTC] Ignoring rejectCall - already in state: ${_callState.status}',
+      );
       return;
     }
 
@@ -599,7 +623,7 @@ class WebRTCService {
   /// End the current call
   Future<void> endCall() async {
     debugPrint('[WebRTC] Ending call');
-    
+
     final remoteUserId = _callState.remoteUserId;
     final callId = _callState.callId;
 
@@ -618,7 +642,7 @@ class WebRTCService {
 
     await _cleanup();
     _updateCallState(CallStatus.ended);
-    
+
     // Reset to idle after a brief delay
     Future.delayed(const Duration(seconds: 2), () {
       if (_callState.status == CallStatus.ended) {
@@ -631,27 +655,31 @@ class WebRTCService {
   Future<bool> requestCallPermissions({bool needsCamera = false}) async {
     try {
       debugPrint('[WebRTC] Requesting call permissions (camera: $needsCamera)');
-      
+
       // Request microphone permission (always needed for calls)
       final micStatus = await Permission.microphone.request();
       debugPrint('[WebRTC] Microphone permission: $micStatus');
-      
+
       if (!micStatus.isGranted) {
-        _errorController.add('Microphone permission is required for calls. Please enable it in Settings.');
+        _errorController.add(
+          'Microphone permission is required for calls. Please enable it in Settings.',
+        );
         return false;
       }
-      
+
       // Request camera permission if video call
       if (needsCamera) {
         final cameraStatus = await Permission.camera.request();
         debugPrint('[WebRTC] Camera permission: $cameraStatus');
-        
+
         if (!cameraStatus.isGranted) {
-          _errorController.add('Camera permission is required for video calls. Please enable it in Settings.');
+          _errorController.add(
+            'Camera permission is required for video calls. Please enable it in Settings.',
+          );
           return false;
         }
       }
-      
+
       return true;
     } catch (e) {
       debugPrint('[WebRTC] Error requesting permissions: $e');
@@ -664,7 +692,9 @@ class WebRTCService {
   Future<void> _setupLocalMedia({bool isAudioOnly = false}) async {
     try {
       // Request permissions before accessing media
-      final hasPermissions = await requestCallPermissions(needsCamera: !isAudioOnly);
+      final hasPermissions = await requestCallPermissions(
+        needsCamera: !isAudioOnly,
+      );
       if (!hasPermissions) {
         throw Exception('Required permissions not granted');
       }
@@ -698,17 +728,23 @@ class WebRTCService {
       debugPrint('[WebRTC] Error getting local media: $e');
       // Check if it's a permission error
       final errorStr = e.toString().toLowerCase();
-      if (errorStr.contains('notallowederror') || 
+      if (errorStr.contains('notallowederror') ||
           errorStr.contains('permission') ||
           errorStr.contains('denied') ||
           errorStr.contains('domexception')) {
         // Clean up call state and presence when permissions are denied
-        debugPrint('[WebRTC] Permission denied - cleaning up call state and presence');
+        debugPrint(
+          '[WebRTC] Permission denied - cleaning up call state and presence',
+        );
         await _updatePresence(inCall: false);
         await _cleanup();
         _updateCallState(CallStatus.idle);
-        _errorController.add('Microphone/camera permission denied. Please enable in Settings.');
-        throw Exception('Microphone/camera permission denied. Please enable in Settings.');
+        _errorController.add(
+          'Microphone/camera permission denied. Please enable in Settings.',
+        );
+        throw Exception(
+          'Microphone/camera permission denied. Please enable in Settings.',
+        );
       }
       throw Exception('Failed to access camera/microphone: $e');
     }
@@ -778,14 +814,15 @@ class WebRTCService {
       } else if (state == RTCPeerConnectionState.RTCPeerConnectionStateFailed) {
         _stopStatsCollection();
         _handleConnectionFailure();
-      } else if (state == RTCPeerConnectionState.RTCPeerConnectionStateDisconnected) {
+      } else if (state ==
+          RTCPeerConnectionState.RTCPeerConnectionStateDisconnected) {
         // Try auto-reconnect first before ending
         _stopStatsCollection();
         _startAutoReconnect();
       } else if (state == RTCPeerConnectionState.RTCPeerConnectionStateClosed) {
         _stopStatsCollection();
         _stopAutoReconnect();
-        if (_callState.status == CallStatus.connected || 
+        if (_callState.status == CallStatus.connected ||
             _callState.status == CallStatus.reconnecting) {
           endCall();
         }
@@ -834,7 +871,7 @@ class WebRTCService {
   /// Handle incoming offer (caller receives this after callee accepts)
   Future<void> _handleOffer(Map<String, dynamic> offer) async {
     debugPrint('[WebRTC] Handling offer from callee');
-    
+
     // Ensure we have local media before creating peer connection
     // (Caller should already have it from initiateCall, but verify)
     if (_localStream == null) {
@@ -843,13 +880,15 @@ class WebRTCService {
         await _setupLocalMedia(isAudioOnly: _callState.isAudioOnly);
       } catch (e) {
         debugPrint('[WebRTC] Failed to setup local media: $e');
-        _errorController.add('Failed to access microphone. Please check permissions.');
+        _errorController.add(
+          'Failed to access microphone. Please check permissions.',
+        );
         await _cleanup();
         _updateCallState(CallStatus.ended);
         return;
       }
     }
-    
+
     await _createPeerConnection();
 
     await _peerConnection!.setRemoteDescription(
@@ -858,7 +897,7 @@ class WebRTCService {
 
     final answer = await _peerConnection!.createAnswer();
     await _peerConnection!.setLocalDescription(answer);
-    
+
     debugPrint('[WebRTC] Sending answer back to callee');
 
     await _sendSignalWithRetry(
@@ -905,28 +944,32 @@ class WebRTCService {
   /// Handle incoming signal
   Future<void> _handleSignal(CallSignal signal) async {
     debugPrint('[WebRTC] Processing signal: ${signal.type}');
-    
+
     switch (signal.type) {
       case CallSignalType.callRequest:
         // Guard: Ignore if we're already in an active call or ringing state
         if (_callState.status != CallStatus.idle) {
-          debugPrint('[WebRTC] Ignoring callRequest - already in state: ${_callState.status}');
+          debugPrint(
+            '[WebRTC] Ignoring callRequest - already in state: ${_callState.status}',
+          );
           // Send busy signal if we're in an active call
-          if (_callState.status == CallStatus.connected || 
+          if (_callState.status == CallStatus.connected ||
               _callState.status == CallStatus.calling ||
               _callState.status == CallStatus.ringing) {
-            await _sendSignal(CallSignal(
-              type: CallSignalType.callBusy,
-              from: _userId!,
-              to: signal.from,
-              fromName: _userName ?? '',
-              callId: signal.callId,
-              callToken: signal.callToken,
-            ));
+            await _sendSignal(
+              CallSignal(
+                type: CallSignalType.callBusy,
+                from: _userId!,
+                to: signal.from,
+                fromName: _userName ?? '',
+                callId: signal.callId,
+                callToken: signal.callToken,
+              ),
+            );
           }
           break;
         }
-        
+
         _callState = _callState.copyWith(
           status: CallStatus.ringing,
           callId: signal.callId,
@@ -937,13 +980,13 @@ class WebRTCService {
           isAudioOnly: signal.isAudioOnly ?? false,
         );
         _callStateController.add(_callState);
-        
+
         // Show push notification for incoming call
         await BilingualNotificationService.showIncomingCallNotification(
           callerName: signal.fromName ?? 'Unknown',
           callId: signal.callId ?? '',
         );
-        
+
         // Add to in-app notification bell
         _addCallNotificationToBell(
           callerName: signal.fromName ?? 'Unknown',
@@ -1001,7 +1044,10 @@ class WebRTCService {
 
   /// Send signal with retry logic for reliability
   /// Uses faster retry delays for quicker call establishment
-  Future<bool> _sendSignalWithRetry(CallSignal signal, {int maxRetries = 3}) async {
+  Future<bool> _sendSignalWithRetry(
+    CallSignal signal, {
+    int maxRetries = 3,
+  }) async {
     for (int attempt = 0; attempt < maxRetries; attempt++) {
       try {
         await _sendSignal(signal);
@@ -1020,7 +1066,7 @@ class WebRTCService {
   /// Send signal to target user with persistent channel
   Future<void> _sendSignal(CallSignal signal) async {
     final channelName = 'calls:user:${signal.to}';
-    
+
     // Reuse or create channel
     RealtimeChannel channel;
     if (_outboundChannels.containsKey(channelName)) {
@@ -1028,7 +1074,7 @@ class WebRTCService {
     } else {
       channel = _supabase.channel(channelName);
       _outboundChannels[channelName] = channel;
-      
+
       // Subscribe and wait for connection
       final completer = Completer<void>();
       channel.subscribe((status, [error]) {
@@ -1044,7 +1090,7 @@ class WebRTCService {
           }
         }
       });
-      
+
       // Wait for subscription with reduced timeout for faster call start
       await completer.future.timeout(
         const Duration(seconds: 3),
@@ -1056,7 +1102,7 @@ class WebRTCService {
       event: 'call-signal',
       payload: signal.toJson(),
     );
-    
+
     debugPrint('[WebRTC] Signal sent: ${signal.type} to ${signal.to}');
   }
 
@@ -1064,16 +1110,16 @@ class WebRTCService {
   /// This starts the channel subscription in the background before it's needed
   void _prewarmChannel(String targetUserId) {
     final channelName = 'calls:user:$targetUserId';
-    
+
     // Skip if already warmed
     if (_outboundChannels.containsKey(channelName)) {
       return;
     }
-    
+
     // Create and subscribe to channel in background
     final channel = _supabase.channel(channelName);
     _outboundChannels[channelName] = channel;
-    
+
     channel.subscribe((status, [error]) {
       if (status == RealtimeSubscribeStatus.subscribed) {
         debugPrint('[WebRTC] Channel pre-warmed for $targetUserId');
@@ -1146,7 +1192,7 @@ class WebRTCService {
   /// Toggle speaker (earpiece/speaker)
   bool toggleSpeaker() {
     final speakerOn = !_callState.isSpeakerOn;
-    
+
     // Use flutter_webrtc helper to switch audio output
     try {
       Helper.setSpeakerphoneOn(speakerOn);
@@ -1216,26 +1262,26 @@ class WebRTCService {
           _callState.status == CallStatus.ringing) {
         debugPrint('[WebRTC] Call timeout - no answer');
         _errorController.add('User is busy or unavailable');
-        
+
         // Show missed call notification for the caller
         if (_callState.remoteUserName != null) {
           await BilingualNotificationService.showMissedCallNotification(
             callerName: _callState.remoteUserName!,
             callId: _callState.callId ?? '',
           );
-          
+
           _addCallNotificationToBell(
             callerName: _callState.remoteUserName!,
             callId: _callState.callId ?? '',
             type: 'missed_call',
           );
         }
-        
+
         endCall();
       }
     });
   }
-  
+
   /// Add call notification to in-app notification bell
   Future<void> _addCallNotificationToBell({
     required String callerName,
@@ -1246,14 +1292,12 @@ class WebRTCService {
       final supabase = Supabase.instance.client;
       final currentUser = supabase.auth.currentUser;
       if (currentUser == null) return;
-      
-      final title = type == 'incoming_call' 
-          ? 'Incoming Call' 
-          : 'Missed Call';
+
+      final title = type == 'incoming_call' ? 'Incoming Call' : 'Missed Call';
       final body = type == 'incoming_call'
           ? '$callerName is calling you'
           : 'You missed a call from $callerName';
-      
+
       await supabase.from('notifications').insert({
         'user_id': currentUser.id,
         'title': title,
@@ -1263,7 +1307,7 @@ class WebRTCService {
         'is_read': false,
         'created_at': DateTime.now().toIso8601String(),
       });
-      
+
       debugPrint('[WebRTC] Added $type notification to bell');
     } catch (e) {
       debugPrint('[WebRTC] Error adding notification to bell: $e');
@@ -1275,13 +1319,13 @@ class WebRTCService {
     _callTimeoutTimer?.cancel();
     _callTimeoutTimer = null;
   }
-  
+
   // ==================== ENHANCED CALL FEATURES ====================
-  
+
   Timer? _statsTimer;
   Timer? _reconnectTimer;
   bool _wasConnectedBeforeDisconnect = false;
-  
+
   /// Start collecting call statistics for quality monitoring
   void _startStatsCollection() {
     _statsTimer?.cancel();
@@ -1289,17 +1333,19 @@ class WebRTCService {
       await _collectStats();
     });
   }
-  
+
   /// Stop collecting call statistics
   void _stopStatsCollection() {
     _statsTimer?.cancel();
     _statsTimer = null;
   }
-  
+
   /// Collect WebRTC stats and update call quality
   Future<void> _collectStats() async {
-    if (_peerConnection == null || _callState.status != CallStatus.connected) return;
-    
+    if (_peerConnection == null || _callState.status != CallStatus.connected) {
+      return;
+    }
+
     try {
       final stats = await _peerConnection!.getStats();
       double totalPacketLoss = 0;
@@ -1307,31 +1353,35 @@ class WebRTCService {
       int latency = 0;
       int bitrate = 0;
       int jitter = 0;
-      
+
       for (final report in stats) {
         final values = report.values;
-        
+
         if (report.type == 'inbound-rtp') {
           final packetsLost = values['packetsLost'] as int? ?? 0;
           final packetsReceived = values['packetsReceived'] as int? ?? 1;
           if (packetsReceived > 0) {
-            totalPacketLoss += (packetsLost / (packetsLost + packetsReceived)) * 100;
+            totalPacketLoss +=
+                (packetsLost / (packetsLost + packetsReceived)) * 100;
             packetLossCount++;
           }
           bitrate = values['bytesReceived'] as int? ?? 0;
           // Jitter is reported in seconds, convert to ms
-          final jitterSeconds = (values['jitter'] as num?)?.toDouble() ?? 0;
+          final jitterSeconds = values['jitter'] as double? ?? 0;
           jitter = (jitterSeconds * 1000).round();
         }
-        
+
         if (report.type == 'candidate-pair' && values['state'] == 'succeeded') {
-          latency = ((values['currentRoundTripTime'] as num?)?.toDouble() ?? 0) * 1000 ~/ 1;
+          latency =
+              (values['currentRoundTripTime'] as double? ?? 0) * 1000 ~/ 1;
         }
       }
-      
-      final double avgPacketLoss = packetLossCount > 0 ? totalPacketLoss / packetLossCount : 0.0;
+
+      final double avgPacketLoss = packetLossCount > 0
+          ? totalPacketLoss / packetLossCount
+          : 0.0;
       final quality = _calculateQuality(avgPacketLoss, latency);
-      
+
       _callState = _callState.copyWith(
         callQuality: quality,
         packetLoss: avgPacketLoss,
@@ -1344,7 +1394,7 @@ class WebRTCService {
       debugPrint('[WebRTC] Error collecting stats: $e');
     }
   }
-  
+
   /// Calculate call quality based on metrics
   CallQuality _calculateQuality(double packetLoss, int latencyMs) {
     if (packetLoss > 10 || latencyMs > 500) return CallQuality.veryPoor;
@@ -1353,67 +1403,68 @@ class WebRTCService {
     if (packetLoss > 0.5 || latencyMs > 50) return CallQuality.good;
     return CallQuality.excellent;
   }
-  
+
   /// Put the current call on hold
   Future<void> holdCall() async {
     if (_callState.status != CallStatus.connected) return;
-    
+
     debugPrint('[WebRTC] Putting call on hold');
-    
+
     // Mute audio and video
     _localStream?.getAudioTracks().forEach((track) => track.enabled = false);
     _localStream?.getVideoTracks().forEach((track) => track.enabled = false);
-    
+
     // Notify remote user
     if (_callState.remoteUserId != null) {
-      await _sendSignalWithRetry(CallSignal(
-        type: CallSignalType.callEnd, // Using callEnd as hold signal
-        from: _userId!,
-        to: _callState.remoteUserId!,
-        fromName: _userName ?? '',
-        callId: _callState.callId,
-        payload: {'action': 'hold'},
-      ));
+      await _sendSignalWithRetry(
+        CallSignal(
+          type: CallSignalType.callEnd, // Using callEnd as hold signal
+          from: _userId!,
+          to: _callState.remoteUserId!,
+          fromName: _userName ?? '',
+          callId: _callState.callId,
+          payload: {'action': 'hold'},
+        ),
+      );
     }
-    
-    _callState = _callState.copyWith(
-      status: CallStatus.onHold,
-      isOnHold: true,
-    );
+
+    _callState = _callState.copyWith(status: CallStatus.onHold, isOnHold: true);
     _callStateController.add(_callState);
   }
-  
+
   /// Resume a call that was on hold
   Future<void> resumeCall() async {
     if (_callState.status != CallStatus.onHold) return;
-    
+
     debugPrint('[WebRTC] Resuming call from hold');
-    
+
     // Unmute audio and video
     _localStream?.getAudioTracks().forEach((track) => track.enabled = true);
     if (!_callState.isAudioOnly) {
       _localStream?.getVideoTracks().forEach((track) => track.enabled = true);
     }
-    
+
     // Notify remote user
     if (_callState.remoteUserId != null) {
-      await _sendSignalWithRetry(CallSignal(
-        type: CallSignalType.callEnd, // Using callEnd as resume signal
-        from: _userId!,
-        to: _callState.remoteUserId!,
-        fromName: _userName ?? '',
-        callId: _callState.callId,
-        payload: {'action': 'resume'},
-      ));
+      await _sendSignalWithRetry(
+        CallSignal(
+          type: CallSignalType.callEnd, // Using callEnd as resume signal
+          from: _userId!,
+          to: _callState.remoteUserId!,
+          fromName: _userName ?? '',
+          callId: _callState.callId,
+          payload: {'action': 'resume'},
+        ),
+      );
     }
-    
+
     _callState = _callState.copyWith(
       status: CallStatus.connected,
       isOnHold: false,
     );
     _callStateController.add(_callState);
   }
-  
+
   /// Toggle hold state
   Future<void> toggleHold() async {
     if (_callState.isOnHold) {
@@ -1422,36 +1473,36 @@ class WebRTCService {
       await holdCall();
     }
   }
-  
+
   /// Start call recording (placeholder - requires native implementation)
   Future<bool> startRecording() async {
     if (_callState.status != CallStatus.connected) return false;
-    
+
     debugPrint('[WebRTC] Starting call recording');
-    
+
     // Note: Actual recording requires native platform implementation
     // This is a placeholder that updates state
     _callState = _callState.copyWith(isRecording: true);
     _callStateController.add(_callState);
-    
+
     _errorController.add('Recording started');
     return true;
   }
-  
+
   /// Stop call recording
   Future<String?> stopRecording() async {
     if (!_callState.isRecording) return null;
-    
+
     debugPrint('[WebRTC] Stopping call recording');
-    
+
     _callState = _callState.copyWith(isRecording: false);
     _callStateController.add(_callState);
-    
+
     _errorController.add('Recording stopped');
     // Return path to recording file (would be set by native implementation)
     return null;
   }
-  
+
   /// Toggle recording
   Future<void> toggleRecording() async {
     if (_callState.isRecording) {
@@ -1460,22 +1511,22 @@ class WebRTCService {
       await startRecording();
     }
   }
-  
+
   /// Toggle noise suppression
   void toggleNoiseSuppression() {
     final newValue = !_callState.isNoiseSuppressed;
     debugPrint('[WebRTC] Toggling noise suppression: $newValue');
-    
+
     // Note: Noise suppression is typically set at stream creation time
     // This updates state for UI feedback
     _callState = _callState.copyWith(isNoiseSuppressed: newValue);
     _callStateController.add(_callState);
   }
-  
+
   /// Set audio output device
   Future<void> setAudioDevice(AudioOutputDevice device) async {
     debugPrint('[WebRTC] Setting audio device: $device');
-    
+
     switch (device) {
       case AudioOutputDevice.speaker:
         await Helper.setSpeakerphoneOn(true);
@@ -1497,37 +1548,37 @@ class WebRTCService {
         _callState = _callState.copyWith(audioDevice: device);
         break;
     }
-    
+
     _callStateController.add(_callState);
   }
-  
+
   /// Update call notes
   void updateCallNotes(String notes) {
     _callState = _callState.copyWith(callNotes: notes);
     _callStateController.add(_callState);
   }
-  
+
   /// Get current call notes
   String? getCallNotes() => _callState.callNotes;
-  
+
   /// Handle auto-reconnect when connection is lost
   void _startAutoReconnect() {
     if (_reconnectTimer != null) return;
-    
+
     _wasConnectedBeforeDisconnect = _callState.status == CallStatus.connected;
     if (!_wasConnectedBeforeDisconnect) return;
-    
+
     debugPrint('[WebRTC] Starting auto-reconnect');
-    
+
     _callState = _callState.copyWith(
       status: CallStatus.reconnecting,
       reconnectAttempts: 0,
     );
     _callStateController.add(_callState);
-    
+
     _reconnectTimer = Timer.periodic(const Duration(seconds: 3), (timer) async {
       final attempts = _callState.reconnectAttempts + 1;
-      
+
       if (attempts > 5) {
         debugPrint('[WebRTC] Max reconnect attempts reached');
         timer.cancel();
@@ -1536,12 +1587,12 @@ class WebRTCService {
         await endCall();
         return;
       }
-      
+
       debugPrint('[WebRTC] Reconnect attempt $attempts/5');
-      
+
       _callState = _callState.copyWith(reconnectAttempts: attempts);
       _callStateController.add(_callState);
-      
+
       try {
         if (_peerConnection != null) {
           await _peerConnection!.restartIce();
@@ -1551,12 +1602,12 @@ class WebRTCService {
       }
     });
   }
-  
+
   /// Stop auto-reconnect timer
   void _stopAutoReconnect() {
     _reconnectTimer?.cancel();
     _reconnectTimer = null;
-    
+
     if (_callState.status == CallStatus.reconnecting) {
       _callState = _callState.copyWith(
         status: CallStatus.connected,
@@ -1572,45 +1623,53 @@ class WebRTCService {
     _callState = CallState();
     _callStateController.add(_callState);
   }
-  
+
   /// Force reset if stuck in a call state
   Future<void> forceResetIfNotInActiveCall() async {
     // If not in any call state, nothing to reset
     if (_callState.status == CallStatus.idle) {
       return;
     }
-    
+
     // Check for stale calling/ringing states (stuck for more than 60 seconds)
-    final isPreConnectionState = 
+    final isPreConnectionState =
         _callState.status == CallStatus.calling ||
         _callState.status == CallStatus.ringing;
-    
+
     if (isPreConnectionState) {
       // Check if we've been in this state for too long (60 seconds max)
       final startTime = _callState.startTime;
       if (startTime != null) {
         final elapsed = DateTime.now().difference(startTime);
         if (elapsed.inSeconds > 60) {
-          debugPrint('[WebRTC] Detected stale calling/ringing state (${elapsed.inSeconds}s), forcing reset');
+          debugPrint(
+            '[WebRTC] Detected stale calling/ringing state (${elapsed.inSeconds}s), forcing reset',
+          );
           await _cleanup();
           return;
         }
       } else {
         // No start time recorded - this is a stuck state, reset it
-        debugPrint('[WebRTC] Detected calling/ringing state with no start time, forcing reset');
+        debugPrint(
+          '[WebRTC] Detected calling/ringing state with no start time, forcing reset',
+        );
         await _cleanup();
         return;
       }
     }
-    
+
     // If we think we're in a call but have no active peer connection,
     // then we're in a stuck state and should reset (except during calling/ringing phases)
-    if (_callState.isInCall && _peerConnection == null && !isPreConnectionState) {
-      debugPrint('[WebRTC] Detected stuck call state (no peer connection), forcing reset');
+    if (_callState.isInCall &&
+        _peerConnection == null &&
+        !isPreConnectionState) {
+      debugPrint(
+        '[WebRTC] Detected stuck call state (no peer connection), forcing reset',
+      );
       await _cleanup();
       return;
     }
-    
+
     // Also reset if we're in a "ended/rejected/busy/failed/unreachable" state that wasn't cleaned up
     if (_callState.status == CallStatus.ended ||
         _callState.status == CallStatus.rejected ||
@@ -1621,15 +1680,20 @@ class WebRTCService {
       await _cleanup();
       return;
     }
-    
+
     // Reset if local/remote streams are null but we think we're in a call
     // Again, skip for calling/ringing phase where streams are being set up
-    if (_callState.isInCall && _localStream == null && _remoteStream == null && !isPreConnectionState) {
-      debugPrint('[WebRTC] Detected stuck call state (no streams), forcing reset');
+    if (_callState.isInCall &&
+        _localStream == null &&
+        _remoteStream == null &&
+        !isPreConnectionState) {
+      debugPrint(
+        '[WebRTC] Detected stuck call state (no streams), forcing reset',
+      );
       await _cleanup();
     }
   }
-  
+
   /// Force reset call state regardless of current state
   /// Use this when the user explicitly wants to clear a stuck state
   Future<void> forceReset() async {
@@ -1640,14 +1704,14 @@ class WebRTCService {
   /// Cleanup resources
   Future<void> _cleanup() async {
     debugPrint('[WebRTC] Cleaning up resources');
-    
+
     _cancelCallTimeoutTimer();
     _stopStatsCollection();
     _stopAutoReconnect();
     _retryTimer?.cancel();
     _retryTimer = null;
     _retryCount = 0;
-    
+
     await _peerConnection?.close();
     _peerConnection = null;
 
@@ -1661,9 +1725,11 @@ class WebRTCService {
     await _updatePresence(inCall: false);
 
     // Cleanup outbound channels - create copy to avoid concurrent modification
-    final channelsToCleanup = Map<String, RealtimeChannel>.from(_outboundChannels);
+    final channelsToCleanup = Map<String, RealtimeChannel>.from(
+      _outboundChannels,
+    );
     _outboundChannels.clear(); // Clear first to prevent further modifications
-    
+
     for (final channel in channelsToCleanup.values) {
       try {
         await channel.unsubscribe();

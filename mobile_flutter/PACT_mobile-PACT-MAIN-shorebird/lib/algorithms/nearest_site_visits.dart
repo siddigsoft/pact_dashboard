@@ -1,31 +1,59 @@
 import '../models/site_visit.dart';
 import 'distance_helper.dart';
 
-/// Algorithm for finding the nearest available site visits to a given location
+/// Simple immutable location value.
+class Location {
+  final double latitude;
+  final double longitude;
+
+  const Location({required this.latitude, required this.longitude});
+}
+
+/// Wrapper that pairs a site visit with its computed distance from the user.
+class SiteVisitWithDistance {
+  final SiteVisit visit;
+  final double distanceMeters;
+
+  const SiteVisitWithDistance(
+      {required this.visit, required this.distanceMeters});
+
+  /// Distance in kilometers (legacy compatibility).
+  double get distance => distanceMeters / 1000;
+
+  /// Human-readable distance label.
+  String get distanceText => distanceMeters >= 1000
+      ? '${distance.toStringAsFixed(1)} km'
+      : '${distanceMeters.toStringAsFixed(0)} m';
+
+  Map<String, dynamic> toJson() => {
+        'visit': visit.toJson(),
+        'distanceMeters': distanceMeters,
+        'distance': distance, // kept for backward compatibility
+        'distanceText': distanceText,
+      };
+}
+
 class NearestSiteVisits {
-  /// Returns the k nearest available site visits to the given location
+  /// Returns up to [k] nearest site visits to [userLocation].
   ///
-  /// [userLocation] The current location of the user (latitude, longitude)
-  /// [availableVisits] List of all available site visits
-  /// [k] Number of nearest visits to return
-  /// [maxRadiusMeters] Optional maximum radius to consider (null means no limit)
-  ///
-  /// Returns a list of [SiteVisit] objects sorted by distance, with distances included
+  /// - Filters out visits without valid coordinates.
+  /// - Filters out visits whose status is not `available`.
+  /// - Applies [maxRadiusMeters] if provided.
   static List<SiteVisitWithDistance> findNearest({
     required Location userLocation,
     required List<SiteVisit> availableVisits,
-    required int k,
+    int k = 10,
     double? maxRadiusMeters,
   }) {
-    // Filter out visits without valid coordinates
-    final validVisits = availableVisits.where((visit) {
-      return visit.latitude != null &&
-          visit.longitude != null &&
-          visit.status == 'available';
-    }).toList();
+    final filtered = availableVisits.where((visit) {
+      final lat = visit.latitude;
+      final lng = visit.longitude;
+      return visit.status.toLowerCase() == 'available' &&
+          lat != null &&
+          lng != null;
+    });
 
-    // Calculate distances for all valid visits
-    final visitsWithDistances = validVisits.map((visit) {
+    final withDistances = filtered.map((visit) {
       final distance = DistanceHelper.haversine(
         userLocation.latitude,
         userLocation.longitude,
@@ -33,55 +61,13 @@ class NearestSiteVisits {
         visit.longitude!,
       );
       return SiteVisitWithDistance(visit: visit, distanceMeters: distance);
+    }).where((entry) {
+      if (maxRadiusMeters == null) return true;
+      return entry.distanceMeters <= maxRadiusMeters;
     }).toList();
 
-    // Filter by radius if specified
-    if (maxRadiusMeters != null) {
-      visitsWithDistances.removeWhere(
-        (visit) => visit.distanceMeters > maxRadiusMeters,
-      );
-    }
-
-    // Sort by distance
-    visitsWithDistances.sort(
-      (a, b) => a.distanceMeters.compareTo(b.distanceMeters),
-    );
-
-    // Return k nearest (or all if less than k available)
-    return visitsWithDistances.take(k).toList();
+    withDistances.sort((a, b) => a.distanceMeters.compareTo(b.distanceMeters));
+    if (withDistances.length <= k) return withDistances;
+    return withDistances.sublist(0, k);
   }
-}
-
-/// Data class to hold a site visit with its calculated distance
-class SiteVisitWithDistance {
-  final SiteVisit visit;
-  final double distanceMeters;
-
-  SiteVisitWithDistance({
-    required this.visit,
-    required this.distanceMeters,
-  });
-
-  /// Get distance in kilometers
-  double get distance => distanceMeters / 1000;
-
-  /// Get human-readable distance text
-  String get distanceText {
-    if (distanceMeters < 1000) {
-      return '${distanceMeters.round()}m';
-    } else {
-      return '${(distanceMeters / 1000).toStringAsFixed(1)}km';
-    }
-  }
-}
-
-/// Simple location class for latitude/longitude pairs
-class Location {
-  final double latitude;
-  final double longitude;
-
-  const Location({
-    required this.latitude,
-    required this.longitude,
-  });
 }

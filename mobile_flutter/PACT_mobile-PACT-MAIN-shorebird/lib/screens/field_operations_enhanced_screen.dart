@@ -9,28 +9,30 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../widgets/reusable_app_bar.dart';
 import '../services/webrtc_service.dart';
+import '../services/agora_call_service.dart';
 import '../models/call_state.dart';
 import 'call_screen.dart';
+import 'agora_call_screen.dart';
 import '../widgets/custom_drawer_menu.dart';
 import '../widgets/notifications_panel.dart';
 import '../widgets/main_layout.dart';
 import '../widgets/start_visit_dialog.dart';
-import '../widgets/visit_report_dialog.dart';
 import '../theme/app_colors.dart';
 import '../services/location_service.dart';
 import '../services/photo_upload_service.dart';
 import '../services/advance_request_service.dart';
-import '../services/offline_data_service.dart';
+import 'package:hive_flutter/hive_flutter.dart';
 import '../services/offline/sync_manager.dart';
 import '../services/offline/offline_db.dart';
 import '../services/offline/models.dart';
 import '../models/visit_report.dart';
-import '../models/visit_report_data.dart';
 import '../widgets/request_advance_dialog.dart';
 import '../models/site_visit.dart';
 import 'visit_report_detail_screen.dart';
 import '../widgets/sync_status_indicator.dart';
+import '../widgets/complete_visit_flow.dart';
 import '../l10n/app_localizations.dart';
+import '../services/claim_fee_service.dart';
 
 class FieldOperationsEnhancedScreen extends StatefulWidget {
   const FieldOperationsEnhancedScreen({super.key});
@@ -102,23 +104,39 @@ class _MMPScreenState extends State<MMPScreen> {
 
   Future<void> _initializeMMP() async {
     try {
-      final user = Supabase.instance.client.auth.currentUser;
+      var user = Supabase.instance.client.auth.currentUser;
+      // Cold start: auth may not have restored yet. Wait briefly then try stored userId.
       if (user == null) {
+        await Future.delayed(const Duration(milliseconds: 600));
+        user = Supabase.instance.client.auth.currentUser;
+      }
+      if (user == null) {
+        final lastUserId = await _getStoredUserId();
+        if (lastUserId != null) {
+          debugPrint(
+            '[_initializeMMP] No auth yet - loading from cache/site_visits for stored user',
+          );
+          await _initializeFromCache(lastUserId);
+          if (!mounted) return;
+          setState(() => _isLoading = false);
+          return;
+        }
         if (!mounted) return;
         setState(() => _isLoading = false);
         return;
       }
 
       _userId = user.id;
+      await _storeUserId(user.id);
 
       // Check connectivity first
       final connectivityResult = await Connectivity().checkConnectivity();
       final isOffline = connectivityResult.contains(ConnectivityResult.none);
-      
+
       if (mounted) {
         setState(() => _isOffline = isOffline);
       }
-      
+
       if (isOffline) {
         // OFFLINE MODE: Load everything from cache
         debugPrint('[_initializeMMP] Offline - loading from cache');
@@ -137,9 +155,14 @@ class _MMPScreenState extends State<MMPScreen> {
 
         if (profileResponse != null) {
           // Cache profile for offline use
-          final offlineService = OfflineDataService();
-          await offlineService.cacheUserProfile(user.id, profileResponse);
-          
+          final offlineDb = OfflineDb();
+          await offlineDb.cacheItem(
+            OfflineDb.profileCacheBox,
+            'profile_${user.id}',
+            data: profileResponse,
+            ttl: const Duration(days: 7),
+          );
+
           _applyProfileData(profileResponse);
 
           // Fetch user's project memberships (for non-admin users)
@@ -178,33 +201,128 @@ class _MMPScreenState extends State<MMPScreen> {
       if (user != null) {
         await _initializeFromCache(user.id);
       } else {
+        final lastUserId = await _getStoredUserId();
+        if (lastUserId != null) {
+          await _initializeFromCache(lastUserId);
+        }
         if (!mounted) return;
         setState(() => _isLoading = false);
       }
     }
   }
-  
+
+  static const String _lastUserIdKey = 'last_user_id';
+
+  Future<void> _storeUserId(String userId) async {
+    try {
+      final box = await Hive.openBox('user_profile_cache');
+      await box.put(_lastUserIdKey, userId);
+    } catch (e) {
+      debugPrint('[_storeUserId] Error: $e');
+    }
+  }
+
+  Future<String?> _getStoredUserId() async {
+    try {
+      final box = await Hive.openBox('user_profile_cache');
+      return box.get(_lastUserIdKey) as String?;
+    } catch (e) {
+      debugPrint('[_getStoredUserId] Error: $e');
+      return null;
+    }
+  }
+
   /// Initialize from cached data when offline
   Future<void> _initializeFromCache(String userId) async {
     try {
       // CRITICAL: Set _userId BEFORE loading from cache (cache keys use _userId)
       _userId = userId;
-      
+
       if (mounted) {
         setState(() => _isOffline = true);
       }
-      debugPrint('[_initializeFromCache] Loading cached profile and data for user: $_userId');
-      final offlineService = OfflineDataService();
-      
+      debugPrint(
+        '[_initializeFromCache] Loading cached profile and data for user: $_userId',
+      );
+      final offlineDb = OfflineDb();
+
       // Load cached profile
-      final cachedProfile = await offlineService.getCachedUserProfile(userId);
+      final cachedItem = offlineDb.getCachedItem(
+        OfflineDb.profileCacheBox,
+        'profile_$userId',
+      );
+
+      Map<String, dynamic>? cachedProfile;
+      if (cachedItem?.data != null) {
+        try {
+          cachedProfile = Map<String, dynamic>.from(cachedItem!.data);
+        } catch (e) {
+          debugPrint('[_initializeFromCache] Error converting cached profile: $e');
+        }
+      }
+
       if (cachedProfile != null) {
         _applyProfileData(cachedProfile);
         debugPrint('[_initializeFromCache] Loaded cached profile: $_userRole');
       } else {
-        debugPrint('[_initializeFromCache] No cached profile found');
+        debugPrint('[_initializeFromCache] No cached profile found, trying fallback methods');
+
+        // FALLBACK 1: Try to load role from Hive cache
+        try {
+          final box = await Hive.openBox('user_profile_cache');
+          final cachedRole = box.get('user_role') as String?;
+          if (cachedRole != null) {
+            debugPrint('[_initializeFromCache] Found role in Hive cache: $cachedRole');
+            final role = cachedRole.toLowerCase();
+            _userRole = role;
+            _isCoordinator =
+                role == 'coordinator' ||
+                role == 'field_coordinator' ||
+                role == 'state_coordinator';
+            _isDataCollector =
+                role == 'datacollector' ||
+                role == 'enumerator' ||
+                role == 'data_collector';
+            _isAdminOrSuperUser =
+                role == 'admin' ||
+                role == 'super_admin' ||
+                role == 'supervisor' ||
+                role == 'fom';
+          }
+        } catch (e) {
+          debugPrint('[_initializeFromCache] Error loading role from Hive cache: $e');
+        }
+
+        // FALLBACK 2: Try to get role from user metadata (if available)
+        if (!_isDataCollector && !_isCoordinator) {
+          try {
+            final user = Supabase.instance.client.auth.currentUser;
+            if (user != null) {
+              final metadataRole = user.userMetadata?['role'] as String?;
+              if (metadataRole != null) {
+                final role = metadataRole.toLowerCase();
+                _userRole = role;
+                _isCoordinator =
+                    role == 'coordinator' ||
+                    role == 'field_coordinator' ||
+                    role == 'state_coordinator';
+                _isDataCollector =
+                    role == 'datacollector' ||
+                    role == 'enumerator' ||
+                    role == 'data_collector';
+                _isAdminOrSuperUser =
+                    role == 'admin' ||
+                    role == 'super_admin' ||
+                    role == 'supervisor' ||
+                    role == 'fom';
+              }
+            }
+          } catch (e) {
+            debugPrint('[_initializeFromCache] Error loading role from metadata: $e');
+          }
+        }
       }
-      
+
       // Load data based on role - mirror the online path
       if (_isDataCollector || _isCoordinator) {
         await _loadDataCollectorData();
@@ -213,12 +331,12 @@ class _MMPScreenState extends State<MMPScreen> {
         // Load advance requests from cache if available
         await _loadAdvanceRequests();
       }
-      
+
       // Coordinators also need coordinator data
       if (_isCoordinator) {
         await _loadCoordinatorData();
       }
-      
+
       if (!mounted) return;
       setState(() => _isLoading = false);
     } catch (e) {
@@ -227,14 +345,15 @@ class _MMPScreenState extends State<MMPScreen> {
       setState(() => _isLoading = false);
     }
   }
-  
+
   /// Apply profile data to instance variables
   void _applyProfileData(Map<String, dynamic> profileResponse) {
     _userRole = (profileResponse['role'] as String?)?.toLowerCase() ?? '';
-    _userName = profileResponse['full_name'] as String? ?? 
-                profileResponse['name'] as String? ??
-                profileResponse['email'] as String? ?? 
-                'PACT User';
+    _userName =
+        profileResponse['full_name'] as String? ??
+        profileResponse['name'] as String? ??
+        profileResponse['email'] as String? ??
+        'PACT User';
     _isCoordinator =
         _userRole == 'coordinator' ||
         _userRole == 'field_coordinator' ||
@@ -294,9 +413,9 @@ class _MMPScreenState extends State<MMPScreen> {
   /// Fetch user's enumerator fee based on classification
   Future<void> _loadUserEnumeratorFee() async {
     if (_userId == null) return;
-    
+
     final supabase = Supabase.instance.client;
-    
+
     try {
       // Get user's classification
       final classificationResult = await supabase
@@ -307,15 +426,21 @@ class _MMPScreenState extends State<MMPScreen> {
           .order('effective_from', ascending: false)
           .limit(1)
           .maybeSingle();
-      
+
       if (classificationResult == null) {
-        debugPrint('[_loadUserEnumeratorFee] No classification found, using default fee');
+        debugPrint(
+          '[_loadUserEnumeratorFee] No classification found, using default fee',
+        );
         return;
       }
-      
+
       final classificationLevel = classificationResult['classification_level'];
       final roleScope = classificationResult['role_scope'];
-      
+      debugPrint(
+        '[_loadUserEnumeratorFee] user_classifications from DB: '
+        'classification_level=$classificationLevel, role_scope=$roleScope (raw)',
+      );
+
       // Get fee structure for this classification
       final feeResult = await supabase
           .from('classification_fee_structures')
@@ -326,14 +451,20 @@ class _MMPScreenState extends State<MMPScreen> {
           .order('effective_from', ascending: false)
           .limit(1)
           .maybeSingle();
-      
+
       if (feeResult != null) {
-        final baseFee = (feeResult['site_visit_base_fee_cents'] as num?)?.toDouble() ?? 0;
-        final multiplier = (feeResult['complexity_multiplier'] as num?)?.toDouble() ?? 1.0;
+        final baseFee =
+            (feeResult['site_visit_base_fee_cents'] as num?)?.toDouble() ?? 0;
+        final multiplier =
+            (feeResult['complexity_multiplier'] as num?)?.toDouble() ?? 1.0;
         _userEnumeratorFee = (baseFee * multiplier * 100).roundToDouble() / 100;
-        debugPrint('[_loadUserEnumeratorFee] Calculated fee: $_userEnumeratorFee SDG (level: $classificationLevel)');
+        debugPrint(
+          '[_loadUserEnumeratorFee] Calculated fee: $_userEnumeratorFee SDG (level: $classificationLevel)',
+        );
       } else {
-        debugPrint('[_loadUserEnumeratorFee] No fee structure found, using default');
+        debugPrint(
+          '[_loadUserEnumeratorFee] No fee structure found, using default',
+        );
       }
     } catch (e) {
       debugPrint('[_loadUserEnumeratorFee] Error: $e');
@@ -349,18 +480,21 @@ class _MMPScreenState extends State<MMPScreen> {
       // Check connectivity first - if offline, load from cache directly
       final connectivityResult = await Connectivity().checkConnectivity();
       final isOffline = connectivityResult.contains(ConnectivityResult.none);
-      
+
       if (isOffline) {
-        debugPrint('[_loadDataCollectorData] Offline - loading all data from cache');
+        debugPrint(
+          '[_loadDataCollectorData] Offline - loading all data from cache',
+        );
         await _loadAvailableSitesFromCache();
         await _loadSmartAssignedSitesFromCache();
         await _loadMySitesFromCache();
+        if (_mySites.isEmpty) await _loadMySitesFromSiteVisitsBox();
         await _loadUnsyncedCompletedVisits();
         _groupAvailableSites();
         debugPrint('[_loadDataCollectorData] Offline load completed');
         return;
       }
-      
+
       // Validate session before starting reload (only when online)
       var session = supabase.auth.currentSession;
       if (session == null || session.isExpired) {
@@ -375,6 +509,7 @@ class _MMPScreenState extends State<MMPScreen> {
             await _loadAvailableSitesFromCache();
             await _loadSmartAssignedSitesFromCache();
             await _loadMySitesFromCache();
+            if (_mySites.isEmpty) await _loadMySitesFromSiteVisitsBox();
             await _loadUnsyncedCompletedVisits();
             _groupAvailableSites();
             return;
@@ -391,6 +526,7 @@ class _MMPScreenState extends State<MMPScreen> {
           await _loadAvailableSitesFromCache();
           await _loadSmartAssignedSitesFromCache();
           await _loadMySitesFromCache();
+          if (_mySites.isEmpty) await _loadMySitesFromSiteVisitsBox();
           await _loadUnsyncedCompletedVisits();
           _groupAvailableSites();
           return;
@@ -406,6 +542,7 @@ class _MMPScreenState extends State<MMPScreen> {
         await _loadAvailableSitesFromCache();
         await _loadSmartAssignedSitesFromCache();
         await _loadMySitesFromCache();
+        if (_mySites.isEmpty) await _loadMySitesFromSiteVisitsBox();
         await _loadUnsyncedCompletedVisits();
         _groupAvailableSites();
         return;
@@ -470,6 +607,24 @@ class _MMPScreenState extends State<MMPScreen> {
       _groupAvailableSites();
 
       debugPrint('[_loadDataCollectorData] Reload completed successfully');
+
+      // When online and we have pending offline completions, trigger sync so they upload
+      try {
+        final offlineDb = OfflineDb();
+        final unsyncedVisits = offlineDb.getUnsyncedSiteVisits();
+        if (unsyncedVisits.isNotEmpty) {
+          debugPrint(
+            '[_loadDataCollectorData] Found ${unsyncedVisits.length} unsynced site visit(s), triggering sync',
+          );
+          final syncManager = SyncManager();
+          syncManager.setSupabaseClient(Supabase.instance.client);
+          syncManager.forceSync();
+        }
+      } catch (syncTriggerError) {
+        debugPrint(
+          '[_loadDataCollectorData] Failed to trigger sync: $syncTriggerError',
+        );
+      }
     } catch (e) {
       debugPrint(
         '[_loadDataCollectorData] Error loading data collector data: $e',
@@ -495,6 +650,31 @@ class _MMPScreenState extends State<MMPScreen> {
           );
           // Don't throw - just log and return, don't trigger logout
         }
+      }
+
+      // Fall back to Hive/OfflineDb when any load error occurs (e.g. network
+      // failure after cold start). Ensures sites show in tabs (Drafts, Completed,
+      // etc.) when app thinks it's online but requests fail.
+      debugPrint(
+        '[_loadDataCollectorData] Falling back to offline storage (Hive)',
+      );
+      try {
+        await _loadAvailableSitesFromCache();
+        await _loadSmartAssignedSitesFromCache();
+        await _loadMySitesFromCache();
+        if (_mySites.isEmpty) await _loadMySitesFromSiteVisitsBox();
+        await _loadUnsyncedCompletedVisits();
+        _groupAvailableSites();
+        if (mounted) {
+          setState(() => _isOffline = true);
+        }
+        debugPrint(
+          '[_loadDataCollectorData] Offline fallback completed successfully',
+        );
+      } catch (fallbackError) {
+        debugPrint(
+          '[_loadDataCollectorData] Offline fallback failed: $fallbackError',
+        );
       }
       // Don't rethrow - we don't want reload errors to cause logout
     }
@@ -679,7 +859,7 @@ class _MMPScreenState extends State<MMPScreen> {
       // Check connectivity first
       final connectivityResult = await Connectivity().checkConnectivity();
       final isOffline = connectivityResult.contains(ConnectivityResult.none);
-      
+
       if (isOffline) {
         debugPrint('[_loadAvailableSites] Offline - loading from cache');
         await _loadAvailableSitesFromCache();
@@ -707,12 +887,16 @@ class _MMPScreenState extends State<MMPScreen> {
       // Web app: Users MUST have a state_id assigned to see claimable sites
       // If user has no state assigned, return empty list (no sites to claim)
       if (_userStateName == null || _userStateName!.isEmpty) {
-        debugPrint('[_loadAvailableSites] No state assigned to user - returning empty list (matching web behavior)');
-        debugPrint('[_loadAvailableSites] User stateId: $_userStateId, stateName: $_userStateName');
+        debugPrint(
+          '[_loadAvailableSites] No state assigned to user - returning empty list (matching web behavior)',
+        );
+        debugPrint(
+          '[_loadAvailableSites] User stateId: $_userStateId, stateName: $_userStateName',
+        );
         _availableSites = [];
         return;
       }
-      
+
       // Filter by state (all sites in user's state are claimable, not just locality)
       // This matches web behavior: users can claim any site in their assigned state
       debugPrint('Filtering by state: $_userStateName');
@@ -775,7 +959,9 @@ class _MMPScreenState extends State<MMPScreen> {
           errorStr.contains('no address associated') ||
           errorStr.contains('connection timed out') ||
           errorStr.contains('errno = 7')) {
-        debugPrint('[_loadAvailableSites] Network error - falling back to cache');
+        debugPrint(
+          '[_loadAvailableSites] Network error - falling back to cache',
+        );
         await _loadAvailableSitesFromCache();
         return;
       }
@@ -814,7 +1000,9 @@ class _MMPScreenState extends State<MMPScreen> {
         data: {'sites': sites},
         ttl: const Duration(hours: 24),
       );
-      debugPrint('[_cacheAvailableSites] Cached ${sites.length} available sites');
+      debugPrint(
+        '[_cacheAvailableSites] Cached ${sites.length} available sites',
+      );
     } catch (e) {
       debugPrint('[_cacheAvailableSites] Error caching sites: $e');
     }
@@ -827,13 +1015,21 @@ class _MMPScreenState extends State<MMPScreen> {
         OfflineDb.siteCacheBox,
         'available_sites_$_userId',
       );
-      
+
       if (cachedItem != null && cachedItem.data != null) {
-        final data = cachedItem.data as Map<String, dynamic>;
+        final data = cachedItem.data;
         final sites = data['sites'] as List?;
         if (sites != null) {
-          _availableSites = sites.map((e) => e as Map<String, dynamic>).toList();
-          debugPrint('[_loadAvailableSitesFromCache] Loaded ${_availableSites.length} sites from cache');
+          _availableSites = sites.map((e) {
+            try {
+              return Map<String, dynamic>.from(e as Map);
+            } catch (_) {
+              return <String, dynamic>{};
+            }
+          }).where((e) => e.isNotEmpty).toList();
+          debugPrint(
+            '[_loadAvailableSitesFromCache] Loaded ${_availableSites.length} sites from cache',
+          );
         } else {
           _availableSites = [];
         }
@@ -856,7 +1052,7 @@ class _MMPScreenState extends State<MMPScreen> {
       // Check connectivity first
       final connectivityResult = await Connectivity().checkConnectivity();
       final isOffline = connectivityResult.contains(ConnectivityResult.none);
-      
+
       if (isOffline) {
         debugPrint('[_loadSmartAssignedSites] Offline - loading from cache');
         await _loadSmartAssignedSitesFromCache();
@@ -884,7 +1080,9 @@ class _MMPScreenState extends State<MMPScreen> {
 
       // Filter out cost-acknowledged sites
       List<Map<String, dynamic>> costFilteredSites = allSites.where((site) {
-        final additionalData = _safeParseAdditionalData(site['additional_data']);
+        final additionalData = _safeParseAdditionalData(
+          site['additional_data'],
+        );
         final costAcknowledged =
             site['cost_acknowledged'] ??
             additionalData['cost_acknowledged'] ??
@@ -914,7 +1112,7 @@ class _MMPScreenState extends State<MMPScreen> {
       }
 
       _smartAssignedSites = costFilteredSites;
-      
+
       // Cache for offline use
       await _cacheSmartAssignedSites(costFilteredSites);
     } catch (e) {
@@ -932,7 +1130,9 @@ class _MMPScreenState extends State<MMPScreen> {
           errorStr.contains('no address associated') ||
           errorStr.contains('connection timed out') ||
           errorStr.contains('errno = 7')) {
-        debugPrint('[_loadSmartAssignedSites] Network error - falling back to cache');
+        debugPrint(
+          '[_loadSmartAssignedSites] Network error - falling back to cache',
+        );
         await _loadSmartAssignedSitesFromCache();
         return;
       }
@@ -953,7 +1153,7 @@ class _MMPScreenState extends State<MMPScreen> {
           );
         }
       }
-      
+
       // Try cache as fallback
       if (_smartAssignedSites.isEmpty) {
         await _loadSmartAssignedSitesFromCache();
@@ -961,7 +1161,9 @@ class _MMPScreenState extends State<MMPScreen> {
     }
   }
 
-  Future<void> _cacheSmartAssignedSites(List<Map<String, dynamic>> sites) async {
+  Future<void> _cacheSmartAssignedSites(
+    List<Map<String, dynamic>> sites,
+  ) async {
     try {
       final offlineDb = OfflineDb();
       await offlineDb.cacheItem(
@@ -970,7 +1172,9 @@ class _MMPScreenState extends State<MMPScreen> {
         data: {'sites': sites},
         ttl: const Duration(hours: 24),
       );
-      debugPrint('[_cacheSmartAssignedSites] Cached ${sites.length} assigned sites');
+      debugPrint(
+        '[_cacheSmartAssignedSites] Cached ${sites.length} assigned sites',
+      );
     } catch (e) {
       debugPrint('[_cacheSmartAssignedSites] Error caching sites: $e');
     }
@@ -983,13 +1187,21 @@ class _MMPScreenState extends State<MMPScreen> {
         OfflineDb.siteCacheBox,
         'smart_assigned_sites_$_userId',
       );
-      
+
       if (cachedItem != null && cachedItem.data != null) {
-        final data = cachedItem.data as Map<String, dynamic>;
+        final data = cachedItem.data;
         final sites = data['sites'] as List?;
         if (sites != null) {
-          _smartAssignedSites = sites.map((e) => e as Map<String, dynamic>).toList();
-          debugPrint('[_loadSmartAssignedSitesFromCache] Loaded ${_smartAssignedSites.length} sites from cache');
+          _smartAssignedSites = sites.map((e) {
+            try {
+              return Map<String, dynamic>.from(e as Map);
+            } catch (_) {
+              return <String, dynamic>{};
+            }
+          }).where((e) => e.isNotEmpty).toList();
+          debugPrint(
+            '[_loadSmartAssignedSitesFromCache] Loaded ${_smartAssignedSites.length} sites from cache',
+          );
         } else {
           _smartAssignedSites = [];
         }
@@ -998,7 +1210,9 @@ class _MMPScreenState extends State<MMPScreen> {
         _smartAssignedSites = [];
       }
     } catch (e) {
-      debugPrint('[_loadSmartAssignedSitesFromCache] Error loading from cache: $e');
+      debugPrint(
+        '[_loadSmartAssignedSitesFromCache] Error loading from cache: $e',
+      );
       _smartAssignedSites = [];
     }
   }
@@ -1012,7 +1226,7 @@ class _MMPScreenState extends State<MMPScreen> {
       // Check connectivity first
       final connectivityResult = await Connectivity().checkConnectivity();
       final isOffline = connectivityResult.contains(ConnectivityResult.none);
-      
+
       if (isOffline) {
         debugPrint('[_loadMySites] Offline - loading from cache');
         await _loadMySitesFromCache();
@@ -1060,7 +1274,7 @@ class _MMPScreenState extends State<MMPScreen> {
 
       // Merge with any pending offline data before setting state
       _mySites = await _mergeWithOfflineData(allSites);
-      
+
       // Cache for offline use (only server data, not merged)
       await _cacheMySites(allSites);
     } catch (e) {
@@ -1093,7 +1307,7 @@ class _MMPScreenState extends State<MMPScreen> {
           debugPrint('[_loadMySites] Session refresh failed: $refreshError');
         }
       }
-      
+
       // Try cache as fallback
       if (_mySites.isEmpty) {
         await _loadMySitesFromCache();
@@ -1123,15 +1337,23 @@ class _MMPScreenState extends State<MMPScreen> {
         OfflineDb.siteCacheBox,
         'my_sites_$_userId',
       );
-      
+
       if (cachedItem != null && cachedItem.data != null) {
-        final data = cachedItem.data as Map<String, dynamic>;
+        final data = cachedItem.data;
         final sites = data['sites'] as List?;
         if (sites != null) {
-          final cachedSites = sites.map((e) => e as Map<String, dynamic>).toList();
+          final cachedSites = sites.map((e) {
+            try {
+              return Map<String, dynamic>.from(e as Map);
+            } catch (_) {
+              return <String, dynamic>{};
+            }
+          }).where((e) => e.isNotEmpty).toList();
           // Merge with offline data when loading from cache
           _mySites = await _mergeWithOfflineData(cachedSites);
-          debugPrint('[_loadMySitesFromCache] Loaded ${_mySites.length} sites from cache (merged with offline)');
+          debugPrint(
+            '[_loadMySitesFromCache] Loaded ${_mySites.length} sites from cache (merged with offline)',
+          );
         } else {
           _mySites = [];
         }
@@ -1145,11 +1367,103 @@ class _MMPScreenState extends State<MMPScreen> {
     }
   }
 
-  /// Safely parse additional_data which may be a JSON string or Map
+  /// Build _mySites from the site_visits box when cache is empty (e.g. cold start offline).
+  Future<void> _loadMySitesFromSiteVisitsBox() async {
+    try {
+      if (_userId == null) return;
+
+      final offlineDb = OfflineDb();
+      final allVisits = offlineDb.getAllSiteVisits();
+      if (allVisits.isEmpty) {
+        debugPrint('[_loadMySitesFromSiteVisitsBox] No site visits in box');
+        return;
+      }
+
+      final bySite = <String, OfflineSiteVisit>{};
+      for (final v in allVisits) {
+        final existing = bySite[v.siteEntryId];
+        final keepNew = existing == null ||
+            _offlineVisitPriority(v.status) > _offlineVisitPriority(existing.status) ||
+            (v.startedAt.isAfter(existing.startedAt) &&
+                _offlineVisitPriority(v.status) == _offlineVisitPriority(existing.status));
+        if (keepNew) {
+          bySite[v.siteEntryId] = v;
+        }
+      }
+
+      _mySites = bySite.values.map((v) => _offlineVisitToSiteMap(v)).toList();
+      debugPrint(
+        '[_loadMySitesFromSiteVisitsBox] Loaded ${_mySites.length} sites from site_visits box',
+      );
+    } catch (e) {
+      debugPrint('[_loadMySitesFromSiteVisitsBox] Error: $e');
+    }
+  }
+
+  int _offlineVisitPriority(String status) {
+    switch (status.toLowerCase()) {
+      case 'completed':
+        return 3;
+      case 'started':
+      case 'draft':
+        return 2;
+      case 'accepted':
+        return 1;
+      default:
+        return 0;
+    }
+  }
+
+  Map<String, dynamic> _offlineVisitToSiteMap(OfflineSiteVisit v) {
+    final status = v.status.toLowerCase();
+    final String displayStatus;
+    final String? visitStartedAt;
+    final String? visitCompletedAt;
+    if (status == 'completed') {
+      displayStatus = 'Completed';
+      visitStartedAt = v.startedAt.toIso8601String();
+      visitCompletedAt = v.completedAt?.toIso8601String();
+    } else if (status == 'draft' || status == 'started') {
+      displayStatus = 'In Progress';
+      visitStartedAt = v.startedAt.toIso8601String();
+      visitCompletedAt = null;
+    } else {
+      displayStatus = 'Accepted';
+      visitStartedAt = null;
+      visitCompletedAt = null;
+    }
+
+    return {
+      'id': v.siteEntryId,
+      'site_name': v.siteName,
+      'siteName': v.siteName,
+      'site_code': v.siteCode,
+      'siteCode': v.siteCode,
+      'state': v.state,
+      'locality': v.locality,
+      'status': displayStatus,
+      'visit_started_at': visitStartedAt,
+      'visit_completed_at': visitCompletedAt,
+      'visit_started_by': _userId,
+      'accepted_by': _userId,
+      'additional_data': {
+        'start_location': v.startLocation,
+        if (v.status == 'completed') 'end_location': v.endLocation,
+      },
+      '_offline_modified': true,
+      '_synced': v.synced,
+      if (v.status == 'draft' || v.status == 'started') '_isOfflineOnly': true,
+    };
+  }
+
+  /// Safely parse additional_data which may be a JSON string or Map (e.g. from cache).
   Map<String, dynamic> _safeParseAdditionalData(dynamic data) {
     if (data is String) {
       try {
-        return Map<String, dynamic>.from(jsonDecode(data) as Map<String, dynamic>);
+        final decoded = jsonDecode(data);
+        return decoded is Map
+            ? Map<String, dynamic>.from(decoded as Map)
+            : {};
       } catch (_) {
         return {};
       }
@@ -1161,6 +1475,14 @@ class _MMPScreenState extends State<MMPScreen> {
     return {};
   }
 
+  /// Safely get a nested map (e.g. start_location) from additional_data.
+  Map<String, dynamic>? _safeStartLocation(Map<String, dynamic> additionalData) {
+    final raw = additionalData['start_location'];
+    if (raw == null) return null;
+    if (raw is Map) return Map<String, dynamic>.from(raw as Map);
+    return null;
+  }
+
   /// Merge server/cached sites with pending offline data from OfflineDb
   Future<List<Map<String, dynamic>>> _mergeWithOfflineData(
     List<Map<String, dynamic>> sites,
@@ -1168,61 +1490,66 @@ class _MMPScreenState extends State<MMPScreen> {
     try {
       final offlineDb = OfflineDb();
       final pendingVisits = offlineDb.getPendingSiteVisits();
-      
+
       if (pendingVisits.isEmpty) {
         return sites;
       }
-      
-      debugPrint('[_mergeWithOfflineData] Found ${pendingVisits.length} pending offline visits');
-      
+
+      debugPrint(
+        '[_mergeWithOfflineData] Found ${pendingVisits.length} pending offline visits',
+      );
+
       // Create a map of pending visits by siteEntryId for quick lookup
       final pendingMap = <String, OfflineSiteVisit>{};
       for (final visit in pendingVisits) {
         pendingMap[visit.siteEntryId] = visit;
       }
-      
+
       // Merge offline data into sites
       final mergedSites = sites.map((site) {
         final siteId = site['id']?.toString();
         if (siteId == null) return site;
-        
+
         final pendingVisit = pendingMap[siteId];
         if (pendingVisit == null) return site;
-        
+
         // Merge offline data into the site
         final mergedSite = Map<String, dynamic>.from(site);
         mergedSite['_offline_modified'] = true;
         mergedSite['_synced'] = false;
-        
+
         // Override status/category from offline visit so local changes are visible
         if (pendingVisit.status == 'completed') {
           mergedSite['status'] = 'Completed';
           mergedSite['_category'] = 'completed';
           if (pendingVisit.completedAt != null) {
-            mergedSite['visit_completed_at'] = pendingVisit.completedAt!.toIso8601String();
+            mergedSite['visit_completed_at'] = pendingVisit.completedAt!
+                .toIso8601String();
           }
         } else if (pendingVisit.status == 'draft') {
           // Draft means started but not completed - should show as Ongoing
           mergedSite['status'] = 'Ongoing';
           mergedSite['_category'] = 'ongoing';
-          if (pendingVisit.startedAt != null) {
-            mergedSite['visit_started_at'] = pendingVisit.startedAt.toIso8601String();
-          }
+          mergedSite['visit_started_at'] = pendingVisit.startedAt
+              .toIso8601String();
         }
-        
+
         // Always normalize additional_data to a Map for consistent handling
-        final additionalData = _safeParseAdditionalData(site['additional_data']);
-        
+        final additionalData = _safeParseAdditionalData(
+          site['additional_data'],
+        );
+
         // Preserve GPS coordinates from offline visit
         if (pendingVisit.startLocation != null) {
           additionalData['start_location'] = pendingVisit.startLocation;
         }
-        
+
         // Always set the normalized additional_data
         mergedSite['additional_data'] = additionalData;
-        
+
         // Preserve completion data
-        if (pendingVisit.status == 'completed' || pendingVisit.status == 'draft') {
+        if (pendingVisit.status == 'completed' ||
+            pendingVisit.status == 'draft') {
           if (pendingVisit.notes != null) {
             mergedSite['_offline_notes'] = pendingVisit.notes;
           }
@@ -1233,11 +1560,13 @@ class _MMPScreenState extends State<MMPScreen> {
             mergedSite['_offline_end_location'] = pendingVisit.endLocation;
           }
         }
-        
-        debugPrint('[_mergeWithOfflineData] Merged offline data for site: $siteId (status: ${pendingVisit.status})');
+
+        debugPrint(
+          '[_mergeWithOfflineData] Merged offline data for site: $siteId (status: ${pendingVisit.status})',
+        );
         return mergedSite;
       }).toList();
-      
+
       return mergedSites;
     } catch (e) {
       debugPrint('[_mergeWithOfflineData] Error merging offline data: $e');
@@ -1285,7 +1614,7 @@ class _MMPScreenState extends State<MMPScreen> {
               .select('site_visit_id, is_synced')
               .inFilter('site_visit_id', siteIds);
 
-          if (reportsResponse != null && reportsResponse is List) {
+          if (reportsResponse is List) {
             debugPrint(
               '[_loadUnsyncedCompletedVisits] Found ${reportsResponse.length} reports for ${siteIds.length} sites',
             );
@@ -1317,15 +1646,15 @@ class _MMPScreenState extends State<MMPScreen> {
           }
         }
       } catch (e) {
-        debugPrint(
-          '[_loadUnsyncedCompletedVisits] Error querying reports: $e',
-        );
+        debugPrint('[_loadUnsyncedCompletedVisits] Error querying reports: $e');
       }
 
       // Also check additional_data for visit_report_submitted flag (backup check)
       final sitesWithReportFlag = allCompletedSites
           .where((site) {
-            final additionalData = _safeParseAdditionalData(site['additional_data']);
+            final additionalData = _safeParseAdditionalData(
+              site['additional_data'],
+            );
             return additionalData['visit_report_submitted'] == true;
           })
           .map((site) => site['id']?.toString())
@@ -1347,14 +1676,14 @@ class _MMPScreenState extends State<MMPScreen> {
       );
 
       // Filter for sites that are NOT synced
-      List<Map<String, dynamic>> unsyncedSites = allCompletedSites
-          .where((site) {
-            final siteId = site['id']?.toString();
-            if (siteId == null) return false;
-            // Site is unsynced if it doesn't have a synced report
-            return !allSyncedSiteIds.contains(siteId);
-          })
-          .toList();
+      List<Map<String, dynamic>> unsyncedSites = allCompletedSites.where((
+        site,
+      ) {
+        final siteId = site['id']?.toString();
+        if (siteId == null) return false;
+        // Site is unsynced if it doesn't have a synced report
+        return !allSyncedSiteIds.contains(siteId);
+      }).toList();
 
       // Filter by project membership (for non-admin users)
       if (!_isAdminOrSuperUser) {
@@ -1477,28 +1806,180 @@ class _MMPScreenState extends State<MMPScreen> {
   }
 
   Future<void> _claimSite(Map<String, dynamic> site) async {
+    debugPrint('[Claim] _claimSite called for site ${site['id']} (${site['site_name'] ?? site['siteName']})');
     try {
       if (_userId == null) return;
 
-      // Use atomic claim RPC for dispatched sites (first-claim system)
+      // Show loading spinner while calculating
+      if (mounted) {
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (BuildContext context) {
+            return Center(
+              child: Container(
+                padding: const EdgeInsets.all(32),
+                margin: const EdgeInsets.symmetric(horizontal: 40),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [Colors.white, Colors.blue.shade50],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  borderRadius: BorderRadius.circular(24),
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppColors.primaryBlue.withOpacity(0.3),
+                      blurRadius: 20,
+                      offset: const Offset(0, 10),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // Animated spinner with gradient border
+                    Container(
+                      width: 70,
+                      height: 70,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        gradient: LinearGradient(
+                          colors: [
+                            AppColors.primaryBlue,
+                            AppColors.primaryBlue.withOpacity(0.6),
+                          ],
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: AppColors.primaryBlue.withOpacity(0.4),
+                            blurRadius: 15,
+                            offset: const Offset(0, 5),
+                          ),
+                        ],
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.all(4),
+                        child: CircularProgressIndicator(
+                          strokeWidth: 4,
+                          valueColor: const AlwaysStoppedAnimation<Color>(
+                            Colors.white,
+                          ),
+                          backgroundColor: Colors.white.withOpacity(0.3),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.calculate_rounded,
+                          color: AppColors.primaryBlue,
+                          size: 22,
+                        ),
+                        const SizedBox(width: 10),
+                        Text(
+                          'Calculating fees',
+                          style: GoogleFonts.poppins(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.textDark,
+                            letterSpacing: 0.3,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Please wait...',
+                      style: GoogleFonts.poppins(
+                        fontSize: 13,
+                        color: AppColors.textLight,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      }
+
+      // Simulate calculation delay for better UX - 6 seconds
+      await Future.delayed(const Duration(seconds: 6));
+
+      // Calculate costs for the confirmation dialog
+      final storedEnumeratorFee =
+          (site['enumerator_fee'] as num?)?.toDouble() ?? 0.0;
+      final transportFee = (site['transport_fee'] as num?)?.toDouble() ?? 0.0;
+      final status = site['status'] ?? 'Pending';
+      final isClaimableSite = status.toLowerCase() == 'dispatched';
+      final enumeratorFee = (storedEnumeratorFee > 0)
+          ? storedEnumeratorFee
+          : (isClaimableSite ? _userEnumeratorFee : 0.0);
+      final totalCost = enumeratorFee + transportFee;
+
+      // Close loading spinner
+      if (mounted) {
+        Navigator.of(context).pop();
+      }
+
+      // Show confirmation dialog before claiming
+      final confirmed = await _showClaimConfirmationDialog(
+        site: site,
+        totalCost: totalCost,
+      );
+
+      if (confirmed != true) {
+        // User cancelled
+        return;
+      }
+
+      // User confirmed - proceed with claim.
+      // Match web ClaimSiteButton: send full params (fee + normalized role_scope) so backend
+      // uses our values and does not SELECT from user_classifications (avoids enum error when DB has "enumerator").
       try {
+        final feeService = ClaimFeeService();
+        final breakdown = await feeService.calculateFeeForClaim(
+          site['id'] as String,
+          _userId!,
+        );
+        final transportFee = (site['transport_fee'] as num?)?.toDouble() ?? 0.0;
+        final enumeratorFee = breakdown?.enumeratorFee ?? _userEnumeratorFee;
+        final totalPayout = (breakdown?.totalPayout) ?? (enumeratorFee + transportFee);
+        final roleScope = ClaimFeeService.normalizeRoleScopeForEnum(breakdown?.roleScope);
+
+        final params = {
+          'p_site_id': site['id'],
+          'p_user_id': _userId!,
+          'p_enumerator_fee': enumeratorFee,
+          'p_total_cost': totalPayout,
+          'p_classification_level': breakdown?.classificationLevel,
+          'p_role_scope': roleScope,
+          'p_fee_source': breakdown?.feeSource ?? 'default',
+        };
+        debugPrint('[Claim] Calling claim_site_visit RPC with params: $params');
         final result = await Supabase.instance.client.rpc(
           'claim_site_visit',
-          params: {'p_site_id': site['id'], 'p_user_id': _userId!},
+          params: params,
         );
 
         final claimResult = result as Map<String, dynamic>?;
+        debugPrint('[Claim] RPC raw result: $claimResult');
 
         if (claimResult == null || (claimResult['success'] as bool?) != true) {
           String description =
               claimResult?['message'] as String? ?? 'Could not claim site';
+          debugPrint(
+            '[Claim] RPC returned failure: success=${claimResult?['success']}, '
+            'message=${claimResult?['message']}, error=${claimResult?['error']}',
+          );
 
           if (claimResult?['error'] == 'ALREADY_CLAIMED') {
             description =
                 'Another enumerator claimed this site first. Try a different site.';
-            // Immediately remove this site from the claimable list
-            _availableSites.removeWhere((s) => s['id'] == site['id']);
-            if (mounted) setState(() {});
           } else if (claimResult?['error'] == 'CLAIM_IN_PROGRESS') {
             description =
                 'Someone else is claiming this site right now. Try again in a moment.';
@@ -1509,15 +1990,43 @@ class _MMPScreenState extends State<MMPScreen> {
               SnackBar(content: Text(description), backgroundColor: Colors.red),
             );
           }
-          
-          // Refresh the list in background to get updated data
-          _loadAvailableSites().then((_) {
-            if (mounted) setState(() {});
-          });
           return;
         }
 
-        // RPC succeeded
+        // RPC succeeded - now update to 'Accepted' so the site goes
+        // directly to My Sites > Inbox (not the Assigned tab).
+        try {
+          final now = DateTime.now().toIso8601String();
+
+          // Parse existing additional_data and add claim_type
+          final additionalData = _safeParseAdditionalData(
+            site['additional_data'],
+          );
+          additionalData['claim_type'] = 'self_claim';
+
+          await Supabase.instance.client
+              .from('mmp_site_entries')
+              .update({
+                'status': 'Accepted',
+                'accepted_by': _userId,
+                'accepted_at': now,
+                'additional_data': additionalData,
+                'cost_acknowledged': true,
+                'cost_acknowledged_at': now,
+                'cost_acknowledged_by': _userId,
+                'updated_at': now,
+              })
+              .eq('id', site['id']);
+          debugPrint(
+            '[_claimSite] Follow-up update succeeded for site ${site['id']}',
+          );
+        } catch (updateError) {
+          // Non-fatal: site is still claimed, just status might need manual fix
+          debugPrint(
+            '[_claimSite] Follow-up update failed for site ${site['id']}: $updateError',
+          );
+        }
+
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
@@ -1526,8 +2035,11 @@ class _MMPScreenState extends State<MMPScreen> {
             ),
           );
         }
-      } catch (e) {
-        // RPC failed
+      } catch (e, stack) {
+        // RPC failed - log full error to trace enum/backend issues
+        debugPrint('[Claim] RPC threw exception: $e');
+        debugPrint('[Claim] Exception type: ${e.runtimeType}');
+        debugPrint('[Claim] Stack trace: $stack');
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -1541,15 +2053,6 @@ class _MMPScreenState extends State<MMPScreen> {
           );
         }
         return;
-      }
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Site claimed successfully!'),
-            backgroundColor: Colors.green,
-          ),
-        );
       }
 
       // Reload data
@@ -1569,10 +2072,486 @@ class _MMPScreenState extends State<MMPScreen> {
     }
   }
 
+  /// Show a confirmation dialog with total cost calculation before claiming a site
+  Future<bool?> _showClaimConfirmationDialog({
+    required Map<String, dynamic> site,
+    required double totalCost,
+  }) async {
+    final siteName = site['site_name'] ?? site['siteName'] ?? 'Unknown Site';
+    final siteCode = site['site_code'] ?? site['siteCode'] ?? 'N/A';
+    final state = site['state'] ?? 'Unknown';
+    final locality = site['locality'] ?? 'Unknown';
+    final siteType = site['site_type'] ?? site['siteType'] ?? '';
+    final hub = site['hub_name'] ?? site['hubName'] ?? site['hub_office'] ?? '';
+
+    return showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        return Dialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(24),
+          ),
+          elevation: 8,
+          backgroundColor: Colors.transparent,
+          insetPadding: const EdgeInsets.symmetric(
+            horizontal: 16,
+            vertical: 24,
+          ),
+          child: Container(
+            constraints: const BoxConstraints(maxWidth: 400, maxHeight: 700),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(24),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.1),
+                  blurRadius: 20,
+                  offset: const Offset(0, 10),
+                ),
+              ],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Header with gradient background
+                Container(
+                  padding: const EdgeInsets.all(24),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        AppColors.primaryBlue,
+                        AppColors.primaryBlue.withOpacity(0.85),
+                      ],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    borderRadius: const BorderRadius.only(
+                      topLeft: Radius.circular(24),
+                      topRight: Radius.circular(24),
+                    ),
+                  ),
+                  child: Column(
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withOpacity(0.2),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: const Icon(
+                              Icons.handshake_rounded,
+                              color: Colors.white,
+                              size: 28,
+                            ),
+                          ),
+                          const SizedBox(width: 16),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Claim Site',
+                                  style: GoogleFonts.poppins(
+                                    fontSize: 22,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                                Text(
+                                  'Review assignment details',
+                                  style: GoogleFonts.poppins(
+                                    fontSize: 13,
+                                    color: Colors.white.withOpacity(0.9),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+
+                // Content - Wrapped in Flexible to prevent overflow
+                Flexible(
+                  child: SingleChildScrollView(
+                    child: Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          // Site Name with icon
+                          Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(8),
+                                decoration: BoxDecoration(
+                                  color: AppColors.primaryBlue.withOpacity(0.1),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Icon(
+                                  Icons.location_city_rounded,
+                                  color: AppColors.primaryBlue,
+                                  size: 20,
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Text(
+                                  siteName,
+                                  style: GoogleFonts.poppins(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.bold,
+                                    color: AppColors.textDark,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 20),
+
+                          // Site Details Card
+                          Container(
+                            padding: const EdgeInsets.all(18),
+                            decoration: BoxDecoration(
+                              color: Colors.grey[50],
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(
+                                color: Colors.grey[200]!,
+                                width: 1,
+                              ),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'SITE INFORMATION',
+                                  style: GoogleFonts.poppins(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w700,
+                                    letterSpacing: 1,
+                                    color: AppColors.textLight,
+                                  ),
+                                ),
+                                const SizedBox(height: 16),
+
+                                // Site Code
+                                _buildSiteDetailRow(
+                                  Icons.qr_code_rounded,
+                                  'Site Code',
+                                  siteCode,
+                                ),
+                                const SizedBox(height: 14),
+
+                                // Location
+                                _buildSiteDetailRow(
+                                  Icons.location_on_rounded,
+                                  'Location',
+                                  '$locality, $state',
+                                ),
+
+                                // Hub (if available)
+                                if (hub.isNotEmpty) ...[
+                                  const SizedBox(height: 14),
+                                  _buildSiteDetailRow(
+                                    Icons.business_rounded,
+                                    'Hub Office',
+                                    hub,
+                                  ),
+                                ],
+
+                                // Site Type (if available)
+                                if (siteType.isNotEmpty) ...[
+                                  const SizedBox(height: 14),
+                                  _buildSiteDetailRow(
+                                    Icons.category_rounded,
+                                    'Site Type',
+                                    siteType,
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+
+                          const SizedBox(height: 20),
+
+                          // Total Payment Card - Eye-catching
+                          Container(
+                            padding: const EdgeInsets.all(24),
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                colors: [
+                                  const Color(0xFF10B981),
+                                  const Color(0xFF059669),
+                                ],
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
+                              ),
+                              borderRadius: BorderRadius.circular(16),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: const Color(
+                                    0xFF10B981,
+                                  ).withOpacity(0.4),
+                                  blurRadius: 12,
+                                  offset: const Offset(0, 6),
+                                ),
+                              ],
+                            ),
+                            child: Column(
+                              children: [
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(
+                                      Icons.payments_rounded,
+                                      color: Colors.white.withOpacity(0.9),
+                                      size: 24,
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Text(
+                                      'Total Payment',
+                                      style: GoogleFonts.poppins(
+                                        fontSize: 15,
+                                        color: Colors.white.withOpacity(0.95),
+                                        fontWeight: FontWeight.w600,
+                                        letterSpacing: 0.5,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 12),
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Padding(
+                                      padding: const EdgeInsets.only(top: 6),
+                                      child: Text(
+                                        'SDG',
+                                        style: GoogleFonts.poppins(
+                                          fontSize: 18,
+                                          fontWeight: FontWeight.w600,
+                                          color: Colors.white.withOpacity(0.9),
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Text(
+                                      totalCost.toStringAsFixed(0),
+                                      style: GoogleFonts.poppins(
+                                        fontSize: 48,
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.white,
+                                        height: 1.1,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 8),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 12,
+                                    vertical: 6,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white.withOpacity(0.2),
+                                    borderRadius: BorderRadius.circular(20),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(
+                                        Icons.check_circle_rounded,
+                                        size: 14,
+                                        color: Colors.white.withOpacity(0.9),
+                                      ),
+                                      const SizedBox(width: 6),
+                                      Text(
+                                        'Upon visit completion',
+                                        style: GoogleFonts.poppins(
+                                          fontSize: 11,
+                                          color: Colors.white.withOpacity(0.9),
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+
+                          const SizedBox(height: 18),
+
+                          // Info message
+                          Container(
+                            padding: const EdgeInsets.all(14),
+                            decoration: BoxDecoration(
+                              color: Colors.blue[50],
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: Colors.blue[100]!,
+                                width: 1,
+                              ),
+                            ),
+                            child: Row(
+                              children: [
+                                Icon(
+                                  Icons.info_rounded,
+                                  color: Colors.blue[700],
+                                  size: 20,
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Text(
+                                    'By claiming this site, you commit to completing the visit and submitting the required report.',
+                                    style: GoogleFonts.poppins(
+                                      fontSize: 12,
+                                      color: Colors.blue[900],
+                                      height: 1.4,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+
+                // Action Buttons
+                Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: Colors.grey[50],
+                    borderRadius: const BorderRadius.only(
+                      bottomLeft: Radius.circular(24),
+                      bottomRight: Radius.circular(24),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: () => Navigator.of(context).pop(false),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: AppColors.textLight,
+                            side: BorderSide(
+                              color: Colors.grey[300]!,
+                              width: 1.5,
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            padding: const EdgeInsets.symmetric(vertical: 16),
+                          ),
+                          child: Text(
+                            'Cancel',
+                            style: GoogleFonts.poppins(
+                              fontWeight: FontWeight.w600,
+                              fontSize: 15,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        flex: 2,
+                        child: ElevatedButton(
+                          onPressed: () => Navigator.of(context).pop(true),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.primaryBlue,
+                            foregroundColor: Colors.white,
+                            elevation: 2,
+                            shadowColor: AppColors.primaryBlue.withOpacity(0.5),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            padding: const EdgeInsets.symmetric(vertical: 16),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const Icon(Icons.check_circle_rounded, size: 20),
+                              const SizedBox(width: 8),
+                              Text(
+                                'Accept & Claim',
+                                style: GoogleFonts.poppins(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 15,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  /// Helper method to build a site detail row in the dialog
+  Widget _buildSiteDetailRow(IconData icon, String label, String value) {
+    return Row(
+      children: [
+        Container(
+          padding: const EdgeInsets.all(6),
+          decoration: BoxDecoration(
+            color: AppColors.primaryBlue.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(6),
+          ),
+          child: Icon(icon, color: AppColors.primaryBlue, size: 18),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                label,
+                style: GoogleFonts.poppins(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.textLight,
+                  letterSpacing: 0.5,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                value,
+                style: GoogleFonts.poppins(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                  color: AppColors.textDark,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
   /// Reclaim a site - release it back to the dispatch pool (Admin/Super Admin only)
   Future<void> _reclaimSite(Map<String, dynamic> site) async {
     // Strict admin check - only admin/super_admin can reclaim
-    final isAdminForReclaim = _userRole == 'admin' || _userRole == 'super_admin' || _userRole == 'superadmin';
+    final isAdminForReclaim =
+        _userRole == 'admin' ||
+        _userRole == 'super_admin' ||
+        _userRole == 'superadmin';
     if (!isAdminForReclaim) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -1584,10 +2563,10 @@ class _MMPScreenState extends State<MMPScreen> {
       }
       return;
     }
-    
+
     final siteName = site['site_name'] ?? site['siteName'] ?? 'Unknown Site';
     final siteId = site['id'];
-    
+
     // Show confirmation dialog
     final reason = await showDialog<String>(
       context: context,
@@ -1628,15 +2607,18 @@ class _MMPScreenState extends State<MMPScreen> {
                 Navigator.pop(context, controller.text.trim());
               },
               style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-              child: const Text('Reclaim', style: TextStyle(color: Colors.white)),
+              child: const Text(
+                'Reclaim',
+                style: TextStyle(color: Colors.white),
+              ),
             ),
           ],
         );
       },
     );
-    
+
     if (reason == null || reason.isEmpty) return;
-    
+
     try {
       // Try using RPC first
       try {
@@ -1648,9 +2630,9 @@ class _MMPScreenState extends State<MMPScreen> {
             'p_reason': reason,
           },
         );
-        
+
         final reclaimResult = result as Map<String, dynamic>?;
-        
+
         if (reclaimResult != null && reclaimResult['success'] == true) {
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
@@ -1665,13 +2647,16 @@ class _MMPScreenState extends State<MMPScreen> {
           if (mounted) setState(() {});
           return;
         } else {
-          final errorMsg = reclaimResult?['message'] ?? 'Failed to reclaim site';
+          final errorMsg =
+              reclaimResult?['message'] ?? 'Failed to reclaim site';
           throw Exception(errorMsg);
         }
       } catch (rpcError) {
         // RPC might not exist, fall back to direct update
-        debugPrint('[_reclaimSite] RPC failed, trying direct update: $rpcError');
-        
+        debugPrint(
+          '[_reclaimSite] RPC failed, trying direct update: $rpcError',
+        );
+
         // Direct update as fallback - clear ALL claim-related fields
         await Supabase.instance.client
             .from('mmp_site_entries')
@@ -1686,7 +2671,7 @@ class _MMPScreenState extends State<MMPScreen> {
               'updated_at': DateTime.now().toIso8601String(),
             })
             .eq('id', siteId);
-        
+
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -1695,7 +2680,7 @@ class _MMPScreenState extends State<MMPScreen> {
             ),
           );
         }
-        
+
         // Reload data
         await _loadDataCollectorData();
         if (mounted) setState(() {});
@@ -2003,10 +2988,9 @@ class _MMPScreenState extends State<MMPScreen> {
 
       // View Report Button for completed visits (Admin/FOM/ICT only)
       if ((status.toString().toLowerCase() == 'completed' ||
-              status.toString().toLowerCase() == 'complete')) {
-        final canViewReport = _isAdminOrSuperUser || 
-                              _userRole == 'fom' ||
-                              _userRole == 'ict';
+          status.toString().toLowerCase() == 'complete')) {
+        final canViewReport =
+            _isAdminOrSuperUser || _userRole == 'fom' || _userRole == 'ict';
         if (canViewReport) {
           buttons.add(
             Expanded(
@@ -2028,17 +3012,21 @@ class _MMPScreenState extends State<MMPScreen> {
 
     // Reclaim Button (Admin/Super Admin only) - for claimed/accepted sites that belong to other users
     // More restrictive than _isAdminOrSuperUser - only true admins can reclaim
-    final isAdminForReclaim = _userRole == 'admin' || _userRole == 'super_admin' || _userRole == 'superadmin';
+    final isAdminForReclaim =
+        _userRole == 'admin' ||
+        _userRole == 'super_admin' ||
+        _userRole == 'superadmin';
     if (isAdminForReclaim) {
       final statusLower = status.toLowerCase().replaceAll(' ', '_');
       final acceptedBy = site['accepted_by']?.toString();
-      final isClaimedOrAccepted = statusLower == 'claimed' || 
-                                   statusLower == 'accepted' || 
-                                   statusLower == 'assigned' ||
-                                   statusLower == 'in_progress' ||
-                                   statusLower == 'ongoing';
+      final isClaimedOrAccepted =
+          statusLower == 'claimed' ||
+          statusLower == 'accepted' ||
+          statusLower == 'assigned' ||
+          statusLower == 'in_progress' ||
+          statusLower == 'ongoing';
       final isOtherUser = acceptedBy != null && acceptedBy != _userId;
-      
+
       if (isClaimedOrAccepted && isOtherUser) {
         buttons.add(
           Expanded(
@@ -2098,7 +3086,7 @@ class _MMPScreenState extends State<MMPScreen> {
   /// Send an SMS message to a contact
   Future<void> _sendSMS(String phoneNumber, {String? message}) async {
     final cleanPhone = phoneNumber.replaceAll(RegExp(r'[^\d+]'), '');
-    final uri = message != null 
+    final uri = message != null
         ? Uri.parse('sms:$cleanPhone?body=${Uri.encodeComponent(message)}')
         : Uri.parse('sms:$cleanPhone');
     try {
@@ -2131,7 +3119,7 @@ class _MMPScreenState extends State<MMPScreen> {
   Future<void> _openWhatsApp(String phoneNumber, {String? message}) async {
     // Remove any non-digit characters except +
     String cleanPhone = phoneNumber.replaceAll(RegExp(r'[^\d+]'), '');
-    
+
     // Handle country codes properly
     if (cleanPhone.startsWith('+')) {
       // Already has country code, just remove the +
@@ -2144,11 +3132,13 @@ class _MMPScreenState extends State<MMPScreen> {
       cleanPhone = '249${cleanPhone.substring(1)}';
     }
     // If it's just digits without any prefix and has 9+ digits, assume it already has country code
-    
+
     final uri = message != null
-        ? Uri.parse('https://wa.me/$cleanPhone?text=${Uri.encodeComponent(message)}')
+        ? Uri.parse(
+            'https://wa.me/$cleanPhone?text=${Uri.encodeComponent(message)}',
+          )
         : Uri.parse('https://wa.me/$cleanPhone');
-    
+
     try {
       if (await canLaunchUrl(uri)) {
         await launchUrl(uri, mode: LaunchMode.externalApplication);
@@ -2175,12 +3165,15 @@ class _MMPScreenState extends State<MMPScreen> {
     }
   }
 
-  /// Initiate an in-app WebRTC call to a PACT user
-  Future<void> _initiateInAppCall(String targetUserId, String targetUserName, {bool isAudioOnly = true}) async {
+  /// Initiate an in-app Agora call to a PACT user
+  Future<void> _initiateInAppCall(
+    String targetUserId,
+    String targetUserName, {
+    bool isAudioOnly = true,
+  }) async {
     try {
-      // Use existing singleton instance - already initialized at app startup in main_screen.dart
-      final webrtcService = WebRTCService();
-      
+      final agoraService = AgoraCallService();
+
       // Check if user is logged in
       if (_userId == null) {
         if (mounted) {
@@ -2193,9 +3186,9 @@ class _MMPScreenState extends State<MMPScreen> {
         }
         return;
       }
-      
+
       // Check if already in a call
-      if (webrtcService.callState.isInCall) {
+      if (agoraService.isInCall) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
@@ -2206,34 +3199,30 @@ class _MMPScreenState extends State<MMPScreen> {
         }
         return;
       }
-      
-      // Initiate the call (service should already be initialized at app startup)
-      final success = await webrtcService.initiateCall(
-        targetUserId,
-        targetUserName,
-        isAudioOnly: isAudioOnly,
+
+      // Start Agora call (service initialized at app startup in main_screen.dart)
+      final result = await agoraService.startCall(
+        remoteUserId: targetUserId,
+        remoteUserName: targetUserName,
+        audioOnly: isAudioOnly,
       );
-      
-      if (success && mounted) {
-        // Navigate to call screen
+
+      if (result.success && result.channelName != null && mounted) {
         Navigator.of(context).push(
           MaterialPageRoute(
-            builder: (context) => CallScreen(
+            builder: (context) => AgoraCallScreen(
+              channelName: result.channelName!,
+              remoteUserId: targetUserId,
               remoteUserName: targetUserName,
+              isAudioOnly: isAudioOnly,
+              isOutgoing: true,
             ),
           ),
         );
       } else if (mounted) {
-        final callState = webrtcService.callState;
-        String message = 'Unable to connect call';
-        if (callState.status == CallStatus.busy) {
-          message = '$targetUserName is busy on another call';
-        }
+        final message = result.error ?? 'Unable to connect call';
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(message),
-            backgroundColor: Colors.orange,
-          ),
+          SnackBar(content: Text(message), backgroundColor: Colors.orange),
         );
       }
     } catch (e) {
@@ -2252,31 +3241,35 @@ class _MMPScreenState extends State<MMPScreen> {
   /// Build contact buttons row for a site
   Widget _buildContactButtons(Map<String, dynamic> site) {
     // Try to get phone number from various possible fields
-    final phone = site['contact_phone'] ?? 
-                  site['phone'] ?? 
-                  site['phone_number'] ??
-                  site['enumerator_phone'] ??
-                  site['assigned_phone'];
-    
+    final phone =
+        site['contact_phone'] ??
+        site['phone'] ??
+        site['phone_number'] ??
+        site['enumerator_phone'] ??
+        site['assigned_phone'];
+
     // Check if contact is a PACT user (has user_id)
-    final contactUserId = site['accepted_by'] ?? 
-                          site['assigned_to'] ?? 
-                          site['enumerator_id'] ??
-                          site['coordinator_id'];
-    final contactName = site['enumerator_name'] ?? 
-                        site['assigned_name'] ?? 
-                        site['coordinator_name'] ??
-                        'PACT User';
-    final isPactUser = contactUserId != null && contactUserId.toString().isNotEmpty;
-    
+    final contactUserId =
+        site['accepted_by'] ??
+        site['assigned_to'] ??
+        site['enumerator_id'] ??
+        site['coordinator_id'];
+    final contactName =
+        site['enumerator_name'] ??
+        site['assigned_name'] ??
+        site['coordinator_name'] ??
+        'PACT User';
+    final isPactUser =
+        contactUserId != null && contactUserId.toString().isNotEmpty;
+
     // If no phone and not a PACT user, don't show buttons
     if ((phone == null || phone.toString().isEmpty) && !isPactUser) {
       return const SizedBox.shrink();
     }
-    
+
     final phoneStr = phone?.toString() ?? '';
     final siteName = site['site_name'] ?? site['siteName'] ?? 'Site';
-    
+
     return Container(
       margin: const EdgeInsets.only(top: 8),
       child: Column(
@@ -2306,7 +3299,10 @@ class _MMPScreenState extends State<MMPScreen> {
                     // SMS Button
                     Expanded(
                       child: OutlinedButton.icon(
-                        onPressed: () => _sendSMS(phoneStr, message: 'Regarding site visit: $siteName'),
+                        onPressed: () => _sendSMS(
+                          phoneStr,
+                          message: 'Regarding site visit: $siteName',
+                        ),
                         icon: const Icon(Icons.message, size: 16),
                         label: Text(l10n?.sms ?? 'SMS'),
                         style: OutlinedButton.styleFrom(
@@ -2320,7 +3316,10 @@ class _MMPScreenState extends State<MMPScreen> {
                     // WhatsApp Button
                     Expanded(
                       child: OutlinedButton.icon(
-                        onPressed: () => _openWhatsApp(phoneStr, message: 'Hello, regarding site visit: $siteName'),
+                        onPressed: () => _openWhatsApp(
+                          phoneStr,
+                          message: 'Hello, regarding site visit: $siteName',
+                        ),
                         icon: const Icon(Icons.chat, size: 16),
                         label: Text(l10n?.whatsapp ?? 'WhatsApp'),
                         style: OutlinedButton.styleFrom(
@@ -2337,6 +3336,46 @@ class _MMPScreenState extends State<MMPScreen> {
         ],
       ),
     );
+  }
+
+  /// Store an accepted site in the OfflineDb site_visits box so that it can
+  /// still appear under My Sites after a cold offline restart.
+  Future<void> _saveAcceptedVisitOffline(Map<String, dynamic> site) async {
+    try {
+      if (_userId == null) return;
+
+      final siteId = site['id']?.toString();
+      if (siteId == null || siteId.isEmpty) return;
+
+      final offlineDb = OfflineDb();
+      final now = DateTime.now();
+
+      final siteName =
+          site['site_name']?.toString() ?? site['siteName']?.toString() ?? 'Unknown Site';
+      final siteCode =
+          site['site_code']?.toString() ?? site['siteCode']?.toString() ?? '';
+      final state = site['state']?.toString() ?? '';
+      final locality = site['locality']?.toString() ?? '';
+
+      final offlineVisit = OfflineSiteVisit(
+        id: 'accepted_${siteId}_${now.millisecondsSinceEpoch}',
+        siteEntryId: siteId,
+        siteName: siteName,
+        siteCode: siteCode,
+        state: state,
+        locality: locality,
+        status: 'accepted',
+        startedAt: now,
+        synced: true,
+      );
+
+      await offlineDb.saveSiteVisitOffline(offlineVisit);
+      debugPrint(
+        '[_saveAcceptedVisitOffline] Stored accepted site offline: $siteId ($siteName)',
+      );
+    } catch (e) {
+      debugPrint('[_saveAcceptedVisitOffline] Error storing accepted site: $e');
+    }
   }
 
   Future<void> _acknowledgeCost(Map<String, dynamic> site) async {
@@ -2370,6 +3409,8 @@ class _MMPScreenState extends State<MMPScreen> {
           })
           .eq('id', site['id']);
 
+      await _saveAcceptedVisitOffline(site);
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -2402,7 +3443,7 @@ class _MMPScreenState extends State<MMPScreen> {
       // Check connectivity first
       final connectivity = await Connectivity().checkConnectivity();
       final isOffline = connectivity.contains(ConnectivityResult.none);
-      
+
       debugPrint('[_startVisit] Connectivity check - offline: $isOffline');
 
       // Check location permissions
@@ -2464,7 +3505,9 @@ class _MMPScreenState extends State<MMPScreen> {
 
       // Add location to additional_data if available
       if (position != null) {
-        final additionalData = _safeParseAdditionalData(site['additional_data']);
+        final additionalData = _safeParseAdditionalData(
+          site['additional_data'],
+        );
         additionalData['start_location'] = {
           'latitude': position.latitude,
           'longitude': position.longitude,
@@ -2488,7 +3531,7 @@ class _MMPScreenState extends State<MMPScreen> {
       // OFFLINE MODE: Queue for sync and update local cache
       if (isOffline) {
         debugPrint('[_startVisit] Offline mode - saving locally');
-        
+
         // Build start location from GPS
         final startLocation = position != null
             ? {
@@ -2497,42 +3540,40 @@ class _MMPScreenState extends State<MMPScreen> {
                 'accuracy': position.accuracy,
               }
             : <String, dynamic>{};
-        
-        // Queue using OfflineDataService with site metadata
-        final offlineDataService = OfflineDataService();
-        await offlineDataService.queueStartVisit(
+
+        // Queue using OfflineDb with site metadata
+        final offlineDb = OfflineDb();
+        await offlineDb.queueStartVisit(
           visitId: site['id'].toString(),
           userId: _userId ?? '',
           startLocation: startLocation,
-          siteName: site['site_name']?.toString() ?? site['siteName']?.toString(),
-          siteCode: site['site_code']?.toString() ?? site['siteCode']?.toString(),
+          siteName:
+              site['site_name']?.toString() ?? site['siteName']?.toString(),
+          siteCode:
+              site['site_code']?.toString() ?? site['siteCode']?.toString(),
           state: site['state']?.toString(),
           locality: site['locality']?.toString(),
         );
-        
+
         // Note: Don't call forceSync while offline - SyncManager will pick up pending actions
         // when connectivity is restored via auto-sync
-        
+
         // Update local cache
         final updatedSite = Map<String, dynamic>.from(site);
         updatedSite.addAll(updateData);
         updatedSite['_offline_modified'] = true;
         updatedSite['_synced'] = false;
-        
+
         // Update in _mySites list
         final siteIndex = _mySites.indexWhere((s) => s['id'] == site['id']);
         if (siteIndex != -1) {
           _mySites[siteIndex] = updatedSite;
         }
-        
+
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Visit started (offline). Will sync when online.'),
-              backgroundColor: Colors.orange,
-            ),
-          );
           setState(() {});
+          // Go straight to Complete Visit dialog
+          await _completeVisit(updatedSite);
         }
         return;
       }
@@ -2561,24 +3602,24 @@ class _MMPScreenState extends State<MMPScreen> {
                   'accuracy': position.accuracy,
                 }
               : <String, dynamic>{};
-          final offlineDataService = OfflineDataService();
-          await offlineDataService.queueStartVisit(
+          final offlineDb = OfflineDb();
+          await offlineDb.queueStartVisit(
             visitId: site['id'].toString(),
             userId: _userId ?? '',
             startLocation: startLocation,
-            siteName: site['site_name']?.toString() ?? site['siteName']?.toString(),
-            siteCode: site['site_code']?.toString() ?? site['siteCode']?.toString(),
+            siteName:
+                site['site_name']?.toString() ?? site['siteName']?.toString(),
+            siteCode:
+                site['site_code']?.toString() ?? site['siteCode']?.toString(),
             state: site['state']?.toString(),
             locality: site['locality']?.toString(),
           );
-          // SyncManager will pick up pending actions when online
           if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Visit started (will sync when online).'),
-                backgroundColor: Colors.orange,
-              ),
-            );
+            final updatedSite = Map<String, dynamic>.from(site);
+            updatedSite.addAll(updateData);
+            updatedSite['_offline_modified'] = true;
+            updatedSite['_synced'] = false;
+            await _completeVisit(updatedSite);
           }
           return;
         }
@@ -2622,24 +3663,24 @@ class _MMPScreenState extends State<MMPScreen> {
                   'accuracy': position.accuracy,
                 }
               : <String, dynamic>{};
-          final offlineDataService = OfflineDataService();
-          await offlineDataService.queueStartVisit(
+          final offlineDb = OfflineDb();
+          await offlineDb.queueStartVisit(
             visitId: site['id'].toString(),
             userId: _userId ?? '',
             startLocation: startLocation,
-            siteName: site['site_name']?.toString() ?? site['siteName']?.toString(),
-            siteCode: site['site_code']?.toString() ?? site['siteCode']?.toString(),
+            siteName:
+                site['site_name']?.toString() ?? site['siteName']?.toString(),
+            siteCode:
+                site['site_code']?.toString() ?? site['siteCode']?.toString(),
             state: site['state']?.toString(),
             locality: site['locality']?.toString(),
           );
-          // SyncManager will pick up pending actions when online
           if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Visit started (will sync when online).'),
-                backgroundColor: Colors.orange,
-              ),
-            );
+            final updatedSite = Map<String, dynamic>.from(site);
+            updatedSite.addAll(updateData);
+            updatedSite['_offline_modified'] = true;
+            updatedSite['_synced'] = false;
+            await _completeVisit(updatedSite);
           }
           return;
         }
@@ -2666,19 +3707,12 @@ class _MMPScreenState extends State<MMPScreen> {
         }
       }
 
+      // Build updated site and go straight to Complete Visit dialog
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Visit started successfully'),
-            backgroundColor: Colors.green,
-          ),
-        );
+        final updatedSite = Map<String, dynamic>.from(site);
+        updatedSite.addAll(updateData);
+        await _completeVisit(updatedSite);
       }
-
-      // Reload data
-      await _loadDataCollectorData();
-      if (!mounted) return;
-      if (mounted) setState(() {});
     } catch (e) {
       debugPrint('[_startVisit] Error starting visit: $e');
 
@@ -2703,697 +3737,58 @@ class _MMPScreenState extends State<MMPScreen> {
   }
 
   Future<void> _completeVisit(Map<String, dynamic> site) async {
-    final supabase = Supabase.instance.client;
-
-    try {
-      debugPrint(
-        '[_completeVisit] Starting completion for site: ${site['id']}',
-      );
-
-      // Check connectivity first
-      final connectivity = await Connectivity().checkConnectivity();
-      final isOffline = connectivity.contains(ConnectivityResult.none);
-      
-      debugPrint('[_completeVisit] Connectivity check - offline: $isOffline');
-
-      // Show visit report dialog first (works offline)
-      final reportData = await showDialog<VisitReportData>(
-        context: context,
-        builder: (context) => VisitReportDialog(site: site),
-      );
-
-      if (reportData == null) return;
-
-      // Get final location (works offline - uses device GPS)
-      final position =
-          reportData.coordinates ?? await LocationService.getCurrentLocation();
-
-      final now = DateTime.now().toIso8601String();
-
-      // Build coordinates JSON
-      final coordinates = position != null
-          ? {
-              'latitude': position.latitude,
-              'longitude': position.longitude,
-              'accuracy': position.accuracy,
-            }
-          : <String, dynamic>{};
-
-      // Calculate fees from cached data (works offline)
-      final enumeratorFee = (site['enumerator_fee'] as num?)?.toDouble() ?? 0.0;
-      final transportFee = (site['transport_fee'] as num?)?.toDouble() ?? 0.0;
-      final totalCost = enumeratorFee + transportFee;
-
-      // OFFLINE MODE: Save locally and queue for sync
-      if (isOffline) {
-        debugPrint('[_completeVisit] Offline mode - saving locally');
-        
-        // Build end location map
-        final endLocation = coordinates.isNotEmpty ? coordinates : <String, dynamic>{};
-        
-        // Convert photos to base64 for offline storage
-        final List<String> photoBase64Urls = [];
-        for (final photoPath in reportData.photos) {
-          try {
-            final file = File(photoPath);
-            final bytes = await file.readAsBytes();
-            final base64String = 'data:image/jpeg;base64,${base64Encode(bytes)}';
-            photoBase64Urls.add(base64String);
-          } catch (e) {
-            debugPrint('[_completeVisit] Error converting photo to base64: $e');
-          }
-        }
-        
-        // Get start location from additional_data if available (safely handle JSON string or map)
-        Map<String, dynamic> additionalData;
-        final existingData = site['additional_data'];
-        if (existingData is String) {
-          try {
-            additionalData = Map<String, dynamic>.from(jsonDecode(existingData) as Map<String, dynamic>);
-          } catch (_) {
-            additionalData = {};
-          }
-        } else if (existingData is Map<String, dynamic>) {
-          additionalData = Map<String, dynamic>.from(existingData);
-        } else {
-          additionalData = {};
-        }
-        final savedStartLocation = additionalData['start_location'] as Map<String, dynamic>?;
-        
-        // Queue using OfflineDataService with site metadata
-        final offlineDataService = OfflineDataService();
-        await offlineDataService.queueCompleteVisit(
-          visitId: site['id'].toString(),
-          userId: _userId ?? '',
-          endLocation: endLocation,
-          notes: reportData.notes,
-          activities: reportData.activities,
-          durationMinutes: reportData.durationMinutes,
-          photoDataUrls: photoBase64Urls,
-          siteName: site['site_name']?.toString() ?? site['siteName']?.toString(),
-          siteCode: site['site_code']?.toString() ?? site['siteCode']?.toString(),
-          state: site['state']?.toString(),
-          locality: site['locality']?.toString(),
-          startLocation: savedStartLocation,
-        );
-        
-        // Note: Don't call forceSync while offline - SyncManager will pick up pending actions
-        // when connectivity is restored via auto-sync
-        
-        // Update local cache with all offline data preserved
-        final updatedSite = Map<String, dynamic>.from(site);
-        updatedSite['status'] = 'Completed';
-        updatedSite['visit_completed_at'] = now;
-        updatedSite['_offline_modified'] = true;
-        updatedSite['_synced'] = false;
-        updatedSite['_offline_notes'] = reportData.notes;
-        updatedSite['_offline_activities'] = reportData.activities;
-        updatedSite['_offline_photos'] = photoBase64Urls;
-        updatedSite['_offline_end_location'] = endLocation;
-        
-        // Update in _mySites list
-        final siteIndex = _mySites.indexWhere((s) => s['id'] == site['id']);
-        if (siteIndex != -1) {
-          _mySites[siteIndex] = updatedSite;
-        }
-        
-        // Add to unsynced list for Outbox display
-        _unsyncedCompletedVisits.add(updatedSite);
-        
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Visit completed (offline). Will sync when online.'),
-              backgroundColor: Colors.orange,
-            ),
-          );
-          setState(() {});
-        }
-        return;
+    final result = await CompleteVisitFlow.run(
+      context,
+      site: site,
+      userId: _userId,
+      onOnlineSuccessReload: () async {
+        await _loadAvailableSites();
+        await _loadMySites();
+        if (mounted) setState(() {});
+      },
+    );
+    if (result == null) return;
+    if (result.updatedSite != null) {
+      final siteIndex = _mySites.indexWhere((s) => s['id'] == site['id']);
+      if (siteIndex != -1) {
+        _mySites[siteIndex] = result.updatedSite!;
       }
-
-      // ONLINE MODE: Validate session
-      final session = supabase.auth.currentSession;
-      debugPrint(
-        '[_completeVisit] Session check - valid: ${session != null}, expired: ${session?.isExpired ?? true}',
-      );
-
-      if (session == null || session.isExpired) {
-        debugPrint(
-          '[_completeVisit] Session expired or missing, attempting refresh...',
-        );
-        try {
-          await supabase.auth.refreshSession();
-          debugPrint('[_completeVisit] Session refreshed successfully');
-        } catch (refreshError) {
-          debugPrint('[_completeVisit] Session refresh failed: $refreshError');
-          // Fall back to offline mode
-          debugPrint('[_completeVisit] Falling back to offline mode');
-          final endLocation = coordinates.isNotEmpty ? coordinates : <String, dynamic>{};
-          
-          // Convert photos to base64
-          final List<String> photoBase64Urls = [];
-          for (final photoPath in reportData.photos) {
-            try {
-              final file = File(photoPath);
-              final bytes = await file.readAsBytes();
-              final base64String = 'data:image/jpeg;base64,${base64Encode(bytes)}';
-              photoBase64Urls.add(base64String);
-            } catch (e) {
-              debugPrint('[_completeVisit] Error converting photo to base64: $e');
-            }
-          }
-          
-          // Get start location from additional_data if available (safely handle JSON string or map)
-          final additionalData = _safeParseAdditionalData(site['additional_data']);
-          final savedStartLocation = additionalData['start_location'] as Map<String, dynamic>?;
-          
-          final offlineDataService = OfflineDataService();
-          await offlineDataService.queueCompleteVisit(
-            visitId: site['id'].toString(),
-            userId: _userId ?? '',
-            endLocation: endLocation,
-            notes: reportData.notes,
-            activities: reportData.activities,
-            durationMinutes: reportData.durationMinutes,
-            photoDataUrls: photoBase64Urls,
-            siteName: site['site_name']?.toString() ?? site['siteName']?.toString(),
-            siteCode: site['site_code']?.toString() ?? site['siteCode']?.toString(),
-            state: site['state']?.toString(),
-            locality: site['locality']?.toString(),
-            startLocation: savedStartLocation,
-          );
-          
-          // SyncManager will pick up pending actions when online
-          _unsyncedCompletedVisits.add({
-            ...site, 
-            'status': 'Completed', 
-            '_offline_modified': true,
-            '_offline_notes': reportData.notes,
-            '_offline_activities': reportData.activities,
-            '_offline_photos': photoBase64Urls,
-            '_offline_end_location': endLocation,
-          });
-          
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Visit completed (will sync when online).'),
-                backgroundColor: Colors.orange,
-              ),
-            );
-            setState(() {});
-          }
-          return;
-        }
+      if (result.isOffline) {
+        _unsyncedCompletedVisits.add(result.updatedSite!);
       }
-
-      // Re-check user ID after potential refresh
-      final userId = supabase.auth.currentUser?.id;
-      if (userId == null) {
-        debugPrint('[_completeVisit] User ID is null after session check');
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Authentication error. Please log in again.'),
-              backgroundColor: Colors.red,
-            ),
-          );
-        }
-        return;
-      }
-
-      // Verify session is still valid after session validation
-      var currentSession = supabase.auth.currentSession;
-      if (currentSession == null || currentSession.isExpired) {
-        debugPrint(
-          '[_completeVisit] Session expired, refreshing...',
-        );
-        try {
-          await supabase.auth.refreshSession();
-          currentSession = supabase.auth.currentSession;
-        } catch (refreshError) {
-          debugPrint(
-            '[_completeVisit] Session refresh failed: $refreshError',
-          );
-          throw Exception('Session expired. Please try again.');
-        }
-      }
-
-      // Upload photos with session refresh during long operation
-      List<String> photoUrls = [];
-      if (reportData.photos.isNotEmpty) {
-        debugPrint(
-          '[_completeVisit] Starting photo upload (${reportData.photos.length} photos)',
-        );
-
-        // Refresh session before photo uploads if needed
-        currentSession = supabase.auth.currentSession;
-        if (currentSession == null || currentSession.isExpired) {
-          debugPrint(
-            '[_completeVisit] Refreshing session before photo uploads...',
-          );
-          try {
-            await supabase.auth.refreshSession();
-          } catch (refreshError) {
-            debugPrint(
-              '[_completeVisit] Session refresh before uploads failed: $refreshError',
-            );
-            throw Exception(
-              'Session expired during photo upload. Please try again.',
-            );
-          }
-        }
-
-        try {
-          photoUrls = await PhotoUploadService.uploadPhotos(
-            site['id'].toString(),
-            reportData.photos,
-          );
-          debugPrint(
-            '[_completeVisit] Photo uploads completed (${photoUrls.length} URLs)',
-          );
-
-          // Verify session after photo uploads (they can take a while)
-          currentSession = supabase.auth.currentSession;
-          if (currentSession == null || currentSession.isExpired) {
-            debugPrint(
-              '[_completeVisit] Session expired after photo uploads, refreshing...',
-            );
-            try {
-              await supabase.auth.refreshSession();
-            } catch (refreshError) {
-              debugPrint(
-                '[_completeVisit] Session refresh after uploads failed: $refreshError',
-              );
-              throw Exception(
-                'Session expired during upload. Please try again.',
-              );
-            }
-          }
-        } catch (uploadError) {
-          debugPrint('[_completeVisit] Photo upload error: $uploadError');
-          // Check if it's an auth error
-          final errorStr = uploadError.toString().toLowerCase();
-          if (errorStr.contains('auth') ||
-              errorStr.contains('unauthorized') ||
-              errorStr.contains('jwt') ||
-              errorStr.contains('token')) {
-            debugPrint('[_completeVisit] Auth-related photo upload error');
-            // Try refreshing session and retry
-            try {
-              await supabase.auth.refreshSession();
-              photoUrls = await PhotoUploadService.uploadPhotos(
-                site['id'].toString(),
-                reportData.photos,
-              );
-              debugPrint(
-                '[_completeVisit] Photo upload retry after refresh successful',
-              );
-            } catch (retryError) {
-              debugPrint(
-                '[_completeVisit] Photo upload retry failed: $retryError',
-              );
-              throw Exception(
-                'Authentication error during photo upload. Please log in again.',
-              );
-            }
-          } else {
-            rethrow;
-          }
-        }
-      }
-
-      // Prepare insert payload to match existing reports table schema (coordinates already defined above)
-      final reportInsert = <String, dynamic>{
-        'site_visit_id': site['id'],
-        'notes': reportData.notes.trim(),
-        'activities': reportData.activities.trim().isEmpty
-            ? null
-            : reportData.activities.trim(),
-        'duration_minutes': reportData.durationMinutes,
-        'coordinates': coordinates,
-        'submitted_by': userId,
-        'submitted_at': now,
-        'is_synced': true,
-      };
-
-      // Verify session before database operations
-      currentSession = supabase.auth.currentSession;
-      if (currentSession == null || currentSession.isExpired) {
-        debugPrint(
-          '[_completeVisit] Session expired before report insert, refreshing...',
-        );
-        try {
-          await supabase.auth.refreshSession();
-        } catch (refreshError) {
-          debugPrint(
-            '[_completeVisit] Session refresh before report insert failed: $refreshError',
-          );
-          throw Exception('Session expired. Please try again.');
-        }
-      }
-
-      // Save report to database
-      debugPrint('[_completeVisit] Inserting report for site: ${site['id']}');
-      dynamic savedReport;
-      try {
-        savedReport = await supabase
-            .from('reports')
-            .insert(reportInsert)
-            .select()
-            .single();
-        debugPrint(
-          '[_completeVisit] Report inserted with id: ${savedReport['id']}',
-        );
-      } catch (dbError) {
-        debugPrint('[_completeVisit] Report insert error: $dbError');
-        final errorStr = dbError.toString().toLowerCase();
-        if (errorStr.contains('auth') ||
-            errorStr.contains('unauthorized') ||
-            errorStr.contains('jwt') ||
-            errorStr.contains('token')) {
-          debugPrint('[_completeVisit] Auth-related report insert error');
-          try {
-            await supabase.auth.refreshSession();
-            savedReport = await supabase
-                .from('reports')
-                .insert(reportInsert)
-                .select()
-                .single();
-            debugPrint(
-              '[_completeVisit] Report insert retry after refresh successful',
-            );
-          } catch (retryError) {
-            debugPrint(
-              '[_completeVisit] Report insert retry failed: $retryError',
-            );
-            throw Exception('Authentication error. Please log in again.');
-          }
-        } else {
-          rethrow;
-        }
-      }
-
-      // Link photos to report
-      if (photoUrls.isNotEmpty && savedReport != null) {
-        final reportPhotos = photoUrls
-            .map(
-              (url) => {
-                'report_id': savedReport['id'],
-                'photo_url': url,
-                'storage_path':
-                    url, // Use URL as storage path if separate path not available
-              },
-            )
-            .toList();
-
-        debugPrint(
-          '[_completeVisit] Inserting ${reportPhotos.length} report photos',
-        );
-        // Verify session before inserting photos
-        currentSession = supabase.auth.currentSession;
-        if (currentSession == null || currentSession.isExpired) {
-          debugPrint(
-            '[_completeVisit] Refreshing session before report_photos insert...',
-          );
-          await supabase.auth.refreshSession();
-        }
-
-        try {
-          await supabase.from('report_photos').insert(reportPhotos);
-        } catch (photoError) {
-          debugPrint(
-            '[_completeVisit] Report photos insert error: $photoError',
-          );
-          final errorStr = photoError.toString().toLowerCase();
-          if (errorStr.contains('auth') ||
-              errorStr.contains('unauthorized') ||
-              errorStr.contains('jwt') ||
-              errorStr.contains('token')) {
-            debugPrint('[_completeVisit] Auth-related report photos error');
-            await supabase.auth.refreshSession();
-            await supabase.from('report_photos').insert(reportPhotos);
-          } else {
-            rethrow;
-          }
-        }
-      }
-
-      // Verify session before updating site status
-      currentSession = supabase.auth.currentSession;
-      if (currentSession == null || currentSession.isExpired) {
-        debugPrint(
-          '[_completeVisit] Refreshing session before site status update...',
-        );
-        await supabase.auth.refreshSession();
-      }
-
-      // Update site status
-      final updateData = <String, dynamic>{
-        'status': 'Completed',
-        'visit_completed_at': now,
-        'visit_completed_by': userId,
-        'updated_at': now,
-        'additional_data': {
-          ..._safeParseAdditionalData(site['additional_data']),
-          'visit_report_submitted': true,
-          'visit_report_id': savedReport['id'],
-          'visit_report_submitted_at': now,
-          if (position != null)
-            'final_location': {
-              'latitude': position.latitude,
-              'longitude': position.longitude,
-              'accuracy': position.accuracy,
-            },
-        },
-      };
-
-      // Ensure visit_completed_at is set
-      final currentSite = await Supabase.instance.client
-          .from('mmp_site_entries')
-          .select('visit_completed_at, visit_completed_by')
-          .eq('id', site['id'])
-          .maybeSingle();
-
-      if (currentSite?['visit_completed_at'] == null) {
-        updateData['visit_completed_at'] = now;
-      }
-      if (currentSite?['visit_completed_by'] == null) {
-        updateData['visit_completed_by'] = userId;
-      }
-
-      debugPrint(
-        '[_completeVisit] Updating mmp_site_entries for site: ${site['id']}',
-      );
-      try {
-        await supabase
-            .from('mmp_site_entries')
-            .update(updateData)
-            .eq('id', site['id']);
-      } catch (updateError) {
-        debugPrint('[_completeVisit] Site status update error: $updateError');
-        final errorStr = updateError.toString().toLowerCase();
-        if (errorStr.contains('auth') ||
-            errorStr.contains('unauthorized') ||
-            errorStr.contains('jwt') ||
-            errorStr.contains('token')) {
-          debugPrint('[_completeVisit] Auth-related site update error');
-          await supabase.auth.refreshSession();
-          await supabase
-              .from('mmp_site_entries')
-              .update(updateData)
-              .eq('id', site['id']);
-        } else {
-          rethrow;
-        }
-      }
-
-      // Save GPS to site_locations table
-      if (position != null) {
-        debugPrint(
-          '[_completeVisit] Inserting final location for site: ${site['id']}',
-        );
-        // Verify session before location insert
-        currentSession = supabase.auth.currentSession;
-        if (currentSession == null || currentSession.isExpired) {
-          debugPrint(
-            '[_completeVisit] Refreshing session before location insert...',
-          );
-          await supabase.auth.refreshSession();
-        }
-
-        try {
-          await supabase.from('site_locations').insert({
-            'site_id': site['id'],
-            'user_id': userId,
-            'latitude': position.latitude,
-            'longitude': position.longitude,
-            'accuracy': position.accuracy ?? 10,
-            'notes': 'Visit end location',
-            'recorded_at': now,
-          });
-        } catch (locationError) {
-          debugPrint('[_completeVisit] Location insert error: $locationError');
-          final errorStr = locationError.toString().toLowerCase();
-          if (errorStr.contains('auth') ||
-              errorStr.contains('unauthorized') ||
-              errorStr.contains('jwt') ||
-              errorStr.contains('token')) {
-            debugPrint('[_completeVisit] Auth-related location insert error');
-            await supabase.auth.refreshSession();
-            await supabase.from('site_locations').insert({
-              'site_id': site['id'],
-              'user_id': userId,
-              'latitude': position.latitude,
-              'longitude': position.longitude,
-              'accuracy': position.accuracy ?? 10,
-              'notes': 'Visit end location',
-              'recorded_at': now,
-            });
-          } else {
-            // Location insert failure is not critical, log and continue
-            debugPrint(
-              '[_completeVisit] Location insert failed but continuing: $locationError',
-            );
-          }
-        }
-      }
-
-      // Verify session is still valid before reloading data
-      currentSession = supabase.auth.currentSession;
-      if (currentSession == null || currentSession.isExpired) {
-        debugPrint(
-          '[_completeVisit] Session expired before reload, refreshing...',
-        );
-        try {
-          await supabase.auth.refreshSession();
-          debugPrint('[_completeVisit] Session refreshed before reload');
-        } catch (refreshError) {
-          debugPrint(
-            '[_completeVisit] Session refresh before reload failed: $refreshError',
-          );
-          // Don't throw - just log and continue, the reload might still work
-        }
-      }
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Visit completed and report submitted successfully'),
-            backgroundColor: Colors.green,
-            duration: Duration(seconds: 2),
-          ),
-        );
-      }
-
-      // Don't reload immediately - let the user see the success message and stay on the page
-      // The realtime subscription will automatically update the UI when the database changes
-      // If realtime is not working, we can reload in the background after a delay
-      debugPrint(
-        '[_completeVisit] Completion successful - UI will update via realtime subscription',
-      );
-
-      // Optionally reload in background after a longer delay to ensure UI stays responsive
-      // Only reload if realtime updates don't work
-      final finalSessionCheck = supabase.auth.currentSession;
-      if (finalSessionCheck != null && !finalSessionCheck.isExpired) {
-        // Reload after 2 seconds in the background - this gives realtime a chance to update first
-        Future.delayed(const Duration(seconds: 2), () async {
-          if (!mounted) return;
-
-          try {
-            debugPrint(
-              '[_completeVisit] Starting background refresh (realtime may have already updated)...',
-            );
-            // Only reload specific data, not everything
-            await _loadAvailableSites();
-            await _loadMySites();
-            if (mounted) {
-              // Only update if widget is still mounted and visible
-              setState(() {});
-              debugPrint('[_completeVisit] Background refresh completed');
-            }
-          } catch (reloadError) {
-            debugPrint(
-              '[_completeVisit] Error during background refresh (non-critical): $reloadError',
-            );
-            // Silently fail - realtime should handle updates
-          }
-        });
-      }
-    } catch (e, stack) {
-      debugPrint('[_completeVisit] Error completing visit: $e');
-      debugPrint('[_completeVisit] Stack trace: $stack');
-
-      // Check session state after error
-      final sessionAfterError = supabase.auth.currentSession;
-      debugPrint(
-        '[_completeVisit] Session after error - valid: ${sessionAfterError != null}, expired: ${sessionAfterError?.isExpired ?? true}',
-      );
-
-      // Check if error is auth-related
-      final errorStr = e.toString().toLowerCase();
-      final isAuthError =
-          errorStr.contains('auth') ||
-          errorStr.contains('unauthorized') ||
-          errorStr.contains('jwt') ||
-          errorStr.contains('token') ||
-          errorStr.contains('session expired');
-
-      if (isAuthError) {
-        debugPrint(
-          '[_completeVisit] ⚠️ AUTH ERROR detected during completion: $e',
-        );
-        // Don't let auth errors trigger logout - user might still be valid
-        // Only show error message
-      }
-
-      if (mounted) {
-        final errorMessage = isAuthError
-            ? 'Authentication error occurred. Please try again or log in again if the problem persists.'
-            : 'Error: ${e.toString()}';
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error: ${e.toString()}'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
+      if (mounted) setState(() {});
     }
   }
 
-  /// Check if a site has a synced report
+  /// Check if a site has a synced report (fully synced to server; belongs in Sent).
+  /// Returns false for offline-only completions (they belong in Outbox until sync runs).
   bool _hasSyncedReport(Map<String, dynamic> site) {
     final siteId = site['id']?.toString();
     if (siteId == null) return false;
 
-    // Check if site is in unsynced list - if it is, it's definitely not synced
+    // Offline-only completion: merged from pending offline visit, not yet synced to server.
+    // These must show in Outbox, not Sent.
+    if (site['_offline_modified'] == true || site['_synced'] == false) {
+      return false;
+    }
+
+    // Check if site is in unsynced list (server Completed but no report)
     final isUnsynced = _unsyncedCompletedVisits.any(
       (uv) => uv['id']?.toString() == siteId,
     );
     if (isUnsynced) return false;
 
-    // Check additional_data flag (most reliable indicator)
+    // Positive evidence from server: report was submitted and synced
     final additionalData = _safeParseAdditionalData(site['additional_data']);
     if (additionalData['visit_report_submitted'] == true) {
       return true;
     }
-
-    // If status is completed and not in unsynced list, it's synced
-    final status = (site['status'] as String? ?? '').toLowerCase();
-    if (status == 'completed' || status == 'complete') {
-      // If it's completed and not in unsynced list, it must be synced
+    if (additionalData['visit_report_id'] != null) {
       return true;
     }
 
-    // For in-progress sites, check if visit_report_id exists in additional_data
-    // This indicates a report was submitted even if status hasn't updated yet
-    if (additionalData?['visit_report_id'] != null) {
-      return true;
-    }
-
+    // Do not assume synced just because status is completed and not in unsynced list
+    // (that wrongly put offline-only completions in Sent). Require report evidence above.
     return false;
   }
 
@@ -3435,7 +3830,9 @@ class _MMPScreenState extends State<MMPScreen> {
           child: Column(
             children: [
               ReusableAppBar(
-                title: AppLocalizations.of(context)?.mmpManagement ?? 'MMP Management',
+                title:
+                    AppLocalizations.of(context)?.mmpManagement ??
+                    'MMP Management',
                 scaffoldKey: _scaffoldKey,
                 showLanguageSwitcher: true,
                 showNotifications: true,
@@ -3476,7 +3873,8 @@ class _MMPScreenState extends State<MMPScreen> {
             ),
             const SizedBox(height: 8),
             Text(
-              l10n?.noPermission ?? 'You don\'t have permission to access this page.',
+              l10n?.noPermission ??
+                  'You don\'t have permission to access this page.',
               style: GoogleFonts.poppins(
                 fontSize: 14,
                 color: AppColors.textLight,
@@ -3541,7 +3939,8 @@ class _MMPScreenState extends State<MMPScreen> {
                           ),
                         ),
                         Text(
-                          l10n?.claimManageComplete ?? 'Claim, manage, and complete site visits',
+                          l10n?.claimManageComplete ??
+                              'Claim, manage, and complete site visits',
                           style: GoogleFonts.poppins(
                             fontSize: 12,
                             color: Colors.white.withOpacity(0.9),
@@ -3640,7 +4039,7 @@ class _MMPScreenState extends State<MMPScreen> {
                       child: _buildSubTabButton(
                         'outbox',
                         l10n?.outbox ?? 'Outbox',
-                        _unsyncedCompletedVisits.length,
+                        _getOutboxCount(),
                       ),
                     ),
                     Expanded(
@@ -3724,7 +4123,12 @@ class _MMPScreenState extends State<MMPScreen> {
     );
   }
 
-  Widget _buildSubTabButton(String tab, String label, int count, {IconData? icon}) {
+  Widget _buildSubTabButton(
+    String tab,
+    String label,
+    int count, {
+    IconData? icon,
+  }) {
     final isActive = _mySitesSubTab == tab;
     // Default icons for sub-tabs if not provided
     final tabIcon = icon ?? _getSubTabIcon(tab);
@@ -3759,7 +4163,9 @@ class _MMPScreenState extends State<MMPScreen> {
                   style: GoogleFonts.poppins(
                     fontSize: 13,
                     fontWeight: isActive ? FontWeight.w600 : FontWeight.normal,
-                    color: isActive ? AppColors.primaryBlue : AppColors.textLight,
+                    color: isActive
+                        ? AppColors.primaryBlue
+                        : AppColors.textLight,
                   ),
                 ),
               ],
@@ -3853,7 +4259,10 @@ class _MMPScreenState extends State<MMPScreen> {
                 ),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.primaryBlue,
-                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 24,
+                    vertical: 12,
+                  ),
                 ),
               ),
             ],
@@ -3861,7 +4270,7 @@ class _MMPScreenState extends State<MMPScreen> {
         ),
       );
     }
-    
+
     final filtered = _getFilteredSites(_availableSites);
 
     if (filtered.isEmpty) {
@@ -4061,25 +4470,26 @@ class _MMPScreenState extends State<MMPScreen> {
       case 'drafts':
         sitesToShow = _mySites.where((site) {
           final status = (site['status'] as String? ?? '').toLowerCase();
-          final isInProgress = status == 'in progress' ||
+          final isInProgress =
+              status == 'in progress' ||
               status == 'in_progress' ||
               status == 'ongoing';
-          
+
           // Only show in drafts if it's in progress AND doesn't have a synced report
           return isInProgress && !_hasSyncedReport(site);
         }).toList();
         break;
       case 'outbox':
-        sitesToShow = _unsyncedCompletedVisits;
+        // Completed but not yet synced: server-completed-no-report + offline-only completions
+        sitesToShow = _mySites.where((site) {
+          final status = (site['status'] as String? ?? '').toLowerCase();
+          final isCompleted = status == 'completed' || status == 'complete';
+          return isCompleted && !_hasSyncedReport(site);
+        }).toList();
         break;
       case 'sent':
-        sitesToShow = _mySites
-            .where((site) {
-              // Include sites with synced reports (regardless of status)
-              // OR sites with completed status that are synced
-              return _hasSyncedReport(site);
-            })
-            .toList();
+        // Only fully synced: has report on server (wallet reflects money)
+        sitesToShow = _mySites.where((site) => _hasSyncedReport(site)).toList();
         break;
     }
 
@@ -4138,11 +4548,14 @@ class _MMPScreenState extends State<MMPScreen> {
     final state = site['state'] ?? '';
     final locality = site['locality'] ?? '';
     final status = site['status'] ?? 'Pending';
-    final storedEnumeratorFee = (site['enumerator_fee'] as num?)?.toDouble() ?? 0.0;
+    final storedEnumeratorFee =
+        (site['enumerator_fee'] as num?)?.toDouble() ?? 0.0;
     final transportFee = (site['transport_fee'] as num?)?.toDouble() ?? 0.0;
     // For claimable sites (Dispatched), use user's classification-based fee if site has no enumerator_fee
     final isClaimableSite = status.toLowerCase() == 'dispatched';
-    final enumeratorFee = (storedEnumeratorFee > 0) ? storedEnumeratorFee : (isClaimableSite ? _userEnumeratorFee : 0.0);
+    final enumeratorFee = (storedEnumeratorFee > 0)
+        ? storedEnumeratorFee
+        : (isClaimableSite ? _userEnumeratorFee : 0.0);
     // Calculate total as enumerator_fee + transport_fee
     final cost = enumeratorFee + transportFee;
 
@@ -4218,7 +4631,8 @@ class _MMPScreenState extends State<MMPScreen> {
           ),
 
           // Show only Total (no Transport/Enumerator breakdown)
-          if (cost > 0) ...[
+          // Hide total for claimable sites - it will be shown in the claim confirmation dialog
+          if (cost > 0 && !showClaimButton) ...[
             const SizedBox(height: 12),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -4406,8 +4820,9 @@ class _MMPScreenState extends State<MMPScreen> {
     final state = site['state'] ?? '';
     final locality = site['locality'] ?? '';
     final status = site['status'] ?? 'Pending';
-    final isCompleted = status.toString().toLowerCase() == 'completed' || 
-                        status.toString().toLowerCase() == 'complete';
+    final isCompleted =
+        status.toString().toLowerCase() == 'completed' ||
+        status.toString().toLowerCase() == 'complete';
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -4498,22 +4913,37 @@ class _MMPScreenState extends State<MMPScreen> {
   void _viewVisitReport(Map<String, dynamic> site) {
     final siteVisit = SiteVisit(
       id: site['id']?.toString() ?? '',
-      siteName: site['site_name']?.toString() ?? site['siteName']?.toString() ?? 'Unknown',
-      siteCode: site['site_code']?.toString() ?? site['siteCode']?.toString() ?? '',
+      siteName:
+          site['site_name']?.toString() ??
+          site['siteName']?.toString() ??
+          'Unknown',
+      siteCode:
+          site['site_code']?.toString() ?? site['siteCode']?.toString() ?? '',
       state: site['state']?.toString() ?? '',
       locality: site['locality']?.toString() ?? '',
       status: site['status']?.toString() ?? '',
-      activity: site['activity']?.toString() ?? site['main_activity']?.toString() ?? '',
+      activity:
+          site['activity']?.toString() ??
+          site['main_activity']?.toString() ??
+          '',
       priority: site['priority']?.toString() ?? 'medium',
       notes: site['notes']?.toString() ?? '',
-      mainActivity: site['main_activity']?.toString() ?? site['activity']?.toString() ?? '',
-      assignedTo: site['accepted_by']?.toString() ?? site['assigned_to']?.toString() ?? '',
-      createdAt: site['created_at'] != null 
+      mainActivity:
+          site['main_activity']?.toString() ??
+          site['activity']?.toString() ??
+          '',
+      assignedTo:
+          site['accepted_by']?.toString() ??
+          site['assigned_to']?.toString() ??
+          '',
+      createdAt: site['created_at'] != null
           ? DateTime.tryParse(site['created_at'].toString()) ?? DateTime.now()
           : DateTime.now(),
       transportFee: (site['transport_fee'] as num?)?.toDouble() ?? 0,
       enumeratorFee: (site['enumerator_fee'] as num?)?.toDouble() ?? 0,
-      dueDate: site['due_date'] != null ? DateTime.tryParse(site['due_date'].toString()) : null,
+      dueDate: site['due_date'] != null
+          ? DateTime.tryParse(site['due_date'].toString())
+          : null,
     );
 
     Navigator.push(
@@ -4557,16 +4987,16 @@ class _MMPScreenState extends State<MMPScreen> {
     }).length;
   }
 
+  int _getOutboxCount() {
+    return _mySites.where((site) {
+      final status = (site['status'] as String? ?? '').toLowerCase();
+      final isCompleted = status == 'completed' || status == 'complete';
+      return isCompleted && !_hasSyncedReport(site);
+    }).length;
+  }
+
   int _getSentCount() {
-    return _mySites
-        .where((site) {
-          final status = (site['status'] as String? ?? '').toLowerCase();
-          return status == 'completed' || status == 'complete';
-        })
-        .where((site) {
-          return !_unsyncedCompletedVisits.any((uv) => uv['id'] == site['id']);
-        })
-        .length;
+    return _mySites.where((site) => _hasSyncedReport(site)).length;
   }
 }
 
@@ -4590,7 +5020,9 @@ class _CostAcknowledgmentDialogState extends State<_CostAcknowledgmentDialog> {
     final enumeratorFee = site['enumerator_fee'] ?? 0;
     final transportFee = site['transport_fee'] ?? 0;
     // Always calculate total as transport + enumerator fee (not just site['cost'])
-    final totalCost = (transportFee is num ? transportFee : 0) + (enumeratorFee is num ? enumeratorFee : 0);
+    final totalCost =
+        (transportFee is num ? transportFee : 0) +
+        (enumeratorFee is num ? enumeratorFee : 0);
 
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),

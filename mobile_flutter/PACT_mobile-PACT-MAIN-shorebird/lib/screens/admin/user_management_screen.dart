@@ -9,29 +9,30 @@ import '../../theme/app_colors.dart';
 
 class UserManagementScreen extends StatefulWidget {
   final bool isArabic;
-  
+
   const UserManagementScreen({super.key, this.isArabic = false});
 
   @override
   State<UserManagementScreen> createState() => _UserManagementScreenState();
 }
 
-class _UserManagementScreenState extends State<UserManagementScreen> with SingleTickerProviderStateMixin {
+class _UserManagementScreenState extends State<UserManagementScreen>
+    with SingleTickerProviderStateMixin {
   final _supabase = Supabase.instance.client;
   final _searchController = TextEditingController();
   late TabController _tabController;
-  
+
   List<Map<String, dynamic>> _users = [];
   List<Map<String, dynamic>> _filteredUsers = [];
   bool _isLoading = true;
   String _selectedRoleFilter = 'all';
   String _selectedTab = 'all';
-  
+
   int _totalUsers = 0;
   int _activeUsers = 0;
   int _pendingUsers = 0;
   int _adminUsers = 0;
-  
+
   RealtimeChannel? _usersChannel;
   bool _hasAccess = false;
 
@@ -50,18 +51,19 @@ class _UserManagementScreenState extends State<UserManagementScreen> with Single
         if (mounted) Navigator.pop(context);
         return;
       }
-      
+
       final profile = await _supabase
           .from('profiles')
           .select('role')
           .eq('id', user.id)
           .maybeSingle();
-      
+
       final role = (profile?['role'] as String?)?.toLowerCase() ?? '';
-      final isAdmin = role == 'admin' || role == 'super_admin' || role == 'superadmin';
-      
+      final isAdmin =
+          role == 'admin' || role == 'super_admin' || role == 'superadmin';
+
       if (!mounted) return;
-      
+
       if (!isAdmin) {
         Navigator.pop(context);
         ScaffoldMessenger.of(context).showSnackBar(
@@ -72,7 +74,7 @@ class _UserManagementScreenState extends State<UserManagementScreen> with Single
         );
         return;
       }
-      
+
       setState(() => _hasAccess = true);
       _loadUsers();
       _setupRealtimeSubscription();
@@ -91,17 +93,20 @@ class _UserManagementScreenState extends State<UserManagementScreen> with Single
   }
 
   void _setupRealtimeSubscription() {
-    _usersChannel = _supabase.channel('admin-users-realtime')
-      .onPostgresChanges(
-        event: PostgresChangeEvent.all,
-        schema: 'public',
-        table: 'profiles',
-        callback: (payload) {
-          debugPrint('[UserManagement] Realtime update: ${payload.eventType}');
-          _loadUsers();
-        },
-      )
-      .subscribe();
+    _usersChannel = _supabase
+        .channel('admin-users-realtime')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'profiles',
+          callback: (payload) {
+            debugPrint(
+              '[UserManagement] Realtime update: ${payload.eventType}',
+            );
+            _loadUsers();
+          },
+        )
+        .subscribe();
   }
 
   void _onTabChanged() {
@@ -120,17 +125,26 @@ class _UserManagementScreenState extends State<UserManagementScreen> with Single
           .order('created_at', ascending: false);
 
       final users = List<Map<String, dynamic>>.from(response as List);
-      
+
       if (!mounted) return;
-      
+
       setState(() {
         _users = users;
         _totalUsers = users.length;
-        _activeUsers = users.where((u) => u['status'] == 'active' || u['is_active'] == true).length;
-        _pendingUsers = users.where((u) => u['status'] == 'pending_approval' || u['status'] == 'pending').length;
+        _activeUsers = users
+            .where((u) => u['status'] == 'active' || u['is_active'] == true)
+            .length;
+        _pendingUsers = users
+            .where(
+              (u) =>
+                  u['status'] == 'pending_approval' || u['status'] == 'pending',
+            )
+            .length;
         _adminUsers = users.where((u) {
           final role = (u['role'] as String?)?.toLowerCase() ?? '';
-          return role == 'admin' || role == 'super_admin' || role == 'superadmin';
+          return role == 'admin' ||
+              role == 'super_admin' ||
+              role == 'superadmin';
         }).length;
         _isLoading = false;
         _filterUsers();
@@ -144,29 +158,38 @@ class _UserManagementScreenState extends State<UserManagementScreen> with Single
 
   void _filterUsers() {
     var filtered = List<Map<String, dynamic>>.from(_users);
-    
+
     switch (_selectedTab) {
       case 'active':
-        filtered = filtered.where((u) => u['status'] == 'active' || u['is_active'] == true).toList();
+        filtered = filtered
+            .where((u) => u['status'] == 'active' || u['is_active'] == true)
+            .toList();
         break;
       case 'pending':
-        filtered = filtered.where((u) => u['status'] == 'pending_approval' || u['status'] == 'pending').toList();
+        filtered = filtered
+            .where(
+              (u) =>
+                  u['status'] == 'pending_approval' || u['status'] == 'pending',
+            )
+            .toList();
         break;
       case 'admins':
         filtered = filtered.where((u) {
           final role = (u['role'] as String?)?.toLowerCase() ?? '';
-          return role == 'admin' || role == 'super_admin' || role == 'superadmin';
+          return role == 'admin' ||
+              role == 'super_admin' ||
+              role == 'superadmin';
         }).toList();
         break;
     }
-    
+
     if (_selectedRoleFilter != 'all') {
       filtered = filtered.where((u) {
         final role = (u['role'] as String?)?.toLowerCase() ?? '';
         return role == _selectedRoleFilter.toLowerCase();
       }).toList();
     }
-    
+
     final query = _searchController.text.toLowerCase();
     if (query.isNotEmpty) {
       filtered = filtered.where((u) {
@@ -175,14 +198,16 @@ class _UserManagementScreenState extends State<UserManagementScreen> with Single
         return name.contains(query) || email.contains(query);
       }).toList();
     }
-    
+
     setState(() => _filteredUsers = filtered);
   }
 
   @override
   Widget build(BuildContext context) {
     return Directionality(
-      textDirection: widget.isArabic ? ui.TextDirection.rtl : ui.TextDirection.ltr,
+      textDirection: widget.isArabic
+          ? ui.TextDirection.rtl
+          : ui.TextDirection.ltr,
       child: Scaffold(
         backgroundColor: AppColors.backgroundGray,
         appBar: AppBar(
@@ -284,13 +309,7 @@ class _UserManagementScreenState extends State<UserManagementScreen> with Single
                 color: color,
               ),
             ),
-            Text(
-              label,
-              style: GoogleFonts.poppins(
-                fontSize: 11,
-                color: color,
-              ),
-            ),
+            Text(label, style: GoogleFonts.poppins(fontSize: 11, color: color)),
           ],
         ),
       ),
@@ -329,11 +348,28 @@ class _UserManagementScreenState extends State<UserManagementScreen> with Single
               value: _selectedRoleFilter,
               underline: const SizedBox(),
               items: [
-                DropdownMenuItem(value: 'all', child: Text(widget.isArabic ? 'كل الأدوار' : 'All Roles')),
-                DropdownMenuItem(value: 'super_admin', child: Text(widget.isArabic ? 'مشرف عام' : 'Super Admin')),
-                DropdownMenuItem(value: 'admin', child: Text(widget.isArabic ? 'مشرف' : 'Admin')),
-                DropdownMenuItem(value: 'coordinator', child: Text(widget.isArabic ? 'منسق' : 'Coordinator')),
-                DropdownMenuItem(value: 'data_collector', child: Text(widget.isArabic ? 'جامع بيانات' : 'Data Collector')),
+                DropdownMenuItem(
+                  value: 'all',
+                  child: Text(widget.isArabic ? 'كل الأدوار' : 'All Roles'),
+                ),
+                DropdownMenuItem(
+                  value: 'super_admin',
+                  child: Text(widget.isArabic ? 'مشرف عام' : 'Super Admin'),
+                ),
+                DropdownMenuItem(
+                  value: 'admin',
+                  child: Text(widget.isArabic ? 'مشرف' : 'Admin'),
+                ),
+                DropdownMenuItem(
+                  value: 'coordinator',
+                  child: Text(widget.isArabic ? 'منسق' : 'Coordinator'),
+                ),
+                DropdownMenuItem(
+                  value: 'data_collector',
+                  child: Text(
+                    widget.isArabic ? 'جامع بيانات' : 'Data Collector',
+                  ),
+                ),
               ],
               onChanged: (value) {
                 setState(() => _selectedRoleFilter = value ?? 'all');
@@ -355,9 +391,17 @@ class _UserManagementScreenState extends State<UserManagementScreen> with Single
         unselectedLabelColor: Colors.grey,
         indicatorColor: AppColors.primaryBlue,
         tabs: [
-          Tab(text: widget.isArabic ? 'الكل ($_totalUsers)' : 'All Users ($_totalUsers)'),
+          Tab(
+            text: widget.isArabic
+                ? 'الكل ($_totalUsers)'
+                : 'All Users ($_totalUsers)',
+          ),
           Tab(text: widget.isArabic ? 'نشط' : 'Active'),
-          Tab(text: widget.isArabic ? 'معلق ($_pendingUsers)' : 'Pending ($_pendingUsers)'),
+          Tab(
+            text: widget.isArabic
+                ? 'معلق ($_pendingUsers)'
+                : 'Pending ($_pendingUsers)',
+          ),
           Tab(text: widget.isArabic ? 'مشرفين' : 'Admins'),
         ],
       ),
@@ -392,16 +436,22 @@ class _UserManagementScreenState extends State<UserManagementScreen> with Single
     final name = user['full_name'] as String? ?? 'Unknown';
     final email = user['email'] as String? ?? '';
     final role = user['role'] as String? ?? 'user';
-    final status = user['status'] as String? ?? (user['is_active'] == true ? 'active' : 'inactive');
+    final status =
+        user['status'] as String? ??
+        (user['is_active'] == true ? 'active' : 'inactive');
     final lastActive = user['last_sign_in_at'] as String?;
-    
+
     final isActive = status == 'active' || user['is_active'] == true;
     final isPending = status == 'pending_approval' || status == 'pending';
-    
-    Color statusColor = isActive ? AppColors.primaryGreen : (isPending ? Colors.orange : Colors.grey);
-    String statusText = isActive 
+
+    Color statusColor = isActive
+        ? AppColors.primaryGreen
+        : (isPending ? Colors.orange : Colors.grey);
+    String statusText = isActive
         ? (widget.isArabic ? 'نشط' : 'Active')
-        : (isPending ? (widget.isArabic ? 'معلق' : 'Pending') : (widget.isArabic ? 'غير نشط' : 'Inactive'));
+        : (isPending
+              ? (widget.isArabic ? 'معلق' : 'Pending')
+              : (widget.isArabic ? 'غير نشط' : 'Inactive'));
 
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
@@ -413,7 +463,7 @@ class _UserManagementScreenState extends State<UserManagementScreen> with Single
             CircleAvatar(
               radius: 24,
               backgroundColor: AppColors.primaryBlue.withOpacity(0.1),
-              backgroundImage: user['avatar_url'] != null 
+              backgroundImage: user['avatar_url'] != null
                   ? NetworkImage(user['avatar_url'] as String)
                   : null,
               child: user['avatar_url'] == null
@@ -452,7 +502,10 @@ class _UserManagementScreenState extends State<UserManagementScreen> with Single
                       _buildRoleBadge(role),
                       const SizedBox(width: 8),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 2,
+                        ),
                         decoration: BoxDecoration(
                           color: statusColor.withOpacity(0.1),
                           borderRadius: BorderRadius.circular(12),
@@ -478,7 +531,10 @@ class _UserManagementScreenState extends State<UserManagementScreen> with Single
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       IconButton(
-                        icon: const Icon(Icons.check_circle, color: AppColors.primaryGreen),
+                        icon: const Icon(
+                          Icons.check_circle,
+                          color: AppColors.primaryGreen,
+                        ),
                         onPressed: () => _approveUser(user),
                         tooltip: widget.isArabic ? 'موافقة' : 'Approve',
                       ),
@@ -509,7 +565,9 @@ class _UserManagementScreenState extends State<UserManagementScreen> with Single
                           children: [
                             const Icon(Icons.admin_panel_settings, size: 18),
                             const SizedBox(width: 8),
-                            Text(widget.isArabic ? 'تغيير الدور' : 'Change Role'),
+                            Text(
+                              widget.isArabic ? 'تغيير الدور' : 'Change Role',
+                            ),
                           ],
                         ),
                       ),
@@ -517,11 +575,16 @@ class _UserManagementScreenState extends State<UserManagementScreen> with Single
                         value: isActive ? 'deactivate' : 'activate',
                         child: Row(
                           children: [
-                            Icon(isActive ? Icons.block : Icons.check_circle, size: 18),
+                            Icon(
+                              isActive ? Icons.block : Icons.check_circle,
+                              size: 18,
+                            ),
                             const SizedBox(width: 8),
-                            Text(isActive 
-                                ? (widget.isArabic ? 'تعطيل' : 'Deactivate')
-                                : (widget.isArabic ? 'تفعيل' : 'Activate')),
+                            Text(
+                              isActive
+                                  ? (widget.isArabic ? 'تعطيل' : 'Deactivate')
+                                  : (widget.isArabic ? 'تفعيل' : 'Activate'),
+                            ),
                           ],
                         ),
                       ),
@@ -538,7 +601,7 @@ class _UserManagementScreenState extends State<UserManagementScreen> with Single
   Widget _buildRoleBadge(String role) {
     Color color;
     String label;
-    
+
     switch (role.toLowerCase()) {
       case 'super_admin':
       case 'superadmin':
@@ -561,7 +624,7 @@ class _UserManagementScreenState extends State<UserManagementScreen> with Single
         color = Colors.grey;
         label = role;
     }
-    
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
       decoration: BoxDecoration(
@@ -597,16 +660,21 @@ class _UserManagementScreenState extends State<UserManagementScreen> with Single
 
   Future<void> _approveUser(Map<String, dynamic> user) async {
     try {
-      await _supabase.from('profiles').update({
-        'status': 'active',
-        'is_active': true,
-        'updated_at': DateTime.now().toIso8601String(),
-      }).eq('id', user['id']);
+      await _supabase
+          .from('profiles')
+          .update({
+            'status': 'active',
+            'is_active': true,
+            'updated_at': DateTime.now().toIso8601String(),
+          })
+          .eq('id', user['id']);
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(widget.isArabic ? 'تمت الموافقة على المستخدم' : 'User approved'),
+            content: Text(
+              widget.isArabic ? 'تمت الموافقة على المستخدم' : 'User approved',
+            ),
             backgroundColor: AppColors.primaryGreen,
           ),
         );
@@ -626,9 +694,11 @@ class _UserManagementScreenState extends State<UserManagementScreen> with Single
       context: context,
       builder: (context) => AlertDialog(
         title: Text(widget.isArabic ? 'رفض المستخدم' : 'Reject User'),
-        content: Text(widget.isArabic 
-            ? 'هل أنت متأكد من رفض هذا المستخدم؟'
-            : 'Are you sure you want to reject this user?'),
+        content: Text(
+          widget.isArabic
+              ? 'هل أنت متأكد من رفض هذا المستخدم؟'
+              : 'Are you sure you want to reject this user?',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
@@ -637,7 +707,10 @@ class _UserManagementScreenState extends State<UserManagementScreen> with Single
           ElevatedButton(
             onPressed: () => Navigator.pop(context, true),
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-            child: Text(widget.isArabic ? 'رفض' : 'Reject', style: const TextStyle(color: Colors.white)),
+            child: Text(
+              widget.isArabic ? 'رفض' : 'Reject',
+              style: const TextStyle(color: Colors.white),
+            ),
           ),
         ],
       ),
@@ -645,16 +718,21 @@ class _UserManagementScreenState extends State<UserManagementScreen> with Single
 
     if (confirmed == true) {
       try {
-        await _supabase.from('profiles').update({
-          'status': 'rejected',
-          'is_active': false,
-          'updated_at': DateTime.now().toIso8601String(),
-        }).eq('id', user['id']);
+        await _supabase
+            .from('profiles')
+            .update({
+              'status': 'rejected',
+              'is_active': false,
+              'updated_at': DateTime.now().toIso8601String(),
+            })
+            .eq('id', user['id']);
 
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text(widget.isArabic ? 'تم رفض المستخدم' : 'User rejected'),
+              content: Text(
+                widget.isArabic ? 'تم رفض المستخدم' : 'User rejected',
+              ),
               backgroundColor: Colors.orange,
             ),
           );
@@ -670,20 +748,30 @@ class _UserManagementScreenState extends State<UserManagementScreen> with Single
     }
   }
 
-  Future<void> _toggleUserStatus(Map<String, dynamic> user, bool activate) async {
+  Future<void> _toggleUserStatus(
+    Map<String, dynamic> user,
+    bool activate,
+  ) async {
     try {
-      await _supabase.from('profiles').update({
-        'status': activate ? 'active' : 'inactive',
-        'is_active': activate,
-        'updated_at': DateTime.now().toIso8601String(),
-      }).eq('id', user['id']);
+      await _supabase
+          .from('profiles')
+          .update({
+            'status': activate ? 'active' : 'inactive',
+            'is_active': activate,
+            'updated_at': DateTime.now().toIso8601String(),
+          })
+          .eq('id', user['id']);
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(activate 
-                ? (widget.isArabic ? 'تم تفعيل المستخدم' : 'User activated')
-                : (widget.isArabic ? 'تم تعطيل المستخدم' : 'User deactivated')),
+            content: Text(
+              activate
+                  ? (widget.isArabic ? 'تم تفعيل المستخدم' : 'User activated')
+                  : (widget.isArabic
+                        ? 'تم تعطيل المستخدم'
+                        : 'User deactivated'),
+            ),
             backgroundColor: AppColors.primaryGreen,
           ),
         );
@@ -701,9 +789,11 @@ class _UserManagementScreenState extends State<UserManagementScreen> with Single
   void _showAddUserDialog() {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(widget.isArabic 
-            ? 'يمكن للمستخدمين التسجيل عبر التطبيق'
-            : 'Users can register through the app'),
+        content: Text(
+          widget.isArabic
+              ? 'يمكن للمستخدمين التسجيل عبر التطبيق'
+              : 'Users can register through the app',
+        ),
         backgroundColor: AppColors.primaryBlue,
       ),
     );
@@ -712,7 +802,7 @@ class _UserManagementScreenState extends State<UserManagementScreen> with Single
   void _showEditUserDialog(Map<String, dynamic> user) {
     final nameController = TextEditingController(text: user['full_name'] ?? '');
     final phoneController = TextEditingController(text: user['phone'] ?? '');
-    
+
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -747,16 +837,22 @@ class _UserManagementScreenState extends State<UserManagementScreen> with Single
             onPressed: () async {
               Navigator.pop(context);
               try {
-                await _supabase.from('profiles').update({
-                  'full_name': nameController.text,
-                  'phone': phoneController.text,
-                  'updated_at': DateTime.now().toIso8601String(),
-                }).eq('id', user['id']);
+                await _supabase
+                    .from('profiles')
+                    .update({
+                      'full_name': nameController.text,
+                      'phone': phoneController.text,
+                      'updated_at': DateTime.now().toIso8601String(),
+                    })
+                    .eq('id', user['id']);
                 _loadUsers();
               } catch (e) {
                 if (mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+                    SnackBar(
+                      content: Text('Error: $e'),
+                      backgroundColor: Colors.red,
+                    ),
                   );
                 }
               }
@@ -770,7 +866,7 @@ class _UserManagementScreenState extends State<UserManagementScreen> with Single
 
   void _showChangeRoleDialog(Map<String, dynamic> user) {
     String selectedRole = user['role'] ?? 'data_collector';
-    
+
     showDialog(
       context: context,
       builder: (context) => StatefulBuilder(
@@ -798,15 +894,20 @@ class _UserManagementScreenState extends State<UserManagementScreen> with Single
               onPressed: () async {
                 Navigator.pop(context);
                 try {
-                  await _supabase.from('profiles').update({
-                    'role': selectedRole,
-                    'updated_at': DateTime.now().toIso8601String(),
-                  }).eq('id', user['id']);
-                  
+                  await _supabase
+                      .from('profiles')
+                      .update({
+                        'role': selectedRole,
+                        'updated_at': DateTime.now().toIso8601String(),
+                      })
+                      .eq('id', user['id']);
+
                   if (mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
-                        content: Text(widget.isArabic ? 'تم تحديث الدور' : 'Role updated'),
+                        content: Text(
+                          widget.isArabic ? 'تم تحديث الدور' : 'Role updated',
+                        ),
                         backgroundColor: AppColors.primaryGreen,
                       ),
                     );
@@ -815,7 +916,10 @@ class _UserManagementScreenState extends State<UserManagementScreen> with Single
                 } catch (e) {
                   if (mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+                      SnackBar(
+                        content: Text('Error: $e'),
+                        backgroundColor: Colors.red,
+                      ),
                     );
                   }
                 }
@@ -828,20 +932,27 @@ class _UserManagementScreenState extends State<UserManagementScreen> with Single
     );
   }
 
-  List<Widget> _buildRoleRadios(String selectedRole, ValueChanged<String?> onChanged) {
+  List<Widget> _buildRoleRadios(
+    String selectedRole,
+    ValueChanged<String?> onChanged,
+  ) {
     final roles = [
       {'value': 'super_admin', 'en': 'Super Admin', 'ar': 'مشرف عام'},
       {'value': 'admin', 'en': 'Admin', 'ar': 'مشرف'},
       {'value': 'coordinator', 'en': 'Coordinator', 'ar': 'منسق'},
       {'value': 'data_collector', 'en': 'Data Collector', 'ar': 'جامع بيانات'},
     ];
-    
-    return roles.map((role) => RadioListTile<String>(
-      value: role['value']!,
-      groupValue: selectedRole,
-      onChanged: onChanged,
-      title: Text(widget.isArabic ? role['ar']! : role['en']!),
-      dense: true,
-    )).toList();
+
+    return roles
+        .map(
+          (role) => RadioListTile<String>(
+            value: role['value']!,
+            groupValue: selectedRole,
+            onChanged: onChanged,
+            title: Text(widget.isArabic ? role['ar']! : role['en']!),
+            dense: true,
+          ),
+        )
+        .toList();
   }
 }

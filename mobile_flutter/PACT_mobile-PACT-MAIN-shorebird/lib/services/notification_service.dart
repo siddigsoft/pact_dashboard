@@ -26,7 +26,7 @@ class NotificationService {
   static const String _userChannelId = 'user_notifications';
   static const String _userChannelName = 'User Notifications';
   static const String _userChannelDescription =
-    'Notifications for account activity and alerts';
+      'Notifications for account activity and alerts';
 
   // Callback for notification tap
   static void Function(NotificationResponse)? _onNotificationTap;
@@ -45,25 +45,25 @@ class NotificationService {
     // iOS initialization settings
     const DarwinInitializationSettings initializationSettingsIOS =
         DarwinInitializationSettings(
-      requestAlertPermission: true,
-      requestBadgePermission: true,
-      requestSoundPermission: true,
-    );
+          requestAlertPermission: true,
+          requestBadgePermission: true,
+          requestSoundPermission: true,
+        );
 
     // macOS initialization settings
     const DarwinInitializationSettings initializationSettingsMacOS =
         DarwinInitializationSettings(
-      requestAlertPermission: true,
-      requestBadgePermission: true,
-      requestSoundPermission: true,
-    );
+          requestAlertPermission: true,
+          requestBadgePermission: true,
+          requestSoundPermission: true,
+        );
 
     const InitializationSettings initializationSettings =
         InitializationSettings(
-      android: initializationSettingsAndroid,
-      iOS: initializationSettingsIOS,
-      macOS: initializationSettingsMacOS,
-    );
+          android: initializationSettingsAndroid,
+          iOS: initializationSettingsIOS,
+          macOS: initializationSettingsMacOS,
+        );
 
     await _notifications.initialize(
       initializationSettings,
@@ -83,21 +83,15 @@ class NotificationService {
   static Future<void> _requestPermissions() async {
     final bool? result = await _notifications
         .resolvePlatformSpecificImplementation<
-            IOSFlutterLocalNotificationsPlugin>()
-        ?.requestPermissions(
-          alert: true,
-          badge: true,
-          sound: true,
-        );
+          IOSFlutterLocalNotificationsPlugin
+        >()
+        ?.requestPermissions(alert: true, badge: true, sound: true);
 
     await _notifications
         .resolvePlatformSpecificImplementation<
-            MacOSFlutterLocalNotificationsPlugin>()
-        ?.requestPermissions(
-          alert: true,
-          badge: true,
-          sound: true,
-        );
+          MacOSFlutterLocalNotificationsPlugin
+        >()
+        ?.requestPermissions(alert: true, badge: true, sound: true);
   }
 
   // ==================== CHAT MESSAGE NOTIFICATIONS ====================
@@ -112,17 +106,17 @@ class NotificationService {
 
     const AndroidNotificationDetails androidDetails =
         AndroidNotificationDetails(
-      _chatChannelId,
-      _chatChannelName,
-      channelDescription: _chatChannelDescription,
-      importance: Importance.max,
-      priority: Priority.high,
-      icon: '@mipmap/ic_launcher',
-      sound: RawResourceAndroidNotificationSound('notification_sound'),
-      enableVibration: true,
-      playSound: true,
-      styleInformation: BigTextStyleInformation(''),
-    );
+          _chatChannelId,
+          _chatChannelName,
+          channelDescription: _chatChannelDescription,
+          importance: Importance.max,
+          priority: Priority.high,
+          icon: '@mipmap/ic_launcher',
+          sound: RawResourceAndroidNotificationSound('notification_sound'),
+          enableVibration: true,
+          playSound: true,
+          styleInformation: BigTextStyleInformation(''),
+        );
 
     const DarwinNotificationDetails iosDetails = DarwinNotificationDetails(
       presentAlert: true,
@@ -158,16 +152,16 @@ class NotificationService {
 
     const AndroidNotificationDetails androidDetails =
         AndroidNotificationDetails(
-      _mmpChannelId,
-      _mmpChannelName,
-      channelDescription: _mmpChannelDescription,
-      importance: Importance.high,
-      priority: Priority.high,
-      icon: '@mipmap/ic_launcher',
-      enableVibration: true,
-      playSound: true,
-      styleInformation: BigTextStyleInformation(''),
-    );
+          _mmpChannelId,
+          _mmpChannelName,
+          channelDescription: _mmpChannelDescription,
+          importance: Importance.high,
+          priority: Priority.high,
+          icon: '@mipmap/ic_launcher',
+          enableVibration: true,
+          playSound: true,
+          styleInformation: BigTextStyleInformation(''),
+        );
 
     const DarwinNotificationDetails iosDetails = DarwinNotificationDetails(
       presentAlert: true,
@@ -200,21 +194,22 @@ class NotificationService {
   }) async {
     await initialize();
 
-    final Importance importance =
-        type == 'warning' || type == 'error' ? Importance.max : Importance.high;
+    final Importance importance = type == 'warning' || type == 'error'
+        ? Importance.max
+        : Importance.high;
 
     final AndroidNotificationDetails androidDetails =
         AndroidNotificationDetails(
-      _userChannelId,
-      _userChannelName,
-      channelDescription: _userChannelDescription,
-      importance: importance,
-      priority: Priority.high,
-      icon: '@mipmap/ic_launcher',
-      enableVibration: true,
-      playSound: true,
-      styleInformation: BigTextStyleInformation(body),
-    );
+          _userChannelId,
+          _userChannelName,
+          channelDescription: _userChannelDescription,
+          importance: importance,
+          priority: Priority.high,
+          icon: '@mipmap/ic_launcher',
+          enableVibration: true,
+          playSound: true,
+          styleInformation: BigTextStyleInformation(body),
+        );
 
     const DarwinNotificationDetails iosDetails = DarwinNotificationDetails(
       presentAlert: true,
@@ -247,18 +242,18 @@ class NotificationService {
 
     const AndroidNotificationDetails androidDetails =
         AndroidNotificationDetails(
-      _updateChannelId,
-      _updateChannelName,
-      channelDescription: _updateChannelDescription,
-      importance: Importance.high,
-      priority: Priority.high,
-      icon: '@mipmap/ic_launcher',
-      enableVibration: true,
-      playSound: true,
-      ongoing: false, // User can dismiss
-      autoCancel: true,
-      styleInformation: BigTextStyleInformation(''),
-    );
+          _updateChannelId,
+          _updateChannelName,
+          channelDescription: _updateChannelDescription,
+          importance: Importance.high,
+          priority: Priority.high,
+          icon: '@mipmap/ic_launcher',
+          enableVibration: true,
+          playSound: true,
+          ongoing: false, // User can dismiss
+          autoCancel: true,
+          styleInformation: BigTextStyleInformation(''),
+        );
 
     const DarwinNotificationDetails iosDetails = DarwinNotificationDetails(
       presentAlert: true,
@@ -275,7 +270,8 @@ class NotificationService {
     await _notifications.show(
       999, // Fixed ID for updates - will replace previous update notification
       BilingualNotificationStrings.appUpdateAvailableTitle,
-      description ?? BilingualNotificationStrings.appUpdateAvailableBody(version),
+      description ??
+          BilingualNotificationStrings.appUpdateAvailableBody(version),
       platformDetails,
       payload: 'update:$version',
     );
@@ -286,17 +282,17 @@ class NotificationService {
 
     const AndroidNotificationDetails androidDetails =
         AndroidNotificationDetails(
-      _updateChannelId,
-      _updateChannelName,
-      channelDescription: _updateChannelDescription,
-      importance: Importance.low,
-      priority: Priority.low,
-      icon: '@mipmap/ic_launcher',
-      ongoing: true, // Can't be dismissed while downloading
-      autoCancel: false,
-      showProgress: true,
-      indeterminate: true,
-    );
+          _updateChannelId,
+          _updateChannelName,
+          channelDescription: _updateChannelDescription,
+          importance: Importance.low,
+          priority: Priority.low,
+          icon: '@mipmap/ic_launcher',
+          ongoing: true, // Can't be dismissed while downloading
+          autoCancel: false,
+          showProgress: true,
+          indeterminate: true,
+        );
 
     const DarwinNotificationDetails iosDetails = DarwinNotificationDetails(
       presentAlert: true,
@@ -323,14 +319,14 @@ class NotificationService {
 
     const AndroidNotificationDetails androidDetails =
         AndroidNotificationDetails(
-      _updateChannelId,
-      _updateChannelName,
-      channelDescription: _updateChannelDescription,
-      importance: Importance.high,
-      priority: Priority.high,
-      icon: '@mipmap/ic_launcher',
-      autoCancel: true,
-    );
+          _updateChannelId,
+          _updateChannelName,
+          channelDescription: _updateChannelDescription,
+          importance: Importance.high,
+          priority: Priority.high,
+          icon: '@mipmap/ic_launcher',
+          autoCancel: true,
+        );
 
     const DarwinNotificationDetails iosDetails = DarwinNotificationDetails(
       presentAlert: true,
@@ -365,14 +361,16 @@ class NotificationService {
   }) async {
     await initialize();
 
-    const AndroidNotificationDetails androidDetails = AndroidNotificationDetails(
-      'cost_submission_approvals',
-      'Cost Submission Approvals',
-      channelDescription: 'Notifications for cost submission approval status',
-      importance: Importance.max,
-      priority: Priority.high,
-      showWhen: true,
-    );
+    const AndroidNotificationDetails androidDetails =
+        AndroidNotificationDetails(
+          'cost_submission_approvals',
+          'Cost Submission Approvals',
+          channelDescription:
+              'Notifications for cost submission approval status',
+          importance: Importance.max,
+          priority: Priority.high,
+          showWhen: true,
+        );
 
     const DarwinNotificationDetails iOSDetails = DarwinNotificationDetails();
 
@@ -384,7 +382,11 @@ class NotificationService {
     await _notifications.show(
       submissionId.hashCode,
       BilingualNotificationStrings.costSubmissionApprovedTitle,
-      BilingualNotificationStrings.costSubmissionApprovedBody(siteVisitId, approvedAmount, currency),
+      BilingualNotificationStrings.costSubmissionApprovedBody(
+        siteVisitId,
+        approvedAmount,
+        currency,
+      ),
       platformDetails,
       payload: 'cost_submission_approved:$submissionId',
     );
@@ -397,14 +399,16 @@ class NotificationService {
   }) async {
     await initialize();
 
-    const AndroidNotificationDetails androidDetails = AndroidNotificationDetails(
-      'cost_submission_rejections',
-      'Cost Submission Rejections',
-      channelDescription: 'Notifications for cost submission rejection status',
-      importance: Importance.max,
-      priority: Priority.high,
-      showWhen: true,
-    );
+    const AndroidNotificationDetails androidDetails =
+        AndroidNotificationDetails(
+          'cost_submission_rejections',
+          'Cost Submission Rejections',
+          channelDescription:
+              'Notifications for cost submission rejection status',
+          importance: Importance.max,
+          priority: Priority.high,
+          showWhen: true,
+        );
 
     const DarwinNotificationDetails iOSDetails = DarwinNotificationDetails();
 
@@ -416,7 +420,10 @@ class NotificationService {
     await _notifications.show(
       submissionId.hashCode,
       BilingualNotificationStrings.costSubmissionRejectedTitle,
-      BilingualNotificationStrings.costSubmissionRejectedBody(siteVisitId, rejectionReason),
+      BilingualNotificationStrings.costSubmissionRejectedBody(
+        siteVisitId,
+        rejectionReason,
+      ),
       platformDetails,
       payload: 'cost_submission_rejected:$submissionId',
     );
@@ -429,14 +436,16 @@ class NotificationService {
   }) async {
     await initialize();
 
-    const AndroidNotificationDetails androidDetails = AndroidNotificationDetails(
-      'cost_submission_revisions',
-      'Cost Submission Revisions',
-      channelDescription: 'Notifications for cost submission revision requests',
-      importance: Importance.max,
-      priority: Priority.high,
-      showWhen: true,
-    );
+    const AndroidNotificationDetails androidDetails =
+        AndroidNotificationDetails(
+          'cost_submission_revisions',
+          'Cost Submission Revisions',
+          channelDescription:
+              'Notifications for cost submission revision requests',
+          importance: Importance.max,
+          priority: Priority.high,
+          showWhen: true,
+        );
 
     const DarwinNotificationDetails iOSDetails = DarwinNotificationDetails();
 
@@ -448,7 +457,10 @@ class NotificationService {
     await _notifications.show(
       submissionId.hashCode,
       BilingualNotificationStrings.revisionRequestedTitle,
-      BilingualNotificationStrings.revisionRequestedBody(siteVisitId, revisionNotes),
+      BilingualNotificationStrings.revisionRequestedBody(
+        siteVisitId,
+        revisionNotes,
+      ),
       platformDetails,
       payload: 'cost_submission_revision:$submissionId',
     );
@@ -459,14 +471,15 @@ class NotificationService {
   }) async {
     await initialize();
 
-    const AndroidNotificationDetails androidDetails = AndroidNotificationDetails(
-      'offline_sync',
-      'Offline Sync',
-      channelDescription: 'Notifications for offline data synchronization',
-      importance: Importance.defaultImportance,
-      priority: Priority.defaultPriority,
-      showWhen: true,
-    );
+    const AndroidNotificationDetails androidDetails =
+        AndroidNotificationDetails(
+          'offline_sync',
+          'Offline Sync',
+          channelDescription: 'Notifications for offline data synchronization',
+          importance: Importance.defaultImportance,
+          priority: Priority.defaultPriority,
+          showWhen: true,
+        );
 
     const DarwinNotificationDetails iOSDetails = DarwinNotificationDetails();
 
@@ -491,14 +504,15 @@ class NotificationService {
   }) async {
     await initialize();
 
-    const AndroidNotificationDetails androidDetails = AndroidNotificationDetails(
-      'budget_alerts',
-      'Budget Alerts',
-      channelDescription: 'Notifications for budget-related alerts',
-      importance: Importance.high,
-      priority: Priority.high,
-      showWhen: true,
-    );
+    const AndroidNotificationDetails androidDetails =
+        AndroidNotificationDetails(
+          'budget_alerts',
+          'Budget Alerts',
+          channelDescription: 'Notifications for budget-related alerts',
+          importance: Importance.high,
+          priority: Priority.high,
+          showWhen: true,
+        );
 
     const DarwinNotificationDetails iOSDetails = DarwinNotificationDetails();
 
@@ -510,7 +524,11 @@ class NotificationService {
     await _notifications.show(
       'budget_alert_$siteVisitId'.hashCode,
       BilingualNotificationStrings.budgetAlertTitle,
-      BilingualNotificationStrings.budgetAlertBody(siteVisitId, remainingBudget, currency),
+      BilingualNotificationStrings.budgetAlertBody(
+        siteVisitId,
+        remainingBudget,
+        currency,
+      ),
       platformDetails,
       payload: 'budget_alert:$siteVisitId',
     );
@@ -548,12 +566,12 @@ class NotificationService {
 
     const AndroidNotificationDetails androidDetails =
         AndroidNotificationDetails(
-      'scheduled',
-      'Scheduled Notifications',
-      channelDescription: 'Scheduled notifications',
-      importance: Importance.high,
-      priority: Priority.high,
-    );
+          'scheduled',
+          'Scheduled Notifications',
+          channelDescription: 'Scheduled notifications',
+          importance: Importance.high,
+          priority: Priority.high,
+        );
 
     const NotificationDetails platformDetails = NotificationDetails(
       android: androidDetails,

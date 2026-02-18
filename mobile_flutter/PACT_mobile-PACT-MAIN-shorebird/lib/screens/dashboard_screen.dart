@@ -91,11 +91,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
       // Check connectivity first
       final connectivityResult = await Connectivity().checkConnectivity();
       final isOffline = connectivityResult.contains(ConnectivityResult.none);
-      
+
       if (mounted) {
         setState(() => _isOffline = isOffline);
       }
-      
+
       if (isOffline) {
         // OFFLINE MODE: Load from cache
         debugPrint('[Dashboard] Offline - loading from cache');
@@ -148,7 +148,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       }
     }
   }
-  
+
   /// Initialize from cached data when offline
   Future<void> _initializeFromCache(String userId) async {
     try {
@@ -156,19 +156,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
         setState(() => _isOffline = true);
       }
       debugPrint('[Dashboard] Loading from cache');
-      
+
       // Load cached profile
       final cachedProfile = await _getCachedProfile(userId);
       if (cachedProfile != null) {
         _applyProfileData(cachedProfile);
       }
-      
+
       // Load cached dashboard data
       final cachedData = await _getCachedDashboardData(userId);
       if (cachedData != null) {
         _applyCachedDashboardData(cachedData);
       }
-      
+
       if (!mounted) return;
       setState(() => _isLoading = false);
     } catch (e) {
@@ -177,25 +177,26 @@ class _DashboardScreenState extends State<DashboardScreen> {
       setState(() => _isLoading = false);
     }
   }
-  
+
   void _applyProfileData(Map<String, dynamic> profileResponse) {
     _userRole = (profileResponse['role'] as String?)?.toLowerCase() ?? '';
-    _isCoordinator =
-        _userRole == 'coordinator' ||
+    _isCoordinator = _userRole == 'coordinator' ||
         _userRole == 'field_coordinator' ||
         _userRole == 'state_coordinator';
 
     _userState = profileResponse['state_id'] as String?;
     _userHub = profileResponse['hub_id'] as String?;
 
-    _isAdminOrSuperUser =
-        _userRole == 'admin' ||
+    _isAdminOrSuperUser = _userRole == 'admin' ||
         _userRole == 'super_admin' ||
         _userRole == 'supervisor' ||
         _userRole == 'fom';
   }
-  
-  Future<void> _cacheProfile(String userId, Map<String, dynamic> profile) async {
+
+  Future<void> _cacheProfile(
+    String userId,
+    Map<String, dynamic> profile,
+  ) async {
     try {
       final offlineDb = OfflineDb();
       await offlineDb.cacheItem(
@@ -208,18 +209,21 @@ class _DashboardScreenState extends State<DashboardScreen> {
       debugPrint('[Dashboard] Error caching profile: $e');
     }
   }
-  
+
   Future<Map<String, dynamic>?> _getCachedProfile(String userId) async {
     try {
       final offlineDb = OfflineDb();
-      final cached = offlineDb.getCachedItem(OfflineDb.profileCacheBox, 'profile_$userId');
-      return cached?.data as Map<String, dynamic>?;
+      final cached = offlineDb.getCachedItem(
+        OfflineDb.profileCacheBox,
+        'profile_$userId',
+      );
+      return cached?.data;
     } catch (e) {
       debugPrint('[Dashboard] Error getting cached profile: $e');
       return null;
     }
   }
-  
+
   Future<void> _cacheDashboardData(String userId) async {
     try {
       final offlineDb = OfflineDb();
@@ -239,7 +243,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
         'completionRateDC': _completionRateDC,
         'isCoordinator': _isCoordinator,
         'coordinatorVisits': _coordinatorVisits.map((v) => v.toJson()).toList(),
-        'dataCollectorVisits': _dataCollectorVisits.map((v) => v.toJson()).toList(),
+        'dataCollectorVisits':
+            _dataCollectorVisits.map((v) => v.toJson()).toList(),
       };
       await offlineDb.cacheItem(
         OfflineDb.siteCacheBox,
@@ -247,23 +252,28 @@ class _DashboardScreenState extends State<DashboardScreen> {
         data: data,
         ttl: const Duration(hours: 12),
       );
-      debugPrint('[Dashboard] Cached dashboard data with ${_coordinatorVisits.length} coordinator and ${_dataCollectorVisits.length} DC visits');
+      debugPrint(
+        '[Dashboard] Cached dashboard data with ${_coordinatorVisits.length} coordinator and ${_dataCollectorVisits.length} DC visits',
+      );
     } catch (e) {
       debugPrint('[Dashboard] Error caching dashboard data: $e');
     }
   }
-  
+
   Future<Map<String, dynamic>?> _getCachedDashboardData(String userId) async {
     try {
       final offlineDb = OfflineDb();
-      final cached = offlineDb.getCachedItem(OfflineDb.siteCacheBox, 'dashboard_data_$userId');
-      return cached?.data as Map<String, dynamic>?;
+      final cached = offlineDb.getCachedItem(
+        OfflineDb.siteCacheBox,
+        'dashboard_data_$userId',
+      );
+      return cached?.data;
     } catch (e) {
       debugPrint('[Dashboard] Error getting cached dashboard data: $e');
       return null;
     }
   }
-  
+
   void _applyCachedDashboardData(Map<String, dynamic> data) {
     _totalOperations = (data['totalOperations'] as num?)?.toInt() ?? 0;
     _completedVisits = (data['completedVisits'] as num?)?.toInt() ?? 0;
@@ -279,7 +289,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     _streak = (data['streak'] as num?)?.toInt() ?? 0;
     _completionRateDC = (data['completionRateDC'] as num?)?.toDouble() ?? 0.0;
     _isCoordinator = data['isCoordinator'] as bool? ?? false;
-    
+
     // Restore visit lists
     final coordVisits = data['coordinatorVisits'] as List?;
     if (coordVisits != null) {
@@ -287,7 +297,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           .map((v) => SiteVisit.fromJson(Map<String, dynamic>.from(v as Map)))
           .toList();
     }
-    
+
     final dcVisits = data['dataCollectorVisits'] as List?;
     if (dcVisits != null) {
       _dataCollectorVisits = dcVisits
@@ -351,7 +361,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             .eq('user_id', _userId!);
 
         if ((response as List).isNotEmpty) {
-          _userProjectIds = (response as List)
+          _userProjectIds = (response)
               .map((m) => m['project_id']?.toString())
               .where((id) => id != null && id.isNotEmpty)
               .cast<String>()
@@ -373,16 +383,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
       // ALWAYS check projects table for team composition (primary source)
       // This matches the web app's useUserProjects hook
       try {
-        final projectsResponse = await Supabase.instance.client
-            .from('projects')
-            .select('id, team');
+        final projectsResponse =
+            await Supabase.instance.client.from('projects').select('id, team');
 
         debugPrint(
           'Checking ${(projectsResponse as List).length} projects for user membership',
         );
         int foundCount = 0;
 
-        for (final project in projectsResponse as List) {
+        for (final project in projectsResponse) {
           final projectId = project['id']?.toString();
           if (projectId == null) continue;
 
@@ -468,9 +477,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
           .limit(1000);
 
       // Filter by project membership (for non-admin users) before converting to SiteVisit
-      List<Map<String, dynamic>> filteredResponse = (response as List)
-          .map((e) => e as Map<String, dynamic>)
-          .toList();
+      List<Map<String, dynamic>> filteredResponse =
+          (response as List).map((e) => e as Map<String, dynamic>).toList();
       if (!_isAdminOrSuperUser) {
         final beforeCount = filteredResponse.length;
         filteredResponse = filteredResponse.where((json) {
@@ -492,9 +500,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
       }
 
       // Convert to SiteVisit objects
-      final siteVisits = filteredResponse
-          .map((json) => SiteVisit.fromJson(json))
-          .toList();
+      final siteVisits =
+          filteredResponse.map((json) => SiteVisit.fromJson(json)).toList();
 
       _coordinatorVisits = siteVisits;
 
@@ -591,8 +598,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
       }
 
       // Filter by project membership (for non-admin users) before converting to SiteVisit
-      List<Map<String, dynamic>> filteredEntries = allEntriesMap.values
-          .toList();
+      List<Map<String, dynamic>> filteredEntries =
+          allEntriesMap.values.toList();
       if (!_isAdminOrSuperUser) {
         final beforeCount = filteredEntries.length;
         filteredEntries = filteredEntries.where((json) {
@@ -614,9 +621,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
       }
 
       // Convert to SiteVisit objects
-      final allVisits = filteredEntries
-          .map((json) => SiteVisit.fromJson(json))
-          .toList();
+      final allVisits =
+          filteredEntries.map((json) => SiteVisit.fromJson(json)).toList();
 
       _dataCollectorVisits = allVisits;
 
@@ -713,30 +719,28 @@ class _DashboardScreenState extends State<DashboardScreen> {
           final locMap = location is Map
               ? location
               : (location is String
-                    ? Map<String, dynamic>.from(
-                        Map<String, dynamic>.from(
-                          (location)
-                              .split(',')
-                              .asMap()
-                              .map(
-                                (i, v) => MapEntry(
-                                  i == 0 ? 'latitude' : 'longitude',
-                                  double.tryParse(v.trim()) ?? 0.0,
-                                ),
+                  ? Map<String, dynamic>.from(
+                      Map<String, dynamic>.from(
+                        (location).split(',').asMap().map(
+                              (i, v) => MapEntry(
+                                i == 0 ? 'latitude' : 'longitude',
+                                double.tryParse(v.trim()) ?? 0.0,
                               ),
-                        ),
-                      )
-                    : null);
+                            ),
+                      ),
+                    )
+                  : null);
 
           if (locMap != null) {
             _currentLocation = {
               'latitude':
-                  ((locMap['latitude'] ?? locMap['lat'] ?? 0.0) as num).toDouble(),
-              'longitude':
-                  ((locMap['longitude'] ?? locMap['lng'] ?? locMap['lon'] ?? 0.0) as num).toDouble(),
+                  (locMap['latitude'] ?? locMap['lat'] ?? 0.0) as double,
+              'longitude': (locMap['longitude'] ??
+                  locMap['lng'] ??
+                  locMap['lon'] ??
+                  0.0) as double,
             };
-            _hasLocation =
-                _currentLocation!['latitude'] != 0.0 &&
+            _hasLocation = _currentLocation!['latitude'] != 0.0 &&
                 _currentLocation!['longitude'] != 0.0;
           }
         }
@@ -763,13 +767,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
         'longitude': position.longitude,
       };
 
-      await Supabase.instance.client
-          .from('profiles')
-          .update({
-            'location': locationData,
-            'updated_at': DateTime.now().toIso8601String(),
-          })
-          .eq('id', _userId!);
+      await Supabase.instance.client.from('profiles').update({
+        'location': locationData,
+        'updated_at': DateTime.now().toIso8601String(),
+      }).eq('id', _userId!);
 
       _currentLocation = {
         'latitude': position.latitude,
@@ -810,14 +811,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
     if (completed.isEmpty) return 0;
 
-    final completedDates =
-        completed
-            .where((v) => v.completedAt != null)
-            .map((v) => v.completedAt!.toLocal())
-            .map((d) => DateTime(d.year, d.month, d.day))
-            .toSet()
-            .toList()
-          ..sort((a, b) => b.compareTo(a));
+    final completedDates = completed
+        .where((v) => v.completedAt != null)
+        .map((v) => v.completedAt!.toLocal())
+        .map((d) => DateTime(d.year, d.month, d.day))
+        .toSet()
+        .toList()
+      ..sort((a, b) => b.compareTo(a));
 
     if (completedDates.isEmpty) return 0;
 
@@ -875,7 +875,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               // Operations Center Header
                               Row(
                                 children: [
-                                  Icon(
+                                  const Icon(
                                     Icons.dashboard_outlined,
                                     color: AppColors.primaryBlue,
                                     size: 24,
@@ -917,7 +917,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                   child: Row(
                                     mainAxisSize: MainAxisSize.min,
                                     children: [
-                                      Icon(
+                                      const Icon(
                                         Icons.location_on,
                                         size: 16,
                                         color: AppColors.accentGreen,
@@ -1489,9 +1489,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Widget _buildTabButton(String tab, String label, IconData icon) {
-    final isActive = _isCoordinator
-        ? _coordinatorTab == tab
-        : _dataCollectorTab == tab;
+    final isActive =
+        _isCoordinator ? _coordinatorTab == tab : _dataCollectorTab == tab;
 
     return InkWell(
       onTap: () => setState(() {
@@ -1596,13 +1595,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Widget _buildUpcomingTab() {
-    final upcoming =
-        _coordinatorVisits
-            .where(
-              (v) => v.dueDate != null && v.dueDate!.isAfter(DateTime.now()),
-            )
-            .toList()
-          ..sort((a, b) => a.dueDate!.compareTo(b.dueDate!));
+    final upcoming = _coordinatorVisits
+        .where(
+          (v) => v.dueDate != null && v.dueDate!.isAfter(DateTime.now()),
+        )
+        .toList()
+      ..sort((a, b) => a.dueDate!.compareTo(b.dueDate!));
 
     if (upcoming.isEmpty) {
       return Center(
@@ -1631,13 +1629,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   Widget _buildCalendarTab() {
     // Simplified calendar view - just show upcoming visits by date
-    final upcoming =
-        _coordinatorVisits
-            .where(
-              (v) => v.dueDate != null && v.dueDate!.isAfter(DateTime.now()),
-            )
-            .toList()
-          ..sort((a, b) => a.dueDate!.compareTo(b.dueDate!));
+    final upcoming = _coordinatorVisits
+        .where(
+          (v) => v.dueDate != null && v.dueDate!.isAfter(DateTime.now()),
+        )
+        .toList()
+      ..sort((a, b) => a.dueDate!.compareTo(b.dueDate!));
 
     final groupedByDate = <DateTime, List<SiteVisit>>{};
     for (final visit in upcoming) {
@@ -1773,13 +1770,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
           v.dueDate!.day == today.day;
     }).toList();
 
-    final upcoming =
-        _dataCollectorVisits
-            .where(
-              (v) => v.dueDate != null && v.dueDate!.isAfter(DateTime.now()),
-            )
-            .toList()
-          ..sort((a, b) => a.dueDate!.compareTo(b.dueDate!));
+    final upcoming = _dataCollectorVisits
+        .where(
+          (v) => v.dueDate != null && v.dueDate!.isAfter(DateTime.now()),
+        )
+        .toList()
+      ..sort((a, b) => a.dueDate!.compareTo(b.dueDate!));
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1810,9 +1806,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   ],
                 ),
                 const SizedBox(height: 12),
-                ...overdue
-                    .take(5)
-                    .map(
+                ...overdue.take(5).map(
                       (visit) => _buildVisitListItem(visit, isOverdue: true),
                     ),
               ],
@@ -1849,7 +1843,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               padding: const EdgeInsets.all(32),
               child: Column(
                 children: [
-                  Icon(
+                  const Icon(
                     Icons.location_off,
                     size: 48,
                     color: AppColors.textLight,
@@ -2006,19 +2000,25 @@ class _DashboardScreenState extends State<DashboardScreen> {
           style: GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.w600),
         ),
         const SizedBox(height: 16),
-        _buildHelpCard('Starting a Visit', [
-          '1. Find your assigned visit',
-          '2. Click "Start" button',
-          '3. Enable location permissions',
-          '4. Complete the visit report',
-        ], Icons.play_arrow),
+        _buildHelpCard(
+            'Starting a Visit',
+            [
+              '1. Find your assigned visit',
+              '2. Click "Start" button',
+              '3. Enable location permissions',
+              '4. Complete the visit report',
+            ],
+            Icons.play_arrow),
         const SizedBox(height: 12),
-        _buildHelpCard('Completing a Visit', [
-          '1. Fill in all required fields',
-          '2. Add photos if needed',
-          '3. Submit the report',
-          '4. Wait for verification',
-        ], Icons.check_circle),
+        _buildHelpCard(
+            'Completing a Visit',
+            [
+              '1. Fill in all required fields',
+              '2. Add photos if needed',
+              '3. Submit the report',
+              '4. Wait for verification',
+            ],
+            Icons.check_circle),
         const SizedBox(height: 16),
         Container(
           padding: const EdgeInsets.all(16),
@@ -2031,7 +2031,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             children: [
               Row(
                 children: [
-                  Icon(Icons.phone, color: AppColors.primaryBlue),
+                  const Icon(Icons.phone, color: AppColors.primaryBlue),
                   const SizedBox(width: 8),
                   Text(
                     'Need Help?',

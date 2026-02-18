@@ -14,11 +14,11 @@ class PaymentMethodsCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
+            const Row(
               children: [
-                const Icon(Icons.payment, size: 24),
-                const SizedBox(width: 12),
-                const Text(
+                Icon(Icons.payment, size: 24),
+                SizedBox(width: 12),
+                Text(
                   'Payment Methods',
                   style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                 ),

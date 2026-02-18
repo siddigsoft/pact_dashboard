@@ -3,7 +3,6 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
@@ -24,7 +23,9 @@ import '../models/chat_contact.dart';
 import '../services/chat_service.dart';
 import '../services/chat_contact_service.dart';
 import '../services/webrtc_service.dart';
+import '../services/agora_call_service.dart';
 import '../screens/call_screen.dart';
+import '../screens/agora_call_screen.dart';
 import '../theme/app_colors.dart';
 import '../utils/error_handler.dart';
 
@@ -94,7 +95,8 @@ class _ChatScreenState extends State<ChatScreen> {
     final messages = await _chatService.getChatMessages(widget.chat.id);
 
     setState(() {
-      _messages = messages; // Messages already ordered by created_at ascending (oldest first)
+      _messages =
+          messages; // Messages already ordered by created_at ascending (oldest first)
       _isLoading = false;
     });
 
@@ -139,8 +141,7 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Future<void> _loadParticipants() async {
-  final participants =
-    await _chatService.getChatParticipants(widget.chat.id);
+    final participants = await _chatService.getChatParticipants(widget.chat.id);
     // Debug: print participants loaded
     // ignore: avoid_print
     print('_loadParticipants for ${widget.chat.id}: $participants');
@@ -149,8 +150,7 @@ class _ChatScreenState extends State<ChatScreen> {
 
     if (widget.chat.otherParticipantId != null &&
         !updatedParticipants.any(
-          (participant) =>
-              participant.userId == widget.chat.otherParticipantId,
+          (participant) => participant.userId == widget.chat.otherParticipantId,
         )) {
       updatedParticipants.add(
         ChatParticipant(
@@ -205,13 +205,16 @@ class _ChatScreenState extends State<ChatScreen> {
     if (_contactUserId == null || _contactUserId!.isEmpty) return;
 
     try {
-      final contact =
-          await _contactService.getContact(_currentUserId!, _contactUserId!);
+      final contact = await _contactService.getContact(
+        _currentUserId!,
+        _contactUserId!,
+      );
 
       // If contact doesn't exist, create it with default name
       if (contact == null && _contactUserId!.isNotEmpty) {
-        final defaultName =
-            await _contactService.fetchUserProfileName(_contactUserId!);
+        final defaultName = await _contactService.fetchUserProfileName(
+          _contactUserId!,
+        );
         final newContact = await _contactService.saveContact(
           userId: _currentUserId!,
           contactUserId: _contactUserId!,
@@ -379,10 +382,7 @@ class _ChatScreenState extends State<ChatScreen> {
           const SizedBox(height: 8),
           Text(
             label,
-            style: GoogleFonts.poppins(
-              fontSize: 12,
-              color: Colors.grey[700],
-            ),
+            style: GoogleFonts.poppins(fontSize: 12, color: Colors.grey[700]),
           ),
         ],
       ),
@@ -412,9 +412,9 @@ class _ChatScreenState extends State<ChatScreen> {
     } catch (e) {
       debugPrint('Error picking image from camera: $e');
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to capture image: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Failed to capture image: $e')));
       }
     }
   }
@@ -432,9 +432,9 @@ class _ChatScreenState extends State<ChatScreen> {
     } catch (e) {
       debugPrint('Error picking image from gallery: $e');
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to select image: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Failed to select image: $e')));
       }
     }
   }
@@ -443,7 +443,9 @@ class _ChatScreenState extends State<ChatScreen> {
     // Document picking is currently disabled - use image picker instead
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please use gallery or camera to share files')),
+        const SnackBar(
+          content: Text('Please use gallery or camera to share files'),
+        ),
       );
     }
   }
@@ -452,11 +454,12 @@ class _ChatScreenState extends State<ChatScreen> {
     setState(() => _isUploadingFile = true);
 
     try {
-      final fileName = '${DateTime.now().millisecondsSinceEpoch}_${file.path.split('/').last}';
+      final fileName =
+          '${DateTime.now().millisecondsSinceEpoch}_${file.path.split('/').last}';
       final storagePath = 'chat_files/${widget.chat.id}/$fileName';
 
       final bytes = await file.readAsBytes();
-      
+
       await Supabase.instance.client.storage
           .from('chat-attachments')
           .uploadBinary(storagePath, bytes);
@@ -474,7 +477,10 @@ class _ChatScreenState extends State<ChatScreen> {
         messageContent = '[Document] ${file.path.split('/').last}\n$url';
       }
 
-      final message = await _chatService.sendMessage(widget.chat.id, messageContent);
+      final message = await _chatService.sendMessage(
+        widget.chat.id,
+        messageContent,
+      );
       if (message != null) {
         setState(() {
           _messages.add(message);
@@ -484,9 +490,9 @@ class _ChatScreenState extends State<ChatScreen> {
     } catch (e) {
       debugPrint('Error uploading file: $e');
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to upload file: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Failed to upload file: $e')));
       }
     } finally {
       setState(() => _isUploadingFile = false);
@@ -501,7 +507,9 @@ class _ChatScreenState extends State<ChatScreen> {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text('Microphone permission is required to record voice messages'),
+              content: Text(
+                'Microphone permission is required to record voice messages',
+              ),
               backgroundColor: Colors.orange,
             ),
           );
@@ -569,7 +577,7 @@ class _ChatScreenState extends State<ChatScreen> {
   Future<void> _stopRecording() async {
     try {
       _recordingTimer?.cancel();
-      
+
       if (!_isRecording || _recordingPath == null) {
         if (mounted) setState(() => _isRecording = false);
         return;
@@ -577,20 +585,20 @@ class _ChatScreenState extends State<ChatScreen> {
 
       // Capture duration before resetting
       final recordedDuration = _recordingDuration;
-      
+
       // Stop recording and get the path
       final path = await _audioRecorder.stop();
-      
+
       if (path != null && path.isNotEmpty) {
         debugPrint('[ChatScreen] Recording stopped, uploading: $path');
-        
+
         // Store duration temporarily for upload
         _recordingDuration = recordedDuration;
-        
+
         // Upload the voice message
         await _uploadVoiceMessage(path);
       }
-      
+
       if (mounted) {
         setState(() {
           _isRecording = false;
@@ -611,30 +619,34 @@ class _ChatScreenState extends State<ChatScreen> {
       }
     }
   }
-  
+
   Future<void> _uploadVoiceMessage(String filePath) async {
     try {
       setState(() => _isSending = true);
-      
+
       final file = File(filePath);
       if (!await file.exists()) {
         throw Exception('Recording file not found');
       }
-      
+
       final bytes = await file.readAsBytes();
       final fileName = 'voice_${DateTime.now().millisecondsSinceEpoch}.m4a';
       final storagePath = 'chat_audio/${widget.chat.id}/$fileName';
-      
+
       // Upload to Supabase Storage using the same bucket as other attachments
       await Supabase.instance.client.storage
           .from('chat-attachments')
-          .uploadBinary(storagePath, bytes, fileOptions: const FileOptions(contentType: 'audio/mp4'));
-      
+          .uploadBinary(
+            storagePath,
+            bytes,
+            fileOptions: const FileOptions(contentType: 'audio/mp4'),
+          );
+
       // Get signed URL (same approach as existing file uploads)
       final signedUrl = await Supabase.instance.client.storage
           .from('chat-attachments')
           .createSignedUrl(storagePath, 60 * 60 * 24 * 365); // 1 year
-      
+
       // Send as audio message - encode URL and metadata in content as JSON
       final durationSeconds = _recordingDuration.inSeconds;
       final audioContent = jsonEncode({
@@ -642,22 +654,22 @@ class _ChatScreenState extends State<ChatScreen> {
         'duration': durationSeconds,
         'fileName': fileName,
       });
-      
+
       await _chatService.sendMessage(
         widget.chat.id,
         audioContent,
         contentType: 'audio',
       );
-      
+
       // Delete temp file
       try {
         await file.delete();
       } catch (e) {
         debugPrint('[ChatScreen] Failed to delete temp file: $e');
       }
-      
+
       debugPrint('[ChatScreen] Voice message uploaded successfully');
-      
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -758,14 +770,16 @@ class _ChatScreenState extends State<ChatScreen> {
           );
 
           if (found.userId == _currentUserId && _participants.length > 1) {
-            final currentIndex =
-                _participants.indexWhere((p) => p.userId == _currentUserId);
+            final currentIndex = _participants.indexWhere(
+              (p) => p.userId == _currentUserId,
+            );
             final otherIndex = currentIndex == 0 ? 1 : 0;
             found = _participants[otherIndex];
           }
         } else {
-          found =
-              _participants.length > 1 ? _participants[1] : _participants.first;
+          found = _participants.length > 1
+              ? _participants[1]
+              : _participants.first;
         }
 
         otherParticipant = found;
@@ -804,30 +818,86 @@ class _ChatScreenState extends State<ChatScreen> {
     try {
       final targetUserId = widget.chat.otherParticipantId!;
       final targetUserName = _getChatTitle();
-      
-      // Check if WebRTC service is initialized
-      final webrtcService = WebRTCService();
-      
-      // Initiate the call
-      final success = await webrtcService.initiateCall(
-        targetUserId,
-        targetUserName,
-        isAudioOnly: isAudioOnly,
+      final agoraService = AgoraCallService();
+
+      debugPrint('[ChatScreen] Attempting Agora call to $targetUserName');
+      debugPrint('[ChatScreen] Call type: ${isAudioOnly ? "Audio" : "Video"}');
+
+      if (!agoraService.isReady) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Call service not ready. Please try again in a moment.',
+              ),
+              backgroundColor: Colors.orange,
+            ),
+          );
+        }
+        return;
+      }
+
+      if (agoraService.isInCall) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('You are already in a call'),
+              backgroundColor: Colors.orange,
+            ),
+          );
+        }
+        return;
+      }
+
+      // Show loading indicator
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Text('Calling $targetUserName...'),
+              ],
+            ),
+            duration: const Duration(seconds: 45),
+          ),
+        );
+      }
+
+      final result = await agoraService.startCall(
+        remoteUserId: targetUserId,
+        remoteUserName: targetUserName,
+        audioOnly: isAudioOnly,
       );
 
-      if (success && mounted) {
-        // Navigate to call screen
+      debugPrint('[ChatScreen] Call initiation result: ${result.success}');
+
+      if (result.success && result.channelName != null && mounted) {
+        ScaffoldMessenger.of(context).clearSnackBars();
         Navigator.of(context).push(
           MaterialPageRoute(
-            builder: (context) => CallScreen(
+            builder: (context) => AgoraCallScreen(
+              channelName: result.channelName!,
+              remoteUserId: targetUserId,
               remoteUserName: targetUserName,
+              isAudioOnly: isAudioOnly,
+              isOutgoing: true,
             ),
           ),
         );
-      } else if (!success && mounted) {
+      } else if (!result.success && mounted) {
+        ScaffoldMessenger.of(context).clearSnackBars();
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('User is busy or unavailable'),
+          SnackBar(
+            content: Text(result.error ?? 'User is busy or unavailable'),
             backgroundColor: Colors.orange,
           ),
         );
@@ -863,9 +933,7 @@ class _ChatScreenState extends State<ChatScreen> {
           controller: nameController,
           decoration: InputDecoration(
             hintText: 'Enter custom name',
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
           ),
           autofocus: true,
         ),
@@ -884,8 +952,10 @@ class _ChatScreenState extends State<ChatScreen> {
                 borderRadius: BorderRadius.circular(12),
               ),
             ),
-            child:
-                Text('Save', style: GoogleFonts.poppins(color: Colors.white)),
+            child: Text(
+              'Save',
+              style: GoogleFonts.poppins(color: Colors.white),
+            ),
           ),
         ],
       ),
@@ -953,8 +1023,10 @@ class _ChatScreenState extends State<ChatScreen> {
                 borderRadius: BorderRadius.circular(12),
               ),
             ),
-            child:
-                Text('Delete', style: GoogleFonts.poppins(color: Colors.white)),
+            child: Text(
+              'Delete',
+              style: GoogleFonts.poppins(color: Colors.white),
+            ),
           ),
         ],
       ),
@@ -1000,7 +1072,7 @@ class _ChatScreenState extends State<ChatScreen> {
   Widget build(BuildContext context) {
     final chatTitle = _getChatTitle();
     final initial = chatTitle.isNotEmpty ? chatTitle[0].toUpperCase() : 'U';
-    
+
     return Scaffold(
       backgroundColor: const Color(0xFFF5F6FA),
       appBar: AppBar(
@@ -1021,7 +1093,11 @@ class _ChatScreenState extends State<ChatScreen> {
           ),
         ),
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white, size: 20),
+          icon: const Icon(
+            Icons.arrow_back_ios_new,
+            color: Colors.white,
+            size: 20,
+          ),
           onPressed: () => Navigator.pop(context),
         ),
         titleSpacing: 0,
@@ -1035,7 +1111,10 @@ class _ChatScreenState extends State<ChatScreen> {
                 gradient: LinearGradient(
                   colors: [Colors.orange.shade400, Colors.deepOrange.shade400],
                 ),
-                border: Border.all(color: Colors.white.withOpacity(0.3), width: 2),
+                border: Border.all(
+                  color: Colors.white.withOpacity(0.3),
+                  width: 2,
+                ),
               ),
               child: Center(
                 child: Text(
@@ -1064,7 +1143,9 @@ class _ChatScreenState extends State<ChatScreen> {
                     overflow: TextOverflow.ellipsis,
                   ),
                   Text(
-                    widget.chat.chatType == 'private' ? 'Tap for contact info' : 'Group Chat',
+                    widget.chat.chatType == 'private'
+                        ? 'Tap for contact info'
+                        : 'Group Chat',
                     style: GoogleFonts.poppins(
                       color: Colors.white70,
                       fontSize: 12,
@@ -1076,7 +1157,8 @@ class _ChatScreenState extends State<ChatScreen> {
           ],
         ),
         actions: [
-          if (widget.chat.chatType == 'private' && widget.chat.otherParticipantId != null) ...[
+          if (widget.chat.chatType == 'private' &&
+              widget.chat.otherParticipantId != null) ...[
             IconButton(
               icon: Container(
                 padding: const EdgeInsets.all(6),
@@ -1084,7 +1166,11 @@ class _ChatScreenState extends State<ChatScreen> {
                   color: Colors.white.withOpacity(0.15),
                   shape: BoxShape.circle,
                 ),
-                child: const Icon(Icons.videocam_rounded, color: Colors.white, size: 20),
+                child: const Icon(
+                  Icons.videocam_rounded,
+                  color: Colors.white,
+                  size: 20,
+                ),
               ),
               onPressed: () => _initiateCall(isAudioOnly: false),
               tooltip: 'Video call',
@@ -1096,7 +1182,11 @@ class _ChatScreenState extends State<ChatScreen> {
                   color: Colors.white.withOpacity(0.15),
                   shape: BoxShape.circle,
                 ),
-                child: const Icon(Icons.call_rounded, color: Colors.white, size: 20),
+                child: const Icon(
+                  Icons.call_rounded,
+                  color: Colors.white,
+                  size: 20,
+                ),
               ),
               onPressed: () => _initiateCall(isAudioOnly: true),
               tooltip: 'Audio call',
@@ -1112,7 +1202,9 @@ class _ChatScreenState extends State<ChatScreen> {
               child: const Icon(Icons.more_vert, color: Colors.white, size: 20),
             ),
             color: Colors.white,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
             onSelected: (value) {
               switch (value) {
                 case 'edit':
@@ -1134,7 +1226,11 @@ class _ChatScreenState extends State<ChatScreen> {
                   value: 'edit',
                   child: Row(
                     children: [
-                      Icon(Icons.edit_rounded, color: Colors.grey[700], size: 20),
+                      Icon(
+                        Icons.edit_rounded,
+                        color: Colors.grey[700],
+                        size: 20,
+                      ),
                       const SizedBox(width: 12),
                       const Text('Edit contact name'),
                     ],
@@ -1144,7 +1240,11 @@ class _ChatScreenState extends State<ChatScreen> {
                 value: 'search',
                 child: Row(
                   children: [
-                    Icon(Icons.search_rounded, color: Colors.grey[700], size: 20),
+                    Icon(
+                      Icons.search_rounded,
+                      color: Colors.grey[700],
+                      size: 20,
+                    ),
                     const SizedBox(width: 12),
                     const Text('Search in chat'),
                   ],
@@ -1154,9 +1254,16 @@ class _ChatScreenState extends State<ChatScreen> {
                 value: 'delete',
                 child: Row(
                   children: [
-                    const Icon(Icons.delete_outline_rounded, color: Colors.red, size: 20),
+                    const Icon(
+                      Icons.delete_outline_rounded,
+                      color: Colors.red,
+                      size: 20,
+                    ),
                     const SizedBox(width: 12),
-                    const Text('Delete chat', style: TextStyle(color: Colors.red)),
+                    const Text(
+                      'Delete chat',
+                      style: TextStyle(color: Colors.red),
+                    ),
                   ],
                 ),
               ),
@@ -1172,19 +1279,18 @@ class _ChatScreenState extends State<ChatScreen> {
             child: _isLoading
                 ? const Center(child: CircularProgressIndicator())
                 : _messages.isEmpty
-                    ? _buildEmptyState()
-                    : ListView.builder(
-                        controller: _scrollController,
-                        padding: const EdgeInsets.all(16),
-                        itemCount: _messages.length,
-                        itemBuilder: (context, index) {
-                          final message = _messages[index];
-                          final isCurrentUser =
-                              message.senderId == _currentUserId;
+                ? _buildEmptyState()
+                : ListView.builder(
+                    controller: _scrollController,
+                    padding: const EdgeInsets.all(16),
+                    itemCount: _messages.length,
+                    itemBuilder: (context, index) {
+                      final message = _messages[index];
+                      final isCurrentUser = message.senderId == _currentUserId;
 
-                          return _buildMessageBubble(message, isCurrentUser);
-                        },
-                      ),
+                      return _buildMessageBubble(message, isCurrentUser);
+                    },
+                  ),
           ),
 
           // Message input
@@ -1209,8 +1315,8 @@ class _ChatScreenState extends State<ChatScreen> {
                   ),
                 )
               : _isRecording
-                  ? _buildRecordingUI()
-                  : _buildMessageInputUI(),
+              ? _buildRecordingUI()
+              : _buildMessageInputUI(),
         ],
       ),
     );
@@ -1249,15 +1355,16 @@ class _ChatScreenState extends State<ChatScreen> {
               child: Row(
                 children: [
                   Container(
-                    width: 12,
-                    height: 12,
-                    decoration: const BoxDecoration(
-                      color: Colors.red,
-                      shape: BoxShape.circle,
-                    ),
-                  ).animate(onPlay: (c) => c.repeat())
-                    .fadeIn(duration: 500.ms)
-                    .fadeOut(duration: 500.ms),
+                        width: 12,
+                        height: 12,
+                        decoration: const BoxDecoration(
+                          color: Colors.red,
+                          shape: BoxShape.circle,
+                        ),
+                      )
+                      .animate(onPlay: (c) => c.repeat())
+                      .fadeIn(duration: 500.ms)
+                      .fadeOut(duration: 500.ms),
                   const SizedBox(width: 12),
                   Text(
                     'Recording ${_formatDuration(_recordingDuration)}',
@@ -1387,8 +1494,9 @@ class _ChatScreenState extends State<ChatScreen> {
                               height: 20,
                               child: CircularProgressIndicator(
                                 strokeWidth: 2,
-                                valueColor:
-                                    AlwaysStoppedAnimation<Color>(Colors.white),
+                                valueColor: AlwaysStoppedAnimation<Color>(
+                                  Colors.white,
+                                ),
                               ),
                             )
                           : const Icon(Icons.send, color: Colors.white),
@@ -1450,7 +1558,10 @@ class _ChatScreenState extends State<ChatScreen> {
                   children: [
                     Icon(Icons.broken_image, color: Colors.grey[500]),
                     const SizedBox(height: 4),
-                    Text('Image unavailable', style: TextStyle(color: Colors.grey[500], fontSize: 12)),
+                    Text(
+                      'Image unavailable',
+                      style: TextStyle(color: Colors.grey[500], fontSize: 12),
+                    ),
                   ],
                 ),
               );
@@ -1471,18 +1582,26 @@ class _ChatScreenState extends State<ChatScreen> {
         child: Container(
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color: isCurrentUser ? Colors.white.withOpacity(0.2) : Colors.grey[100],
+            color: isCurrentUser
+                ? Colors.white.withOpacity(0.2)
+                : Colors.grey[100],
             borderRadius: BorderRadius.circular(8),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.insert_drive_file, color: isCurrentUser ? Colors.white : Colors.blue),
+              Icon(
+                Icons.insert_drive_file,
+                color: isCurrentUser ? Colors.white : Colors.blue,
+              ),
               const SizedBox(width: 8),
               Flexible(
                 child: Text(
                   fileName,
-                  style: TextStyle(color: textColor, fontWeight: FontWeight.w500),
+                  style: TextStyle(
+                    color: textColor,
+                    fontWeight: FontWeight.w500,
+                  ),
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
@@ -1492,10 +1611,7 @@ class _ChatScreenState extends State<ChatScreen> {
       );
     }
 
-    return Text(
-      content,
-      style: TextStyle(color: textColor, fontSize: 16),
-    );
+    return Text(content, style: TextStyle(color: textColor, fontSize: 16));
   }
 
   Widget _buildVoiceMessagePlayer(String url, bool isCurrentUser) {
@@ -1521,7 +1637,10 @@ class _ChatScreenState extends State<ChatScreen> {
                 return Container(
                   color: Colors.black,
                   child: const Center(
-                    child: Text('Failed to load image', style: TextStyle(color: Colors.white)),
+                    child: Text(
+                      'Failed to load image',
+                      style: TextStyle(color: Colors.white),
+                    ),
                   ),
                 );
               },
@@ -1539,24 +1658,24 @@ class _ChatScreenState extends State<ChatScreen> {
       );
       return;
     }
-    
+
     try {
       final uri = Uri.parse(url);
       if (await canLaunchUrl(uri)) {
         await launchUrl(uri, mode: LaunchMode.externalApplication);
       } else {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Cannot open: $fileName')),
-          );
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text('Cannot open: $fileName')));
         }
       }
     } catch (e) {
       debugPrint('Error opening document: $e');
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to open: $fileName')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Failed to open: $fileName')));
       }
     }
   }
@@ -1672,8 +1791,10 @@ class _ChatScreenState extends State<ChatScreen> {
                 borderRadius: BorderRadius.circular(12),
               ),
             ),
-            child:
-                Text('Delete', style: GoogleFonts.poppins(color: Colors.white)),
+            child: Text(
+              'Delete',
+              style: GoogleFonts.poppins(color: Colors.white),
+            ),
           ),
         ],
       ),
@@ -1892,7 +2013,9 @@ class _VoiceMessagePlayerState extends State<_VoiceMessagePlayer> {
                         ? Colors.white.withOpacity(0.3)
                         : Colors.grey[300],
                     valueColor: AlwaysStoppedAnimation<Color>(
-                      widget.isCurrentUser ? Colors.white : const Color(0xFFFF9800),
+                      widget.isCurrentUser
+                          ? Colors.white
+                          : const Color(0xFFFF9800),
                     ),
                     minHeight: 4,
                   ),

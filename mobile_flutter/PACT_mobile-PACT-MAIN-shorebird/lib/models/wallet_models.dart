@@ -1,5 +1,7 @@
 import 'package:json_annotation/json_annotation.dart';
 
+part 'wallet_models.g.dart';
+
 enum WithdrawalStatus {
   pending,
   supervisorApproved,
@@ -127,12 +129,18 @@ class Wallet {
   factory Wallet.fromJson(Map<String, dynamic> json) => Wallet(
     id: json['id'] is String ? json['id'] as String : 'unknown',
     userId: json['user_id'] is String ? json['user_id'] as String : 'unknown',
-    balances: json['balances'] is Map<String, dynamic> ? json['balances'] as Map<String, dynamic> : {},
+    balances: json['balances'] is Map<String, dynamic>
+        ? json['balances'] as Map<String, dynamic>
+        : {},
     totalEarned: (json['total_earned'] as num?)?.toDouble() ?? 0.0,
     totalWithdrawn: (json['total_withdrawn'] as num?)?.toDouble() ?? 0.0,
     currency: json['currency'] is String ? json['currency'] as String : 'SDG',
-    createdAt: json['created_at'] is String ? DateTime.parse(json['created_at'] as String) : DateTime.now(),
-    updatedAt: json['updated_at'] is String ? DateTime.parse(json['updated_at'] as String) : DateTime.now(),
+    createdAt: json['created_at'] is String
+        ? DateTime.parse(json['created_at'] as String)
+        : DateTime.now(),
+    updatedAt: json['updated_at'] is String
+        ? DateTime.parse(json['updated_at'] as String)
+        : DateTime.now(),
   );
   Map<String, dynamic> toJson() => {
     'id': id,
@@ -220,22 +228,34 @@ class WalletTransaction {
     required this.createdAt,
   });
 
-  factory WalletTransaction.fromJson(Map<String, dynamic> json) => WalletTransaction(
+  factory WalletTransaction.fromJson(
+    Map<String, dynamic> json,
+  ) => WalletTransaction(
     id: json['id'] is String ? json['id'] as String : 'unknown',
-    walletId: json['wallet_id'] is String ? json['wallet_id'] as String : 'unknown',
+    walletId: json['wallet_id'] is String
+        ? json['wallet_id'] as String
+        : 'unknown',
     userId: json['user_id'] is String ? json['user_id'] as String : 'unknown',
     type: json['type'] is String ? json['type'] as String : 'unknown',
     amount: (json['amount'] as num?)?.toDouble() ?? 0.0,
-    amountCents: json['amount_cents'] is int ? json['amount_cents'] as int : null,
+    amountCents: json['amount_cents'] is int
+        ? json['amount_cents'] as int
+        : null,
     currency: json['currency'] is String ? json['currency'] as String : 'SDG',
     siteVisitId: json['site_visit_id'] as String?,
     withdrawalRequestId: json['withdrawal_request_id'] as String?,
     description: json['description'] as String?,
     metadata: json['metadata'] as Map<String, dynamic>?,
-    balanceBefore: json['balance_before'] is num ? (json['balance_before'] as num).toDouble() : null,
-    balanceAfter: json['balance_after'] is num ? (json['balance_after'] as num).toDouble() : null,
+    balanceBefore: json['balance_before'] is num
+        ? (json['balance_before'] as num).toDouble()
+        : null,
+    balanceAfter: json['balance_after'] is num
+        ? (json['balance_after'] as num).toDouble()
+        : null,
     createdBy: json['created_by'] as String?,
-    createdAt: json['created_at'] is String ? DateTime.parse(json['created_at'] as String) : DateTime.now(),
+    createdAt: json['created_at'] is String
+        ? DateTime.parse(json['created_at'] as String)
+        : DateTime.now(),
   );
   Map<String, dynamic> toJson() => {
     'id': id,
@@ -274,7 +294,9 @@ class WalletTransaction {
     }
   }
 
-  bool get isCredit => ['earning', 'site_visit_fee', 'bonus', 'adjustment'].contains(type) && amount > 0;
+  bool get isCredit =>
+      ['earning', 'site_visit_fee', 'bonus', 'adjustment'].contains(type) &&
+      amount > 0;
 }
 
 @JsonSerializable()
@@ -329,23 +351,37 @@ class WithdrawalRequest {
     this.referenceId,
   });
 
-  factory WithdrawalRequest.fromJson(Map<String, dynamic> json) => WithdrawalRequest(
+  factory WithdrawalRequest.fromJson(
+    Map<String, dynamic> json,
+  ) => WithdrawalRequest(
     id: json['id'] is String ? json['id'] as String : 'unknown',
     walletId: json['wallet_id'] as String?,
     userId: json['user_id'] is String ? json['user_id'] as String : 'unknown',
     amount: (json['amount'] as num?)?.toDouble() ?? 0.0,
     currency: json['currency'] is String ? json['currency'] as String : 'SDG',
-    statusString: json['status'] is String ? json['status'] as String : 'pending',
-    createdAt: json['created_at'] is String ? DateTime.parse(json['created_at'] as String) : DateTime.now(),
-    approvedAt: json['approved_at'] is String ? DateTime.parse(json['approved_at'] as String) : null,
-    supervisorApprovedAt: json['supervisor_approved_at'] is String ? DateTime.parse(json['supervisor_approved_at'] as String) : null,
+    statusString: json['status'] is String
+        ? json['status'] as String
+        : 'pending',
+    createdAt: json['created_at'] is String
+        ? DateTime.parse(json['created_at'] as String)
+        : DateTime.now(),
+    approvedAt: json['approved_at'] is String
+        ? DateTime.parse(json['approved_at'] as String)
+        : null,
+    supervisorApprovedAt: json['supervisor_approved_at'] is String
+        ? DateTime.parse(json['supervisor_approved_at'] as String)
+        : null,
     requestReason: json['request_reason'] as String?,
     supervisorNotes: json['supervisor_notes'] as String?,
     adminNotes: json['admin_notes'] as String?,
     paymentMethodString: json['payment_method'] as String?,
-    paymentMethodDetails: json['payment_method_details'] as Map<String, dynamic>?,
-    requesterName: json['requester_name'] as String? ?? 
-        (json['profiles'] is Map ? (json['profiles'] as Map)['full_name'] as String? : null),
+    paymentMethodDetails:
+        json['payment_method_details'] as Map<String, dynamic>?,
+    requesterName:
+        json['requester_name'] as String? ??
+        (json['profiles'] is Map
+            ? (json['profiles'] as Map)['full_name'] as String?
+            : null),
     referenceId: json['reference_id'] as String?,
   );
 
@@ -375,7 +411,11 @@ class WithdrawalRequest {
       return PaymentMethod.fromJson(paymentMethodDetails!);
     }
     if (paymentMethodString != null) {
-      return PaymentMethod(id: 'default', name: paymentMethodString!, type: 'bank');
+      return PaymentMethod(
+        id: 'default',
+        name: paymentMethodString!,
+        type: 'bank',
+      );
     }
     return null;
   }
@@ -385,7 +425,8 @@ class WithdrawalRequest {
   String get statusLabel => status.displayName;
 
   bool get canCancel => statusString == 'pending';
-  bool get isSettled => ['approved', 'rejected', 'cancelled', 'processed'].contains(statusString);
+  bool get isSettled =>
+      ['approved', 'rejected', 'cancelled', 'processed'].contains(statusString);
 
   String? get reason => requestReason;
 }
@@ -412,11 +453,15 @@ class SiteVisitCost {
 
   factory SiteVisitCost.fromJson(Map<String, dynamic> json) => SiteVisitCost(
     id: json['id'] is String ? json['id'] as String : 'unknown',
-    siteVisitId: json['site_visit_id'] is String ? json['site_visit_id'] as String : 'unknown',
+    siteVisitId: json['site_visit_id'] is String
+        ? json['site_visit_id'] as String
+        : 'unknown',
     cost: (json['cost'] as num?)?.toDouble() ?? 0.0,
     currency: json['currency'] is String ? json['currency'] as String : 'SDG',
     type: json['type'] is String ? json['type'] as String : 'field_operation',
-    createdAt: json['created_at'] is String ? DateTime.parse(json['created_at'] as String) : DateTime.now(),
+    createdAt: json['created_at'] is String
+        ? DateTime.parse(json['created_at'] as String)
+        : DateTime.now(),
   );
   Map<String, dynamic> toJson() => {
     'id': id,

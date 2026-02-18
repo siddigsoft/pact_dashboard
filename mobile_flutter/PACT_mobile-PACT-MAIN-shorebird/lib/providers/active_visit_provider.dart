@@ -16,7 +16,7 @@ class ActiveVisitState {
   final List<Position> locationHistory;
   final String? notes;
   final List<String> photos;
-  
+
   // ========== NEW: LOCKED START GPS ==========
   // GPS captured once on "Start Visit" - never changes after that
   final Position? lockedStartGPS;
@@ -79,13 +79,13 @@ class ActiveVisitState {
     final seconds = elapsedTime.inSeconds.remainder(60);
     return '${hours.toString().padLeft(2, '0')}:${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
   }
-  
+
   // ========== NEW: GPS STATUS HELPERS ==========
   bool get hasLockedGPS => lockedStartGPS != null && gpsLocked;
   double? get lockedLatitude => lockedStartGPS?.latitude;
   double? get lockedLongitude => lockedStartGPS?.longitude;
   double? get lockedAccuracy => lockedStartGPS?.accuracy;
-  
+
   Map<String, dynamic>? get lockedGPSAsMap {
     if (lockedStartGPS == null) return null;
     return {
@@ -99,7 +99,8 @@ class ActiveVisitState {
 }
 
 /// Provider for active visit state
-final activeVisitProvider = StateNotifierProvider<ActiveVisitNotifier, ActiveVisitState>((ref) {
+final activeVisitProvider =
+    StateNotifierProvider<ActiveVisitNotifier, ActiveVisitState>((ref) {
   return ActiveVisitNotifier(ref);
 });
 
@@ -108,7 +109,7 @@ class ActiveVisitNotifier extends StateNotifier<ActiveVisitState> {
   Timer? _timer;
   StreamSubscription<Position>? _locationSubscription;
   final LocationTrackingService _locationService = LocationTrackingService();
-  
+
   // ========== GPS CAPTURE CONSTANTS ==========
   static const double maxAccuracyMeters = 10.0; // GPS must be ≤10m accuracy
   static const int maxGpsAttempts = 30; // Max attempts (30 seconds timeout)
@@ -149,10 +150,11 @@ class ActiveVisitNotifier extends StateNotifier<ActiveVisitState> {
 
   /// Capture GPS once on start with ≤10m accuracy requirement
   Future<Position?> _captureStartGPS() async {
-    debugPrint('📍 Starting GPS capture for visit (accuracy ≤${maxAccuracyMeters}m required)...');
-    
+    debugPrint(
+        '📍 Starting GPS capture for visit (accuracy ≤${maxAccuracyMeters}m required)...');
+
     state = state.copyWith(isCapturingGPS: true, gpsError: null);
-    
+
     try {
       // Check permission first
       final permission = await Geolocator.checkPermission();
@@ -167,16 +169,17 @@ class ActiveVisitNotifier extends StateNotifier<ActiveVisitState> {
           return null;
         }
       }
-      
+
       if (permission == LocationPermission.deniedForever) {
         state = state.copyWith(
           isCapturingGPS: false,
-          gpsError: 'Location permission permanently denied. Please enable in settings.',
+          gpsError:
+              'Location permission permanently denied. Please enable in settings.',
         );
         debugPrint('❌ GPS permission permanently denied');
         return null;
       }
-      
+
       // Check if location service is enabled
       final serviceEnabled = await Geolocator.isLocationServiceEnabled();
       if (!serviceEnabled) {
@@ -187,45 +190,46 @@ class ActiveVisitNotifier extends StateNotifier<ActiveVisitState> {
         debugPrint('❌ Location services disabled');
         return null;
       }
-      
+
       // Attempt to get position with ≤10m accuracy
       Position? bestPosition;
       int attempts = 0;
-      
+
       while (attempts < maxGpsAttempts) {
         attempts++;
         debugPrint('📍 GPS attempt $attempts/$maxGpsAttempts...');
-        
+
         try {
           final position = await Geolocator.getCurrentPosition(
-            locationSettings: const LocationSettings(
-              accuracy: LocationAccuracy.best,
-              distanceFilter: 0,
-            ),
+            desiredAccuracy: LocationAccuracy.best,
           ).timeout(const Duration(seconds: 5));
-          
-          debugPrint('📍 Got position: ${position.latitude}, ${position.longitude} (accuracy: ${position.accuracy}m)');
-          
+
+          debugPrint(
+              '📍 Got position: ${position.latitude}, ${position.longitude} (accuracy: ${position.accuracy}m)');
+
           // Check if accuracy is within our requirement
           if (position.accuracy <= maxAccuracyMeters) {
             bestPosition = position;
-            debugPrint('✅ GPS captured with accuracy ${position.accuracy}m (≤${maxAccuracyMeters}m)');
+            debugPrint(
+                '✅ GPS captured with accuracy ${position.accuracy}m (≤${maxAccuracyMeters}m)');
             break;
           } else {
             // Keep the best position so far
-            if (bestPosition == null || position.accuracy < bestPosition.accuracy) {
+            if (bestPosition == null ||
+                position.accuracy < bestPosition.accuracy) {
               bestPosition = position;
             }
-            debugPrint('⚠️ Accuracy ${position.accuracy}m > ${maxAccuracyMeters}m required, trying again...');
+            debugPrint(
+                '⚠️ Accuracy ${position.accuracy}m > ${maxAccuracyMeters}m required, trying again...');
           }
         } catch (e) {
           debugPrint('⚠️ GPS attempt $attempts failed: $e');
         }
-        
+
         // Small delay between attempts
         await Future.delayed(const Duration(milliseconds: 500));
       }
-      
+
       // After all attempts, use best position if we have one
       if (bestPosition != null) {
         // Lock the GPS - it will never change after this
@@ -233,12 +237,13 @@ class ActiveVisitNotifier extends StateNotifier<ActiveVisitState> {
           lockedStartGPS: bestPosition,
           gpsLocked: true,
           isCapturingGPS: false,
-          gpsError: bestPosition.accuracy > maxAccuracyMeters 
+          gpsError: bestPosition.accuracy > maxAccuracyMeters
               ? 'GPS captured with ${bestPosition.accuracy.toStringAsFixed(1)}m accuracy (target: ≤${maxAccuracyMeters}m)'
               : null,
         );
-        
-        debugPrint('🔒 GPS LOCKED: ${bestPosition.latitude}, ${bestPosition.longitude} (${bestPosition.accuracy}m)');
+
+        debugPrint(
+            '🔒 GPS LOCKED: ${bestPosition.latitude}, ${bestPosition.longitude} (${bestPosition.accuracy}m)');
         return bestPosition;
       } else {
         state = state.copyWith(
@@ -248,7 +253,6 @@ class ActiveVisitNotifier extends StateNotifier<ActiveVisitState> {
         debugPrint('❌ Failed to capture any GPS position');
         return null;
       }
-      
     } catch (e) {
       state = state.copyWith(
         isCapturingGPS: false,

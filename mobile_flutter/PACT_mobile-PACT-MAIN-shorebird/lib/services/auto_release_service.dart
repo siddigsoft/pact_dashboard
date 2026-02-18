@@ -29,7 +29,7 @@ class AutoReleaseService {
           .from('mmp_site_entries')
           .select()
           .eq('status', 'claimed')
-          .is_('accepted_by', null)
+          .filter('accepted_by', 'is', null)
           .order('created_at', ascending: false)
           .limit(500);
 

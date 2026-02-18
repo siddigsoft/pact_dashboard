@@ -16,7 +16,9 @@ class TypingIndicator {
       chatId: json['chat_id']?.toString() ?? '',
       userId: json['user_id']?.toString() ?? '',
       userName: json['user_name']?.toString() ?? '',
-      timestamp: DateTime.tryParse(json['timestamp']?.toString() ?? '') ?? DateTime.now(),
+      timestamp:
+          DateTime.tryParse(json['timestamp']?.toString() ?? '') ??
+          DateTime.now(),
     );
   }
 

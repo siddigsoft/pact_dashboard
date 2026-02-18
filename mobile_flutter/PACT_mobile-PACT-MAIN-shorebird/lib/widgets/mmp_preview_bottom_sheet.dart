@@ -46,7 +46,8 @@ class _MMPPreviewContentState extends State<_MMPPreviewContent> {
   WebViewController? _webViewController;
   String? _webViewError;
 
-  String get _fileName => widget.file.originalFilename ?? widget.file.name ?? 'Document';
+  String get _fileName =>
+      widget.file.originalFilename ?? widget.file.name ?? 'Document';
 
   @override
   void initState() {
@@ -64,18 +65,15 @@ class _MMPPreviewContentState extends State<_MMPPreviewContent> {
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
       ..setBackgroundColor(Colors.transparent);
 
-    controller
-        .loadFile(widget.localPath)
-        .then((_) {
-          if (mounted) {
-            setState(() => _webViewController = controller);
-          }
-        })
-        .catchError((error) {
-          if (mounted) {
-            setState(() => _webViewError = 'Unable to preview document: $error');
-          }
-        });
+    controller.loadFile(widget.localPath).then((_) {
+      if (mounted) {
+        setState(() => _webViewController = controller);
+      }
+    }).catchError((error) {
+      if (mounted) {
+        setState(() => _webViewError = 'Unable to preview document: $error');
+      }
+    });
   }
 
   Future<void> _openExternally() async {
@@ -105,12 +103,14 @@ class _MMPPreviewContentState extends State<_MMPPreviewContent> {
   Future<void> _shareFile() async {
     // On web, if localPath is a URL, share the URL directly
     if (kIsWeb && widget.localPath.startsWith('http')) {
-      await Share.share('Check out this file: ${widget.localPath}', subject: _fileName);
+      await Share.share('Check out this file: ${widget.localPath}',
+          subject: _fileName);
       return;
     }
 
     try {
-      await Share.shareXFiles([XFile(widget.localPath)], text: 'Sharing $_fileName');
+      await Share.shareXFiles([XFile(widget.localPath)],
+          text: 'Sharing $_fileName');
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(

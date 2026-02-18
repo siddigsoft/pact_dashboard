@@ -1,30 +1,20 @@
 // lib/widgets/permits/locality_requirement_triage_dialog.dart
 
-import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../theme/app_colors.dart';
-import '../../l10n/app_localizations.dart';
+import 'package:pact_mobile/l10n/app_localizations.dart';
+import 'package:pact_mobile/l10n/app_localizations_extension.dart';
 
-enum LocalityRequirement {
-  yesHaveIt,
-  requiredDontHave,
-  notRequired,
-}
+enum LocalityRequirement { yesHaveIt, requiredDontHave, notRequired }
 
-enum FollowUpChoice {
-  canProceed,
-  cannotProceed,
-}
+enum FollowUpChoice { canProceed, cannotProceed }
 
 class LocalityRequirementResult {
   final LocalityRequirement requirement;
   final FollowUpChoice? followUp;
 
-  LocalityRequirementResult({
-    required this.requirement,
-    this.followUp,
-  });
+  LocalityRequirementResult({required this.requirement, this.followUp});
 }
 
 class LocalityRequirementTriageDialog extends StatefulWidget {
@@ -55,7 +45,7 @@ class _LocalityRequirementTriageDialogState
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
-    final isRtl = Directionality.of(context) == ui.TextDirection.rtl;
+    final isRtl = Directionality.of(context) == TextDirection.rtl;
 
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -95,7 +85,7 @@ class _LocalityRequirementTriageDialogState
               color: AppColors.primaryBlue.withOpacity(0.2),
               shape: BoxShape.circle,
             ),
-            child: Icon(
+            child: const Icon(
               Icons.location_on,
               color: AppColors.primaryBlue,
               size: 24,
@@ -172,34 +162,51 @@ class _LocalityRequirementTriageDialogState
         const SizedBox(height: 20),
         _buildOptionTile(
           title: l10n?.translate('yesHaveIt') ?? 'Yes, I have the permit',
-          subtitle: l10n?.translate('willUploadPermit') ?? 'I will upload the permit document',
+          subtitle:
+              l10n?.translate('willUploadPermit') ??
+              'I will upload the permit document',
           icon: Icons.check_circle_outline,
           color: Colors.green,
           isSelected: _selectedRequirement == LocalityRequirement.yesHaveIt,
           onTap: () {
-            setState(() => _selectedRequirement = LocalityRequirement.yesHaveIt);
+            setState(
+              () => _selectedRequirement = LocalityRequirement.yesHaveIt,
+            );
           },
         ),
         const SizedBox(height: 12),
         _buildOptionTile(
-          title: l10n?.translate('noRequiredDontHave') ?? 'Required but I don\'t have it',
-          subtitle: l10n?.translate('cannotProvideNow') ?? 'The permit is required but I cannot provide it now',
+          title:
+              l10n?.translate('noRequiredDontHave') ??
+              'Required but I don\'t have it',
+          subtitle:
+              l10n?.translate('cannotProvideNow') ??
+              'The permit is required but I cannot provide it now',
           icon: Icons.warning_amber_outlined,
           color: Colors.orange,
-          isSelected: _selectedRequirement == LocalityRequirement.requiredDontHave,
+          isSelected:
+              _selectedRequirement == LocalityRequirement.requiredDontHave,
           onTap: () {
-            setState(() => _selectedRequirement = LocalityRequirement.requiredDontHave);
+            setState(
+              () => _selectedRequirement = LocalityRequirement.requiredDontHave,
+            );
           },
         ),
         const SizedBox(height: 12),
         _buildOptionTile(
-          title: l10n?.translate('notRequiredInLocality') ?? 'Not required in this locality',
-          subtitle: l10n?.translate('noPermitNeeded') ?? 'No locality permit is needed for operations here',
+          title:
+              l10n?.translate('notRequiredInLocality') ??
+              'Not required in this locality',
+          subtitle:
+              l10n?.translate('noPermitNeeded') ??
+              'No locality permit is needed for operations here',
           icon: Icons.not_interested,
           color: Colors.grey,
           isSelected: _selectedRequirement == LocalityRequirement.notRequired,
           onTap: () {
-            setState(() => _selectedRequirement = LocalityRequirement.notRequired);
+            setState(
+              () => _selectedRequirement = LocalityRequirement.notRequired,
+            );
           },
         ),
         const SizedBox(height: 24),
@@ -274,18 +281,21 @@ class _LocalityRequirementTriageDialogState
         const SizedBox(height: 16),
         Text(
           l10n?.chooseHowToProceed(
-            widget.siteCount,
-            widget.siteCount == 1 
-                ? (l10n.translate('site') ?? 'site') 
-                : (l10n.translate('sites') ?? 'sites'),
-            widget.locality,
-          ) ?? 'Choose how to proceed for ${widget.siteCount} ${widget.siteCount == 1 ? 'site' : 'sites'} in ${widget.locality}:',
+                widget.siteCount,
+                widget.siteCount == 1
+                    ? (l10n.translate('site') ?? 'site')
+                    : (l10n.translate('sites') ?? 'sites'),
+                widget.locality,
+              ) ??
+              'Choose how to proceed for ${widget.siteCount} ${widget.siteCount == 1 ? 'site' : 'sites'} in ${widget.locality}:',
           style: GoogleFonts.poppins(fontSize: 13, color: Colors.grey.shade600),
         ),
         const SizedBox(height: 16),
         _buildOptionTile(
           title: l10n?.translate('yesProceedWithout') ?? 'Yes, I can proceed',
-          subtitle: l10n?.translate('continueWithoutPermit') ?? 'Continue without the locality permit',
+          subtitle:
+              l10n?.translate('continueWithoutPermit') ??
+              'Continue without the locality permit',
           icon: Icons.check_circle_outline,
           color: Colors.green,
           isSelected: _followUpChoice == FollowUpChoice.canProceed,
@@ -296,7 +306,9 @@ class _LocalityRequirementTriageDialogState
         const SizedBox(height: 12),
         _buildOptionTile(
           title: l10n?.translate('noCannotProceed') ?? 'No, I need the permit',
-          subtitle: l10n?.translate('sendBackToManager') ?? 'Send back to Field Operations Manager',
+          subtitle:
+              l10n?.translate('sendBackToManager') ??
+              'Send back to Field Operations Manager',
           icon: Icons.arrow_back,
           color: Colors.red,
           isSelected: _followUpChoice == FollowUpChoice.cannotProceed,
@@ -325,7 +337,8 @@ class _LocalityRequirementTriageDialogState
               child: ElevatedButton(
                 onPressed: _followUpChoice == null ? null : _onComplete,
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: _followUpChoice == FollowUpChoice.cannotProceed
+                  backgroundColor:
+                      _followUpChoice == FollowUpChoice.cannotProceed
                       ? Colors.red
                       : AppColors.primaryBlue,
                   foregroundColor: Colors.white,
@@ -405,7 +418,11 @@ class _LocalityRequirementTriageDialogState
             if (isSelected)
               Icon(Icons.check_circle, color: color, size: 24)
             else
-              Icon(Icons.radio_button_unchecked, color: Colors.grey.shade400, size: 24),
+              Icon(
+                Icons.radio_button_unchecked,
+                color: Colors.grey.shade400,
+                size: 24,
+              ),
           ],
         ),
       ),
@@ -415,14 +432,14 @@ class _LocalityRequirementTriageDialogState
   void _onNextStep() {
     if (_selectedRequirement == LocalityRequirement.yesHaveIt) {
       Navigator.of(context).pop();
-      widget.onComplete(LocalityRequirementResult(
-        requirement: LocalityRequirement.yesHaveIt,
-      ));
+      widget.onComplete(
+        LocalityRequirementResult(requirement: LocalityRequirement.yesHaveIt),
+      );
     } else if (_selectedRequirement == LocalityRequirement.notRequired) {
       Navigator.of(context).pop();
-      widget.onComplete(LocalityRequirementResult(
-        requirement: LocalityRequirement.notRequired,
-      ));
+      widget.onComplete(
+        LocalityRequirementResult(requirement: LocalityRequirement.notRequired),
+      );
     } else {
       setState(() => _step = 2);
     }
@@ -430,9 +447,11 @@ class _LocalityRequirementTriageDialogState
 
   void _onComplete() {
     Navigator.of(context).pop();
-    widget.onComplete(LocalityRequirementResult(
-      requirement: _selectedRequirement!,
-      followUp: _followUpChoice,
-    ));
+    widget.onComplete(
+      LocalityRequirementResult(
+        requirement: _selectedRequirement!,
+        followUp: _followUpChoice,
+      ),
+    );
   }
 }

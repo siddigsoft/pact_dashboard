@@ -6,7 +6,8 @@ import 'package:file_picker/file_picker.dart';
 import 'package:intl/intl.dart';
 import '../../theme/app_colors.dart';
 import '../../services/permit_upload_service.dart';
-import '../../l10n/app_localizations.dart';
+import 'package:flutter_gen/gen_l10n/app_localizations.dart';
+import 'package:pact_mobile/l10n/app_localizations_extension.dart';
 import 'permit_types.dart';
 
 class BulkLocalityPermitItem {
@@ -32,8 +33,7 @@ class BulkLocalityPermitItem {
     this.errorMessage,
   });
 
-  bool get isReady =>
-      file != null && issueDate != null && expiryDate != null;
+  bool get isReady => file != null && issueDate != null && expiryDate != null;
 }
 
 class BulkLocalityPermitUploadDialog extends StatefulWidget {
@@ -72,10 +72,12 @@ class _BulkLocalityPermitUploadDialogState
   void initState() {
     super.initState();
     _permitItems = widget.localities
-        .map((loc) => BulkLocalityPermitItem(
-              state: loc['state'] ?? '',
-              locality: loc['locality'] ?? '',
-            ))
+        .map(
+          (loc) => BulkLocalityPermitItem(
+            state: loc['state'] ?? '',
+            locality: loc['locality'] ?? '',
+          ),
+        )
         .toList();
   }
 
@@ -87,8 +89,9 @@ class _BulkLocalityPermitUploadDialogState
           children: [
             ListTile(
               leading: const Icon(Icons.photo_library),
-              title: Text(AppLocalizations.of(context)?.translate('gallery') ??
-                  'Gallery'),
+              title: Text(
+                AppLocalizations.of(context)?.translate('gallery') ?? 'Gallery',
+              ),
               onTap: () async {
                 Navigator.pop(context);
                 final XFile? image = await _imagePicker.pickImage(
@@ -105,8 +108,9 @@ class _BulkLocalityPermitUploadDialogState
             ),
             ListTile(
               leading: const Icon(Icons.camera_alt),
-              title: Text(AppLocalizations.of(context)?.translate('camera') ??
-                  'Camera'),
+              title: Text(
+                AppLocalizations.of(context)?.translate('camera') ?? 'Camera',
+              ),
               onTap: () async {
                 Navigator.pop(context);
                 final XFile? image = await _imagePicker.pickImage(
@@ -123,7 +127,10 @@ class _BulkLocalityPermitUploadDialogState
             ),
             ListTile(
               leading: const Icon(Icons.picture_as_pdf, color: Colors.red),
-              title: Text(l10n.selectPdf),
+              title: Text(
+                AppLocalizations.of(context)?.translate('selectPdfOrImage') ??
+                    'Select PDF',
+              ),
               onTap: () async {
                 Navigator.pop(context);
                 final result = await FilePicker.platform.pickFiles(
@@ -198,9 +205,6 @@ class _BulkLocalityPermitUploadDialogState
           state: item.state,
           locality: item.locality,
           file: item.file!,
-          issueDate: item.issueDate!,
-          expiryDate: item.expiryDate!,
-          comments: item.comments,
         );
 
         setState(() {
@@ -274,9 +278,7 @@ class _BulkLocalityPermitUploadDialogState
                 Navigator.pop(context);
               }
             },
-            child: Text(
-              AppLocalizations.of(context)?.translate('ok') ?? 'OK',
-            ),
+            child: Text(AppLocalizations.of(context)?.translate('ok') ?? 'OK'),
           ),
         ],
       ),
@@ -302,8 +304,9 @@ class _BulkLocalityPermitUploadDialogState
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
                 color: AppColors.primaryGreen,
-                borderRadius:
-                    const BorderRadius.vertical(top: Radius.circular(12)),
+                borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(12),
+                ),
               ),
               child: Row(
                 children: [
@@ -322,7 +325,9 @@ class _BulkLocalityPermitUploadDialogState
                     ),
                   ),
                   IconButton(
-                    onPressed: _isUploading ? null : () => Navigator.pop(context),
+                    onPressed: _isUploading
+                        ? null
+                        : () => Navigator.pop(context),
                     icon: const Icon(Icons.close, color: Colors.white),
                   ),
                 ],
@@ -344,10 +349,14 @@ class _BulkLocalityPermitUploadDialogState
                     ),
                   ),
                   Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 4,
+                    ),
                     decoration: BoxDecoration(
-                      color: readyCount > 0 ? Colors.green[50] : Colors.grey[200],
+                      color: readyCount > 0
+                          ? Colors.green[50]
+                          : Colors.grey[200],
                       borderRadius: BorderRadius.circular(16),
                     ),
                     child: Text(
@@ -357,7 +366,9 @@ class _BulkLocalityPermitUploadDialogState
                       style: GoogleFonts.poppins(
                         fontSize: 12,
                         fontWeight: FontWeight.w500,
-                        color: readyCount > 0 ? Colors.green[700] : Colors.grey[600],
+                        color: readyCount > 0
+                            ? Colors.green[700]
+                            : Colors.grey[600],
                       ),
                     ),
                   ),
@@ -397,9 +408,7 @@ class _BulkLocalityPermitUploadDialogState
                               widget.onCancel?.call();
                               Navigator.pop(context);
                             },
-                      child: Text(
-                        isArabic ? 'إلغاء' : 'Cancel',
-                      ),
+                      child: Text(isArabic ? 'إلغاء' : 'Cancel'),
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -415,8 +424,9 @@ class _BulkLocalityPermitUploadDialogState
                               height: 20,
                               child: CircularProgressIndicator(
                                 strokeWidth: 2,
-                                valueColor:
-                                    AlwaysStoppedAnimation<Color>(Colors.white),
+                                valueColor: AlwaysStoppedAnimation<Color>(
+                                  Colors.white,
+                                ),
                               ),
                             )
                           : const Icon(Icons.cloud_upload),
@@ -424,8 +434,8 @@ class _BulkLocalityPermitUploadDialogState
                         _isUploading
                             ? (isArabic ? 'جاري الرفع...' : 'Uploading...')
                             : (isArabic
-                                ? 'رفع $readyCount تصريح'
-                                : 'Upload $readyCount Permits'),
+                                  ? 'رفع $readyCount تصريح'
+                                  : 'Upload $readyCount Permits'),
                       ),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: AppColors.primaryGreen,
@@ -444,7 +454,10 @@ class _BulkLocalityPermitUploadDialogState
   }
 
   Widget _buildPermitItemCard(
-      BulkLocalityPermitItem item, int index, bool isArabic) {
+    BulkLocalityPermitItem item,
+    int index,
+    bool isArabic,
+  ) {
     Color statusColor;
     IconData statusIcon;
 
@@ -472,10 +485,7 @@ class _BulkLocalityPermitUploadDialogState
       child: Container(
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: statusColor.withOpacity(0.3),
-            width: 1,
-          ),
+          border: Border.all(color: statusColor.withOpacity(0.3), width: 1),
         ),
         child: ExpansionTile(
           leading: Container(
@@ -495,10 +505,7 @@ class _BulkLocalityPermitUploadDialogState
           ),
           subtitle: Text(
             item.state,
-            style: GoogleFonts.poppins(
-              fontSize: 12,
-              color: Colors.grey[600],
-            ),
+            style: GoogleFonts.poppins(fontSize: 12, color: Colors.grey[600]),
           ),
           trailing: item.status == PermitUploadStatus.uploading
               ? const SizedBox(
@@ -514,7 +521,9 @@ class _BulkLocalityPermitUploadDialogState
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   InkWell(
-                    onTap: _isUploading ? null : () => _selectFileForItem(index),
+                    onTap: _isUploading
+                        ? null
+                        : () => _selectFileForItem(index),
                     child: Container(
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
@@ -539,8 +548,9 @@ class _BulkLocalityPermitUploadDialogState
                                       ? 'اختر ملف التصريح'
                                       : 'Select permit file'),
                               style: GoogleFonts.poppins(
-                                color:
-                                    item.file != null ? Colors.black : Colors.grey,
+                                color: item.file != null
+                                    ? Colors.black
+                                    : Colors.grey,
                               ),
                               overflow: TextOverflow.ellipsis,
                             ),
@@ -554,8 +564,9 @@ class _BulkLocalityPermitUploadDialogState
                     children: [
                       Expanded(
                         child: InkWell(
-                          onTap:
-                              _isUploading ? null : () => _selectDate(index, true),
+                          onTap: _isUploading
+                              ? null
+                              : () => _selectDate(index, true),
                           child: Container(
                             padding: const EdgeInsets.all(12),
                             decoration: BoxDecoration(
@@ -575,8 +586,9 @@ class _BulkLocalityPermitUploadDialogState
                                 const SizedBox(height: 4),
                                 Text(
                                   item.issueDate != null
-                                      ? DateFormat('yyyy-MM-dd')
-                                          .format(item.issueDate!)
+                                      ? DateFormat(
+                                          'yyyy-MM-dd',
+                                        ).format(item.issueDate!)
                                       : (isArabic ? 'اختر' : 'Select'),
                                   style: GoogleFonts.poppins(
                                     fontWeight: FontWeight.w500,
@@ -615,8 +627,9 @@ class _BulkLocalityPermitUploadDialogState
                                 const SizedBox(height: 4),
                                 Text(
                                   item.expiryDate != null
-                                      ? DateFormat('yyyy-MM-dd')
-                                          .format(item.expiryDate!)
+                                      ? DateFormat(
+                                          'yyyy-MM-dd',
+                                        ).format(item.expiryDate!)
                                       : (isArabic ? 'اختر' : 'Select'),
                                   style: GoogleFonts.poppins(
                                     fontWeight: FontWeight.w500,
@@ -642,8 +655,11 @@ class _BulkLocalityPermitUploadDialogState
                       ),
                       child: Row(
                         children: [
-                          const Icon(Icons.error_outline,
-                              color: Colors.red, size: 16),
+                          const Icon(
+                            Icons.error_outline,
+                            color: Colors.red,
+                            size: 16,
+                          ),
                           const SizedBox(width: 8),
                           Expanded(
                             child: Text(

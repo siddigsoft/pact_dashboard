@@ -8,7 +8,7 @@ import '../theme/app_colors.dart';
 
 /// A reusable notifications panel widget that displays a modal bottom sheet
 /// with user notifications.
-/// 
+///
 /// Example usage:
 /// ```dart
 /// NotificationsPanel.show(context);
@@ -17,7 +17,7 @@ class NotificationsPanel {
   /// Show the notifications panel as a modal bottom sheet
   static void show(BuildContext context) {
     final notificationService = UserNotificationService();
-    
+
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
@@ -95,7 +95,7 @@ class _NotificationsPanelContent extends StatelessWidget {
               stream: notificationService.watchNotifications(),
               builder: (context, snapshot) {
                 final notifications = notificationService.currentNotifications;
-                
+
                 if (notifications.isEmpty) {
                   return Center(
                     child: Column(
@@ -123,7 +123,8 @@ class _NotificationsPanelContent extends StatelessWidget {
                   controller: scrollController,
                   padding: const EdgeInsets.symmetric(vertical: 8),
                   itemCount: notifications.length,
-                  separatorBuilder: (context, index) => const Divider(height: 1),
+                  separatorBuilder: (context, index) =>
+                      const Divider(height: 1),
                   itemBuilder: (context, index) {
                     final notification = notifications[index];
                     return NotificationItem(
@@ -165,7 +166,7 @@ class NotificationItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isUnread = !notification.isRead;
-    
+
     return InkWell(
       onTap: () async {
         if (isUnread) {
@@ -174,7 +175,9 @@ class NotificationItem extends StatelessWidget {
         onTap();
       },
       child: Container(
-        color: isUnread ? AppColors.primaryBlue.withOpacity(0.05) : Colors.transparent,
+        color: isUnread
+            ? AppColors.primaryBlue.withOpacity(0.05)
+            : Colors.transparent,
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -184,7 +187,9 @@ class NotificationItem extends StatelessWidget {
               width: 40,
               height: 40,
               decoration: BoxDecoration(
-                color: _getNotificationColor(notification.type ?? 'info').withOpacity(0.1),
+                color: _getNotificationColor(
+                  notification.type ?? 'info',
+                ).withOpacity(0.1),
                 shape: BoxShape.circle,
               ),
               child: Icon(
@@ -206,7 +211,8 @@ class NotificationItem extends StatelessWidget {
                           notification.title,
                           style: GoogleFonts.poppins(
                             fontSize: 14,
-                            fontWeight: isUnread ? FontWeight.w600 : FontWeight.w500,
+                            fontWeight:
+                                isUnread ? FontWeight.w600 : FontWeight.w500,
                             color: AppColors.textDark,
                           ),
                         ),
@@ -216,7 +222,7 @@ class NotificationItem extends StatelessWidget {
                           width: 8,
                           height: 8,
                           margin: const EdgeInsets.only(left: 8),
-                          decoration: BoxDecoration(
+                          decoration: const BoxDecoration(
                             color: AppColors.primaryBlue,
                             shape: BoxShape.circle,
                           ),
@@ -295,4 +301,3 @@ class NotificationItem extends StatelessWidget {
     }
   }
 }
-

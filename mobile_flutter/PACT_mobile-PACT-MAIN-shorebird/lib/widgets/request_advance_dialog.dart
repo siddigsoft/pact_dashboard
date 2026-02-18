@@ -24,10 +24,10 @@ class _RequestAdvanceDialogState extends State<RequestAdvanceDialog> {
   final _formKey = GlobalKey<FormState>();
   final _amountController = TextEditingController();
   final _justificationController = TextEditingController();
-  
+
   String _paymentType = 'full_advance';
   bool _isSubmitting = false;
-  
+
   // Installment plan
   List<Map<String, dynamic>> _installments = [];
 
@@ -167,7 +167,8 @@ class _RequestAdvanceDialogState extends State<RequestAdvanceDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final siteName = widget.site['site_name'] ?? widget.site['siteName'] ?? 'Unknown Site';
+    final siteName =
+        widget.site['site_name'] ?? widget.site['siteName'] ?? 'Unknown Site';
 
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -179,9 +180,9 @@ class _RequestAdvanceDialogState extends State<RequestAdvanceDialog> {
             // Header
             Container(
               padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
+              decoration: const BoxDecoration(
                 color: AppColors.primaryBlue,
-                borderRadius: const BorderRadius.only(
+                borderRadius: BorderRadius.only(
                   topLeft: Radius.circular(16),
                   topRight: Radius.circular(16),
                 ),
@@ -229,7 +230,8 @@ class _RequestAdvanceDialogState extends State<RequestAdvanceDialog> {
                               children: [
                                 Expanded(
                                   child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     children: [
                                       Text(
                                         'Site Name',
@@ -317,7 +319,8 @@ class _RequestAdvanceDialogState extends State<RequestAdvanceDialog> {
                           ),
                           filled: true,
                           fillColor: Colors.white,
-                          errorText: _requestedAmount > widget.transportationBudget
+                          errorText: _requestedAmount >
+                                  widget.transportationBudget
                               ? 'Amount exceeds budget by ${(_requestedAmount - widget.transportationBudget).toStringAsFixed(0)} SDG'
                               : _requestedAmount <= 0
                                   ? 'Amount must be greater than zero'
@@ -372,7 +375,8 @@ class _RequestAdvanceDialogState extends State<RequestAdvanceDialog> {
                               value: 'full_advance',
                               groupValue: _paymentType,
                               onChanged: (value) {
-                                setState(() => _paymentType = value ?? 'full_advance');
+                                setState(() =>
+                                    _paymentType = value ?? 'full_advance');
                               },
                               contentPadding: EdgeInsets.zero,
                             ),
@@ -393,7 +397,8 @@ class _RequestAdvanceDialogState extends State<RequestAdvanceDialog> {
                               value: 'installments',
                               groupValue: _paymentType,
                               onChanged: (value) {
-                                setState(() => _paymentType = value ?? 'installments');
+                                setState(() =>
+                                    _paymentType = value ?? 'installments');
                               },
                               contentPadding: EdgeInsets.zero,
                             ),
@@ -427,13 +432,15 @@ class _RequestAdvanceDialogState extends State<RequestAdvanceDialog> {
                             margin: const EdgeInsets.only(bottom: 12),
                             padding: const EdgeInsets.all(16),
                             decoration: BoxDecoration(
-                              border: Border.all(color: AppColors.backgroundGray),
+                              border:
+                                  Border.all(color: AppColors.backgroundGray),
                               borderRadius: BorderRadius.circular(12),
                             ),
                             child: Column(
                               children: [
                                 Row(
-                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceBetween,
                                   children: [
                                     Text(
                                       'Installment ${index + 1}',
@@ -444,8 +451,10 @@ class _RequestAdvanceDialogState extends State<RequestAdvanceDialog> {
                                     ),
                                     if (_installments.length > 1)
                                       IconButton(
-                                        icon: const Icon(Icons.delete, color: Colors.red, size: 20),
-                                        onPressed: () => _removeInstallment(index),
+                                        icon: const Icon(Icons.delete,
+                                            color: Colors.red, size: 20),
+                                        onPressed: () =>
+                                            _removeInstallment(index),
                                       ),
                                   ],
                                 ),
@@ -454,12 +463,16 @@ class _RequestAdvanceDialogState extends State<RequestAdvanceDialog> {
                                   children: [
                                     Expanded(
                                       child: TextFormField(
-                                        initialValue: (_installments[index]['amount'] as num?)?.toStringAsFixed(0) ?? '0',
+                                        initialValue: (_installments[index]
+                                                    ['amount'] as num?)
+                                                ?.toStringAsFixed(0) ??
+                                            '0',
                                         keyboardType: TextInputType.number,
                                         decoration: InputDecoration(
                                           labelText: 'Amount (SDG)',
                                           border: OutlineInputBorder(
-                                            borderRadius: BorderRadius.circular(8),
+                                            borderRadius:
+                                                BorderRadius.circular(8),
                                           ),
                                           filled: true,
                                           fillColor: Colors.white,
@@ -477,19 +490,23 @@ class _RequestAdvanceDialogState extends State<RequestAdvanceDialog> {
                                     const SizedBox(width: 8),
                                     Expanded(
                                       child: TextFormField(
-                                        initialValue: _installments[index]['stage'] as String? ?? '',
+                                        initialValue: _installments[index]
+                                                ['stage'] as String? ??
+                                            '',
                                         decoration: InputDecoration(
                                           labelText: 'Stage',
                                           hintText: 'e.g., before_travel',
                                           border: OutlineInputBorder(
-                                            borderRadius: BorderRadius.circular(8),
+                                            borderRadius:
+                                                BorderRadius.circular(8),
                                           ),
                                           filled: true,
                                           fillColor: Colors.white,
                                           isDense: true,
                                         ),
                                         onChanged: (value) {
-                                          _updateInstallment(index, 'stage', value);
+                                          _updateInstallment(
+                                              index, 'stage', value);
                                         },
                                       ),
                                     ),
@@ -497,7 +514,9 @@ class _RequestAdvanceDialogState extends State<RequestAdvanceDialog> {
                                 ),
                                 const SizedBox(height: 8),
                                 TextFormField(
-                                  initialValue: _installments[index]['description'] as String? ?? '',
+                                  initialValue: _installments[index]
+                                          ['description'] as String? ??
+                                      '',
                                   decoration: InputDecoration(
                                     labelText: 'Description',
                                     hintText: 'Describe this payment stage',
@@ -509,7 +528,8 @@ class _RequestAdvanceDialogState extends State<RequestAdvanceDialog> {
                                     isDense: true,
                                   ),
                                   onChanged: (value) {
-                                    _updateInstallment(index, 'description', value);
+                                    _updateInstallment(
+                                        index, 'description', value);
                                   },
                                 ),
                               ],
@@ -572,7 +592,8 @@ class _RequestAdvanceDialogState extends State<RequestAdvanceDialog> {
                         controller: _justificationController,
                         maxLines: 4,
                         decoration: InputDecoration(
-                          hintText: 'Explain why you need this advance and how it will be used...',
+                          hintText:
+                              'Explain why you need this advance and how it will be used...',
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(12),
                           ),
@@ -594,7 +615,7 @@ class _RequestAdvanceDialogState extends State<RequestAdvanceDialog> {
             // Footer
             Container(
               padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
+              decoration: const BoxDecoration(
                 border: Border(
                   top: BorderSide(color: AppColors.backgroundGray),
                 ),
@@ -603,7 +624,9 @@ class _RequestAdvanceDialogState extends State<RequestAdvanceDialog> {
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
                   TextButton(
-                    onPressed: _isSubmitting ? null : () => Navigator.of(context).pop(),
+                    onPressed: _isSubmitting
+                        ? null
+                        : () => Navigator.of(context).pop(),
                     child: const Text('Cancel'),
                   ),
                   const SizedBox(width: 8),
@@ -619,7 +642,8 @@ class _RequestAdvanceDialogState extends State<RequestAdvanceDialog> {
                             height: 20,
                             child: CircularProgressIndicator(
                               strokeWidth: 2,
-                              valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                              valueColor:
+                                  AlwaysStoppedAnimation<Color>(Colors.white),
                             ),
                           )
                         : const Text('Submit Request'),
@@ -633,4 +657,3 @@ class _RequestAdvanceDialogState extends State<RequestAdvanceDialog> {
     );
   }
 }
-

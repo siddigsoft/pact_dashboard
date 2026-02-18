@@ -83,16 +83,16 @@ class GroupCallState {
 
 class GroupCallService {
   final SupabaseClient _supabase = Supabase.instance.client;
-  
+
   MediaStream? _localStream;
   RTCVideoRenderer? _localRenderer;
   RealtimeChannel? _roomChannel;
-  
+
   final Map<String, GroupCallParticipant> _participants = {};
   GroupCallState _state = GroupCallState();
-  final StreamController<GroupCallState> _stateController = 
+  final StreamController<GroupCallState> _stateController =
       StreamController<GroupCallState>.broadcast();
-  
+
   String? _userId;
   String? _userName;
 
@@ -115,18 +115,18 @@ class GroupCallService {
   Future<void> initialize(String userId, String userName) async {
     _userId = userId;
     _userName = userName;
-    
+
     _localRenderer = RTCVideoRenderer();
     await _localRenderer!.initialize();
   }
 
   Future<String> createRoom(String roomName) async {
     try {
-      final response = await _supabase.from('call_rooms').insert({
-        'name': roomName,
-        'created_by': _userId,
-        'is_active': true,
-      }).select().single();
+      final response = await _supabase
+          .from('call_rooms')
+          .insert({'name': roomName, 'created_by': _userId, 'is_active': true})
+          .select()
+          .single();
 
       return response['id'] as String;
     } catch (e) {
@@ -160,11 +160,13 @@ class GroupCallService {
   Future<void> _setupLocalStream(bool withVideo) async {
     final constraints = {
       'audio': true,
-      'video': withVideo ? {
-        'facingMode': 'user',
-        'width': {'ideal': 640},
-        'height': {'ideal': 480},
-      } : false,
+      'video': withVideo
+          ? {
+              'facingMode': 'user',
+              'width': {'ideal': 640},
+              'height': {'ideal': 480},
+            }
+          : false,
     };
 
     _localStream = await navigator.mediaDevices.getUserMedia(constraints);
@@ -238,13 +240,13 @@ class GroupCallService {
   Future<void> _handleParticipantLeft(Map<String, dynamic> payload) async {
     final userId = payload['user_id'] as String;
     final participant = _participants.remove(userId);
-    
+
     if (participant != null) {
       await participant.peerConnection?.close();
       participant.renderer?.srcObject = null;
       await participant.renderer?.dispose();
     }
-    
+
     _updateParticipants();
   }
 
@@ -310,7 +312,7 @@ class GroupCallService {
   Future<void> _handleOffer(Map<String, dynamic> payload) async {
     final fromId = payload['from'] as String;
     final toId = payload['to'] as String;
-    
+
     if (toId != _userId) return;
 
     if (!_participants.containsKey(fromId)) {
@@ -346,7 +348,7 @@ class GroupCallService {
   Future<void> _handleAnswer(Map<String, dynamic> payload) async {
     final fromId = payload['from'] as String;
     final toId = payload['to'] as String;
-    
+
     if (toId != _userId) return;
 
     final peerConnection = _participants[fromId]?.peerConnection;
@@ -362,7 +364,7 @@ class GroupCallService {
   Future<void> _handleIceCandidate(Map<String, dynamic> payload) async {
     final fromId = payload['from'] as String;
     final toId = payload['to'] as String;
-    
+
     if (toId != _userId) return;
 
     final peerConnection = _participants[fromId]?.peerConnection;
@@ -379,7 +381,7 @@ class GroupCallService {
   void _handleAudioToggle(Map<String, dynamic> payload) {
     final userId = payload['user_id'] as String;
     final enabled = payload['enabled'] as bool;
-    
+
     if (_participants.containsKey(userId)) {
       _participants[userId] = _participants[userId]!.copyWith(
         isAudioEnabled: enabled,
@@ -391,7 +393,7 @@ class GroupCallService {
   void _handleVideoToggle(Map<String, dynamic> payload) {
     final userId = payload['user_id'] as String;
     final enabled = payload['enabled'] as bool;
-    
+
     if (_participants.containsKey(userId)) {
       _participants[userId] = _participants[userId]!.copyWith(
         isVideoEnabled: enabled,
@@ -408,7 +410,7 @@ class GroupCallService {
       }
       final enabled = audioTracks.first.enabled;
       _updateState(_state.copyWith(isAudioEnabled: enabled));
-      
+
       _roomChannel?.sendBroadcastMessage(
         event: 'audio_toggle',
         payload: {'user_id': _userId, 'enabled': enabled},
@@ -424,7 +426,7 @@ class GroupCallService {
       }
       final enabled = videoTracks.isNotEmpty && videoTracks.first.enabled;
       _updateState(_state.copyWith(isVideoEnabled: enabled));
-      
+
       _roomChannel?.sendBroadcastMessage(
         event: 'video_toggle',
         payload: {'user_id': _userId, 'enabled': enabled},
@@ -444,7 +446,7 @@ class GroupCallService {
 
   Future<void> _cleanup() async {
     _roomChannel?.unsubscribe();
-    
+
     _localStream?.getTracks().forEach((track) => track.stop());
     _localRenderer?.srcObject = null;
     _localStream = null;
@@ -458,9 +460,7 @@ class GroupCallService {
   }
 
   void _updateParticipants() {
-    _updateState(_state.copyWith(
-      participants: _participants.values.toList(),
-    ));
+    _updateState(_state.copyWith(participants: _participants.values.toList()));
   }
 
   void _updateState(GroupCallState newState) {

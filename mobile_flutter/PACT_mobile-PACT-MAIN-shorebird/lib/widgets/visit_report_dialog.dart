@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
@@ -8,6 +9,7 @@ import 'package:image_picker/image_picker.dart';
 import '../theme/app_colors.dart';
 import '../models/visit_report_data.dart';
 import '../services/location_service.dart';
+import '../services/offline/offline_db.dart';
 
 class VisitReportDialog extends StatefulWidget {
   final Map<String, dynamic> site;
@@ -49,22 +51,45 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
     super.dispose();
   }
 
+  /// Safely parse additional_data (may be JSON string or Map from cache/API).
+  static Map<String, dynamic>? _safeAdditionalData(dynamic data) {
+    if (data == null) return null;
+    if (data is String) {
+      try {
+        final decoded = jsonDecode(data);
+        return decoded is Map
+            ? Map<String, dynamic>.from(decoded as Map)
+            : null;
+      } catch (_) {
+        return null;
+      }
+    }
+    if (data is Map) {
+      return Map<String, dynamic>.from(data as Map);
+    }
+    return null;
+  }
+
   void _loadDraftData() {
     final additionalData =
-        widget.site['additional_data'] as Map<String, dynamic>?;
-    if (additionalData != null) {
+        _safeAdditionalData(widget.site['additional_data']);
+    if (additionalData != null && additionalData.isNotEmpty) {
       _activitiesController.text = additionalData['draft_activities'] ?? '';
       _notesController.text = additionalData['draft_notes'] ?? '';
       _durationMinutes = additionalData['draft_visit_duration'] ?? 0;
 
-      if (additionalData['draft_coordinates'] != null) {
-        final coords =
-            additionalData['draft_coordinates'] as Map<String, dynamic>;
+      final rawCoords = additionalData['draft_coordinates'];
+      if (rawCoords != null && rawCoords is Map) {
+        final coords = Map<String, dynamic>.from(rawCoords as Map);
+        // JSON/DB may return numbers as int; Position requires double
+        final lat = (coords['latitude'] as num?)?.toDouble() ?? 0.0;
+        final lng = (coords['longitude'] as num?)?.toDouble() ?? 0.0;
+        final acc = (coords['accuracy'] as num?)?.toDouble() ?? 0.0;
         _coordinates = Position(
-          latitude: coords['latitude'] ?? 0.0,
-          longitude: coords['longitude'] ?? 0.0,
+          latitude: lat,
+          longitude: lng,
           timestamp: DateTime.now(),
-          accuracy: coords['accuracy'] ?? 0.0,
+          accuracy: acc,
           altitude: 0.0,
           heading: 0.0,
           speed: 0.0,
@@ -74,10 +99,62 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
         );
         _locationEnabled = true;
       }
+    }
 
-      // Note: Draft photo URLs are not loaded here as they are URLs, not file paths
-      // We only load file paths from image picker, not URLs from draft data
-      // If you need to display draft photos, handle them separately
+    // Load local draft (activities, notes, photos, duration, coordinates) so user can resume
+    final siteId = widget.site['id']?.toString() ?? '';
+    if (siteId.isNotEmpty) {
+      try {
+        final offlineDb = OfflineDb();
+        final cached = offlineDb.getCachedItem(
+          OfflineDb.siteCacheBox,
+          'visit_draft_$siteId',
+        );
+        if (cached?.data != null) {
+          final draft = cached!.data;
+          if (draft['draft_activities'] != null) {
+            _activitiesController.text =
+                (draft['draft_activities'] as String?) ?? '';
+          }
+          if (draft['draft_notes'] != null) {
+            _notesController.text = (draft['draft_notes'] as String?) ?? '';
+          }
+          if (draft['draft_visit_duration'] != null) {
+            _durationMinutes =
+                (draft['draft_visit_duration'] as num?)?.toInt() ?? 0;
+          }
+          final rawCoords = draft['draft_coordinates'];
+          if (rawCoords != null && rawCoords is Map) {
+            final coords = Map<String, dynamic>.from(rawCoords as Map);
+            final lat = (coords['latitude'] as num?)?.toDouble() ?? 0.0;
+            final lng = (coords['longitude'] as num?)?.toDouble() ?? 0.0;
+            final acc = (coords['accuracy'] as num?)?.toDouble() ?? 0.0;
+            _coordinates = Position(
+              latitude: lat,
+              longitude: lng,
+              timestamp: DateTime.now(),
+              accuracy: acc,
+              altitude: 0.0,
+              heading: 0.0,
+              speed: 0.0,
+              speedAccuracy: 0.0,
+              altitudeAccuracy: 0.0,
+              headingAccuracy: 0.0,
+            );
+            _locationEnabled = true;
+          }
+          final paths = draft['draft_photo_paths'] as List?;
+          if (paths != null && paths.isNotEmpty) {
+            for (final p in paths) {
+              if (p is String && File(p).existsSync()) {
+                _photoPaths.add(p);
+              }
+            }
+          }
+        }
+      } catch (e) {
+        debugPrint('[_loadDraftData] Error loading local draft: $e');
+      }
     }
 
     // Get visit start time from site
@@ -133,18 +210,17 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
       }
 
       // Start location stream for continuous updates
-      _positionStream =
-          Geolocator.getPositionStream(
-            locationSettings: const LocationSettings(
-              accuracy: LocationAccuracy.high,
-              distanceFilter: 10, // Update every 10 meters
-            ),
-          ).listen((position) {
-            setState(() {
-              _coordinates = position;
-              _locationEnabled = true;
-            });
-          });
+      _positionStream = Geolocator.getPositionStream(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.high,
+          distanceFilter: 10, // Update every 10 meters
+        ),
+      ).listen((position) {
+        setState(() {
+          _coordinates = position;
+          _locationEnabled = true;
+        });
+      });
     } catch (e) {
       setState(() {
         _isGettingLocation = false;
@@ -310,12 +386,62 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
     }
   }
 
+  /// Save current form state as draft (activities, notes, photos, duration, coordinates).
+  /// Stored locally so when the user reopens the dialog the data is restored.
+  Future<void> _saveDraft() async {
+    final siteId = widget.site['id']?.toString() ?? '';
+    if (siteId.isEmpty) return;
+
+    try {
+      final draft = <String, dynamic>{
+        'draft_activities': _activitiesController.text.trim(),
+        'draft_notes': _notesController.text.trim(),
+        'draft_visit_duration': _durationMinutes,
+        'draft_photo_paths': List<String>.from(_photoPaths),
+      };
+      if (_coordinates != null) {
+        draft['draft_coordinates'] = {
+          'latitude': _coordinates!.latitude,
+          'longitude': _coordinates!.longitude,
+          'accuracy': _coordinates!.accuracy,
+        };
+      }
+
+      final offlineDb = OfflineDb();
+      await offlineDb.cacheItem(
+        OfflineDb.siteCacheBox,
+        'visit_draft_$siteId',
+        data: draft,
+        ttl: const Duration(days: 30),
+      );
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Draft saved. You can continue later.'),
+            backgroundColor: Colors.green,
+          ),
+        );
+        Navigator.of(context).pop();
+      }
+    } catch (e) {
+      debugPrint('Error saving draft: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Could not save draft: ${e.toString()}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final siteName =
         widget.site['site_name'] ?? widget.site['siteName'] ?? 'Unknown Site';
-    final siteCode =
-        widget.site['site_code'] ??
+    final siteCode = widget.site['site_code'] ??
         widget.site['siteCode'] ??
         widget.site['id']?.toString().substring(0, 8) ??
         '';
@@ -424,7 +550,7 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
             // Footer
             Container(
               padding: const EdgeInsets.all(24),
-              decoration: BoxDecoration(
+              decoration: const BoxDecoration(
                 border: Border(
                   top: BorderSide(color: AppColors.backgroundGray),
                 ),
@@ -445,7 +571,23 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
                       child: const Text('Cancel'),
                     ),
                   ),
-                  const SizedBox(width: 12),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: _isSubmitting ? null : _saveDraft,
+                      //icon: const Icon(Icons.save_outlined, size: 18),
+                      label: const Text('Draft'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.orange.shade800,
+                        side: BorderSide(color: Colors.orange.shade700),
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(24),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
                   Expanded(
                     flex: 2,
                     child: ElevatedButton(
@@ -469,19 +611,23 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
                                 ),
                               ),
                             )
-                          : Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                const Icon(Icons.check, size: 20),
-                                const SizedBox(width: 8),
-                                Text(
-                                  'Complete Visit',
-                                  style: GoogleFonts.poppins(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.bold,
+                          : FittedBox(
+                              fit: BoxFit.scaleDown,
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                 // const Icon(Icons.check, size: 20),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    'Complete Visit',
+                                    style: GoogleFonts.poppins(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.bold,
+                                    ),
                                   ),
-                                ),
-                              ],
+                                ],
+                              ),
                             ),
                     ),
                   ),
@@ -522,8 +668,8 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
                     decoration: BoxDecoration(
                       color:
                           _coordinates != null && (_coordinates!.accuracy <= 10)
-                          ? Colors.black
-                          : Colors.black.withOpacity(0.3),
+                              ? Colors.black
+                              : Colors.black.withOpacity(0.3),
                       shape: BoxShape.circle,
                     ),
                     child: Icon(
@@ -549,8 +695,8 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
                         _coordinates == null
                             ? 'Acquiring location...'
                             : _coordinates!.accuracy <= 10
-                            ? 'Excellent accuracy'
-                            : 'Improving accuracy...',
+                                ? 'Excellent accuracy'
+                                : 'Improving accuracy...',
                         style: GoogleFonts.poppins(
                           fontSize: 12,
                           color: AppColors.textLight,

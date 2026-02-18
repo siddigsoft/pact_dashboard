@@ -14,15 +14,16 @@ class CallHistoryService {
 
   static const String _historyBoxName = 'pact_call_history';
   static const int _maxLocalEntries = 100;
-  
+
   final SupabaseClient _supabase = Supabase.instance.client;
   List<CallHistoryEntry> _history = [];
-  
-  final _historyController = StreamController<List<CallHistoryEntry>>.broadcast();
+
+  final _historyController =
+      StreamController<List<CallHistoryEntry>>.broadcast();
   Stream<List<CallHistoryEntry>> get historyStream => _historyController.stream;
-  
+
   List<CallHistoryEntry> get history => List.unmodifiable(_history);
-  
+
   Future<void> initialize() async {
     await _loadLocalHistory();
     await _syncWithServer();
@@ -33,13 +34,18 @@ class CallHistoryService {
       final box = await Hive.openBox(_historyBoxName);
       final cached = box.get('history');
       if (cached != null && cached is List) {
-        _history = cached.map((item) {
-          if (item is Map) {
-            return CallHistoryEntry.fromJson(Map<String, dynamic>.from(item));
-          }
-          return null;
-        }).whereType<CallHistoryEntry>().toList();
-        
+        _history = cached
+            .map((item) {
+              if (item is Map) {
+                return CallHistoryEntry.fromJson(
+                  Map<String, dynamic>.from(item),
+                );
+              }
+              return null;
+            })
+            .whereType<CallHistoryEntry>()
+            .toList();
+
         _history.sort((a, b) => b.startTime.compareTo(a.startTime));
         _historyController.add(_history);
         debugPrint('[CallHistory] Loaded ${_history.length} local entries');
@@ -71,31 +77,32 @@ class CallHistoryService {
           .order('created_at', ascending: false)
           .limit(50);
 
-      if (response != null && response is List) {
-        for (final item in response) {
-          final entry = _parseServerEntry(item as Map<String, dynamic>, userId);
-          if (entry != null && !_history.any((h) => h.callId == entry.callId)) {
-            _history.add(entry);
-          }
+      for (final item in response) {
+        final entry = _parseServerEntry(item, userId);
+        if (entry != null && !_history.any((h) => h.callId == entry.callId)) {
+          _history.add(entry);
         }
-        _history.sort((a, b) => b.startTime.compareTo(a.startTime));
-        _historyController.add(_history);
-        await _saveLocalHistory();
       }
+      _history.sort((a, b) => b.startTime.compareTo(a.startTime));
+      _historyController.add(_history);
+      await _saveLocalHistory();
     } catch (e) {
       debugPrint('[CallHistory] Error syncing with server: $e');
     }
   }
 
-  CallHistoryEntry? _parseServerEntry(Map<String, dynamic> data, String currentUserId) {
+  CallHistoryEntry? _parseServerEntry(
+    Map<String, dynamic> data,
+    String currentUserId,
+  ) {
     try {
       final callerId = data['caller_id'] as String?;
       final isOutgoing = callerId == currentUserId;
-      
+
       return CallHistoryEntry(
         id: data['id'] as String? ?? const Uuid().v4(),
         callId: data['call_id'] as String?,
-        remoteUserId: isOutgoing 
+        remoteUserId: isOutgoing
             ? (data['callee_id'] as String? ?? '')
             : (data['caller_id'] as String? ?? ''),
         remoteUserName: isOutgoing
@@ -108,8 +115,8 @@ class CallHistoryService {
         isVideoCall: data['is_video'] as bool? ?? false,
         endStatus: _parseStatus(data['status'] as String?),
         startTime: DateTime.parse(data['created_at'] as String),
-        endTime: data['ended_at'] != null 
-            ? DateTime.parse(data['ended_at'] as String) 
+        endTime: data['ended_at'] != null
+            ? DateTime.parse(data['ended_at'] as String)
             : null,
         duration: data['duration_seconds'] != null
             ? Duration(seconds: data['duration_seconds'] as int)
@@ -125,28 +132,42 @@ class CallHistoryService {
 
   CallStatus _parseStatus(String? status) {
     switch (status) {
-      case 'connected': return CallStatus.connected;
-      case 'missed': return CallStatus.unreachable;
-      case 'rejected': return CallStatus.rejected;
-      case 'busy': return CallStatus.busy;
-      case 'failed': return CallStatus.failed;
-      default: return CallStatus.ended;
+      case 'connected':
+        return CallStatus.connected;
+      case 'ended':
+        return CallStatus.ended;
+      case 'missed':
+        return CallStatus.unreachable;
+      case 'rejected':
+        return CallStatus.rejected;
+      case 'busy':
+        return CallStatus.busy;
+      case 'failed':
+        return CallStatus.failed;
+      default:
+        return CallStatus.ended;
     }
   }
 
   Future<void> addEntry(CallHistoryEntry entry) async {
+    debugPrint('[JitsiCall] CallHistoryService addEntry() ENTER id=${entry.id} callId=${entry.callId} remote=${entry.remoteUserName} isOutgoing=${entry.isOutgoing} isVideo=${entry.isVideoCall} status=${entry.endStatus.name}');
     _history.insert(0, entry);
     _historyController.add(_history);
     await _saveLocalHistory();
     await _saveToServer(entry);
+    debugPrint('[JitsiCall] CallHistoryService addEntry() DONE');
   }
 
   Future<void> _saveToServer(CallHistoryEntry entry) async {
     try {
       final userId = _supabase.auth.currentUser?.id;
-      if (userId == null) return;
+      debugPrint('[JitsiCall] CallHistoryService _saveToServer() userId=$userId entry.id=${entry.id} call_id=${entry.callId}');
+      if (userId == null) {
+        debugPrint('[JitsiCall] CallHistoryService _saveToServer() SKIP no userId');
+        return;
+      }
 
-      await _supabase.from('call_history').insert({
+      final payload = {
         'id': entry.id,
         'call_id': entry.callId,
         'caller_id': entry.isOutgoing ? userId : entry.remoteUserId,
@@ -158,9 +179,13 @@ class CallHistoryService {
         'duration_seconds': entry.duration?.inSeconds,
         'notes': entry.notes,
         'was_recorded': entry.wasRecorded,
-      });
-    } catch (e) {
-      debugPrint('[CallHistory] Error saving to server: $e');
+      };
+      debugPrint('[JitsiCall] CallHistoryService _saveToServer() inserting call_history: $payload');
+      await _supabase.from('call_history').insert(payload);
+      debugPrint('[JitsiCall] CallHistoryService _saveToServer() DONE');
+    } catch (e, st) {
+      debugPrint('[JitsiCall] CallHistoryService _saveToServer() ERROR: $e');
+      debugPrint('[JitsiCall] CallHistoryService _saveToServer() stackTrace: $st');
     }
   }
 
@@ -192,7 +217,7 @@ class CallHistoryService {
     _history.removeWhere((e) => e.id == entryId);
     _historyController.add(_history);
     await _saveLocalHistory();
-    
+
     try {
       await _supabase.from('call_history').delete().eq('id', entryId);
     } catch (e) {
@@ -203,7 +228,7 @@ class CallHistoryService {
   Future<void> clearHistory() async {
     _history.clear();
     _historyController.add(_history);
-    
+
     try {
       final box = await Hive.openBox(_historyBoxName);
       await box.clear();

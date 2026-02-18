@@ -12,7 +12,7 @@ class GeoCoordinates {
   factory GeoCoordinates.fromJson(Map<String, dynamic> json) {
     final lat = json['latitude'] ?? json['lat'];
     final lng = json['longitude'] ?? json['lng'] ?? json['lon'];
-    
+
     if (lat is num && lng is num) {
       return GeoCoordinates(
         latitude: lat.toDouble(),
@@ -28,8 +28,10 @@ class GeoCoordinates {
   };
 
   bool isValid() {
-    return latitude >= -90 && latitude <= 90 && 
-           longitude >= -180 && longitude <= 180;
+    return latitude >= -90 &&
+        latitude <= 90 &&
+        longitude >= -180 &&
+        longitude <= 180;
   }
 }
 
@@ -38,7 +40,7 @@ class ProximityConfig {
   final bool enabled;
   final bool requireLocationSharing;
 
-  ProximityConfig({
+  const ProximityConfig({
     this.radiusKm = 80.0,
     this.enabled = true,
     this.requireLocationSharing = true,
@@ -92,9 +94,12 @@ class GeoDistanceUtils {
     final deltaLatRad = _toRadians(point2.latitude - point1.latitude);
     final deltaLonRad = _toRadians(point2.longitude - point1.longitude);
 
-    final a = sin(deltaLatRad / 2) * sin(deltaLatRad / 2) +
-        cos(lat1Rad) * cos(lat2Rad) *
-        sin(deltaLonRad / 2) * sin(deltaLonRad / 2);
+    final a =
+        sin(deltaLatRad / 2) * sin(deltaLatRad / 2) +
+        cos(lat1Rad) *
+            cos(lat2Rad) *
+            sin(deltaLonRad / 2) *
+            sin(deltaLonRad / 2);
 
     final c = 2 * atan2(sqrt(a), sqrt(1 - a));
 
@@ -119,7 +124,7 @@ class GeoDistanceUtils {
 
     try {
       Map<String, dynamic> parsed;
-      
+
       if (location is String) {
         parsed = jsonDecode(location) as Map<String, dynamic>;
       } else if (location is Map) {
@@ -187,14 +192,16 @@ class GeoDistanceUtils {
         isWithinRadius: false,
         hasGpsCoordinates: siteLocation != null,
         canAccess: false,
-        reason: 'Location sharing must be enabled to claim sites. Please enable GPS.',
+        reason:
+            'Location sharing must be enabled to claim sites. Please enable GPS.',
       );
     }
 
     final normalizedUserState = userStateName.toLowerCase().trim();
     final normalizedSiteState = (siteStateName ?? '').toLowerCase().trim();
 
-    final isWithinState = normalizedSiteState == normalizedUserState ||
+    final isWithinState =
+        normalizedSiteState == normalizedUserState ||
         normalizedSiteState.contains(normalizedUserState) ||
         normalizedUserState.contains(normalizedSiteState);
 
@@ -247,7 +254,8 @@ class GeoDistanceUtils {
         hasGpsCoordinates: true,
         distanceKm: distanceKm,
         canAccess: false,
-        reason: 'This site is ${distanceKm.round()} km away, beyond the ${cfg.radiusKm.round()} km limit.',
+        reason:
+            'This site is ${distanceKm.round()} km away, beyond the ${cfg.radiusKm.round()} km limit.',
       );
     }
   }
@@ -300,8 +308,8 @@ class GeoDistanceUtils {
 
   static Future<bool> hasLocationPermission() async {
     final permission = await Geolocator.checkPermission();
-    return permission == LocationPermission.always || 
-           permission == LocationPermission.whileInUse;
+    return permission == LocationPermission.always ||
+        permission == LocationPermission.whileInUse;
   }
 }
 

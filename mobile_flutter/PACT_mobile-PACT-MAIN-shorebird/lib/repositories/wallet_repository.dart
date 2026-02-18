@@ -4,11 +4,11 @@ import 'package:flutter/foundation.dart';
 import '../models/wallet_models.dart';
 import '../models/wallet_transaction.dart';
 import '../models/down_payment_request.dart';
-import '../services/offline_data_service.dart';
+import '../services/offline/offline_db.dart';
 
 class WalletRepository {
   final SupabaseClient _supabase = Supabase.instance.client;
-  final OfflineDataService _offlineDataService = OfflineDataService();
+  final OfflineDb _offlineDb = OfflineDb();
 
   /// Check if device is online
   Future<bool> _isOnline() async {
@@ -42,7 +42,12 @@ class WalletRepository {
       final wallet = Wallet.fromJson(response);
 
       // Cache for offline use
-      await _offlineDataService.cacheWalletData(userId, response);
+      await _offlineDb.cacheItem(
+        OfflineDb.walletCacheBox,
+        'wallet_data_$userId',
+        data: response,
+        ttl: const Duration(hours: 24),
+      );
 
       return wallet;
     } catch (e) {
@@ -55,7 +60,11 @@ class WalletRepository {
   }
 
   Future<Wallet?> _getWalletFromCache(String userId) async {
-    final cachedData = await _offlineDataService.getCachedWalletData(userId);
+    final cachedItem = _offlineDb.getCachedItem(
+      OfflineDb.walletCacheBox,
+      'wallet_data_$userId',
+    );
+    final cachedData = cachedItem?.data;
     if (cachedData != null) {
       debugPrint('📦 Returning cached wallet data');
       return Wallet.fromJson(cachedData);
@@ -460,14 +469,18 @@ class WalletRepository {
       );
 
       // Cache stats for offline use
-      await _offlineDataService.cacheWalletStats(userId, {
-        'totalEarned': stats.totalEarned,
-        'totalWithdrawn': stats.totalWithdrawn,
-        'pendingWithdrawals': stats.pendingWithdrawals,
-        'currentBalance': stats.currentBalance,
-        'totalTransactions': stats.totalTransactions,
-        'completedSiteVisits': stats.completedSiteVisits,
-      });
+      await _offlineDb.cacheItem(
+        OfflineDb.walletCacheBox,
+        'wallet_stats_$userId',
+        data: {
+          'totalEarned': stats.totalEarned,
+          'totalWithdrawn': stats.totalWithdrawn,
+          'pendingWithdrawals': stats.pendingWithdrawals,
+          'currentBalance': stats.currentBalance,
+          'totalTransactions': stats.totalTransactions,
+          'completedSiteVisits': stats.completedSiteVisits,
+        },
+      );
 
       return stats;
     } catch (e) {
@@ -480,8 +493,12 @@ class WalletRepository {
   }
 
   Future<WalletStats?> _getWalletStatsFromCache(String userId) async {
-    final cachedData = await _offlineDataService.getCachedWalletStats(userId);
-    if (cachedData != null) {
+    final cachedItem = _offlineDb.getCachedItem(
+      OfflineDb.walletCacheBox,
+      'wallet_stats_$userId',
+    );
+    if (cachedItem != null) {
+      final cachedData = cachedItem.data;
       debugPrint('📦 Returning cached wallet stats');
       return WalletStats(
         totalEarned: (cachedData['totalEarned'] as num?)?.toDouble() ?? 0,
@@ -709,7 +726,6 @@ class WalletRepository {
   }
 
   /// Get down payment requests for current user
-  /// Filters out requests that have been soft-deleted (cancelled with deleted flag in metadata)
   Future<List<DownPaymentRequest>> getUserDownPaymentRequests(
     String userId,
   ) async {
@@ -721,15 +737,6 @@ class WalletRepository {
           .order('created_at', ascending: false);
 
       return (response as List)
-          .where((json) {
-            if (json['status'] == 'cancelled') {
-              final metadata = json['metadata'];
-              if (metadata is Map && metadata['deleted'] == true) {
-                return false;
-              }
-            }
-            return true;
-          })
           .map((json) => DownPaymentRequest.fromJson(json))
           .toList();
     } catch (e) {
@@ -933,7 +940,6 @@ class WalletRepository {
   }
 
   /// Real-time stream for user's down payment requests
-  /// Filters out requests that have been soft-deleted (cancelled with deleted flag in metadata)
   Stream<List<DownPaymentRequest>> watchUserDownPaymentRequests(String userId) {
     return _supabase
         .from('down_payment_requests')
@@ -941,18 +947,8 @@ class WalletRepository {
         .eq('requested_by', userId)
         .order('created_at', ascending: false)
         .map(
-          (data) => data
-              .where((json) {
-                if (json['status'] == 'cancelled') {
-                  final metadata = json['metadata'];
-                  if (metadata is Map && metadata['deleted'] == true) {
-                    return false;
-                  }
-                }
-                return true;
-              })
-              .map((json) => DownPaymentRequest.fromJson(json))
-              .toList(),
+          (data) =>
+              data.map((json) => DownPaymentRequest.fromJson(json)).toList(),
         );
   }
 

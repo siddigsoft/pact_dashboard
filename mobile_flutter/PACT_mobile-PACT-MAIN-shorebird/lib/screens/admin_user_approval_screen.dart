@@ -10,7 +10,8 @@ class AdminUserApprovalScreen extends StatefulWidget {
   const AdminUserApprovalScreen({super.key});
 
   @override
-  State<AdminUserApprovalScreen> createState() => _AdminUserApprovalScreenState();
+  State<AdminUserApprovalScreen> createState() =>
+      _AdminUserApprovalScreenState();
 }
 
 class _AdminUserApprovalScreenState extends State<AdminUserApprovalScreen> {
@@ -37,7 +38,8 @@ class _AdminUserApprovalScreenState extends State<AdminUserApprovalScreen> {
           .order('created_at', ascending: false);
 
       setState(() {
-        _pendingUsers = response.map<Profile>((json) => Profile.fromJson(json)).toList();
+        _pendingUsers =
+            response.map<Profile>((json) => Profile.fromJson(json)).toList();
         _isLoading = false;
       });
     } catch (e) {
@@ -83,8 +85,7 @@ class _AdminUserApprovalScreenState extends State<AdminUserApprovalScreen> {
     try {
       await _authService.supabase
           .from('profiles')
-          .update({'status': 'rejected'})
-          .eq('id', userId);
+          .update({'status': 'rejected'}).eq('id', userId);
 
       await _loadPendingUsers(); // Refresh list
 
@@ -138,7 +139,7 @@ class _AdminUserApprovalScreenState extends State<AdminUserApprovalScreen> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(
+          const Icon(
             Icons.check_circle_outline,
             size: 64,
             color: AppColors.textSecondary,
@@ -238,7 +239,8 @@ class _AdminUserApprovalScreenState extends State<AdminUserApprovalScreen> {
               Row(
                 children: [
                   if (user.phone != null) ...[
-                    Icon(Icons.phone, size: 16, color: AppColors.textSecondary),
+                    const Icon(Icons.phone,
+                        size: 16, color: AppColors.textSecondary),
                     const SizedBox(width: 4),
                     Text(
                       user.phone!,
@@ -249,7 +251,8 @@ class _AdminUserApprovalScreenState extends State<AdminUserApprovalScreen> {
                   ],
                   if (user.employeeId != null) ...[
                     const SizedBox(width: 16),
-                    Icon(Icons.badge, size: 16, color: AppColors.textSecondary),
+                    const Icon(Icons.badge,
+                        size: 16, color: AppColors.textSecondary),
                     const SizedBox(width: 4),
                     Text(
                       user.employeeId!,
@@ -266,7 +269,8 @@ class _AdminUserApprovalScreenState extends State<AdminUserApprovalScreen> {
               children: [
                 Expanded(
                   child: ElevatedButton(
-                    onPressed: () => _approveUser(user.id, user.fullName ?? 'User'),
+                    onPressed: () =>
+                        _approveUser(user.id, user.fullName ?? 'User'),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppColors.success,
                       foregroundColor: Colors.white,
@@ -280,7 +284,8 @@ class _AdminUserApprovalScreenState extends State<AdminUserApprovalScreen> {
                 const SizedBox(width: 12),
                 Expanded(
                   child: OutlinedButton(
-                    onPressed: () => _rejectUser(user.id, user.fullName ?? 'User'),
+                    onPressed: () =>
+                        _rejectUser(user.id, user.fullName ?? 'User'),
                     style: OutlinedButton.styleFrom(
                       side: const BorderSide(color: AppColors.error),
                       foregroundColor: AppColors.error,

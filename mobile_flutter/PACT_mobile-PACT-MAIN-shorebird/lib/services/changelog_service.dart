@@ -31,7 +31,8 @@ class ChangelogEntry {
     return '$version (Build $buildNumber)';
   }
 
-  bool get hasChanges => features.isNotEmpty || fixes.isNotEmpty || improvements.isNotEmpty;
+  bool get hasChanges =>
+      features.isNotEmpty || fixes.isNotEmpty || improvements.isNotEmpty;
 }
 
 class ChangelogService {
@@ -54,7 +55,7 @@ class ChangelogService {
 
       try {
         final codePush = ShorebirdCodePush();
-        final isAvailable = await codePush.isShorebirdAvailable();
+        final isAvailable = codePush.isShorebirdAvailable();
         if (isAvailable) {
           _currentPatchNumber = await codePush.currentPatchNumber();
         }
@@ -62,7 +63,9 @@ class ChangelogService {
         debugPrint('[ChangelogService] Error getting patch number: $e');
       }
 
-      debugPrint('[ChangelogService] Initialized: v$_currentVersion build $_currentBuildNumber patch $_currentPatchNumber');
+      debugPrint(
+        '[ChangelogService] Initialized: v$_currentVersion build $_currentBuildNumber patch $_currentPatchNumber',
+      );
     } catch (e) {
       debugPrint('[ChangelogService] Error initializing: $e');
     }
@@ -89,14 +92,18 @@ class ChangelogService {
       }
       final box = Hive.box(_cacheBoxName);
       final lastSeen = box.get(_lastSeenVersionKey) as String?;
-      
+
       if (lastSeen == null) {
-        debugPrint('[ChangelogService] No previous version seen - showing dialog');
+        debugPrint(
+          '[ChangelogService] No previous version seen - showing dialog',
+        );
         return true;
       }
-      
+
       final isNew = lastSeen != currentVersionString;
-      debugPrint('[ChangelogService] Last seen: $lastSeen, Current: $currentVersionString, isNew: $isNew');
+      debugPrint(
+        '[ChangelogService] Last seen: $lastSeen, Current: $currentVersionString, isNew: $isNew',
+      );
       return isNew;
     } catch (e) {
       debugPrint('[ChangelogService] Error checking new version: $e');
@@ -111,7 +118,9 @@ class ChangelogService {
       }
       final box = Hive.box(_cacheBoxName);
       await box.put(_lastSeenVersionKey, currentVersionString);
-      debugPrint('[ChangelogService] Marked version as seen: $currentVersionString');
+      debugPrint(
+        '[ChangelogService] Marked version as seen: $currentVersionString',
+      );
     } catch (e) {
       debugPrint('[ChangelogService] Error marking version as seen: $e');
     }
@@ -175,9 +184,7 @@ class ChangelogService {
         'Fixed List<ConnectivityResult> handling',
         'Fixed sync service connectivity checks',
       ],
-      improvements: [
-        'Improved battery usage during GPS tracking',
-      ],
+      improvements: ['Improved battery usage during GPS tracking'],
     ),
     ChangelogEntry(
       version: '1.0.3',
@@ -188,13 +195,8 @@ class ChangelogService {
         'Permit upload functionality',
         'MMP verification workflow',
       ],
-      fixes: [
-        'Fixed authentication token refresh',
-      ],
-      improvements: [
-        'Faster app startup time',
-        'Reduced memory usage',
-      ],
+      fixes: ['Fixed authentication token refresh'],
+      improvements: ['Faster app startup time', 'Reduced memory usage'],
     ),
   ];
 }

@@ -14,7 +14,8 @@ class AutoReleaseSettings {
 
   factory AutoReleaseSettings.fromJson(Map<String, dynamic> json) {
     return AutoReleaseSettings(
-      confirmationHoursBeforeVisit: json['confirmationHoursBeforeVisit'] as int? ?? 24,
+      confirmationHoursBeforeVisit:
+          json['confirmationHoursBeforeVisit'] as int? ?? 24,
       releaseHoursBeforeVisit: json['releaseHoursBeforeVisit'] as int? ?? 12,
       autoReleaseEnabled: json['autoReleaseEnabled'] as bool? ?? true,
     );
@@ -98,7 +99,9 @@ class ConfirmationDeadlineUtils {
     return defaultSettings;
   }
 
-  static Future<void> saveAutoReleaseSettings(AutoReleaseSettings settings) async {
+  static Future<void> saveAutoReleaseSettings(
+    AutoReleaseSettings settings,
+  ) async {
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(_settingsKey, jsonEncode(settings.toJson()));
@@ -112,15 +115,15 @@ class ConfirmationDeadlineUtils {
     AutoReleaseSettings? settings,
   }) {
     final config = settings ?? defaultSettings;
-    
+
     final confirmationDeadline = visitDate.subtract(
       Duration(hours: config.confirmationHoursBeforeVisit),
     );
-    
+
     final autoreleaseAt = visitDate.subtract(
       Duration(hours: config.releaseHoursBeforeVisit),
     );
-    
+
     return ConfirmationDeadlines(
       confirmationDeadline: confirmationDeadline.toIso8601String(),
       autoreleaseAt: autoreleaseAt.toIso8601String(),
@@ -141,8 +144,11 @@ class ConfirmationDeadlineUtils {
     AutoReleaseSettings? settings,
   }) {
     final config = settings ?? defaultSettings;
-    final baseDeadlines = calculateConfirmationDeadlines(dateFrom, settings: config);
-    
+    final baseDeadlines = calculateConfirmationDeadlines(
+      dateFrom,
+      settings: config,
+    );
+
     return DateRangeDeadlines(
       confirmationDeadline: baseDeadlines.confirmationDeadline,
       autoreleaseAt: baseDeadlines.autoreleaseAt,
@@ -157,7 +163,9 @@ class ConfirmationDeadlineUtils {
     return ReminderTimes(
       twoDaysBefore: confirmationDeadline.subtract(const Duration(days: 2)),
       oneDayBefore: confirmationDeadline.subtract(const Duration(days: 1)),
-      twelveHoursBefore: confirmationDeadline.subtract(const Duration(hours: 12)),
+      twelveHoursBefore: confirmationDeadline.subtract(
+        const Duration(hours: 12),
+      ),
     );
   }
 
@@ -189,7 +197,7 @@ class ConfirmationDeadlineUtils {
     if (duration.isNegative) {
       return 'Overdue';
     }
-    
+
     if (duration.inDays > 0) {
       return '${duration.inDays}d ${duration.inHours % 24}h remaining';
     } else if (duration.inHours > 0) {

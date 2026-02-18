@@ -28,7 +28,8 @@ class SOSButton extends StatelessWidget {
           titlePadding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
           title: Row(
             children: [
-              Icon(Icons.warning_amber_rounded, color: AppColors.accentRed),
+              const Icon(Icons.warning_amber_rounded,
+                  color: AppColors.accentRed),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
@@ -63,7 +64,8 @@ class SOSButton extends StatelessWidget {
                         color: AppColors.accentRed.withOpacity(0.1),
                         shape: BoxShape.circle,
                       ),
-                      child: Icon(Icons.phone, color: AppColors.accentRed),
+                      child:
+                          const Icon(Icons.phone, color: AppColors.accentRed),
                     ),
                     title: Text(
                       name,
@@ -109,7 +111,7 @@ class SOSButton extends StatelessWidget {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(Icons.emergency, color: AppColors.accentRed, size: 28),
+              const Icon(Icons.emergency, color: AppColors.accentRed, size: 28),
               const SizedBox(width: 8),
               Text(
                 'SOS',

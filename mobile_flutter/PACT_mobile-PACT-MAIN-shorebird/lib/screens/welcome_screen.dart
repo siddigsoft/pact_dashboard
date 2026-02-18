@@ -77,7 +77,7 @@ class _WelcomeScreenState extends State<WelcomeScreen>
     } else if (hour >= 17 && hour < 21) {
       return 'مساء النور';
     } else {
-      return 'تصبح على خير';
+      return ' ليله سعيدة ';
     }
   }
 
@@ -136,11 +136,7 @@ class _WelcomeScreenState extends State<WelcomeScreen>
             children: [
               const Spacer(flex: 2),
 
-              Icon(
-                    _getGreetingIcon(),
-                    size: 80,
-                    color: greetingColor,
-                  )
+              Icon(_getGreetingIcon(), size: 80, color: greetingColor)
                   .animate()
                   .fadeIn(duration: 600.ms, delay: 200.ms)
                   .scale(begin: const Offset(0.5, 0.5), duration: 800.ms)
@@ -154,10 +150,7 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
                       gradient: LinearGradient(
-                        colors: [
-                          Colors.white,
-                          greetingColor.withOpacity(0.2),
-                        ],
+                        colors: [Colors.white, greetingColor.withOpacity(0.2)],
                         begin: Alignment.topLeft,
                         end: Alignment.bottomRight,
                       ),
@@ -168,13 +161,11 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                           offset: const Offset(0, 10),
                         ),
                       ],
-                      border: Border.all(
-                        color: Colors.white,
-                        width: 4,
-                      ),
+                      border: Border.all(color: Colors.white, width: 4),
                     ),
                     child: ClipOval(
-                      child: widget.avatarUrl != null &&
+                      child:
+                          widget.avatarUrl != null &&
                               widget.avatarUrl!.isNotEmpty
                           ? Image.network(
                               widget.avatarUrl!,
@@ -260,30 +251,26 @@ class _WelcomeScreenState extends State<WelcomeScreen>
               const SizedBox(height: 20),
 
               Text(
-                    'أهلاً وسهلاً بك في PACT',
-                    textDirection: TextDirection.rtl,
-                    style: GoogleFonts.cairo(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w500,
-                      color: AppColors.textGray,
-                    ),
-                  )
-                  .animate()
-                  .fadeIn(duration: 600.ms, delay: 1200.ms),
+                'أهلاً وسهلاً بك في PACT',
+                textDirection: TextDirection.rtl,
+                style: GoogleFonts.cairo(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w500,
+                  color: AppColors.textLight,
+                ),
+              ).animate().fadeIn(duration: 600.ms, delay: 1200.ms),
 
               const SizedBox(height: 6),
 
               Text(
-                    'Welcome to PACT Command Center',
-                    style: GoogleFonts.poppins(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w500,
-                      color: AppColors.textGray,
-                      letterSpacing: 0.3,
-                    ),
-                  )
-                  .animate()
-                  .fadeIn(duration: 600.ms, delay: 1400.ms),
+                'Welcome to PACT Command Center',
+                style: GoogleFonts.poppins(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                  color: AppColors.textLight,
+                  letterSpacing: 0.3,
+                ),
+              ).animate().fadeIn(duration: 600.ms, delay: 1400.ms),
 
               const Spacer(flex: 2),
 
@@ -343,14 +330,12 @@ class _WelcomeScreenState extends State<WelcomeScreen>
 
               if (_showContinue)
                 Text(
-                      'Tap to continue or wait...',
-                      style: GoogleFonts.poppins(
-                        fontSize: 12,
-                        color: AppColors.textGray.withOpacity(0.7),
-                      ),
-                    )
-                    .animate()
-                    .fadeIn(duration: 400.ms, delay: 200.ms),
+                  'Tap to continue or wait...',
+                  style: GoogleFonts.poppins(
+                    fontSize: 12,
+                    color: AppColors.textLight.withOpacity(0.7),
+                  ),
+                ).animate().fadeIn(duration: 400.ms, delay: 200.ms),
 
               const SizedBox(height: 40),
             ],
@@ -407,10 +392,7 @@ Future<void> showWelcomeScreen({
         );
       },
       transitionsBuilder: (context, animation, secondaryAnimation, child) {
-        return FadeTransition(
-          opacity: animation,
-          child: child,
-        );
+        return FadeTransition(opacity: animation, child: child);
       },
       transitionDuration: const Duration(milliseconds: 500),
     ),

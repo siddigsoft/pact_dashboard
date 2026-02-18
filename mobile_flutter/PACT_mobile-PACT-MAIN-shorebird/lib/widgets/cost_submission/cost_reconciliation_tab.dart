@@ -1,5 +1,6 @@
 /// Cost Reconciliation Tab Widget
 /// Form for reconciling advance payments
+library;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -62,13 +63,10 @@ class _CostReconciliationTabState extends State<CostReconciliationTab> {
                 const SizedBox(width: 12),
                 Expanded(
                   child: Text(
-                    widget.isArabic 
+                    widget.isArabic
                         ? 'قم بتسوية السلف المدفوعة بالمبلغ الفعلي المصروف'
                         : 'Reconcile paid advances with the actual amount spent',
-                    style: TextStyle(
-                      color: Colors.blue.shade700,
-                      fontSize: 13,
-                    ),
+                    style: TextStyle(color: Colors.blue.shade700, fontSize: 13),
                   ),
                 ),
               ],
@@ -78,11 +76,10 @@ class _CostReconciliationTabState extends State<CostReconciliationTab> {
 
           // Select Advance
           Text(
-            widget.isArabic ? 'اختر السلفة للتسوية' : 'Select Advance to Reconcile',
-            style: const TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
-            ),
+            widget.isArabic
+                ? 'اختر السلفة للتسوية'
+                : 'Select Advance to Reconcile',
+            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
           ),
           const SizedBox(height: 8),
           _buildAdvanceSelector(),
@@ -95,52 +92,54 @@ class _CostReconciliationTabState extends State<CostReconciliationTab> {
 
             // Actual Amount
             Text(
-              widget.isArabic ? 'المبلغ الفعلي المصروف (جنيه سوداني)' : 'Actual Amount Spent (SDG)',
-              style: const TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
-              ),
+              widget.isArabic
+                  ? 'المبلغ الفعلي المصروف (جنيه سوداني)'
+                  : 'Actual Amount Spent (SDG)',
+              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
             ),
             const SizedBox(height: 8),
             TextFormField(
               controller: _actualAmountController,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              keyboardType: const TextInputType.numberWithOptions(
+                decimal: true,
+              ),
               inputFormatters: [
                 FilteringTextInputFormatter.allow(RegExp(r'^\d+\.?\d{0,2}')),
               ],
               decoration: InputDecoration(
                 hintText: _selectedSubmission!.amount.toStringAsFixed(2),
                 prefixIcon: const Icon(Icons.attach_money),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                helperText: widget.isArabic 
-                    ? 'أدخل المبلغ الفعلي المصروف' 
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                helperText: widget.isArabic
+                    ? 'أدخل المبلغ الفعلي المصروف'
                     : 'Enter the actual amount spent',
               ),
             ),
             const SizedBox(height: 8),
-            
+
             // Variance display
-            if (_actualAmountController.text.isNotEmpty) 
+            if (_actualAmountController.text.isNotEmpty)
               _buildVarianceDisplay(),
             const SizedBox(height: 24),
 
             // Notes
             Text(
               widget.isArabic ? 'ملاحظات التسوية' : 'Reconciliation Notes',
-              style: const TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
-              ),
+              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
             ),
             const SizedBox(height: 8),
             TextFormField(
               controller: _notesController,
               maxLines: 3,
               decoration: InputDecoration(
-                hintText: widget.isArabic 
+                hintText: widget.isArabic
                     ? 'أضف ملاحظات حول التسوية'
                     : 'Add notes about the reconciliation',
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
               ),
             ),
             const SizedBox(height: 32),
@@ -150,18 +149,26 @@ class _CostReconciliationTabState extends State<CostReconciliationTab> {
               height: 52,
               child: ElevatedButton.icon(
                 onPressed: _isSubmitting ? null : _submitReconciliation,
-                icon: _isSubmitting 
+                icon: _isSubmitting
                     ? const SizedBox(
                         width: 20,
                         height: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
                       )
                     : const Icon(Icons.check_circle),
                 label: Text(
                   _isSubmitting
                       ? (widget.isArabic ? 'جاري التسوية...' : 'Reconciling...')
-                      : (widget.isArabic ? 'تأكيد التسوية' : 'Confirm Reconciliation'),
-                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                      : (widget.isArabic
+                            ? 'تأكيد التسوية'
+                            : 'Confirm Reconciliation'),
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.green,
@@ -199,19 +206,21 @@ class _CostReconciliationTabState extends State<CostReconciliationTab> {
             ),
             const SizedBox(height: 24),
             Text(
-              widget.isArabic ? 'لا توجد سلف للتسوية' : 'No Advances to Reconcile',
-              style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                fontWeight: FontWeight.bold,
-              ),
+              widget.isArabic
+                  ? 'لا توجد سلف للتسوية'
+                  : 'No Advances to Reconcile',
+              style: Theme.of(
+                context,
+              ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
             Text(
-              widget.isArabic 
-                  ? 'لا توجد سلف مدفوعة تحتاج إلى تسوية' 
+              widget.isArabic
+                  ? 'لا توجد سلف مدفوعة تحتاج إلى تسوية'
                   : 'No paid advances require reconciliation',
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: Colors.grey.shade600,
-              ),
+              style: Theme.of(
+                context,
+              ).textTheme.bodyMedium?.copyWith(color: Colors.grey.shade600),
               textAlign: TextAlign.center,
             ),
           ],
@@ -222,7 +231,7 @@ class _CostReconciliationTabState extends State<CostReconciliationTab> {
 
   Widget _buildAdvanceSelector() {
     return DropdownButtonFormField<OperationalCostSubmission>(
-      value: _selectedSubmission,
+      initialValue: _selectedSubmission,
       decoration: InputDecoration(
         prefixIcon: const Icon(Icons.receipt),
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
@@ -264,15 +273,13 @@ class _CostReconciliationTabState extends State<CostReconciliationTab> {
   Widget _buildSelectedAdvanceCard() {
     final submission = _selectedSubmission!;
     final dateFormat = DateFormat('MMM dd, yyyy');
-    
+
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: Theme.of(context).dividerColor,
-        ),
+        border: Border.all(color: Theme.of(context).dividerColor),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -285,7 +292,11 @@ class _CostReconciliationTabState extends State<CostReconciliationTab> {
                   color: Colors.blue.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: const Icon(Icons.receipt_long, size: 20, color: Colors.blue),
+                child: const Icon(
+                  Icons.receipt_long,
+                  size: 20,
+                  color: Colors.blue,
+                ),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -337,17 +348,11 @@ class _CostReconciliationTabState extends State<CostReconciliationTab> {
         children: [
           Text(
             label,
-            style: TextStyle(
-              color: Colors.grey.shade600,
-              fontSize: 13,
-            ),
+            style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
           ),
           Text(
             value,
-            style: TextStyle(
-              fontWeight: FontWeight.w600,
-              color: valueColor,
-            ),
+            style: TextStyle(fontWeight: FontWeight.w600, color: valueColor),
           ),
         ],
       ),
@@ -367,13 +372,13 @@ class _CostReconciliationTabState extends State<CostReconciliationTab> {
 
     if (isRefund) {
       color = Colors.blue;
-      message = widget.isArabic 
+      message = widget.isArabic
           ? 'مبلغ الإرجاع: ${variance.abs().toStringAsFixed(2)} SDG'
           : 'Refund amount: ${variance.abs().toStringAsFixed(2)} SDG';
       icon = Icons.arrow_back;
     } else if (isOverspent) {
       color = Colors.orange;
-      message = widget.isArabic 
+      message = widget.isArabic
           ? 'مبلغ إضافي مطلوب: ${variance.toStringAsFixed(2)} SDG'
           : 'Additional amount needed: ${variance.toStringAsFixed(2)} SDG';
       icon = Icons.warning;
@@ -411,10 +416,14 @@ class _CostReconciliationTabState extends State<CostReconciliationTab> {
 
   Future<void> _submitReconciliation() async {
     if (_selectedSubmission == null) return;
-    
+
     final actualAmount = double.tryParse(_actualAmountController.text);
     if (actualAmount == null || actualAmount < 0) {
-      _showError(widget.isArabic ? 'يرجى إدخال مبلغ صحيح' : 'Please enter a valid amount');
+      _showError(
+        widget.isArabic
+            ? 'يرجى إدخال مبلغ صحيح'
+            : 'Please enter a valid amount',
+      );
       return;
     }
 
@@ -428,7 +437,11 @@ class _CostReconciliationTabState extends State<CostReconciliationTab> {
       );
 
       if (success && mounted) {
-        _showSuccess(widget.isArabic ? 'تمت التسوية بنجاح' : 'Reconciliation completed successfully');
+        _showSuccess(
+          widget.isArabic
+              ? 'تمت التسوية بنجاح'
+              : 'Reconciliation completed successfully',
+        );
         _resetForm();
         widget.onReconciled?.call();
       }

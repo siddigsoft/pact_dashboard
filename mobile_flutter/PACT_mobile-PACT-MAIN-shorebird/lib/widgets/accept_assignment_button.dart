@@ -40,31 +40,31 @@ class _AcceptAssignmentButtonState
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-          width: double.infinity,
-          height: 50,
-          child: ElevatedButton.icon(
-            onPressed: _isLoading ? null : _acceptAssignment,
-            icon: _isLoading
-                ? const SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                    ),
-                  )
-                : const Icon(Icons.check_circle_outline),
-            label: const Text('Accept Assignment'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.success,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            ),
+      width: double.infinity,
+      height: 50,
+      child: ElevatedButton.icon(
+        onPressed: _isLoading ? null : _acceptAssignment,
+        icon: _isLoading
+            ? const SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                ),
+              )
+            : const Icon(Icons.check_circle_outline),
+        label: const Text('Accept Assignment'),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: AppColors.success,
+          foregroundColor: Colors.white,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
           ),
-        )
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        ),
+      ),
+    )
         .animate(target: _isLoading ? 0 : 1)
         .scale(duration: const Duration(milliseconds: 300));
   }
@@ -165,8 +165,7 @@ class _AcceptAssignmentButtonState
 
     final enumeratorFee = siteData?['enumerator_fee'] ?? 0.0;
     final transportFee = siteData?['transport_fee'] ?? 0.0;
-    final totalCost =
-        (enumeratorFee is num ? enumeratorFee.toDouble() : 0.0) +
+    final totalCost = (enumeratorFee is num ? enumeratorFee.toDouble() : 0.0) +
         (transportFee is num ? transportFee.toDouble() : 0.0);
 
     return await showDialog<bool>(
@@ -177,11 +176,11 @@ class _AcceptAssignmentButtonState
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(16),
               ),
-              title: Row(
+              title: const Row(
                 children: [
                   Icon(Icons.attach_money, color: AppColors.primaryBlue),
-                  const SizedBox(width: 8),
-                  const Expanded(
+                  SizedBox(width: 8),
+                  Expanded(
                     child: Text(
                       'Review & Confirm Costs',
                       style: TextStyle(

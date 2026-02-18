@@ -9,9 +9,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import '../theme/app_colors.dart';
-import '../models/site_visit.dart';
 import '../services/site_visit_service.dart';
-import '../l10n/app_localizations.dart';
+import 'package:pact_mobile/l10n/app_localizations.dart';
 import '../widgets/custom_drawer_menu.dart';
 import '../widgets/reusable_app_bar.dart';
 import '../widgets/modern_app_header.dart';
@@ -223,7 +222,7 @@ class _SiteVerificationScreenState extends State<SiteVerificationScreen>
             .eq('user_id', _userId!);
 
         if ((response as List).isNotEmpty) {
-          _userProjectIds = (response as List)
+          _userProjectIds = (response)
               .map((m) => m['project_id']?.toString())
               .where((id) => id != null && id.isNotEmpty)
               .cast<String>()
@@ -254,7 +253,7 @@ class _SiteVerificationScreenState extends State<SiteVerificationScreen>
         );
         int foundCount = 0;
 
-        for (final project in projectsResponse as List) {
+        for (final project in projectsResponse) {
           final projectId = project['id']?.toString();
           if (projectId == null) continue;
 
@@ -582,18 +581,22 @@ class _SiteVerificationScreenState extends State<SiteVerificationScreen>
 
     // Check if site is explicitly forwarded or assigned to this user
     // If so, bypass hub/state checks - the assignment is the authorization
-    final additionalData = site['additional_data'] as Map<String, dynamic>? ?? {};
+    final additionalData =
+        site['additional_data'] as Map<String, dynamic>? ?? {};
     final assignedTo = additionalData['assigned_to']?.toString();
-    final isExplicitlyAssigned = forwardedTo == _userId || assignedTo == _userId;
+    final isExplicitlyAssigned =
+        forwardedTo == _userId || assignedTo == _userId;
 
     if (isExplicitlyAssigned) {
-      debugPrint('Site is explicitly forwarded/assigned to user - bypassing regional checks');
+      debugPrint(
+        'Site is explicitly forwarded/assigned to user - bypassing regional checks',
+      );
       return null; // Explicitly assigned sites can always be verified
     }
 
     // FALLBACK: Regional authorization for coordinators without explicit assignment
     // Check if user has access through state/hub membership
-    
+
     // Check state match (normalized comparison)
     if (_userState != null && _userState!.isNotEmpty) {
       final userStateNorm = _userState!.toLowerCase().replaceAll(
@@ -617,7 +620,7 @@ class _SiteVerificationScreenState extends State<SiteVerificationScreen>
     // NOTE: Hub check is now bypassed to avoid false negatives from spelling mismatches
     // (e.g., "forchana-hub" vs "Farchana Hub"). State-level access is sufficient
     // for coordinators, and explicit forwarding covers specific assignments.
-    
+
     debugPrint('Regional access validation passed (via state membership)');
     return null; // All checks passed
   }
@@ -951,11 +954,11 @@ class _SiteVerificationScreenState extends State<SiteVerificationScreen>
                   ],
                 ),
                 child: TextField(
-                  decoration: InputDecoration(
-                    prefixIcon: const Icon(Icons.search),
+                  decoration: const InputDecoration(
+                    prefixIcon: Icon(Icons.search),
                     hintText: 'Search by site name, code, state, or locality',
                     border: InputBorder.none,
-                    contentPadding: const EdgeInsets.symmetric(
+                    contentPadding: EdgeInsets.symmetric(
                       horizontal: 8,
                       vertical: 12,
                     ),
@@ -1225,7 +1228,7 @@ class _SiteVerificationScreenState extends State<SiteVerificationScreen>
                 color: AppColors.backgroundGray,
                 borderRadius: BorderRadius.circular(8),
               ),
-              child: Icon(
+              child: const Icon(
                 Icons.warning_amber_rounded,
                 color: AppColors.primaryBlue,
                 size: 20,
@@ -1288,7 +1291,7 @@ class _SiteVerificationScreenState extends State<SiteVerificationScreen>
                     ],
                   ),
                 ),
-              ...sites.map((site) => _buildSiteCard(site, 'new')),
+              ...sites.map((site) => _buildSiteCard(site, 'new_state_tab_site')),
             ],
           ),
         );
@@ -1472,7 +1475,7 @@ class _SiteVerificationScreenState extends State<SiteVerificationScreen>
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.search_off, size: 64, color: const Color(0xFF9CA3AF)),
+              const Icon(Icons.search_off, size: 64, color: Color(0xFF9CA3AF)),
               const SizedBox(height: 12),
               Text(
                 'No sites match your search',
@@ -1842,7 +1845,7 @@ class _SiteVerificationScreenState extends State<SiteVerificationScreen>
                               child: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  Icon(
+                                  const Icon(
                                     Icons.folder,
                                     size: 14,
                                     color: AppColors.textDark,
@@ -1887,7 +1890,7 @@ class _SiteVerificationScreenState extends State<SiteVerificationScreen>
                           color: AppColors.primaryBlue.withOpacity(0.1),
                           borderRadius: BorderRadius.circular(8),
                         ),
-                        child: Icon(
+                        child: const Icon(
                           Icons.location_on,
                           size: 16,
                           color: AppColors.primaryBlue,
@@ -1925,10 +1928,10 @@ class _SiteVerificationScreenState extends State<SiteVerificationScreen>
                   const SizedBox(height: 12),
                   Row(
                     children: [
-                      Icon(
+                      const Icon(
                         Icons.folder_outlined,
                         size: 16,
-                        color: const Color(0xFF9CA3AF),
+                        color: Color(0xFF9CA3AF),
                       ),
                       const SizedBox(width: 6),
                       Expanded(
@@ -1951,10 +1954,10 @@ class _SiteVerificationScreenState extends State<SiteVerificationScreen>
                 if (additionalData['cp_name'] != null) ...[
                   Row(
                     children: [
-                      Icon(
+                      const Icon(
                         Icons.person_outline,
                         size: 14,
-                        color: const Color(0xFF9CA3AF),
+                        color: Color(0xFF9CA3AF),
                       ),
                       const SizedBox(width: 8),
                       Expanded(
@@ -1978,10 +1981,10 @@ class _SiteVerificationScreenState extends State<SiteVerificationScreen>
                     (site['activity_at_site'] ?? '').toString().isNotEmpty) ...[
                   Row(
                     children: [
-                      Icon(
+                      const Icon(
                         Icons.work_outline,
                         size: 14,
-                        color: const Color(0xFF9CA3AF),
+                        color: Color(0xFF9CA3AF),
                       ),
                       const SizedBox(width: 8),
                       Expanded(
@@ -2004,10 +2007,10 @@ class _SiteVerificationScreenState extends State<SiteVerificationScreen>
                 if (additionalData['survey_tool'] != null) ...[
                   Row(
                     children: [
-                      Icon(
+                      const Icon(
                         Icons.analytics_outlined,
                         size: 14,
-                        color: const Color(0xFF9CA3AF),
+                        color: Color(0xFF9CA3AF),
                       ),
                       const SizedBox(width: 8),
                       Expanded(
@@ -2040,7 +2043,11 @@ class _SiteVerificationScreenState extends State<SiteVerificationScreen>
                     ),
                     child: Row(
                       children: [
-                        Icon(Icons.report_problem, size: 14, color: Colors.red),
+                        const Icon(
+                          Icons.report_problem,
+                          size: 14,
+                          color: Colors.red,
+                        ),
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(
@@ -2063,6 +2070,7 @@ class _SiteVerificationScreenState extends State<SiteVerificationScreen>
                 _buildPermitIndicators(additionalData),
                 // Action buttons based on category
                 if (category == 'new' ||
+                    category == 'new_state_tab_site' ||
                     category == 'locality_permit' ||
                     category == 'cp_verification' ||
                     category == 'rejected') ...[
@@ -2263,8 +2271,29 @@ class _SiteVerificationScreenState extends State<SiteVerificationScreen>
     final hasLocalityPermit =
         additionalData['locality_permit_attached'] == true;
 
-    if (category == 'new') {
-      // Show Upload Permits button for new sites
+    if (category == 'new_state_tab_site') {
+      // State Permit sub-tab: no per-site upload; state permit is managed at state level only
+      return Row(
+        children: [
+          Expanded(
+            child: OutlinedButton.icon(
+              onPressed: () => _returnToFOM(site),
+              icon: const Icon(Icons.undo, size: 18),
+              label: const Text('Return'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: const Color(0xFFEF4444),
+                side: const BorderSide(color: Color(0xFFEF4444), width: 1.5),
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+            ),
+          ),
+        ],
+      );
+    } else if (category == 'new') {
+      // Show Upload Permits button for new sites (e.g. in Locality Permit sub-tab)
       return Row(
         children: [
           Expanded(
@@ -2388,7 +2417,11 @@ class _SiteVerificationScreenState extends State<SiteVerificationScreen>
           Expanded(
             child: OutlinedButton.icon(
               onPressed: () => _verifySite(site),
-              icon: Icon(Icons.refresh, size: 18, color: AppColors.primaryBlue),
+              icon: const Icon(
+                Icons.refresh,
+                size: 18,
+                color: AppColors.primaryBlue,
+              ),
               label: const Text('Re-verify Site'),
               style: OutlinedButton.styleFrom(
                 backgroundColor: Colors.white,
@@ -3167,7 +3200,7 @@ class _SiteVerificationScreenState extends State<SiteVerificationScreen>
             onStatePermitMissing: () {
               Navigator.of(context).pop(); // close and show a note
               ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
+                const SnackBar(
                   content: Text(
                     'State permit not found - upload state permit first',
                   ),
@@ -3421,7 +3454,7 @@ class _SiteVerificationScreenState extends State<SiteVerificationScreen>
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
+          const SnackBar(
             content: Text(
               'Locality permit marked as not required - moved to CP verification',
             ),
@@ -3473,7 +3506,7 @@ class _SiteVerificationScreenState extends State<SiteVerificationScreen>
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
+          const SnackBar(
             content: Text(
               'Proceeding without locality permit - moved to CP verification',
             ),
@@ -3748,10 +3781,18 @@ class _SiteVerificationScreenState extends State<SiteVerificationScreen>
             .toIso8601String();
         additionalData['locality_permit_skipped_by'] = _userId;
 
+        // Update comments field to match CoordinatorSites.tsx behavior
+        final existingComments = site['comments']?.toString() ?? '';
+        const permitNote = 'No locality permit required';
+        final updatedComments = existingComments.isNotEmpty
+            ? '$existingComments\n\n$permitNote'
+            : permitNote;
+
         await _supabase
             .from('mmp_site_entries')
             .update({
               'status': 'permits_attached',
+              'comments': updatedComments,
               'additional_data': additionalData,
               'updated_at': DateTime.now().toIso8601String(),
             })
@@ -3850,8 +3891,8 @@ class _SiteVerificationScreenState extends State<SiteVerificationScreen>
       if (visitDate == null) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: const Text('Please select a visit date'),
+            const SnackBar(
+              content: Text('Please select a visit date'),
               backgroundColor: Colors.red,
             ),
           );
@@ -3863,10 +3904,8 @@ class _SiteVerificationScreenState extends State<SiteVerificationScreen>
         if (distributionStart == null || distributionEnd == null) {
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: const Text(
-                  'Please select distribution start and end dates',
-                ),
+              const SnackBar(
+                content: Text('Please select distribution start and end dates'),
                 backgroundColor: Colors.red,
               ),
             );
@@ -3877,10 +3916,8 @@ class _SiteVerificationScreenState extends State<SiteVerificationScreen>
             visitDate.isAfter(distributionEnd)) {
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: const Text(
-                  'Visit date must be within distribution period',
-                ),
+              const SnackBar(
+                content: Text('Visit date must be within distribution period'),
                 backgroundColor: Colors.red,
               ),
             );
@@ -3893,8 +3930,8 @@ class _SiteVerificationScreenState extends State<SiteVerificationScreen>
         if (followUpDate == null) {
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: const Text('Please select a follow-up date'),
+              const SnackBar(
+                content: Text('Please select a follow-up date'),
                 backgroundColor: Colors.red,
               ),
             );
@@ -3904,10 +3941,8 @@ class _SiteVerificationScreenState extends State<SiteVerificationScreen>
         if (followUpDate.isBefore(visitDate)) {
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: const Text(
-                  'Follow-up date must be after the primary visit',
-                ),
+              const SnackBar(
+                content: Text('Follow-up date must be after the primary visit'),
                 backgroundColor: Colors.red,
               ),
             );
@@ -4031,11 +4066,11 @@ class _SiteVerificationScreenState extends State<SiteVerificationScreen>
         showDialog(
           context: context,
           builder: (context) => AlertDialog(
-            title: Row(
+            title: const Row(
               children: [
                 Icon(Icons.error_outline, color: Colors.red, size: 28),
-                const SizedBox(width: 12),
-                const Text('Cannot Verify'),
+                SizedBox(width: 12),
+                Text('Cannot Verify'),
               ],
             ),
             content: Text(error),
@@ -4053,15 +4088,15 @@ class _SiteVerificationScreenState extends State<SiteVerificationScreen>
         final proceed = await showDialog<bool>(
           context: context,
           builder: (context) => AlertDialog(
-            title: Row(
+            title: const Row(
               children: [
                 Icon(
                   Icons.warning_amber,
                   color: AppColors.primaryBlue,
                   size: 28,
                 ),
-                const SizedBox(width: 12),
-                const Text('Warning'),
+                SizedBox(width: 12),
+                Text('Warning'),
               ],
             ),
             content: Text('$error\n\nDo you want to proceed anyway?'),
@@ -4138,8 +4173,8 @@ class _SiteVerificationScreenState extends State<SiteVerificationScreen>
     if (visitDate == null) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text('Please select a visit date'),
+          const SnackBar(
+            content: Text('Please select a visit date'),
             backgroundColor: Colors.red,
           ),
         );
@@ -4152,10 +4187,8 @@ class _SiteVerificationScreenState extends State<SiteVerificationScreen>
       if (distributionStart == null || distributionEnd == null) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: const Text(
-                'Please select distribution start and end dates',
-              ),
+            const SnackBar(
+              content: Text('Please select distribution start and end dates'),
               backgroundColor: Colors.red,
             ),
           );
@@ -4168,8 +4201,8 @@ class _SiteVerificationScreenState extends State<SiteVerificationScreen>
           visitDate.isAfter(distributionEnd)) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: const Text(
+            const SnackBar(
+              content: Text(
                 'Visit date must be within the distribution period',
               ),
               backgroundColor: Colors.red,
@@ -4182,8 +4215,8 @@ class _SiteVerificationScreenState extends State<SiteVerificationScreen>
       if (followUpDate == null) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: const Text('Please select a follow-up date'),
+            const SnackBar(
+              content: Text('Please select a follow-up date'),
               backgroundColor: Colors.red,
             ),
           );
@@ -4195,10 +4228,8 @@ class _SiteVerificationScreenState extends State<SiteVerificationScreen>
       if (followUpDate.isBefore(visitDate)) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: const Text(
-                'Follow-up date must be after the primary visit',
-              ),
+            const SnackBar(
+              content: Text('Follow-up date must be after the primary visit'),
               backgroundColor: Colors.red,
             ),
           );
@@ -4379,8 +4410,8 @@ class _SiteVerificationScreenState extends State<SiteVerificationScreen>
         } else {
           workflow['currentStage'] =
               (currentStage != null && currentStage.isNotEmpty)
-                  ? currentStage
-                  : 'verified';
+              ? currentStage
+              : 'verified';
         }
 
         await _supabase
@@ -4455,7 +4486,7 @@ class _SiteVerificationScreenState extends State<SiteVerificationScreen>
           .eq('id', siteId);
 
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
+        const SnackBar(
           content: Text('Site returned to FOM'),
           backgroundColor: AppColors.primaryBlue,
         ),
@@ -4575,7 +4606,7 @@ class _SiteDetailsSheet extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    gradient: LinearGradient(
+                    gradient: const LinearGradient(
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,
                       colors: [AppColors.primaryBlue, AppColors.darkBlue],
@@ -4707,7 +4738,7 @@ class _SiteDetailsSheet extends StatelessWidget {
                       width: double.infinity,
                       child: Container(
                         decoration: BoxDecoration(
-                          gradient: LinearGradient(
+                          gradient: const LinearGradient(
                             begin: Alignment.topLeft,
                             end: Alignment.bottomRight,
                             colors: [AppColors.primaryBlue, AppColors.darkBlue],
@@ -5038,16 +5069,9 @@ class _PermitVerificationDialogState extends State<_PermitVerificationDialog> {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(20),
           ),
+          backgroundColor: Colors.white,
           child: Container(
             constraints: const BoxConstraints(maxWidth: 600, maxHeight: 700),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(20),
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [Colors.white, AppColors.primaryBlue.withOpacity(0.02)],
-              ),
-            ),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -5140,34 +5164,30 @@ class _PermitVerificationDialogState extends State<_PermitVerificationDialog> {
   Widget _buildStatePermitQuestion(String state) {
     return Card(
       elevation: 0,
+      color: Colors.white,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
         side: BorderSide(color: Colors.blue[200]!, width: 1),
       ),
-      child: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [Colors.blue[50]!.withOpacity(0.5), Colors.white],
-          ),
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: Column(
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Icon(Icons.warning_amber, color: Colors.blue[600], size: 24),
                   const SizedBox(width: 8),
-                  Text(
-                    'State Permit Verification',
-                    style: GoogleFonts.poppins(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.blue[800],
+                  Expanded(
+                    child: Text(
+                      'State Permit Verification',
+                      style: GoogleFonts.poppins(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.blue[800],
+                      ),
+                      softWrap: true,
                     ),
                   ),
                 ],
@@ -5256,7 +5276,6 @@ class _PermitVerificationDialogState extends State<_PermitVerificationDialog> {
             ],
           ),
         ),
-      ),
     );
   }
 
@@ -5308,7 +5327,7 @@ class _PermitVerificationDialogState extends State<_PermitVerificationDialog> {
             children: [
               Row(
                 children: [
-                  Icon(
+                  const Icon(
                     Icons.warning_amber,
                     color: AppColors.primaryBlue,
                     size: 24,
@@ -5344,7 +5363,7 @@ class _PermitVerificationDialogState extends State<_PermitVerificationDialog> {
                 ),
                 child: Row(
                   children: [
-                    Icon(
+                    const Icon(
                       Icons.info_outline,
                       color: AppColors.primaryBlue,
                       size: 20,
@@ -5602,7 +5621,7 @@ class _PermitVerificationDialogState extends State<_PermitVerificationDialog> {
                           horizontal: 12,
                           vertical: 8,
                         ),
-                        side: BorderSide(color: AppColors.primaryBlue),
+                        side: const BorderSide(color: AppColors.primaryBlue),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(8),
                         ),
@@ -5980,7 +5999,7 @@ class _PermitVerificationDialogState extends State<_PermitVerificationDialog> {
                           horizontal: 12,
                           vertical: 8,
                         ),
-                        side: BorderSide(color: AppColors.primaryBlue),
+                        side: const BorderSide(color: AppColors.primaryBlue),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(8),
                         ),
@@ -6022,7 +6041,7 @@ class _PermitVerificationDialogState extends State<_PermitVerificationDialog> {
             children: [
               Row(
                 children: [
-                  Icon(
+                  const Icon(
                     Icons.warning_amber,
                     color: AppColors.primaryBlue,
                     size: 24,
@@ -6058,7 +6077,7 @@ class _PermitVerificationDialogState extends State<_PermitVerificationDialog> {
                 ),
                 child: Row(
                   children: [
-                    Icon(
+                    const Icon(
                       Icons.info_outline,
                       color: AppColors.primaryBlue,
                       size: 20,
@@ -8444,6 +8463,7 @@ class _BulkLocalityPermitRequirementDialogState
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
+      backgroundColor: Colors.white,
       title: Row(
         children: [
           Icon(Icons.location_on, color: Colors.green[600], size: 24),
@@ -8460,54 +8480,61 @@ class _BulkLocalityPermitRequirementDialogState
           ),
         ],
       ),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Verify locality permit requirements for ${widget.locality}, ${widget.state}',
-            style: GoogleFonts.poppins(fontSize: 13, color: Colors.grey[600]),
+      content: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.of(context).size.height * 0.6,
+        ),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Verify locality permit requirements for ${widget.locality}, ${widget.state}',
+                style: GoogleFonts.poppins(fontSize: 13, color: Colors.grey[600]),
+              ),
+              Text(
+                '${widget.siteCount} sites will be affected',
+                style: GoogleFonts.poppins(
+                  fontSize: 12,
+                  color: Colors.grey[500],
+                  fontStyle: FontStyle.italic,
+                ),
+              ),
+              const SizedBox(height: 24),
+              Text(
+                'Do you require a Locality permit in this locality?',
+                style: GoogleFonts.poppins(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w500,
+                  color: Colors.grey[800],
+                ),
+              ),
+              const SizedBox(height: 16),
+              _buildOptionWithDescription(
+                'Yes, it\'s required and I will upload it',
+                'I have the locality permit and will upload it now',
+                'required_have_it',
+                _localityPermitRequirement,
+                (value) => setState(() => _localityPermitRequirement = value),
+              ),
+              _buildOptionWithDescription(
+                'Yes, it\'s required but I don\'t have it',
+                'The locality permit is required but not available',
+                'required_dont_have_it',
+                _localityPermitRequirement,
+                (value) => setState(() => _localityPermitRequirement = value),
+              ),
+              _buildOptionWithDescription(
+                'No, it\'s not a requirement',
+                'Locality permit is not required in this locality',
+                'not_required',
+                _localityPermitRequirement,
+                (value) => setState(() => _localityPermitRequirement = value),
+              ),
+            ],
           ),
-          Text(
-            '${widget.siteCount} sites will be affected',
-            style: GoogleFonts.poppins(
-              fontSize: 12,
-              color: Colors.grey[500],
-              fontStyle: FontStyle.italic,
-            ),
-          ),
-          const SizedBox(height: 24),
-          Text(
-            'Do you require a Locality permit in this locality?',
-            style: GoogleFonts.poppins(
-              fontSize: 16,
-              fontWeight: FontWeight.w500,
-              color: Colors.grey[800],
-            ),
-          ),
-          const SizedBox(height: 16),
-          _buildOptionWithDescription(
-            'Yes, it\'s required and I will upload it',
-            'I have the locality permit and will upload it now',
-            'required_have_it',
-            _localityPermitRequirement,
-            (value) => setState(() => _localityPermitRequirement = value),
-          ),
-          _buildOptionWithDescription(
-            'Yes, it\'s required but I don\'t have it',
-            'The locality permit is required but not available',
-            'required_dont_have_it',
-            _localityPermitRequirement,
-            (value) => setState(() => _localityPermitRequirement = value),
-          ),
-          _buildOptionWithDescription(
-            'No, it\'s not a requirement',
-            'Locality permit is not required in this locality',
-            'not_required',
-            _localityPermitRequirement,
-            (value) => setState(() => _localityPermitRequirement = value),
-          ),
-        ],
+        ),
       ),
       actions: [
         TextButton(
@@ -8628,7 +8655,11 @@ class _BulkLocalityPermitFollowUpDialogState
     return AlertDialog(
       title: Row(
         children: [
-          Icon(Icons.warning_amber, color: AppColors.primaryBlue, size: 24),
+          const Icon(
+            Icons.warning_amber,
+            color: AppColors.primaryBlue,
+            size: 24,
+          ),
           const SizedBox(width: 8),
           Expanded(
             child: Text(
@@ -8670,7 +8701,7 @@ class _BulkLocalityPermitFollowUpDialogState
             ),
             child: Row(
               children: [
-                Icon(
+                const Icon(
                   Icons.info_outline,
                   color: AppColors.primaryBlue,
                   size: 20,

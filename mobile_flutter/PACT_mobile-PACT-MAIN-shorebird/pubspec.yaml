@@ -76,10 +76,11 @@ dependencies:
   package_info_plus: ^9.0.0
   wakelock_plus: ^1.2.8
   proximity_sensor: ^1.0.6
-  vibration: ^2.0.1
+  vibration: ^2.1.0
   record: ^6.0.0
   html: ^0.15.5
   timezone: ^0.10.0
+  agora_rtc_engine: ^6.3.2
 
 dev_dependencies:
   flutter_test:

@@ -40,10 +40,14 @@ class SupportTicket {
       priority: json['priority']?.toString() ?? 'normal',
       status: json['status']?.toString() ?? 'open',
       assignedTo: json['assigned_to']?.toString(),
-      messages: json['messages'] != null
-          ? (json['messages'] as List).map((m) => TicketMessage.fromJson(m)).toList()
+      messages: (json['ticket_messages'] ?? json['messages']) != null
+          ? ((json['ticket_messages'] ?? json['messages']) as List)
+                .map((m) => TicketMessage.fromJson(m))
+                .toList()
           : [],
-      createdAt: DateTime.tryParse(json['created_at']?.toString() ?? '') ?? DateTime.now(),
+      createdAt:
+          DateTime.tryParse(json['created_at']?.toString() ?? '') ??
+          DateTime.now(),
       resolvedAt: json['resolved_at'] != null
           ? DateTime.tryParse(json['resolved_at'].toString())
           : null,
@@ -75,11 +79,15 @@ class TicketMessage {
       id: json['id']?.toString() ?? '',
       ticketId: json['ticket_id']?.toString() ?? '',
       senderId: json['sender_id']?.toString() ?? '',
-      senderName: json['sender_name']?.toString() ?? 
-                  json['profiles']?['full_name']?.toString() ?? '',
-      content: json['content']?.toString() ?? '',
-      isStaffReply: json['is_staff_reply'] as bool? ?? false,
-      createdAt: DateTime.tryParse(json['created_at']?.toString() ?? '') ?? DateTime.now(),
+      senderName:
+          json['sender_name']?.toString() ??
+          json['profiles']?['full_name']?.toString() ??
+          '',
+      content: json['message']?.toString() ?? json['content']?.toString() ?? '',
+      isStaffReply: json['is_admin'] as bool? ?? json['is_staff_reply'] as bool? ?? false,
+      createdAt:
+          DateTime.tryParse(json['created_at']?.toString() ?? '') ??
+          DateTime.now(),
     );
   }
 }
@@ -177,9 +185,7 @@ class HelpEnhancementsService {
           .eq('user_id', _currentUserId ?? '')
           .order('created_at', ascending: false);
 
-      return (response as List)
-          .map((t) => SupportTicket.fromJson(t))
-          .toList();
+      return (response as List).map((t) => SupportTicket.fromJson(t)).toList();
     } catch (e) {
       debugPrint('[HelpEnhancements] Error getting tickets: $e');
       return [];
@@ -190,19 +196,23 @@ class HelpEnhancementsService {
     required String subject,
     required String description,
     required String category,
-    String priority = 'normal',
+    String priority = 'medium',
     String? screenshotUrl,
   }) async {
     try {
-      final response = await _supabase.from('support_tickets').insert({
-        'user_id': _currentUserId,
-        'subject': subject,
-        'description': description,
-        'category': category,
-        'priority': priority,
-        'status': 'open',
-        'metadata': screenshotUrl != null ? {'screenshot': screenshotUrl} : null,
-      }).select().single();
+      final response = await _supabase
+          .from('support_tickets')
+          .insert({
+            'user_id': _currentUserId,
+            'subject': subject,
+            'description': description,
+            'category': category,
+            'priority': priority,
+            'status': 'open',
+            'source': 'mobile',
+          })
+          .select()
+          .single();
 
       return SupportTicket.fromJson(response);
     } catch (e) {
@@ -213,11 +223,15 @@ class HelpEnhancementsService {
 
   Future<bool> addTicketMessage(String ticketId, String content) async {
     try {
+      final userId = _currentUserId;
+      if (userId == null) return false;
+      final name = await _getCurrentUserDisplayName();
       await _supabase.from('ticket_messages').insert({
         'ticket_id': ticketId,
-        'sender_id': _currentUserId,
-        'content': content,
-        'is_staff_reply': false,
+        'sender_id': userId,
+        'sender_name': name,
+        'message': content,
+        'is_admin': false,
       });
       return true;
     } catch (e) {
@@ -226,16 +240,50 @@ class HelpEnhancementsService {
     }
   }
 
+  Future<String> _getCurrentUserDisplayName() async {
+    try {
+      final res = await _supabase
+          .from('profiles')
+          .select('full_name')
+          .eq('id', _currentUserId ?? '')
+          .maybeSingle();
+      return (res?['full_name']?.toString() ?? '').trim().isEmpty
+          ? 'User'
+          : (res!['full_name'] as String).trim();
+    } catch (_) {
+      return 'User';
+    }
+  }
+
   Future<bool> closeTicket(String ticketId) async {
     try {
-      await _supabase.from('support_tickets').update({
-        'status': 'closed',
-        'resolved_at': DateTime.now().toIso8601String(),
-      }).eq('id', ticketId);
+      await _supabase
+          .from('support_tickets')
+          .update({
+            'status': 'closed',
+            'updated_at': DateTime.now().toIso8601String(),
+          })
+          .eq('id', ticketId);
       return true;
     } catch (e) {
       debugPrint('[HelpEnhancements] Error closing ticket: $e');
       return false;
+    }
+  }
+
+  Future<SupportTicket?> getTicketById(String ticketId) async {
+    try {
+      final response = await _supabase
+          .from('support_tickets')
+          .select('*, ticket_messages(*)')
+          .eq('id', ticketId)
+          .eq('user_id', _currentUserId ?? '')
+          .maybeSingle();
+      if (response == null) return null;
+      return SupportTicket.fromJson(response);
+    } catch (e) {
+      debugPrint('[HelpEnhancements] Error getting ticket: $e');
+      return null;
     }
   }
 
@@ -252,18 +300,18 @@ class HelpEnhancementsService {
 
   Future<List<HelpArticle>> searchKnowledgeBase(String query) async {
     if (query.trim().isEmpty) return [];
-    
+
     try {
       final response = await _supabase
           .from('help_articles')
           .select()
-          .or('title_en.ilike.%$query%,title_ar.ilike.%$query%,content_en.ilike.%$query%,content_ar.ilike.%$query%,tags.cs.{$query}')
+          .or(
+            'title_en.ilike.%$query%,title_ar.ilike.%$query%,content_en.ilike.%$query%,content_ar.ilike.%$query%,tags.cs.{$query}',
+          )
           .order('view_count', ascending: false)
           .limit(20);
 
-      return (response as List)
-          .map((a) => HelpArticle.fromJson(a))
-          .toList();
+      return (response as List).map((a) => HelpArticle.fromJson(a)).toList();
     } catch (e) {
       debugPrint('[HelpEnhancements] Error searching knowledge base: $e');
       return [];
@@ -278,9 +326,7 @@ class HelpEnhancementsService {
           .eq('category', category)
           .order('view_count', ascending: false);
 
-      return (response as List)
-          .map((a) => HelpArticle.fromJson(a))
-          .toList();
+      return (response as List).map((a) => HelpArticle.fromJson(a)).toList();
     } catch (e) {
       debugPrint('[HelpEnhancements] Error getting articles: $e');
       return [];
@@ -296,9 +342,7 @@ class HelpEnhancementsService {
           .order('view_count', ascending: false)
           .limit(10);
 
-      return (response as List)
-          .map((a) => HelpArticle.fromJson(a))
-          .toList();
+      return (response as List).map((a) => HelpArticle.fromJson(a)).toList();
     } catch (e) {
       debugPrint('[HelpEnhancements] Error getting featured articles: $e');
       return [];
@@ -307,9 +351,10 @@ class HelpEnhancementsService {
 
   Future<void> trackArticleView(String articleId) async {
     try {
-      await _supabase.rpc('increment_article_view', params: {
-        'article_id': articleId,
-      });
+      await _supabase.rpc(
+        'increment_article_view',
+        params: {'article_id': articleId},
+      );
     } catch (e) {
       debugPrint('[HelpEnhancements] Error tracking view: $e');
     }
@@ -393,20 +438,24 @@ class HelpEnhancementsService {
     try {
       final articles = await getFeaturedArticles();
       final box = await Hive.openBox(_offlineHelpBox);
-      
+
       await box.put('cached_articles', {
         'updated_at': DateTime.now().toIso8601String(),
-        'articles': articles.map((a) => {
-          'id': a.id,
-          'title_en': a.titleEn,
-          'title_ar': a.titleAr,
-          'content_en': a.contentEn,
-          'content_ar': a.contentAr,
-          'category': a.category,
-          'tags': a.tags,
-        }).toList(),
+        'articles': articles
+            .map(
+              (a) => {
+                'id': a.id,
+                'title_en': a.titleEn,
+                'title_ar': a.titleAr,
+                'content_en': a.contentEn,
+                'content_ar': a.contentAr,
+                'category': a.category,
+                'tags': a.tags,
+              },
+            )
+            .toList(),
       });
-      
+
       debugPrint('[HelpEnhancements] Cached ${articles.length} help articles');
     } catch (e) {
       debugPrint('[HelpEnhancements] Error caching articles: $e');
@@ -422,7 +471,9 @@ class HelpEnhancementsService {
       final articles = cached['articles'] as List?;
       if (articles == null) return [];
 
-      return articles.map((a) => HelpArticle.fromJson(Map<String, dynamic>.from(a))).toList();
+      return articles
+          .map((a) => HelpArticle.fromJson(Map<String, dynamic>.from(a)))
+          .toList();
     } catch (e) {
       debugPrint('[HelpEnhancements] Error getting cached articles: $e');
       return [];
@@ -464,10 +515,11 @@ class HelpEnhancementsService {
   Future<String?> startLiveChatSession() async {
     try {
       // Create a support chat
-      final response = await _supabase.from('support_chats').insert({
-        'user_id': _currentUserId,
-        'status': 'waiting',
-      }).select().single();
+      final response = await _supabase
+          .from('support_chats')
+          .insert({'user_id': _currentUserId, 'status': 'waiting'})
+          .select()
+          .single();
 
       return response['id']?.toString();
     } catch (e) {
@@ -501,10 +553,13 @@ class HelpEnhancementsService {
 
   Future<void> endLiveChatSession(String chatId) async {
     try {
-      await _supabase.from('support_chats').update({
-        'status': 'closed',
-        'ended_at': DateTime.now().toIso8601String(),
-      }).eq('id', chatId);
+      await _supabase
+          .from('support_chats')
+          .update({
+            'status': 'closed',
+            'ended_at': DateTime.now().toIso8601String(),
+          })
+          .eq('id', chatId);
     } catch (e) {
       debugPrint('[HelpEnhancements] Error ending chat: $e');
     }

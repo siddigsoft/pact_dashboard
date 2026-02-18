@@ -46,11 +46,11 @@ class SignatureHistoryItem {
         (s) => s.name == (json['status'] ?? 'pending'),
         orElse: () => SignatureStatus.pending,
       ),
-      signedAt: json['signed_at'] != null 
-          ? DateTime.tryParse(json['signed_at']) 
+      signedAt: json['signed_at'] != null
+          ? DateTime.tryParse(json['signed_at'])
           : null,
-      verifiedAt: json['verified_at'] != null 
-          ? DateTime.tryParse(json['verified_at']) 
+      verifiedAt: json['verified_at'] != null
+          ? DateTime.tryParse(json['verified_at'])
           : null,
       amount: json['amount']?.toDouble(),
       currency: json['currency'],
@@ -104,7 +104,8 @@ class _SignatureHistoryWidgetState extends State<SignatureHistoryWidget> {
 
   Widget _buildSignatureCard(SignatureHistoryItem signature) {
     final isExpanded = _expandedId == signature.id;
-    final isMonetary = signature.type == 'transaction' && signature.amount != null;
+    final isMonetary =
+        signature.type == 'transaction' && signature.amount != null;
 
     final methodLabels = widget.isArabic
         ? {
@@ -135,14 +136,12 @@ class _SignatureHistoryWidgetState extends State<SignatureHistoryWidget> {
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
         side: BorderSide(
-          color: isExpanded 
+          color: isExpanded
               ? AppColors.primaryBlue.withOpacity(0.3)
               : Colors.transparent,
         ),
       ),
-      color: isExpanded 
-          ? AppColors.primaryBlue.withOpacity(0.05)
-          : null,
+      color: isExpanded ? AppColors.primaryBlue.withOpacity(0.05) : null,
       child: InkWell(
         onTap: () {
           setState(() {
@@ -166,8 +165,8 @@ class _SignatureHistoryWidgetState extends State<SignatureHistoryWidget> {
                       color: signature.status == SignatureStatus.verified
                           ? Colors.green.withOpacity(0.1)
                           : signature.status == SignatureStatus.signed
-                              ? Colors.blue.withOpacity(0.1)
-                              : Colors.grey.withOpacity(0.1),
+                          ? Colors.blue.withOpacity(0.1)
+                          : Colors.grey.withOpacity(0.1),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Icon(
@@ -176,12 +175,12 @@ class _SignatureHistoryWidgetState extends State<SignatureHistoryWidget> {
                       color: signature.status == SignatureStatus.verified
                           ? Colors.green
                           : signature.status == SignatureStatus.signed
-                              ? Colors.blue
-                              : Colors.grey,
+                          ? Colors.blue
+                          : Colors.grey,
                     ),
                   ),
                   const SizedBox(width: 12),
-                  
+
                   // Content
                   Expanded(
                     child: Column(
@@ -209,12 +208,17 @@ class _SignatureHistoryWidgetState extends State<SignatureHistoryWidget> {
                             ),
                           ],
                         ),
-                        
-                        if (isMonetary && signature.amount != null && signature.currency != null)
+
+                        if (isMonetary &&
+                            signature.amount != null &&
+                            signature.currency != null)
                           Padding(
                             padding: const EdgeInsets.only(top: 4),
                             child: Text(
-                              _formatAmount(signature.amount!, signature.currency!),
+                              _formatAmount(
+                                signature.amount!,
+                                signature.currency!,
+                              ),
                               style: TextStyle(
                                 fontSize: 15,
                                 fontWeight: FontWeight.bold,
@@ -222,13 +226,17 @@ class _SignatureHistoryWidgetState extends State<SignatureHistoryWidget> {
                               ),
                             ),
                           ),
-                        
+
                         if (signature.signedAt != null)
                           Padding(
                             padding: const EdgeInsets.only(top: 4),
                             child: Row(
                               children: [
-                                Icon(Icons.schedule, size: 12, color: Colors.grey[500]),
+                                Icon(
+                                  Icons.schedule,
+                                  size: 12,
+                                  color: Colors.grey[500],
+                                ),
                                 const SizedBox(width: 4),
                                 Text(
                                   _formatDate(signature.signedAt!),
@@ -243,10 +251,12 @@ class _SignatureHistoryWidgetState extends State<SignatureHistoryWidget> {
                       ],
                     ),
                   ),
-                  
+
                   // Expand Icon
                   Icon(
-                    isExpanded ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
+                    isExpanded
+                        ? Icons.keyboard_arrow_up
+                        : Icons.keyboard_arrow_down,
                     color: Colors.grey,
                   ),
                 ],
@@ -255,19 +265,16 @@ class _SignatureHistoryWidgetState extends State<SignatureHistoryWidget> {
               // Expanded Content
               if (isExpanded) ...[
                 const Divider(height: 24),
-                
+
                 if (signature.description != null)
                   Padding(
                     padding: const EdgeInsets.only(bottom: 12),
                     child: Text(
                       signature.description!,
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: Colors.grey[600],
-                      ),
+                      style: TextStyle(fontSize: 13, color: Colors.grey[600]),
                     ),
                   ),
-                
+
                 Wrap(
                   spacing: 16,
                   runSpacing: 8,
@@ -291,7 +298,7 @@ class _SignatureHistoryWidgetState extends State<SignatureHistoryWidget> {
                         ),
                       ],
                     ),
-                    
+
                     // Signer
                     if (signature.signerName != null)
                       Row(
@@ -314,11 +321,14 @@ class _SignatureHistoryWidgetState extends State<SignatureHistoryWidget> {
                           ),
                         ],
                       ),
-                    
+
                     // Document Type
                     if (signature.documentType != null)
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 2,
+                        ),
                         decoration: BoxDecoration(
                           color: Colors.grey.withOpacity(0.1),
                           borderRadius: BorderRadius.circular(8),
@@ -330,13 +340,17 @@ class _SignatureHistoryWidgetState extends State<SignatureHistoryWidget> {
                       ),
                   ],
                 ),
-                
+
                 if (signature.verifiedAt != null)
                   Padding(
                     padding: const EdgeInsets.only(top: 12),
                     child: Row(
                       children: [
-                        Icon(Icons.verified, size: 16, color: Colors.green[600]),
+                        Icon(
+                          Icons.verified,
+                          size: 16,
+                          color: Colors.green[600],
+                        ),
                         const SizedBox(width: 4),
                         Text(
                           '${widget.isArabic ? 'تم التحقق:' : 'Verified:'} ${_formatDate(signature.verifiedAt!)}',
@@ -348,16 +362,21 @@ class _SignatureHistoryWidgetState extends State<SignatureHistoryWidget> {
                       ],
                     ),
                   ),
-                
+
                 if (widget.onViewSignature != null)
                   Padding(
                     padding: const EdgeInsets.only(top: 12),
                     child: OutlinedButton.icon(
                       onPressed: () => widget.onViewSignature!(signature.id),
                       icon: const Icon(Icons.open_in_new, size: 16),
-                      label: Text(widget.isArabic ? 'عرض التفاصيل' : 'View Details'),
+                      label: Text(
+                        widget.isArabic ? 'عرض التفاصيل' : 'View Details',
+                      ),
                       style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 8,
+                        ),
                         textStyle: const TextStyle(fontSize: 12),
                       ),
                     ),
@@ -405,7 +424,11 @@ class _SignatureHistoryWidgetState extends State<SignatureHistoryWidget> {
                   children: [
                     Row(
                       children: [
-                        Icon(Icons.history, color: AppColors.primaryBlue, size: 20),
+                        Icon(
+                          Icons.history,
+                          color: AppColors.primaryBlue,
+                          size: 20,
+                        ),
                         const SizedBox(width: 8),
                         Text(
                           labels['title']!,
@@ -419,14 +442,13 @@ class _SignatureHistoryWidgetState extends State<SignatureHistoryWidget> {
                     const SizedBox(height: 2),
                     Text(
                       labels['description']!,
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.grey[600],
-                      ),
+                      style: TextStyle(fontSize: 12, color: Colors.grey[600]),
                     ),
                   ],
                 ),
-                if (widget.showViewAll && widget.onViewAll != null && widget.signatures.isNotEmpty)
+                if (widget.showViewAll &&
+                    widget.onViewAll != null &&
+                    widget.signatures.isNotEmpty)
                   TextButton(
                     onPressed: widget.onViewAll,
                     child: Text(labels['viewAll']!),
@@ -459,17 +481,12 @@ class _SignatureHistoryWidgetState extends State<SignatureHistoryWidget> {
                     const SizedBox(height: 12),
                     Text(
                       labels['empty']!,
-                      style: const TextStyle(
-                        fontWeight: FontWeight.w500,
-                      ),
+                      style: const TextStyle(fontWeight: FontWeight.w500),
                     ),
                     const SizedBox(height: 4),
                     Text(
                       labels['emptyDesc']!,
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: Colors.grey[500],
-                      ),
+                      style: TextStyle(fontSize: 13, color: Colors.grey[500]),
                     ),
                   ],
                 ),

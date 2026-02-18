@@ -9,98 +9,35 @@ class BilingualNotificationService {
   static String _currentLocale = 'en';
 
   static const Map<String, Map<String, String>> _translations = {
-    'new_message': {
-      'en': 'New Message',
-      'ar': 'رسالة جديدة',
-    },
-    'new_site_assigned': {
-      'en': 'New Site Assigned',
-      'ar': 'موقع جديد مُعين',
-    },
+    'new_message': {'en': 'New Message', 'ar': 'رسالة جديدة'},
+    'new_site_assigned': {'en': 'New Site Assigned', 'ar': 'موقع جديد مُعين'},
     'site_visit_reminder': {
       'en': 'Site Visit Reminder',
       'ar': 'تذكير بالزيارة الميدانية',
     },
-    'payment_received': {
-      'en': 'Payment Received',
-      'ar': 'تم استلام الدفعة',
-    },
-    'payment_pending': {
-      'en': 'Payment Pending',
-      'ar': 'دفعة معلقة',
-    },
-    'sync_complete': {
-      'en': 'Sync Complete',
-      'ar': 'اكتملت المزامنة',
-    },
-    'sync_failed': {
-      'en': 'Sync Failed',
-      'ar': 'فشلت المزامنة',
-    },
-    'mmp_uploaded': {
-      'en': 'MMP File Uploaded',
-      'ar': 'تم رفع ملف MMP',
-    },
-    'mmp_approved': {
-      'en': 'MMP Approved',
-      'ar': 'تمت الموافقة على MMP',
-    },
-    'mmp_rejected': {
-      'en': 'MMP Rejected',
-      'ar': 'تم رفض MMP',
-    },
-    'visit_started': {
-      'en': 'Visit Started',
-      'ar': 'بدأت الزيارة',
-    },
-    'visit_completed': {
-      'en': 'Visit Completed',
-      'ar': 'اكتملت الزيارة',
-    },
-    'cost_submitted': {
-      'en': 'Cost Submitted',
-      'ar': 'تم تقديم التكلفة',
-    },
-    'cost_approved': {
-      'en': 'Cost Approved',
-      'ar': 'تمت الموافقة على التكلفة',
-    },
-    'cost_rejected': {
-      'en': 'Cost Rejected',
-      'ar': 'تم رفض التكلفة',
-    },
-    'account_updated': {
-      'en': 'Account Updated',
-      'ar': 'تم تحديث الحساب',
-    },
-    'new_assignment': {
-      'en': 'New Assignment',
-      'ar': 'مهمة جديدة',
-    },
+    'payment_received': {'en': 'Payment Received', 'ar': 'تم استلام الدفعة'},
+    'payment_pending': {'en': 'Payment Pending', 'ar': 'دفعة معلقة'},
+    'sync_complete': {'en': 'Sync Complete', 'ar': 'اكتملت المزامنة'},
+    'sync_failed': {'en': 'Sync Failed', 'ar': 'فشلت المزامنة'},
+    'mmp_uploaded': {'en': 'MMP File Uploaded', 'ar': 'تم رفع ملف MMP'},
+    'mmp_approved': {'en': 'MMP Approved', 'ar': 'تمت الموافقة على MMP'},
+    'mmp_rejected': {'en': 'MMP Rejected', 'ar': 'تم رفض MMP'},
+    'visit_started': {'en': 'Visit Started', 'ar': 'بدأت الزيارة'},
+    'visit_completed': {'en': 'Visit Completed', 'ar': 'اكتملت الزيارة'},
+    'cost_submitted': {'en': 'Cost Submitted', 'ar': 'تم تقديم التكلفة'},
+    'cost_approved': {'en': 'Cost Approved', 'ar': 'تمت الموافقة على التكلفة'},
+    'cost_rejected': {'en': 'Cost Rejected', 'ar': 'تم رفض التكلفة'},
+    'account_updated': {'en': 'Account Updated', 'ar': 'تم تحديث الحساب'},
+    'new_assignment': {'en': 'New Assignment', 'ar': 'مهمة جديدة'},
     'deadline_approaching': {
       'en': 'Deadline Approaching',
       'ar': 'الموعد النهائي يقترب',
     },
-    'deadline_passed': {
-      'en': 'Deadline Passed',
-      'ar': 'انتهى الموعد النهائي',
-    },
-    'signature_requested': {
-      'en': 'Signature Requested',
-      'ar': 'مطلوب توقيع',
-    },
-    'document_signed': {
-      'en': 'Document Signed',
-      'ar': 'تم توقيع المستند',
-    },
-    'incoming_call': {
-      'en': 'Incoming Call',
-      'ar': 'مكالمة واردة',
-    },
-    'missed_call': {
-      'en': 'Missed Call',
-      'ar': 'مكالمة فائتة',
-    },
+    'deadline_passed': {'en': 'Deadline Passed', 'ar': 'انتهى الموعد النهائي'},
+    'signature_requested': {'en': 'Signature Requested', 'ar': 'مطلوب توقيع'},
+    'document_signed': {'en': 'Document Signed', 'ar': 'تم توقيع المستند'},
+    'incoming_call': {'en': 'Incoming Call', 'ar': 'مكالمة واردة'},
+    'missed_call': {'en': 'Missed Call', 'ar': 'مكالمة فائتة'},
     'data_sync_required': {
       'en': 'Data Sync Required',
       'ar': 'مطلوب مزامنة البيانات',
@@ -121,18 +58,9 @@ class BilingualNotificationService {
       'en': 'Permit Approved',
       'ar': 'تمت الموافقة على التصريح',
     },
-    'permit_rejected': {
-      'en': 'Permit Rejected',
-      'ar': 'تم رفض التصريح',
-    },
-    'update_available': {
-      'en': 'Update Available',
-      'ar': 'تحديث متاح',
-    },
-    'update_installed': {
-      'en': 'Update Installed',
-      'ar': 'تم تثبيت التحديث',
-    },
+    'permit_rejected': {'en': 'Permit Rejected', 'ar': 'تم رفض التصريح'},
+    'update_available': {'en': 'Update Available', 'ar': 'تحديث متاح'},
+    'update_installed': {'en': 'Update Installed', 'ar': 'تم تثبيت التحديث'},
   };
 
   static const Map<String, Map<String, String>> _bodyTranslations = {
@@ -176,10 +104,7 @@ class BilingualNotificationService {
       'en': 'You have {count} pending items to sync',
       'ar': 'لديك {count} عناصر معلقة للمزامنة',
     },
-    'call_from': {
-      'en': 'Call from {name}',
-      'ar': 'مكالمة من {name}',
-    },
+    'call_from': {'en': 'Call from {name}', 'ar': 'مكالمة من {name}'},
     'missed_call_from': {
       'en': 'Missed call from {name}',
       'ar': 'مكالمة فائتة من {name}',
@@ -240,22 +165,22 @@ class BilingualNotificationService {
   }
 
   static String _translate(String key) {
-    return _translations[key]?[_currentLocale] ?? 
-           _translations[key]?['en'] ?? 
-           key;
+    return _translations[key]?[_currentLocale] ??
+        _translations[key]?['en'] ??
+        key;
   }
 
   static String _translateBody(String key, {Map<String, String>? params}) {
-    String text = _bodyTranslations[key]?[_currentLocale] ?? 
-                  _bodyTranslations[key]?['en'] ?? 
-                  key;
-    
+    String text = _bodyTranslations[key]?[_currentLocale] ??
+        _bodyTranslations[key]?['en'] ??
+        key;
+
     if (params != null) {
       params.forEach((k, v) {
         text = text.replaceAll('{$k}', v);
       });
     }
-    
+
     return text;
   }
 
@@ -330,7 +255,10 @@ class BilingualNotificationService {
     await initialize();
 
     final title = _translate('new_site_assigned');
-    final body = _translateBody('site_assigned_to_you', params: {'site': siteName});
+    final body = _translateBody(
+      'site_assigned_to_you',
+      params: {'site': siteName},
+    );
 
     await _showNotification(
       id: siteId.hashCode,
@@ -349,7 +277,10 @@ class BilingualNotificationService {
     await initialize();
 
     final title = _translate('payment_received');
-    final body = _translateBody('you_received_payment', params: {'amount': amount});
+    final body = _translateBody(
+      'you_received_payment',
+      params: {'amount': amount},
+    );
 
     await _showNotification(
       id: transactionId.hashCode,
@@ -367,11 +298,15 @@ class BilingualNotificationService {
   }) async {
     await initialize();
 
-    final title = success ? _translate('sync_complete') : _translate('sync_failed');
-    final body = success 
+    final title =
+        success ? _translate('sync_complete') : _translate('sync_failed');
+    final body = success
         ? _translateBody('your_data_synced')
-        : pendingCount != null 
-            ? _translateBody('pending_items_to_sync', params: {'count': pendingCount.toString()})
+        : pendingCount != null
+            ? _translateBody(
+                'pending_items_to_sync',
+                params: {'count': pendingCount.toString()},
+              )
             : _translateBody('sync_error_occurred');
 
     await _showNotification(
@@ -414,7 +349,7 @@ class BilingualNotificationService {
       sound: 'ringtone.aiff',
     );
 
-    final NotificationDetails platformDetails = NotificationDetails(
+    final NotificationDetails platformDetails = const NotificationDetails(
       android: androidDetails,
       iOS: iosDetails,
     );
@@ -428,15 +363,13 @@ class BilingualNotificationService {
     );
   }
 
-  static Future<void> showUpdateNotification({
-    required bool installed,
-  }) async {
+  static Future<void> showUpdateNotification({required bool installed}) async {
     await initialize();
 
-    final title = installed 
+    final title = installed
         ? _translate('update_installed')
         : _translate('update_available');
-    final body = installed 
+    final body = installed
         ? _translateBody('update_installed_restart')
         : _translateBody('new_version_available');
 
@@ -456,7 +389,10 @@ class BilingualNotificationService {
     await initialize();
 
     final title = _translate('signature_requested');
-    final body = _translateBody('signature_requested_for', params: {'document': documentName});
+    final body = _translateBody(
+      'signature_requested_for',
+      params: {'document': documentName},
+    );
 
     await _showNotification(
       id: documentId.hashCode,
@@ -475,7 +411,10 @@ class BilingualNotificationService {
     await initialize();
 
     final title = _translate('missed_call');
-    final body = _translateBody('missed_call_from', params: {'name': callerName});
+    final body = _translateBody(
+      'missed_call_from',
+      params: {'name': callerName},
+    );
 
     await _showNotification(
       id: callId.hashCode,
@@ -517,7 +456,13 @@ class BilingualNotificationService {
       iOS: iosDetails,
     );
 
-    await _notifications.show(id, title, body, platformDetails, payload: payload);
+    await _notifications.show(
+      id,
+      title,
+      body,
+      platformDetails,
+      payload: payload,
+    );
   }
 
   static Importance _getAndroidImportance(NotificationImportance importance) {

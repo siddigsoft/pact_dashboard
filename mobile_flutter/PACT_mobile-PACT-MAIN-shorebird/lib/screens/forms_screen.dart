@@ -13,7 +13,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../services/auth_service.dart';
 import '../theme/app_colors.dart';
 import '../widgets/modern_app_header.dart';
-import '../l10n/app_localizations.dart';
+import 'package:flutter_gen/gen_l10n/app_localizations.dart';
 // import '../widgets/mmp_preview_bottom_sheet.dart'; // MMP code frozen
 
 class FormsScreen extends StatefulWidget {
@@ -26,7 +26,8 @@ class FormsScreen extends StatefulWidget {
 class _FormsScreenState extends State<FormsScreen> {
   // final MMPFileService _mmpFileService = MMPFileService(); // MMP code frozen
   final AuthService _authService = AuthService();
-  // List<MMPFile> _mmpFiles = []; // MMP code frozen
+  final List<dynamic> _mmpFiles =
+      []; // MMP code frozen - using dynamic to avoid type errors
   bool _isLoading = true;
   bool _isAuthenticated = false;
 
@@ -74,36 +75,11 @@ class _FormsScreenState extends State<FormsScreen> {
 
   Future<void> _loadMMPFiles() async {
     try {
-      final files = await _mmpFileService.getMMPFilesCached();
-
+      // MMP functionality is frozen - load returns empty
       if (mounted) {
-        final parsedFiles = files
-            .map((f) {
-              try {
-                return MMPFile.fromJson(f);
-              } catch (e) {
-                debugPrint('Error parsing MMP file: $e');
-                debugPrint('Problematic data: $f');
-                return null;
-              }
-            })
-            .whereType<MMPFile>()
-            .toList();
-
-        debugPrint('Successfully parsed ${parsedFiles.length} files');
-
         setState(() {
-          _mmpFiles = parsedFiles;
           _isLoading = false;
         });
-
-        if (parsedFiles.isNotEmpty) {
-          unawaited(
-            _mmpFileService.prefetchMMPFiles(parsedFiles).catchError((error) {
-              debugPrint('Prefetch error: $error');
-            }),
-          );
-        }
       }
     } catch (e, stackTrace) {
       debugPrint('Error loading MMP files: $e');
@@ -111,16 +87,6 @@ class _FormsScreenState extends State<FormsScreen> {
       if (mounted) {
         setState(() {
           _isLoading = false;
-        });
-        // Use addPostFrameCallback to show snackbar after build
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text('Error loading MMP files: ${e.toString()}'),
-              ),
-            );
-          }
         });
       }
     }
@@ -143,7 +109,8 @@ class _FormsScreenState extends State<FormsScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       _buildSectionTitle(
-                          AppLocalizations.of(context)!.mmpFiles),
+                        AppLocalizations.of(context)!.mmpFiles,
+                      ),
                       const SizedBox(height: 12),
                       if (_isLoading)
                         const Center(child: CircularProgressIndicator())
@@ -153,8 +120,9 @@ class _FormsScreenState extends State<FormsScreen> {
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               Text(
-                                AppLocalizations.of(context)!
-                                    .pleaseLogInToViewMMPFiles,
+                                AppLocalizations.of(
+                                  context,
+                                )!.pleaseLogInToViewMMPFiles,
                                 style: GoogleFonts.poppins(
                                   fontSize: 16,
                                   color: AppColors.textLight,
@@ -166,8 +134,9 @@ class _FormsScreenState extends State<FormsScreen> {
                                   // Navigate to login screen
                                   Navigator.pushNamed(context, '/login');
                                 },
-                                child:
-                                    Text(AppLocalizations.of(context)!.logIn),
+                                child: Text(
+                                  AppLocalizations.of(context)!.logIn,
+                                ),
                               ),
                             ],
                           ),
@@ -232,21 +201,12 @@ class _FormsScreenState extends State<FormsScreen> {
   }
 
   Widget _buildMMPFilesList() {
-    return ListView.builder(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      itemCount: _mmpFiles.length,
-      itemBuilder: (context, index) {
-        final file = _mmpFiles[index];
-        return _buildFormItem(
-          icon: Icons.file_present_rounded,
-          title: file.name ?? 'Unnamed File',
-          status: file.status ?? 'Unknown',
-          statusColor: _getStatusColor(file.status ?? ''),
-          onTap: () => _handleFileTap(file),
-          delay: (index * 150).ms,
-        );
-      },
+    // MMP functionality is frozen - return empty
+    return Center(
+      child: Text(
+        AppLocalizations.of(context)!.noMMPFilesAvailable,
+        style: GoogleFonts.poppins(fontSize: 16, color: AppColors.textLight),
+      ),
     );
   }
 
@@ -265,30 +225,16 @@ class _FormsScreenState extends State<FormsScreen> {
     }
   }
 
-  Future<void> _handleFileTap(MMPFile file) async {
-    try {
-      final localPath = await _mmpFileService.ensureFileAvailable(file);
-      if (!mounted) return;
-      MMPPreviewBottomSheet.show(context, file: file, localPath: localPath);
-    } on OfflineFileUnavailableException catch (offlineError) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(offlineError.message),
-            duration: const Duration(seconds: 3),
-          ),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        final errorMessage = AppLocalizations.of(context)!.couldNotOpenFile;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(errorMessage),
-            duration: const Duration(seconds: 3),
-          ),
-        );
-      }
+  Future<void> _handleFileTap(dynamic file) async {
+    // MMP functionality is frozen
+    if (mounted) {
+      final errorMessage = AppLocalizations.of(context)!.couldNotOpenFile;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(errorMessage),
+          duration: const Duration(seconds: 3),
+        ),
+      );
     }
   }
 
@@ -301,117 +247,117 @@ class _FormsScreenState extends State<FormsScreen> {
     required Duration delay,
   }) {
     return Container(
-      margin: const EdgeInsets.only(bottom: 16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 2),
-            spreadRadius: 0,
+          margin: const EdgeInsets.only(bottom: 16),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.05),
+                blurRadius: 10,
+                offset: const Offset(0, 2),
+                spreadRadius: 0,
+              ),
+            ],
           ),
-        ],
-      ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: () {
-            HapticFeedback.mediumImpact();
-            onTap();
-          },
-          borderRadius: BorderRadius.circular(16),
-          child: Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: AppColors.backgroundGray,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Icon(icon, color: AppColors.textDark, size: 28)
-                      .animate(
-                        onPlay: (controller) =>
-                            controller.repeat(reverse: true),
-                      )
-                      .scale(
-                        begin: const Offset(1, 1),
-                        end: const Offset(1.15, 1.15),
-                        duration: 2.seconds,
-                        curve: Curves.easeInOut,
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: () {
+                HapticFeedback.mediumImpact();
+                onTap();
+              },
+              borderRadius: BorderRadius.circular(16),
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: AppColors.backgroundGray,
+                        borderRadius: BorderRadius.circular(12),
                       ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        title,
-                        style: GoogleFonts.poppins(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w600,
-                          color: AppColors.textDark,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Row(
-                        children: [
-                          Container(
-                            width: 8,
-                            height: 8,
-                            decoration: BoxDecoration(
-                              color: statusColor,
-                              shape: BoxShape.circle,
-                            ),
+                      child: Icon(icon, color: AppColors.textDark, size: 28)
+                          .animate(
+                            onPlay: (controller) =>
+                                controller.repeat(reverse: true),
                           )
-                              .animate(
-                                onPlay: (controller) => controller.repeat(),
-                              )
-                              .shimmer(
-                                duration: 1.5.seconds,
-                                color: Colors.white.withOpacity(0.6),
-                              )
-                              .animate() // Add a second animation
-                              .scaleXY(
-                                begin: 0.8,
-                                end: 1.2,
-                                duration: 1.seconds,
-                              )
-                              .then()
-                              .scaleXY(
-                                begin: 1.2,
-                                end: 0.8,
-                                duration: 1.seconds,
-                              ),
-                          const SizedBox(width: 6),
+                          .scale(
+                            begin: const Offset(1, 1),
+                            end: const Offset(1.15, 1.15),
+                            duration: 2.seconds,
+                            curve: Curves.easeInOut,
+                          ),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
                           Text(
-                            status,
+                            title,
                             style: GoogleFonts.poppins(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w500,
-                              color: statusColor,
+                              fontSize: 18,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.textDark,
                             ),
+                          ),
+                          const SizedBox(height: 4),
+                          Row(
+                            children: [
+                              Container(
+                                    width: 8,
+                                    height: 8,
+                                    decoration: BoxDecoration(
+                                      color: statusColor,
+                                      shape: BoxShape.circle,
+                                    ),
+                                  )
+                                  .animate(
+                                    onPlay: (controller) => controller.repeat(),
+                                  )
+                                  .shimmer(
+                                    duration: 1.5.seconds,
+                                    color: Colors.white.withOpacity(0.6),
+                                  )
+                                  .animate() // Add a second animation
+                                  .scaleXY(
+                                    begin: 0.8,
+                                    end: 1.2,
+                                    duration: 1.seconds,
+                                  )
+                                  .then()
+                                  .scaleXY(
+                                    begin: 1.2,
+                                    end: 0.8,
+                                    duration: 1.seconds,
+                                  ),
+                              const SizedBox(width: 6),
+                              Text(
+                                status,
+                                style: GoogleFonts.poppins(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w500,
+                                  color: statusColor,
+                                ),
+                              ),
+                            ],
                           ),
                         ],
                       ),
-                    ],
-                  ),
+                    ),
+                    const Icon(
+                      Icons.chevron_right,
+                      color: AppColors.textLight,
+                      size: 28,
+                    ),
+                  ],
                 ),
-                Icon(
-                  Icons.chevron_right,
-                  color: AppColors.textLight,
-                  size: 28,
-                ),
-              ],
+              ),
             ),
           ),
-        ),
-      ),
-    )
+        )
         .animate(delay: delay)
         .fadeIn(duration: 600.ms)
         .slideX(begin: 0.2, end: 0, duration: 500.ms, curve: Curves.easeOut)

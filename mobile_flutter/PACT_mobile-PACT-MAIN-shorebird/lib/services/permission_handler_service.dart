@@ -5,7 +5,8 @@ import 'package:flutter/foundation.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 class PermissionHandlerService {
-  static final PermissionHandlerService _instance = PermissionHandlerService._internal();
+  static final PermissionHandlerService _instance =
+      PermissionHandlerService._internal();
   factory PermissionHandlerService() => _instance;
   PermissionHandlerService._internal();
 
@@ -30,11 +31,11 @@ class PermissionHandlerService {
     }
 
     final statuses = await permissions.request();
-    
+
     for (final entry in statuses.entries) {
       debugPrint('[Permissions] ${entry.key}: ${entry.value}');
     }
-    
+
     return statuses;
   }
 
@@ -53,19 +54,19 @@ class PermissionHandlerService {
   Future<bool> requestCallPermissions() async {
     final micStatus = await Permission.microphone.request();
     debugPrint('[Permissions] Microphone for call: $micStatus');
-    
+
     if (!micStatus.isGranted) {
       return false;
     }
-    
+
     if (Platform.isAndroid) {
       final phoneStatus = await Permission.phone.request();
       debugPrint('[Permissions] Phone: $phoneStatus');
-      
+
       final bluetoothStatus = await Permission.bluetoothConnect.request();
       debugPrint('[Permissions] Bluetooth: $bluetoothStatus');
     }
-    
+
     return true;
   }
 
@@ -79,7 +80,9 @@ class PermissionHandlerService {
     if (Platform.isAndroid) {
       final storageStatus = await Permission.storage.request();
       final photosStatus = await Permission.photos.request();
-      debugPrint('[Permissions] Storage: $storageStatus, Photos: $photosStatus');
+      debugPrint(
+        '[Permissions] Storage: $storageStatus, Photos: $photosStatus',
+      );
       return storageStatus.isGranted || photosStatus.isGranted;
     } else {
       final status = await Permission.photos.request();
@@ -108,7 +111,8 @@ class PermissionHandlerService {
 
   Future<bool> hasStoragePermission() async {
     if (Platform.isAndroid) {
-      return await Permission.storage.isGranted || await Permission.photos.isGranted;
+      return await Permission.storage.isGranted ||
+          await Permission.photos.isGranted;
     }
     return await Permission.photos.isGranted;
   }
@@ -122,10 +126,14 @@ class PermissionHandlerService {
       'camera': await Permission.camera.isGranted,
       'microphone': await Permission.microphone.isGranted,
       'location': await Permission.locationWhenInUse.isGranted,
-      'storage': await Permission.storage.isGranted || await Permission.photos.isGranted,
+      'storage':
+          await Permission.storage.isGranted ||
+          await Permission.photos.isGranted,
       'notification': await Permission.notification.isGranted,
       'phone': Platform.isAndroid ? await Permission.phone.isGranted : true,
-      'bluetooth': Platform.isAndroid ? await Permission.bluetoothConnect.isGranted : true,
+      'bluetooth': Platform.isAndroid
+          ? await Permission.bluetoothConnect.isGranted
+          : true,
     };
   }
 }

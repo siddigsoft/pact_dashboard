@@ -103,9 +103,7 @@ class _WithdrawalRequestScreenState
     setState(() => _isSubmitting = true);
 
     try {
-      await ref
-          .read(walletServiceProvider)
-          .createWithdrawalRequest(
+      await ref.read(walletServiceProvider).createWithdrawalRequest(
             amount: amount,
             requestReason: _reasonController.text.trim(),
             paymentMethod:
@@ -311,7 +309,8 @@ class _WithdrawalRequestScreenState
                         case 'financeadmin':
                         case 'ict':
                         case 'fom':
-                          return const SizedBox.shrink(); // No minimum for admin roles
+                          return const SizedBox
+                              .shrink(); // No minimum for admin roles
                         default:
                           minimumAmount = 500;
                       }
@@ -393,17 +392,17 @@ class _WithdrawalRequestScreenState
                         color: const Color(0xFF1976D2).withOpacity(0.3),
                       ),
                     ),
-                    child: Row(
+                    child: const Row(
                       children: [
-                        const Icon(
+                        Icon(
                           Icons.info_outline,
                           color: Color(0xFF1976D2),
                         ),
-                        const SizedBox(width: 12),
+                        SizedBox(width: 12),
                         Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
-                            children: const [
+                            children: [
                               Text(
                                 'Approval Process',
                                 style: TextStyle(
@@ -435,9 +434,8 @@ class _WithdrawalRequestScreenState
                     width: double.infinity,
                     height: 56,
                     child: ElevatedButton(
-                      onPressed: _isSubmitting
-                          ? null
-                          : _submitWithdrawalRequest,
+                      onPressed:
+                          _isSubmitting ? null : _submitWithdrawalRequest,
                       style: ElevatedButton.styleFrom(
                         backgroundColor: const Color(0xFFFF9800),
                         foregroundColor: Colors.white,
@@ -503,14 +501,14 @@ class _WithdrawalRequestScreenState
                 color: const Color(0xFFFF9800).withOpacity(0.3),
               ),
             ),
-            child: Column(
+            child: const Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
                   children: [
-                    const Icon(Icons.warning_amber, color: Color(0xFFFF9800)),
-                    const SizedBox(width: 12),
-                    const Expanded(
+                    Icon(Icons.warning_amber, color: Color(0xFFFF9800)),
+                    SizedBox(width: 12),
+                    Expanded(
                       child: Text(
                         'No payment methods added',
                         style: TextStyle(
@@ -521,8 +519,8 @@ class _WithdrawalRequestScreenState
                     ),
                   ],
                 ),
-                const SizedBox(height: 8),
-                const Text(
+                SizedBox(height: 8),
+                Text(
                   'Please add a payment method in the Payment Methods section before requesting a withdrawal.',
                   style: TextStyle(fontSize: 13, color: Color(0xFF263238)),
                 ),

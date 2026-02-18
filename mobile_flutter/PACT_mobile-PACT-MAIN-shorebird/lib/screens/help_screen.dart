@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../models/help_models.dart';
 import '../services/help_service.dart';
+import 'notification_test_screen.dart';
 
 class HelpScreen extends StatefulWidget {
   const HelpScreen({super.key});
@@ -71,9 +72,7 @@ class _HelpScreenState extends State<HelpScreen> {
                   },
                 )
               : null,
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(8),
-          ),
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
         ),
         onChanged: _onSearchChanged,
       ),
@@ -95,9 +94,9 @@ class _HelpScreenState extends State<HelpScreen> {
             const SizedBox(height: 8),
             Text(
               'Try different search terms',
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: Colors.grey[600],
-                  ),
+              style: Theme.of(
+                context,
+              ).textTheme.bodyMedium?.copyWith(color: Colors.grey[600]),
             ),
           ],
         ),
@@ -132,6 +131,11 @@ class _HelpScreenState extends State<HelpScreen> {
 
         // Report a Bug
         _buildReportBugCard(),
+
+        const SizedBox(height: 16),
+
+        // [TESTING ONLY] Notification Test
+        _buildNotificationTestCard(),
       ],
     );
   }
@@ -156,10 +160,7 @@ class _HelpScreenState extends State<HelpScreen> {
                 const SizedBox(height: 4),
                 Text(
                   category.description,
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: Colors.grey[600],
-                  ),
+                  style: TextStyle(fontSize: 14, color: Colors.grey[600]),
                 ),
               ],
             ],
@@ -177,10 +178,7 @@ class _HelpScreenState extends State<HelpScreen> {
       child: ListTile(
         leading: CircleAvatar(
           backgroundColor: const Color(0xFF1976D2).withOpacity(0.1),
-          child: const Icon(
-            Icons.help_outline,
-            color: Color(0xFF1976D2),
-          ),
+          child: const Icon(Icons.help_outline, color: Color(0xFF1976D2)),
         ),
         title: Text(article.title),
         trailing: const Icon(Icons.chevron_right),
@@ -243,10 +241,7 @@ class _HelpScreenState extends State<HelpScreen> {
                   spacing: 8,
                   children: article.tags.map((tag) {
                     return Chip(
-                      label: Text(
-                        tag,
-                        style: const TextStyle(fontSize: 12),
-                      ),
+                      label: Text(tag, style: const TextStyle(fontSize: 12)),
                       backgroundColor: Colors.grey[200],
                       padding: EdgeInsets.zero,
                       materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
@@ -285,8 +280,8 @@ class _HelpScreenState extends State<HelpScreen> {
                 Text(
                   'Contact Support',
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      ),
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
               ],
             ),
@@ -342,16 +337,11 @@ class _HelpScreenState extends State<HelpScreen> {
               children: [
                 Text(
                   title,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w500,
-                  ),
+                  style: const TextStyle(fontWeight: FontWeight.w500),
                 ),
                 Text(
                   subtitle,
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.grey[600],
-                  ),
+                  style: TextStyle(fontSize: 12, color: Colors.grey[600]),
                 ),
               ],
             ),
@@ -396,10 +386,62 @@ class _HelpScreenState extends State<HelpScreen> {
                     ),
                     Text(
                       'Help us improve the app',
+                      style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                    ),
+                  ],
+                ),
+              ),
+              const Icon(Icons.chevron_right),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildNotificationTestCard() {
+    return Card(
+      color: Colors.purple.shade50,
+      child: InkWell(
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => const NotificationTestScreen(),
+            ),
+          );
+        },
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.purple.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(
+                  Icons.notifications_active,
+                  color: Colors.purple,
+                  size: 28,
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      '🧪 Test Notifications',
                       style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.grey[600],
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
                       ),
+                    ),
+                    Text(
+                      '[TESTING ONLY] Test bilingual notifications',
+                      style: TextStyle(fontSize: 12, color: Colors.grey[700]),
                     ),
                   ],
                 ),
@@ -453,10 +495,7 @@ class _HelpScreenState extends State<HelpScreen> {
           ),
           ElevatedButton(
             onPressed: () {
-              _submitBugReport(
-                stepsController.text,
-                errorController.text,
-              );
+              _submitBugReport(stepsController.text, errorController.text);
               Navigator.pop(context);
             },
             style: ElevatedButton.styleFrom(
@@ -478,7 +517,8 @@ class _HelpScreenState extends State<HelpScreen> {
     );
 
     // Send bug report via email
-    final body = '''
+    final body =
+        '''
 Bug Report - PACT Mobile
 
 Steps to Reproduce:
@@ -497,10 +537,7 @@ ${bugReport.reportedAt.toIso8601String()}
     final uri = Uri(
       scheme: 'mailto',
       path: 'kazibwe@pactorg.org',
-      queryParameters: {
-        'subject': 'PACT Mobile Bug Report',
-        'body': body,
-      },
+      queryParameters: {'subject': 'PACT Mobile Bug Report', 'body': body},
     );
 
     if (await canLaunchUrl(uri)) {
@@ -519,9 +556,7 @@ ${bugReport.reportedAt.toIso8601String()}
     final uri = Uri(
       scheme: 'mailto',
       path: email,
-      queryParameters: {
-        'subject': 'PACT Mobile Support Request',
-      },
+      queryParameters: {'subject': 'PACT Mobile Support Request'},
     );
 
     if (await canLaunchUrl(uri)) {

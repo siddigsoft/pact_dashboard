@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'dart:ui' as ui;
-import 'dart:typed_data';
 import 'dart:convert';
 import '../theme/app_colors.dart';
 
@@ -76,7 +75,8 @@ class _SignaturePadWidgetState extends State<SignaturePadWidget> {
     if (!_hasSignature || _strokes.isEmpty) return;
 
     try {
-      final RenderBox? renderBox = _canvasKey.currentContext?.findRenderObject() as RenderBox?;
+      final RenderBox? renderBox =
+          _canvasKey.currentContext?.findRenderObject() as RenderBox?;
       if (renderBox == null) return;
 
       final size = renderBox.size;
@@ -108,12 +108,18 @@ class _SignaturePadWidgetState extends State<SignaturePadWidget> {
       }
 
       final picture = recorder.endRecording();
-      final img = await picture.toImage(size.width.toInt(), size.height.toInt());
+      final img = await picture.toImage(
+        size.width.toInt(),
+        size.height.toInt(),
+      );
       final byteData = await img.toByteData(format: ui.ImageByteFormat.png);
-      
+
       if (byteData != null) {
         final base64String = base64Encode(byteData.buffer.asUint8List());
-        widget.onSignatureCapture?.call('data:image/png;base64,$base64String', _strokes.length);
+        widget.onSignatureCapture?.call(
+          'data:image/png;base64,$base64String',
+          _strokes.length,
+        );
       }
     } catch (e) {
       debugPrint('Error capturing signature: $e');
@@ -124,7 +130,11 @@ class _SignaturePadWidgetState extends State<SignaturePadWidget> {
   Widget build(BuildContext context) {
     final labels = widget.isArabic
         ? {'clear': 'مسح', 'confirm': 'تأكيد التوقيع', 'strokes': 'ضربات'}
-        : {'clear': 'Clear', 'confirm': 'Confirm Signature', 'strokes': 'strokes'};
+        : {
+            'clear': 'Clear',
+            'confirm': 'Confirm Signature',
+            'strokes': 'strokes',
+          };
 
     return Card(
       elevation: 2,
@@ -154,7 +164,10 @@ class _SignaturePadWidgetState extends State<SignaturePadWidget> {
                 ),
                 if (_hasSignature && _strokes.isNotEmpty)
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
                     decoration: BoxDecoration(
                       color: AppColors.primaryBlue.withOpacity(0.1),
                       borderRadius: BorderRadius.circular(12),
@@ -162,7 +175,11 @@ class _SignaturePadWidgetState extends State<SignaturePadWidget> {
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        const Icon(Icons.check, size: 14, color: AppColors.primaryBlue),
+                        const Icon(
+                          Icons.check,
+                          size: 14,
+                          color: AppColors.primaryBlue,
+                        ),
                         const SizedBox(width: 4),
                         Text(
                           '${_strokes.length} ${labels['strokes']}',
@@ -179,10 +196,7 @@ class _SignaturePadWidgetState extends State<SignaturePadWidget> {
             const SizedBox(height: 8),
             Text(
               widget.placeholder,
-              style: TextStyle(
-                fontSize: 13,
-                color: Colors.grey[600],
-              ),
+              style: TextStyle(fontSize: 13, color: Colors.grey[600]),
             ),
             const SizedBox(height: 12),
 
@@ -195,7 +209,7 @@ class _SignaturePadWidgetState extends State<SignaturePadWidget> {
                 color: widget.backgroundColor,
                 borderRadius: BorderRadius.circular(8),
                 border: Border.all(
-                  color: _hasSignature 
+                  color: _hasSignature
                       ? AppColors.primaryBlue.withOpacity(0.5)
                       : Colors.grey.withOpacity(0.3),
                   width: 2,
@@ -206,7 +220,8 @@ class _SignaturePadWidgetState extends State<SignaturePadWidget> {
                 borderRadius: BorderRadius.circular(6),
                 child: GestureDetector(
                   onPanStart: (details) => _startStroke(details.localPosition),
-                  onPanUpdate: (details) => _continueStroke(details.localPosition),
+                  onPanUpdate: (details) =>
+                      _continueStroke(details.localPosition),
                   onPanEnd: (_) => _endStroke(),
                   child: CustomPaint(
                     painter: _SignaturePainter(
@@ -310,6 +325,7 @@ class _SignaturePainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _SignaturePainter oldDelegate) {
-    return strokes != oldDelegate.strokes || currentStroke != oldDelegate.currentStroke;
+    return strokes != oldDelegate.strokes ||
+        currentStroke != oldDelegate.currentStroke;
   }
 }

@@ -10,17 +10,19 @@ enum CornerPosition { topLeft, topRight, bottomLeft, bottomRight }
 
 class ProfessionalMovableToggle extends ConsumerStatefulWidget {
   final bool showByDefault;
-  
+
   const ProfessionalMovableToggle({
     super.key,
     this.showByDefault = true,
   });
 
   @override
-  ConsumerState<ProfessionalMovableToggle> createState() => _ProfessionalMovableToggleState();
+  ConsumerState<ProfessionalMovableToggle> createState() =>
+      _ProfessionalMovableToggleState();
 }
 
-class _ProfessionalMovableToggleState extends ConsumerState<ProfessionalMovableToggle> 
+class _ProfessionalMovableToggleState
+    extends ConsumerState<ProfessionalMovableToggle>
     with SingleTickerProviderStateMixin {
   bool _isVisible = true;
   bool _isExpanded = true;
@@ -29,18 +31,18 @@ class _ProfessionalMovableToggleState extends ConsumerState<ProfessionalMovableT
   bool _isDragging = false;
   CornerPosition _cornerPosition = CornerPosition.bottomLeft;
   UserAvailability? _localAvailabilityOverride;
-  
+
   late AnimationController _animationController;
   late Animation<double> _scaleAnimation;
-  
+
   Offset _dragOffset = Offset.zero;
-  
+
   static const String _positionKey = 'professional_toggle_corner';
   static const String _visibilityKey = 'professional_toggle_visible';
   static const String _expandedKey = 'professional_toggle_expanded';
   static const String _pendingAvailabilityKey = 'pending_availability_change';
   static const String _localAvailabilityKey = 'local_availability_status';
-  
+
   @override
   void initState() {
     super.initState();
@@ -57,26 +59,26 @@ class _ProfessionalMovableToggleState extends ConsumerState<ProfessionalMovableT
     Connectivity().onConnectivityChanged.listen(_onConnectivityChanged);
     _animationController.forward();
   }
-  
+
   @override
   void dispose() {
     _animationController.dispose();
     super.dispose();
   }
-  
+
   void _onConnectivityChanged(List<ConnectivityResult> results) {
     if (!results.contains(ConnectivityResult.none)) {
       _syncPendingAvailabilityChanges();
     }
   }
-  
+
   Future<void> _loadPreferences() async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final cornerIndex = prefs.getInt(_positionKey) ?? 2;
       final visible = prefs.getBool(_visibilityKey) ?? widget.showByDefault;
       final expanded = prefs.getBool(_expandedKey) ?? true;
-      
+
       if (mounted) {
         setState(() {
           _cornerPosition = CornerPosition.values[cornerIndex.clamp(0, 3)];
@@ -88,7 +90,7 @@ class _ProfessionalMovableToggleState extends ConsumerState<ProfessionalMovableT
       debugPrint('[ProfessionalMovableToggle] Error loading preferences: $e');
     }
   }
-  
+
   Future<void> _savePreferences() async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -99,7 +101,7 @@ class _ProfessionalMovableToggleState extends ConsumerState<ProfessionalMovableT
       debugPrint('[ProfessionalMovableToggle] Error saving preferences: $e');
     }
   }
-  
+
   Future<void> _loadLocalAvailability() async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -110,14 +112,15 @@ class _ProfessionalMovableToggleState extends ConsumerState<ProfessionalMovableT
         });
       }
     } catch (e) {
-      debugPrint('[ProfessionalMovableToggle] Error loading local availability: $e');
+      debugPrint(
+          '[ProfessionalMovableToggle] Error loading local availability: $e');
     }
   }
 
   Future<void> _syncPendingAvailabilityChanges() async {
     if (_isSyncing) return;
     _isSyncing = true;
-    
+
     try {
       final connectivityResult = await Connectivity().checkConnectivity();
       final isOnline = !connectivityResult.contains(ConnectivityResult.none);
@@ -131,21 +134,18 @@ class _ProfessionalMovableToggleState extends ConsumerState<ProfessionalMovableT
       if (profile == null) return;
 
       final supabase = Supabase.instance.client;
-      await supabase
-          .from('profiles')
-          .update({
-            'availability': pendingChange,
-            'updated_at': DateTime.now().toIso8601String(),
-          })
-          .eq('id', profile.id);
+      await supabase.from('profiles').update({
+        'availability': pendingChange,
+        'updated_at': DateTime.now().toIso8601String(),
+      }).eq('id', profile.id);
 
       await prefs.remove(_pendingAvailabilityKey);
       await prefs.remove(_localAvailabilityKey);
-      
+
       if (mounted) {
         setState(() => _localAvailabilityOverride = null);
       }
-      
+
       ref.invalidate(currentUserProfileProvider);
     } catch (e) {
       debugPrint('[ProfessionalMovableToggle] Error syncing: $e');
@@ -162,7 +162,7 @@ class _ProfessionalMovableToggleState extends ConsumerState<ProfessionalMovableT
       final profile = ref.read(currentUserProfileProvider);
       if (profile == null) throw Exception('User profile not found');
 
-      final currentAvailability = _localAvailabilityOverride ?? 
+      final currentAvailability = _localAvailabilityOverride ??
           UserAvailability.fromString(profile.availability.name);
       final newAvailability = currentAvailability == UserAvailability.online
           ? UserAvailability.offline
@@ -186,29 +186,32 @@ class _ProfessionalMovableToggleState extends ConsumerState<ProfessionalMovableT
         final prefs = await SharedPreferences.getInstance();
         await prefs.remove(_pendingAvailabilityKey);
         await prefs.remove(_localAvailabilityKey);
-        
+
         if (mounted) setState(() => _localAvailabilityOverride = null);
         ref.invalidate(currentUserProfileProvider);
       } else {
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString(_pendingAvailabilityKey, newAvailability.value);
         await prefs.setString(_localAvailabilityKey, newAvailability.value);
-        
-        if (mounted) setState(() => _localAvailabilityOverride = newAvailability);
+
+        if (mounted) {
+          setState(() => _localAvailabilityOverride = newAvailability);
+        }
       }
 
       if (mounted) {
         final message = newAvailability == UserAvailability.online
             ? 'You are now Online'
             : 'You are now Offline';
-        
+
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Row(
               children: [
                 Icon(
-                  newAvailability == UserAvailability.online 
-                      ? Icons.wifi : Icons.wifi_off,
+                  newAvailability == UserAvailability.online
+                      ? Icons.wifi
+                      : Icons.wifi_off,
                   color: Colors.white,
                   size: 18,
                 ),
@@ -220,7 +223,8 @@ class _ProfessionalMovableToggleState extends ConsumerState<ProfessionalMovableT
                 ? const Color(0xFF10B981)
                 : const Color(0xFF6B7280),
             behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
             margin: const EdgeInsets.all(16),
           ),
         );
@@ -238,7 +242,7 @@ class _ProfessionalMovableToggleState extends ConsumerState<ProfessionalMovableT
       if (mounted) setState(() => _isLoading = false);
     }
   }
-  
+
   CornerPosition _findNearestCorner(Offset position, Size screenSize) {
     final corners = {
       CornerPosition.topLeft: const Offset(0, 0),
@@ -246,10 +250,10 @@ class _ProfessionalMovableToggleState extends ConsumerState<ProfessionalMovableT
       CornerPosition.bottomLeft: Offset(0, screenSize.height),
       CornerPosition.bottomRight: Offset(screenSize.width, screenSize.height),
     };
-    
+
     CornerPosition nearest = CornerPosition.bottomLeft;
     double minDistance = double.infinity;
-    
+
     corners.forEach((corner, offset) {
       final distance = (position - offset).distance;
       if (distance < minDistance) {
@@ -257,22 +261,25 @@ class _ProfessionalMovableToggleState extends ConsumerState<ProfessionalMovableT
         nearest = corner;
       }
     });
-    
+
     return nearest;
   }
-  
-  Offset _getCornerOffset(CornerPosition corner, Size screenSize, Size widgetSize) {
+
+  Offset _getCornerOffset(
+      CornerPosition corner, Size screenSize, Size widgetSize) {
     const padding = 16.0;
     const bottomNavHeight = 80.0;
     const topSafeArea = 100.0;
-    
+
     switch (corner) {
       case CornerPosition.topLeft:
-        return Offset(padding, topSafeArea);
+        return const Offset(padding, topSafeArea);
       case CornerPosition.topRight:
-        return Offset(screenSize.width - widgetSize.width - padding, topSafeArea);
+        return Offset(
+            screenSize.width - widgetSize.width - padding, topSafeArea);
       case CornerPosition.bottomLeft:
-        return Offset(padding, screenSize.height - widgetSize.height - bottomNavHeight);
+        return Offset(
+            padding, screenSize.height - widgetSize.height - bottomNavHeight);
       case CornerPosition.bottomRight:
         return Offset(
           screenSize.width - widgetSize.width - padding,
@@ -280,18 +287,20 @@ class _ProfessionalMovableToggleState extends ConsumerState<ProfessionalMovableT
         );
     }
   }
-  
+
   void _hideToggle() {
     setState(() => _isVisible = false);
     _savePreferences();
-    
+
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: const Row(
           children: [
             Icon(Icons.visibility_off, color: Colors.white, size: 18),
             SizedBox(width: 8),
-            Expanded(child: Text('Status toggle hidden. Tap the indicator to show again.')),
+            Expanded(
+                child: Text(
+                    'Status toggle hidden. Tap the indicator to show again.')),
           ],
         ),
         backgroundColor: const Color(0xFF374151),
@@ -310,18 +319,18 @@ class _ProfessionalMovableToggleState extends ConsumerState<ProfessionalMovableT
       ),
     );
   }
-  
+
   void _showToggle() {
     setState(() => _isVisible = true);
     _savePreferences();
     _animationController.reset();
     _animationController.forward();
   }
-  
+
   void _toggleExpanded() {
     setState(() => _isExpanded = !_isExpanded);
     _savePreferences();
-    
+
     if (!_isExpanded) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -329,25 +338,27 @@ class _ProfessionalMovableToggleState extends ConsumerState<ProfessionalMovableT
             children: [
               Icon(Icons.touch_app, color: Colors.white, size: 18),
               SizedBox(width: 8),
-              Expanded(child: Text('Double-tap to expand, long-press for options')),
+              Expanded(
+                  child: Text('Double-tap to expand, long-press for options')),
             ],
           ),
           backgroundColor: const Color(0xFF374151),
           behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
           margin: const EdgeInsets.all(16),
           duration: const Duration(seconds: 3),
         ),
       );
     }
   }
-  
+
   void _showMinimizedMenu(BuildContext context, Color primaryColor) {
     final RenderBox? box = context.findRenderObject() as RenderBox?;
     if (box == null) return;
-    
+
     final Offset position = box.localToGlobal(Offset.zero);
-    
+
     showMenu<String>(
       context: context,
       position: RelativeRect.fromLTRB(
@@ -395,14 +406,17 @@ class _ProfessionalMovableToggleState extends ConsumerState<ProfessionalMovableT
           value: 'move_tl',
           child: Row(
             children: [
-              Icon(Icons.north_west, size: 18, 
-                color: _cornerPosition == CornerPosition.topLeft 
-                    ? primaryColor : Colors.grey[700]),
+              Icon(Icons.north_west,
+                  size: 18,
+                  color: _cornerPosition == CornerPosition.topLeft
+                      ? primaryColor
+                      : Colors.grey[700]),
               const SizedBox(width: 12),
               Text('Top Left',
-                style: TextStyle(
-                  color: _cornerPosition == CornerPosition.topLeft 
-                      ? primaryColor : null)),
+                  style: TextStyle(
+                      color: _cornerPosition == CornerPosition.topLeft
+                          ? primaryColor
+                          : null)),
             ],
           ),
         ),
@@ -410,14 +424,17 @@ class _ProfessionalMovableToggleState extends ConsumerState<ProfessionalMovableT
           value: 'move_tr',
           child: Row(
             children: [
-              Icon(Icons.north_east, size: 18,
-                color: _cornerPosition == CornerPosition.topRight 
-                    ? primaryColor : Colors.grey[700]),
+              Icon(Icons.north_east,
+                  size: 18,
+                  color: _cornerPosition == CornerPosition.topRight
+                      ? primaryColor
+                      : Colors.grey[700]),
               const SizedBox(width: 12),
               Text('Top Right',
-                style: TextStyle(
-                  color: _cornerPosition == CornerPosition.topRight 
-                      ? primaryColor : null)),
+                  style: TextStyle(
+                      color: _cornerPosition == CornerPosition.topRight
+                          ? primaryColor
+                          : null)),
             ],
           ),
         ),
@@ -425,14 +442,17 @@ class _ProfessionalMovableToggleState extends ConsumerState<ProfessionalMovableT
           value: 'move_bl',
           child: Row(
             children: [
-              Icon(Icons.south_west, size: 18,
-                color: _cornerPosition == CornerPosition.bottomLeft 
-                    ? primaryColor : Colors.grey[700]),
+              Icon(Icons.south_west,
+                  size: 18,
+                  color: _cornerPosition == CornerPosition.bottomLeft
+                      ? primaryColor
+                      : Colors.grey[700]),
               const SizedBox(width: 12),
               Text('Bottom Left',
-                style: TextStyle(
-                  color: _cornerPosition == CornerPosition.bottomLeft 
-                      ? primaryColor : null)),
+                  style: TextStyle(
+                      color: _cornerPosition == CornerPosition.bottomLeft
+                          ? primaryColor
+                          : null)),
             ],
           ),
         ),
@@ -440,14 +460,17 @@ class _ProfessionalMovableToggleState extends ConsumerState<ProfessionalMovableT
           value: 'move_br',
           child: Row(
             children: [
-              Icon(Icons.south_east, size: 18,
-                color: _cornerPosition == CornerPosition.bottomRight 
-                    ? primaryColor : Colors.grey[700]),
+              Icon(Icons.south_east,
+                  size: 18,
+                  color: _cornerPosition == CornerPosition.bottomRight
+                      ? primaryColor
+                      : Colors.grey[700]),
               const SizedBox(width: 12),
               Text('Bottom Right',
-                style: TextStyle(
-                  color: _cornerPosition == CornerPosition.bottomRight 
-                      ? primaryColor : null)),
+                  style: TextStyle(
+                      color: _cornerPosition == CornerPosition.bottomRight
+                          ? primaryColor
+                          : null)),
             ],
           ),
         ),
@@ -484,7 +507,7 @@ class _ProfessionalMovableToggleState extends ConsumerState<ProfessionalMovableT
   @override
   Widget build(BuildContext context) {
     final profile = ref.watch(currentUserProfileProvider);
-    
+
     if (profile != null) {
       final role = (profile.role ?? '').toLowerCase();
       final isDataCollectorOrCoordinator = [
@@ -493,40 +516,49 @@ class _ProfessionalMovableToggleState extends ConsumerState<ProfessionalMovableT
         'coordinator',
         'enumerator',
       ].contains(role);
-      
+
       if (!isDataCollectorOrCoordinator) return const SizedBox.shrink();
     }
-    
-    final availability = _localAvailabilityOverride ?? 
+
+    final availability = _localAvailabilityOverride ??
         (profile != null
             ? UserAvailability.fromString(profile.availability.name)
             : UserAvailability.offline);
     final isOnline = availability == UserAvailability.online;
-    
+
     return LayoutBuilder(
       builder: (context, constraints) {
         final screenSize = Size(constraints.maxWidth, constraints.maxHeight);
-        final widgetSize = _isExpanded ? const Size(160, 50) : const Size(50, 50);
-        
-        final baseOffset = _getCornerOffset(_cornerPosition, screenSize, widgetSize);
-        final currentOffset = _isDragging 
-            ? baseOffset + _dragOffset 
-            : baseOffset;
-        
+        final widgetSize =
+            _isExpanded ? const Size(160, 50) : const Size(50, 50);
+
+        final baseOffset =
+            _getCornerOffset(_cornerPosition, screenSize, widgetSize);
+        final currentOffset =
+            _isDragging ? baseOffset + _dragOffset : baseOffset;
+
         return Stack(
           children: [
             if (!_isVisible)
               AnimatedPositioned(
                 duration: const Duration(milliseconds: 300),
                 curve: Curves.easeOutCubic,
-                left: _cornerPosition == CornerPosition.topLeft || 
-                      _cornerPosition == CornerPosition.bottomLeft ? 8 : null,
-                right: _cornerPosition == CornerPosition.topRight || 
-                       _cornerPosition == CornerPosition.bottomRight ? 8 : null,
-                top: _cornerPosition == CornerPosition.topLeft || 
-                     _cornerPosition == CornerPosition.topRight ? 100 : null,
-                bottom: _cornerPosition == CornerPosition.bottomLeft || 
-                        _cornerPosition == CornerPosition.bottomRight ? 90 : null,
+                left: _cornerPosition == CornerPosition.topLeft ||
+                        _cornerPosition == CornerPosition.bottomLeft
+                    ? 8
+                    : null,
+                right: _cornerPosition == CornerPosition.topRight ||
+                        _cornerPosition == CornerPosition.bottomRight
+                    ? 8
+                    : null,
+                top: _cornerPosition == CornerPosition.topLeft ||
+                        _cornerPosition == CornerPosition.topRight
+                    ? 100
+                    : null,
+                bottom: _cornerPosition == CornerPosition.bottomLeft ||
+                        _cornerPosition == CornerPosition.bottomRight
+                    ? 90
+                    : null,
                 child: GestureDetector(
                   onTap: _showToggle,
                   child: Container(
@@ -534,12 +566,14 @@ class _ProfessionalMovableToggleState extends ConsumerState<ProfessionalMovableT
                     height: 28,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
-                      color: isOnline 
+                      color: isOnline
                           ? const Color(0xFF10B981).withOpacity(0.9)
                           : const Color(0xFF6B7280).withOpacity(0.9),
                       boxShadow: [
                         BoxShadow(
-                          color: (isOnline ? const Color(0xFF10B981) : const Color(0xFF6B7280))
+                          color: (isOnline
+                                  ? const Color(0xFF10B981)
+                                  : const Color(0xFF6B7280))
                               .withOpacity(0.4),
                           blurRadius: 8,
                           spreadRadius: 2,
@@ -561,8 +595,8 @@ class _ProfessionalMovableToggleState extends ConsumerState<ProfessionalMovableT
               ),
             if (_isVisible)
               AnimatedPositioned(
-                duration: _isDragging 
-                    ? Duration.zero 
+                duration: _isDragging
+                    ? Duration.zero
                     : const Duration(milliseconds: 300),
                 curve: Curves.easeOutCubic,
                 left: currentOffset.dx,
@@ -582,10 +616,11 @@ class _ProfessionalMovableToggleState extends ConsumerState<ProfessionalMovableT
                     onPanEnd: (_) {
                       final finalPosition = baseOffset + _dragOffset;
                       final newCorner = _findNearestCorner(
-                        finalPosition + Offset(widgetSize.width / 2, widgetSize.height / 2),
+                        finalPosition +
+                            Offset(widgetSize.width / 2, widgetSize.height / 2),
                         screenSize,
                       );
-                      
+
                       setState(() {
                         _isDragging = false;
                         _dragOffset = Offset.zero;
@@ -602,21 +637,20 @@ class _ProfessionalMovableToggleState extends ConsumerState<ProfessionalMovableT
       },
     );
   }
-  
+
   Widget _buildToggleWidget(bool isOnline) {
-    final primaryColor = isOnline 
-        ? const Color(0xFF10B981) 
-        : const Color(0xFF6B7280);
+    final primaryColor =
+        isOnline ? const Color(0xFF10B981) : const Color(0xFF6B7280);
     final backgroundColor = isOnline
         ? const Color(0xFF10B981).withOpacity(0.15)
         : const Color(0xFF6B7280).withOpacity(0.15);
-    
+
     return AnimatedContainer(
       duration: const Duration(milliseconds: 200),
       curve: Curves.easeOutCubic,
-      height: 50,
+      height: 52,
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(25),
+        borderRadius: BorderRadius.circular(26),
         color: Colors.white,
         border: Border.all(
           color: primaryColor.withOpacity(0.3),
@@ -638,7 +672,7 @@ class _ProfessionalMovableToggleState extends ConsumerState<ProfessionalMovableT
         ],
       ),
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(25),
+        borderRadius: BorderRadius.circular(26),
         child: Material(
           color: Colors.transparent,
           child: Row(
@@ -647,7 +681,9 @@ class _ProfessionalMovableToggleState extends ConsumerState<ProfessionalMovableT
               GestureDetector(
                 onTap: _isLoading ? null : _toggleAvailability,
                 onDoubleTap: !_isExpanded ? _toggleExpanded : null,
-                onLongPress: !_isExpanded ? () => _showMinimizedMenu(context, primaryColor) : null,
+                onLongPress: !_isExpanded
+                    ? () => _showMinimizedMenu(context, primaryColor)
+                    : null,
                 child: Container(
                   padding: EdgeInsets.symmetric(
                     horizontal: _isExpanded ? 12 : 10,
@@ -655,9 +691,10 @@ class _ProfessionalMovableToggleState extends ConsumerState<ProfessionalMovableT
                   ),
                   decoration: BoxDecoration(
                     color: backgroundColor,
-                    borderRadius: _isExpanded 
-                        ? const BorderRadius.horizontal(left: Radius.circular(25))
-                        : BorderRadius.circular(25),
+                    borderRadius: _isExpanded
+                        ? const BorderRadius.horizontal(
+                            left: Radius.circular(26))
+                        : BorderRadius.circular(26),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
@@ -684,7 +721,8 @@ class _ProfessionalMovableToggleState extends ConsumerState<ProfessionalMovableT
                                   height: 16,
                                   child: CircularProgressIndicator(
                                     strokeWidth: 2,
-                                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                    valueColor: AlwaysStoppedAnimation<Color>(
+                                        Colors.white),
                                   ),
                                 )
                               : Icon(
@@ -710,7 +748,9 @@ class _ProfessionalMovableToggleState extends ConsumerState<ProfessionalMovableT
                               ),
                             ),
                             Text(
-                              isOnline ? 'Tap to go offline' : 'Tap to go online',
+                              isOnline
+                                  ? 'Tap to go offline'
+                                  : 'Tap to go online',
                               style: TextStyle(
                                 fontSize: 9,
                                 color: Colors.grey[500],
@@ -750,19 +790,23 @@ class _ProfessionalMovableToggleState extends ConsumerState<ProfessionalMovableT
                         _hideToggle();
                         break;
                       case 'move_tl':
-                        setState(() => _cornerPosition = CornerPosition.topLeft);
+                        setState(
+                            () => _cornerPosition = CornerPosition.topLeft);
                         _savePreferences();
                         break;
                       case 'move_tr':
-                        setState(() => _cornerPosition = CornerPosition.topRight);
+                        setState(
+                            () => _cornerPosition = CornerPosition.topRight);
                         _savePreferences();
                         break;
                       case 'move_bl':
-                        setState(() => _cornerPosition = CornerPosition.bottomLeft);
+                        setState(
+                            () => _cornerPosition = CornerPosition.bottomLeft);
                         _savePreferences();
                         break;
                       case 'move_br':
-                        setState(() => _cornerPosition = CornerPosition.bottomRight);
+                        setState(
+                            () => _cornerPosition = CornerPosition.bottomRight);
                         _savePreferences();
                         break;
                     }
@@ -772,7 +816,8 @@ class _ProfessionalMovableToggleState extends ConsumerState<ProfessionalMovableT
                       value: 'minimize',
                       child: Row(
                         children: [
-                          Icon(Icons.minimize, size: 18, color: Colors.grey[700]),
+                          Icon(Icons.minimize,
+                              size: 18, color: Colors.grey[700]),
                           const SizedBox(width: 12),
                           const Text('Minimize'),
                         ],
@@ -782,7 +827,8 @@ class _ProfessionalMovableToggleState extends ConsumerState<ProfessionalMovableT
                       value: 'hide',
                       child: Row(
                         children: [
-                          Icon(Icons.visibility_off, size: 18, color: Colors.grey[700]),
+                          Icon(Icons.visibility_off,
+                              size: 18, color: Colors.grey[700]),
                           const SizedBox(width: 12),
                           const Text('Hide'),
                         ],
@@ -808,16 +854,16 @@ class _ProfessionalMovableToggleState extends ConsumerState<ProfessionalMovableT
                           Icon(
                             Icons.north_west,
                             size: 18,
-                            color: _cornerPosition == CornerPosition.topLeft 
-                                ? const Color(0xFF10B981) 
+                            color: _cornerPosition == CornerPosition.topLeft
+                                ? const Color(0xFF10B981)
                                 : Colors.grey[700],
                           ),
                           const SizedBox(width: 12),
                           Text(
                             'Top Left',
                             style: TextStyle(
-                              color: _cornerPosition == CornerPosition.topLeft 
-                                  ? const Color(0xFF10B981) 
+                              color: _cornerPosition == CornerPosition.topLeft
+                                  ? const Color(0xFF10B981)
                                   : null,
                             ),
                           ),
@@ -831,16 +877,16 @@ class _ProfessionalMovableToggleState extends ConsumerState<ProfessionalMovableT
                           Icon(
                             Icons.north_east,
                             size: 18,
-                            color: _cornerPosition == CornerPosition.topRight 
-                                ? const Color(0xFF10B981) 
+                            color: _cornerPosition == CornerPosition.topRight
+                                ? const Color(0xFF10B981)
                                 : Colors.grey[700],
                           ),
                           const SizedBox(width: 12),
                           Text(
                             'Top Right',
                             style: TextStyle(
-                              color: _cornerPosition == CornerPosition.topRight 
-                                  ? const Color(0xFF10B981) 
+                              color: _cornerPosition == CornerPosition.topRight
+                                  ? const Color(0xFF10B981)
                                   : null,
                             ),
                           ),
@@ -854,17 +900,18 @@ class _ProfessionalMovableToggleState extends ConsumerState<ProfessionalMovableT
                           Icon(
                             Icons.south_west,
                             size: 18,
-                            color: _cornerPosition == CornerPosition.bottomLeft 
-                                ? const Color(0xFF10B981) 
+                            color: _cornerPosition == CornerPosition.bottomLeft
+                                ? const Color(0xFF10B981)
                                 : Colors.grey[700],
                           ),
                           const SizedBox(width: 12),
                           Text(
                             'Bottom Left',
                             style: TextStyle(
-                              color: _cornerPosition == CornerPosition.bottomLeft 
-                                  ? const Color(0xFF10B981) 
-                                  : null,
+                              color:
+                                  _cornerPosition == CornerPosition.bottomLeft
+                                      ? const Color(0xFF10B981)
+                                      : null,
                             ),
                           ),
                         ],
@@ -877,17 +924,18 @@ class _ProfessionalMovableToggleState extends ConsumerState<ProfessionalMovableT
                           Icon(
                             Icons.south_east,
                             size: 18,
-                            color: _cornerPosition == CornerPosition.bottomRight 
-                                ? const Color(0xFF10B981) 
+                            color: _cornerPosition == CornerPosition.bottomRight
+                                ? const Color(0xFF10B981)
                                 : Colors.grey[700],
                           ),
                           const SizedBox(width: 12),
                           Text(
                             'Bottom Right',
                             style: TextStyle(
-                              color: _cornerPosition == CornerPosition.bottomRight 
-                                  ? const Color(0xFF10B981) 
-                                  : null,
+                              color:
+                                  _cornerPosition == CornerPosition.bottomRight
+                                      ? const Color(0xFF10B981)
+                                      : null,
                             ),
                           ),
                         ],

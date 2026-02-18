@@ -188,25 +188,25 @@ class _TransactionSearchWidgetState
                     vertical: 12,
                   ),
                 ),
-                items: [
-                  const DropdownMenuItem(value: null, child: Text('All Types')),
-                  const DropdownMenuItem(
+                items: const [
+                  DropdownMenuItem(value: null, child: Text('All Types')),
+                  DropdownMenuItem(
                     value: TRANSACTION_TYPE_EARNING,
                     child: Text('Earnings'),
                   ),
-                  const DropdownMenuItem(
+                  DropdownMenuItem(
                     value: TRANSACTION_TYPE_SITE_VISIT_FEE,
                     child: Text('Site Visit Fees'),
                   ),
-                  const DropdownMenuItem(
+                  DropdownMenuItem(
                     value: TRANSACTION_TYPE_WITHDRAWAL,
                     child: Text('Withdrawals'),
                   ),
-                  const DropdownMenuItem(
+                  DropdownMenuItem(
                     value: TRANSACTION_TYPE_BONUS,
                     child: Text('Bonuses'),
                   ),
-                  const DropdownMenuItem(
+                  DropdownMenuItem(
                     value: TRANSACTION_TYPE_PENALTY,
                     child: Text('Penalties'),
                   ),

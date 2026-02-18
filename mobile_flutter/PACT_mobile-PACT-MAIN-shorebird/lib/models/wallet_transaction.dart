@@ -11,7 +11,7 @@ double _parseDouble(dynamic value) {
 class WalletException implements Exception {
   final String message;
   WalletException(this.message);
-  
+
   @override
   String toString() => 'WalletException: $message';
 }
@@ -19,7 +19,7 @@ class WalletException implements Exception {
 class WithdrawalException implements Exception {
   final String message;
   WithdrawalException(this.message);
-  
+
   @override
   String toString() => 'WithdrawalException: $message';
 }
@@ -27,7 +27,7 @@ class WithdrawalException implements Exception {
 class InsufficientBalanceException implements Exception {
   final String message;
   InsufficientBalanceException(this.message);
-  
+
   @override
   String toString() => 'InsufficientBalanceException: $message';
 }

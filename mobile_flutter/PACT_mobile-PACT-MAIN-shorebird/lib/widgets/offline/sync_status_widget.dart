@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:connectivity_plus/connectivity_plus.dart';
-import '../providers/offline_provider.dart';
-import '../services/offline/models.dart';
+import '../../providers/offline_provider.dart';
 
 /// Displays current sync status and provides quick sync button
 class SyncStatusBar extends ConsumerWidget {
@@ -81,15 +79,15 @@ class SyncStatusBar extends ConsumerWidget {
         return Container(
           color: Colors.blue[50],
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          child: Row(
+          child: const Row(
             children: [
               SizedBox(
                 width: 20,
                 height: 20,
                 child: CircularProgressIndicator(strokeWidth: 2),
               ),
-              const SizedBox(width: 12),
-              const Text('Checking sync status...'),
+              SizedBox(width: 12),
+              Text('Checking sync status...'),
             ],
           ),
         );
@@ -326,14 +324,14 @@ class OfflineBanner extends ConsumerWidget {
             color: Colors.orange[400],
             border: Border(bottom: BorderSide(color: Colors.orange[600]!)),
           ),
-          child: Row(
+          child: const Row(
             children: [
               Icon(Icons.cloud_off, color: Colors.white, size: 20),
-              const SizedBox(width: 12),
+              SizedBox(width: 12),
               Expanded(
                 child: Text(
                   'You are offline. Your changes will sync automatically.',
-                  style: const TextStyle(
+                  style: TextStyle(
                     color: Colors.white,
                     fontWeight: FontWeight.w500,
                   ),

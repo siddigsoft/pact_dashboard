@@ -19,6 +19,11 @@ Future<void> exportTransactionsToCSV(
   Wallet wallet,
 ) async {
   try {
+    // Check for empty list
+    if (transactions.isEmpty) {
+      throw Exception('No transactions to export');
+    }
+
     // Prepare headers
     final headers = [
       'ID',
@@ -68,6 +73,11 @@ Future<void> exportTransactionsToPDF(
   String currency,
 ) async {
   try {
+    // Check for empty list
+    if (transactions.isEmpty) {
+      throw Exception('No transactions to export');
+    }
+
     final pdf = pw.Document();
 
     // Calculate totals
@@ -150,7 +160,7 @@ Future<void> exportTransactionsToPDF(
               fontSize: 10,
               fontWeight: pw.FontWeight.bold,
             ),
-            rowDecoration: pw.BoxDecoration(
+            rowDecoration: const pw.BoxDecoration(
               border: pw.Border(
                 bottom: pw.BorderSide(color: PdfColors.grey300),
               ),
@@ -177,6 +187,11 @@ Future<void> exportWithdrawalsToCSV(
   String? statusFilter,
 ) async {
   try {
+    // Check for empty list
+    if (withdrawals.isEmpty) {
+      throw Exception('No withdrawals to export');
+    }
+
     // Prepare headers
     final headers = [
       'ID',
@@ -186,7 +201,7 @@ Future<void> exportWithdrawalsToCSV(
       'Payment Method',
       'Reason',
       'Requested Date',
-      'Processed Date',
+      'Updated Date', // Fix: Complete the string
     ];
 
     // Prepare rows
@@ -200,8 +215,9 @@ Future<void> exportWithdrawalsToCSV(
             w.paymentMethod ?? '-',
             w.requestReason ?? '-',
             DateFormat('MMM dd, yyyy HH:mm').format(w.createdAt),
-            w.processedAt != null
-                ? DateFormat('MMM dd, yyyy HH:mm').format(w.processedAt!)
+            w.updatedAt !=
+                    null // Fix: Complete the string
+                ? DateFormat('MMM dd, yyyy HH:mm').format(w.updatedAt!)
                 : '-',
           ],
         )
@@ -227,12 +243,20 @@ Future<void> exportWithdrawalsToPDF(
   String? statusFilter,
 ) async {
   try {
+    // Check for empty list
+    if (withdrawals.isEmpty) {
+      throw Exception('No withdrawals to export');
+    }
+
     final pdf = pw.Document();
 
     // Calculate totals by status
     double approvedTotal = 0;
     double pendingTotal = 0;
     double rejectedTotal = 0;
+
+    // Use first withdrawal's currency
+    final currency = withdrawals.first.currency;
 
     for (var w in withdrawals) {
       if (w.status == WITHDRAWAL_STATUS_APPROVED) {
@@ -277,15 +301,15 @@ Future<void> exportWithdrawalsToPDF(
             children: [
               _buildSummaryBox(
                 'Approved',
-                formatCurrency(approvedTotal, DEFAULT_CURRENCY),
+                formatCurrency(approvedTotal, currency), // Use actual currency
               ),
               _buildSummaryBox(
                 'Pending',
-                formatCurrency(pendingTotal, DEFAULT_CURRENCY),
+                formatCurrency(pendingTotal, currency), // Use actual currency
               ),
               _buildSummaryBox(
                 'Rejected',
-                formatCurrency(rejectedTotal, DEFAULT_CURRENCY),
+                formatCurrency(rejectedTotal, currency), // Use actual currency
               ),
             ],
           ),
@@ -310,7 +334,7 @@ Future<void> exportWithdrawalsToPDF(
               fontSize: 10,
               fontWeight: pw.FontWeight.bold,
             ),
-            rowDecoration: pw.BoxDecoration(
+            rowDecoration: const pw.BoxDecoration(
               border: pw.Border(
                 bottom: pw.BorderSide(color: PdfColors.grey300),
               ),

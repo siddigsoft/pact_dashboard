@@ -6,7 +6,8 @@ import 'package:file_picker/file_picker.dart';
 import 'package:intl/intl.dart';
 import '../../theme/app_colors.dart';
 import '../../services/permit_upload_service.dart';
-import '../../l10n/app_localizations.dart';
+import 'package:flutter_gen/gen_l10n/app_localizations.dart';
+import 'package:pact_mobile/l10n/app_localizations_extension.dart';
 import 'permit_types.dart';
 
 class BulkStatePermitItem {
@@ -30,8 +31,7 @@ class BulkStatePermitItem {
     this.errorMessage,
   });
 
-  bool get isReady =>
-      file != null && issueDate != null && expiryDate != null;
+  bool get isReady => file != null && issueDate != null && expiryDate != null;
 }
 
 class BulkStatePermitUploadDialog extends StatefulWidget {
@@ -82,8 +82,9 @@ class _BulkStatePermitUploadDialogState
           children: [
             ListTile(
               leading: const Icon(Icons.photo_library),
-              title: Text(AppLocalizations.of(context)?.translate('gallery') ??
-                  'Gallery'),
+              title: Text(
+                AppLocalizations.of(context)?.translate('gallery') ?? 'Gallery',
+              ),
               onTap: () async {
                 Navigator.pop(context);
                 final XFile? image = await _imagePicker.pickImage(
@@ -101,7 +102,8 @@ class _BulkStatePermitUploadDialogState
             ListTile(
               leading: const Icon(Icons.camera_alt),
               title: Text(
-                  AppLocalizations.of(context)?.translate('camera') ?? 'Camera'),
+                AppLocalizations.of(context)?.translate('camera') ?? 'Camera',
+              ),
               onTap: () async {
                 Navigator.pop(context);
                 final XFile? image = await _imagePicker.pickImage(
@@ -118,7 +120,10 @@ class _BulkStatePermitUploadDialogState
             ),
             ListTile(
               leading: const Icon(Icons.picture_as_pdf, color: Colors.red),
-              title: Text(l10n.selectPdf),
+              title: Text(
+                AppLocalizations.of(context)?.translate('selectPdfOrImage') ??
+                    'Select PDF',
+              ),
               onTap: () async {
                 Navigator.pop(context);
                 final result = await FilePicker.platform.pickFiles(
@@ -146,7 +151,9 @@ class _BulkStatePermitUploadDialogState
       initialDate: isIssueDate
           ? (item.issueDate ?? DateTime.now())
           : (item.expiryDate ?? DateTime.now().add(const Duration(days: 365))),
-      firstDate: isIssueDate ? DateTime(2020) : (item.issueDate ?? DateTime(2020)),
+      firstDate: isIssueDate
+          ? DateTime(2020)
+          : (item.issueDate ?? DateTime(2020)),
       lastDate: DateTime(2030),
       builder: (context, child) {
         return Theme(
@@ -192,11 +199,12 @@ class _BulkStatePermitUploadDialogState
   }
 
   Future<void> _uploadAllPermits() async {
-    final readyItems =
-        _permitItems.where((item) => item.isReady).toList();
+    final readyItems = _permitItems.where((item) => item.isReady).toList();
     if (readyItems.isEmpty) {
-      _showError(AppLocalizations.of(context)?.translate('noPermitsReady') ??
-          'No permits ready for upload');
+      _showError(
+        AppLocalizations.of(context)?.translate('noPermitsReady') ??
+            'No permits ready for upload',
+      );
       return;
     }
 
@@ -397,7 +405,10 @@ class _BulkStatePermitUploadDialogState
             child: Text(
               l10n?.translate('bulkUploadInstructions') ??
                   'Select files and dates for each state. Only states with complete information will be uploaded.',
-              style: GoogleFonts.poppins(fontSize: 12, color: Colors.blue.shade900),
+              style: GoogleFonts.poppins(
+                fontSize: 12,
+                color: Colors.blue.shade900,
+              ),
             ),
           ),
         ],
@@ -416,7 +427,7 @@ class _BulkStatePermitUploadDialogState
         mainAxisAlignment: MainAxisAlignment.spaceAround,
         children: [
           _buildStatItem(
-            '${_readyCount}',
+            '$_readyCount',
             l10n?.translate('ready') ?? 'Ready',
             Colors.green,
           ),
@@ -455,9 +466,11 @@ class _BulkStatePermitUploadDialogState
   }
 
   Widget _buildPermitItemCard(
-      int index, BulkStatePermitItem item, AppLocalizations? l10n) {
-    final isCurrentlyUploading =
-        _isUploading && _currentUploadIndex == index;
+    int index,
+    BulkStatePermitItem item,
+    AppLocalizations? l10n,
+  ) {
+    final isCurrentlyUploading = _isUploading && _currentUploadIndex == index;
 
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
@@ -467,11 +480,12 @@ class _BulkStatePermitUploadDialogState
           color: item.status == PermitUploadStatus.success
               ? Colors.green
               : item.status == PermitUploadStatus.error
-                  ? Colors.red
-                  : item.isReady
-                      ? Colors.green.shade200
-                      : Colors.grey.shade300,
-          width: item.status == PermitUploadStatus.success ||
+              ? Colors.red
+              : item.isReady
+              ? Colors.green.shade200
+              : Colors.grey.shade300,
+          width:
+              item.status == PermitUploadStatus.success ||
                   item.status == PermitUploadStatus.error
               ? 2
               : 1,
@@ -497,8 +511,10 @@ class _BulkStatePermitUploadDialogState
                 ),
                 if (item.isReady && item.status == PermitUploadStatus.pending)
                   Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 2,
+                    ),
                     decoration: BoxDecoration(
                       color: Colors.green.shade100,
                       borderRadius: BorderRadius.circular(12),
@@ -514,7 +530,8 @@ class _BulkStatePermitUploadDialogState
                   ),
               ],
             ),
-            if (item.status == PermitUploadStatus.error && item.errorMessage != null)
+            if (item.status == PermitUploadStatus.error &&
+                item.errorMessage != null)
               Padding(
                 padding: const EdgeInsets.only(top: 8),
                 child: Text(
@@ -532,7 +549,9 @@ class _BulkStatePermitUploadDialogState
                     padding: const EdgeInsets.symmetric(vertical: 16),
                     decoration: BoxDecoration(
                       border: Border.all(
-                          color: AppColors.primaryBlue, style: BorderStyle.solid),
+                        color: AppColors.primaryBlue,
+                        style: BorderStyle.solid,
+                      ),
                       borderRadius: BorderRadius.circular(8),
                       color: AppColors.primaryBlue.withOpacity(0.05),
                     ),
@@ -562,7 +581,11 @@ class _BulkStatePermitUploadDialogState
                   ),
                   child: Row(
                     children: [
-                      Icon(Icons.check_circle, color: Colors.green.shade600, size: 20),
+                      Icon(
+                        Icons.check_circle,
+                        color: Colors.green.shade600,
+                        size: 20,
+                      ),
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
@@ -573,9 +596,14 @@ class _BulkStatePermitUploadDialogState
                         ),
                       ),
                       IconButton(
-                        icon: const Icon(Icons.close, color: Colors.red, size: 20),
-                        onPressed:
-                            _isUploading ? null : () => _clearFileForItem(index),
+                        icon: const Icon(
+                          Icons.close,
+                          color: Colors.red,
+                          size: 20,
+                        ),
+                        onPressed: _isUploading
+                            ? null
+                            : () => _clearFileForItem(index),
                         padding: EdgeInsets.zero,
                         constraints: const BoxConstraints(),
                       ),
@@ -613,7 +641,10 @@ class _BulkStatePermitUploadDialogState
     );
   }
 
-  Widget _buildStatusIcon(PermitUploadStatus status, bool isCurrentlyUploading) {
+  Widget _buildStatusIcon(
+    PermitUploadStatus status,
+    bool isCurrentlyUploading,
+  ) {
     if (isCurrentlyUploading) {
       return const SizedBox(
         width: 24,
@@ -634,8 +665,11 @@ class _BulkStatePermitUploadDialogState
           child: CircularProgressIndicator(strokeWidth: 2),
         );
       default:
-        return Icon(Icons.cloud_upload_outlined,
-            color: Colors.grey.shade400, size: 24);
+        return Icon(
+          Icons.cloud_upload_outlined,
+          color: Colors.grey.shade400,
+          size: 24,
+        );
     }
   }
 
@@ -651,7 +685,8 @@ class _BulkStatePermitUploadDialogState
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
         decoration: BoxDecoration(
           border: Border.all(
-              color: date != null ? AppColors.primaryBlue : Colors.grey.shade300),
+            color: date != null ? AppColors.primaryBlue : Colors.grey.shade300,
+          ),
           borderRadius: BorderRadius.circular(8),
           color: date != null ? AppColors.primaryBlue.withOpacity(0.05) : null,
         ),
@@ -660,7 +695,10 @@ class _BulkStatePermitUploadDialogState
           children: [
             Text(
               label,
-              style: GoogleFonts.poppins(fontSize: 10, color: Colors.grey.shade600),
+              style: GoogleFonts.poppins(
+                fontSize: 10,
+                color: Colors.grey.shade600,
+              ),
             ),
             const SizedBox(height: 2),
             Text(
@@ -700,7 +738,8 @@ class _BulkStatePermitUploadDialogState
               style: OutlinedButton.styleFrom(
                 padding: const EdgeInsets.symmetric(vertical: 14),
                 shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8)),
+                  borderRadius: BorderRadius.circular(8),
+                ),
               ),
               child: Text(l10n?.translate('cancel') ?? 'Cancel'),
             ),
@@ -715,12 +754,14 @@ class _BulkStatePermitUploadDialogState
                       width: 20,
                       height: 20,
                       child: CircularProgressIndicator(
-                          strokeWidth: 2, color: Colors.white),
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
                     )
                   : const Icon(Icons.cloud_upload),
               label: Text(
                 _isUploading
-                    ? '${l10n?.translate('uploading') ?? 'Uploading'}... (${_successCount + _errorCount}/${_readyCount})'
+                    ? '${l10n?.translate('uploading') ?? 'Uploading'}... (${_successCount + _errorCount}/$_readyCount)'
                     : '${l10n?.translate('uploadAll') ?? 'Upload All'} ($_readyCount)',
               ),
               style: ElevatedButton.styleFrom(
@@ -728,7 +769,8 @@ class _BulkStatePermitUploadDialogState
                 foregroundColor: Colors.white,
                 padding: const EdgeInsets.symmetric(vertical: 14),
                 shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8)),
+                  borderRadius: BorderRadius.circular(8),
+                ),
               ),
             ),
           ),

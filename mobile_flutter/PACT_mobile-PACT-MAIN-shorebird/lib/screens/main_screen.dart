@@ -6,12 +6,12 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'dashboard_screen.dart';
 import 'field_operations_enhanced_screen.dart';
-// import 'forms_screen.dart'; // Removed forms screen
-// import 'equipment_screen.dart'; // Removed equipment screen
+
 import 'wallet_screen.dart';
 import '../widgets/network_status_indicator.dart';
-import '../widgets/incoming_call_dialog.dart';
+import '../widgets/agora_incoming_call_dialog.dart';
 import '../services/webrtc_service.dart';
+import '../services/agora_call_service.dart';
 import '../services/presence_service.dart';
 import '../models/call_state.dart';
 import '../widgets/whats_new_dialog.dart';
@@ -26,7 +26,7 @@ class MainScreen extends StatefulWidget {
 
 class _MainScreenState extends State<MainScreen> {
   int _currentIndex = 0;
-  StreamSubscription<CallState>? _callStateSubscription;
+  StreamSubscription? _agoraIncomingCallSubscription;
   StreamSubscription? _connectivitySubscription;
   bool _isCoordinator = false;
   bool _isLoadingRole = true;
@@ -39,45 +39,32 @@ class _MainScreenState extends State<MainScreen> {
     _initializeWebRTC();
     _showWhatsNewIfNeeded();
     _setupConnectivityListener();
-    
+
     // Check for active call from notification tap after a short delay
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _checkForActiveCall();
     });
   }
-  
+
   /// Listen for connectivity changes to initialize presence when internet becomes available
   void _setupConnectivityListener() {
     _connectivitySubscription?.cancel();
-    _connectivitySubscription = Connectivity().onConnectivityChanged.listen((results) async {
+    _connectivitySubscription = Connectivity().onConnectivityChanged.listen((
+      results,
+    ) async {
       final hasInternet = !results.contains(ConnectivityResult.none);
-      
+
       if (hasInternet && !_servicesInitialized) {
-        debugPrint('🌐 Internet connection restored - initializing WebRTC/Presence');
+        debugPrint(
+          '🌐 Internet connection restored - initializing WebRTC/Presence',
+        );
         await _initializeWebRTC();
       }
     });
   }
-  
+
   void _checkForActiveCall() {
-    // Check if there's an active incoming call that needs to be shown
-    final currentState = WebRTCService().callState;
-    if (currentState.status == CallStatus.ringing &&
-        currentState.remoteUserId != null &&
-        currentState.callId != null &&
-        currentState.callToken != null &&
-        mounted) {
-      debugPrint('📞 Found active incoming call, showing dialog');
-      showIncomingCallDialog(
-        context,
-        callerId: currentState.remoteUserId!,
-        callerName: currentState.remoteUserName ?? 'Unknown',
-        callerAvatar: null,
-        callId: currentState.callId!,
-        callToken: currentState.callToken!,
-        isAudioOnly: currentState.isAudioOnly,
-      );
-    }
+    // Agora incoming calls are handled via incomingCallStream in _initializeWebRTC
   }
 
   Future<void> _showWhatsNewIfNeeded() async {
@@ -89,7 +76,11 @@ class _MainScreenState extends State<MainScreen> {
 
   @override
   void dispose() {
-    _callStateSubscription?.cancel();
+    debugPrint('[MainScreen] dispose() called');
+    if (_agoraIncomingCallSubscription != null) {
+      debugPrint('[MainScreen] Cancelling incoming call subscription');
+      _agoraIncomingCallSubscription?.cancel();
+    }
     _connectivitySubscription?.cancel();
     super.dispose();
   }
@@ -108,7 +99,7 @@ class _MainScreenState extends State<MainScreen> {
       // Check connectivity before making network call
       final connectivity = await Connectivity().checkConnectivity();
       final isOnline = !connectivity.contains(ConnectivityResult.none);
-      
+
       if (!isOnline) {
         debugPrint('📴 Offline mode - using cached role');
         setState(() => _isLoadingRole = false);
@@ -216,7 +207,7 @@ class _MainScreenState extends State<MainScreen> {
                 userName;
             userAvatar = response['avatar_url'] as String?;
             userRole = response['role'] as String?;
-            
+
             // Cache for offline use
             final box = await Hive.openBox('user_profile_cache');
             await box.put('full_name', userName);
@@ -231,14 +222,54 @@ class _MainScreenState extends State<MainScreen> {
         return; // Skip WebRTC when offline - it won't work anyway
       }
 
-      // Initialize WebRTC service
-      await WebRTCService().initialize(
-        user.id,
-        userName,
-        userAvatar: userAvatar,
-      );
+      // Initialize WebRTC service (signaling)
+      await WebRTCService().initialize(user.id, userName, userAvatar: userAvatar);
 
       debugPrint('✅ WebRTC service initialized for user: $userName');
+
+      // Initialize Agora call service for native video/audio calls
+      try {
+        await AgoraCallService().initialize(
+          userId: user.id,
+          userName: userName,
+          userAvatar: userAvatar,
+          userEmail: user.email,
+        );
+        debugPrint('✅ Agora call service initialized for user: $userName');
+
+        // Listen for Agora incoming calls
+        debugPrint('[MainScreen] Setting up incoming call subscription...');
+        debugPrint('[MainScreen] Stream instance: ${AgoraCallService().incomingCallStream.hashCode}');
+        _agoraIncomingCallSubscription =
+            AgoraCallService().incomingCallStream.listen((incomingCall) {
+          debugPrint('[MainScreen] >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>');
+          debugPrint('[MainScreen] Incoming call event received!');
+          debugPrint('[MainScreen] From: ${incomingCall.callerName}');
+          debugPrint('[MainScreen] CallId: ${incomingCall.callId}');
+          debugPrint('[MainScreen] mounted: $mounted, context.mounted: ${context.mounted}');
+          debugPrint('[MainScreen] >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>');
+          if (mounted && context.mounted) {
+            try {
+              debugPrint('[MainScreen] About to show dialog...');
+              showAgoraIncomingCallDialog(context, incomingCall: incomingCall);
+              debugPrint('[MainScreen] Dialog show called successfully');
+            } catch (e, st) {
+              debugPrint('[MainScreen] ERROR showing incoming call dialog: $e');
+              debugPrint('[MainScreen] StackTrace: $st');
+            }
+          } else {
+            debugPrint('[MainScreen] Cannot show dialog - not mounted (mounted=$mounted, context.mounted=${context.mounted})');
+          }
+        }, onError: (e, st) {
+          debugPrint('[MainScreen] Incoming call stream ERROR: $e');
+          debugPrint('[MainScreen] StackTrace: $st');
+        }, onDone: () {
+          debugPrint('[MainScreen] Incoming call stream DONE (closed)');
+        });
+        debugPrint('[MainScreen] Subscription created: ${_agoraIncomingCallSubscription.hashCode}');
+      } catch (e) {
+        debugPrint('⚠️ Agora init failed (calls may use WebRTC): $e');
+      }
 
       // Initialize Presence service for online status tracking
       await PresenceService().initialize(
@@ -249,29 +280,9 @@ class _MainScreenState extends State<MainScreen> {
       );
 
       debugPrint('✅ Presence service initialized for user: $userName');
-      
+
       // Mark services as initialized so connectivity listener doesn't re-initialize
       _servicesInitialized = true;
-
-      // Listen for incoming calls
-      _callStateSubscription = WebRTCService().callStateStream.listen((state) {
-        if (state.status == CallStatus.ringing &&
-            state.remoteUserId != null &&
-            state.callId != null &&
-            state.callToken != null &&
-            mounted) {
-          // Show incoming call dialog
-          showIncomingCallDialog(
-            context,
-            callerId: state.remoteUserId!,
-            callerName: state.remoteUserName ?? 'Unknown',
-            callerAvatar: null,
-            callId: state.callId!,
-            callToken: state.callToken!,
-            isAudioOnly: state.isAudioOnly,
-          );
-        }
-      });
     } catch (e) {
       debugPrint('❌ Error initializing WebRTC: $e');
     }

@@ -11,6 +11,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../theme/app_colors.dart';
 import '../providers/sync_provider.dart';
+import '../services/offline/sync_manager.dart';
 
 class AppMenuOverlay extends StatelessWidget {
   final Function() onClose;
@@ -264,7 +265,12 @@ PACT Mobile User
         );
       }
 
-      // Perform full sync
+      // Sync site visits, reports, pending actions (SyncManager)
+      final syncManager = SyncManager();
+      syncManager.setSupabaseClient(Supabase.instance.client);
+      await syncManager.forceSync();
+
+      // Perform full sync (tasks, equipment, profiles, etc.)
       await syncProvider.performFullSync();
 
       // Show success message
@@ -523,7 +529,10 @@ PACT Mobile User
             const SizedBox(width: 12),
             Text(
               'Sign Out',
-              style: GoogleFonts.poppins(fontSize: 20, fontWeight: FontWeight.w600),
+              style: GoogleFonts.poppins(
+                fontSize: 20,
+                fontWeight: FontWeight.w600,
+              ),
             ),
           ],
         ),
@@ -550,7 +559,10 @@ PACT Mobile User
                   Expanded(
                     child: Text(
                       'Any unsaved data will be lost. Make sure to sync your data before signing out.',
-                      style: GoogleFonts.poppins(fontSize: 12, color: Colors.amber[800]),
+                      style: GoogleFonts.poppins(
+                        fontSize: 12,
+                        color: Colors.amber[800],
+                      ),
                     ),
                   ),
                 ],
@@ -583,9 +595,7 @@ PACT Mobile User
             ),
             child: Text(
               'Sign Out',
-              style: GoogleFonts.poppins(
-                fontWeight: FontWeight.w500,
-              ),
+              style: GoogleFonts.poppins(fontWeight: FontWeight.w500),
             ),
           ),
         ],
@@ -593,7 +603,7 @@ PACT Mobile User
       ),
     );
   }
-  
+
   Future<void> _performSignOut(BuildContext context) async {
     try {
       // Show loading indicator
@@ -604,10 +614,10 @@ PACT Mobile User
           child: CircularProgressIndicator(color: AppColors.primaryOrange),
         ),
       );
-      
+
       // Perform sign out
       await Supabase.instance.client.auth.signOut();
-      
+
       // Clear local data
       final prefs = await SharedPreferences.getInstance();
       await prefs.remove('auth_token');
@@ -617,11 +627,13 @@ PACT Mobile User
       await prefs.remove('user_name');
       await prefs.setBool('is_logged_in', false);
       await prefs.remove('token_expires_at');
-      
+
       // Close loading dialog and navigate to login
       if (context.mounted) {
         Navigator.of(context).pop(); // Close loading
-        Navigator.of(context).pushNamedAndRemoveUntil('/login', (route) => false);
+        Navigator.of(
+          context,
+        ).pushNamedAndRemoveUntil('/login', (route) => false);
       }
     } catch (e) {
       // Close loading dialog

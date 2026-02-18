@@ -19,7 +19,7 @@ class EncryptionService {
     try {
       final storage = SecureStorageService();
       String? storedKey = await storage.read(_keyStorageKey);
-      
+
       if (storedKey == null) {
         // Generate a new key if none exists
         final key = encrypt.Key.fromSecureRandom(32);
@@ -31,10 +31,11 @@ class EncryptionService {
       final key = encrypt.Key(keyBytes);
       _iv = encrypt.IV.fromSecureRandom(16);
       _encrypter = encrypt.Encrypter(encrypt.AES(key));
-      
+
       LoggerService.log('Encryption service initialized');
     } catch (e) {
-      LoggerService.log('Error initializing encryption service: $e', level: LogLevel.error);
+      LoggerService.log('Error initializing encryption service: $e',
+          level: LogLevel.error);
       rethrow;
     }
   }
@@ -53,7 +54,7 @@ class EncryptionService {
     try {
       final parts = encryptedData.split(':');
       if (parts.length != 2) {
-        throw FormatException('Invalid encrypted data format');
+        throw const FormatException('Invalid encrypted data format');
       }
 
       final iv = encrypt.IV(base64Decode(parts[0]));

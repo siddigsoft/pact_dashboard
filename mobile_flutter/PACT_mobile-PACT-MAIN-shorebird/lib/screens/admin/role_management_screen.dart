@@ -8,7 +8,7 @@ import '../../theme/app_colors.dart';
 
 class RoleManagementScreen extends StatefulWidget {
   final bool isArabic;
-  
+
   const RoleManagementScreen({super.key, this.isArabic = false});
 
   @override
@@ -17,7 +17,7 @@ class RoleManagementScreen extends StatefulWidget {
 
 class _RoleManagementScreenState extends State<RoleManagementScreen> {
   final _supabase = Supabase.instance.client;
-  
+
   List<Map<String, dynamic>> _roles = [];
   Map<String, int> _roleUserCounts = {};
   bool _isLoading = true;
@@ -42,13 +42,19 @@ class _RoleManagementScreenState extends State<RoleManagementScreen> {
       'description_ar': 'وصول إداري لإدارة المستخدمين والمحتوى',
       'color': Colors.blue,
       'icon': Icons.manage_accounts,
-      'permissions': ['users.read', 'users.write', 'reports.read', 'reports.write'],
+      'permissions': [
+        'users.read',
+        'users.write',
+        'reports.read',
+        'reports.write',
+      ],
     },
     {
       'name': 'coordinator',
       'name_en': 'Coordinator',
       'name_ar': 'منسق',
-      'description_en': 'Coordinate field operations and manage data collectors',
+      'description_en':
+          'Coordinate field operations and manage data collectors',
       'description_ar': 'تنسيق العمليات الميدانية وإدارة جامعي البيانات',
       'color': Colors.teal,
       'icon': Icons.supervisor_account,
@@ -89,18 +95,19 @@ class _RoleManagementScreenState extends State<RoleManagementScreen> {
         if (mounted) Navigator.pop(context);
         return;
       }
-      
+
       final profile = await _supabase
           .from('profiles')
           .select('role')
           .eq('id', user.id)
           .maybeSingle();
-      
+
       final role = (profile?['role'] as String?)?.toLowerCase() ?? '';
-      final isAdmin = role == 'admin' || role == 'super_admin' || role == 'superadmin';
-      
+      final isAdmin =
+          role == 'admin' || role == 'super_admin' || role == 'superadmin';
+
       if (!mounted) return;
-      
+
       if (!isAdmin) {
         Navigator.pop(context);
         ScaffoldMessenger.of(context).showSnackBar(
@@ -111,7 +118,7 @@ class _RoleManagementScreenState extends State<RoleManagementScreen> {
         );
         return;
       }
-      
+
       setState(() => _hasAccess = true);
       _loadRoles();
     } catch (e) {
@@ -126,20 +133,20 @@ class _RoleManagementScreenState extends State<RoleManagementScreen> {
     try {
       final usersResponse = await _supabase.from('profiles').select('role');
       final users = List<Map<String, dynamic>>.from(usersResponse as List);
-      
+
       final counts = <String, int>{};
       for (final user in users) {
         final role = (user['role'] as String?)?.toLowerCase() ?? 'user';
         counts[role] = (counts[role] ?? 0) + 1;
       }
-      
+
       try {
         final rolesResponse = await _supabase.from('roles').select();
         _roles = List<Map<String, dynamic>>.from(rolesResponse as List);
       } catch (e) {
         _roles = [];
       }
-      
+
       if (!mounted) return;
       setState(() {
         _roleUserCounts = counts;
@@ -155,7 +162,9 @@ class _RoleManagementScreenState extends State<RoleManagementScreen> {
   @override
   Widget build(BuildContext context) {
     return Directionality(
-      textDirection: widget.isArabic ? ui.TextDirection.rtl : ui.TextDirection.ltr,
+      textDirection: widget.isArabic
+          ? ui.TextDirection.rtl
+          : ui.TextDirection.ltr,
       child: Scaffold(
         backgroundColor: AppColors.backgroundGray,
         appBar: AppBar(
@@ -183,8 +192,8 @@ class _RoleManagementScreenState extends State<RoleManagementScreen> {
         body: !_hasAccess
             ? const Center(child: CircularProgressIndicator())
             : _isLoading
-                ? const Center(child: CircularProgressIndicator())
-                : RefreshIndicator(
+            ? const Center(child: CircularProgressIndicator())
+            : RefreshIndicator(
                 onRefresh: _loadRoles,
                 child: ListView(
                   padding: const EdgeInsets.all(16),
@@ -209,12 +218,15 @@ class _RoleManagementScreenState extends State<RoleManagementScreen> {
 
   Widget _buildRolesSummary() {
     final totalUsers = _roleUserCounts.values.fold<int>(0, (a, b) => a + b);
-    
+
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         gradient: LinearGradient(
-          colors: [AppColors.primaryBlue, AppColors.primaryBlue.withOpacity(0.8)],
+          colors: [
+            AppColors.primaryBlue,
+            AppColors.primaryBlue.withOpacity(0.8),
+          ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
@@ -322,7 +334,7 @@ class _RoleManagementScreenState extends State<RoleManagementScreen> {
     final icon = role['icon'] as IconData;
     final count = _roleUserCounts[role['name']] ?? 0;
     final permissions = role['permissions'] as List<String>;
-    
+
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -355,7 +367,9 @@ class _RoleManagementScreenState extends State<RoleManagementScreen> {
                         ),
                       ),
                       Text(
-                        widget.isArabic ? role['description_ar'] : role['description_en'],
+                        widget.isArabic
+                            ? role['description_ar']
+                            : role['description_en'],
                         style: GoogleFonts.poppins(
                           fontSize: 12,
                           color: Colors.grey[600],
@@ -365,7 +379,10 @@ class _RoleManagementScreenState extends State<RoleManagementScreen> {
                   ),
                 ),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 6,
+                  ),
                   decoration: BoxDecoration(
                     color: color.withOpacity(0.1),
                     borderRadius: BorderRadius.circular(20),
@@ -394,20 +411,31 @@ class _RoleManagementScreenState extends State<RoleManagementScreen> {
             Wrap(
               spacing: 8,
               runSpacing: 8,
-              children: permissions.map((p) => Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  color: Colors.grey.shade100,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Text(
-                  p == 'all' ? (widget.isArabic ? 'جميع الصلاحيات' : 'All Permissions') : p,
-                  style: GoogleFonts.poppins(
-                    fontSize: 11,
-                    color: Colors.grey[700],
-                  ),
-                ),
-              )).toList(),
+              children: permissions
+                  .map(
+                    (p) => Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade100,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        p == 'all'
+                            ? (widget.isArabic
+                                  ? 'جميع الصلاحيات'
+                                  : 'All Permissions')
+                            : p,
+                        style: GoogleFonts.poppins(
+                          fontSize: 11,
+                          color: Colors.grey[700],
+                        ),
+                      ),
+                    ),
+                  )
+                  .toList(),
             ),
           ],
         ),

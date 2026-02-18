@@ -16,7 +16,6 @@ class PaymentMethodsCardWidget extends ConsumerStatefulWidget {
 
 class _PaymentMethodsCardWidgetState
     extends ConsumerState<PaymentMethodsCardWidget> {
-  bool _showAddDialog = false;
   String _selectedType = 'bank';
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
@@ -95,7 +94,7 @@ class _PaymentMethodsCardWidgetState
 
       if (mounted) {
         _clearForm();
-        setState(() => _showAddDialog = false);
+        Navigator.of(context).pop();
 
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -257,8 +256,7 @@ class _PaymentMethodsCardWidgetState
                         ),
                         const SizedBox(height: 16),
                         ElevatedButton.icon(
-                          onPressed: () =>
-                              setState(() => _showAddDialog = true),
+                          onPressed: _openAddDialog,
                           icon: const Icon(Icons.add),
                           label: const Text('Add First Method'),
                           style: ElevatedButton.styleFrom(
@@ -339,7 +337,7 @@ class _PaymentMethodsCardWidgetState
             child: SizedBox(
               width: double.infinity,
               child: OutlinedButton.icon(
-                onPressed: () => setState(() => _showAddDialog = true),
+                onPressed: _openAddDialog,
                 icon: const Icon(Icons.add),
                 label: const Text('Add Payment Method'),
                 style: OutlinedButton.styleFrom(
@@ -460,7 +458,7 @@ class _PaymentMethodsCardWidgetState
   }
 
   /// Show add payment method dialog
-  void _showAddDialog() {
+  void _openAddDialog() {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(

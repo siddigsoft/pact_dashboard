@@ -51,7 +51,7 @@ class _DigitalSignaturesScreenState extends State<DigitalSignaturesScreen>
         if (mounted) setState(() => _isLoading = false);
         return;
       }
-      
+
       debugPrint('Loading signatures for user: $userId');
 
       // Load user signatures
@@ -62,7 +62,9 @@ class _DigitalSignaturesScreenState extends State<DigitalSignaturesScreen>
             .select()
             .eq('user_id', userId)
             .order('created_at', ascending: false);
-        signatures = List<Map<String, dynamic>>.from(signaturesResponse as List);
+        signatures = List<Map<String, dynamic>>.from(
+          signaturesResponse as List,
+        );
         debugPrint('Loaded ${signatures.length} signatures');
       } catch (e) {
         debugPrint('Error loading user_signatures: $e');

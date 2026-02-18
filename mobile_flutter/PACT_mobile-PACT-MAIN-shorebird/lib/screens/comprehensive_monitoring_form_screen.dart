@@ -357,7 +357,7 @@ class _ComprehensiveMonitoringFormScreenState
         title: const Text('Comprehensive Monitoring Form'),
         elevation: 0,
         flexibleSpace: Container(
-          decoration: BoxDecoration(
+          decoration: const BoxDecoration(
             gradient: AppColors.primaryGradient,
           ),
         ),
@@ -419,7 +419,7 @@ class _ComprehensiveMonitoringFormScreenState
                   color: AppColors.primaryOrange.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: Icon(
+                child: const Icon(
                   Icons.person_outline,
                   color: AppColors.primaryOrange,
                 ),
@@ -489,7 +489,7 @@ class _ComprehensiveMonitoringFormScreenState
                   color: AppColors.primaryBlue.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: Icon(
+                child: const Icon(
                   Icons.location_on_outlined,
                   color: AppColors.primaryBlue,
                 ),

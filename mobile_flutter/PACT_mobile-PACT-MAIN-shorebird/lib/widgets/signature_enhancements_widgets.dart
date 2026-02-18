@@ -39,36 +39,31 @@ class _TypedSignatureWidgetState extends State<TypedSignatureWidget> {
   @override
   Widget build(BuildContext context) {
     final isArabic = widget.locale == 'ar';
-    
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
           isArabic ? 'أدخل اسمك' : 'Enter your name',
-          style: const TextStyle(
-            fontSize: 14,
-            fontWeight: FontWeight.w500,
-          ),
+          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
         ),
         const SizedBox(height: 8),
         TextField(
           controller: _nameController,
           decoration: InputDecoration(
             hintText: isArabic ? 'اسمك الكامل' : 'Your full name',
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(8),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 12,
+              vertical: 12,
             ),
-            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
           ),
           onChanged: (_) => setState(() {}),
         ),
         const SizedBox(height: 16),
         Text(
           isArabic ? 'اختر نمط الخط' : 'Choose font style',
-          style: const TextStyle(
-            fontSize: 14,
-            fontWeight: FontWeight.w500,
-          ),
+          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
         ),
         const SizedBox(height: 8),
         SizedBox(
@@ -79,17 +74,24 @@ class _TypedSignatureWidgetState extends State<TypedSignatureWidget> {
             itemBuilder: (context, index) {
               final font = widget.availableFonts[index];
               final isSelected = font == _selectedFont;
-              
+
               return GestureDetector(
                 onTap: () => setState(() => _selectedFont = font),
                 child: Container(
                   margin: const EdgeInsets.only(right: 8),
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 8,
+                  ),
                   decoration: BoxDecoration(
-                    color: isSelected ? AppColors.primaryBlue : Colors.grey.shade100,
+                    color: isSelected
+                        ? AppColors.primaryBlue
+                        : Colors.grey.shade100,
                     borderRadius: BorderRadius.circular(8),
                     border: Border.all(
-                      color: isSelected ? AppColors.primaryBlue : Colors.grey.shade300,
+                      color: isSelected
+                          ? AppColors.primaryBlue
+                          : Colors.grey.shade300,
                     ),
                   ),
                   child: Center(
@@ -111,10 +113,7 @@ class _TypedSignatureWidgetState extends State<TypedSignatureWidget> {
         if (_nameController.text.isNotEmpty) ...[
           Text(
             isArabic ? 'معاينة' : 'Preview',
-            style: const TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w500,
-            ),
+            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
           ),
           const SizedBox(height: 8),
           Container(
@@ -177,7 +176,8 @@ class InitialsSignatureWidget extends StatefulWidget {
   });
 
   @override
-  State<InitialsSignatureWidget> createState() => _InitialsSignatureWidgetState();
+  State<InitialsSignatureWidget> createState() =>
+      _InitialsSignatureWidgetState();
 }
 
 class _InitialsSignatureWidgetState extends State<InitialsSignatureWidget> {
@@ -193,16 +193,13 @@ class _InitialsSignatureWidgetState extends State<InitialsSignatureWidget> {
   @override
   Widget build(BuildContext context) {
     final isArabic = widget.locale == 'ar';
-    
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
           isArabic ? 'أدخل الأحرف الأولى' : 'Enter your initials',
-          style: const TextStyle(
-            fontSize: 14,
-            fontWeight: FontWeight.w500,
-          ),
+          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
         ),
         const SizedBox(height: 8),
         TextField(
@@ -211,10 +208,11 @@ class _InitialsSignatureWidgetState extends State<InitialsSignatureWidget> {
           textCapitalization: TextCapitalization.characters,
           decoration: InputDecoration(
             hintText: isArabic ? 'مثال: م.أ' : 'e.g., JD',
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(8),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 12,
+              vertical: 12,
             ),
-            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
             counterText: '',
           ),
           onChanged: (_) => setState(() {}),
@@ -230,7 +228,7 @@ class _InitialsSignatureWidgetState extends State<InitialsSignatureWidget> {
             Switch(
               value: _isCircular,
               onChanged: (value) => setState(() => _isCircular = value),
-              activeColor: AppColors.primaryBlue,
+              activeThumbColor: AppColors.primaryBlue,
             ),
           ],
         ),
@@ -265,7 +263,8 @@ class _InitialsSignatureWidgetState extends State<InitialsSignatureWidget> {
           child: ElevatedButton(
             onPressed: _initialsController.text.isEmpty
                 ? null
-                : () => widget.onGenerate(_initialsController.text, _isCircular),
+                : () =>
+                      widget.onGenerate(_initialsController.text, _isCircular),
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.primaryBlue,
               padding: const EdgeInsets.symmetric(vertical: 14),
@@ -305,15 +304,13 @@ class SignatureVerificationBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isArabic = locale == 'ar';
-    
+
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: isVerified ? Colors.green.shade50 : Colors.red.shade50,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(
-          color: isVerified ? Colors.green : Colors.red,
-        ),
+        border: Border.all(color: isVerified ? Colors.green : Colors.red),
       ),
       child: Row(
         children: [
@@ -334,25 +331,19 @@ class SignatureVerificationBadge extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w600,
-                    color: isVerified ? Colors.green.shade700 : Colors.red.shade700,
+                    color: isVerified
+                        ? Colors.green.shade700
+                        : Colors.red.shade700,
                   ),
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  isArabic
-                      ? 'بواسطة $signerName'
-                      : 'By $signerName',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.grey.shade600,
-                  ),
+                  isArabic ? 'بواسطة $signerName' : 'By $signerName',
+                  style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
                 ),
                 Text(
                   _formatDate(signedAt, isArabic),
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: Colors.grey.shade500,
-                  ),
+                  style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
                 ),
               ],
             ),
@@ -368,7 +359,7 @@ class SignatureVerificationBadge extends StatelessWidget {
     final year = date.year.toString();
     final hour = date.hour.toString().padLeft(2, '0');
     final minute = date.minute.toString().padLeft(2, '0');
-    
+
     return '$day/$month/$year $hour:$minute';
   }
 }
@@ -391,7 +382,7 @@ class BatchSigningProgress extends StatelessWidget {
   Widget build(BuildContext context) {
     final isArabic = locale == 'ar';
     final progress = total > 0 ? (completed + failed) / total : 0.0;
-    
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -400,17 +391,11 @@ class BatchSigningProgress extends StatelessWidget {
           children: [
             Text(
               isArabic ? 'تقدم التوقيع' : 'Signing Progress',
-              style: const TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w500,
-              ),
+              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
             ),
             Text(
               '${completed + failed}/$total',
-              style: TextStyle(
-                fontSize: 14,
-                color: Colors.grey.shade600,
-              ),
+              style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
             ),
           ],
         ),
@@ -432,10 +417,7 @@ class BatchSigningProgress extends StatelessWidget {
             isArabic
                 ? '$failed من $total فشل التوقيع'
                 : '$failed of $total failed to sign',
-            style: TextStyle(
-              fontSize: 12,
-              color: Colors.red.shade600,
-            ),
+            style: TextStyle(fontSize: 12, color: Colors.red.shade600),
           ),
         ],
       ],
@@ -458,7 +440,8 @@ class SignaturePlacementWidget extends StatefulWidget {
   });
 
   @override
-  State<SignaturePlacementWidget> createState() => _SignaturePlacementWidgetState();
+  State<SignaturePlacementWidget> createState() =>
+      _SignaturePlacementWidgetState();
 }
 
 class _SignaturePlacementWidgetState extends State<SignaturePlacementWidget> {
@@ -482,10 +465,14 @@ class _SignaturePlacementWidgetState extends State<SignaturePlacementWidget> {
           child: GestureDetector(
             onPanUpdate: (details) {
               setState(() {
-                _x = (_x + details.delta.dx)
-                    .clamp(0, widget.containerWidth - _width);
-                _y = (_y + details.delta.dy)
-                    .clamp(0, widget.containerHeight - _height);
+                _x = (_x + details.delta.dx).clamp(
+                  0,
+                  widget.containerWidth - _width,
+                );
+                _y = (_y + details.delta.dy).clamp(
+                  0,
+                  widget.containerHeight - _height,
+                );
               });
             },
             onPanEnd: (_) {
@@ -498,10 +485,7 @@ class _SignaturePlacementWidgetState extends State<SignaturePlacementWidget> {
                 border: Border.all(color: AppColors.primaryBlue, width: 2),
                 borderRadius: BorderRadius.circular(4),
               ),
-              child: Image.memory(
-                widget.signatureImage,
-                fit: BoxFit.contain,
-              ),
+              child: Image.memory(widget.signatureImage, fit: BoxFit.contain),
             ),
           ),
         ),

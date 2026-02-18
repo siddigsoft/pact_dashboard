@@ -48,7 +48,7 @@ class AppColors {
   static const Color cardBackground = Color(
     0xFFFEFEFE,
   ); // Slightly off-white for card backgrounds
-  
+
   // Aliases for common use cases
   static const Color primary = primaryOrange;
   static const Color primaryGreen = accentGreen; // Alias for call screens

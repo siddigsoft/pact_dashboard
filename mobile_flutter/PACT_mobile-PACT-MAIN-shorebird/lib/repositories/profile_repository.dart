@@ -3,12 +3,12 @@ import 'package:image_picker/image_picker.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/foundation.dart';
 import '../models/pact_user_profile.dart';
-import '../services/offline_data_service.dart';
+import '../services/offline/offline_db.dart';
 
 /// Repository for user profile operations
 class ProfileRepository {
   final SupabaseClient _supabase;
-  final OfflineDataService _offlineDataService = OfflineDataService();
+  final OfflineDb _offlineDb = OfflineDb();
 
   ProfileRepository(this._supabase);
 
@@ -51,7 +51,12 @@ class ProfileRepository {
       final profile = PACTUserProfile.fromJson(response);
 
       // Cache for offline use
-      await _offlineDataService.cacheUserProfile(userId, response);
+      await _offlineDb.cacheItem(
+        OfflineDb.profileCacheBox,
+        'profile_$userId',
+        data: response,
+        ttl: const Duration(days: 7),
+      );
 
       return profile;
     } on PostgrestException catch (e) {
@@ -70,7 +75,11 @@ class ProfileRepository {
   }
 
   Future<PACTUserProfile?> _getProfileFromCache(String userId) async {
-    final cachedData = await _offlineDataService.getCachedUserProfile(userId);
+    final cachedItem = _offlineDb.getCachedItem(
+      OfflineDb.profileCacheBox,
+      'profile_$userId',
+    );
+    final cachedData = cachedItem?.data;
     if (cachedData != null) {
       debugPrint('📦 Returning cached user profile');
       return PACTUserProfile.fromJson(cachedData);

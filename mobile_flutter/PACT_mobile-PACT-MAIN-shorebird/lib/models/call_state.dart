@@ -4,75 +4,112 @@
 enum CallStatus {
   idle,
   calling,
-  ringing,
+  incomingCall,
   connected,
-  ended,
-  rejected,
-  busy,
-  unreachable,
+  disconnected,
   failed,
+  ringing,
   onHold,
   reconnecting,
+  unreachable,
+  busy,
+  rejected,
+  ended,
 }
 
 /// Call quality level (1-5, 5 being best)
 enum CallQuality {
   excellent, // 5 bars
-  good,      // 4 bars
-  fair,      // 3 bars
-  poor,      // 2 bars
-  veryPoor,  // 1 bar
+  good, // 4 bars
+  fair, // 3 bars
+  poor, // 2 bars
+  veryPoor, // 1 bar
   unknown,
 }
 
 /// Audio output device
-enum AudioOutputDevice {
-  earpiece,
-  speaker,
-  bluetooth,
-  wiredHeadset,
-}
+enum AudioOutputDevice { earpiece, speaker, bluetooth, wiredHeadset }
 
 /// Call state model
 class CallState {
-  final CallStatus status;
-  final String? callId;
-  final String? callToken;
-  final String? remoteUserId;
-  final String? remoteUserName;
-  final String? remoteUserAvatar;
-  final bool isVideoEnabled;
-  final bool isMuted;
-  final bool isSpeakerOn;
-  final DateTime? startTime;
-  final bool isAudioOnly;
-  
+  CallStatus _status = CallStatus.idle;
+  String? _remoteUserId;
+  String? _remoteUserName;
+  bool _isAudioOnly = true;
+  bool _isAudioEnabled = true;
+  bool _isVideoEnabled = true;
+
+  CallStatus get status => _status;
+  bool get isInCall =>
+      _status == CallStatus.connected || _status == CallStatus.calling;
+  String? get remoteUserId => _remoteUserId;
+  String? get remoteUserName => _remoteUserName;
+  bool get isAudioOnly => _isAudioOnly;
+  bool get isAudioEnabled => _isAudioEnabled;
+  bool get isVideoEnabled => _isVideoEnabled;
+
+  void updateStatus(CallStatus newStatus) {
+    _status = newStatus;
+  }
+
+  void setRemoteUser(String userId, String userName) {
+    _remoteUserId = userId;
+    _remoteUserName = userName;
+  }
+
+  void clearRemoteUser() {
+    _remoteUserId = null;
+    _remoteUserName = null;
+  }
+
+  void setAudioOnly(bool value) {
+    _isAudioOnly = value;
+  }
+
+  void setAudioEnabled(bool enabled) {
+    _isAudioEnabled = enabled;
+  }
+
+  void setVideoEnabled(bool enabled) {
+    _isVideoEnabled = enabled;
+  }
+
   // Enhanced call features
-  final bool isOnHold;
-  final bool isRecording;
-  final bool isNoiseSuppressed;
-  final bool isScreenSharing;
-  final CallQuality callQuality;
-  final AudioOutputDevice audioDevice;
-  final int reconnectAttempts;
-  final String? callNotes;
-  final double? packetLoss;
-  final int? latencyMs;
-  final int? bitrate;
-  final int? jitterMs;
+  bool isOnHold = false;
+  bool isRecording = false;
+  bool isNoiseSuppressed = true;
+  bool isScreenSharing = false;
+  CallQuality callQuality = CallQuality.unknown;
+  AudioOutputDevice audioDevice = AudioOutputDevice.earpiece;
+  int reconnectAttempts = 0;
+  String? callNotes;
+  double? packetLoss;
+  int? latencyMs;
+  int? bitrate;
+  int? jitterMs;
+
+  // Constructor parameters
+  String? callId;
+  String? callToken;
+  String? remoteUserAvatar;
+  bool isMuted = false;
+  bool isSpeakerOn = false;
+  DateTime? startTime;
+  String? jitsiRoom;
 
   CallState({
-    this.status = CallStatus.idle,
+    CallStatus status = CallStatus.idle,
     this.callId,
     this.callToken,
-    this.remoteUserId,
-    this.remoteUserName,
+    String? remoteUserId,
+    String? remoteUserName,
     this.remoteUserAvatar,
-    this.isVideoEnabled = false,
+    bool isVideoEnabled = false,
     this.isMuted = false,
     this.isSpeakerOn = false,
     this.startTime,
-    this.isAudioOnly = false,
+    this.jitsiRoom,
+    bool isAudioOnly = false,
     this.isOnHold = false,
     this.isRecording = false,
     this.isNoiseSuppressed = true,
@@ -85,14 +122,29 @@ class CallState {
     this.latencyMs,
     this.bitrate,
     this.jitterMs,
-  });
+  }) {
+    _status = status;
+    _isVideoEnabled = isVideoEnabled;
+    _remoteUserId = remoteUserId;
+    _remoteUserName = remoteUserName;
+    _isAudioOnly = isAudioOnly;
+  }
 
-  bool get isInCall =>
-      status == CallStatus.calling ||
-      status == CallStatus.ringing ||
-      status == CallStatus.connected ||
-      status == CallStatus.onHold ||
-      status == CallStatus.reconnecting;
+  // Convenience getters for backward compatibility
+  bool get isActive => isInCall;
+  String? get roomName => jitsiRoom;
+  String? get callerId => remoteUserId;
+  String? get targetUserName => remoteUserName;
+  String? get targetUserId => remoteUserId;
+  String? get callerName => remoteUserName;
+  String? get callerAvatar => remoteUserAvatar;
+  bool get isAudioMuted => isMuted;
+  bool get isVideoMuted => !isVideoEnabled;
+  bool get isConnected => status == CallStatus.connected;
+  bool get isConnecting => status == CallStatus.calling;
+  bool get isIncoming => false; // Determined by other factors
+  bool get isOutgoing => false; // Determined by other factors
+  String? get callType => isAudioOnly ? 'audio' : 'video';
 
   bool get shouldShowCallScreen =>
       status == CallStatus.calling ||
@@ -108,12 +160,18 @@ class CallState {
   /// Get quality as number of bars (1-5)
   int get qualityBars {
     switch (callQuality) {
-      case CallQuality.excellent: return 5;
-      case CallQuality.good: return 4;
-      case CallQuality.fair: return 3;
-      case CallQuality.poor: return 2;
-      case CallQuality.veryPoor: return 1;
-      case CallQuality.unknown: return 0;
+      case CallQuality.excellent:
+        return 5;
+      case CallQuality.good:
+        return 4;
+      case CallQuality.fair:
+        return 3;
+      case CallQuality.poor:
+        return 2;
+      case CallQuality.veryPoor:
+        return 1;
+      case CallQuality.unknown:
+        return 0;
     }
   }
 
@@ -128,6 +186,7 @@ class CallState {
     bool? isMuted,
     bool? isSpeakerOn,
     DateTime? startTime,
+    String? jitsiRoom,
     bool? isAudioOnly,
     bool? isOnHold,
     bool? isRecording,
@@ -153,6 +212,7 @@ class CallState {
       isMuted: isMuted ?? this.isMuted,
       isSpeakerOn: isSpeakerOn ?? this.isSpeakerOn,
       startTime: startTime ?? this.startTime,
+      jitsiRoom: jitsiRoom ?? this.jitsiRoom,
       isAudioOnly: isAudioOnly ?? this.isAudioOnly,
       isOnHold: isOnHold ?? this.isOnHold,
       isRecording: isRecording ?? this.isRecording,
@@ -202,7 +262,10 @@ class CallHistoryEntry {
     this.wasRecorded = false,
   });
 
-  bool get isMissed => !isOutgoing && endStatus != CallStatus.connected && endStatus != CallStatus.rejected;
+  bool get isMissed =>
+      !isOutgoing &&
+      endStatus != CallStatus.connected &&
+      endStatus != CallStatus.rejected;
 
   Map<String, dynamic> toJson() => {
     'id': id,
@@ -234,8 +297,10 @@ class CallHistoryEntry {
         orElse: () => CallStatus.ended,
       ),
       startTime: DateTime.parse(json['start_time'] as String),
-      endTime: json['end_time'] != null ? DateTime.parse(json['end_time'] as String) : null,
-      duration: json['duration_seconds'] != null 
+      endTime: json['end_time'] != null
+          ? DateTime.parse(json['end_time'] as String)
+          : null,
+      duration: json['duration_seconds'] != null
           ? Duration(seconds: json['duration_seconds'] as int)
           : null,
       notes: json['notes'] as String?,

@@ -4,10 +4,11 @@ import 'package:pact_mobile/models/site_visit.dart';
 
 void main() {
   group('ConflictResolutionService', () {
-    test('resolveConflict with lastWriteWins strategy should pick newer data', () {
+    test('resolveConflict with lastWriteWins strategy should pick newer data',
+        () {
       final now = DateTime.now();
-      final older = now.subtract(Duration(hours: 1));
-      
+      final older = now.subtract(const Duration(hours: 1));
+
       final result = ConflictResolutionService.resolveConflict<String>(
         localData: 'local',
         serverData: 'server',
@@ -41,7 +42,9 @@ void main() {
       expect(result.assignedTo, equals('user1'));
     });
 
-    test('resolveSiteVisitConflict should resolve assignment conflicts using server data', () {
+    test(
+        'resolveSiteVisitConflict should resolve assignment conflicts using server data',
+        () {
       final localVisit = SiteVisit(
         id: '1',
         status: 'assigned',

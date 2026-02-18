@@ -65,8 +65,7 @@ class _MainLayoutState extends State<MainLayout> {
       if (response != null && mounted) {
         final role = (response['role'] as String?)?.toLowerCase() ?? '';
         setState(() {
-          _isCoordinator =
-              role == 'coordinator' ||
+          _isCoordinator = role == 'coordinator' ||
               role == 'field_coordinator' ||
               role == 'state_coordinator';
           _isLoadingRole = false;
@@ -97,7 +96,7 @@ class _MainLayoutState extends State<MainLayout> {
         break;
       case 1:
         // Sites Management
-        screen = FieldOperationsEnhancedScreen();
+        screen = const FieldOperationsEnhancedScreen();
         break;
       case 2:
         // Wallet

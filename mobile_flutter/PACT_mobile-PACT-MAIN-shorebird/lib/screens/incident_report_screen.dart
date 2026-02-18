@@ -8,7 +8,7 @@ import '../services/local_storage_service.dart';
 import '../services/auth_service.dart';
 import '../providers/sync_provider.dart';
 import '../theme/app_colors.dart';
-import '../l10n/app_localizations.dart';
+import 'package:flutter_gen/gen_l10n/app_localizations.dart';
 
 class IncidentReportScreen extends StatefulWidget {
   const IncidentReportScreen({super.key});
@@ -234,7 +234,7 @@ class _IncidentReportScreenState extends State<IncidentReportScreen> {
                       ],
                     ),
                     trailing: report.severity == 'critical'
-                        ? Icon(Icons.warning, color: AppColors.accentRed)
+                        ? const Icon(Icons.warning, color: AppColors.accentRed)
                         : null,
                     onTap: () {
                       // Show detailed view

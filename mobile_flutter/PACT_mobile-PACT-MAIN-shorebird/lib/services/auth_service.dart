@@ -52,8 +52,7 @@ class AuthService {
         // Create new user profile if doesn't exist
         await supabase.from('Users').insert({
           'UID': user.id,
-          'Display name':
-              user.userMetadata?['full_name'] ??
+          'Display name': user.userMetadata?['full_name'] ??
               user.email?.split('@')[0] ??
               'User',
           'Email': user.email,
@@ -68,8 +67,8 @@ class AuthService {
         // Update last sign in time
         await supabase
             .from('Users')
-            .update({'Last sign in at': DateTime.now().toIso8601String()})
-            .eq('UID', user.id);
+            .update({'Last sign in at': DateTime.now().toIso8601String()}).eq(
+                'UID', user.id);
       }
 
       // Ensure user has worker role
@@ -120,7 +119,7 @@ class AuthService {
       }
       throw AuthException(e.message);
     } catch (e) {
-      throw AuthException('An unexpected error occurred');
+      throw const AuthException('An unexpected error occurred');
     }
   }
 
@@ -141,9 +140,10 @@ class AuthService {
       // This ensures the handle_new_user trigger can properly set the profile role
       // The database trigger reads from raw_user_meta_data->>'role'
       final normalizedRole = role?.trim().toLowerCase() ?? 'dataCollector';
-      
-      debugPrint('[AuthService] SignUp with metadata: role=$normalizedRole, hubId=$hubId, stateId=$stateId, localityId=$localityId');
-      
+
+      debugPrint(
+          '[AuthService] SignUp with metadata: role=$normalizedRole, hubId=$hubId, stateId=$stateId, localityId=$localityId');
+
       final response = await supabase.auth.signUp(
         email: email,
         password: password,
@@ -153,21 +153,26 @@ class AuthService {
           // Include phone if provided
           if (phone != null && phone.trim().isNotEmpty) 'phone': phone.trim(),
           // Include employeeId if provided
-          if (employeeId != null && employeeId.trim().isNotEmpty) 'employeeId': employeeId.trim(),
+          if (employeeId != null && employeeId.trim().isNotEmpty)
+            'employeeId': employeeId.trim(),
           // CRITICAL: Always include role (never null)
           'role': normalizedRole,
           // Include location data if provided (required for coordinators/data collectors)
           if (hubId != null && hubId.trim().isNotEmpty) 'hubId': hubId.trim(),
-          if (stateId != null && stateId.trim().isNotEmpty) 'stateId': stateId.trim(),
-          if (localityId != null && localityId.trim().isNotEmpty) 'localityId': localityId.trim(),
+          if (stateId != null && stateId.trim().isNotEmpty)
+            'stateId': stateId.trim(),
+          if (localityId != null && localityId.trim().isNotEmpty)
+            'localityId': localityId.trim(),
           // Include avatar if provided
-          if (avatarUrl != null && avatarUrl.trim().isNotEmpty) 'avatar': avatarUrl.trim(),
+          if (avatarUrl != null && avatarUrl.trim().isNotEmpty)
+            'avatar': avatarUrl.trim(),
         },
       );
-      
-      debugPrint('[AuthService] SignUp successful. User ID: ${response.user?.id}');
+
+      debugPrint(
+          '[AuthService] SignUp successful. User ID: ${response.user?.id}');
       debugPrint('[AuthService] User metadata: ${response.user?.userMetadata}');
-      
+
       return response;
     } on AuthException catch (e) {
       if (kDebugMode) {
@@ -176,7 +181,7 @@ class AuthService {
       throw AuthException(e.message);
     } catch (e) {
       debugPrint('[AuthService] Unexpected signup error: $e');
-      throw AuthException('An unexpected error occurred');
+      throw const AuthException('An unexpected error occurred');
     }
   }
 
@@ -187,7 +192,7 @@ class AuthService {
       // Clear local authentication data
       await _clearLocalAuthData();
     } catch (e) {
-      throw AuthException('Failed to sign out');
+      throw const AuthException('Failed to sign out');
     }
   }
 
@@ -212,10 +217,9 @@ class AuthService {
     try {
       await supabase
           .from('profiles')
-          .update({'status': 'approved'})
-          .eq('id', userId);
+          .update({'status': 'approved'}).eq('id', userId);
     } catch (e) {
-      throw AuthException('Failed to approve user');
+      throw const AuthException('Failed to approve user');
     }
   }
 
@@ -224,7 +228,7 @@ class AuthService {
     try {
       await supabase.auth.resend(type: OtpType.signup, email: email);
     } catch (e) {
-      throw AuthException('Failed to resend verification email');
+      throw const AuthException('Failed to resend verification email');
     }
   }
 
@@ -238,13 +242,13 @@ class AuthService {
       );
 
       if (response.status != 200) {
-        throw AuthException('Failed to send reset code');
+        throw const AuthException('Failed to send reset code');
       }
 
       // The function returns success even if user doesn't exist (security)
     } catch (e) {
       debugPrint('Error requesting password reset: $e');
-      throw AuthException('Failed to send reset code. Please try again.');
+      throw const AuthException('Failed to send reset code. Please try again.');
     }
   }
 
@@ -257,17 +261,17 @@ class AuthService {
       );
 
       if (response.status != 200) {
-        throw AuthException('Invalid or expired verification code');
+        throw const AuthException('Invalid or expired verification code');
       }
 
       final data = response.data;
       if (data == null || !(data['success'] as bool)) {
-        throw AuthException('Invalid or expired verification code');
+        throw const AuthException('Invalid or expired verification code');
       }
     } catch (e) {
       debugPrint('Error verifying OTP: $e');
       if (e is AuthException) rethrow;
-      throw AuthException('Failed to verify code. Please try again.');
+      throw const AuthException('Failed to verify code. Please try again.');
     }
   }
 
@@ -288,17 +292,17 @@ class AuthService {
       );
 
       if (response.status != 200) {
-        throw AuthException('Failed to reset password');
+        throw const AuthException('Failed to reset password');
       }
 
       final data = response.data;
       if (data == null || !(data['success'] as bool)) {
-        throw AuthException('Failed to reset password');
+        throw const AuthException('Failed to reset password');
       }
     } catch (e) {
       debugPrint('Error resetting password: $e');
       if (e is AuthException) rethrow;
-      throw AuthException('Failed to reset password. Please try again.');
+      throw const AuthException('Failed to reset password. Please try again.');
     }
   }
 

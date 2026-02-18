@@ -95,30 +95,31 @@ class _CompleteVisitScreenState extends ConsumerState<CompleteVisitScreen> {
 
       if (drafts.isNotEmpty) {
         final draft = drafts.first;
-        
+
         // Parse combined notes and activities
         final parsed = _parseNotesAndActivities(draft.notes);
-        
+
         // Restore notes
         if (parsed['notes']!.isNotEmpty) {
           _notesController.text = parsed['notes']!;
         }
-        
+
         // Restore activities
         if (parsed['activities']!.isNotEmpty) {
           _activitiesController.text = parsed['activities']!;
         }
-        
+
         // Restore photos from base64 strings
         if (draft.photos != null && draft.photos!.isNotEmpty) {
           await _restorePhotosFromDraft(draft.photos!);
         }
-        
+
         if (mounted) {
           setState(() {});
           AppSnackBar.show(
             context,
-            message: 'Draft loaded with ${_photos.length} photos. Continue where you left off!',
+            message:
+                'Draft loaded with ${_photos.length} photos. Continue where you left off!',
             type: SnackBarType.info,
           );
         }
@@ -127,50 +128,54 @@ class _CompleteVisitScreenState extends ConsumerState<CompleteVisitScreen> {
       debugPrint('Error loading draft: $e');
     }
   }
-  
+
   /// Restore photos from base64 encoded strings saved in draft
   Future<void> _restorePhotosFromDraft(List<String> photoData) async {
     if (kIsWeb) {
       debugPrint('Photo restoration not supported on web platform');
       return;
     }
-    
+
     try {
       // Use app-specific cache directory that persists across restarts
       final cacheDir = await path_provider.getApplicationCacheDirectory();
       final draftsDir = Directory('${cacheDir.path}/draft_photos');
-      
+
       // Create drafts directory if it doesn't exist
       if (!await draftsDir.exists()) {
         await draftsDir.create(recursive: true);
       }
-      
+
       for (int i = 0; i < photoData.length; i++) {
         try {
           final data = photoData[i];
-          
+
           // Check if it's a file path that still exists
-          if (!data.startsWith('data:') && !data.contains('base64') && File(data).existsSync()) {
+          if (!data.startsWith('data:') &&
+              !data.contains('base64') &&
+              File(data).existsSync()) {
             _photos.add(XFile(data));
             continue;
           }
-          
+
           // Check if it's base64 encoded
-          if (data.startsWith('data:image') || data.contains('base64') || _isBase64(data)) {
+          if (data.startsWith('data:image') ||
+              data.contains('base64') ||
+              _isBase64(data)) {
             // Extract base64 content
             String base64Str = data;
             if (data.contains(',')) {
               base64Str = data.split(',').last;
             }
-            
+
             // Decode base64 to bytes
             final bytes = base64Decode(base64Str);
-            
+
             // Save to persistent cache directory with unique name based on site visit
             final fileName = 'draft_${widget.visit.id}_photo_$i.jpg';
             final photoFile = File('${draftsDir.path}/$fileName');
             await photoFile.writeAsBytes(bytes);
-            
+
             // Add to photos list
             _photos.add(XFile(photoFile.path));
           }
@@ -182,7 +187,7 @@ class _CompleteVisitScreenState extends ConsumerState<CompleteVisitScreen> {
       debugPrint('Error restoring photos from draft: $e');
     }
   }
-  
+
   /// Check if a string is valid base64
   bool _isBase64(String str) {
     try {
@@ -193,10 +198,10 @@ class _CompleteVisitScreenState extends ConsumerState<CompleteVisitScreen> {
       return false;
     }
   }
-  
+
   /// Separator used to combine notes and activities in draft storage
   static const String _draftSeparator = '|||ACTIVITIES|||';
-  
+
   /// Combine notes and activities into a single string for storage
   String _combineNotesAndActivities(String notes, String activities) {
     if (activities.isEmpty) {
@@ -204,13 +209,13 @@ class _CompleteVisitScreenState extends ConsumerState<CompleteVisitScreen> {
     }
     return '$notes$_draftSeparator$activities';
   }
-  
+
   /// Parse combined notes string into separate notes and activities
   Map<String, String> _parseNotesAndActivities(String? combined) {
     if (combined == null || combined.isEmpty) {
       return {'notes': '', 'activities': ''};
     }
-    
+
     if (combined.contains(_draftSeparator)) {
       final parts = combined.split(_draftSeparator);
       return {
@@ -218,7 +223,7 @@ class _CompleteVisitScreenState extends ConsumerState<CompleteVisitScreen> {
         'activities': parts.length > 1 ? parts[1] : '',
       };
     }
-    
+
     return {'notes': combined, 'activities': ''};
   }
 
@@ -248,32 +253,28 @@ class _CompleteVisitScreenState extends ConsumerState<CompleteVisitScreen> {
         lastKnown = await Geolocator.getLastKnownPosition();
       }
 
-      final timeout = kIsWeb
-          ? const Duration(seconds: 60)
-          : const Duration(seconds: 20);
+      const timeout = kIsWeb ? Duration(seconds: 60) : Duration(seconds: 20);
 
       Position position;
       if (lastKnown != null) {
         position = lastKnown;
       } else {
         // On web, getCurrentPosition can hang; use a short stream fallback.
-        position =
-            await Geolocator.getCurrentPosition(
-              desiredAccuracy: LocationAccuracy.high,
-            ).timeout(
-              timeout,
-              onTimeout: () async {
-                final streamTimeout = kIsWeb
-                    ? const Duration(seconds: 15)
-                    : const Duration(seconds: 10);
-                return await Geolocator.getPositionStream(
-                  locationSettings: const LocationSettings(
-                    accuracy: LocationAccuracy.high,
-                    distanceFilter: 0,
-                  ),
-                ).first.timeout(streamTimeout);
-              },
-            );
+        position = await Geolocator.getCurrentPosition(
+          desiredAccuracy: LocationAccuracy.high,
+        ).timeout(
+          timeout,
+          onTimeout: () async {
+            const streamTimeout =
+                kIsWeb ? Duration(seconds: 15) : Duration(seconds: 10);
+            return await Geolocator.getPositionStream(
+              locationSettings: const LocationSettings(
+                accuracy: LocationAccuracy.high,
+                distanceFilter: 0,
+              ),
+            ).first.timeout(streamTimeout);
+          },
+        );
       }
 
       if (!mounted) return;
@@ -450,9 +451,7 @@ class _CompleteVisitScreenState extends ConsumerState<CompleteVisitScreen> {
         }
 
         try {
-          await supabase.storage
-              .from(_reportPhotosBucket)
-              .uploadBinary(
+          await supabase.storage.from(_reportPhotosBucket).uploadBinary(
                 storagePath,
                 bytes,
                 fileOptions: const FileOptions(
@@ -512,9 +511,7 @@ class _CompleteVisitScreenState extends ConsumerState<CompleteVisitScreen> {
           .single();
 
       // 5. Stop active visit tracking
-      await ref
-          .read(activeVisitProvider.notifier)
-          .completeVisit(
+      await ref.read(activeVisitProvider.notifier).completeVisit(
             notes: _notesController.text,
             photos: _photos.map((p) => p.path).toList(),
           );
@@ -558,15 +555,14 @@ class _CompleteVisitScreenState extends ConsumerState<CompleteVisitScreen> {
   Future<void> _saveOfflineCompletion(String userId) async {
     try {
       final db = ref.read(offlineDbProvider);
-      final uuid = const Uuid();
+      const uuid = Uuid();
       final now = DateTime.now();
 
       // Calculate visit duration
       final activeVisitState = ref.read(activeVisitProvider);
       final startTime = activeVisitState.startedAt;
-      final durationMinutes = startTime != null
-          ? now.difference(startTime).inMinutes
-          : null;
+      final durationMinutes =
+          startTime != null ? now.difference(startTime).inMinutes : null;
 
       // Convert photos to base64 for local storage
       final List<String> photoDataList = [];
@@ -651,9 +647,7 @@ class _CompleteVisitScreenState extends ConsumerState<CompleteVisitScreen> {
       await db.addPendingSync(syncAction);
 
       // Stop active visit tracking
-      await ref
-          .read(activeVisitProvider.notifier)
-          .completeVisit(
+      await ref.read(activeVisitProvider.notifier).completeVisit(
             notes: _notesController.text,
             photos: _photos.map((p) => p.path).toList(),
           );
@@ -698,7 +692,7 @@ class _CompleteVisitScreenState extends ConsumerState<CompleteVisitScreen> {
 
     try {
       final db = ref.read(offlineDbProvider);
-      final uuid = const Uuid();
+      const uuid = Uuid();
       final now = DateTime.now();
       final userId = Supabase.instance.client.auth.currentUser?.id;
 
@@ -750,7 +744,7 @@ class _CompleteVisitScreenState extends ConsumerState<CompleteVisitScreen> {
         _notesController.text.trim(),
         _activitiesController.text.trim(),
       );
-      
+
       // Create draft record
       final draftVisit = OfflineSiteVisit(
         id: draftId,
@@ -1015,7 +1009,7 @@ class _CompleteVisitScreenState extends ConsumerState<CompleteVisitScreen> {
                             image: DecorationImage(
                               image: kIsWeb
                                   ? NetworkImage(_photos[index].path)
-                                        as ImageProvider
+                                      as ImageProvider
                                   : FileImage(File(_photos[index].path)),
                               fit: BoxFit.cover,
                             ),
@@ -1082,9 +1076,8 @@ class _CompleteVisitScreenState extends ConsumerState<CompleteVisitScreen> {
                 width: double.infinity,
                 height: 50,
                 child: OutlinedButton.icon(
-                  onPressed: (_isSavingDraft || _isSubmitting)
-                      ? null
-                      : _saveDraft,
+                  onPressed:
+                      (_isSavingDraft || _isSubmitting) ? null : _saveDraft,
                   icon: _isSavingDraft
                       ? const SizedBox(
                           width: 20,
@@ -1097,7 +1090,8 @@ class _CompleteVisitScreenState extends ConsumerState<CompleteVisitScreen> {
                   ),
                   style: OutlinedButton.styleFrom(
                     foregroundColor: AppColors.primaryBlue,
-                    side: BorderSide(color: AppColors.primaryBlue, width: 2),
+                    side: const BorderSide(
+                        color: AppColors.primaryBlue, width: 2),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
                     ),
@@ -1112,9 +1106,8 @@ class _CompleteVisitScreenState extends ConsumerState<CompleteVisitScreen> {
               width: double.infinity,
               height: 50,
               child: ElevatedButton.icon(
-                onPressed: (_isSubmitting || _isSavingDraft)
-                    ? null
-                    : _submitReport,
+                onPressed:
+                    (_isSubmitting || _isSavingDraft) ? null : _submitReport,
                 icon: _isSubmitting
                     ? const SizedBox(
                         width: 20,
@@ -1159,13 +1152,13 @@ class _CompleteVisitScreenState extends ConsumerState<CompleteVisitScreen> {
               _currentLocation != null
                   ? Icons.location_on
                   : _locationError != null
-                  ? Icons.location_off
-                  : Icons.location_searching,
+                      ? Icons.location_off
+                      : Icons.location_searching,
               color: _currentLocation != null
                   ? AppColors.success
                   : _locationError != null
-                  ? Colors.red
-                  : AppColors.primaryOrange,
+                      ? Colors.red
+                      : AppColors.primaryOrange,
             ),
             const SizedBox(width: 12),
             Expanded(

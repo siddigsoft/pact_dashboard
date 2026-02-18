@@ -1,5 +1,4 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import '../models/cost_submission_models.dart';
 import '../repositories/cost_submission_repository.dart';
@@ -10,7 +9,9 @@ import '../services/notification_service.dart';
 import 'auth_provider.dart';
 
 // Cost submission repository provider
-final costSubmissionRepositoryProvider = Provider<CostSubmissionRepository>((ref) {
+final costSubmissionRepositoryProvider = Provider<CostSubmissionRepository>((
+  ref,
+) {
   final supabase = ref.watch(supabaseClientProvider);
   return CostSubmissionRepository(supabase);
 });
@@ -21,155 +22,181 @@ final costSubmissionServiceProvider = Provider<CostSubmissionService>((ref) {
 });
 
 // Budget restriction service provider
-final budgetRestrictionServiceProvider = Provider<BudgetRestrictionService>((ref) {
+final budgetRestrictionServiceProvider = Provider<BudgetRestrictionService>((
+  ref,
+) {
   return BudgetRestrictionService();
 });
 
 // Stream provider for user's cost submissions (real-time)
-final userCostSubmissionsStreamProvider = StreamProvider.autoDispose<List<CostSubmission>>((ref) {
-  final repository = ref.watch(costSubmissionRepositoryProvider);
-  final userId = ref.watch(currentUserIdProvider);
-  
-  if (userId == null || userId.isEmpty) {
-    return Stream.value([]);
-  }
-  
-  return repository.watchUserCostSubmissions(userId);
-});
+final userCostSubmissionsStreamProvider =
+    StreamProvider.autoDispose<List<CostSubmission>>((ref) {
+      final repository = ref.watch(costSubmissionRepositoryProvider);
+      final userId = ref.watch(currentUserIdProvider);
+
+      if (userId == null || userId.isEmpty) {
+        return Stream.value([]);
+      }
+
+      return repository.watchUserCostSubmissions(userId);
+    });
 
 // Future provider for user's cost submissions
-final userCostSubmissionsProvider = FutureProvider.autoDispose<List<CostSubmission>>((ref) async {
-  final repository = ref.watch(costSubmissionRepositoryProvider);
-  final userId = ref.watch(currentUserIdProvider);
-  
-  if (userId == null || userId.isEmpty) {
-    return [];
-  }
-  
-  return repository.getUserCostSubmissions(userId);
-});
+final userCostSubmissionsProvider =
+    FutureProvider.autoDispose<List<CostSubmission>>((ref) async {
+      final repository = ref.watch(costSubmissionRepositoryProvider);
+      final userId = ref.watch(currentUserIdProvider);
+
+      if (userId == null || userId.isEmpty) {
+        return [];
+      }
+
+      return repository.getUserCostSubmissions(userId);
+    });
 
 // Provider for cost submissions filtered by status
-final costSubmissionsByStatusProvider = FutureProvider.autoDispose.family<List<CostSubmission>, CostSubmissionStatus?>((ref, status) async {
-  final repository = ref.watch(costSubmissionRepositoryProvider);
-  final userId = ref.watch(currentUserIdProvider);
-  
-  if (userId == null || userId.isEmpty) {
-    return [];
-  }
-  
-  if (status == null) {
-    return repository.getUserCostSubmissions(userId);
-  }
-  
-  return repository.getCostSubmissionsByStatus(userId, status);
-});
+final costSubmissionsByStatusProvider = FutureProvider.autoDispose
+    .family<List<CostSubmission>, CostSubmissionStatus?>((ref, status) async {
+      final repository = ref.watch(costSubmissionRepositoryProvider);
+      final userId = ref.watch(currentUserIdProvider);
+
+      if (userId == null || userId.isEmpty) {
+        return [];
+      }
+
+      if (status == null) {
+        return repository.getUserCostSubmissions(userId);
+      }
+
+      return repository.getCostSubmissionsByStatus(userId, status);
+    });
 
 // Provider for single cost submission by ID
-final costSubmissionByIdProvider = FutureProvider.autoDispose.family<CostSubmission?, String>((ref, id) async {
-  final repository = ref.watch(costSubmissionRepositoryProvider);
-  return repository.getCostSubmissionById(id);
-});
+final costSubmissionByIdProvider = FutureProvider.autoDispose
+    .family<CostSubmission?, String>((ref, id) async {
+      final repository = ref.watch(costSubmissionRepositoryProvider);
+      return repository.getCostSubmissionById(id);
+    });
 
 // Provider for cost submission statistics
-final costSubmissionStatsProvider = FutureProvider.autoDispose<CostSubmissionStats>((ref) async {
-  final repository = ref.watch(costSubmissionRepositoryProvider);
-  final userId = ref.watch(currentUserIdProvider);
-  
-  if (userId == null || userId.isEmpty) {
-    return CostSubmissionStats();
-  }
-  
-  return repository.getCostSubmissionStats(userId);
-});
+final costSubmissionStatsProvider =
+    FutureProvider.autoDispose<CostSubmissionStats>((ref) async {
+      final repository = ref.watch(costSubmissionRepositoryProvider);
+      final userId = ref.watch(currentUserIdProvider);
+
+      if (userId == null || userId.isEmpty) {
+        return CostSubmissionStats();
+      }
+
+      return repository.getCostSubmissionStats(userId);
+    });
 
 // State provider for selected status filter
-final selectedStatusFilterProvider = StateProvider.autoDispose<CostSubmissionStatus?>((ref) => null);
+final selectedStatusFilterProvider =
+    StateProvider.autoDispose<CostSubmissionStatus?>((ref) => null);
 
 // State provider for search query
-final costSubmissionSearchQueryProvider = StateProvider.autoDispose<String>((ref) => '');
+final costSubmissionSearchQueryProvider = StateProvider.autoDispose<String>(
+  (ref) => '',
+);
 
 // Provider for pending cost submissions (for approval dashboard)
-final pendingCostSubmissionsProvider = FutureProvider.autoDispose<List<CostSubmission>>((ref) async {
-  final supabase = ref.watch(supabaseClientProvider);
-  final currentUserId = supabase.auth.currentUser?.id;
-  
-  if (currentUserId == null) {
-    return [];
-  }
-  
-  try {
-    // Fetch pending cost submissions for approvers
-    // Note: Database uses state_id and hub_id columns (not state/hub)
-    final profileResponse = await supabase
-        .from('profiles')
-        .select('role, state_id, hub_id')
-        .eq('id', currentUserId)
-        .maybeSingle();
-    
-    final userRole = profileResponse?['role']?.toString().toLowerCase() ?? '';
-    
-    // Admin/Super Admin can see all pending submissions
-    if (userRole.contains('admin') || userRole.contains('super')) {
-      final response = await supabase
-          .from('site_visit_cost_submissions')
-          .select()
-          .eq('status', 'pending')
-          .order('submitted_at', ascending: false);
-      
-      return (response as List)
-          .map((json) => CostSubmission.fromJson(json as Map<String, dynamic>))
-          .toList();
-    } else if (userRole.contains('coordinator') || userRole.contains('fom')) {
-      // Coordinators and FOM can see pending submissions
-      final response = await supabase
-          .from('site_visit_cost_submissions')
-          .select()
-          .eq('status', 'pending')
-          .order('submitted_at', ascending: false);
-      
-      return (response as List)
-          .map((json) => CostSubmission.fromJson(json as Map<String, dynamic>))
-          .toList();
-    }
-    
-    return [];
-  } catch (e) {
-    print('[pendingCostSubmissionsProvider] Error: $e');
-    return [];
-  }
-});
+final pendingCostSubmissionsProvider =
+    FutureProvider.autoDispose<List<CostSubmission>>((ref) async {
+      final supabase = ref.watch(supabaseClientProvider);
+      final currentUserId = supabase.auth.currentUser?.id;
+
+      if (currentUserId == null) {
+        return [];
+      }
+
+      try {
+        // Fetch pending cost submissions for approvers
+        // Note: Database uses state_id and hub_id columns (not state/hub)
+        final profileResponse = await supabase
+            .from('profiles')
+            .select('role, state_id, hub_id')
+            .eq('id', currentUserId)
+            .maybeSingle();
+
+        final userRole =
+            profileResponse?['role']?.toString().toLowerCase() ?? '';
+
+        // Admin/Super Admin can see all pending submissions
+        if (userRole.contains('admin') || userRole.contains('super')) {
+          final response = await supabase
+              .from('site_visit_cost_submissions')
+              .select()
+              .eq('status', 'pending')
+              .order('submitted_at', ascending: false);
+
+          return (response as List)
+              .map(
+                (json) => CostSubmission.fromJson(json as Map<String, dynamic>),
+              )
+              .toList();
+        } else if (userRole.contains('coordinator') ||
+            userRole.contains('fom')) {
+          // Coordinators and FOM can see pending submissions
+          final response = await supabase
+              .from('site_visit_cost_submissions')
+              .select()
+              .eq('status', 'pending')
+              .order('submitted_at', ascending: false);
+
+          return (response as List)
+              .map(
+                (json) => CostSubmission.fromJson(json as Map<String, dynamic>),
+              )
+              .toList();
+        }
+
+        return [];
+      } catch (e) {
+        print('[pendingCostSubmissionsProvider] Error: $e');
+        return [];
+      }
+    });
 
 // Provider for filtered and searched cost submissions
-final filteredCostSubmissionsProvider = FutureProvider.autoDispose<List<CostSubmission>>((ref) async {
-  final submissions = await ref.watch(userCostSubmissionsProvider.future);
-  final statusFilter = ref.watch(selectedStatusFilterProvider);
-  final searchQuery = ref.watch(costSubmissionSearchQueryProvider);
-  final service = ref.watch(costSubmissionServiceProvider);
-  
-  var filtered = submissions;
-  
-  // Apply status filter
-  if (statusFilter != null) {
-    filtered = service.filterByStatus(filtered, statusFilter);
-  }
-  
-  // Apply search filter
-  if (searchQuery.isNotEmpty) {
-    filtered = filtered.where((submission) {
-      final lowerQuery = searchQuery.toLowerCase();
-      return submission.siteVisitId.toLowerCase().contains(lowerQuery) ||
-             submission.submissionNotes?.toLowerCase().contains(lowerQuery) == true ||
-             submission.transportationDetails?.toLowerCase().contains(lowerQuery) == true ||
-             submission.accommodationDetails?.toLowerCase().contains(lowerQuery) == true;
-    }).toList();
-  }
-  
-  return filtered;
-});
+final filteredCostSubmissionsProvider =
+    FutureProvider.autoDispose<List<CostSubmission>>((ref) async {
+      final submissions = await ref.watch(userCostSubmissionsProvider.future);
+      final statusFilter = ref.watch(selectedStatusFilterProvider);
+      final searchQuery = ref.watch(costSubmissionSearchQueryProvider);
+      final service = ref.watch(costSubmissionServiceProvider);
+
+      var filtered = submissions;
+
+      // Apply status filter
+      if (statusFilter != null) {
+        filtered = service.filterByStatus(filtered, statusFilter);
+      }
+
+      // Apply search filter
+      if (searchQuery.isNotEmpty) {
+        filtered = filtered.where((submission) {
+          final lowerQuery = searchQuery.toLowerCase();
+          return submission.siteVisitId.toLowerCase().contains(lowerQuery) ||
+              submission.submissionNotes?.toLowerCase().contains(lowerQuery) ==
+                  true ||
+              submission.transportationDetails?.toLowerCase().contains(
+                    lowerQuery,
+                  ) ==
+                  true ||
+              submission.accommodationDetails?.toLowerCase().contains(
+                    lowerQuery,
+                  ) ==
+                  true;
+        }).toList();
+      }
+
+      return filtered;
+    });
 
 // State notifier for creating cost submission
-class CreateCostSubmissionNotifier extends StateNotifier<AsyncValue<CostSubmission?>> {
+class CreateCostSubmissionNotifier
+    extends StateNotifier<AsyncValue<CostSubmission?>> {
   CreateCostSubmissionNotifier(this.ref) : super(const AsyncValue.data(null));
 
   final Ref ref;
@@ -187,10 +214,11 @@ class CreateCostSubmissionNotifier extends StateNotifier<AsyncValue<CostSubmissi
       }
 
       // Calculate total cost
-      final totalCostCents = request.transportationCostCents +
-                           request.accommodationCostCents +
-                           request.mealAllowanceCents +
-                           request.otherCostsCents;
+      final totalCostCents =
+          request.transportationCostCents +
+          request.accommodationCostCents +
+          request.mealAllowanceCents +
+          request.otherCostsCents;
 
       // Check connectivity
       final connectivityResult = await Connectivity().checkConnectivity();
@@ -206,7 +234,9 @@ class CreateCostSubmissionNotifier extends StateNotifier<AsyncValue<CostSubmissi
         );
 
         if (!budgetCheck.allowed) {
-          throw CostSubmissionException(budgetCheck.message ?? 'Budget restriction violated');
+          throw CostSubmissionException(
+            budgetCheck.message ?? 'Budget restriction violated',
+          );
         }
 
         // Check monthly submission limits
@@ -216,10 +246,15 @@ class CreateCostSubmissionNotifier extends StateNotifier<AsyncValue<CostSubmissi
         );
 
         if (!monthlyCheck.allowed) {
-          throw CostSubmissionException(monthlyCheck.message ?? 'Monthly limit exceeded');
+          throw CostSubmissionException(
+            monthlyCheck.message ?? 'Monthly limit exceeded',
+          );
         }
 
-        final submission = await repository.createCostSubmission(request, userId);
+        final submission = await repository.createCostSubmission(
+          request,
+          userId,
+        );
         state = AsyncValue.data(submission);
       } else {
         // Offline: Cache submission for later sync
@@ -235,7 +270,9 @@ class CreateCostSubmissionNotifier extends StateNotifier<AsyncValue<CostSubmissi
           'otherCostsDetails': request.otherCostsDetails,
           'submissionNotes': request.submissionNotes,
           'currency': request.currency,
-          'supportingDocuments': request.supportingDocuments?.map((doc) => doc.toJson()).toList(),
+          'supportingDocuments': request.supportingDocuments
+              ?.map((doc) => doc.toJson())
+              .toList(),
           'userId': userId,
           'totalCostCents': totalCostCents,
           'createdAt': DateTime.now().toIso8601String(),
@@ -298,12 +335,18 @@ class CreateCostSubmissionNotifier extends StateNotifier<AsyncValue<CostSubmissi
   }
 }
 
-final createCostSubmissionProvider = StateNotifierProvider.autoDispose<CreateCostSubmissionNotifier, AsyncValue<CostSubmission?>>((ref) {
-  return CreateCostSubmissionNotifier(ref);
-});
+final createCostSubmissionProvider =
+    StateNotifierProvider.autoDispose<
+      CreateCostSubmissionNotifier,
+      AsyncValue<CostSubmission?>
+    >((ref) {
+      return CreateCostSubmissionNotifier(ref);
+    });
 
 // Provider for offline submissions
-final offlineSubmissionsProvider = FutureProvider<List<Map<String, dynamic>>>((ref) async {
+final offlineSubmissionsProvider = FutureProvider<List<Map<String, dynamic>>>((
+  ref,
+) async {
   return SubmissionCacheService.getCachedSubmissions();
 });
 
@@ -322,7 +365,8 @@ class SyncOfflineSubmissionsNotifier extends StateNotifier<AsyncValue<int>> {
     state = const AsyncValue.loading();
 
     try {
-      final cachedSubmissions = await SubmissionCacheService.getCachedSubmissions();
+      final cachedSubmissions =
+          await SubmissionCacheService.getCachedSubmissions();
       if (cachedSubmissions.isEmpty) {
         state = const AsyncValue.data(0);
         return;
@@ -348,23 +392,35 @@ class SyncOfflineSubmissionsNotifier extends StateNotifier<AsyncValue<int>> {
             // Convert cached data back to request format
             final request = CreateCostSubmissionRequest(
               siteVisitId: cachedSubmission['siteVisitId'] as String,
-              transportationCostCents: cachedSubmission['transportationCostCents'] as int,
-              accommodationCostCents: cachedSubmission['accommodationCostCents'] as int,
+              transportationCostCents:
+                  cachedSubmission['transportationCostCents'] as int,
+              accommodationCostCents:
+                  cachedSubmission['accommodationCostCents'] as int,
               mealAllowanceCents: cachedSubmission['mealAllowanceCents'] as int,
               otherCostsCents: cachedSubmission['otherCostsCents'] as int,
-              transportationDetails: cachedSubmission['transportationDetails'] as String?,
-              accommodationDetails: cachedSubmission['accommodationDetails'] as String?,
+              transportationDetails:
+                  cachedSubmission['transportationDetails'] as String?,
+              accommodationDetails:
+                  cachedSubmission['accommodationDetails'] as String?,
               mealDetails: cachedSubmission['mealDetails'] as String?,
-              otherCostsDetails: cachedSubmission['otherCostsDetails'] as String?,
+              otherCostsDetails:
+                  cachedSubmission['otherCostsDetails'] as String?,
               submissionNotes: cachedSubmission['submissionNotes'] as String?,
               currency: cachedSubmission['currency'] as String,
-              supportingDocuments: (cachedSubmission['supportingDocuments'] as List<dynamic>?)
-                  ?.map((doc) => SupportingDocument.fromJson(doc as Map<String, dynamic>))
-                  .toList(),
+              supportingDocuments:
+                  (cachedSubmission['supportingDocuments'] as List<dynamic>?)
+                      ?.map(
+                        (doc) => SupportingDocument.fromJson(
+                          doc as Map<String, dynamic>,
+                        ),
+                      )
+                      .toList(),
             );
 
             await repository.createCostSubmission(request, userId);
-            await SubmissionCacheService.removeCachedSubmission(cachedSubmission['id'] as String);
+            await SubmissionCacheService.removeCachedSubmission(
+              cachedSubmission['id'] as String,
+            );
             syncedCount++;
           }
         } catch (e) {
@@ -394,24 +450,29 @@ class SyncOfflineSubmissionsNotifier extends StateNotifier<AsyncValue<int>> {
   }
 }
 
-final syncOfflineSubmissionsProvider = StateNotifierProvider.autoDispose<SyncOfflineSubmissionsNotifier, AsyncValue<int>>((ref) {
-  return SyncOfflineSubmissionsNotifier(ref);
-});
+final syncOfflineSubmissionsProvider =
+    StateNotifierProvider.autoDispose<
+      SyncOfflineSubmissionsNotifier,
+      AsyncValue<int>
+    >((ref) {
+      return SyncOfflineSubmissionsNotifier(ref);
+    });
 
 // State notifier for updating cost submission
-class UpdateCostSubmissionNotifier extends StateNotifier<AsyncValue<CostSubmission?>> {
+class UpdateCostSubmissionNotifier
+    extends StateNotifier<AsyncValue<CostSubmission?>> {
   UpdateCostSubmissionNotifier(this.ref) : super(const AsyncValue.data(null));
 
   final Ref ref;
 
   Future<void> update(String id, UpdateCostSubmissionRequest request) async {
     state = const AsyncValue.loading();
-    
+
     try {
       final repository = ref.read(costSubmissionRepositoryProvider);
       final submission = await repository.updateCostSubmission(id, request);
       state = AsyncValue.data(submission);
-      
+
       // Invalidate related providers
       ref.invalidate(userCostSubmissionsProvider);
       ref.invalidate(userCostSubmissionsStreamProvider);
@@ -427,24 +488,29 @@ class UpdateCostSubmissionNotifier extends StateNotifier<AsyncValue<CostSubmissi
   }
 }
 
-final updateCostSubmissionProvider = StateNotifierProvider.autoDispose<UpdateCostSubmissionNotifier, AsyncValue<CostSubmission?>>((ref) {
-  return UpdateCostSubmissionNotifier(ref);
-});
+final updateCostSubmissionProvider =
+    StateNotifierProvider.autoDispose<
+      UpdateCostSubmissionNotifier,
+      AsyncValue<CostSubmission?>
+    >((ref) {
+      return UpdateCostSubmissionNotifier(ref);
+    });
 
 // State notifier for cancelling cost submission
-class CancelCostSubmissionNotifier extends StateNotifier<AsyncValue<CostSubmission?>> {
+class CancelCostSubmissionNotifier
+    extends StateNotifier<AsyncValue<CostSubmission?>> {
   CancelCostSubmissionNotifier(this.ref) : super(const AsyncValue.data(null));
 
   final Ref ref;
 
   Future<void> cancel(String id) async {
     state = const AsyncValue.loading();
-    
+
     try {
       final repository = ref.read(costSubmissionRepositoryProvider);
       final submission = await repository.cancelCostSubmission(id);
       state = AsyncValue.data(submission);
-      
+
       // Invalidate related providers
       ref.invalidate(userCostSubmissionsProvider);
       ref.invalidate(userCostSubmissionsStreamProvider);
@@ -460,12 +526,18 @@ class CancelCostSubmissionNotifier extends StateNotifier<AsyncValue<CostSubmissi
   }
 }
 
-final cancelCostSubmissionProvider = StateNotifierProvider.autoDispose<CancelCostSubmissionNotifier, AsyncValue<CostSubmission?>>((ref) {
-  return CancelCostSubmissionNotifier(ref);
-});
+final cancelCostSubmissionProvider =
+    StateNotifierProvider.autoDispose<
+      CancelCostSubmissionNotifier,
+      AsyncValue<CostSubmission?>
+    >((ref) {
+      return CancelCostSubmissionNotifier(ref);
+    });
 
 // Provider for pending cost submissions count
-final pendingCostSubmissionsCountProvider = FutureProvider.autoDispose<int>((ref) async {
+final pendingCostSubmissionsCountProvider = FutureProvider.autoDispose<int>((
+  ref,
+) async {
   final stats = await ref.watch(costSubmissionStatsProvider.future);
   return stats.pendingCount;
 });
@@ -477,7 +549,9 @@ final totalPendingAmountProvider = FutureProvider.autoDispose<int>((ref) async {
 });
 
 // Provider for total approved amount
-final totalApprovedAmountProvider = FutureProvider.autoDispose<int>((ref) async {
+final totalApprovedAmountProvider = FutureProvider.autoDispose<int>((
+  ref,
+) async {
   final stats = await ref.watch(costSubmissionStatsProvider.future);
   return stats.totalApprovedAmountCents;
 });
@@ -493,25 +567,28 @@ final totalPaidAmountProvider = FutureProvider.autoDispose<int>((ref) async {
 // ============================================================================
 
 // Provider for revision requested submissions
-final revisionRequestedProvider = FutureProvider.autoDispose<List<CostSubmission>>((ref) async {
-  final repository = ref.watch(costSubmissionRepositoryProvider);
-  final userId = ref.watch(currentUserIdProvider);
-  
-  if (userId == null || userId.isEmpty) {
-    return [];
-  }
-  
-  return repository.getRevisionRequested(userId);
-});
+final revisionRequestedProvider =
+    FutureProvider.autoDispose<List<CostSubmission>>((ref) async {
+      final repository = ref.watch(costSubmissionRepositoryProvider);
+      final userId = ref.watch(currentUserIdProvider);
+
+      if (userId == null || userId.isEmpty) {
+        return [];
+      }
+
+      return repository.getRevisionRequested(userId);
+    });
 
 // Provider for approval history of a submission
-final approvalHistoryProvider = FutureProvider.autoDispose.family<List<CostApprovalHistory>, String>((ref, submissionId) async {
-  final repository = ref.watch(costSubmissionRepositoryProvider);
-  return repository.getApprovalHistory(submissionId);
-});
+final approvalHistoryProvider = FutureProvider.autoDispose
+    .family<List<CostApprovalHistory>, String>((ref, submissionId) async {
+      final repository = ref.watch(costSubmissionRepositoryProvider);
+      return repository.getApprovalHistory(submissionId);
+    });
 
 // Review cost submission notifier
-class ReviewCostSubmissionNotifier extends StateNotifier<AsyncValue<CostSubmission?>> {
+class ReviewCostSubmissionNotifier
+    extends StateNotifier<AsyncValue<CostSubmission?>> {
   final Ref ref;
 
   ReviewCostSubmissionNotifier(this.ref) : super(const AsyncValue.data(null));
@@ -528,7 +605,9 @@ class ReviewCostSubmissionNotifier extends StateNotifier<AsyncValue<CostSubmissi
       }
 
       // Get the submission before review to send notifications
-      final submissionBeforeReview = await repository.getCostSubmissionById(request.submissionId);
+      final submissionBeforeReview = await repository.getCostSubmissionById(
+        request.submissionId,
+      );
 
       final submission = await repository.reviewCostSubmission(request, userId);
       state = AsyncValue.data(submission);
@@ -550,7 +629,10 @@ class ReviewCostSubmissionNotifier extends StateNotifier<AsyncValue<CostSubmissi
     }
   }
 
-  Future<void> _sendReviewNotification(CostSubmission submission, ReviewCostSubmissionRequest request) async {
+  Future<void> _sendReviewNotification(
+    CostSubmission submission,
+    ReviewCostSubmissionRequest request,
+  ) async {
     try {
       final amount = (submission.totalCostCents / 100).toDouble();
 
@@ -574,7 +656,10 @@ class ReviewCostSubmissionNotifier extends StateNotifier<AsyncValue<CostSubmissi
           await NotificationService.showCostSubmissionRevisionRequestedNotification(
             submissionId: submission.id,
             siteVisitId: submission.siteVisitId,
-            revisionNotes: request.revisionNotes ?? request.reviewerNotes ?? 'Revision required',
+            revisionNotes:
+                request.revisionNotes ??
+                request.reviewerNotes ??
+                'Revision required',
           );
           break;
       }
@@ -585,29 +670,38 @@ class ReviewCostSubmissionNotifier extends StateNotifier<AsyncValue<CostSubmissi
   }
 
   Future<void> approveSubmission(String submissionId, String? notes) async {
-    await reviewSubmission(ReviewCostSubmissionRequest(
-      submissionId: submissionId,
-      action: ReviewAction.approve,
-      approvalNotes: notes,
-      reviewerNotes: notes,
-    ));
+    await reviewSubmission(
+      ReviewCostSubmissionRequest(
+        submissionId: submissionId,
+        action: ReviewAction.approve,
+        approvalNotes: notes,
+        reviewerNotes: notes,
+      ),
+    );
   }
 
   Future<void> rejectSubmission(String submissionId, String? notes) async {
-    await reviewSubmission(ReviewCostSubmissionRequest(
-      submissionId: submissionId,
-      action: ReviewAction.reject,
-      reviewerNotes: notes,
-    ));
+    await reviewSubmission(
+      ReviewCostSubmissionRequest(
+        submissionId: submissionId,
+        action: ReviewAction.reject,
+        reviewerNotes: notes,
+      ),
+    );
   }
 
-  Future<void> requestRevision(String submissionId, String revisionNotes) async {
-    await reviewSubmission(ReviewCostSubmissionRequest(
-      submissionId: submissionId,
-      action: ReviewAction.requestRevision,
-      revisionNotes: revisionNotes,
-      reviewerNotes: revisionNotes,
-    ));
+  Future<void> requestRevision(
+    String submissionId,
+    String revisionNotes,
+  ) async {
+    await reviewSubmission(
+      ReviewCostSubmissionRequest(
+        submissionId: submissionId,
+        action: ReviewAction.requestRevision,
+        revisionNotes: revisionNotes,
+        reviewerNotes: revisionNotes,
+      ),
+    );
   }
 
   void reset() {
@@ -615,9 +709,13 @@ class ReviewCostSubmissionNotifier extends StateNotifier<AsyncValue<CostSubmissi
   }
 }
 
-final reviewCostSubmissionProvider = StateNotifierProvider.autoDispose<ReviewCostSubmissionNotifier, AsyncValue<CostSubmission?>>((ref) {
-  return ReviewCostSubmissionNotifier(ref);
-});
+final reviewCostSubmissionProvider =
+    StateNotifierProvider.autoDispose<
+      ReviewCostSubmissionNotifier,
+      AsyncValue<CostSubmission?>
+    >((ref) {
+      return ReviewCostSubmissionNotifier(ref);
+    });
 
 // Alias for backward compatibility
 final costSubmissionApprovalProvider = reviewCostSubmissionProvider;

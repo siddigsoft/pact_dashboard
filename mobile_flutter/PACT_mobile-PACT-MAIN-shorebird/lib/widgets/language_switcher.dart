@@ -23,9 +23,9 @@ class LanguageSwitcher extends StatelessWidget {
           value: const Locale('en', ''),
           child: Row(
             children: [
-              Text(
+              const Text(
                 '🇺🇸',
-                style: const TextStyle(fontSize: 18),
+                style: TextStyle(fontSize: 18),
               ),
               const SizedBox(width: 8),
               Text(
@@ -43,9 +43,9 @@ class LanguageSwitcher extends StatelessWidget {
           value: const Locale('ar', ''),
           child: Row(
             children: [
-              Text(
+              const Text(
                 '🇸🇦',
-                style: const TextStyle(fontSize: 18),
+                style: TextStyle(fontSize: 18),
               ),
               const SizedBox(width: 8),
               Text(

@@ -64,21 +64,21 @@ class VideoCallState {
 
 class VideoCallService {
   final SupabaseClient _supabase = Supabase.instance.client;
-  
+
   RTCPeerConnection? _peerConnection;
   MediaStream? _localStream;
   MediaStream? _remoteStream;
   RTCVideoRenderer? _localRenderer;
   RTCVideoRenderer? _remoteRenderer;
   RealtimeChannel? _signalChannel;
-  
+
   VideoCallState _state = VideoCallState();
-  final StreamController<VideoCallState> _stateController = 
+  final StreamController<VideoCallState> _stateController =
       StreamController<VideoCallState>.broadcast();
-  
+
   String? _userId;
   String? _userName;
-  List<RTCIceCandidate> _pendingCandidates = [];
+  final List<RTCIceCandidate> _pendingCandidates = [];
 
   Stream<VideoCallState> get stateStream => _stateController.stream;
   VideoCallState get state => _state;
@@ -100,7 +100,7 @@ class VideoCallService {
   Future<void> initialize(String userId, String userName) async {
     _userId = userId;
     _userName = userName;
-    
+
     _localRenderer = RTCVideoRenderer();
     _remoteRenderer = RTCVideoRenderer();
     await _localRenderer!.initialize();
@@ -113,21 +113,28 @@ class VideoCallService {
     return camera.isGranted && microphone.isGranted;
   }
 
-  Future<bool> startVideoCall(String targetUserId, String targetUserName) async {
+  Future<bool> startVideoCall(
+    String targetUserId,
+    String targetUserName,
+  ) async {
     try {
       if (!await requestPermissions()) {
-        _updateState(_state.copyWith(
-          status: VideoCallStatus.failed,
-          errorMessage: 'Camera/microphone permission denied',
-        ));
+        _updateState(
+          _state.copyWith(
+            status: VideoCallStatus.failed,
+            errorMessage: 'Camera/microphone permission denied',
+          ),
+        );
         return false;
       }
 
-      _updateState(_state.copyWith(
-        status: VideoCallStatus.initiating,
-        remoteUserId: targetUserId,
-        remoteUserName: targetUserName,
-      ));
+      _updateState(
+        _state.copyWith(
+          status: VideoCallStatus.initiating,
+          remoteUserId: targetUserId,
+          remoteUserName: targetUserName,
+        ),
+      );
 
       await _setupLocalStream();
       await _createPeerConnection();
@@ -149,10 +156,12 @@ class VideoCallService {
       return true;
     } catch (e) {
       debugPrint('[VideoCall] Error starting call: $e');
-      _updateState(_state.copyWith(
-        status: VideoCallStatus.failed,
-        errorMessage: e.toString(),
-      ));
+      _updateState(
+        _state.copyWith(
+          status: VideoCallStatus.failed,
+          errorMessage: e.toString(),
+        ),
+      );
       return false;
     }
   }
@@ -160,21 +169,25 @@ class VideoCallService {
   Future<bool> answerVideoCall(Map<String, dynamic> offerData) async {
     try {
       if (!await requestPermissions()) {
-        _updateState(_state.copyWith(
-          status: VideoCallStatus.failed,
-          errorMessage: 'Camera/microphone permission denied',
-        ));
+        _updateState(
+          _state.copyWith(
+            status: VideoCallStatus.failed,
+            errorMessage: 'Camera/microphone permission denied',
+          ),
+        );
         return false;
       }
 
       final callerId = offerData['callerId'] as String;
       final callerName = offerData['callerName'] as String?;
 
-      _updateState(_state.copyWith(
-        status: VideoCallStatus.connecting,
-        remoteUserId: callerId,
-        remoteUserName: callerName,
-      ));
+      _updateState(
+        _state.copyWith(
+          status: VideoCallStatus.connecting,
+          remoteUserId: callerId,
+          remoteUserName: callerName,
+        ),
+      );
 
       await _setupLocalStream();
       await _createPeerConnection();
@@ -206,10 +219,12 @@ class VideoCallService {
       return true;
     } catch (e) {
       debugPrint('[VideoCall] Error answering call: $e');
-      _updateState(_state.copyWith(
-        status: VideoCallStatus.failed,
-        errorMessage: e.toString(),
-      ));
+      _updateState(
+        _state.copyWith(
+          status: VideoCallStatus.failed,
+          errorMessage: e.toString(),
+        ),
+      );
       return false;
     }
   }
@@ -263,7 +278,7 @@ class VideoCallService {
       if (state == RTCPeerConnectionState.RTCPeerConnectionStateConnected) {
         _updateState(_state.copyWith(status: VideoCallStatus.connected));
       } else if (state == RTCPeerConnectionState.RTCPeerConnectionStateFailed ||
-                 state == RTCPeerConnectionState.RTCPeerConnectionStateDisconnected) {
+          state == RTCPeerConnectionState.RTCPeerConnectionStateDisconnected) {
         _updateState(_state.copyWith(status: VideoCallStatus.failed));
       }
     };
@@ -271,7 +286,7 @@ class VideoCallService {
 
   Future<void> _subscribeToSignaling(String remoteUserId) async {
     _signalChannel?.unsubscribe();
-    
+
     _signalChannel = _supabase
         .channel('video_call:$_userId')
         .onBroadcast(
@@ -291,7 +306,7 @@ class VideoCallService {
           payload['sdpType'] as String,
         );
         await _peerConnection?.setRemoteDescription(sdp);
-        
+
         for (final candidate in _pendingCandidates) {
           await _peerConnection?.addCandidate(candidate);
         }
@@ -304,7 +319,7 @@ class VideoCallService {
           payload['sdpMid'] as String?,
           payload['sdpMLineIndex'] as int?,
         );
-        
+
         if (_peerConnection?.getRemoteDescription() != null) {
           await _peerConnection?.addCandidate(candidate);
         } else {
@@ -317,19 +332,23 @@ class VideoCallService {
         break;
 
       case 'video_toggle':
-        _updateState(_state.copyWith(
-          isRemoteVideoEnabled: payload['videoEnabled'] as bool? ?? true,
-        ));
+        _updateState(
+          _state.copyWith(
+            isRemoteVideoEnabled: payload['videoEnabled'] as bool? ?? true,
+          ),
+        );
         break;
     }
   }
 
-  Future<void> _sendSignal(String targetUserId, Map<String, dynamic> data) async {
+  Future<void> _sendSignal(
+    String targetUserId,
+    Map<String, dynamic> data,
+  ) async {
     try {
-      await _supabase.channel('video_call:$targetUserId').sendBroadcastMessage(
-        event: 'video_signal',
-        payload: data,
-      );
+      await _supabase
+          .channel('video_call:$targetUserId')
+          .sendBroadcastMessage(event: 'video_signal', payload: data);
     } catch (e) {
       debugPrint('[VideoCall] Error sending signal: $e');
     }
@@ -342,7 +361,7 @@ class VideoCallService {
         track.enabled = !track.enabled;
       }
       _updateState(_state.copyWith(isVideoEnabled: videoTracks.first.enabled));
-      
+
       if (_state.remoteUserId != null) {
         _sendSignal(_state.remoteUserId!, {
           'type': 'video_toggle',
@@ -383,15 +402,15 @@ class VideoCallService {
 
   Future<void> _cleanup() async {
     _signalChannel?.unsubscribe();
-    
+
     _localStream?.getTracks().forEach((track) => track.stop());
     _remoteStream?.getTracks().forEach((track) => track.stop());
-    
+
     await _peerConnection?.close();
-    
+
     _localRenderer?.srcObject = null;
     _remoteRenderer?.srcObject = null;
-    
+
     _localStream = null;
     _remoteStream = null;
     _peerConnection = null;

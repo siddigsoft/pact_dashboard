@@ -9,7 +9,7 @@ import '../../theme/app_colors.dart';
 
 class AuditLogsScreen extends StatefulWidget {
   final bool isArabic;
-  
+
   const AuditLogsScreen({super.key, this.isArabic = false});
 
   @override
@@ -19,13 +19,13 @@ class AuditLogsScreen extends StatefulWidget {
 class _AuditLogsScreenState extends State<AuditLogsScreen> {
   final _supabase = Supabase.instance.client;
   final _searchController = TextEditingController();
-  
+
   List<Map<String, dynamic>> _logs = [];
   bool _isLoading = true;
   String _selectedType = 'all';
   DateTime? _startDate;
   DateTime? _endDate;
-  
+
   RealtimeChannel? _logsChannel;
   bool _hasAccess = false;
 
@@ -42,29 +42,33 @@ class _AuditLogsScreenState extends State<AuditLogsScreen> {
         if (mounted) Navigator.pop(context);
         return;
       }
-      
+
       final profile = await _supabase
           .from('profiles')
           .select('role')
           .eq('id', user.id)
           .maybeSingle();
-      
+
       final role = (profile?['role'] as String?)?.toLowerCase() ?? '';
       final isSuperAdmin = role == 'super_admin' || role == 'superadmin';
-      
+
       if (!mounted) return;
-      
+
       if (!isSuperAdmin) {
         Navigator.pop(context);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(widget.isArabic ? 'الوصول مرفوض - للمشرف العام فقط' : 'Access Denied - Super Admin Only'),
+            content: Text(
+              widget.isArabic
+                  ? 'الوصول مرفوض - للمشرف العام فقط'
+                  : 'Access Denied - Super Admin Only',
+            ),
             backgroundColor: Colors.red,
           ),
         );
         return;
       }
-      
+
       setState(() => _hasAccess = true);
       _loadLogs();
       _setupRealtimeSubscription();
@@ -82,43 +86,47 @@ class _AuditLogsScreenState extends State<AuditLogsScreen> {
   }
 
   void _setupRealtimeSubscription() {
-    _logsChannel = _supabase.channel('audit-logs-realtime')
-      .onPostgresChanges(
-        event: PostgresChangeEvent.insert,
-        schema: 'public',
-        table: 'audit_logs',
-        callback: (payload) {
-          debugPrint('[AuditLogs] New log entry');
-          _loadLogs();
-        },
-      )
-      .subscribe();
+    _logsChannel = _supabase
+        .channel('audit-logs-realtime')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.insert,
+          schema: 'public',
+          table: 'audit_logs',
+          callback: (payload) {
+            debugPrint('[AuditLogs] New log entry');
+            _loadLogs();
+          },
+        )
+        .subscribe();
   }
 
   Future<void> _loadLogs() async {
     if (!mounted) return;
     setState(() => _isLoading = true);
     try {
-      var query = _supabase
+      dynamic query = _supabase
           .from('audit_logs')
-          .select('*, profiles:user_id(full_name, email)')
-          .order('created_at', ascending: false)
-          .limit(200);
+          .select('*, profiles:user_id(full_name, email)');
 
       if (_selectedType != 'all') {
         query = query.eq('action_type', _selectedType);
       }
-      
+
       if (_startDate != null) {
         query = query.gte('created_at', _startDate!.toIso8601String());
       }
-      
+
       if (_endDate != null) {
-        query = query.lte('created_at', _endDate!.add(const Duration(days: 1)).toIso8601String());
+        query = query.lte(
+          'created_at',
+          _endDate!.add(const Duration(days: 1)).toIso8601String(),
+        );
       }
 
+      query = query.order('created_at', ascending: false).limit(200);
+
       final response = await query;
-      
+
       if (!mounted) return;
       setState(() {
         _logs = List<Map<String, dynamic>>.from(response as List);
@@ -134,7 +142,8 @@ class _AuditLogsScreenState extends State<AuditLogsScreen> {
   @override
   Widget build(BuildContext context) {
     return Directionality(
-      textDirection: widget.isArabic ? ui.TextDirection.rtl : ui.TextDirection.ltr,
+      textDirection:
+          widget.isArabic ? ui.TextDirection.rtl : ui.TextDirection.ltr,
       child: Scaffold(
         backgroundColor: AppColors.backgroundGray,
         appBar: AppBar(
@@ -178,7 +187,8 @@ class _AuditLogsScreenState extends State<AuditLogsScreen> {
                                 child: ListView.builder(
                                   padding: const EdgeInsets.all(16),
                                   itemCount: _logs.length,
-                                  itemBuilder: (context, index) => _buildLogCard(_logs[index]),
+                                  itemBuilder: (context, index) =>
+                                      _buildLogCard(_logs[index]),
                                 ),
                               ),
                   ),
@@ -206,14 +216,40 @@ class _AuditLogsScreenState extends State<AuditLogsScreen> {
                 underline: const SizedBox(),
                 isExpanded: true,
                 items: [
-                  DropdownMenuItem(value: 'all', child: Text(widget.isArabic ? 'كل الإجراءات' : 'All Actions')),
-                  DropdownMenuItem(value: 'login', child: Text(widget.isArabic ? 'تسجيل دخول' : 'Login')),
-                  DropdownMenuItem(value: 'logout', child: Text(widget.isArabic ? 'تسجيل خروج' : 'Logout')),
-                  DropdownMenuItem(value: 'create', child: Text(widget.isArabic ? 'إنشاء' : 'Create')),
-                  DropdownMenuItem(value: 'update', child: Text(widget.isArabic ? 'تحديث' : 'Update')),
-                  DropdownMenuItem(value: 'delete', child: Text(widget.isArabic ? 'حذف' : 'Delete')),
-                  DropdownMenuItem(value: 'approval', child: Text(widget.isArabic ? 'موافقة' : 'Approval')),
-                  DropdownMenuItem(value: 'financial', child: Text(widget.isArabic ? 'مالي' : 'Financial')),
+                  DropdownMenuItem(
+                    value: 'all',
+                    child: Text(
+                      widget.isArabic ? 'كل الإجراءات' : 'All Actions',
+                    ),
+                  ),
+                  DropdownMenuItem(
+                    value: 'login',
+                    child: Text(widget.isArabic ? 'تسجيل دخول' : 'Login'),
+                  ),
+                  DropdownMenuItem(
+                    value: 'logout',
+                    child: Text(widget.isArabic ? 'تسجيل خروج' : 'Logout'),
+                  ),
+                  DropdownMenuItem(
+                    value: 'create',
+                    child: Text(widget.isArabic ? 'إنشاء' : 'Create'),
+                  ),
+                  DropdownMenuItem(
+                    value: 'update',
+                    child: Text(widget.isArabic ? 'تحديث' : 'Update'),
+                  ),
+                  DropdownMenuItem(
+                    value: 'delete',
+                    child: Text(widget.isArabic ? 'حذف' : 'Delete'),
+                  ),
+                  DropdownMenuItem(
+                    value: 'approval',
+                    child: Text(widget.isArabic ? 'موافقة' : 'Approval'),
+                  ),
+                  DropdownMenuItem(
+                    value: 'financial',
+                    child: Text(widget.isArabic ? 'مالي' : 'Financial'),
+                  ),
                 ],
                 onChanged: (value) {
                   setState(() => _selectedType = value ?? 'all');
@@ -227,7 +263,7 @@ class _AuditLogsScreenState extends State<AuditLogsScreen> {
             onPressed: _selectDateRange,
             icon: const Icon(Icons.date_range, size: 18),
             label: Text(
-              _startDate != null 
+              _startDate != null
                   ? DateFormat('MM/dd').format(_startDate!)
                   : (widget.isArabic ? 'التاريخ' : 'Date'),
               style: GoogleFonts.poppins(fontSize: 12),
@@ -258,10 +294,7 @@ class _AuditLogsScreenState extends State<AuditLogsScreen> {
           const SizedBox(height: 16),
           Text(
             widget.isArabic ? 'لا توجد سجلات' : 'No audit logs found',
-            style: GoogleFonts.poppins(
-              fontSize: 18,
-              color: Colors.grey[600],
-            ),
+            style: GoogleFonts.poppins(fontSize: 18, color: Colors.grey[600]),
           ),
         ],
       ),
@@ -271,14 +304,17 @@ class _AuditLogsScreenState extends State<AuditLogsScreen> {
   Widget _buildLogCard(Map<String, dynamic> log) {
     final actionType = log['action_type'] as String? ?? 'unknown';
     final description = log['description'] as String? ?? '';
-    final createdAt = DateTime.tryParse(log['created_at'] ?? '') ?? DateTime.now();
+    final createdAt =
+        DateTime.tryParse(log['created_at'] ?? '') ?? DateTime.now();
     final entityType = log['entity_type'] as String? ?? '';
     final profile = log['profiles'] as Map<String, dynamic>?;
-    final userName = profile?['full_name'] as String? ?? profile?['email'] as String? ?? 'System';
-    
+    final userName = profile?['full_name'] as String? ??
+        profile?['email'] as String? ??
+        'System';
+
     final icon = _getActionIcon(actionType);
     final color = _getActionColor(actionType);
-    
+
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -325,7 +361,11 @@ class _AuditLogsScreenState extends State<AuditLogsScreen> {
                   const SizedBox(height: 8),
                   Row(
                     children: [
-                      Icon(Icons.person_outline, size: 14, color: Colors.grey[500]),
+                      Icon(
+                        Icons.person_outline,
+                        size: 14,
+                        color: Colors.grey[500],
+                      ),
                       const SizedBox(width: 4),
                       Expanded(
                         child: Text(
@@ -337,7 +377,11 @@ class _AuditLogsScreenState extends State<AuditLogsScreen> {
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
-                      Icon(Icons.access_time, size: 14, color: Colors.grey[500]),
+                      Icon(
+                        Icons.access_time,
+                        size: 14,
+                        color: Colors.grey[500],
+                      ),
                       const SizedBox(width: 4),
                       Text(
                         _formatDateTime(createdAt),
@@ -421,11 +465,15 @@ class _AuditLogsScreenState extends State<AuditLogsScreen> {
   String _formatDateTime(DateTime dt) {
     final now = DateTime.now();
     final diff = now.difference(dt);
-    
+
     if (diff.inMinutes < 60) {
-      return widget.isArabic ? 'منذ ${diff.inMinutes} دقيقة' : '${diff.inMinutes}m ago';
+      return widget.isArabic
+          ? 'منذ ${diff.inMinutes} دقيقة'
+          : '${diff.inMinutes}m ago';
     } else if (diff.inHours < 24) {
-      return widget.isArabic ? 'منذ ${diff.inHours} ساعة' : '${diff.inHours}h ago';
+      return widget.isArabic
+          ? 'منذ ${diff.inHours} ساعة'
+          : '${diff.inHours}h ago';
     } else if (diff.inDays < 7) {
       return widget.isArabic ? 'منذ ${diff.inDays} يوم' : '${diff.inDays}d ago';
     }
@@ -441,7 +489,7 @@ class _AuditLogsScreenState extends State<AuditLogsScreen> {
           ? DateTimeRange(start: _startDate!, end: _endDate!)
           : null,
     );
-    
+
     if (picked != null) {
       setState(() {
         _startDate = picked.start;
@@ -477,10 +525,19 @@ class _AuditLogsScreenState extends State<AuditLogsScreen> {
               children: [
                 _buildFilterChip('all', widget.isArabic ? 'الكل' : 'All'),
                 _buildFilterChip('login', widget.isArabic ? 'دخول' : 'Login'),
-                _buildFilterChip('create', widget.isArabic ? 'إنشاء' : 'Create'),
-                _buildFilterChip('update', widget.isArabic ? 'تحديث' : 'Update'),
+                _buildFilterChip(
+                  'create',
+                  widget.isArabic ? 'إنشاء' : 'Create',
+                ),
+                _buildFilterChip(
+                  'update',
+                  widget.isArabic ? 'تحديث' : 'Update',
+                ),
                 _buildFilterChip('delete', widget.isArabic ? 'حذف' : 'Delete'),
-                _buildFilterChip('financial', widget.isArabic ? 'مالي' : 'Financial'),
+                _buildFilterChip(
+                  'financial',
+                  widget.isArabic ? 'مالي' : 'Financial',
+                ),
               ],
             ),
             const SizedBox(height: 24),
@@ -494,11 +551,16 @@ class _AuditLogsScreenState extends State<AuditLogsScreen> {
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.primaryBlue,
                   padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
                 ),
                 child: Text(
                   widget.isArabic ? 'تطبيق' : 'Apply',
-                  style: GoogleFonts.poppins(color: Colors.white, fontWeight: FontWeight.w600),
+                  style: GoogleFonts.poppins(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
               ),
             ),

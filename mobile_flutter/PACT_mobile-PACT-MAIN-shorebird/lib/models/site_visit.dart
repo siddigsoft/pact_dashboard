@@ -1,9 +1,10 @@
 class SiteVisit {
   final String id;
-  final String? userId;  // User who created/owns this site visit
+  final String? userId; // User who created/owns this site visit
   final String siteName;
   final String siteCode;
-  final String status; // dispatched → assigned/accepted → in_progress → completed / cancelled
+  final String
+  status; // dispatched → assigned/accepted → in_progress → completed / cancelled
   final String locality;
   final String state;
   final String activity;
@@ -25,7 +26,7 @@ class SiteVisit {
   }
 
   String get locationString => location?['description'] as String? ?? '';
-  
+
   /// Get site coordinates as a Map for GPS proximity checks
   /// Checks multiple sources: location, additionalData, visitData
   Map<String, dynamic>? get siteCoordinates {
@@ -34,11 +35,18 @@ class SiteVisit {
       return {'latitude': latitude, 'longitude': longitude};
     }
     if (location != null) return location;
-    
+
     // Check additionalData for coordinates
     if (additionalData != null) {
-      final lat = additionalData!['latitude'] ?? additionalData!['lat'] ?? additionalData!['site_latitude'];
-      final lng = additionalData!['longitude'] ?? additionalData!['lng'] ?? additionalData!['lon'] ?? additionalData!['site_longitude'];
+      final lat =
+          additionalData!['latitude'] ??
+          additionalData!['lat'] ??
+          additionalData!['site_latitude'];
+      final lng =
+          additionalData!['longitude'] ??
+          additionalData!['lng'] ??
+          additionalData!['lon'] ??
+          additionalData!['site_longitude'];
       if (lat != null && lng != null) {
         return {'latitude': lat, 'longitude': lng};
       }
@@ -50,11 +58,12 @@ class SiteVisit {
         return additionalData!['gps'] as Map<String, dynamic>;
       }
     }
-    
+
     // Check visitData for coordinates
     if (visitData != null) {
       final lat = visitData!['latitude'] ?? visitData!['lat'];
-      final lng = visitData!['longitude'] ?? visitData!['lng'] ?? visitData!['lon'];
+      final lng =
+          visitData!['longitude'] ?? visitData!['lng'] ?? visitData!['lon'];
       if (lat != null && lng != null) {
         return {'latitude': lat, 'longitude': lng};
       }
@@ -62,7 +71,7 @@ class SiteVisit {
         return visitData!['location'] as Map<String, dynamic>;
       }
     }
-    
+
     return null;
   }
 
@@ -70,13 +79,15 @@ class SiteVisit {
   String? get scheduledDate {
     // Try visit_data first
     if (visitData != null) {
-      final scheduled = visitData!['scheduledDate'] ?? visitData!['scheduled_date'];
+      final scheduled =
+          visitData!['scheduledDate'] ?? visitData!['scheduled_date'];
       if (scheduled != null) return scheduled.toString();
     }
     // Fall back to dueDate
     if (dueDate != null) return dueDate!.toIso8601String();
     return null;
   }
+
   final Map<String, dynamic>? fees;
   final Map<String, dynamic>? visitData;
   final String assignedTo;
@@ -92,7 +103,7 @@ class SiteVisit {
   final DateTime? arrivalTimestamp;
   final Map<String, dynamic>? journeyPath;
   final bool arrivalRecorded;
-  
+
   // ========== NEW TRACKING COLUMNS (from mmp_site_entries schema) ==========
   final String? claimedBy;
   final DateTime? claimedAt;
@@ -103,12 +114,12 @@ class SiteVisit {
   final String? visitCompletedBy;
   final DateTime? visitCompletedAt;
   final DateTime? updatedAt;
-  
+
   // ========== FEES (from mmp_site_entries schema) ==========
   final double? enumeratorFee;
   final double? transportFee;
   final double? cost; // total cost
-  
+
   // ========== ADDITIONAL DATA (jsonb) ==========
   // Contains: start_location, end_location, photos, offline_markers, offline_synced_at, etc.
   final Map<String, dynamic>? additionalData;
@@ -164,7 +175,7 @@ class SiteVisit {
     if (json.containsKey('mmp_file_id')) {
       // Build additional_data with hub_office and other direct columns
       Map<String, dynamic> additionalData = json['additional_data'] ?? {};
-      
+
       // Add direct columns to additional_data for easy access
       if (json['hub_office'] != null) {
         additionalData['hub_office'] = json['hub_office'];
@@ -181,7 +192,7 @@ class SiteVisit {
       if (json['visit_type'] != null) {
         additionalData['visit_type'] = json['visit_type'];
       }
-      
+
       return SiteVisit(
         id: json['id']?.toString() ?? '',
         userId: json['accepted_by'],
@@ -192,7 +203,9 @@ class SiteVisit {
         state: json['state'] ?? '',
         activity: json['activity_at_site'] ?? json['main_activity'] ?? '',
         priority: 'Medium',
-        dueDate: json['visit_date'] != null ? DateTime.tryParse(json['visit_date']) : null,
+        dueDate: json['visit_date'] != null
+            ? DateTime.tryParse(json['visit_date'])
+            : null,
         notes: json['comments'] ?? '',
         mainActivity: json['main_activity'] ?? '',
         location: null,
@@ -203,12 +216,18 @@ class SiteVisit {
         visitData: additionalData,
         assignedTo: json['accepted_by'] ?? '',
         assignedBy: json['dispatched_by'],
-        assignedAt: json['dispatched_at'] != null ? DateTime.tryParse(json['dispatched_at']) : null,
+        assignedAt: json['dispatched_at'] != null
+            ? DateTime.tryParse(json['dispatched_at'])
+            : null,
         attachments: null,
-        completedAt: json['visit_completed_at'] != null ? DateTime.tryParse(json['visit_completed_at']) : null,
+        completedAt: json['visit_completed_at'] != null
+            ? DateTime.tryParse(json['visit_completed_at'])
+            : null,
         rating: null,
         mmpId: json['mmp_file_id'],
-        createdAt: json['created_at'] != null ? DateTime.parse(json['created_at']) : DateTime.now(),
+        createdAt: json['created_at'] != null
+            ? DateTime.parse(json['created_at'])
+            : DateTime.now(),
         arrivalLatitude: null,
         arrivalLongitude: null,
         arrivalTimestamp: null,
@@ -216,14 +235,24 @@ class SiteVisit {
         arrivalRecorded: false,
         // New tracking columns
         claimedBy: json['claimed_by'],
-        claimedAt: json['claimed_at'] != null ? DateTime.tryParse(json['claimed_at']) : null,
+        claimedAt: json['claimed_at'] != null
+            ? DateTime.tryParse(json['claimed_at'])
+            : null,
         acceptedBy: json['accepted_by'],
-        acceptedAt: json['accepted_at'] != null ? DateTime.tryParse(json['accepted_at']) : null,
+        acceptedAt: json['accepted_at'] != null
+            ? DateTime.tryParse(json['accepted_at'])
+            : null,
         visitStartedBy: json['visit_started_by'],
-        visitStartedAt: json['visit_started_at'] != null ? DateTime.tryParse(json['visit_started_at']) : null,
+        visitStartedAt: json['visit_started_at'] != null
+            ? DateTime.tryParse(json['visit_started_at'])
+            : null,
         visitCompletedBy: json['visit_completed_by'],
-        visitCompletedAt: json['visit_completed_at'] != null ? DateTime.tryParse(json['visit_completed_at']) : null,
-        updatedAt: json['updated_at'] != null ? DateTime.tryParse(json['updated_at']) : null,
+        visitCompletedAt: json['visit_completed_at'] != null
+            ? DateTime.tryParse(json['visit_completed_at'])
+            : null,
+        updatedAt: json['updated_at'] != null
+            ? DateTime.tryParse(json['updated_at'])
+            : null,
         // Fees
         enumeratorFee: _parseDouble(json['enumerator_fee']),
         transportFee: _parseDouble(json['transport_fee']),
@@ -244,8 +273,9 @@ class SiteVisit {
       state: json['state'] ?? '',
       activity: json['activity'] ?? '',
       priority: json['priority'] ?? 'medium',
-      dueDate:
-          json['due_date'] != null ? DateTime.parse(json['due_date']) : null,
+      dueDate: json['due_date'] != null
+          ? DateTime.parse(json['due_date'])
+          : null,
       notes: json['notes'] ?? '',
       mainActivity: json['main_activity'] ?? '',
       location: json['location'],
@@ -256,12 +286,12 @@ class SiteVisit {
       assignedAt: json['assigned_at'] != null
           ? DateTime.parse(json['assigned_at'])
           : null,
-    attachments: json['attachments'] != null
-      ? (json['attachments'] as List)
-        .where((e) => e != null)
-        .map((e) => e.toString())
-        .toList()
-      : null,
+      attachments: json['attachments'] != null
+          ? (json['attachments'] as List)
+                .where((e) => e != null)
+                .map((e) => e.toString())
+                .toList()
+          : null,
       completedAt: json['completed_at'] != null
           ? DateTime.parse(json['completed_at'])
           : null,
@@ -425,7 +455,7 @@ class SiteVisit {
   }
 
   // ========== HELPER METHODS ==========
-  
+
   /// Calculate total cost from enumerator and transport fees
   double? get calculatedTotalCost {
     if (enumeratorFee == null && transportFee == null) return null;

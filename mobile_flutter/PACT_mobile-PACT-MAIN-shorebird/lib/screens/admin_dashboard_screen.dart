@@ -34,7 +34,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   int _totalUsers = 0;
   int _activeVisits = 0;
   int _supportContacts = 0;
-  
+
   // Extended Stats
   int _totalMMPs = 0;
   int _pendingMMPs = 0;
@@ -133,12 +133,19 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       final mmpsResponse = await _supabase.from('mmps').select('id, status');
       final mmpsList = mmpsResponse as List;
       _totalMMPs = mmpsList.length;
-      _pendingMMPs = mmpsList.where((m) => 
-        m['status'] == 'pending' || m['status'] == 'draft' || m['status'] == 'submitted'
-      ).length;
-      _approvedMMPs = mmpsList.where((m) => 
-        m['status'] == 'approved' || m['status'] == 'dispatched'
-      ).length;
+      _pendingMMPs = mmpsList
+          .where(
+            (m) =>
+                m['status'] == 'pending' ||
+                m['status'] == 'draft' ||
+                m['status'] == 'submitted',
+          )
+          .length;
+      _approvedMMPs = mmpsList
+          .where(
+            (m) => m['status'] == 'approved' || m['status'] == 'dispatched',
+          )
+          .length;
 
       // Completed Visits
       final completedResponse = await _supabase
@@ -171,8 +178,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
             .from('wallets')
             .select('balance');
         final wallets = walletsResponse as List;
-        _totalWalletBalance = wallets.fold<int>(0, (sum, w) => 
-          sum + ((w['balance'] as num?)?.toInt() ?? 0)
+        _totalWalletBalance = wallets.fold<int>(
+          0,
+          (sum, w) => sum + ((w['balance'] as num?)?.toInt() ?? 0),
         );
       } catch (e) {
         debugPrint('Wallets table may not exist: $e');
@@ -381,10 +389,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       children: [
         Text(
           'Quick Actions',
-          style: GoogleFonts.poppins(
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
-          ),
+          style: GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.bold),
         ),
         const SizedBox(height: 12),
         Wrap(
@@ -397,7 +402,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
               Colors.orange,
               () => Navigator.push(
                 context,
-                MaterialPageRoute(builder: (_) => const AdminUserApprovalScreen()),
+                MaterialPageRoute(
+                  builder: (_) => const AdminUserApprovalScreen(),
+                ),
               ),
             ),
             _buildActionChip(
@@ -424,7 +431,11 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       children: [
         Row(
           children: [
-            Icon(Icons.admin_panel_settings, color: AppColors.primaryBlue, size: 20),
+            Icon(
+              Icons.admin_panel_settings,
+              color: AppColors.primaryBlue,
+              size: 20,
+            ),
             const SizedBox(width: 8),
             Text(
               'Administration',
@@ -556,7 +567,10 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         gradient: LinearGradient(
-          colors: [AppColors.primaryBlue, AppColors.primaryBlue.withOpacity(0.8)],
+          colors: [
+            AppColors.primaryBlue,
+            AppColors.primaryBlue.withOpacity(0.8),
+          ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
@@ -582,21 +596,57 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           const SizedBox(height: 16),
           Row(
             children: [
-              Expanded(child: _buildMiniStatCard('Total MMPs', _totalMMPs.toString(), Icons.folder)),
+              Expanded(
+                child: _buildMiniStatCard(
+                  'Total MMPs',
+                  _totalMMPs.toString(),
+                  Icons.folder,
+                ),
+              ),
               const SizedBox(width: 12),
-              Expanded(child: _buildMiniStatCard('Pending MMPs', _pendingMMPs.toString(), Icons.pending)),
+              Expanded(
+                child: _buildMiniStatCard(
+                  'Pending MMPs',
+                  _pendingMMPs.toString(),
+                  Icons.pending,
+                ),
+              ),
               const SizedBox(width: 12),
-              Expanded(child: _buildMiniStatCard('Approved', _approvedMMPs.toString(), Icons.check_circle)),
+              Expanded(
+                child: _buildMiniStatCard(
+                  'Approved',
+                  _approvedMMPs.toString(),
+                  Icons.check_circle,
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 12),
           Row(
             children: [
-              Expanded(child: _buildMiniStatCard('Ongoing Visits', _ongoingVisits.toString(), Icons.location_on)),
+              Expanded(
+                child: _buildMiniStatCard(
+                  'Ongoing Visits',
+                  _ongoingVisits.toString(),
+                  Icons.location_on,
+                ),
+              ),
               const SizedBox(width: 12),
-              Expanded(child: _buildMiniStatCard('Completed', _completedVisits.toString(), Icons.done_all)),
+              Expanded(
+                child: _buildMiniStatCard(
+                  'Completed',
+                  _completedVisits.toString(),
+                  Icons.done_all,
+                ),
+              ),
               const SizedBox(width: 12),
-              Expanded(child: _buildMiniStatCard('Pending Dispatch', _pendingDispatch.toString(), Icons.send)),
+              Expanded(
+                child: _buildMiniStatCard(
+                  'Pending Dispatch',
+                  _pendingDispatch.toString(),
+                  Icons.send,
+                ),
+              ),
             ],
           ),
         ],
@@ -664,7 +714,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           Colors.teal,
           () => Navigator.push(
             context,
-            MaterialPageRoute(builder: (_) => const FieldOperationsEnhancedScreen()),
+            MaterialPageRoute(
+              builder: (_) => const FieldOperationsEnhancedScreen(),
+            ),
           ),
         ),
         _buildAdminMenuCard(
@@ -674,7 +726,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           Colors.orange,
           () => Navigator.push(
             context,
-            MaterialPageRoute(builder: (_) => const FieldOperationsEnhancedScreen()),
+            MaterialPageRoute(
+              builder: (_) => const FieldOperationsEnhancedScreen(),
+            ),
           ),
         ),
         _buildAdminMenuCard(
@@ -684,7 +738,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           Colors.indigo,
           () => Navigator.push(
             context,
-            MaterialPageRoute(builder: (_) => const FieldOperationsEnhancedScreen()),
+            MaterialPageRoute(
+              builder: (_) => const FieldOperationsEnhancedScreen(),
+            ),
           ),
         ),
       ],
@@ -717,7 +773,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           AppColors.primaryGreen,
           () => Navigator.push(
             context,
-            MaterialPageRoute(builder: (_) => const FieldOperationsEnhancedScreen()),
+            MaterialPageRoute(
+              builder: (_) => const FieldOperationsEnhancedScreen(),
+            ),
           ),
         ),
         _buildAdminMenuCard(
@@ -727,7 +785,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           Colors.blue,
           () => Navigator.push(
             context,
-            MaterialPageRoute(builder: (_) => const FieldOperationsEnhancedScreen()),
+            MaterialPageRoute(
+              builder: (_) => const FieldOperationsEnhancedScreen(),
+            ),
           ),
         ),
         _buildAdminMenuCard(
@@ -737,7 +797,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           Colors.deepPurple,
           () => Navigator.push(
             context,
-            MaterialPageRoute(builder: (_) => const FieldOperationsEnhancedScreen()),
+            MaterialPageRoute(
+              builder: (_) => const FieldOperationsEnhancedScreen(),
+            ),
           ),
         ),
       ],
@@ -750,7 +812,11 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       children: [
         Row(
           children: [
-            Icon(Icons.account_balance_wallet, color: Colors.amber.shade700, size: 20),
+            Icon(
+              Icons.account_balance_wallet,
+              color: Colors.amber.shade700,
+              size: 20,
+            ),
             const SizedBox(width: 8),
             Text(
               'Financial Management',
@@ -857,7 +923,11 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           Center(
             child: Column(
               children: [
-                Icon(Icons.contact_phone_outlined, size: 48, color: Colors.grey[400]),
+                Icon(
+                  Icons.contact_phone_outlined,
+                  size: 48,
+                  color: Colors.grey[400],
+                ),
                 const SizedBox(height: 8),
                 Text(
                   'No contacts yet',
@@ -906,7 +976,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
               decoration: BoxDecoration(
-                color: contact.isActive ? Colors.green.withOpacity(0.1) : Colors.grey.withOpacity(0.1),
+                color: contact.isActive
+                    ? Colors.green.withOpacity(0.1)
+                    : Colors.grey.withOpacity(0.1),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Text(
@@ -955,17 +1027,22 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
 
   Future<void> _toggleContactStatus(SupportContact contact) async {
     try {
-      await _supabase.from('support_contacts').update({
-        'is_active': !contact.isActive,
-        'updated_at': DateTime.now().toIso8601String(),
-      }).eq('id', contact.id);
+      await _supabase
+          .from('support_contacts')
+          .update({
+            'is_active': !contact.isActive,
+            'updated_at': DateTime.now().toIso8601String(),
+          })
+          .eq('id', contact.id);
 
       await _loadSupportContacts();
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Contact ${contact.isActive ? 'deactivated' : 'activated'}'),
+            content: Text(
+              'Contact ${contact.isActive ? 'deactivated' : 'activated'}',
+            ),
             backgroundColor: AppColors.primaryGreen,
           ),
         );
@@ -973,10 +1050,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error: $e'),
-            backgroundColor: Colors.red,
-          ),
+          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
         );
       }
     }
@@ -1018,10 +1092,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       } catch (e) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Error: $e'),
-              backgroundColor: Colors.red,
-            ),
+            SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
           );
         }
       }
@@ -1044,7 +1115,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     final roleArController = TextEditingController(text: contact?.roleAr ?? '');
     final emailController = TextEditingController(text: contact?.email ?? '');
     final phoneController = TextEditingController(text: contact?.phone ?? '');
-    final whatsappController = TextEditingController(text: contact?.whatsapp ?? '');
+    final whatsappController = TextEditingController(
+      text: contact?.whatsapp ?? '',
+    );
 
     showDialog(
       context: context,
@@ -1135,12 +1208,24 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
 
               final Map<String, dynamic> data = {
                 'name': nameController.text,
-                'name_ar': nameArController.text.isEmpty ? null : nameArController.text,
-                'role': roleController.text.isEmpty ? null : roleController.text,
-                'role_ar': roleArController.text.isEmpty ? null : roleArController.text,
-                'email': emailController.text.isEmpty ? null : emailController.text,
-                'phone': phoneController.text.isEmpty ? null : phoneController.text,
-                'whatsapp': whatsappController.text.isEmpty ? null : whatsappController.text,
+                'name_ar': nameArController.text.isEmpty
+                    ? null
+                    : nameArController.text,
+                'role': roleController.text.isEmpty
+                    ? null
+                    : roleController.text,
+                'role_ar': roleArController.text.isEmpty
+                    ? null
+                    : roleArController.text,
+                'email': emailController.text.isEmpty
+                    ? null
+                    : emailController.text,
+                'phone': phoneController.text.isEmpty
+                    ? null
+                    : phoneController.text,
+                'whatsapp': whatsappController.text.isEmpty
+                    ? null
+                    : whatsappController.text,
                 'updated_at': DateTime.now().toIso8601String(),
               };
 
@@ -1162,7 +1247,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                 if (mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
-                      content: Text('Contact ${isEditing ? 'updated' : 'added'}'),
+                      content: Text(
+                        'Contact ${isEditing ? 'updated' : 'added'}',
+                      ),
                       backgroundColor: AppColors.accentGreen,
                     ),
                   );
@@ -1178,7 +1265,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                 }
               }
             },
-            style: ElevatedButton.styleFrom(backgroundColor: AppColors.primaryBlue),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primaryBlue,
+            ),
             child: Text(
               isEditing ? 'Update' : 'Add',
               style: const TextStyle(color: Colors.white),

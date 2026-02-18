@@ -78,11 +78,11 @@ class _WalletScreenState extends State<WalletScreen> {
       // Check connectivity first
       final connectivityResult = await Connectivity().checkConnectivity();
       final isOffline = connectivityResult.contains(ConnectivityResult.none);
-      
+
       if (mounted) {
         setState(() => _isOffline = isOffline);
       }
-      
+
       if (isOffline) {
         // OFFLINE MODE: Load from cache
         debugPrint('[Wallet] Offline - loading from cache');
@@ -120,7 +120,7 @@ class _WalletScreenState extends State<WalletScreen> {
       }
     }
   }
-  
+
   /// Initialize from cached data when offline
   Future<void> _initializeFromCache(String userId) async {
     try {
@@ -128,13 +128,13 @@ class _WalletScreenState extends State<WalletScreen> {
         setState(() => _isOffline = true);
       }
       debugPrint('[Wallet] Loading from cache');
-      
+
       // Load cached wallet data
       final cachedData = await _getCachedWalletData(userId);
       if (cachedData != null) {
         _applyCachedWalletData(cachedData);
       }
-      
+
       if (!mounted) return;
       setState(() => _isLoading = false);
     } catch (e) {
@@ -143,7 +143,7 @@ class _WalletScreenState extends State<WalletScreen> {
       setState(() => _isLoading = false);
     }
   }
-  
+
   Future<void> _cacheWalletData(String userId) async {
     try {
       final offlineDb = OfflineDb();
@@ -168,34 +168,42 @@ class _WalletScreenState extends State<WalletScreen> {
       debugPrint('[Wallet] Error caching wallet data: $e');
     }
   }
-  
+
   Future<Map<String, dynamic>?> _getCachedWalletData(String userId) async {
     try {
       final offlineDb = OfflineDb();
-      final cached = offlineDb.getCachedItem(OfflineDb.walletCacheBox, 'wallet_data_$userId');
-      return cached?.data as Map<String, dynamic>?;
+      final cached = offlineDb.getCachedItem(
+        OfflineDb.walletCacheBox,
+        'wallet_data_$userId',
+      );
+      return cached?.data;
     } catch (e) {
       debugPrint('[Wallet] Error getting cached wallet data: $e');
       return null;
     }
   }
-  
+
   void _applyCachedWalletData(Map<String, dynamic> data) {
     _currentBalance = (data['currentBalance'] as num?)?.toDouble() ?? 0.0;
     _totalEarned = (data['totalEarned'] as num?)?.toDouble() ?? 0.0;
     _totalWithdrawn = (data['totalWithdrawn'] as num?)?.toDouble() ?? 0.0;
-    _pendingWithdrawals = (data['pendingWithdrawals'] as num?)?.toDouble() ?? 0.0;
+    _pendingWithdrawals =
+        (data['pendingWithdrawals'] as num?)?.toDouble() ?? 0.0;
     _thisMonthEarnings = (data['thisMonthEarnings'] as num?)?.toDouble() ?? 0.0;
     _thisWeekEarnings = (data['thisWeekEarnings'] as num?)?.toDouble() ?? 0.0;
-    
+
     final txList = data['transactions'] as List?;
     if (txList != null) {
-      _transactions = txList.map((t) => Map<String, dynamic>.from(t as Map)).toList();
+      _transactions = txList
+          .map((t) => Map<String, dynamic>.from(t as Map))
+          .toList();
     }
-    
+
     final wrList = data['withdrawalRequests'] as List?;
     if (wrList != null) {
-      _withdrawalRequests = wrList.map((w) => Map<String, dynamic>.from(w as Map)).toList();
+      _withdrawalRequests = wrList
+          .map((w) => Map<String, dynamic>.from(w as Map))
+          .toList();
     }
   }
 

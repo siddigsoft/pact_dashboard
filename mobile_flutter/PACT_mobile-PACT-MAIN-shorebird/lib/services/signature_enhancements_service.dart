@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:typed_data';
 import 'dart:ui' as ui;
 import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
@@ -41,7 +40,9 @@ class SignatureTemplate {
       width: (json['width'] as num?)?.toDouble() ?? 150,
       height: (json['height'] as num?)?.toDouble() ?? 50,
       pageNumber: json['page_number'] as int? ?? 1,
-      createdAt: DateTime.tryParse(json['created_at']?.toString() ?? '') ?? DateTime.now(),
+      createdAt:
+          DateTime.tryParse(json['created_at']?.toString() ?? '') ??
+          DateTime.now(),
     );
   }
 
@@ -107,39 +108,41 @@ class SignatureEnhancementsService {
     try {
       final recorder = ui.PictureRecorder();
       final canvas = Canvas(recorder);
-      
+
       final textStyle = TextStyle(
         fontFamily: fontFamily,
         fontSize: fontSize,
         color: color,
       );
-      
+
       final textSpan = TextSpan(text: name, style: textStyle);
       final textPainter = TextPainter(
         text: textSpan,
         textDirection: TextDirection.ltr,
       );
-      
+
       textPainter.layout();
-      
+
       final width = textPainter.width + 20;
       final height = textPainter.height + 20;
-      
+
       // Draw on white background
       canvas.drawRect(
         Rect.fromLTWH(0, 0, width, height),
         Paint()..color = Colors.white,
       );
-      
+
       textPainter.paint(canvas, const Offset(10, 10));
-      
+
       final picture = recorder.endRecording();
       final image = await picture.toImage(width.ceil(), height.ceil());
       final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
-      
+
       return byteData?.buffer.asUint8List();
     } catch (e) {
-      debugPrint('[SignatureEnhancements] Error generating typed signature: $e');
+      debugPrint(
+        '[SignatureEnhancements] Error generating typed signature: $e',
+      );
       return null;
     }
   }
@@ -157,9 +160,9 @@ class SignatureEnhancementsService {
     try {
       final recorder = ui.PictureRecorder();
       final canvas = Canvas(recorder);
-      
+
       const size = 80.0;
-      
+
       // Draw background
       if (circular) {
         canvas.drawCircle(
@@ -188,7 +191,7 @@ class SignatureEnhancementsService {
             ..strokeWidth = 2,
         );
       }
-      
+
       // Draw initials
       final textStyle = TextStyle(
         fontFamily: fontFamily,
@@ -196,24 +199,24 @@ class SignatureEnhancementsService {
         color: color,
         fontWeight: FontWeight.bold,
       );
-      
+
       final textSpan = TextSpan(text: initials.toUpperCase(), style: textStyle);
       final textPainter = TextPainter(
         text: textSpan,
         textDirection: TextDirection.ltr,
       );
-      
+
       textPainter.layout();
       final offset = Offset(
         (size - textPainter.width) / 2,
         (size - textPainter.height) / 2,
       );
       textPainter.paint(canvas, offset);
-      
+
       final picture = recorder.endRecording();
       final image = await picture.toImage(size.ceil(), size.ceil());
       final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
-      
+
       return byteData?.buffer.asUint8List();
     } catch (e) {
       debugPrint('[SignatureEnhancements] Error generating initials: $e');
@@ -242,18 +245,21 @@ class SignatureEnhancementsService {
 
       final storedHash = response['document_hash'] as String?;
       final signatureHash = response['signature_hash'] as String?;
-      
+
       // For verification, we'd need to fetch the current document and compare hashes
       // Here we just validate that the signature record exists and has valid hashes
-      final isValid = storedHash != null && 
-                      signatureHash != null && 
-                      storedHash.isNotEmpty && 
-                      signatureHash.isNotEmpty;
+      final isValid =
+          storedHash != null &&
+          signatureHash != null &&
+          storedHash.isNotEmpty &&
+          signatureHash.isNotEmpty;
 
       return SignatureVerification(
         documentHash: storedHash ?? '',
         signatureHash: signatureHash ?? '',
-        signedAt: DateTime.tryParse(response['signed_at']?.toString() ?? '') ?? DateTime.now(),
+        signedAt:
+            DateTime.tryParse(response['signed_at']?.toString() ?? '') ??
+            DateTime.now(),
         signerId: response['user_id']?.toString() ?? '',
         signerName: response['profiles']?['full_name']?.toString() ?? '',
         isValid: isValid,
@@ -276,8 +282,11 @@ class SignatureEnhancementsService {
       final timestamp = DateTime.now().toUtc();
 
       // Create certified timestamp
-      final certificationData = '$documentHash:$signatureHash:${timestamp.toIso8601String()}';
-      final certificationHash = sha256.convert(utf8.encode(certificationData)).toString();
+      final certificationData =
+          '$documentHash:$signatureHash:${timestamp.toIso8601String()}';
+      final certificationHash = sha256
+          .convert(utf8.encode(certificationData))
+          .toString();
 
       await _supabase.from('signature_logs').insert({
         'user_id': _currentUserId,
@@ -303,7 +312,7 @@ class SignatureEnhancementsService {
     required String signatureId,
   }) async {
     final successfulIds = <String>[];
-    
+
     for (final documentId in documentIds) {
       try {
         await _supabase.from('signature_logs').insert({
@@ -314,10 +323,12 @@ class SignatureEnhancementsService {
         });
         successfulIds.add(documentId);
       } catch (e) {
-        debugPrint('[SignatureEnhancements] Error signing document $documentId: $e');
+        debugPrint(
+          '[SignatureEnhancements] Error signing document $documentId: $e',
+        );
       }
     }
-    
+
     return successfulIds;
   }
 
@@ -361,10 +372,7 @@ class SignatureEnhancementsService {
 
   Future<bool> deleteTemplate(String templateId) async {
     try {
-      await _supabase
-          .from('signature_templates')
-          .delete()
-          .eq('id', templateId);
+      await _supabase.from('signature_templates').delete().eq('id', templateId);
       return true;
     } catch (e) {
       debugPrint('[SignatureEnhancements] Error deleting template: $e');
@@ -384,7 +392,7 @@ class SignatureEnhancementsService {
     try {
       final box = await Hive.openBox(_offlineSignaturesBox);
       final id = '${DateTime.now().millisecondsSinceEpoch}_$documentId';
-      
+
       await box.put(id, {
         'document_id': documentId,
         'signature_id': signatureId,
@@ -394,7 +402,7 @@ class SignatureEnhancementsService {
         'created_at': DateTime.now().toIso8601String(),
         'synced': false,
       });
-      
+
       debugPrint('[SignatureEnhancements] Queued offline signature: $id');
     } catch (e) {
       debugPrint('[SignatureEnhancements] Error queuing offline signature: $e');
@@ -410,7 +418,7 @@ class SignatureEnhancementsService {
       for (final key in box.keys) {
         final data = box.get(key);
         if (data == null || data is! Map) continue;
-        
+
         final map = Map<String, dynamic>.from(data);
         if (map['synced'] == true) {
           keysToRemove.add(key);
@@ -428,11 +436,13 @@ class SignatureEnhancementsService {
               'synced_at': DateTime.now().toIso8601String(),
             },
           });
-          
+
           keysToRemove.add(key);
           syncedCount++;
         } catch (e) {
-          debugPrint('[SignatureEnhancements] Error syncing signature $key: $e');
+          debugPrint(
+            '[SignatureEnhancements] Error syncing signature $key: $e',
+          );
         }
       }
 
@@ -442,7 +452,9 @@ class SignatureEnhancementsService {
 
       return syncedCount;
     } catch (e) {
-      debugPrint('[SignatureEnhancements] Error syncing offline signatures: $e');
+      debugPrint(
+        '[SignatureEnhancements] Error syncing offline signatures: $e',
+      );
       return 0;
     }
   }
@@ -486,17 +498,23 @@ class SignatureEnhancementsService {
     }
   }
 
-  Future<List<Map<String, dynamic>>> getDocumentSignatures(String documentId) async {
+  Future<List<Map<String, dynamic>>> getDocumentSignatures(
+    String documentId,
+  ) async {
     try {
       final response = await _supabase
           .from('document_signatures')
-          .select('*, user_signatures!signature_id(*), profiles:user_id(full_name)')
+          .select(
+            '*, user_signatures!signature_id(*), profiles:user_id(full_name)',
+          )
           .eq('document_id', documentId)
           .order('applied_at', ascending: true);
 
       return List<Map<String, dynamic>>.from(response);
     } catch (e) {
-      debugPrint('[SignatureEnhancements] Error getting document signatures: $e');
+      debugPrint(
+        '[SignatureEnhancements] Error getting document signatures: $e',
+      );
       return [];
     }
   }

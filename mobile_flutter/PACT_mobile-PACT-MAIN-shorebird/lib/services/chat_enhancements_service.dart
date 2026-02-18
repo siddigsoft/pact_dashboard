@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -12,15 +11,16 @@ import '../models/link_preview.dart';
 class ChatEnhancementsService {
   final SupabaseClient _supabase = Supabase.instance.client;
   static const String _linkPreviewCacheBox = 'link_preview_cache';
-  
+
   final Map<String, List<TypingIndicator>> _typingUsers = {};
-  final StreamController<Map<String, List<TypingIndicator>>> _typingController = 
+  final StreamController<Map<String, List<TypingIndicator>>> _typingController =
       StreamController.broadcast();
-  
+
   Timer? _typingCleanupTimer;
   RealtimeChannel? _typingChannel;
 
-  Stream<Map<String, List<TypingIndicator>>> get typingStream => _typingController.stream;
+  Stream<Map<String, List<TypingIndicator>>> get typingStream =>
+      _typingController.stream;
 
   String? get _currentUserId => _supabase.auth.currentUser?.id;
 
@@ -43,9 +43,11 @@ class ChatEnhancementsService {
     }
   }
 
-  Future<Map<String, List<MessageReaction>>> getBatchMessageReactions(List<String> messageIds) async {
+  Future<Map<String, List<MessageReaction>>> getBatchMessageReactions(
+    List<String> messageIds,
+  ) async {
     if (messageIds.isEmpty) return {};
-    
+
     try {
       final response = await _supabase
           .from('message_reactions')
@@ -67,7 +69,7 @@ class ChatEnhancementsService {
 
   Future<bool> addReaction(String messageId, String emoji) async {
     if (_currentUserId == null) return false;
-    
+
     try {
       // Check if reaction already exists
       final existing = await _supabase
@@ -102,10 +104,7 @@ class ChatEnhancementsService {
 
   Future<bool> removeReaction(String reactionId) async {
     try {
-      await _supabase
-          .from('message_reactions')
-          .delete()
-          .eq('id', reactionId);
+      await _supabase.from('message_reactions').delete().eq('id', reactionId);
       return true;
     } catch (e) {
       debugPrint('[ChatEnhancements] Error removing reaction: $e');
@@ -133,7 +132,7 @@ class ChatEnhancementsService {
 
   void subscribeToTyping(String chatId) {
     _typingChannel?.unsubscribe();
-    
+
     _typingChannel = _supabase
         .channel('typing:$chatId')
         .onBroadcast(
@@ -141,9 +140,11 @@ class ChatEnhancementsService {
           callback: (payload) {
             final indicator = TypingIndicator.fromJson(payload);
             if (indicator.userId == _currentUserId) return;
-            
+
             _typingUsers.putIfAbsent(chatId, () => []);
-            _typingUsers[chatId]!.removeWhere((t) => t.userId == indicator.userId);
+            _typingUsers[chatId]!.removeWhere(
+              (t) => t.userId == indicator.userId,
+            );
             _typingUsers[chatId]!.add(indicator);
             _typingController.add(_typingUsers);
           },
@@ -165,15 +166,17 @@ class ChatEnhancementsService {
 
   Future<void> sendTypingIndicator(String chatId, String userName) async {
     try {
-      await _supabase.channel('typing:$chatId').sendBroadcastMessage(
-        event: 'typing',
-        payload: {
-          'chat_id': chatId,
-          'user_id': _currentUserId,
-          'user_name': userName,
-          'timestamp': DateTime.now().toIso8601String(),
-        },
-      );
+      await _supabase
+          .channel('typing:$chatId')
+          .sendBroadcastMessage(
+            event: 'typing',
+            payload: {
+              'chat_id': chatId,
+              'user_id': _currentUserId,
+              'user_name': userName,
+              'timestamp': DateTime.now().toIso8601String(),
+            },
+          );
     } catch (e) {
       debugPrint('[ChatEnhancements] Error sending typing indicator: $e');
     }
@@ -194,7 +197,7 @@ class ChatEnhancementsService {
     required String replyToSenderId,
   }) async {
     if (_currentUserId == null) return false;
-    
+
     try {
       await _supabase.from('chat_messages').insert({
         'chat_id': chatId,
@@ -205,8 +208,8 @@ class ChatEnhancementsService {
         'metadata': {
           'reply_to': {
             'message_id': replyToMessageId,
-            'content': replyToContent.length > 100 
-                ? '${replyToContent.substring(0, 100)}...' 
+            'content': replyToContent.length > 100
+                ? '${replyToContent.substring(0, 100)}...'
                 : replyToContent,
             'sender_id': replyToSenderId,
           },
@@ -229,7 +232,7 @@ class ChatEnhancementsService {
     Map<String, dynamic>? attachments,
   }) async {
     if (_currentUserId == null) return false;
-    
+
     try {
       await _supabase.from('chat_messages').insert({
         'chat_id': targetChatId,
@@ -238,10 +241,7 @@ class ChatEnhancementsService {
         'content_type': contentType,
         'attachments': attachments,
         'status': 'sent',
-        'metadata': {
-          'forwarded': true,
-          'original_sender_id': originalSenderId,
-        },
+        'metadata': {'forwarded': true, 'original_sender_id': originalSenderId},
       });
       return true;
     } catch (e) {
@@ -254,7 +254,7 @@ class ChatEnhancementsService {
 
   Future<bool> editMessage(String messageId, String newContent) async {
     if (_currentUserId == null) return false;
-    
+
     try {
       // Verify ownership
       final message = await _supabase
@@ -268,14 +268,17 @@ class ChatEnhancementsService {
         return false;
       }
 
-      await _supabase.from('chat_messages').update({
-        'content': newContent,
-        'metadata': {
-          'edited': true,
-          'edited_at': DateTime.now().toIso8601String(),
-        },
-      }).eq('id', messageId);
-      
+      await _supabase
+          .from('chat_messages')
+          .update({
+            'content': newContent,
+            'metadata': {
+              'edited': true,
+              'edited_at': DateTime.now().toIso8601String(),
+            },
+          })
+          .eq('id', messageId);
+
       return true;
     } catch (e) {
       debugPrint('[ChatEnhancements] Error editing message: $e');
@@ -285,7 +288,7 @@ class ChatEnhancementsService {
 
   Future<bool> deleteMessage(String messageId) async {
     if (_currentUserId == null) return false;
-    
+
     try {
       // Verify ownership
       final message = await _supabase
@@ -300,14 +303,17 @@ class ChatEnhancementsService {
       }
 
       // Soft delete - mark as deleted
-      await _supabase.from('chat_messages').update({
-        'content': '',
-        'metadata': {
-          'deleted': true,
-          'deleted_at': DateTime.now().toIso8601String(),
-        },
-      }).eq('id', messageId);
-      
+      await _supabase
+          .from('chat_messages')
+          .update({
+            'content': '',
+            'metadata': {
+              'deleted': true,
+              'deleted_at': DateTime.now().toIso8601String(),
+            },
+          })
+          .eq('id', messageId);
+
       return true;
     } catch (e) {
       debugPrint('[ChatEnhancements] Error deleting message: $e');
@@ -319,7 +325,7 @@ class ChatEnhancementsService {
 
   Future<void> markMessageRead(String messageId) async {
     if (_currentUserId == null) return;
-    
+
     try {
       await _supabase.from('message_read_receipts').upsert({
         'message_id': messageId,
@@ -354,7 +360,7 @@ class ChatEnhancementsService {
     int limit = 50,
   }) async {
     if (query.trim().isEmpty) return [];
-    
+
     try {
       final response = await _supabase
           .from('chat_messages')
@@ -379,40 +385,45 @@ class ChatEnhancementsService {
       final box = await Hive.openBox(_linkPreviewCacheBox);
       final cached = box.get(url);
       if (cached != null && cached is Map) {
-        final cacheTime = DateTime.tryParse(cached['cached_at']?.toString() ?? '');
-        if (cacheTime != null && 
+        final cacheTime = DateTime.tryParse(
+          cached['cached_at']?.toString() ?? '',
+        );
+        if (cacheTime != null &&
             DateTime.now().difference(cacheTime).inHours < 24) {
           return LinkPreview.fromJson(Map<String, dynamic>.from(cached));
         }
       }
 
       // Fetch the URL
-      final response = await http.get(
-        Uri.parse(url),
-        headers: {'User-Agent': 'Mozilla/5.0'},
-      ).timeout(const Duration(seconds: 10));
+      final response = await http
+          .get(Uri.parse(url), headers: {'User-Agent': 'Mozilla/5.0'})
+          .timeout(const Duration(seconds: 10));
 
       if (response.statusCode != 200) return null;
 
       final document = html_parser.parse(response.body);
-      
+
       // Extract Open Graph meta tags
       String? getMetaContent(String property) {
-        final element = document.querySelector('meta[property="$property"]') ??
+        final element =
+            document.querySelector('meta[property="$property"]') ??
             document.querySelector('meta[name="$property"]');
         return element?.attributes['content'];
       }
 
       final preview = LinkPreview(
         url: url,
-        title: getMetaContent('og:title') ?? 
-               document.querySelector('title')?.text,
-        description: getMetaContent('og:description') ?? 
-                     getMetaContent('description'),
+        title:
+            getMetaContent('og:title') ?? document.querySelector('title')?.text,
+        description:
+            getMetaContent('og:description') ?? getMetaContent('description'),
         imageUrl: getMetaContent('og:image'),
         siteName: getMetaContent('og:site_name'),
-        favicon: document.querySelector('link[rel="icon"]')?.attributes['href'] ??
-                 document.querySelector('link[rel="shortcut icon"]')?.attributes['href'],
+        favicon:
+            document.querySelector('link[rel="icon"]')?.attributes['href'] ??
+            document
+                .querySelector('link[rel="shortcut icon"]')
+                ?.attributes['href'],
       );
 
       // Cache the result
@@ -444,7 +455,11 @@ class ChatEnhancementsService {
 
       final file = await _supabase.storage
           .from('chat-attachments')
-          .upload(storagePath, await http.MultipartFile.fromPath('file', filePath).finalize() as dynamic);
+          .upload(
+            storagePath,
+            await http.MultipartFile.fromPath('file', filePath).finalize()
+                as dynamic,
+          );
 
       final publicUrl = _supabase.storage
           .from('chat-attachments')
@@ -466,21 +481,22 @@ class ChatEnhancementsService {
     required String contentType,
   }) async {
     try {
-      final storagePath = 'chat_files/$chatId/${DateTime.now().millisecondsSinceEpoch}_$fileName';
+      final storagePath =
+          'chat_files/$chatId/${DateTime.now().millisecondsSinceEpoch}_$fileName';
 
       await _supabase.storage
           .from('chat-attachments')
-          .upload(storagePath, await http.MultipartFile.fromPath('file', filePath).finalize() as dynamic);
+          .upload(
+            storagePath,
+            await http.MultipartFile.fromPath('file', filePath).finalize()
+                as dynamic,
+          );
 
       final publicUrl = _supabase.storage
           .from('chat-attachments')
           .getPublicUrl(storagePath);
 
-      return {
-        'url': publicUrl,
-        'name': fileName,
-        'type': contentType,
-      };
+      return {'url': publicUrl, 'name': fileName, 'type': contentType};
     } catch (e) {
       debugPrint('[ChatEnhancements] Error uploading file: $e');
       return null;

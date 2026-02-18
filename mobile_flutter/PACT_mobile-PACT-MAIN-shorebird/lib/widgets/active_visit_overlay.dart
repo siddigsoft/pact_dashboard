@@ -108,7 +108,7 @@ class _MinimizedOverlay extends StatelessWidget {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.timer, size: 16, color: AppColors.primaryOrange),
+              const Icon(Icons.timer, size: 16, color: AppColors.primaryOrange),
               const SizedBox(width: 4),
               Text(
                 state.formattedElapsedTime,
@@ -124,7 +124,7 @@ class _MinimizedOverlay extends StatelessWidget {
 
         // Expand icon
         const SizedBox(width: 8),
-        Icon(Icons.expand_less, color: AppColors.textSecondary, size: 20),
+        const Icon(Icons.expand_less, color: AppColors.textSecondary, size: 20),
       ],
     );
   }
@@ -184,7 +184,8 @@ class _ExpandedOverlay extends ConsumerWidget {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(Icons.timer, size: 18, color: AppColors.primaryOrange),
+                  const Icon(Icons.timer,
+                      size: 18, color: AppColors.primaryOrange),
                   const SizedBox(width: 6),
                   Text(
                     state.formattedElapsedTime,
@@ -198,7 +199,7 @@ class _ExpandedOverlay extends ConsumerWidget {
               ),
             ),
             const SizedBox(width: 8),
-            Icon(Icons.expand_more, color: AppColors.textSecondary),
+            const Icon(Icons.expand_more, color: AppColors.textSecondary),
           ],
         ),
 
@@ -252,7 +253,7 @@ class _ExpandedOverlay extends ConsumerWidget {
             ),
             child: Row(
               children: [
-                Icon(Icons.gps_fixed, size: 16, color: AppColors.success),
+                const Icon(Icons.gps_fixed, size: 16, color: AppColors.success),
                 const SizedBox(width: 8),
                 Text(
                   'GPS Tracking Active',
@@ -284,7 +285,7 @@ class _ExpandedOverlay extends ConsumerWidget {
             ),
             child: Row(
               children: [
-                Icon(Icons.payments, size: 16, color: Colors.blue),
+                const Icon(Icons.payments, size: 16, color: Colors.blue),
                 const SizedBox(width: 8),
                 Text(
                   'Total Payout:',

@@ -584,7 +584,7 @@ class AppLocalizationsAr extends AppLocalizations {
   String get completed => 'مكتمل';
 
   @override
-  String get pending => 'قيد الانتظار';
+  String get pending => 'معلق';
 
   @override
   String get approved => 'موافق عليه';
@@ -593,7 +593,7 @@ class AppLocalizationsAr extends AppLocalizations {
   String get rejected => 'مرفوض';
 
   @override
-  String get cancelled => 'ملغى';
+  String get cancelled => 'ملغي';
 
   @override
   String get underReview => 'قيد المراجعة';
@@ -626,7 +626,7 @@ class AppLocalizationsAr extends AppLocalizations {
   String get reason => 'السبب';
 
   @override
-  String get enterReason => 'أدخل السبب';
+  String get enterReason => 'الرجاء إدخال السبب';
 
   @override
   String get selectPaymentMethod => 'اختر طريقة الدفع';
@@ -719,7 +719,7 @@ class AppLocalizationsAr extends AppLocalizations {
   String get info => 'معلومات';
 
   @override
-  String get ok => 'حسناً';
+  String get ok => 'موافق';
 
   @override
   String get yes => 'نعم';
@@ -789,4 +789,559 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get passwordsDoNotMatch => 'كلمات المرور غير متطابقة';
+
+  @override
+  String get statePermit => 'تصريح الولاية';
+
+  @override
+  String get localityPermit => 'تصريح المحلية';
+
+  @override
+  String get federalPermit => 'التصريح الفيدرالي';
+
+  @override
+  String get permitRequired => 'التصريح مطلوب';
+
+  @override
+  String get permitNotRequired => 'التصريح غير مطلوب';
+
+  @override
+  String get uploadStatePermit => 'رفع تصريح الولاية';
+
+  @override
+  String get uploadLocalityPermit => 'رفع تصريح المحلية';
+
+  @override
+  String get statePermitRequired => 'تصريح الولاية مطلوب';
+
+  @override
+  String statePermitDescription(String state) {
+    return 'تم رفع التصريح الفيدرالي فقط. يرجى رفع تصريح ولاية $state للمتابعة.';
+  }
+
+  @override
+  String get localityPermitRequired => 'تصريح المحلية مطلوب';
+
+  @override
+  String localityPermitDescription(String locality) {
+    return 'يرجى رفع تصريح المحلية لـ $locality للمتابعة.';
+  }
+
+  @override
+  String get selectFile => 'اختر ملف';
+
+  @override
+  String get permitFile => 'ملف التصريح';
+
+  @override
+  String get issueDate => 'تاريخ الإصدار';
+
+  @override
+  String get expiryDate => 'تاريخ الانتهاء';
+
+  @override
+  String get comments => 'ملاحظات';
+
+  @override
+  String get addCommentsOptional => 'أضف ملاحظات (اختياري)';
+
+  @override
+  String get uploadPermit => 'رفع التصريح';
+
+  @override
+  String get uploading => 'جاري الرفع...';
+
+  @override
+  String get permitUploadSuccess => 'تم رفع التصريح بنجاح';
+
+  @override
+  String get permitUploadError => 'فشل رفع التصريح';
+
+  @override
+  String get invalidFileType => 'نوع ملف غير صالح';
+
+  @override
+  String get fileTooLarge => 'الملف كبير جداً';
+
+  @override
+  String get selectPdfOrImage => 'يرجى اختيار ملف PDF أو صورة (JPG، PNG)';
+
+  @override
+  String maxFileSize(int size) {
+    return 'الحد الأقصى لحجم الملف: $size ميجابايت';
+  }
+
+  @override
+  String get datesRequired => 'تاريخ الإصدار والانتهاء مطلوبان';
+
+  @override
+  String get expiryAfterIssue => 'يجب أن يكون تاريخ الانتهاء بعد تاريخ الإصدار';
+
+  @override
+  String get showPreview => 'عرض المعاينة';
+
+  @override
+  String get hidePreview => 'إخفاء المعاينة';
+
+  @override
+  String get clearFile => 'مسح الملف';
+
+  @override
+  String get permitVerification => 'التحقق من التصريح';
+
+  @override
+  String get verifyPermits => 'التحقق من التصاريح';
+
+  @override
+  String get permitsAttached => 'التصاريح مرفقة';
+
+  @override
+  String get pendingVerification => 'في انتظار التحقق';
+
+  @override
+  String get verified => 'تم التحقق';
+
+  @override
+  String get statePermitAttached => 'تصريح الولاية مرفق';
+
+  @override
+  String get localityPermitAttached => 'تصريح المحلية مرفق';
+
+  @override
+  String doYouHaveStatePermit(String state) {
+    return 'هل لديك تصريح الولاية لـ $state؟';
+  }
+
+  @override
+  String doYouHaveLocalityPermit(String locality) {
+    return 'هل لديك تصريح المحلية لـ $locality؟';
+  }
+
+  @override
+  String get yesHaveIt => 'نعم، لدي التصريح';
+
+  @override
+  String get noRequiredDontHave => 'مطلوب ولكن ليس لدي';
+
+  @override
+  String get notRequiredInLocality => 'غير مطلوب في هذه المحلية';
+
+  @override
+  String get canProceedWithout => 'هل يمكنك المتابعة بدون التصريح؟';
+
+  @override
+  String get yesProceedWithout => 'نعم، يمكنني المتابعة';
+
+  @override
+  String get noCannotProceed => 'لا، أحتاج التصريح';
+
+  @override
+  String get sendBackToFom => 'إرسال إلى مدير العمليات';
+
+  @override
+  String get siteVerification => 'التحقق من الموقع';
+
+  @override
+  String get verifySite => 'التحقق من الموقع';
+
+  @override
+  String get returnToFom => 'إعادة إلى مدير العمليات';
+
+  @override
+  String get pendingSites => 'المواقع المعلقة';
+
+  @override
+  String get cpVerification => 'التحقق من التصاريح';
+
+  @override
+  String get verifiedSites => 'المواقع المتحقق منها';
+
+  @override
+  String sitesNeedStatePermit(int count) {
+    return '$count مواقع تحتاج تصريح الولاية';
+  }
+
+  @override
+  String sitesNeedLocalityPermit(int count) {
+    return '$count مواقع تحتاج تصريح المحلية';
+  }
+
+  @override
+  String get step1SelectFile => 'الخطوة 1: اختر الملف';
+
+  @override
+  String get step2EnterDates => 'الخطوة 2: أدخل التواريخ';
+
+  @override
+  String get step3AddComments => 'الخطوة 3: أضف ملاحظات (اختياري)';
+
+  @override
+  String get step4Upload => 'الخطوة 4: رفع التصريح';
+
+  @override
+  String get tapToSelectFile => 'اضغط لاختيار ملف';
+
+  @override
+  String get supportedFormats => 'الصيغ المدعومة: PDF، JPG، PNG';
+
+  @override
+  String fileSelected(String fileName) {
+    return 'تم اختيار الملف: $fileName';
+  }
+
+  @override
+  String get gallery => 'المعرض';
+
+  @override
+  String get pdfDocument => 'مستند PDF';
+
+  @override
+  String get willUploadPermit => 'سأقوم برفع مستند التصريح';
+
+  @override
+  String get cannotProvideNow => 'التصريح مطلوب لكن لا أستطيع توفيره الآن';
+
+  @override
+  String get noPermitNeeded => 'لا يلزم تصريح محلية للعمليات هنا';
+
+  @override
+  String get continueWithoutPermit => 'المتابعة بدون تصريح المحلية';
+
+  @override
+  String get sendBackToManager => 'إرسال إلى مدير العمليات الميدانية';
+
+  @override
+  String chooseHowToProceed(int count, String sitesLabel, String locality) {
+    return 'اختر كيفية المتابعة لـ $count $sitesLabel في $locality:';
+  }
+
+  @override
+  String get site => 'موقع';
+
+  @override
+  String get sites => 'مواقع';
+
+  @override
+  String get uploadFailed => 'فشل الرفع';
+
+  @override
+  String get databaseUpdateFailed => 'فشل تحديث قاعدة البيانات. يرجى المحاولة مرة أخرى.';
+
+  @override
+  String get selectDate => 'اختر التاريخ';
+
+  @override
+  String get bulkStatePermitUpload => 'رفع تصاريح الولايات بالجملة';
+
+  @override
+  String get bulkLocalityPermitUpload => 'رفع تصاريح المحليات بالجملة';
+
+  @override
+  String get statesSelected => 'ولايات محددة';
+
+  @override
+  String get localitiesSelected => 'محليات محددة';
+
+  @override
+  String get bulkUploadInstructions => 'حدد الملفات والتواريخ لكل ولاية. سيتم رفع الولايات ذات المعلومات الكاملة فقط.';
+
+  @override
+  String get bulkLocalityUploadInstructions => 'حدد الملفات والتواريخ لكل محلية. سيتم رفع المحليات ذات المعلومات الكاملة فقط.';
+
+  @override
+  String get noPermitsReady => 'لا توجد تصاريح جاهزة للرفع';
+
+  @override
+  String get ready => 'جاهز';
+
+  @override
+  String get uploaded => 'تم الرفع';
+
+  @override
+  String get failed => 'فشل';
+
+  @override
+  String get uploadAll => 'رفع الكل';
+
+  @override
+  String get notificationAppUpdateTitle => 'تحديث التطبيق متاح';
+
+  @override
+  String notificationAppUpdateBody(String version) {
+    return 'إصدار جديد ($version) جاهز. اضغط للتحديث!';
+  }
+
+  @override
+  String get notificationDownloadingTitle => 'جاري تحميل التحديث';
+
+  @override
+  String get notificationDownloadingBody => 'يرجى الانتظار...';
+
+  @override
+  String get notificationUpdateInstalledTitle => 'تم تثبيت التحديث';
+
+  @override
+  String get notificationUpdateInstalledBody => 'تطبيقك محدث الآن. أعد التشغيل للتطبيق.';
+
+  @override
+  String get notificationCostApprovedTitle => 'تمت الموافقة على التكلفة';
+
+  @override
+  String notificationCostApprovedBody(String siteId, String amount, String currency) {
+    return 'تمت الموافقة لزيارة الموقع $siteId. المبلغ: $amount $currency';
+  }
+
+  @override
+  String get notificationCostRejectedTitle => 'تم رفض طلب التكلفة';
+
+  @override
+  String notificationCostRejectedBody(String siteId, String reason) {
+    return 'تم الرفض لزيارة الموقع $siteId. السبب: $reason';
+  }
+
+  @override
+  String get notificationRevisionTitle => 'مطلوب مراجعة';
+
+  @override
+  String notificationRevisionBody(String siteId, String notes) {
+    return 'زيارة الموقع $siteId تحتاج مراجعة. الملاحظات: $notes';
+  }
+
+  @override
+  String get notificationSyncCompletedTitle => 'اكتمل المزامنة';
+
+  @override
+  String notificationSyncCompletedBody(int count) {
+    return 'تم مزامنة $count طلب(ات) بنجاح.';
+  }
+
+  @override
+  String get notificationBudgetAlertTitle => 'تنبيه الميزانية';
+
+  @override
+  String notificationBudgetAlertBody(String siteId, String amount, String currency) {
+    return 'الميزانية المتبقية لـ $siteId: $amount $currency';
+  }
+
+  @override
+  String get notificationNewMessageTitle => 'رسالة جديدة';
+
+  @override
+  String get notificationSignatureVerifiedTitle => 'تم التحقق من التوقيع';
+
+  @override
+  String get notificationSignatureVerifiedBody => 'تم التحقق من توقيعك من قبل المسؤول.';
+
+  @override
+  String get notificationSignatureRejectedTitle => 'تم رفض التوقيع';
+
+  @override
+  String get notificationSignatureRejectedBody => 'تم رفض توقيعك. يرجى تقديم توقيع جديد.';
+
+  @override
+  String get notificationSiteAssignedTitle => 'تم تعيين زيارة موقع';
+
+  @override
+  String notificationSiteAssignedBody(String siteName) {
+    return 'تم تعيينك لزيارة: $siteName';
+  }
+
+  @override
+  String get notificationPaymentReceivedTitle => 'تم استلام الدفعة';
+
+  @override
+  String notificationPaymentReceivedBody(String amount, String currency) {
+    return 'استلمت $amount $currency.';
+  }
+
+  @override
+  String get notificationApprovalRequiredTitle => 'مطلوب موافقة';
+
+  @override
+  String notificationApprovalRequiredBody(String itemType) {
+    return 'يتطلب $itemType موافقتك.';
+  }
+
+  @override
+  String get notificationSupportTicketTitle => 'تم تحديث تذكرة الدعم';
+
+  @override
+  String notificationSupportTicketBody(String ticketId) {
+    return 'تم تحديث تذكرة الدعم #$ticketId الخاصة بك.';
+  }
+
+  @override
+  String get notificationIncomingCallTitle => 'مكالمة واردة';
+
+  @override
+  String notificationIncomingCallBody(String callerName) {
+    return '$callerName يتصل بك.';
+  }
+
+  @override
+  String get notificationMissedCallTitle => 'مكالمة فائتة';
+
+  @override
+  String notificationMissedCallBody(String callerName) {
+    return 'فاتتك مكالمة من $callerName.';
+  }
+
+  @override
+  String get mmpManagement => 'إدارة خطة المراقبة الشهرية';
+
+  @override
+  String get accessDenied => 'تم رفض الوصول';
+
+  @override
+  String get noPermission => 'ليس لديك صلاحية للوصول إلى هذه الصفحة.';
+
+  @override
+  String get myAssignments => 'مهامي';
+
+  @override
+  String get claimManageComplete => 'المطالبة وإدارة وإكمال زيارات الموقع';
+
+  @override
+  String get searchSites => 'البحث عن المواقع...';
+
+  @override
+  String get claimable => 'قابل للمطالبة';
+
+  @override
+  String get assigned => 'معين';
+
+  @override
+  String get mySites => 'مواقعي';
+
+  @override
+  String get inProgress => 'قيد التنفيذ';
+
+  @override
+  String get claimSite => 'المطالبة بالموقع';
+
+  @override
+  String get reclaimSite => 'استرداد';
+
+  @override
+  String get completeVisit => 'إكمال';
+
+  @override
+  String get viewReport => 'عرض التقرير';
+
+  @override
+  String get requestAdvance => 'طلب سلفة';
+
+  @override
+  String get acknowledgeCost => 'الإقرار بالتكلفة';
+
+  @override
+  String get siteClaimedSuccess => 'تمت المطالبة بالموقع بنجاح!';
+
+  @override
+  String get siteReclaimedSuccess => 'تم استرداد الموقع بنجاح';
+
+  @override
+  String get visitStartedSuccess => 'بدأت الزيارة بنجاح';
+
+  @override
+  String get visitCompletedSuccess => 'اكتملت الزيارة وتم تقديم التقرير بنجاح';
+
+  @override
+  String get errorOccurred => 'حدث خطأ';
+
+  @override
+  String get call => 'اتصال';
+
+  @override
+  String get sms => 'رسالة نصية';
+
+  @override
+  String get whatsapp => 'واتساب';
+
+  @override
+  String get state => 'الولاية';
+
+  @override
+  String get locality => 'المحلية';
+
+  @override
+  String get transportFee => 'رسوم النقل';
+
+  @override
+  String get enumeratorFee => 'رسوم الباحث';
+
+  @override
+  String get totalCost => 'التكلفة الإجمالية';
+
+  @override
+  String get noSitesAvailable => 'لا توجد مواقع متاحة';
+
+  @override
+  String get pullToRefresh => 'اسحب للتحديث';
+
+  @override
+  String get willSyncWhenOnline => 'سيتم المزامنة عند الاتصال';
+
+  @override
+  String get dispatched => 'تم الإرسال';
+
+  @override
+  String get onlyAdminsCanReclaim => 'المسؤولون فقط يمكنهم استرداد المواقع';
+
+  @override
+  String get releaseSiteToPool => 'إعادة هذا الموقع إلى مجموعة الإرسال؟';
+
+  @override
+  String get siteDetails => 'تفاصيل الموقع';
+
+  @override
+  String get visitDetails => 'تفاصيل الزيارة';
+
+  @override
+  String get auditTrail => 'سجل المراجعة';
+
+  @override
+  String get assignedTo => 'معين إلى';
+
+  @override
+  String get visitDate => 'تاريخ الزيارة';
+
+  @override
+  String get project => 'المشروع';
+
+  @override
+  String get activity => 'النشاط';
+
+  @override
+  String get cpName => 'اسم الشريك';
+
+  @override
+  String get openInMaps => 'فتح في الخرائط';
+
+  @override
+  String get noData => 'لا توجد بيانات متاحة';
+
+  @override
+  String get view => 'عرض';
+
+  @override
+  String get overdue => 'متأخر';
+
+  @override
+  String get inbox => 'الوارد';
+
+  @override
+  String get drafts => 'المسودات';
+
+  @override
+  String get outbox => 'الصادر';
+
+  @override
+  String get sent => 'المرسلة';
+
+  @override
+  String get accepted => 'مقبول';
+
+  @override
+  String get ongoing => 'جاري';
 }

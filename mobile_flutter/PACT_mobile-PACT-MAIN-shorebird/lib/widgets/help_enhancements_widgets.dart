@@ -17,7 +17,7 @@ class SupportTicketCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isArabic = locale == 'ar';
-    
+
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(12),
@@ -57,17 +57,18 @@ class SupportTicketCard extends StatelessWidget {
             const SizedBox(height: 8),
             Text(
               ticket.description,
-              style: TextStyle(
-                fontSize: 13,
-                color: Colors.grey.shade600,
-              ),
+              style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
             ),
             const SizedBox(height: 12),
             Row(
               children: [
-                Icon(Icons.category_outlined, size: 14, color: Colors.grey.shade500),
+                Icon(
+                  Icons.category_outlined,
+                  size: 14,
+                  color: Colors.grey.shade500,
+                ),
                 const SizedBox(width: 4),
                 Text(
                   _getCategoryLabel(ticket.category, isArabic),
@@ -82,7 +83,11 @@ class SupportTicketCard extends StatelessWidget {
                 ),
                 if (ticket.messages.isNotEmpty) ...[
                   const Spacer(),
-                  Icon(Icons.message_outlined, size: 14, color: Colors.grey.shade500),
+                  Icon(
+                    Icons.message_outlined,
+                    size: 14,
+                    color: Colors.grey.shade500,
+                  ),
                   const SizedBox(width: 4),
                   Text(
                     '${ticket.messages.length}',
@@ -100,7 +105,7 @@ class SupportTicketCard extends StatelessWidget {
   Widget _buildStatusBadge(String status, bool isArabic) {
     Color color;
     String label;
-    
+
     switch (status) {
       case 'open':
         color = Colors.blue;
@@ -122,7 +127,7 @@ class SupportTicketCard extends StatelessWidget {
         color = Colors.grey;
         label = status;
     }
-    
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
@@ -154,7 +159,7 @@ class SupportTicketCard extends StatelessWidget {
   String _formatDate(DateTime date) {
     final now = DateTime.now();
     final diff = now.difference(date);
-    
+
     if (diff.inDays > 0) {
       return '${diff.inDays}d ago';
     } else if (diff.inHours > 0) {
@@ -189,9 +194,11 @@ class TicketMessageBubble extends StatelessWidget {
         ),
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: isCurrentUser 
-              ? AppColors.primaryBlue 
-              : (message.isStaffReply ? Colors.green.shade50 : Colors.grey.shade100),
+          color: isCurrentUser
+              ? AppColors.primaryBlue
+              : (message.isStaffReply
+                    ? Colors.green.shade50
+                    : Colors.grey.shade100),
           borderRadius: BorderRadius.only(
             topLeft: const Radius.circular(16),
             topRight: const Radius.circular(16),
@@ -206,7 +213,11 @@ class TicketMessageBubble extends StatelessWidget {
               Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(Icons.support_agent, size: 14, color: Colors.green.shade700),
+                  Icon(
+                    Icons.support_agent,
+                    size: 14,
+                    color: Colors.green.shade700,
+                  ),
                   const SizedBox(width: 4),
                   Text(
                     message.senderName,
@@ -232,8 +243,8 @@ class TicketMessageBubble extends StatelessWidget {
               _formatTime(message.createdAt),
               style: TextStyle(
                 fontSize: 10,
-                color: isCurrentUser 
-                    ? Colors.white.withOpacity(0.7) 
+                color: isCurrentUser
+                    ? Colors.white.withOpacity(0.7)
                     : Colors.grey.shade500,
               ),
             ),
@@ -307,7 +318,10 @@ class HelpArticleCard extends StatelessWidget {
                       spacing: 4,
                       children: article.tags.take(3).map((tag) {
                         return Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 2,
+                          ),
                           decoration: BoxDecoration(
                             color: Colors.grey.shade100,
                             borderRadius: BorderRadius.circular(4),
@@ -355,7 +369,7 @@ class ContextualHelpTooltip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isArabic = locale == 'ar';
-    
+
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -394,10 +408,7 @@ class ContextualHelpTooltip extends StatelessWidget {
           const SizedBox(height: 8),
           Text(
             tip.getContent(locale),
-            style: const TextStyle(
-              fontSize: 14,
-              color: Colors.white70,
-            ),
+            style: const TextStyle(fontSize: 14, color: Colors.white70),
           ),
           const SizedBox(height: 12),
           Row(
@@ -405,17 +416,17 @@ class ContextualHelpTooltip extends StatelessWidget {
             children: [
               Text(
                 '$currentStep / $totalSteps',
-                style: const TextStyle(
-                  fontSize: 12,
-                  color: Colors.white60,
-                ),
+                style: const TextStyle(fontSize: 12, color: Colors.white60),
               ),
               if (onNext != null && currentStep < totalSteps)
                 TextButton(
                   onPressed: onNext,
                   style: TextButton.styleFrom(
                     backgroundColor: Colors.white.withOpacity(0.2),
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 8,
+                    ),
                   ),
                   child: Text(
                     isArabic ? 'التالي' : 'Next',
@@ -427,7 +438,10 @@ class ContextualHelpTooltip extends StatelessWidget {
                   onPressed: onDismiss,
                   style: TextButton.styleFrom(
                     backgroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 8,
+                    ),
                   ),
                   child: Text(
                     isArabic ? 'تم' : 'Got it',
@@ -446,11 +460,7 @@ class FeedbackForm extends StatefulWidget {
   final Function(String type, String message) onSubmit;
   final String locale;
 
-  const FeedbackForm({
-    super.key,
-    required this.onSubmit,
-    this.locale = 'en',
-  });
+  const FeedbackForm({super.key, required this.onSubmit, this.locale = 'en'});
 
   @override
   State<FeedbackForm> createState() => _FeedbackFormState();
@@ -469,7 +479,7 @@ class _FeedbackFormState extends State<FeedbackForm> {
   @override
   Widget build(BuildContext context) {
     final isArabic = widget.locale == 'ar';
-    
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -479,12 +489,13 @@ class _FeedbackFormState extends State<FeedbackForm> {
         ),
         const SizedBox(height: 8),
         DropdownButtonFormField<String>(
-          value: _type,
+          initialValue: _type,
           decoration: InputDecoration(
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(8),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 12,
+              vertical: 8,
             ),
-            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           ),
           items: [
             DropdownMenuItem(
@@ -512,10 +523,10 @@ class _FeedbackFormState extends State<FeedbackForm> {
           controller: _messageController,
           maxLines: 5,
           decoration: InputDecoration(
-            hintText: isArabic ? 'اكتب ملاحظاتك هنا...' : 'Write your feedback here...',
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(8),
-            ),
+            hintText: isArabic
+                ? 'اكتب ملاحظاتك هنا...'
+                : 'Write your feedback here...',
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
           ),
         ),
         const SizedBox(height: 16),
@@ -560,7 +571,7 @@ class EmergencySOSButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isArabic = locale == 'ar';
-    
+
     return GestureDetector(
       onLongPress: onPressed,
       child: Container(
@@ -579,18 +590,11 @@ class EmergencySOSButton extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(
-              Icons.sos,
-              color: Colors.white,
-              size: 48,
-            ),
+            const Icon(Icons.sos, color: Colors.white, size: 48),
             const SizedBox(height: 8),
             Text(
               isArabic ? 'اضغط مطولاً للطوارئ' : 'Long press for SOS',
-              style: const TextStyle(
-                fontSize: 12,
-                color: Colors.white70,
-              ),
+              style: const TextStyle(fontSize: 12, color: Colors.white70),
             ),
           ],
         ),
@@ -631,11 +635,7 @@ class LiveChatBubble extends StatelessWidget {
                 ),
               ],
             ),
-            child: const Icon(
-              Icons.chat_bubble,
-              color: Colors.white,
-              size: 28,
-            ),
+            child: const Icon(Icons.chat_bubble, color: Colors.white, size: 28),
           ),
           if (unreadCount > 0)
             Positioned(

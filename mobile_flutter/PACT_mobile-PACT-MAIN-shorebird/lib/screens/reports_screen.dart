@@ -10,7 +10,8 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/site_visit.dart';
 import '../services/site_visit_service.dart';
-import '../services/offline_data_service.dart';
+import '../services/offline/offline_db.dart';
+import 'package:connectivity_plus/connectivity_plus.dart';
 
 class _VisitReportData {
   final String reportId;
@@ -43,7 +44,7 @@ class ReportsScreen extends StatefulWidget {
 
 class _ReportsScreenState extends State<ReportsScreen> {
   final SiteVisitService _siteVisitService = SiteVisitService();
-  final OfflineDataService _offlineDataService = OfflineDataService();
+  final OfflineDb _offlineDb = OfflineDb();
   List<SiteVisit> _allVisits = [];
   List<SiteVisit> _filteredVisits = [];
   bool _isLoading = true;
@@ -78,7 +79,8 @@ class _ReportsScreenState extends State<ReportsScreen> {
       if (_userId == null) return;
 
       // Check if we're online
-      _isOffline = !(await _offlineDataService.isOnline());
+      final connectivity = await Connectivity().checkConnectivity();
+      _isOffline = connectivity.contains(ConnectivityResult.none);
 
       if (_isOffline) {
         // Load from cache when offline
@@ -109,19 +111,25 @@ class _ReportsScreenState extends State<ReportsScreen> {
   Future<void> _loadFromCache() async {
     debugPrint('📦 Loading reports from offline cache...');
 
-    // Load cached visits
-    final cachedVisits = await _offlineDataService.getCachedCompletedVisits(
-      _userId!,
+    // Get cached visits from OfflineDb
+    final cachedItem = _offlineDb.getCachedItem(
+      OfflineDb.reportsCacheBox,
+      'completed_visits_$_userId',
     );
+    final cachedVisitsData = cachedItem?.data as Map<String, dynamic>?;
+    final cachedVisits = (cachedVisitsData?['visits'] as List?)?.map((v) => v as Map<String, dynamic>).toList() ?? [];
     if (cachedVisits.isNotEmpty) {
       _allVisits = cachedVisits.map((v) => SiteVisit.fromJson(v)).toList();
     }
 
     // Load cached reports
-    final cachedReports = await _offlineDataService.getCachedReportsData(
-      _userId!,
+    final cachedReportsItem = _offlineDb.getCachedItem(
+      OfflineDb.reportsCacheBox,
+      'reports_$_userId',
     );
-    if (cachedReports != null) {
+    final cachedReportsData = cachedReportsItem?.data as Map<String, dynamic>?;
+    final cachedReports = cachedReportsData?['reports'] as Map<String, Map<String, dynamic>>?;
+    if (cachedReports != null && cachedReports.isNotEmpty) {
       _reportByVisitId.clear();
       cachedReports.forEach((visitId, data) {
         _reportByVisitId[visitId] = _VisitReportData(
@@ -140,11 +148,14 @@ class _ReportsScreenState extends State<ReportsScreen> {
     }
 
     // Load cached site locations
-    final cachedLocations = await _offlineDataService.getCachedSiteLocations(
-      _userId!,
+    final cachedLocationsItem = _offlineDb.getCachedItem(
+      OfflineDb.siteCacheBox,
+      'site_locations_$_userId',
     );
-    if (cachedLocations != null) {
-      _siteLocations = cachedLocations;
+    final cachedLocationsData = cachedLocationsItem?.data as Map<String, dynamic>?;
+    final cachedLocations = cachedLocationsData ?? {};
+    if (cachedLocations.isNotEmpty) {
+      _siteLocations = cachedLocations.map((k, v) => MapEntry(k, Map<String, dynamic>.from((v as Map?)?.cast<String, dynamic>() ?? {})));
     }
 
     if (mounted && _allVisits.isNotEmpty) {
@@ -172,7 +183,12 @@ class _ReportsScreenState extends State<ReportsScreen> {
     try {
       // Cache visits
       final visitsJson = _allVisits.map((v) => v.toJson()).toList();
-      await _offlineDataService.cacheCompletedVisits(_userId!, visitsJson);
+      await _offlineDb.cacheItem(
+        OfflineDb.reportsCacheBox,
+        'completed_visits_$_userId',
+        data: {'visits': visitsJson},
+        ttl: const Duration(hours: 24),
+      );
 
       // Cache reports
       final reportsJson = <String, Map<String, dynamic>>{};
@@ -187,10 +203,20 @@ class _ReportsScreenState extends State<ReportsScreen> {
           'photoUrls': report.photoUrls,
         };
       });
-      await _offlineDataService.cacheReports(_userId!, reportsJson);
+      await _offlineDb.cacheItem(
+        OfflineDb.reportsCacheBox,
+        'reports_$_userId',
+        data: {'reports': reportsJson},
+        ttl: const Duration(hours: 24),
+      );
 
       // Cache site locations
-      await _offlineDataService.cacheSiteLocations(_userId!, _siteLocations);
+      await _offlineDb.cacheItem(
+        OfflineDb.siteCacheBox,
+        'site_locations_$_userId',
+        data: _siteLocations,
+        ttl: const Duration(hours: 24),
+      );
     } catch (e) {
       debugPrint('Error caching reports data: $e');
     }
@@ -247,23 +273,22 @@ class _ReportsScreenState extends State<ReportsScreen> {
       latestReportRowByVisitId.forEach((siteVisitId, row) {
         final reportId = row['id']?.toString() ?? '';
         final submittedAtRaw = row['submitted_at'];
-        final submittedAt = submittedAtRaw is String
-            ? DateTime.tryParse(submittedAtRaw)
-            : null;
+        final submittedAt =
+            submittedAtRaw is String ? DateTime.tryParse(submittedAtRaw) : null;
 
         final durationRaw = row['duration_minutes'];
         final durationMinutes = durationRaw is int
             ? durationRaw
             : durationRaw is num
-            ? durationRaw.toInt()
-            : null;
+                ? durationRaw.toInt()
+                : null;
 
         final coordinatesRaw = row['coordinates'];
         final coordinates = coordinatesRaw is Map<String, dynamic>
             ? coordinatesRaw
             : coordinatesRaw is Map
-            ? coordinatesRaw.map((k, v) => MapEntry(k.toString(), v))
-            : null;
+                ? coordinatesRaw.map((k, v) => MapEntry(k.toString(), v))
+                : null;
 
         _reportByVisitId[siteVisitId] = _VisitReportData(
           reportId: reportId,
@@ -335,13 +360,13 @@ class _ReportsScreenState extends State<ReportsScreen> {
       final coordinatesText = location != null
           ? '${location['latitude']?.toStringAsFixed(6) ?? 'N/A'}, ${location['longitude']?.toStringAsFixed(6) ?? 'N/A'}'
           : (report.coordinates != null
-                ? '${report.coordinates?['latitude'] ?? 'N/A'}, ${report.coordinates?['longitude'] ?? 'N/A'}'
-                : 'Not recorded');
+              ? '${report.coordinates?['latitude'] ?? 'N/A'}, ${report.coordinates?['longitude'] ?? 'N/A'}'
+              : 'Not recorded');
       final accuracyText = location != null
           ? '${location['accuracy']?.toStringAsFixed(1) ?? 'N/A'}m'
           : (report.coordinates?['accuracy'] != null
-                ? '${report.coordinates?['accuracy']}m'
-                : 'N/A');
+              ? '${report.coordinates?['accuracy']}m'
+              : 'N/A');
 
       final completedAt = visit.completedAt;
       final submittedAt = report.submittedAt;
@@ -887,7 +912,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
 
       final email = await showDialog<String>(
         context: context,
-        builder: (context) => EmailDialog(),
+        builder: (context) => const EmailDialog(),
       );
 
       if (email != null && email.isNotEmpty) {
@@ -992,12 +1017,12 @@ class _ReportsScreenState extends State<ReportsScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
+                      const Text(
                         'Filter Options',
                         style: TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.bold,
-                          color: const Color(0xFF263238),
+                          color: Color(0xFF263238),
                         ),
                       ),
                       const SizedBox(height: 12),
@@ -1020,12 +1045,12 @@ class _ReportsScreenState extends State<ReportsScreen> {
                                 value: _filterType,
                                 isExpanded: true,
                                 underline: const SizedBox(),
-                                icon: Icon(
+                                icon: const Icon(
                                   Icons.arrow_drop_down,
-                                  color: const Color(0xFF1976D2),
+                                  color: Color(0xFF1976D2),
                                 ),
-                                style: TextStyle(
-                                  color: const Color(0xFF263238),
+                                style: const TextStyle(
+                                  color: Color(0xFF263238),
                                   fontSize: 14,
                                   fontWeight: FontWeight.w500,
                                 ),
@@ -1073,15 +1098,15 @@ class _ReportsScreenState extends State<ReportsScreen> {
                                       DateFormat(
                                         'yyyy-MM-dd',
                                       ).format(_selectedDate),
-                                      style: TextStyle(
-                                        color: const Color(0xFF263238),
+                                      style: const TextStyle(
+                                        color: Color(0xFF263238),
                                         fontSize: 14,
                                         fontWeight: FontWeight.w500,
                                       ),
                                     ),
-                                    Icon(
+                                    const Icon(
                                       Icons.calendar_today,
-                                      color: const Color(0xFFFF9800),
+                                      color: Color(0xFFFF9800),
                                       size: 20,
                                     ),
                                   ],
@@ -1117,9 +1142,9 @@ class _ReportsScreenState extends State<ReportsScreen> {
                   ),
                   child: Row(
                     children: [
-                      Icon(
+                      const Icon(
                         Icons.analytics,
-                        color: const Color(0xFF1976D2),
+                        color: Color(0xFF1976D2),
                         size: 24,
                       ),
                       const SizedBox(width: 12),
@@ -1210,10 +1235,10 @@ class _ReportsScreenState extends State<ReportsScreen> {
                                             child: Text(
                                               visit.siteCode.length >= 2
                                                   ? visit.siteCode
-                                                        .substring(0, 2)
-                                                        .toUpperCase()
+                                                      .substring(0, 2)
+                                                      .toUpperCase()
                                                   : visit.siteCode
-                                                        .toUpperCase(),
+                                                      .toUpperCase(),
                                               style: const TextStyle(
                                                 color: Colors.white,
                                                 fontWeight: FontWeight.bold,
@@ -1245,10 +1270,10 @@ class _ReportsScreenState extends State<ReportsScreen> {
                                               // Site code
                                               Row(
                                                 children: [
-                                                  Icon(
+                                                  const Icon(
                                                     Icons.location_on,
                                                     size: 16,
-                                                    color: const Color(
+                                                    color: Color(
                                                       0xFFFF9800,
                                                     ),
                                                   ),
@@ -1258,8 +1283,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
                                                       'Code: ${visit.siteCode}',
                                                       style: TextStyle(
                                                         color: Colors
-                                                            .grey
-                                                            .shade700,
+                                                            .grey.shade700,
                                                         fontSize: 14,
                                                         fontWeight:
                                                             FontWeight.w500,
@@ -1274,10 +1298,10 @@ class _ReportsScreenState extends State<ReportsScreen> {
                                               // Date
                                               Row(
                                                 children: [
-                                                  Icon(
+                                                  const Icon(
                                                     Icons.access_time,
                                                     size: 16,
-                                                    color: const Color(
+                                                    color: Color(
                                                       0xFF1976D2,
                                                     ),
                                                   ),
@@ -1294,8 +1318,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
                                                           : 'No Date',
                                                       style: TextStyle(
                                                         color: Colors
-                                                            .grey
-                                                            .shade600,
+                                                            .grey.shade600,
                                                         fontSize: 13,
                                                       ),
                                                       overflow:
@@ -1309,10 +1332,10 @@ class _ReportsScreenState extends State<ReportsScreen> {
                                                 const SizedBox(height: 4),
                                                 Row(
                                                   children: [
-                                                    Icon(
+                                                    const Icon(
                                                       Icons.gps_fixed,
                                                       size: 16,
-                                                      color: const Color(
+                                                      color: Color(
                                                         0xFF4CAF50,
                                                       ),
                                                     ),
@@ -1322,8 +1345,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
                                                         '${location['latitude']?.toStringAsFixed(4) ?? 'N/A'}, ${location['longitude']?.toStringAsFixed(4) ?? 'N/A'} (±${location['accuracy']?.toStringAsFixed(0) ?? 'N/A'}m)',
                                                         style: TextStyle(
                                                           color: Colors
-                                                              .grey
-                                                              .shade600,
+                                                              .grey.shade600,
                                                           fontSize: 12,
                                                         ),
                                                         overflow: TextOverflow
@@ -1381,18 +1403,19 @@ class _ReportsScreenState extends State<ReportsScreen> {
                                                       '📷 ${report.photoUrls.length}',
                                                       style: TextStyle(
                                                         color: Colors
-                                                            .grey
-                                                            .shade600,
+                                                            .grey.shade600,
                                                         fontSize: 12,
                                                       ),
                                                     ),
                                                     TextButton.icon(
-                                                      style: TextButton.styleFrom(
+                                                      style:
+                                                          TextButton.styleFrom(
                                                         padding:
-                                                            const EdgeInsets.symmetric(
-                                                              horizontal: 8,
-                                                              vertical: 4,
-                                                            ),
+                                                            const EdgeInsets
+                                                                .symmetric(
+                                                          horizontal: 8,
+                                                          vertical: 4,
+                                                        ),
                                                         minimumSize: Size.zero,
                                                         tapTargetSize:
                                                             MaterialTapTargetSize
@@ -1400,8 +1423,8 @@ class _ReportsScreenState extends State<ReportsScreen> {
                                                       ),
                                                       onPressed: () =>
                                                           _downloadVisitReport(
-                                                            visit,
-                                                          ),
+                                                        visit,
+                                                      ),
                                                       icon: const Icon(
                                                         Icons.picture_as_pdf,
                                                         size: 16,

@@ -3,9 +3,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../theme/app_colors.dart';
-import '../services/webrtc_service.dart';
-import '../models/call_state.dart';
-import '../screens/call_screen.dart';
+import 'package:pact_mobile/models/call_state.dart' show CallState, CallStatus;
+import 'package:pact_mobile/services/agora_call_service.dart';
+import '../screens/agora_call_screen.dart';
 import 'dart:async';
 
 class FloatingCallOverlay extends StatefulWidget {
@@ -30,14 +30,15 @@ class FloatingCallOverlay extends StatefulWidget {
 
 class _FloatingCallOverlayState extends State<FloatingCallOverlay>
     with SingleTickerProviderStateMixin {
-  final WebRTCService _webrtcService = WebRTCService();
+  final AgoraCallService _agoraService = AgoraCallService();
   StreamSubscription<CallState>? _callStateSubscription;
-  CallState _callState = CallState();
+
+  CallState? _callState;
+  late AnimationController _pulseController;
+  Offset _position = const Offset(10, 100);
+  bool _isDragging = false;
   Duration _callDuration = Duration.zero;
   Timer? _durationTimer;
-  Offset _position = const Offset(20, 100);
-  bool _isDragging = false;
-  late AnimationController _pulseController;
 
   @override
   void initState() {
@@ -49,16 +50,8 @@ class _FloatingCallOverlayState extends State<FloatingCallOverlay>
     _subscribeToCallState();
   }
 
-  @override
-  void dispose() {
-    _callStateSubscription?.cancel();
-    _durationTimer?.cancel();
-    _pulseController.dispose();
-    super.dispose();
-  }
-
   void _subscribeToCallState() {
-    _callStateSubscription = _webrtcService.callStateStream.listen((state) {
+    _callStateSubscription = _agoraService.callStateStream.listen((state) {
       if (!mounted) return;
       setState(() => _callState = state);
 
@@ -80,6 +73,14 @@ class _FloatingCallOverlayState extends State<FloatingCallOverlay>
     });
   }
 
+  @override
+  void dispose() {
+    _durationTimer?.cancel();
+    _pulseController.dispose();
+    _callStateSubscription?.cancel();
+    super.dispose();
+  }
+
   String _formatDuration() {
     final minutes = _callDuration.inMinutes.remainder(60);
     final seconds = _callDuration.inSeconds.remainder(60);
@@ -89,25 +90,34 @@ class _FloatingCallOverlayState extends State<FloatingCallOverlay>
   void _openFullCallScreen() {
     HapticFeedback.lightImpact();
     CallOverlayManager().hideOverlay();
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (context) => CallScreen(
-          remoteUserName: widget.remoteUserName ?? _callState.remoteUserName,
-          remoteUserAvatar: widget.remoteUserAvatar,
-          remoteUserRole: widget.remoteUserRole,
+    final channelName = _agoraService.currentChannelName;
+    final remoteUserId = _callState?.remoteUserId ?? _agoraService.currentRemoteUserId;
+    final remoteUserName = widget.remoteUserName ?? _callState?.remoteUserName ?? 'Unknown';
+    if (channelName != null && remoteUserId != null) {
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (context) => AgoraCallScreen(
+            channelName: channelName,
+            remoteUserId: remoteUserId,
+            remoteUserName: remoteUserName,
+            remoteUserAvatar: widget.remoteUserAvatar,
+            isAudioOnly: _callState?.isAudioOnly ?? true,
+            isOutgoing: true,
+          ),
         ),
-      ),
-    );
+      );
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    if (!_callState.isInCall) return const SizedBox.shrink();
+    if (_callState?.isInCall != true) return const SizedBox.shrink();
 
     final screenSize = MediaQuery.of(context).size;
-    final userName = widget.remoteUserName ?? _callState.remoteUserName ?? 'Unknown';
+    final userName =
+        widget.remoteUserName ?? _callState?.remoteUserName ?? 'Unknown';
     final userInitial = userName.isNotEmpty ? userName[0].toUpperCase() : 'U';
-    final isConnected = _callState.status == CallStatus.connected;
+    final isConnected = _callState?.status == CallStatus.connected;
 
     return Positioned(
       left: _position.dx,
@@ -117,15 +127,23 @@ class _FloatingCallOverlayState extends State<FloatingCallOverlay>
         onPanUpdate: (details) {
           setState(() {
             _position = Offset(
-              (_position.dx + details.delta.dx).clamp(0, screenSize.width - 180),
-              (_position.dy + details.delta.dy).clamp(50, screenSize.height - 80),
+              (_position.dx + details.delta.dx).clamp(
+                0,
+                screenSize.width - 180,
+              ),
+              (_position.dy + details.delta.dy).clamp(
+                50,
+                screenSize.height - 80,
+              ),
             );
           });
         },
         onPanEnd: (_) {
           setState(() => _isDragging = false);
           final centerX = _position.dx + 90;
-          final newX = centerX < screenSize.width / 2 ? 10.0 : screenSize.width - 190;
+          final newX = centerX < screenSize.width / 2
+              ? 10.0
+              : screenSize.width - 190;
           setState(() => _position = Offset(newX, _position.dy));
         },
         onTap: _openFullCallScreen,
@@ -134,8 +152,7 @@ class _FloatingCallOverlayState extends State<FloatingCallOverlay>
           builder: (context, child) {
             return AnimatedContainer(
               duration: const Duration(milliseconds: 200),
-              transform: Matrix4.identity()
-                ..scale(_isDragging ? 1.05 : 1.0),
+              transform: Matrix4.identity()..scale(_isDragging ? 1.05 : 1.0),
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(16),
                 child: BackdropFilter(
@@ -159,8 +176,13 @@ class _FloatingCallOverlayState extends State<FloatingCallOverlay>
                       borderRadius: BorderRadius.circular(16),
                       boxShadow: [
                         BoxShadow(
-                          color: (isConnected ? AppColors.primaryGreen : AppColors.primaryBlue)
-                              .withOpacity(0.3 + (_pulseController.value * 0.2)),
+                          color:
+                              (isConnected
+                                      ? AppColors.primaryGreen
+                                      : AppColors.primaryBlue)
+                                  .withOpacity(
+                                    0.3 + (_pulseController.value * 0.2),
+                                  ),
                           blurRadius: 15,
                           spreadRadius: 2,
                         ),
@@ -233,13 +255,17 @@ class _FloatingCallOverlayState extends State<FloatingCallOverlay>
                                     width: 8,
                                     height: 8,
                                     decoration: BoxDecoration(
-                                      color: isConnected ? Colors.white : Colors.white54,
+                                      color: isConnected
+                                          ? Colors.white
+                                          : Colors.white54,
                                       shape: BoxShape.circle,
                                     ),
                                   ),
                                   const SizedBox(width: 6),
                                   Text(
-                                    isConnected ? _formatDuration() : 'Connecting...',
+                                    isConnected
+                                        ? _formatDuration()
+                                        : 'Connecting...',
                                     style: GoogleFonts.poppins(
                                       color: Colors.white.withOpacity(0.9),
                                       fontSize: 11,
@@ -254,7 +280,7 @@ class _FloatingCallOverlayState extends State<FloatingCallOverlay>
                         GestureDetector(
                           onTap: () async {
                             HapticFeedback.heavyImpact();
-                            await _webrtcService.endCall();
+                            await _agoraService.endCall();
                             widget.onEndCall?.call();
                           },
                           child: Container(
@@ -294,7 +320,12 @@ class CallOverlayManager {
   String? _currentRemoteUserAvatar;
   String? _currentRemoteUserRole;
 
-  void showOverlay(BuildContext context, {String? remoteUserName, String? remoteUserAvatar, String? remoteUserRole}) {
+  void showOverlay(
+    BuildContext context, {
+    String? remoteUserName,
+    String? remoteUserAvatar,
+    String? remoteUserRole,
+  }) {
     hideOverlay();
     _currentRemoteUserName = remoteUserName;
     _currentRemoteUserAvatar = remoteUserAvatar;

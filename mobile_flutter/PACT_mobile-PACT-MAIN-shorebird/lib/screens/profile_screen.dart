@@ -7,6 +7,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../models/pact_user_profile.dart';
 import '../providers/profile_provider.dart';
 import '../services/offline/offline_db.dart';
+import '../services/offline/sync_manager.dart';
 import '../theme/app_colors.dart';
 
 class ProfileScreen extends ConsumerStatefulWidget {
@@ -67,12 +68,12 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
 
   Future<void> _loadSyncStatus() async {
     setState(() => _isLoadingSyncStatus = true);
-    
+
     try {
       final offlineDb = OfflineDb();
       final pendingSync = offlineDb.getPendingSyncActions(status: 'pending');
       final pendingSiteVisits = offlineDb.getPendingSiteVisits();
-      
+
       setState(() {
         _pendingSyncCount = pendingSync.length;
         _pendingSiteVisitsCount = pendingSiteVisits.length;
@@ -85,14 +86,49 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     }
   }
 
+  /// Trigger SyncManager (site visits, reports), then refresh pending counts.
+  Future<void> _triggerSync() async {
+    if (_isLoadingSyncStatus) return;
+
+    setState(() => _isLoadingSyncStatus = true);
+
+    try {
+      final syncManager = SyncManager();
+      syncManager.setSupabaseClient(Supabase.instance.client);
+      await syncManager.forceSync();
+      await _loadSyncStatus();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Sync completed'),
+            backgroundColor: Colors.green,
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint('Profile sync error: $e');
+      await _loadSyncStatus();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Sync failed: $e'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    }
+  }
+
   Future<void> _loadLookupNames(PACTUserProfile profile) async {
     if (_isLoadingLookups) return;
-    
+
     setState(() => _isLoadingLookups = true);
-    
+
     try {
       final supabase = Supabase.instance.client;
-      
+
       // Use direct name fields if available (some databases store names directly)
       if (profile.hubName != null && profile.hubName!.isNotEmpty) {
         _hubName = profile.hubName;
@@ -103,14 +139,16 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       if (profile.localityName != null && profile.localityName!.isNotEmpty) {
         _localityName = profile.localityName;
       }
-      
+
       // If still no names and we have IDs that look like UUIDs, try lookup
       final uuidRegex = RegExp(
-        r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
+        r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$',
       );
-      
+
       // Load hub name if not already set
-      if (_hubName == null && profile.hubId != null && profile.hubId!.isNotEmpty) {
+      if (_hubName == null &&
+          profile.hubId != null &&
+          profile.hubId!.isNotEmpty) {
         if (uuidRegex.hasMatch(profile.hubId!)) {
           try {
             final hubResponse = await supabase
@@ -131,9 +169,11 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
           _hubName = profile.hubId;
         }
       }
-      
+
       // Load state name if not already set
-      if (_stateName == null && profile.stateId != null && profile.stateId!.isNotEmpty) {
+      if (_stateName == null &&
+          profile.stateId != null &&
+          profile.stateId!.isNotEmpty) {
         if (uuidRegex.hasMatch(profile.stateId!)) {
           try {
             final stateResponse = await supabase
@@ -153,9 +193,11 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
           _stateName = profile.stateId;
         }
       }
-      
+
       // Load locality name if not already set
-      if (_localityName == null && profile.localityId != null && profile.localityId!.isNotEmpty) {
+      if (_localityName == null &&
+          profile.localityId != null &&
+          profile.localityId!.isNotEmpty) {
         if (uuidRegex.hasMatch(profile.localityId!)) {
           try {
             final localityResponse = await supabase
@@ -175,25 +217,23 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
           _localityName = profile.localityId;
         }
       }
-      
+
       // Load classifications
       try {
         final classificationsResponse = await supabase
             .from('user_classifications')
             .select('classification_level, role_scope')
             .eq('user_id', profile.id);
-        
-        _classificationNames = (classificationsResponse as List)
-            .map((c) {
-              final level = c['classification_level'] as String? ?? '';
-              final scope = c['role_scope'] as String? ?? '';
-              return scope.isNotEmpty ? '$level ($scope)' : level;
-            })
-            .toList();
+
+        _classificationNames = (classificationsResponse as List).map((c) {
+          final level = c['classification_level'] as String? ?? '';
+          final scope = c['role_scope'] as String? ?? '';
+          return scope.isNotEmpty ? '$level ($scope)' : level;
+        }).toList();
       } catch (e) {
         debugPrint('Error loading classifications: $e');
       }
-      
+
       if (mounted) {
         setState(() => _isLoadingLookups = false);
       }
@@ -327,7 +367,10 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     final profile = profileState.profile;
 
     // Load lookup names when profile is available
-    if (profile != null && !_isLoadingLookups && _hubName == null && _stateName == null) {
+    if (profile != null &&
+        !_isLoadingLookups &&
+        _hubName == null &&
+        _stateName == null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         _loadLookupNames(profile);
       });
@@ -408,14 +451,16 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                   children: [
                     // Sync Status Banner
                     if (_pendingRequestsCount > 0) _buildSyncStatusBanner(),
-                    
+
                     // Avatar Section
                     Center(
                       child: Stack(
                         children: [
                           CircleAvatar(
                             radius: 60,
-                            backgroundColor: AppColors.primaryBlue.withOpacity(0.2),
+                            backgroundColor: AppColors.primaryBlue.withOpacity(
+                              0.2,
+                            ),
                             backgroundImage: _selectedImageBytes != null
                                 ? MemoryImage(_selectedImageBytes!)
                                 : profile.hasAvatar
@@ -534,26 +579,41 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                       icon: Icons.business,
                       color: AppColors.primaryBlue,
                       children: [
-                        if (profile.hubId != null || profile.hubName != null) ...[
+                        if (profile.hubId != null ||
+                            profile.hubName != null) ...[
                           _buildInfoRow(
                             'Hub',
-                            _isLoadingLookups ? 'Loading...' : (_hubName ?? profile.hubName ?? 'Not assigned'),
+                            _isLoadingLookups
+                                ? 'Loading...'
+                                : (_hubName ??
+                                      profile.hubName ??
+                                      'Not assigned'),
                             icon: Icons.hub,
                           ),
                           const SizedBox(height: 12),
                         ],
-                        if (profile.stateId != null || profile.stateName != null) ...[
+                        if (profile.stateId != null ||
+                            profile.stateName != null) ...[
                           _buildInfoRow(
                             'State',
-                            _isLoadingLookups ? 'Loading...' : (_stateName ?? profile.stateName ?? 'Not assigned'),
+                            _isLoadingLookups
+                                ? 'Loading...'
+                                : (_stateName ??
+                                      profile.stateName ??
+                                      'Not assigned'),
                             icon: Icons.location_city,
                           ),
                           const SizedBox(height: 12),
                         ],
-                        if (profile.localityId != null || profile.localityName != null) ...[
+                        if (profile.localityId != null ||
+                            profile.localityName != null) ...[
                           _buildInfoRow(
                             'Locality',
-                            _isLoadingLookups ? 'Loading...' : (_localityName ?? profile.localityName ?? 'Not assigned'),
+                            _isLoadingLookups
+                                ? 'Loading...'
+                                : (_localityName ??
+                                      profile.localityName ??
+                                      'Not assigned'),
                             icon: Icons.location_on,
                           ),
                           const SizedBox(height: 12),
@@ -570,21 +630,24 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                     const SizedBox(height: 16),
 
                     // Classifications Section
-                    if (_classificationNames.isNotEmpty || profile.classification != null)
+                    if (_classificationNames.isNotEmpty ||
+                        profile.classification != null)
                       _buildSection(
                         title: 'Classifications',
                         icon: Icons.stars,
                         color: AppColors.primaryOrange,
                         children: [
                           if (_classificationNames.isNotEmpty)
-                            ..._classificationNames.map((name) => Padding(
-                              padding: const EdgeInsets.only(bottom: 8),
-                              child: _buildInfoRow(
-                                'Level',
-                                name,
-                                icon: Icons.grade,
+                            ..._classificationNames.map(
+                              (name) => Padding(
+                                padding: const EdgeInsets.only(bottom: 8),
+                                child: _buildInfoRow(
+                                  'Level',
+                                  name,
+                                  icon: Icons.grade,
+                                ),
                               ),
-                            ))
+                            )
                           else if (profile.classification != null) ...[
                             _buildInfoRow(
                               'Level',
@@ -694,7 +757,11 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               color: Colors.orange,
               borderRadius: BorderRadius.circular(8),
             ),
-            child: const Icon(Icons.cloud_upload, color: Colors.white, size: 20),
+            child: const Icon(
+              Icons.cloud_upload,
+              color: Colors.white,
+              size: 20,
+            ),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -728,9 +795,18 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             ),
           ),
           IconButton(
-            icon: Icon(Icons.refresh, color: Colors.orange[700]),
-            onPressed: _loadSyncStatus,
-            tooltip: 'Refresh sync status',
+            icon: _isLoadingSyncStatus
+                ? SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.orange[700],
+                    ),
+                  )
+                : Icon(Icons.refresh, color: Colors.orange[700]),
+            onPressed: _isLoadingSyncStatus ? null : _triggerSync,
+            tooltip: 'Sync now',
           ),
         ],
       ),
@@ -744,7 +820,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     required List<Widget> children,
   }) {
     if (children.isEmpty) return const SizedBox.shrink();
-    
+
     return Container(
       width: double.infinity,
       decoration: BoxDecoration(

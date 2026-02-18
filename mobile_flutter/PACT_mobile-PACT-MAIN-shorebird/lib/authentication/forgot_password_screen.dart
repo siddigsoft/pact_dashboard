@@ -509,14 +509,14 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
                                 color: AppColors.primaryBlue.withOpacity(0.1),
                                 borderRadius: BorderRadius.circular(12),
                               ),
-                              child: Row(
+                              child: const Row(
                                 children: [
                                   Icon(
                                     Icons.info_outline,
                                     color: AppColors.primaryBlue,
                                     size: 20,
                                   ),
-                                  const SizedBox(width: 12),
+                                  SizedBox(width: 12),
                                   Expanded(
                                     child: Text(
                                       'Check your spam folder if you don\'t see the email in your inbox.',

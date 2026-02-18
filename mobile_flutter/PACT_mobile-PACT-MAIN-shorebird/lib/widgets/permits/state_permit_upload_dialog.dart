@@ -9,7 +9,8 @@ import 'package:file_picker/file_picker.dart';
 import 'package:intl/intl.dart';
 import '../../theme/app_colors.dart';
 import '../../services/permit_upload_service.dart';
-import '../../l10n/app_localizations.dart';
+import 'package:flutter_gen/gen_l10n/app_localizations.dart';
+import 'package:pact_mobile/l10n/app_localizations_extension.dart';
 
 class StatePermitUploadDialog extends StatefulWidget {
   final String state;
@@ -28,7 +29,8 @@ class StatePermitUploadDialog extends StatefulWidget {
   });
 
   @override
-  State<StatePermitUploadDialog> createState() => _StatePermitUploadDialogState();
+  State<StatePermitUploadDialog> createState() =>
+      _StatePermitUploadDialogState();
 }
 
 class _StatePermitUploadDialogState extends State<StatePermitUploadDialog> {
@@ -51,6 +53,7 @@ class _StatePermitUploadDialogState extends State<StatePermitUploadDialog> {
   }
 
   Future<void> _selectFile() async {
+    final l10n = AppLocalizations.of(context);
     showModalBottomSheet(
       context: context,
       builder: (context) => SafeArea(
@@ -58,7 +61,8 @@ class _StatePermitUploadDialogState extends State<StatePermitUploadDialog> {
           children: [
             ListTile(
               leading: const Icon(Icons.photo_library),
-              title: Text(AppLocalizations.of(context)?.translate('gallery') ?? 'Gallery'),
+              title: Text(AppLocalizations.of(context)?.translate('gallery') ??
+                  'Gallery'),
               onTap: () async {
                 Navigator.pop(context);
                 final XFile? image = await _imagePicker.pickImage(
@@ -76,7 +80,8 @@ class _StatePermitUploadDialogState extends State<StatePermitUploadDialog> {
             ),
             ListTile(
               leading: const Icon(Icons.camera_alt),
-              title: Text(AppLocalizations.of(context)?.translate('camera') ?? 'Camera'),
+              title: Text(AppLocalizations.of(context)?.translate('camera') ??
+                  'Camera'),
               onTap: () async {
                 Navigator.pop(context);
                 final XFile? image = await _imagePicker.pickImage(
@@ -94,7 +99,7 @@ class _StatePermitUploadDialogState extends State<StatePermitUploadDialog> {
             ),
             ListTile(
               leading: const Icon(Icons.picture_as_pdf, color: Colors.red),
-              title: Text(l10n.selectPdf),
+              title: Text(l10n?.translate('selectPdfOrImage') ?? 'Select PDF'),
               onTap: () async {
                 Navigator.pop(context);
                 final result = await FilePicker.platform.pickFiles(
@@ -166,15 +171,19 @@ class _StatePermitUploadDialogState extends State<StatePermitUploadDialog> {
 
   Future<void> _uploadPermit() async {
     if (_selectedFile == null) {
-      _showError(AppLocalizations.of(context)?.translate('selectFile') ?? 'Please select a file');
+      _showError(AppLocalizations.of(context)?.translate('selectFile') ??
+          'Please select a file');
       return;
     }
     if (_issueDate == null || _expiryDate == null) {
-      _showError(AppLocalizations.of(context)?.translate('datesRequired') ?? 'Please select issue and expiry dates');
+      _showError(AppLocalizations.of(context)?.translate('datesRequired') ??
+          'Please select issue and expiry dates');
       return;
     }
-    if (_expiryDate!.isBefore(_issueDate!) || _expiryDate!.isAtSameMomentAs(_issueDate!)) {
-      _showError(AppLocalizations.of(context)?.translate('expiryAfterIssue') ?? 'Expiry date must be after issue date');
+    if (_expiryDate!.isBefore(_issueDate!) ||
+        _expiryDate!.isAtSameMomentAs(_issueDate!)) {
+      _showError(AppLocalizations.of(context)?.translate('expiryAfterIssue') ??
+          'Expiry date must be after issue date');
       return;
     }
 
@@ -201,7 +210,9 @@ class _StatePermitUploadDialogState extends State<StatePermitUploadDialog> {
         'verified': widget.userType == 'fom',
         'issueDate': DateFormat('yyyy-MM-dd').format(_issueDate!),
         'expiryDate': DateFormat('yyyy-MM-dd').format(_expiryDate!),
-        'comments': _commentsController.text.isNotEmpty ? _commentsController.text : null,
+        'comments': _commentsController.text.isNotEmpty
+            ? _commentsController.text
+            : null,
       };
 
       await _uploadService.updateMmpFilePermits(
@@ -295,7 +306,8 @@ class _StatePermitUploadDialogState extends State<StatePermitUploadDialog> {
       ),
       child: Row(
         children: [
-          Icon(Icons.warning_amber_rounded, color: Colors.amber.shade700, size: 28),
+          Icon(Icons.warning_amber_rounded,
+              color: Colors.amber.shade700, size: 28),
           const SizedBox(width: 12),
           Expanded(
             child: Text(
@@ -339,7 +351,8 @@ class _StatePermitUploadDialogState extends State<StatePermitUploadDialog> {
           Expanded(
             child: Text(
               description,
-              style: GoogleFonts.poppins(fontSize: 13, color: Colors.amber.shade900),
+              style: GoogleFonts.poppins(
+                  fontSize: 13, color: Colors.amber.shade900),
             ),
           ),
         ],
@@ -351,11 +364,26 @@ class _StatePermitUploadDialogState extends State<StatePermitUploadDialog> {
     return Row(
       children: [
         _buildStepDot(0, l10n?.translate('step1SelectFile') ?? 'File'),
-        Expanded(child: Container(height: 2, color: _currentStep >= 1 ? AppColors.primaryBlue : Colors.grey.shade300)),
+        Expanded(
+            child: Container(
+                height: 2,
+                color: _currentStep >= 1
+                    ? AppColors.primaryBlue
+                    : Colors.grey.shade300)),
         _buildStepDot(1, l10n?.translate('step2EnterDates') ?? 'Dates'),
-        Expanded(child: Container(height: 2, color: _currentStep >= 2 ? AppColors.primaryBlue : Colors.grey.shade300)),
+        Expanded(
+            child: Container(
+                height: 2,
+                color: _currentStep >= 2
+                    ? AppColors.primaryBlue
+                    : Colors.grey.shade300)),
         _buildStepDot(2, l10n?.translate('step3AddComments') ?? 'Comments'),
-        Expanded(child: Container(height: 2, color: _currentStep >= 3 ? AppColors.primaryBlue : Colors.grey.shade300)),
+        Expanded(
+            child: Container(
+                height: 2,
+                color: _currentStep >= 3
+                    ? AppColors.primaryBlue
+                    : Colors.grey.shade300)),
         _buildStepDot(3, l10n?.translate('step4Upload') ?? 'Upload'),
       ],
     );
@@ -399,7 +427,8 @@ class _StatePermitUploadDialogState extends State<StatePermitUploadDialog> {
         children: [
           Text(
             l10n?.translate('step1SelectFile') ?? 'Step 1: Select File',
-            style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 14),
+            style:
+                GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 14),
           ),
           const SizedBox(height: 12),
           if (_selectedFile == null)
@@ -409,26 +438,34 @@ class _StatePermitUploadDialogState extends State<StatePermitUploadDialog> {
               child: Container(
                 padding: const EdgeInsets.symmetric(vertical: 32),
                 decoration: BoxDecoration(
-                  border: Border.all(color: AppColors.primaryBlue, style: BorderStyle.solid),
+                  border: Border.all(
+                      color: AppColors.primaryBlue, style: BorderStyle.solid),
                   borderRadius: BorderRadius.circular(8),
                   color: AppColors.primaryBlue.withOpacity(0.05),
                 ),
                 child: Column(
                   children: [
-                    Icon(Icons.cloud_upload_outlined, size: 48, color: AppColors.primaryBlue),
+                    Icon(Icons.cloud_upload_outlined,
+                        size: 48, color: AppColors.primaryBlue),
                     const SizedBox(height: 8),
                     Text(
-                      l10n?.translate('tapToSelectFile') ?? 'Tap to select file',
-                      style: GoogleFonts.poppins(color: AppColors.primaryBlue, fontWeight: FontWeight.w500),
+                      l10n?.translate('tapToSelectFile') ??
+                          'Tap to select file',
+                      style: GoogleFonts.poppins(
+                          color: AppColors.primaryBlue,
+                          fontWeight: FontWeight.w500),
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      l10n?.translate('supportedFormats') ?? 'Supported formats: PDF, JPG, PNG',
-                      style: GoogleFonts.poppins(fontSize: 12, color: Colors.grey),
+                      l10n?.translate('supportedFormats') ??
+                          'Supported formats: PDF, JPG, PNG',
+                      style:
+                          GoogleFonts.poppins(fontSize: 12, color: Colors.grey),
                     ),
                     Text(
                       l10n?.maxFileSize(10) ?? 'Maximum file size: 10 MB',
-                      style: GoogleFonts.poppins(fontSize: 12, color: Colors.grey),
+                      style:
+                          GoogleFonts.poppins(fontSize: 12, color: Colors.grey),
                     ),
                   ],
                 ),
@@ -452,11 +489,14 @@ class _StatePermitUploadDialogState extends State<StatePermitUploadDialog> {
                       children: [
                         Text(
                           _fileName ?? 'File selected',
-                          style: GoogleFonts.poppins(fontWeight: FontWeight.w500),
+                          style:
+                              GoogleFonts.poppins(fontWeight: FontWeight.w500),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
-                        if (_showPreview && _selectedFile != null && !_fileName!.toLowerCase().endsWith('.pdf'))
+                        if (_showPreview &&
+                            _selectedFile != null &&
+                            !_fileName!.toLowerCase().endsWith('.pdf'))
                           Padding(
                             padding: const EdgeInsets.only(top: 8),
                             child: ClipRRect(
@@ -472,8 +512,10 @@ class _StatePermitUploadDialogState extends State<StatePermitUploadDialog> {
                     ),
                   ),
                   IconButton(
-                    icon: Icon(_showPreview ? Icons.visibility_off : Icons.visibility),
-                    onPressed: () => setState(() => _showPreview = !_showPreview),
+                    icon: Icon(
+                        _showPreview ? Icons.visibility_off : Icons.visibility),
+                    onPressed: () =>
+                        setState(() => _showPreview = !_showPreview),
                     tooltip: _showPreview
                         ? (l10n?.translate('hidePreview') ?? 'Hide Preview')
                         : (l10n?.translate('showPreview') ?? 'Show Preview'),
@@ -503,7 +545,8 @@ class _StatePermitUploadDialogState extends State<StatePermitUploadDialog> {
         children: [
           Text(
             l10n?.translate('step2EnterDates') ?? 'Step 2: Enter Dates',
-            style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 14),
+            style:
+                GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 14),
           ),
           const SizedBox(height: 12),
           Row(
@@ -544,13 +587,17 @@ class _StatePermitUploadDialogState extends State<StatePermitUploadDialog> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
         decoration: BoxDecoration(
-          border: Border.all(color: date != null ? AppColors.primaryBlue : Colors.grey.shade300),
+          border: Border.all(
+              color:
+                  date != null ? AppColors.primaryBlue : Colors.grey.shade300),
           borderRadius: BorderRadius.circular(8),
           color: date != null ? AppColors.primaryBlue.withOpacity(0.05) : null,
         ),
         child: Row(
           children: [
-            Icon(icon, size: 18, color: date != null ? AppColors.primaryBlue : Colors.grey),
+            Icon(icon,
+                size: 18,
+                color: date != null ? AppColors.primaryBlue : Colors.grey),
             const SizedBox(width: 8),
             Expanded(
               child: Column(
@@ -558,10 +605,13 @@ class _StatePermitUploadDialogState extends State<StatePermitUploadDialog> {
                 children: [
                   Text(
                     label,
-                    style: GoogleFonts.poppins(fontSize: 11, color: Colors.grey.shade600),
+                    style: GoogleFonts.poppins(
+                        fontSize: 11, color: Colors.grey.shade600),
                   ),
                   Text(
-                    date != null ? DateFormat('MMM dd, yyyy').format(date) : 'Select date',
+                    date != null
+                        ? DateFormat('MMM dd, yyyy').format(date)
+                        : 'Select date',
                     style: GoogleFonts.poppins(
                       fontWeight: FontWeight.w500,
                       color: date != null ? Colors.black : Colors.grey,
@@ -587,20 +637,26 @@ class _StatePermitUploadDialogState extends State<StatePermitUploadDialog> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            l10n?.translate('step3AddComments') ?? 'Step 3: Add Comments (Optional)',
-            style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 14),
+            l10n?.translate('step3AddComments') ??
+                'Step 3: Add Comments (Optional)',
+            style:
+                GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 14),
           ),
           const SizedBox(height: 12),
           TextField(
             controller: _commentsController,
             maxLines: 3,
             decoration: InputDecoration(
-              hintText: l10n?.translate('addCommentsOptional') ?? 'Add comments (optional)',
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+              hintText: l10n?.translate('addCommentsOptional') ??
+                  'Add comments (optional)',
+              border:
+                  OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
               contentPadding: const EdgeInsets.all(12),
             ),
             onChanged: (_) {
-              if (_issueDate != null && _expiryDate != null && _currentStep < 3) {
+              if (_issueDate != null &&
+                  _expiryDate != null &&
+                  _currentStep < 3) {
                 setState(() => _currentStep = 3);
               }
             },
@@ -611,7 +667,8 @@ class _StatePermitUploadDialogState extends State<StatePermitUploadDialog> {
   }
 
   Widget _buildUploadButton(AppLocalizations? l10n) {
-    final canUpload = _selectedFile != null && _issueDate != null && _expiryDate != null;
+    final canUpload =
+        _selectedFile != null && _issueDate != null && _expiryDate != null;
 
     return Row(
       children: [
@@ -625,7 +682,8 @@ class _StatePermitUploadDialogState extends State<StatePermitUploadDialog> {
                   },
             style: OutlinedButton.styleFrom(
               padding: const EdgeInsets.symmetric(vertical: 14),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8)),
             ),
             child: Text(l10n?.translate('cancel') ?? 'Cancel'),
           ),
@@ -639,7 +697,8 @@ class _StatePermitUploadDialogState extends State<StatePermitUploadDialog> {
                 ? const SizedBox(
                     width: 20,
                     height: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                    child: CircularProgressIndicator(
+                        strokeWidth: 2, color: Colors.white),
                   )
                 : const Icon(Icons.cloud_upload),
             label: Text(
@@ -651,7 +710,8 @@ class _StatePermitUploadDialogState extends State<StatePermitUploadDialog> {
               backgroundColor: AppColors.primaryBlue,
               foregroundColor: Colors.white,
               padding: const EdgeInsets.symmetric(vertical: 14),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8)),
             ),
           ),
         ),

@@ -4,13 +4,15 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
-import '../services/offline_data_service.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import '../services/offline/offline_db.dart';
+import '../services/offline/sync_manager.dart';
 import '../theme/app_colors.dart';
 
 class SyncStatusIndicator extends StatefulWidget {
   final bool showDetails;
   final VoidCallback? onSyncPressed;
-  
+
   const SyncStatusIndicator({
     super.key,
     this.showDetails = false,
@@ -21,9 +23,10 @@ class SyncStatusIndicator extends StatefulWidget {
   State<SyncStatusIndicator> createState() => _SyncStatusIndicatorState();
 }
 
-class _SyncStatusIndicatorState extends State<SyncStatusIndicator> with SingleTickerProviderStateMixin {
-  final OfflineDataService _offlineService = OfflineDataService();
-  
+class _SyncStatusIndicatorState extends State<SyncStatusIndicator>
+    with SingleTickerProviderStateMixin {
+  final OfflineDb _offlineDb = OfflineDb();
+
   int _pendingCount = 0;
   Map<String, int> _pendingByType = {};
   bool _isOnline = true;
@@ -60,12 +63,13 @@ class _SyncStatusIndicatorState extends State<SyncStatusIndicator> with SingleTi
   }
 
   void _listenToConnectivity() {
-    _connectivitySubscription = Connectivity().onConnectivityChanged.listen((result) {
+    _connectivitySubscription =
+        Connectivity().onConnectivityChanged.listen((result) {
       final wasOffline = !_isOnline;
       setState(() {
         _isOnline = !result.contains(ConnectivityResult.none);
       });
-      
+
       // Auto-sync when coming back online
       if (wasOffline && _isOnline && _pendingCount > 0 && !_isSyncing) {
         _syncAll();
@@ -84,8 +88,8 @@ class _SyncStatusIndicatorState extends State<SyncStatusIndicator> with SingleTi
 
   Future<void> _loadPendingCount() async {
     try {
-      final count = await _offlineService.getPendingSyncCount();
-      final byType = await _offlineService.getPendingActionsByType();
+      final count = _offlineDb.getPendingSyncCount();
+      final byType = _offlineDb.getPendingActionsByType();
       if (mounted) {
         setState(() {
           _pendingCount = count;
@@ -99,25 +103,49 @@ class _SyncStatusIndicatorState extends State<SyncStatusIndicator> with SingleTi
 
   Future<void> _syncAll() async {
     if (!_isOnline || _isSyncing) return;
-    
+
     setState(() => _isSyncing = true);
     _animationController.repeat();
 
     try {
-      final results = await _offlineService.syncAll();
-      final totalSynced = results.values.fold<int>(0, (sum, val) => sum + val);
-      
-      if (mounted && totalSynced > 0) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Synced $totalSynced pending item${totalSynced > 1 ? 's' : ''}'),
-            backgroundColor: AppColors.primaryGreen,
-            behavior: SnackBarBehavior.floating,
-            duration: const Duration(seconds: 2),
-          ),
-        );
+      final syncManager = SyncManager();
+      if (syncManager.isSyncing) {
+        debugPrint('[SyncStatusIndicator] Sync already in progress');
+        if (mounted) setState(() => _isSyncing = false);
+        _animationController.stop();
+        _animationController.reset();
+        return;
       }
-      
+      try {
+        syncManager.setSupabaseClient(Supabase.instance.client);
+      } catch (e) {
+        debugPrint('[SyncStatusIndicator] Error setting Supabase client: $e');
+      }
+      debugPrint('[SyncStatusIndicator] Starting sync...');
+      final result = await syncManager.forceSync();
+      debugPrint('[SyncStatusIndicator] Sync completed: ${result.success}, synced: ${result.synced}, failed: ${result.failed}');
+
+      if (mounted) {
+        if (result.success && result.synced > 0) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Synced ${result.synced} pending item${result.synced > 1 ? 's' : ''}'),
+              backgroundColor: AppColors.primaryGreen,
+              behavior: SnackBarBehavior.floating,
+              duration: const Duration(seconds: 2),
+            ),
+          );
+        } else if (result.failed > 0) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Sync completed with ${result.failed} error${result.failed > 1 ? 's' : ''}'),
+              backgroundColor: Colors.orange,
+              behavior: SnackBarBehavior.floating,
+              duration: const Duration(seconds: 3),
+            ),
+          );
+        }
+      }
       await _loadPendingCount();
     } catch (e) {
       debugPrint('[SyncStatusIndicator] Error syncing: $e');
@@ -170,7 +198,8 @@ class _SyncStatusIndicatorState extends State<SyncStatusIndicator> with SingleTi
                 child: const Icon(Icons.sync, color: Colors.white, size: 16),
               )
             else
-              const Icon(Icons.cloud_upload_outlined, color: Colors.white, size: 16),
+              const Icon(Icons.cloud_upload_outlined,
+                  color: Colors.white, size: 16),
             const SizedBox(width: 4),
             Text(
               _isSyncing ? 'Syncing...' : '$_pendingCount pending',
@@ -210,7 +239,7 @@ class _SyncStatusIndicatorState extends State<SyncStatusIndicator> with SingleTi
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: _isOnline 
+                  color: _isOnline
                       ? AppColors.primaryGreen.withOpacity(0.1)
                       : Colors.orange.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(8),
@@ -234,7 +263,9 @@ class _SyncStatusIndicatorState extends State<SyncStatusIndicator> with SingleTi
                       ),
                     ),
                     Text(
-                      _isOnline ? 'Connected' : 'Offline - Will sync when connected',
+                      _isOnline
+                          ? 'Connected'
+                          : 'Offline - Will sync when connected',
                       style: GoogleFonts.poppins(
                         color: Colors.grey[600],
                         fontSize: 12,
@@ -245,7 +276,8 @@ class _SyncStatusIndicatorState extends State<SyncStatusIndicator> with SingleTi
               ),
               if (_pendingCount > 0)
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                   decoration: BoxDecoration(
                     color: Colors.orange.withOpacity(0.1),
                     borderRadius: BorderRadius.circular(12),
@@ -261,7 +293,6 @@ class _SyncStatusIndicatorState extends State<SyncStatusIndicator> with SingleTi
                 ),
             ],
           ),
-          
           if (_pendingByType.isNotEmpty) ...[
             const SizedBox(height: 16),
             const Divider(height: 1),
@@ -276,12 +307,11 @@ class _SyncStatusIndicatorState extends State<SyncStatusIndicator> with SingleTi
             ),
             const SizedBox(height: 8),
             ..._pendingByType.entries.map((entry) => _buildPendingItem(
-              _getTypeLabel(entry.key),
-              entry.value,
-              _getTypeIcon(entry.key),
-            )),
+                  _getTypeLabel(entry.key),
+                  entry.value,
+                  _getTypeIcon(entry.key),
+                )),
           ],
-          
           if (_pendingCount > 0 && _isOnline) ...[
             const SizedBox(height: 16),
             SizedBox(
@@ -289,7 +319,7 @@ class _SyncStatusIndicatorState extends State<SyncStatusIndicator> with SingleTi
               child: ElevatedButton.icon(
                 onPressed: _isSyncing ? null : _syncAll,
                 icon: _isSyncing
-                    ? SizedBox(
+                    ? const SizedBox(
                         width: 16,
                         height: 16,
                         child: CircularProgressIndicator(
@@ -402,7 +432,7 @@ class SyncStatusBadge extends StatefulWidget {
 }
 
 class _SyncStatusBadgeState extends State<SyncStatusBadge> {
-  final OfflineDataService _offlineService = OfflineDataService();
+  final OfflineDb _offlineDb = OfflineDb();
   int _pendingCount = 0;
   Timer? _timer;
 
@@ -420,7 +450,7 @@ class _SyncStatusBadgeState extends State<SyncStatusBadge> {
   }
 
   Future<void> _loadCount() async {
-    final count = await _offlineService.getPendingSyncCount();
+    final count = _offlineDb.getPendingSyncCount();
     if (mounted) {
       setState(() => _pendingCount = count);
     }
@@ -429,7 +459,7 @@ class _SyncStatusBadgeState extends State<SyncStatusBadge> {
   @override
   Widget build(BuildContext context) {
     if (_pendingCount == 0) return const SizedBox.shrink();
-    
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(

@@ -37,7 +37,7 @@ class _IncomingCallOverlayState extends State<IncomingCallOverlay>
   late Animation<double> _pulseAnimation;
   late Animation<double> _slideAnimation;
   late Animation<double> _glowAnimation;
-  
+
   final AudioPlayer _ringtonePlayer = AudioPlayer();
   Timer? _vibrationTimer;
   Duration _ringingDuration = Duration.zero;
@@ -55,7 +55,7 @@ class _IncomingCallOverlayState extends State<IncomingCallOverlay>
     _vibrationTimer = Timer.periodic(const Duration(milliseconds: 1500), (_) {
       HapticFeedback.mediumImpact();
     });
-    
+
     _ringingTimer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (mounted) {
         setState(() {
@@ -192,7 +192,9 @@ class _IncomingCallOverlayState extends State<IncomingCallOverlay>
                 ),
                 const SizedBox(width: 12),
                 Text(
-                  widget.isVideoCall ? 'Incoming Video Call' : 'Incoming Voice Call',
+                  widget.isVideoCall
+                      ? 'Incoming Video Call'
+                      : 'Incoming Voice Call',
                   style: GoogleFonts.poppins(
                     fontSize: 14,
                     color: Colors.white,
@@ -223,7 +225,9 @@ class _IncomingCallOverlayState extends State<IncomingCallOverlay>
               size: const Size(280, 280),
               painter: EnhancedRipplePainter(
                 animation: _rippleController.value,
-                color: widget.isVideoCall ? AppColors.primaryBlue : AppColors.primaryGreen,
+                color: widget.isVideoCall
+                    ? AppColors.primaryBlue
+                    : AppColors.primaryGreen,
               ),
             );
           },
@@ -238,8 +242,11 @@ class _IncomingCallOverlayState extends State<IncomingCallOverlay>
                 shape: BoxShape.circle,
                 boxShadow: [
                   BoxShadow(
-                    color: (widget.isVideoCall ? AppColors.primaryBlue : AppColors.primaryGreen)
-                        .withOpacity(_glowAnimation.value),
+                    color:
+                        (widget.isVideoCall
+                                ? AppColors.primaryBlue
+                                : AppColors.primaryGreen)
+                            .withOpacity(_glowAnimation.value),
                     blurRadius: 40,
                     spreadRadius: 10,
                   ),
@@ -333,7 +340,10 @@ class _IncomingCallOverlayState extends State<IncomingCallOverlay>
                 if (widget.callerRole != null) ...[
                   const SizedBox(height: 8),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 6,
+                    ),
                     decoration: BoxDecoration(
                       color: Colors.white.withOpacity(0.1),
                       borderRadius: BorderRadius.circular(20),
@@ -353,7 +363,9 @@ class _IncomingCallOverlayState extends State<IncomingCallOverlay>
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Icon(
-                      widget.isVideoCall ? Icons.videocam_rounded : Icons.phone_rounded,
+                      widget.isVideoCall
+                          ? Icons.videocam_rounded
+                          : Icons.phone_rounded,
                       color: Colors.white54,
                       size: 18,
                     ),
@@ -399,7 +411,9 @@ class _IncomingCallOverlayState extends State<IncomingCallOverlay>
                     },
                   ),
                   _buildActionButton(
-                    icon: widget.isVideoCall ? Icons.videocam_rounded : Icons.call_rounded,
+                    icon: widget.isVideoCall
+                        ? Icons.videocam_rounded
+                        : Icons.call_rounded,
                     label: 'Accept',
                     color: const Color(0xFF43A047),
                     shadowColor: const Color(0xFF43A047),
@@ -432,7 +446,9 @@ class _IncomingCallOverlayState extends State<IncomingCallOverlay>
         GestureDetector(
           onTap: onTap,
           child: AnimatedBuilder(
-            animation: isAccept ? _pulseController : const AlwaysStoppedAnimation(1.0),
+            animation: isAccept
+                ? _pulseController
+                : const AlwaysStoppedAnimation(1.0),
             builder: (context, child) {
               return Transform.scale(
                 scale: isAccept ? 1.0 + (_pulseController.value * 0.05) : 1.0,
@@ -443,10 +459,7 @@ class _IncomingCallOverlayState extends State<IncomingCallOverlay>
                     gradient: LinearGradient(
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,
-                      colors: [
-                        color,
-                        color.withOpacity(0.8),
-                      ],
+                      colors: [color, color.withOpacity(0.8)],
                     ),
                     shape: BoxShape.circle,
                     boxShadow: [
@@ -458,11 +471,7 @@ class _IncomingCallOverlayState extends State<IncomingCallOverlay>
                       ),
                     ],
                   ),
-                  child: Icon(
-                    icon,
-                    color: Colors.white,
-                    size: 36,
-                  ),
+                  child: Icon(icon, color: Colors.white, size: 36),
                 ),
               );
             },
@@ -486,20 +495,17 @@ class EnhancedRipplePainter extends CustomPainter {
   final double animation;
   final Color color;
 
-  EnhancedRipplePainter({
-    required this.animation,
-    required this.color,
-  });
+  EnhancedRipplePainter({required this.animation, required this.color});
 
   @override
   void paint(Canvas canvas, Size size) {
     final center = Offset(size.width / 2, size.height / 2);
-    
+
     for (int i = 0; i < 4; i++) {
       final progress = ((animation + (i * 0.25)) % 1.0);
       final radius = 50 + (progress * 90);
       final opacity = (1 - progress) * 0.4;
-      
+
       final paint = Paint()
         ..color = color.withOpacity(opacity)
         ..style = PaintingStyle.stroke
@@ -552,15 +558,12 @@ class _IncomingCallPopupState extends State<IncomingCallPopup>
       duration: const Duration(milliseconds: 400),
       vsync: this,
     );
-    _slideAnimation = Tween<Offset>(
-      begin: const Offset(0, -1),
-      end: Offset.zero,
-    ).animate(CurvedAnimation(
-      parent: _slideController,
-      curve: Curves.elasticOut,
-    ));
+    _slideAnimation =
+        Tween<Offset>(begin: const Offset(0, -1), end: Offset.zero).animate(
+          CurvedAnimation(parent: _slideController, curve: Curves.elasticOut),
+        );
     _slideController.forward();
-    
+
     _vibrationTimer = Timer.periodic(const Duration(milliseconds: 2000), (_) {
       HapticFeedback.mediumImpact();
     });
@@ -629,8 +632,14 @@ class _IncomingCallPopupState extends State<IncomingCallPopup>
                                 begin: Alignment.topLeft,
                                 end: Alignment.bottomRight,
                                 colors: widget.isVideoCall
-                                    ? [AppColors.primaryBlue, AppColors.primaryBlue.withOpacity(0.7)]
-                                    : [AppColors.primaryGreen, AppColors.primaryGreen.withOpacity(0.7)],
+                                    ? [
+                                        AppColors.primaryBlue,
+                                        AppColors.primaryBlue.withOpacity(0.7),
+                                      ]
+                                    : [
+                                        AppColors.primaryGreen,
+                                        AppColors.primaryGreen.withOpacity(0.7),
+                                      ],
                               ),
                               border: Border.all(
                                 color: Colors.white.withOpacity(0.3),
@@ -684,16 +693,18 @@ class _IncomingCallPopupState extends State<IncomingCallPopup>
                                 Row(
                                   children: [
                                     Icon(
-                                      widget.isVideoCall ? Icons.videocam : Icons.phone,
-                                      color: widget.isVideoCall 
-                                          ? AppColors.primaryBlue 
+                                      widget.isVideoCall
+                                          ? Icons.videocam
+                                          : Icons.phone,
+                                      color: widget.isVideoCall
+                                          ? AppColors.primaryBlue
                                           : AppColors.primaryGreen,
                                       size: 16,
                                     ),
                                     const SizedBox(width: 6),
                                     Text(
-                                      widget.isVideoCall 
-                                          ? 'Incoming video call...' 
+                                      widget.isVideoCall
+                                          ? 'Incoming video call...'
                                           : 'Incoming voice call...',
                                       style: GoogleFonts.poppins(
                                         color: Colors.white70,
@@ -727,10 +738,15 @@ class _IncomingCallPopupState extends State<IncomingCallPopup>
                                 widget.onDecline();
                               },
                               child: Container(
-                                padding: const EdgeInsets.symmetric(vertical: 14),
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 14,
+                                ),
                                 decoration: BoxDecoration(
                                   gradient: const LinearGradient(
-                                    colors: [Color(0xFFE53935), Color(0xFFD32F2F)],
+                                    colors: [
+                                      Color(0xFFE53935),
+                                      Color(0xFFD32F2F),
+                                    ],
                                   ),
                                   borderRadius: BorderRadius.circular(14),
                                   boxShadow: [
@@ -744,7 +760,11 @@ class _IncomingCallPopupState extends State<IncomingCallPopup>
                                 child: Row(
                                   mainAxisAlignment: MainAxisAlignment.center,
                                   children: [
-                                    const Icon(Icons.call_end, color: Colors.white, size: 22),
+                                    const Icon(
+                                      Icons.call_end,
+                                      color: Colors.white,
+                                      size: 22,
+                                    ),
                                     const SizedBox(width: 8),
                                     Text(
                                       'Decline',
@@ -767,10 +787,15 @@ class _IncomingCallPopupState extends State<IncomingCallPopup>
                                 widget.onAccept();
                               },
                               child: Container(
-                                padding: const EdgeInsets.symmetric(vertical: 14),
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 14,
+                                ),
                                 decoration: BoxDecoration(
                                   gradient: const LinearGradient(
-                                    colors: [Color(0xFF43A047), Color(0xFF2E7D32)],
+                                    colors: [
+                                      Color(0xFF43A047),
+                                      Color(0xFF2E7D32),
+                                    ],
                                   ),
                                   borderRadius: BorderRadius.circular(14),
                                   boxShadow: [
@@ -785,7 +810,9 @@ class _IncomingCallPopupState extends State<IncomingCallPopup>
                                   mainAxisAlignment: MainAxisAlignment.center,
                                   children: [
                                     Icon(
-                                      widget.isVideoCall ? Icons.videocam : Icons.call,
+                                      widget.isVideoCall
+                                          ? Icons.videocam
+                                          : Icons.call,
                                       color: Colors.white,
                                       size: 22,
                                     ),
@@ -818,7 +845,8 @@ class _IncomingCallPopupState extends State<IncomingCallPopup>
 }
 
 class IncomingCallOverlayManager {
-  static final IncomingCallOverlayManager _instance = IncomingCallOverlayManager._internal();
+  static final IncomingCallOverlayManager _instance =
+      IncomingCallOverlayManager._internal();
   factory IncomingCallOverlayManager() => _instance;
   IncomingCallOverlayManager._internal();
 

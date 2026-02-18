@@ -1,118 +1,78 @@
-import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:pact_mobile/services/rpc_client.dart';
 
-/// Handles the atomic assignment of site visits to users
-class SiteVisitAssignment {
-  final SupabaseClient _supabase;
+class AssignmentInfo {
+  final String? assignedTo;
+  final String? status;
 
-  SiteVisitAssignment(this._supabase);
-
-  /// Attempts to assign a site visit to a user
-  ///
-  /// Returns a Future that completes with the assignment result
-  /// If successful, updates the local site visit status
-  /// If failed, returns the current assignment state from the server
-  Future<AssignmentResult> attemptAssign({
-    required String siteId,
-    required String userId,
-  }) async {
-    try {
-      // Optional: Mark local state as pending to prevent duplicate attempts
-      // await _markLocalPendingAssignment(siteId);
-
-      // Call Supabase RPC to attempt assignment
-      final response = await _supabase.rpc(
-        'assign_site_visit',
-        params: {
-          'p_site_id': siteId,
-          'p_user_id': userId,
-        },
-      );
-
-      if (response.error != null) {
-        // Handle network or server error
-        return AssignmentResult(
-          success: false,
-          error: response.error!.message,
-          currentAssignment: null,
-        );
-      }
-
-      final result = response.data as Map<String, dynamic>;
-
-      if (result['success'] == true) {
-        // Update local state
-        await _updateLocalAssignment(
-          siteId: siteId,
-          userId: userId,
-          status: 'assigned',
-        );
-
-        return AssignmentResult(
-          success: true,
-          error: null,
-          currentAssignment: Assignment(
-            siteId: siteId,
-            assignedTo: userId,
-            status: 'assigned',
-          ),
-        );
-      } else {
-        // Assignment failed - site was already assigned
-        return AssignmentResult(
-          success: false,
-          error: 'Site visit already assigned',
-          currentAssignment: Assignment(
-            siteId: siteId,
-            assignedTo: result['assigned_to'],
-            status: result['status'],
-          ),
-        );
-      }
-    } catch (e) {
-      // Handle unexpected errors
-      return AssignmentResult(
-        success: false,
-        error: e.toString(),
-        currentAssignment: null,
-      );
-    }
-  }
-
-  /// Updates the local site visit record after successful assignment
-  Future<void> _updateLocalAssignment({
-    required String siteId,
-    required String userId,
-    required String status,
-  }) async {
-    // TODO: Implement local database update
-    // This should update your local site_visits table/storage
-    // Example with Hive or other local storage:
-    // await _box.put(siteId, {'status': status, 'assigned_to': userId});
-  }
+  const AssignmentInfo({this.assignedTo, this.status});
 }
 
-/// Represents the result of an assignment attempt
-class AssignmentResult {
+class SiteVisitAssignmentResult {
   final bool success;
   final String? error;
-  final Assignment? currentAssignment;
+  final AssignmentInfo? currentAssignment;
 
-  AssignmentResult({
+  const SiteVisitAssignmentResult({
     required this.success,
     this.error,
     this.currentAssignment,
   });
 }
 
-/// Represents the assignment state of a site visit
-class Assignment {
-  final String siteId;
-  final String assignedTo;
-  final String status;
+class SiteVisitAssignment {
+  final RpcClient _client;
 
-  Assignment({
-    required this.siteId,
-    required this.assignedTo,
-    required this.status,
-  });
+  SiteVisitAssignment(this._client);
+
+  Future<SiteVisitAssignmentResult> attemptAssign({
+    required String siteId,
+    required String userId,
+  }) async {
+    try {
+      final response = await _client.rpc(
+        'assign_site_visit',
+        params: {'site_id': siteId, 'user_id': userId},
+      );
+
+      if (response.error != null) {
+        return SiteVisitAssignmentResult(
+          success: false,
+          error: response.error?.message,
+        );
+      }
+
+      final data = response.data as Map<String, dynamic>?;
+      if (data == null) {
+        return const SiteVisitAssignmentResult(
+          success: false,
+          error: 'Unexpected response from server',
+        );
+      }
+
+      final assignedTo = data['assigned_to'] as String?;
+      final status = data['status'] as String?;
+      final current = AssignmentInfo(assignedTo: assignedTo, status: status);
+
+      final success = data['success'] == true;
+      if (success) {
+        return SiteVisitAssignmentResult(
+          success: true,
+          currentAssignment: current,
+        );
+      }
+
+      // If not successful, determine message.
+      final alreadyAssigned = status == 'assigned' || assignedTo != null;
+      final message = alreadyAssigned
+          ? 'Site visit already assigned'
+          : (data['error'] as String? ?? 'Assignment failed');
+      return SiteVisitAssignmentResult(
+        success: false,
+        error: message,
+        currentAssignment: current,
+      );
+    } catch (e) {
+      return SiteVisitAssignmentResult(success: false, error: e.toString());
+    }
+  }
 }

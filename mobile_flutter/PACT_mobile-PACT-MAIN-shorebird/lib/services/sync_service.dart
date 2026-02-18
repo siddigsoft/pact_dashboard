@@ -42,7 +42,7 @@ class SyncService {
         requiresBatteryNotLow: true,
       ),
     );
-    
+
     // Register auto-release task to run every 30 minutes
     await Workmanager().registerPeriodicTask(
       autoReleaseTaskKey,
@@ -58,9 +58,9 @@ class SyncService {
   void _setupConnectivityListener() {
     Connectivity().onConnectivityChanged.listen((results) {
       // Handle List<ConnectivityResult> from newer connectivity_plus
-      final hasConnection = results is List
-          ? !(results as List).contains(ConnectivityResult.none)
-          : results != ConnectivityResult.none;
+      final hasConnection = !(results as List).contains(
+        ConnectivityResult.none,
+      );
       if (hasConnection) {
         syncData();
       }
@@ -106,14 +106,16 @@ void callbackDispatcher() {
       case SyncService.syncTaskKey:
         final db = await DatabaseService().database;
         final supabase = SupabaseService();
-        
+
         final syncService = SyncService(DatabaseService(), supabase);
         await syncService.syncData();
         break;
       case SyncService.autoReleaseTaskKey:
         final autoReleaseService = AutoReleaseService();
         final releasedCount = await autoReleaseService.checkAndReleaseSites();
-        debugPrint('Auto-release task completed: $releasedCount sites released');
+        debugPrint(
+          'Auto-release task completed: $releasedCount sites released',
+        );
         break;
     }
     return true;

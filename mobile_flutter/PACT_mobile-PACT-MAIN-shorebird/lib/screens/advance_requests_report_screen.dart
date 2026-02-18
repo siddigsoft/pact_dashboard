@@ -14,10 +14,12 @@ class AdvanceRequestsReportScreen extends StatefulWidget {
   const AdvanceRequestsReportScreen({super.key});
 
   @override
-  State<AdvanceRequestsReportScreen> createState() => _AdvanceRequestsReportScreenState();
+  State<AdvanceRequestsReportScreen> createState() =>
+      _AdvanceRequestsReportScreenState();
 }
 
-class _AdvanceRequestsReportScreenState extends State<AdvanceRequestsReportScreen> 
+class _AdvanceRequestsReportScreenState
+    extends State<AdvanceRequestsReportScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
   List<AdvanceRequestData> _requests = [];
@@ -45,13 +47,13 @@ class _AdvanceRequestsReportScreenState extends State<AdvanceRequestsReportScree
   Future<void> _checkAccessAndLoad() async {
     final hasAccess = await AdvanceReportService.checkUserHasReportAccess();
     final role = await AdvanceReportService.getCurrentUserRole();
-    
+
     if (mounted) {
       setState(() {
         _hasAccess = hasAccess;
         _userRole = role;
       });
-      
+
       if (hasAccess) {
         _loadData();
       } else {
@@ -66,12 +68,12 @@ class _AdvanceRequestsReportScreenState extends State<AdvanceRequestsReportScree
       _hasError = false;
       _errorMessage = '';
     });
-    
+
     try {
       final requests = await AdvanceReportService.fetchAllRequests();
       final filteredRequests = _applyPeriodFilter(requests);
       final stats = AdvanceReportService.calculateStats(filteredRequests);
-      
+
       if (mounted) {
         setState(() {
           _requests = filteredRequests;
@@ -84,28 +86,41 @@ class _AdvanceRequestsReportScreenState extends State<AdvanceRequestsReportScree
         setState(() {
           _isLoading = false;
           _hasError = true;
-          _errorMessage = 'Failed to load report data. Please check your connection and try again.';
+          _errorMessage =
+              'Failed to load report data. Please check your connection and try again.';
         });
       }
     }
   }
 
-  List<AdvanceRequestData> _applyPeriodFilter(List<AdvanceRequestData> requests) {
+  List<AdvanceRequestData> _applyPeriodFilter(
+    List<AdvanceRequestData> requests,
+  ) {
     final now = DateTime.now();
-    
+
     switch (_filterPeriod) {
       case 'thisMonth':
-        return requests.where((r) => 
-          r.requestedAt.year == now.year && r.requestedAt.month == now.month
-        ).toList();
+        return requests
+            .where(
+              (r) =>
+                  r.requestedAt.year == now.year &&
+                  r.requestedAt.month == now.month,
+            )
+            .toList();
       case 'lastMonth':
         final lastMonth = DateTime(now.year, now.month - 1, 1);
-        return requests.where((r) => 
-          r.requestedAt.year == lastMonth.year && r.requestedAt.month == lastMonth.month
-        ).toList();
+        return requests
+            .where(
+              (r) =>
+                  r.requestedAt.year == lastMonth.year &&
+                  r.requestedAt.month == lastMonth.month,
+            )
+            .toList();
       case 'last3Months':
         final threeMonthsAgo = DateTime(now.year, now.month - 3, now.day);
-        return requests.where((r) => r.requestedAt.isAfter(threeMonthsAgo)).toList();
+        return requests
+            .where((r) => r.requestedAt.isAfter(threeMonthsAgo))
+            .toList();
       default:
         return requests;
     }
@@ -114,10 +129,22 @@ class _AdvanceRequestsReportScreenState extends State<AdvanceRequestsReportScree
   Future<void> _exportToCSV(String groupType) async {
     try {
       List<List<dynamic>> rows = [];
-      
+
       switch (groupType) {
         case 'all':
-          rows.add(['Date', 'Team Member', 'Site', 'Hub', 'State', 'Project', 'Amount (SDG)', 'Status', 'Paid', 'Remaining', 'Receipt Confirmed']);
+          rows.add([
+            'Date',
+            'Team Member',
+            'Site',
+            'Hub',
+            'State',
+            'Project',
+            'Amount (SDG)',
+            'Status',
+            'Paid',
+            'Remaining',
+            'Receipt Confirmed',
+          ]);
           for (var req in _requests) {
             rows.add([
               DateFormat('yyyy-MM-dd').format(req.requestedAt),
@@ -129,65 +156,135 @@ class _AdvanceRequestsReportScreenState extends State<AdvanceRequestsReportScree
               req.requestedAmount,
               req.status.replaceAll('_', ' '),
               req.totalPaidAmount,
-              (req.remainingAmount ?? (req.requestedAmount - req.totalPaidAmount)),
+              (req.remainingAmount ??
+                  (req.requestedAmount - req.totalPaidAmount)),
               req.isReceiptConfirmed ? 'Yes' : 'No',
             ]);
           }
           break;
         case 'byTeam':
           final grouped = AdvanceReportService.groupByTeamMember(_requests);
-          rows.add(['Team Member', 'Requests', 'Total Requested (SDG)', 'Total Approved (SDG)', 'Pending']);
+          rows.add([
+            'Team Member',
+            'Requests',
+            'Total Requested (SDG)',
+            'Total Approved (SDG)',
+            'Pending',
+          ]);
           for (var g in grouped) {
-            rows.add([g.name, g.requests, g.totalRequested, g.totalApproved, g.pending]);
+            rows.add([
+              g.name,
+              g.requests,
+              g.totalRequested,
+              g.totalApproved,
+              g.pending,
+            ]);
           }
           break;
         case 'byHub':
           final grouped = AdvanceReportService.groupByHub(_requests);
-          rows.add(['Hub', 'Requests', 'Total Requested (SDG)', 'Total Approved (SDG)', 'Pending']);
+          rows.add([
+            'Hub',
+            'Requests',
+            'Total Requested (SDG)',
+            'Total Approved (SDG)',
+            'Pending',
+          ]);
           for (var g in grouped) {
-            rows.add([g.name, g.requests, g.totalRequested, g.totalApproved, g.pending]);
+            rows.add([
+              g.name,
+              g.requests,
+              g.totalRequested,
+              g.totalApproved,
+              g.pending,
+            ]);
           }
           break;
         case 'byStatus':
           final grouped = AdvanceReportService.groupByStatus(_requests);
-          rows.add(['Status', 'Requests', 'Total Requested (SDG)', 'Total Approved (SDG)', 'Pending']);
+          rows.add([
+            'Status',
+            'Requests',
+            'Total Requested (SDG)',
+            'Total Approved (SDG)',
+            'Pending',
+          ]);
           for (var g in grouped) {
-            rows.add([g.name, g.requests, g.totalRequested, g.totalApproved, g.pending]);
+            rows.add([
+              g.name,
+              g.requests,
+              g.totalRequested,
+              g.totalApproved,
+              g.pending,
+            ]);
           }
           break;
         case 'byState':
           final grouped = AdvanceReportService.groupByState(_requests);
-          rows.add(['State', 'Requests', 'Total Requested (SDG)', 'Total Approved (SDG)', 'Pending']);
+          rows.add([
+            'State',
+            'Requests',
+            'Total Requested (SDG)',
+            'Total Approved (SDG)',
+            'Pending',
+          ]);
           for (var g in grouped) {
-            rows.add([g.name, g.requests, g.totalRequested, g.totalApproved, g.pending]);
+            rows.add([
+              g.name,
+              g.requests,
+              g.totalRequested,
+              g.totalApproved,
+              g.pending,
+            ]);
           }
           break;
         case 'byProject':
           final grouped = AdvanceReportService.groupByProject(_requests);
-          rows.add(['Project', 'Requests', 'Total Requested (SDG)', 'Total Approved (SDG)', 'Pending']);
+          rows.add([
+            'Project',
+            'Requests',
+            'Total Requested (SDG)',
+            'Total Approved (SDG)',
+            'Pending',
+          ]);
           for (var g in grouped) {
-            rows.add([g.name, g.requests, g.totalRequested, g.totalApproved, g.pending]);
+            rows.add([
+              g.name,
+              g.requests,
+              g.totalRequested,
+              g.totalApproved,
+              g.pending,
+            ]);
           }
           break;
       }
 
       final csv = const ListToCsvConverter().convert(rows);
       final directory = await getTemporaryDirectory();
-      final fileName = 'advance_report_${groupType}_${DateFormat('yyyyMMdd').format(DateTime.now())}.csv';
+      final fileName =
+          'advance_report_${groupType}_${DateFormat('yyyyMMdd').format(DateTime.now())}.csv';
       final file = File('${directory.path}/$fileName');
       await file.writeAsString(csv);
 
-      await Share.shareXFiles([XFile(file.path)], subject: 'Advance Requests Report');
-      
+      await Share.shareXFiles([
+        XFile(file.path),
+      ], subject: 'Advance Requests Report');
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Report exported successfully'), backgroundColor: Colors.green),
+          const SnackBar(
+            content: Text('Report exported successfully'),
+            backgroundColor: Colors.green,
+          ),
         );
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Export failed: $e'), backgroundColor: Colors.red),
+          SnackBar(
+            content: Text('Export failed: $e'),
+            backgroundColor: Colors.red,
+          ),
         );
       }
     }
@@ -245,7 +342,10 @@ class _AdvanceRequestsReportScreenState extends State<AdvanceRequestsReportScree
                   Tab(icon: Icon(Icons.list_alt, size: 18), text: 'All'),
                   Tab(icon: Icon(Icons.people, size: 18), text: 'Team'),
                   Tab(icon: Icon(Icons.business, size: 18), text: 'Hub'),
-                  Tab(icon: Icon(Icons.pending_actions, size: 18), text: 'Status'),
+                  Tab(
+                    icon: Icon(Icons.pending_actions, size: 18),
+                    text: 'Status',
+                  ),
                   Tab(icon: Icon(Icons.location_on, size: 18), text: 'State'),
                   Tab(icon: Icon(Icons.folder, size: 18), text: 'Project'),
                 ],
@@ -256,16 +356,36 @@ class _AdvanceRequestsReportScreenState extends State<AdvanceRequestsReportScree
         body: _isLoading
             ? const Center(child: CircularProgressIndicator())
             : _hasError
-              ? _buildErrorState()
-              : TabBarView(
+            ? _buildErrorState()
+            : TabBarView(
                 controller: _tabController,
                 children: [
                   _buildAllRequestsTab(),
-                  _buildGroupedTab('byTeam', AdvanceReportService.groupByTeamMember(_requests), 'Team Member'),
-                  _buildGroupedTab('byHub', AdvanceReportService.groupByHub(_requests), 'Hub'),
-                  _buildGroupedTab('byStatus', AdvanceReportService.groupByStatus(_requests), 'Status'),
-                  _buildGroupedTab('byState', AdvanceReportService.groupByState(_requests), 'State'),
-                  _buildGroupedTab('byProject', AdvanceReportService.groupByProject(_requests), 'Project'),
+                  _buildGroupedTab(
+                    'byTeam',
+                    AdvanceReportService.groupByTeamMember(_requests),
+                    'Team Member',
+                  ),
+                  _buildGroupedTab(
+                    'byHub',
+                    AdvanceReportService.groupByHub(_requests),
+                    'Hub',
+                  ),
+                  _buildGroupedTab(
+                    'byStatus',
+                    AdvanceReportService.groupByStatus(_requests),
+                    'Status',
+                  ),
+                  _buildGroupedTab(
+                    'byState',
+                    AdvanceReportService.groupByState(_requests),
+                    'State',
+                  ),
+                  _buildGroupedTab(
+                    'byProject',
+                    AdvanceReportService.groupByProject(_requests),
+                    'Project',
+                  ),
                 ],
               ),
       ),
@@ -349,7 +469,10 @@ class _AdvanceRequestsReportScreenState extends State<AdvanceRequestsReportScree
             const PopupMenuItem(value: 'all', child: Text('All Time')),
             const PopupMenuItem(value: 'thisMonth', child: Text('This Month')),
             const PopupMenuItem(value: 'lastMonth', child: Text('Last Month')),
-            const PopupMenuItem(value: 'last3Months', child: Text('Last 3 Months')),
+            const PopupMenuItem(
+              value: 'last3Months',
+              child: Text('Last 3 Months'),
+            ),
           ],
         ),
         IconButton(
@@ -362,7 +485,7 @@ class _AdvanceRequestsReportScreenState extends State<AdvanceRequestsReportScree
 
   Widget _buildStatsCards() {
     final formatter = NumberFormat('#,###');
-    
+
     return Padding(
       padding: const EdgeInsets.all(16),
       child: Column(
@@ -442,7 +565,11 @@ class _AdvanceRequestsReportScreenState extends State<AdvanceRequestsReportScree
     );
   }
 
-  Widget _buildGroupedTab(String groupType, List<ReportGroupData> grouped, String groupLabel) {
+  Widget _buildGroupedTab(
+    String groupType,
+    List<ReportGroupData> grouped,
+    String groupLabel,
+  ) {
     return Column(
       children: [
         _buildExportButtons(groupType),
@@ -508,9 +635,9 @@ class _AdvanceRequestsReportScreenState extends State<AdvanceRequestsReportScree
             const SizedBox(height: 16),
             Text(
               'Error Loading Report',
-              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                color: Colors.red[700],
-              ),
+              style: Theme.of(
+                context,
+              ).textTheme.headlineSmall?.copyWith(color: Colors.red[700]),
             ),
             const SizedBox(height: 8),
             Text(
@@ -573,10 +700,7 @@ class _StatCard extends StatelessWidget {
                 children: [
                   Text(
                     title,
-                    style: TextStyle(
-                      color: Colors.grey[600],
-                      fontSize: 12,
-                    ),
+                    style: TextStyle(color: Colors.grey[600], fontSize: 12),
                   ),
                   const SizedBox(height: 4),
                   FittedBox(
@@ -593,10 +717,7 @@ class _StatCard extends StatelessWidget {
                   ),
                   Text(
                     subtitle,
-                    style: TextStyle(
-                      color: Colors.grey[500],
-                      fontSize: 11,
-                    ),
+                    style: TextStyle(color: Colors.grey[500], fontSize: 11),
                   ),
                 ],
               ),
@@ -618,7 +739,9 @@ class _RequestCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final statusInfo = StatusBadgeInfo.fromStatus(request.status);
     final formatter = NumberFormat('#,###');
-    final remaining = request.remainingAmount ?? (request.requestedAmount - request.totalPaidAmount);
+    final remaining =
+        request.remainingAmount ??
+        (request.requestedAmount - request.totalPaidAmount);
 
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
@@ -640,7 +763,10 @@ class _RequestCard extends StatelessWidget {
                   ),
                 ),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
                   decoration: BoxDecoration(
                     color: statusInfo.color.withOpacity(0.1),
                     borderRadius: BorderRadius.circular(12),
@@ -664,7 +790,10 @@ class _RequestCard extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 12),
-            _buildInfoRow(Icons.calendar_today, DateFormat('MMM dd, yyyy').format(request.requestedAt)),
+            _buildInfoRow(
+              Icons.calendar_today,
+              DateFormat('MMM dd, yyyy').format(request.requestedAt),
+            ),
             _buildInfoRow(Icons.location_on, request.siteName),
             if (request.hubName != null)
               _buildInfoRow(Icons.business, request.hubName!),
@@ -676,20 +805,35 @@ class _RequestCard extends StatelessWidget {
             Row(
               children: [
                 Expanded(
-                  child: _buildAmountColumn('Requested', formatter.format(request.requestedAmount), const Color(0xFF1E40AF)),
+                  child: _buildAmountColumn(
+                    'Requested',
+                    formatter.format(request.requestedAmount),
+                    const Color(0xFF1E40AF),
+                  ),
                 ),
                 Expanded(
-                  child: _buildAmountColumn('Paid', formatter.format(request.totalPaidAmount), Colors.green),
+                  child: _buildAmountColumn(
+                    'Paid',
+                    formatter.format(request.totalPaidAmount),
+                    Colors.green,
+                  ),
                 ),
                 Expanded(
-                  child: _buildAmountColumn('Remaining', formatter.format(remaining), remaining > 0 ? Colors.orange : Colors.grey),
+                  child: _buildAmountColumn(
+                    'Remaining',
+                    formatter.format(remaining),
+                    remaining > 0 ? Colors.orange : Colors.grey,
+                  ),
                 ),
               ],
             ),
             if (request.isReceiptConfirmed) ...[
               const SizedBox(height: 12),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 6,
+                ),
                 decoration: BoxDecoration(
                   color: Colors.green.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(8),
@@ -697,7 +841,11 @@ class _RequestCard extends StatelessWidget {
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(Icons.check_circle, size: 16, color: Colors.green),
+                    const Icon(
+                      Icons.check_circle,
+                      size: 16,
+                      color: Colors.green,
+                    ),
                     const SizedBox(width: 6),
                     Text(
                       'Receipt Confirmed / تم تأكيد الاستلام',
@@ -778,10 +926,7 @@ class _RequestCard extends StatelessWidget {
   Widget _buildAmountColumn(String label, String value, Color color) {
     return Column(
       children: [
-        Text(
-          label,
-          style: TextStyle(color: Colors.grey[500], fontSize: 11),
-        ),
+        Text(label, style: TextStyle(color: Colors.grey[500], fontSize: 11)),
         const SizedBox(height: 4),
         Text(
           'SDG $value',
@@ -826,7 +971,10 @@ class _GroupCard extends StatelessWidget {
                   ),
                 ),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
                   decoration: BoxDecoration(
                     color: const Color(0xFF1E40AF).withOpacity(0.1),
                     borderRadius: BorderRadius.circular(12),
@@ -906,12 +1054,16 @@ class _SliverTabBarDelegate extends SliverPersistentHeaderDelegate {
 
   @override
   double get minExtent => tabBar.preferredSize.height;
-  
+
   @override
   double get maxExtent => tabBar.preferredSize.height;
 
   @override
-  Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) {
+  Widget build(
+    BuildContext context,
+    double shrinkOffset,
+    bool overlapsContent,
+  ) {
     return Container(
       color: Theme.of(context).scaffoldBackgroundColor,
       child: tabBar,

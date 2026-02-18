@@ -8,9 +8,11 @@ import '../services/help_service.dart';
 import '../theme/app_colors.dart';
 import '../widgets/custom_drawer_menu.dart';
 import '../services/webrtc_service.dart';
-import '../services/chat_service.dart';
+import '../services/agora_call_service.dart';
 import 'communications_screen.dart';
 import 'call_screen.dart';
+import 'agora_call_screen.dart';
+import 'notification_test_screen.dart';
 
 class HelpSupportScreen extends StatefulWidget {
   const HelpSupportScreen({super.key});
@@ -30,11 +32,11 @@ class _HelpSupportScreenState extends State<HelpSupportScreen>
   bool _isSearching = false;
   List<SupportContact> _supportContacts = [];
   bool _loadingContacts = false;
-  
+
   List<Map<String, dynamic>> _ictAdminUsers = [];
   bool _loadingIctUsers = false;
   String? _selectedRecipientId;
-  
+
   // Field operations support
   List<Map<String, dynamic>> _fieldSupervisors = [];
   bool _loadingFieldSupervisors = false;
@@ -121,7 +123,8 @@ class _HelpSupportScreenState extends State<HelpSupportScreen>
         setState(() {
           _currentUserHubId = response['hub_id'] ?? response['hub'];
           _currentUserStateId = response['state_id'] ?? response['state'];
-          _currentUserLocalityId = response['locality_id'] ?? response['locality'];
+          _currentUserLocalityId =
+              response['locality_id'] ?? response['locality'];
         });
         // Load field supervisors after getting current user's location
         _loadFieldSupervisors();
@@ -142,8 +145,16 @@ class _HelpSupportScreenState extends State<HelpSupportScreen>
       // Build query to find supervisors, coordinators, FOM in same hub or state
       var query = Supabase.instance.client
           .from('profiles')
-          .select('id, full_name, email, role, phone, avatar_url, availability, hub_id, state_id, hub, state')
-          .inFilter('role', ['supervisor', 'coordinator', 'fom', 'projectManager', 'admin']);
+          .select(
+            'id, full_name, email, role, phone, avatar_url, availability, hub_id, state_id, hub, state',
+          )
+          .inFilter('role', [
+            'supervisor',
+            'coordinator',
+            'fom',
+            'projectManager',
+            'admin',
+          ]);
 
       final response = await query.order('full_name', ascending: true);
 
@@ -151,7 +162,7 @@ class _HelpSupportScreenState extends State<HelpSupportScreen>
       final filteredList = (response as List).where((user) {
         final userHubId = user['hub_id'] ?? user['hub'];
         final userStateId = user['state_id'] ?? user['state'];
-        
+
         // Match by hub first, then by state
         if (_currentUserHubId != null && userHubId == _currentUserHubId) {
           return true;
@@ -276,7 +287,9 @@ class _HelpSupportScreenState extends State<HelpSupportScreen>
         controller: _searchController,
         textDirection: isArabic ? ui.TextDirection.rtl : ui.TextDirection.ltr,
         decoration: InputDecoration(
-          hintText: isArabic ? 'ابحث في مقالات المساعدة...' : 'Search help articles...',
+          hintText: isArabic
+              ? 'ابحث في مقالات المساعدة...'
+              : 'Search help articles...',
           prefixIcon: const Icon(Icons.search),
           suffixIcon: _searchController.text.isNotEmpty
               ? IconButton(
@@ -317,7 +330,10 @@ class _HelpSupportScreenState extends State<HelpSupportScreen>
         unselectedLabelColor: Colors.grey,
         indicatorColor: AppColors.primaryBlue,
         indicatorWeight: 3,
-        labelStyle: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 13),
+        labelStyle: GoogleFonts.poppins(
+          fontWeight: FontWeight.w600,
+          fontSize: 13,
+        ),
         unselectedLabelStyle: GoogleFonts.poppins(fontSize: 13),
         tabs: [
           Tab(
@@ -359,7 +375,9 @@ class _HelpSupportScreenState extends State<HelpSupportScreen>
             ),
             const SizedBox(height: 8),
             Text(
-              isArabic ? 'جرب مصطلحات بحث مختلفة' : 'Try different search terms',
+              isArabic
+                  ? 'جرب مصطلحات بحث مختلفة'
+                  : 'Try different search terms',
               style: GoogleFonts.poppins(color: Colors.grey[500]),
             ),
           ],
@@ -400,7 +418,10 @@ class _HelpSupportScreenState extends State<HelpSupportScreen>
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         gradient: LinearGradient(
-          colors: [AppColors.primaryBlue, AppColors.primaryBlue.withOpacity(0.8)],
+          colors: [
+            AppColors.primaryBlue,
+            AppColors.primaryBlue.withOpacity(0.8),
+          ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
@@ -417,7 +438,11 @@ class _HelpSupportScreenState extends State<HelpSupportScreen>
                   color: Colors.white.withOpacity(0.2),
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: const Icon(Icons.rocket_launch, color: Colors.white, size: 24),
+                child: const Icon(
+                  Icons.rocket_launch,
+                  color: Colors.white,
+                  size: 24,
+                ),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -433,10 +458,30 @@ class _HelpSupportScreenState extends State<HelpSupportScreen>
             ],
           ),
           const SizedBox(height: 16),
-          _buildQuickStartStep('1', isArabic ? 'تسجيل الدخول بحسابك' : 'Login with your account', isArabic),
-          _buildQuickStartStep('2', isArabic ? 'تفعيل خدمات الموقع' : 'Enable location services', isArabic),
-          _buildQuickStartStep('3', isArabic ? 'المطالبة بأول زيارة ميدانية' : 'Claim your first site visit', isArabic),
-          _buildQuickStartStep('4', isArabic ? 'إكمال وتقديم تقريرك' : 'Complete and submit your report', isArabic),
+          _buildQuickStartStep(
+            '1',
+            isArabic ? 'تسجيل الدخول بحسابك' : 'Login with your account',
+            isArabic,
+          ),
+          _buildQuickStartStep(
+            '2',
+            isArabic ? 'تفعيل خدمات الموقع' : 'Enable location services',
+            isArabic,
+          ),
+          _buildQuickStartStep(
+            '3',
+            isArabic
+                ? 'المطالبة بأول زيارة ميدانية'
+                : 'Claim your first site visit',
+            isArabic,
+          ),
+          _buildQuickStartStep(
+            '4',
+            isArabic
+                ? 'إكمال وتقديم تقريرك'
+                : 'Complete and submit your report',
+            isArabic,
+          ),
         ],
       ),
     );
@@ -537,10 +582,7 @@ class _HelpSupportScreenState extends State<HelpSupportScreen>
       tilePadding: EdgeInsets.zero,
       title: Text(
         error.getError(_currentLocale),
-        style: GoogleFonts.poppins(
-          fontWeight: FontWeight.w600,
-          fontSize: 14,
-        ),
+        style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 14),
       ),
       children: [
         Padding(
@@ -550,7 +592,10 @@ class _HelpSupportScreenState extends State<HelpSupportScreen>
             children: [
               Text(
                 error.getMeaning(_currentLocale),
-                style: GoogleFonts.poppins(fontSize: 13, color: Colors.grey[700]),
+                style: GoogleFonts.poppins(
+                  fontSize: 13,
+                  color: Colors.grey[700],
+                ),
               ),
               const SizedBox(height: 8),
               Container(
@@ -562,7 +607,11 @@ class _HelpSupportScreenState extends State<HelpSupportScreen>
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Icon(Icons.lightbulb_outline, color: Colors.green.shade700, size: 18),
+                    Icon(
+                      Icons.lightbulb_outline,
+                      color: Colors.green.shade700,
+                      size: 18,
+                    ),
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
@@ -731,9 +780,13 @@ class _HelpSupportScreenState extends State<HelpSupportScreen>
           else if (_supportContacts.isEmpty)
             _buildDefaultContacts(isArabic)
           else
-            ..._supportContacts.map((contact) => _buildContactCard(contact, isArabic)),
+            ..._supportContacts.map(
+              (contact) => _buildContactCard(contact, isArabic),
+            ),
           const SizedBox(height: 24),
           _buildReportBugCard(isArabic),
+          const SizedBox(height: 16),
+          _buildNotificationTestCard(isArabic),
         ],
       ),
     );
@@ -763,7 +816,9 @@ class _HelpSupportScreenState extends State<HelpSupportScreen>
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
               ),
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(16),
+              ),
             ),
             child: Row(
               children: [
@@ -773,7 +828,11 @@ class _HelpSupportScreenState extends State<HelpSupportScreen>
                     color: Colors.white.withOpacity(0.2),
                     borderRadius: BorderRadius.circular(10),
                   ),
-                  child: const Icon(Icons.groups, color: Colors.white, size: 24),
+                  child: const Icon(
+                    Icons.groups,
+                    color: Colors.white,
+                    size: 24,
+                  ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -781,7 +840,9 @@ class _HelpSupportScreenState extends State<HelpSupportScreen>
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        isArabic ? 'دعم العمليات الميدانية' : 'Field Operations Support',
+                        isArabic
+                            ? 'دعم العمليات الميدانية'
+                            : 'Field Operations Support',
                         style: GoogleFonts.poppins(
                           color: Colors.white,
                           fontWeight: FontWeight.bold,
@@ -789,7 +850,9 @@ class _HelpSupportScreenState extends State<HelpSupportScreen>
                         ),
                       ),
                       Text(
-                        isArabic ? 'المشرفين والمنسقين في منطقتك' : 'Supervisors & coordinators in your area',
+                        isArabic
+                            ? 'المشرفين والمنسقين في منطقتك'
+                            : 'Supervisors & coordinators in your area',
                         style: GoogleFonts.poppins(
                           color: Colors.white.withOpacity(0.9),
                           fontSize: 12,
@@ -806,12 +869,14 @@ class _HelpSupportScreenState extends State<HelpSupportScreen>
             child: _loadingFieldSupervisors
                 ? const Center(child: CircularProgressIndicator())
                 : _fieldSupervisors.isEmpty
-                    ? _buildNoFieldSupervisorsMessage(isArabic)
-                    : Column(
-                        children: _fieldSupervisors
-                            .map((user) => _buildFieldSupportUserCard(user, isArabic))
-                            .toList(),
-                      ),
+                ? _buildNoFieldSupervisorsMessage(isArabic)
+                : Column(
+                    children: _fieldSupervisors
+                        .map(
+                          (user) => _buildFieldSupportUserCard(user, isArabic),
+                        )
+                        .toList(),
+                  ),
           ),
         ],
       ),
@@ -842,7 +907,8 @@ class _HelpSupportScreenState extends State<HelpSupportScreen>
   }
 
   Widget _buildFieldSupportUserCard(Map<String, dynamic> user, bool isArabic) {
-    final isOnline = user['availability'] == 'online' || user['availability'] == 'available';
+    final isOnline =
+        user['availability'] == 'online' || user['availability'] == 'available';
     final avatarUrl = user['avatar_url'] as String?;
     final fullName = user['full_name'] as String? ?? 'Unknown';
     final role = user['role'] as String? ?? '';
@@ -865,7 +931,9 @@ class _HelpSupportScreenState extends State<HelpSupportScreen>
               CircleAvatar(
                 radius: 24,
                 backgroundColor: Colors.orange.shade100,
-                backgroundImage: avatarUrl != null ? NetworkImage(avatarUrl) : null,
+                backgroundImage: avatarUrl != null
+                    ? NetworkImage(avatarUrl)
+                    : null,
                 child: avatarUrl == null
                     ? Text(
                         fullName.isNotEmpty ? fullName[0].toUpperCase() : '?',
@@ -923,7 +991,11 @@ class _HelpSupportScreenState extends State<HelpSupportScreen>
                 color: AppColors.primaryGreen.withOpacity(0.1),
                 borderRadius: BorderRadius.circular(8),
               ),
-              child: Icon(Icons.video_call, color: AppColors.primaryGreen, size: 18),
+              child: Icon(
+                Icons.video_call,
+                color: AppColors.primaryGreen,
+                size: 18,
+              ),
             ),
             tooltip: isArabic ? 'مكالمة داخلية' : 'In-app Call',
           ),
@@ -966,7 +1038,9 @@ class _HelpSupportScreenState extends State<HelpSupportScreen>
       case 'coordinator':
         return isArabic ? 'منسق' : 'Coordinator';
       case 'fom':
-        return isArabic ? 'مدير العمليات الميدانية' : 'Field Operations Manager';
+        return isArabic
+            ? 'مدير العمليات الميدانية'
+            : 'Field Operations Manager';
       case 'projectmanager':
         return isArabic ? 'مدير المشروع' : 'Project Manager';
       case 'admin':
@@ -977,13 +1051,15 @@ class _HelpSupportScreenState extends State<HelpSupportScreen>
   }
 
   Future<void> _initiateInAppCall(String userId, String userName) async {
-    final webRtcService = WebRTCService();
+    final agoraService = AgoraCallService();
     final currentUser = Supabase.instance.client.auth.currentUser;
-    
+
     if (currentUser == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(_currentLocale == 'ar' ? 'يجب تسجيل الدخول' : 'Please login first'),
+          content: Text(
+            _currentLocale == 'ar' ? 'يجب تسجيل الدخول' : 'Please login first',
+          ),
           backgroundColor: Colors.red,
         ),
       );
@@ -991,41 +1067,60 @@ class _HelpSupportScreenState extends State<HelpSupportScreen>
     }
 
     try {
-      // Initialize WebRTC service if not already initialized
-      if (!webRtcService.isInitialized) {
-        final supabase = Supabase.instance.client;
-        final profileResponse = await supabase
-            .from('profiles')
-            .select('id, full_name, avatar_url')
-            .eq('id', currentUser.id)
-            .maybeSingle();
-        
-        final callerName = profileResponse?['full_name'] as String? ?? 'User';
-        final callerAvatar = profileResponse?['avatar_url'] as String?;
-        
-        await webRtcService.initialize(
-          currentUser.id,
-          callerName,
-          userAvatar: callerAvatar,
-        );
+      if (!agoraService.isReady) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                _currentLocale == 'ar'
+                    ? 'خدمة المكالمات غير جاهزة'
+                    : 'Call service not ready. Try again.',
+              ),
+              backgroundColor: Colors.orange,
+            ),
+          );
+        }
+        return;
       }
-      
-      final success = await webRtcService.initiateCall(userId, userName, isAudioOnly: false);
-      
-      if (success && mounted) {
-        // Navigate to the call screen
+
+      if (agoraService.isInCall) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('You are already in a call'),
+              backgroundColor: Colors.orange,
+            ),
+          );
+        }
+        return;
+      }
+
+      final result = await agoraService.startCall(
+        remoteUserId: userId,
+        remoteUserName: userName,
+        audioOnly: false,
+      );
+
+      if (result.success && result.channelName != null && mounted) {
         Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (context) => CallScreen(
+            builder: (context) => AgoraCallScreen(
+              channelName: result.channelName!,
+              remoteUserId: userId,
               remoteUserName: userName,
+              isAudioOnly: false,
+              isOutgoing: true,
             ),
           ),
         );
       } else if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(_currentLocale == 'ar' ? 'فشل بدء المكالمة' : 'Failed to start call'),
+            content: Text(
+              result.error ??
+                  (_currentLocale == 'ar' ? 'فشل بدء المكالمة' : 'Failed to start call'),
+            ),
             backgroundColor: Colors.red,
           ),
         );
@@ -1033,7 +1128,9 @@ class _HelpSupportScreenState extends State<HelpSupportScreen>
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(_currentLocale == 'ar' ? 'فشل الاتصال: $e' : 'Call failed: $e'),
+          content: Text(
+            _currentLocale == 'ar' ? 'فشل الاتصال: $e' : 'Call failed: $e',
+          ),
           backgroundColor: Colors.red,
         ),
       );
@@ -1044,17 +1141,15 @@ class _HelpSupportScreenState extends State<HelpSupportScreen>
     // Navigate to communications screen to send message
     Navigator.push(
       context,
-      MaterialPageRoute(
-        builder: (context) => const CommunicationsScreen(),
-      ),
+      MaterialPageRoute(builder: (context) => const CommunicationsScreen()),
     );
-    
+
     // Show hint about who to message
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
-          _currentLocale == 'ar' 
-              ? 'ابحث عن $userName لإرسال رسالة' 
+          _currentLocale == 'ar'
+              ? 'ابحث عن $userName لإرسال رسالة'
               : 'Search for $userName to send a message',
         ),
         backgroundColor: AppColors.primaryBlue,
@@ -1083,11 +1178,16 @@ class _HelpSupportScreenState extends State<HelpSupportScreen>
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
               gradient: LinearGradient(
-                colors: [AppColors.primaryBlue, AppColors.primaryBlue.withOpacity(0.8)],
+                colors: [
+                  AppColors.primaryBlue,
+                  AppColors.primaryBlue.withOpacity(0.8),
+                ],
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
               ),
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(16),
+              ),
             ),
             child: Row(
               children: [
@@ -1097,7 +1197,11 @@ class _HelpSupportScreenState extends State<HelpSupportScreen>
                     color: Colors.white.withOpacity(0.2),
                     borderRadius: BorderRadius.circular(10),
                   ),
-                  child: const Icon(Icons.headset_mic, color: Colors.white, size: 24),
+                  child: const Icon(
+                    Icons.headset_mic,
+                    color: Colors.white,
+                    size: 24,
+                  ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -1105,7 +1209,9 @@ class _HelpSupportScreenState extends State<HelpSupportScreen>
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        isArabic ? 'فريق الدعم التقني والإداري' : 'ICT & Admin Support Team',
+                        isArabic
+                            ? 'فريق الدعم التقني والإداري'
+                            : 'ICT & Admin Support Team',
                         style: GoogleFonts.poppins(
                           color: Colors.white,
                           fontWeight: FontWeight.bold,
@@ -1113,7 +1219,9 @@ class _HelpSupportScreenState extends State<HelpSupportScreen>
                         ),
                       ),
                       Text(
-                        isArabic ? 'للمشاكل التقنية والإدارية' : 'For technical and administrative issues',
+                        isArabic
+                            ? 'للمشاكل التقنية والإدارية'
+                            : 'For technical and administrative issues',
                         style: GoogleFonts.poppins(
                           color: Colors.white.withOpacity(0.9),
                           fontSize: 12,
@@ -1130,12 +1238,12 @@ class _HelpSupportScreenState extends State<HelpSupportScreen>
             child: _loadingIctUsers
                 ? const Center(child: CircularProgressIndicator())
                 : _ictAdminUsers.isEmpty
-                    ? _buildNoIctUsersMessage(isArabic)
-                    : Column(
-                        children: _ictAdminUsers
-                            .map((user) => _buildIctSupportUserCard(user, isArabic))
-                            .toList(),
-                      ),
+                ? _buildNoIctUsersMessage(isArabic)
+                : Column(
+                    children: _ictAdminUsers
+                        .map((user) => _buildIctSupportUserCard(user, isArabic))
+                        .toList(),
+                  ),
           ),
         ],
       ),
@@ -1166,7 +1274,8 @@ class _HelpSupportScreenState extends State<HelpSupportScreen>
   }
 
   Widget _buildIctSupportUserCard(Map<String, dynamic> user, bool isArabic) {
-    final isOnline = user['availability'] == 'online' || user['availability'] == 'available';
+    final isOnline =
+        user['availability'] == 'online' || user['availability'] == 'available';
     final avatarUrl = user['avatar_url'] as String?;
     final fullName = user['full_name'] as String? ?? 'Unknown';
     final role = user['role'] as String? ?? '';
@@ -1192,10 +1301,14 @@ class _HelpSupportScreenState extends State<HelpSupportScreen>
                   CircleAvatar(
                     radius: 24,
                     backgroundColor: AppColors.primaryBlue.withOpacity(0.1),
-                    backgroundImage: avatarUrl != null ? NetworkImage(avatarUrl) : null,
+                    backgroundImage: avatarUrl != null
+                        ? NetworkImage(avatarUrl)
+                        : null,
                     child: avatarUrl == null
                         ? Text(
-                            fullName.isNotEmpty ? fullName[0].toUpperCase() : '?',
+                            fullName.isNotEmpty
+                                ? fullName[0].toUpperCase()
+                                : '?',
                             style: GoogleFonts.poppins(
                               color: AppColors.primaryBlue,
                               fontWeight: FontWeight.bold,
@@ -1283,7 +1396,7 @@ class _HelpSupportScreenState extends State<HelpSupportScreen>
       ),
     );
   }
-  
+
   Widget _buildCompactActionButton({
     required IconData icon,
     required Color color,
@@ -1323,7 +1436,10 @@ class _HelpSupportScreenState extends State<HelpSupportScreen>
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         gradient: LinearGradient(
-          colors: [AppColors.primaryBlue, AppColors.primaryBlue.withOpacity(0.8)],
+          colors: [
+            AppColors.primaryBlue,
+            AppColors.primaryBlue.withOpacity(0.8),
+          ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
@@ -1354,13 +1470,18 @@ class _HelpSupportScreenState extends State<HelpSupportScreen>
                 ),
                 const SizedBox(height: 4),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 6,
+                  ),
                   decoration: BoxDecoration(
                     color: Colors.white.withOpacity(0.2),
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: Text(
-                    isArabic ? '24/7 - متاح على مدار الساعة' : '24/7 - Available Around the Clock',
+                    isArabic
+                        ? '24/7 - متاح على مدار الساعة'
+                        : '24/7 - Available Around the Clock',
                     style: GoogleFonts.poppins(
                       color: Colors.white,
                       fontWeight: FontWeight.w600,
@@ -1370,7 +1491,9 @@ class _HelpSupportScreenState extends State<HelpSupportScreen>
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  isArabic ? 'نحن هنا لمساعدتك في أي وقت' : 'We are here to help you anytime',
+                  isArabic
+                      ? 'نحن هنا لمساعدتك في أي وقت'
+                      : 'We are here to help you anytime',
                   style: GoogleFonts.poppins(
                     color: Colors.white.withOpacity(0.9),
                     fontSize: 12,
@@ -1406,7 +1529,11 @@ class _HelpSupportScreenState extends State<HelpSupportScreen>
                     color: Colors.white.withOpacity(0.2),
                     borderRadius: BorderRadius.circular(12),
                   ),
-                  child: const Icon(Icons.emergency, color: Colors.white, size: 28),
+                  child: const Icon(
+                    Icons.emergency,
+                    color: Colors.white,
+                    size: 28,
+                  ),
                 ),
                 const SizedBox(width: 16),
                 Expanded(
@@ -1422,7 +1549,9 @@ class _HelpSupportScreenState extends State<HelpSupportScreen>
                         ),
                       ),
                       Text(
-                        isArabic ? 'للمشاكل العاجلة في الميدان' : 'For urgent field issues',
+                        isArabic
+                            ? 'للمشاكل العاجلة في الميدان'
+                            : 'For urgent field issues',
                         style: GoogleFonts.poppins(
                           color: Colors.white.withOpacity(0.9),
                           fontSize: 12,
@@ -1526,7 +1655,7 @@ class _HelpSupportScreenState extends State<HelpSupportScreen>
     if (_selectedRecipientId == null) return;
 
     List<String> emails = [];
-    
+
     if (_selectedRecipientId == 'all') {
       emails = _ictAdminUsers
           .where((u) => u['email'] != null)
@@ -1545,14 +1674,20 @@ class _HelpSupportScreenState extends State<HelpSupportScreen>
     if (emails.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(isArabic ? 'لم يتم العثور على بريد إلكتروني' : 'No email address found'),
+          content: Text(
+            isArabic
+                ? 'لم يتم العثور على بريد إلكتروني'
+                : 'No email address found',
+          ),
           backgroundColor: Colors.red,
         ),
       );
       return;
     }
 
-    final uri = Uri.parse('mailto:${emails.join(',')}?subject=${Uri.encodeComponent(isArabic ? 'طلب دعم' : 'Support Request')}');
+    final uri = Uri.parse(
+      'mailto:${emails.join(',')}?subject=${Uri.encodeComponent(isArabic ? 'طلب دعم' : 'Support Request')}',
+    );
     if (await canLaunchUrl(uri)) {
       await launchUrl(uri);
     }
@@ -1563,16 +1698,19 @@ class _HelpSupportScreenState extends State<HelpSupportScreen>
       (u) => u['id'] == userId,
       orElse: () => {},
     );
-    
+
     if (user.isEmpty) return;
 
-    final webRtcService = WebRTCService();
+    final agoraService = AgoraCallService();
     final currentUser = Supabase.instance.client.auth.currentUser;
-    
+    final userName = user['full_name'] ?? 'Support';
+
     if (currentUser == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(_currentLocale == 'ar' ? 'يجب تسجيل الدخول' : 'Please login first'),
+          content: Text(
+            _currentLocale == 'ar' ? 'يجب تسجيل الدخول' : 'Please login first',
+          ),
           backgroundColor: Colors.red,
         ),
       );
@@ -1580,22 +1718,41 @@ class _HelpSupportScreenState extends State<HelpSupportScreen>
     }
 
     try {
-      await webRtcService.initiateCall(
-        userId,
-        user['full_name'] ?? 'Support',
-        isAudioOnly: true,
+      final result = await agoraService.startCall(
+        remoteUserId: userId,
+        remoteUserName: userName,
+        audioOnly: true,
       );
-      
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(_currentLocale == 'ar' ? 'جاري الاتصال...' : 'Calling...'),
-          backgroundColor: AppColors.primaryGreen,
-        ),
-      );
+
+      if (result.success && result.channelName != null && mounted) {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => AgoraCallScreen(
+              channelName: result.channelName!,
+              remoteUserId: userId,
+              remoteUserName: userName,
+              isAudioOnly: true,
+              isOutgoing: true,
+            ),
+          ),
+        );
+      } else if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              result.error ?? (_currentLocale == 'ar' ? 'فشل الاتصال' : 'Call failed'),
+            ),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(_currentLocale == 'ar' ? 'فشل الاتصال: $e' : 'Call failed: $e'),
+          content: Text(
+            _currentLocale == 'ar' ? 'فشل الاتصال: $e' : 'Call failed: $e',
+          ),
           backgroundColor: Colors.red,
         ),
       );
@@ -1618,7 +1775,7 @@ class _HelpSupportScreenState extends State<HelpSupportScreen>
         return;
       }
     }
-    
+
     if (_ictAdminUsers.isNotEmpty) {
       final firstAdmin = _ictAdminUsers.firstWhere(
         (u) => u['phone'] != null,
@@ -1629,7 +1786,7 @@ class _HelpSupportScreenState extends State<HelpSupportScreen>
         return;
       }
     }
-    
+
     if (_supportContacts.isNotEmpty) {
       final emergencyContact = _supportContacts.firstWhere(
         (c) => c.phone != null,
@@ -1662,14 +1819,16 @@ class _HelpSupportScreenState extends State<HelpSupportScreen>
     if (_fieldSupervisors.isNotEmpty) {
       // Find first online supervisor, or fallback to first supervisor
       final onlineSupervisor = _fieldSupervisors.firstWhere(
-        (u) => u['availability'] == 'online' || u['availability'] == 'available',
+        (u) =>
+            u['availability'] == 'online' || u['availability'] == 'available',
         orElse: () => _fieldSupervisors.first,
       );
       userId = onlineSupervisor['id'] as String?;
       userName = onlineSupervisor['full_name'] as String? ?? 'Supervisor';
     } else if (_ictAdminUsers.isNotEmpty) {
       final onlineAdmin = _ictAdminUsers.firstWhere(
-        (u) => u['availability'] == 'online' || u['availability'] == 'available',
+        (u) =>
+            u['availability'] == 'online' || u['availability'] == 'available',
         orElse: () => _ictAdminUsers.first,
       );
       userId = onlineAdmin['id'] as String?;
@@ -1706,9 +1865,7 @@ class _HelpSupportScreenState extends State<HelpSupportScreen>
       // Just navigate to communications
       Navigator.push(
         context,
-        MaterialPageRoute(
-          builder: (context) => const CommunicationsScreen(),
-        ),
+        MaterialPageRoute(builder: (context) => const CommunicationsScreen()),
       );
     }
   }
@@ -1800,7 +1957,11 @@ class _HelpSupportScreenState extends State<HelpSupportScreen>
                     color: AppColors.primaryGreen.withOpacity(0.1),
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: Icon(Icons.phone, color: AppColors.primaryGreen, size: 20),
+                  child: Icon(
+                    Icons.phone,
+                    color: AppColors.primaryGreen,
+                    size: 20,
+                  ),
                 ),
               ),
             if (contact.email != null)
@@ -1812,7 +1973,11 @@ class _HelpSupportScreenState extends State<HelpSupportScreen>
                     color: AppColors.primaryBlue.withOpacity(0.1),
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: Icon(Icons.email, color: AppColors.primaryBlue, size: 20),
+                  child: Icon(
+                    Icons.email,
+                    color: AppColors.primaryBlue,
+                    size: 20,
+                  ),
                 ),
               ),
             if (contact.whatsapp != null)
@@ -1859,6 +2024,42 @@ class _HelpSupportScreenState extends State<HelpSupportScreen>
     );
   }
 
+  Widget _buildNotificationTestCard(bool isArabic) {
+    return Card(
+      color: Colors.purple.shade50,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: ListTile(
+        leading: Container(
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+            color: Colors.purple.withOpacity(0.2),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: const Icon(Icons.notifications_active, color: Colors.purple),
+        ),
+        title: Text(
+          isArabic ? '🧪 اختبار الإشعارات' : '🧪 Test Notifications',
+          style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
+        ),
+        subtitle: Text(
+          isArabic
+              ? '[للاختبار فقط] اختبار الإشعارات ثنائية اللغة'
+              : '[TESTING ONLY] Test bilingual notifications',
+          style: GoogleFonts.poppins(fontSize: 12),
+        ),
+        trailing: const Icon(Icons.chevron_right),
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => NotificationTestScreen(),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
   Widget _buildCategoryContent(
     HelpCategory category,
     bool isArabic,
@@ -1879,7 +2080,9 @@ class _HelpSupportScreenState extends State<HelpSupportScreen>
               ),
             ),
             const SizedBox(height: 12),
-            ...category.articles.map((article) => _buildArticleCard(article, isArabic)),
+            ...category.articles.map(
+              (article) => _buildArticleCard(article, isArabic),
+            ),
           ],
         ],
       ),
@@ -1893,7 +2096,11 @@ class _HelpSupportScreenState extends State<HelpSupportScreen>
       child: ListTile(
         leading: CircleAvatar(
           backgroundColor: AppColors.primaryBlue.withOpacity(0.1),
-          child: Icon(Icons.article_outlined, color: AppColors.primaryBlue, size: 20),
+          child: Icon(
+            Icons.article_outlined,
+            color: AppColors.primaryBlue,
+            size: 20,
+          ),
         ),
         title: Text(
           article.getTitle(_currentLocale),
@@ -1919,7 +2126,9 @@ class _HelpSupportScreenState extends State<HelpSupportScreen>
         expand: false,
         builder: (context, scrollController) {
           return Directionality(
-            textDirection: isArabic ? ui.TextDirection.rtl : ui.TextDirection.ltr,
+            textDirection: isArabic
+                ? ui.TextDirection.rtl
+                : ui.TextDirection.ltr,
             child: Padding(
               padding: const EdgeInsets.all(20),
               child: Column(
@@ -1975,7 +2184,8 @@ class _HelpSupportScreenState extends State<HelpSupportScreen>
                                   const SizedBox(width: 12),
                                   Expanded(
                                     child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
                                       children: [
                                         Text(
                                           isArabic ? 'الحل' : 'Solution',
@@ -1987,7 +2197,9 @@ class _HelpSupportScreenState extends State<HelpSupportScreen>
                                         const SizedBox(height: 4),
                                         Text(
                                           article.getSolution(_currentLocale)!,
-                                          style: GoogleFonts.poppins(fontSize: 13),
+                                          style: GoogleFonts.poppins(
+                                            fontSize: 13,
+                                          ),
                                         ),
                                       ],
                                     ),
@@ -2026,9 +2238,7 @@ class _HelpSupportScreenState extends State<HelpSupportScreen>
                   controller: stepsController,
                   maxLines: 5,
                   decoration: InputDecoration(
-                    labelText: isArabic
-                        ? 'صف المشكلة'
-                        : 'Describe the problem',
+                    labelText: isArabic ? 'صف المشكلة' : 'Describe the problem',
                     hintText: isArabic
                         ? 'ما الذي حدث؟ ما الخطوات التي أدت للمشكلة؟'
                         : 'What happened? What steps led to the problem?',

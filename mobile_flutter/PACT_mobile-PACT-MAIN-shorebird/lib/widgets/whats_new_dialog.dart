@@ -13,7 +13,8 @@ class WhatsNewDialog extends StatelessWidget {
     super.key,
     required ChangelogEntry changelog,
     required VoidCallback onDismiss,
-  }) : _changelog = changelog, _onDismiss = onDismiss;
+  })  : _changelog = changelog,
+        _onDismiss = onDismiss;
 
   static Future<void> showIfNeeded(BuildContext context) async {
     final changelogService = ChangelogService();
@@ -22,7 +23,7 @@ class WhatsNewDialog extends StatelessWidget {
     final hasNew = await changelogService.hasNewVersion();
     if (hasNew && context.mounted) {
       final changelog = changelogService.getCurrentChangelog();
-      
+
       await showDialog(
         context: context,
         barrierDismissible: false,
@@ -110,9 +111,9 @@ class WhatsNewDialog extends StatelessWidget {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
+      decoration: const BoxDecoration(
         gradient: AppColors.primaryGradient,
-        borderRadius: const BorderRadius.only(
+        borderRadius: BorderRadius.only(
           topLeft: Radius.circular(20),
           topRight: Radius.circular(20),
         ),
@@ -193,33 +194,33 @@ class WhatsNewDialog extends StatelessWidget {
         ),
         const SizedBox(height: 10),
         ...items.map((item) => Padding(
-          padding: const EdgeInsets.only(left: 8, bottom: 8),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                margin: const EdgeInsets.only(top: 6),
-                width: 6,
-                height: 6,
-                decoration: BoxDecoration(
-                  color: color,
-                  shape: BoxShape.circle,
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  item,
-                  style: GoogleFonts.poppins(
-                    fontSize: 14,
-                    color: Colors.grey.shade700,
-                    height: 1.4,
+              padding: const EdgeInsets.only(left: 8, bottom: 8),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    margin: const EdgeInsets.only(top: 6),
+                    width: 6,
+                    height: 6,
+                    decoration: BoxDecoration(
+                      color: color,
+                      shape: BoxShape.circle,
+                    ),
                   ),
-                ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      item,
+                      style: GoogleFonts.poppins(
+                        fontSize: 14,
+                        color: Colors.grey.shade700,
+                        height: 1.4,
+                      ),
+                    ),
+                  ),
+                ],
               ),
-            ],
-          ),
-        )),
+            )),
       ],
     );
   }

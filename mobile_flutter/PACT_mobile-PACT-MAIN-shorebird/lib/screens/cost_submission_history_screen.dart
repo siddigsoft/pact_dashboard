@@ -10,10 +10,12 @@ class CostSubmissionHistoryScreen extends ConsumerStatefulWidget {
   const CostSubmissionHistoryScreen({super.key});
 
   @override
-  ConsumerState<CostSubmissionHistoryScreen> createState() => _CostSubmissionHistoryScreenState();
+  ConsumerState<CostSubmissionHistoryScreen> createState() =>
+      _CostSubmissionHistoryScreenState();
 }
 
-class _CostSubmissionHistoryScreenState extends ConsumerState<CostSubmissionHistoryScreen> {
+class _CostSubmissionHistoryScreenState
+    extends ConsumerState<CostSubmissionHistoryScreen> {
   @override
   Widget build(BuildContext context) {
     final submissionsAsync = ref.watch(filteredCostSubmissionsProvider);
@@ -54,7 +56,8 @@ class _CostSubmissionHistoryScreenState extends ConsumerState<CostSubmissionHist
                   Text('Error: $error'),
                   const SizedBox(height: 16),
                   ElevatedButton(
-                    onPressed: () => ref.invalidate(userCostSubmissionsProvider),
+                    onPressed: () =>
+                        ref.invalidate(userCostSubmissionsProvider),
                     child: const Text('Retry'),
                   ),
                 ],
@@ -83,7 +86,8 @@ class _CostSubmissionHistoryScreenState extends ConsumerState<CostSubmissionHist
                   label: 'All',
                   isSelected: selectedStatus == null,
                   onSelected: () {
-                    ref.read(selectedStatusFilterProvider.notifier).state = null;
+                    ref.read(selectedStatusFilterProvider.notifier).state =
+                        null;
                   },
                 ),
                 const SizedBox(width: 8),
@@ -131,55 +135,68 @@ class _CostSubmissionHistoryScreenState extends ConsumerState<CostSubmissionHist
           ),
           // Offline sync section
           hasOfflineSubmissionsAsync.when(
-            data: (hasOffline) => hasOffline ? Padding(
-              padding: const EdgeInsets.only(top: 8),
-              child: Row(
-                children: [
-                  const Icon(Icons.sync, size: 16, color: Colors.orange),
-                  const SizedBox(width: 8),
-                  const Text(
-                    'Offline submissions pending sync',
-                    style: TextStyle(color: Colors.orange, fontSize: 12),
-                  ),
-                  const Spacer(),
-                  syncStateAsync.when(
-                    data: (syncedCount) => syncedCount > 0 ? Text(
-                      '$syncedCount synced',
-                      style: const TextStyle(color: Colors.green, fontSize: 12),
-                    ) : const SizedBox.shrink(),
-                    loading: () => const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2),
+            data: (hasOffline) => hasOffline
+                ? Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.sync, size: 16, color: Colors.orange),
+                        const SizedBox(width: 8),
+                        const Text(
+                          'Offline submissions pending sync',
+                          style: TextStyle(color: Colors.orange, fontSize: 12),
+                        ),
+                        const Spacer(),
+                        syncStateAsync.when(
+                          data: (syncedCount) => syncedCount > 0
+                              ? Text(
+                                  '$syncedCount synced',
+                                  style: const TextStyle(
+                                      color: Colors.green, fontSize: 12),
+                                )
+                              : const SizedBox.shrink(),
+                          loading: () => const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          ),
+                          error: (error, stack) => const Text(
+                            'Sync failed',
+                            style: TextStyle(color: Colors.red, fontSize: 12),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        ElevatedButton.icon(
+                          onPressed: syncStateAsync.isLoading
+                              ? null
+                              : () async {
+                                  try {
+                                    await ref
+                                        .read(syncOfflineSubmissionsProvider
+                                            .notifier)
+                                        .syncOfflineSubmissions();
+                                  } catch (e) {
+                                    if (mounted) {
+                                      ScaffoldMessenger.of(context)
+                                          .showSnackBar(
+                                        SnackBar(
+                                            content: Text('Sync failed: $e')),
+                                      );
+                                    }
+                                  }
+                                },
+                          icon: const Icon(Icons.sync, size: 16),
+                          label: const Text('Sync Now'),
+                          style: ElevatedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 12, vertical: 6),
+                            textStyle: const TextStyle(fontSize: 12),
+                          ),
+                        ),
+                      ],
                     ),
-                    error: (error, stack) => Text(
-                      'Sync failed',
-                      style: const TextStyle(color: Colors.red, fontSize: 12),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  ElevatedButton.icon(
-                    onPressed: syncStateAsync.isLoading ? null : () async {
-                      try {
-                        await ref.read(syncOfflineSubmissionsProvider.notifier).syncOfflineSubmissions();
-                      } catch (e) {
-                        if (mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text('Sync failed: $e')),
-                          );
-                        }
-                      }
-                    },
-                    icon: const Icon(Icons.sync, size: 16),
-                    label: const Text('Sync Now'),
-                    style: ElevatedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                      textStyle: const TextStyle(fontSize: 12),
-                    ),
-                  ),
-                ],
-              ),
-            ) : const SizedBox.shrink(),
+                  )
+                : const SizedBox.shrink(),
             loading: () => const SizedBox.shrink(),
             error: (error, stack) => const SizedBox.shrink(),
           ),
@@ -207,7 +224,8 @@ class _CostSubmissionHistoryScreenState extends ConsumerState<CostSubmissionHist
     );
   }
 
-  Widget _buildSubmissionCard(CostSubmission submission, CostSubmissionService service) {
+  Widget _buildSubmissionCard(
+      CostSubmission submission, CostSubmissionService service) {
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
       elevation: 2,
@@ -299,7 +317,8 @@ class _CostSubmissionHistoryScreenState extends ConsumerState<CostSubmissionHist
                 children: [
                   if (submission.supportingDocuments.isNotEmpty)
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 4),
                       decoration: BoxDecoration(
                         color: Colors.blue[50],
                         borderRadius: BorderRadius.circular(4),
@@ -307,7 +326,8 @@ class _CostSubmissionHistoryScreenState extends ConsumerState<CostSubmissionHist
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(Icons.attach_file, size: 14, color: Colors.blue[700]),
+                          Icon(Icons.attach_file,
+                              size: 14, color: Colors.blue[700]),
                           const SizedBox(width: 4),
                           Text(
                             '${submission.supportingDocuments.length}',
@@ -331,7 +351,8 @@ class _CostSubmissionHistoryScreenState extends ConsumerState<CostSubmissionHist
     );
   }
 
-  Widget _buildStatusBadge(CostSubmissionStatus status, CostSubmissionService service) {
+  Widget _buildStatusBadge(
+      CostSubmissionStatus status, CostSubmissionService service) {
     Color color;
     switch (status) {
       case CostSubmissionStatus.pending:

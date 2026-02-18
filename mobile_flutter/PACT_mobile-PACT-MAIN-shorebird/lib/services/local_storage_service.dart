@@ -3,6 +3,7 @@ import '../models/task.dart';
 import '../models/equipment.dart';
 import '../models/incident_report.dart';
 import '../models/safety_checklist.dart';
+import '../models/safety_report.dart';
 import '../models/user_profile.dart';
 
 class LocalStorageService {
@@ -155,25 +156,56 @@ class LocalStorageService {
   // Bulk operations for sync
   Future<void> saveMultipleTasks(List<Task> tasks) async {
     final box = Hive.box(tasksBox);
-    final Map<String, Map<String, dynamic>> taskMap = {for (var task in tasks) task.id: task.toJson()};
+    final Map<String, Map<String, dynamic>> taskMap = {
+      for (var task in tasks) task.id: task.toJson(),
+    };
     await box.putAll(taskMap);
   }
 
   Future<void> saveMultipleEquipments(List<Equipment> equipments) async {
     final box = Hive.box(equipmentsBox);
-    final Map<String, Map<String, dynamic>> equipmentMap = {for (var eq in equipments) eq.id: eq.toJson()};
+    final Map<String, Map<String, dynamic>> equipmentMap = {
+      for (var eq in equipments) eq.id: eq.toJson(),
+    };
     await box.putAll(equipmentMap);
   }
 
   Future<void> saveMultipleIncidentReports(List<IncidentReport> reports) async {
     final box = Hive.box(incidentReportsBox);
-    final Map<String, Map<String, dynamic>> reportMap = {for (var report in reports) report.id: report.toJson()};
+    final Map<String, Map<String, dynamic>> reportMap = {
+      for (var report in reports) report.id: report.toJson(),
+    };
     await box.putAll(reportMap);
   }
 
-  Future<void> saveMultipleSafetyChecklists(List<SafetyChecklist> checklists) async {
+  Future<void> saveMultipleSafetyChecklists(
+    List<SafetyChecklist> checklists,
+  ) async {
     final box = Hive.box(safetyChecklistsBox);
-    final Map<String, Map<String, dynamic>> checklistMap = {for (var checklist in checklists) checklist.id: checklist.toJson()};
+    final Map<String, Map<String, dynamic>> checklistMap = {
+      for (var checklist in checklists) checklist.id: checklist.toJson(),
+    };
     await box.putAll(checklistMap);
+  }
+
+  // Safety Reports CRUD (compat for tests)
+  Future<void> saveSafetyReport(SafetyReport report) async {
+    final box = Hive.box('safetyReports');
+    await box.put(report.id, report.toJson());
+  }
+
+  SafetyReport? getSafetyReport(String id) {
+    final box = Hive.box('safetyReports');
+    final json = box.get(id);
+    return json != null
+        ? SafetyReport.fromJson(Map<String, dynamic>.from(json))
+        : null;
+  }
+
+  List<SafetyReport> getAllSafetyReports() {
+    final box = Hive.box('safetyReports');
+    return box.values
+        .map((json) => SafetyReport.fromJson(Map<String, dynamic>.from(json)))
+        .toList();
   }
 }

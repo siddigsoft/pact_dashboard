@@ -1,6 +1,7 @@
 // lib/algorithms/site_visit_assignment.dart
 
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:geolocator/geolocator.dart';
 import '../models/site_visit.dart';
 import '../algorithms/distance_helper.dart';
@@ -8,7 +9,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 class SiteVisitAssignmentService {
   final SupabaseClient _supabase;
-  final StreamController<List<SiteVisit>> _nearbyVisitsController = 
+  final StreamController<List<SiteVisit>> _nearbyVisitsController =
       StreamController<List<SiteVisit>>.broadcast();
 
   Stream<List<SiteVisit>> get nearbyVisits => _nearbyVisitsController.stream;
@@ -73,14 +74,10 @@ class SiteVisitAssignmentService {
           'p_site_id': siteVisitId,
           'p_user_id': userId,
         },
-      ).execute();
+      );
 
-      if (response.error != null) {
-        throw response.error!;
-      }
-
-      final result = response.data as Map<String, dynamic>;
-      return result['success'] as bool;
+      final result = response as Map<String, dynamic>;
+      return result['success'] as bool? ?? false;
     } catch (e) {
       debugPrint('Error assigning site visit: $e');
       return false;
@@ -88,21 +85,15 @@ class SiteVisitAssignmentService {
   }
 
   /// Get all MMPs associated with a site visit
-  Future<List<MMPFile>> getSiteVisitMMPs(String siteVisitId) async {
+  Future<List<Map<String, dynamic>>> getSiteVisitMMPs(
+      String siteVisitId) async {
     try {
       final response = await _supabase
           .from('mmp_files')
           .select()
-          .eq('site_visit_id', siteVisitId)
-          .execute();
+          .eq('site_visit_id', siteVisitId);
 
-      if (response.error != null) {
-        throw response.error!;
-      }
-
-      return (response.data as List)
-          .map((json) => MMPFile.fromJson(json))
-          .toList();
+      return (response as List?)?.cast<Map<String, dynamic>>() ?? [];
     } catch (e) {
       debugPrint('Error fetching MMPs: $e');
       return [];

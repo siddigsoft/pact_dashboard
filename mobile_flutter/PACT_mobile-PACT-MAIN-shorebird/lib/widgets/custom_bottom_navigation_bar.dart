@@ -4,17 +4,17 @@ import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../theme/app_colors.dart';
-import '../l10n/app_localizations.dart';
+import 'package:pact_mobile/l10n/app_localizations.dart';
 
 /// A reusable bottom navigation bar widget for the app.
-/// 
+///
 /// Features:
 /// - Animated indicator for the selected tab
 /// - Responsive design based on screen size
 /// - Support for coordinator role with additional "Verify" tab
 /// - Custom colors per tab
 /// - Smooth animations and transitions
-/// 
+///
 /// Example usage:
 /// ```dart
 /// CustomBottomNavigationBar(
@@ -28,10 +28,10 @@ import '../l10n/app_localizations.dart';
 class CustomBottomNavigationBar extends StatelessWidget {
   /// The currently selected tab index
   final int currentIndex;
-  
+
   /// Callback when a tab is tapped
   final Function(int) onTap;
-  
+
   /// Whether the user is a coordinator (shows extra "Verify" tab)
   final bool isCoordinator;
 
@@ -76,7 +76,9 @@ class CustomBottomNavigationBar extends StatelessWidget {
           AnimatedPositioned(
             duration: const Duration(milliseconds: 300),
             curve: Curves.easeInOut,
-            left: (screenWidth / itemCount) * currentIndex + (screenWidth / (itemCount * 2)) - 24,
+            left: (screenWidth / itemCount) * currentIndex +
+                (screenWidth / (itemCount * 2)) -
+                24,
             top: 8,
             child: Container(
               width: 48,
@@ -110,7 +112,7 @@ class CustomBottomNavigationBar extends StatelessWidget {
       ),
     );
   }
-  
+
   /// Builds the list of navigation items based on user role
   List<Widget> _buildNavItems(BuildContext context) {
     final items = <Widget>[
@@ -121,12 +123,12 @@ class CustomBottomNavigationBar extends StatelessWidget {
       // Wallet
       _buildNavItem(2, 'Wallet', Icons.wallet_giftcard),
     ];
-    
+
     // Commented out items - keeping for future use
     // _buildNavItem(1, 'Reports', Icons.bar_chart_outlined),
     // _buildNavItem(2, AppLocalizations.of(context)!.safety, Icons.shield_outlined),
     // _buildNavItem(3, AppLocalizations.of(context)!.chat, Icons.chat_bubble_outline),
-    
+
     // Add verification tab for coordinators (commented out)
     // if (isCoordinator) {
     //   items.add(_buildNavItem(5, 'Verify', Icons.verified_user_outlined));
@@ -135,7 +137,7 @@ class CustomBottomNavigationBar extends StatelessWidget {
     if (isCoordinator) {
       items.add(_buildNavItem(3, 'Verify', Icons.verified_user_outlined));
     }
-    
+
     return items;
   }
 
@@ -168,7 +170,7 @@ class CustomBottomNavigationBar extends StatelessWidget {
     final isActive = currentIndex == index;
     final activeColor = _getActiveColor(index);
     // Width for 3 items
-    final itemWidth = 90.0;
+    const itemWidth = 90.0;
 
     return GestureDetector(
       onTap: () => onTap(index),
@@ -232,4 +234,3 @@ class CustomBottomNavigationBar extends StatelessWidget {
     );
   }
 }
-

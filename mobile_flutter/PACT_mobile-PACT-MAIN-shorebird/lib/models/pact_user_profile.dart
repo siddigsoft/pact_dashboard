@@ -70,9 +70,11 @@ class UserClassification {
       hasRetainer: json['has_retainer'] ?? false,
       retainerAmountCents: json['retainer_amount_cents'] ?? 0,
       retainerCurrency: json['retainer_currency'] ?? 'SDG',
-      effectiveFrom: DateTime.parse(json['effective_from'] ?? DateTime.now().toIso8601String()),
-      effectiveUntil: json['effective_until'] != null 
-          ? DateTime.parse(json['effective_until']) 
+      effectiveFrom: DateTime.parse(
+        json['effective_from'] ?? DateTime.now().toIso8601String(),
+      ),
+      effectiveUntil: json['effective_until'] != null
+          ? DateTime.parse(json['effective_until'])
           : null,
     );
   }
@@ -111,7 +113,11 @@ class UserLocation {
       latitude: (json['latitude'] ?? 0.0).toDouble(),
       longitude: (json['longitude'] ?? 0.0).toDouble(),
       accuracy: json['accuracy']?.toDouble(),
-      lastUpdated: DateTime.parse(json['last_updated'] ?? json['lastUpdated'] ?? DateTime.now().toIso8601String()),
+      lastUpdated: DateTime.parse(
+        json['last_updated'] ??
+            json['lastUpdated'] ??
+            DateTime.now().toIso8601String(),
+      ),
       isSharing: json['is_sharing'] ?? json['isSharing'] ?? false,
     );
   }
@@ -140,8 +146,11 @@ class UserPerformance {
   factory UserPerformance.fromJson(Map<String, dynamic> json) {
     return UserPerformance(
       rating: (json['rating'] ?? 0.0).toDouble(),
-      totalCompletedTasks: json['total_completed_tasks'] ?? json['totalCompletedTasks'] ?? 0,
-      onTimeCompletion: (json['on_time_completion'] ?? json['onTimeCompletion'] ?? 0.0).toDouble(),
+      totalCompletedTasks:
+          json['total_completed_tasks'] ?? json['totalCompletedTasks'] ?? 0,
+      onTimeCompletion:
+          (json['on_time_completion'] ?? json['onTimeCompletion'] ?? 0.0)
+              .toDouble(),
     );
   }
 
@@ -188,7 +197,7 @@ bool _isUuid(String? value) {
   if (value == null || value.isEmpty) return false;
   // UUID format: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
   final uuidRegex = RegExp(
-    r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
+    r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$',
   );
   return uuidRegex.hasMatch(value);
 }
@@ -196,44 +205,44 @@ bool _isUuid(String? value) {
 /// Complete user profile model matching the database schema
 class PACTUserProfile {
   final String id;
-  
+
   // Basic info
   final String? fullName;
   final String? username;
   final String email;
   final String? phone;
-  
+
   // Role and status
   final String role; // app_role enum from database
   final String status; // pending, approved, rejected
   final UserAvailability availability;
-  
+
   // Avatar
   final String? avatarUrl;
-  
+
   // Organizational assignment (can be IDs or names depending on database)
   final String? hubId;
   final String? stateId;
   final String? localityId;
-  
+
   // Direct name fields (some databases store names directly)
   final String? hubName;
   final String? stateName;
   final String? localityName;
-  
+
   // Employment info
   final String? employeeId;
   final BankAccount? bankAccount;
-  
+
   // Location
   final UserLocation? location;
   final bool locationSharing;
-  
+
   // Timestamps
   final DateTime createdAt;
   final DateTime updatedAt;
   final DateTime? lastActive;
-  
+
   // Additional data (not in profiles table, joined from other tables)
   final UserPerformance? performance;
   final UserClassification? classification;
@@ -272,7 +281,7 @@ class PACTUserProfile {
       try {
         if (json['location'] is String) {
           final locationData = Map<String, dynamic>.from(
-            jsonDecode(json['location'])
+            jsonDecode(json['location']),
           );
           parsedLocation = UserLocation.fromJson(locationData);
         } else if (json['location'] is Map) {
@@ -289,7 +298,7 @@ class PACTUserProfile {
       try {
         if (json['bank_account'] is String) {
           final bankData = Map<String, dynamic>.from(
-            jsonDecode(json['bank_account'])
+            jsonDecode(json['bank_account']),
           );
           parsedBankAccount = BankAccount.fromJson(bankData);
         } else if (json['bank_account'] is Map) {
@@ -313,19 +322,41 @@ class PACTUserProfile {
       hubId: json['hub_id'] ?? json['hubId'] ?? json['hub'],
       stateId: json['state_id'] ?? json['stateId'] ?? json['state'],
       localityId: json['locality_id'] ?? json['localityId'] ?? json['locality'],
-      hubName: json['hub_name'] ?? json['hubName'] ?? (json['hub'] is String && !_isUuid(json['hub']) ? json['hub'] : null),
-      stateName: json['state_name'] ?? json['stateName'] ?? (json['state'] is String && !_isUuid(json['state']) ? json['state'] : null),
-      localityName: json['locality_name'] ?? json['localityName'] ?? (json['locality'] is String && !_isUuid(json['locality']) ? json['locality'] : null),
+      hubName:
+          json['hub_name'] ??
+          json['hubName'] ??
+          (json['hub'] is String && !_isUuid(json['hub']) ? json['hub'] : null),
+      stateName:
+          json['state_name'] ??
+          json['stateName'] ??
+          (json['state'] is String && !_isUuid(json['state'])
+              ? json['state']
+              : null),
+      localityName:
+          json['locality_name'] ??
+          json['localityName'] ??
+          (json['locality'] is String && !_isUuid(json['locality'])
+              ? json['locality']
+              : null),
       employeeId: json['employee_id'] ?? json['employeeId'],
       bankAccount: parsedBankAccount,
       location: parsedLocation,
-      locationSharing: json['location_sharing'] ?? json['locationSharing'] ?? false,
-      createdAt: DateTime.parse(json['created_at'] ?? json['createdAt'] ?? DateTime.now().toIso8601String()),
-      updatedAt: DateTime.parse(json['updated_at'] ?? json['updatedAt'] ?? DateTime.now().toIso8601String()),
+      locationSharing:
+          json['location_sharing'] ?? json['locationSharing'] ?? false,
+      createdAt: DateTime.parse(
+        json['created_at'] ??
+            json['createdAt'] ??
+            DateTime.now().toIso8601String(),
+      ),
+      updatedAt: DateTime.parse(
+        json['updated_at'] ??
+            json['updatedAt'] ??
+            DateTime.now().toIso8601String(),
+      ),
       lastActive: json['last_active'] != null || json['lastActive'] != null
           ? DateTime.parse(json['last_active'] ?? json['lastActive'])
           : null,
-      performance: json['performance'] != null 
+      performance: json['performance'] != null
           ? UserPerformance.fromJson(json['performance'])
           : null,
       classification: json['classification'] != null
@@ -360,16 +391,16 @@ class PACTUserProfile {
   };
 
   /// Get display name (prioritize fullName, fallback to username or email)
-  String get displayName =>
-      fullName?.isNotEmpty == true
-          ? fullName!
-          : username?.isNotEmpty == true
-              ? username!
-              : email.split('@').first;
+  String get displayName => fullName?.isNotEmpty == true
+      ? fullName!
+      : username?.isNotEmpty == true
+      ? username!
+      : email.split('@').first;
 
   /// Get initials for avatar
   String get initials {
-    final name = displayName;
+    final name = displayName.trim();
+    if (name.isEmpty) return 'U';
     final parts = name.split(' ');
     if (parts.length >= 2) {
       return '${parts[0][0]}${parts[1][0]}'.toUpperCase();

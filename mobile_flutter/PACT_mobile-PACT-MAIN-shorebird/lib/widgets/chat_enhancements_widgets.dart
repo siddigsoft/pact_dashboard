@@ -10,7 +10,14 @@ class ReactionPicker extends StatelessWidget {
 
   const ReactionPicker({super.key, required this.onReactionSelected});
 
-  static const List<String> defaultReactions = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
+  static const List<String> defaultReactions = [
+    '👍',
+    '❤️',
+    '😂',
+    '😮',
+    '😢',
+    '🙏',
+  ];
 
   @override
   Widget build(BuildContext context) {
@@ -66,11 +73,13 @@ class MessageReactionsDisplay extends StatelessWidget {
       runSpacing: 4,
       children: reactions.map((reaction) {
         return GestureDetector(
-          onTap: onReactionTap != null ? () => onReactionTap!(reaction.emoji) : null,
+          onTap: onReactionTap != null
+              ? () => onReactionTap!(reaction.emoji)
+              : null,
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
             decoration: BoxDecoration(
-              color: reaction.currentUserReacted 
+              color: reaction.currentUserReacted
                   ? AppColors.primaryBlue.withOpacity(0.2)
                   : Colors.grey.withOpacity(0.1),
               borderRadius: BorderRadius.circular(12),
@@ -88,8 +97,8 @@ class MessageReactionsDisplay extends StatelessWidget {
                     '${reaction.count}',
                     style: TextStyle(
                       fontSize: 11,
-                      color: reaction.currentUserReacted 
-                          ? AppColors.primaryBlue 
+                      color: reaction.currentUserReacted
+                          ? AppColors.primaryBlue
                           : Colors.grey[600],
                       fontWeight: FontWeight.w500,
                     ),
@@ -205,14 +214,16 @@ class _TypingIndicatorWidgetState extends State<TypingIndicatorWidget>
 
   @override
   Widget build(BuildContext context) {
-    final activeTypers = widget.typingUsers.where((t) => t.isStillTyping).toList();
+    final activeTypers = widget.typingUsers
+        .where((t) => t.isStillTyping)
+        .toList();
     if (activeTypers.isEmpty) return const SizedBox.shrink();
 
     final isArabic = widget.locale == 'ar';
     String text;
-    
+
     if (activeTypers.length == 1) {
-      text = isArabic 
+      text = isArabic
           ? '${activeTypers.first.userName} يكتب...'
           : '${activeTypers.first.userName} is typing...';
     } else if (activeTypers.length == 2) {
@@ -220,9 +231,7 @@ class _TypingIndicatorWidgetState extends State<TypingIndicatorWidget>
           ? '${activeTypers[0].userName} و ${activeTypers[1].userName} يكتبان...'
           : '${activeTypers[0].userName} and ${activeTypers[1].userName} are typing...';
     } else {
-      text = isArabic
-          ? 'عدة أشخاص يكتبون...'
-          : 'Several people are typing...';
+      text = isArabic ? 'عدة أشخاص يكتبون...' : 'Several people are typing...';
     }
 
     return Padding(
@@ -256,7 +265,7 @@ class _TypingIndicatorWidgetState extends State<TypingIndicatorWidget>
             final delay = index * 0.2;
             final value = (_controller.value + delay) % 1.0;
             final opacity = (value < 0.5) ? value * 2 : (1 - value) * 2;
-            
+
             return Container(
               width: 6,
               height: 6,
@@ -277,11 +286,7 @@ class LinkPreviewCard extends StatelessWidget {
   final LinkPreview preview;
   final VoidCallback? onTap;
 
-  const LinkPreviewCard({
-    super.key,
-    required this.preview,
-    this.onTap,
-  });
+  const LinkPreviewCard({super.key, required this.preview, this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -340,10 +345,7 @@ class LinkPreviewCard extends StatelessWidget {
                       preview.description!,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.grey[600],
-                      ),
+                      style: TextStyle(fontSize: 12, color: Colors.grey[600]),
                     ),
                   ],
                 ],
@@ -379,8 +381,8 @@ class _VoiceMessagePlayerState extends State<VoiceMessagePlayer> {
   @override
   Widget build(BuildContext context) {
     final color = widget.isOwnMessage ? Colors.white : AppColors.primaryBlue;
-    final bgColor = widget.isOwnMessage 
-        ? Colors.white.withOpacity(0.2) 
+    final bgColor = widget.isOwnMessage
+        ? Colors.white.withOpacity(0.2)
         : AppColors.primaryBlue.withOpacity(0.1);
 
     return Container(
@@ -393,10 +395,7 @@ class _VoiceMessagePlayerState extends State<VoiceMessagePlayer> {
             child: Container(
               width: 40,
               height: 40,
-              decoration: BoxDecoration(
-                color: bgColor,
-                shape: BoxShape.circle,
-              ),
+              decoration: BoxDecoration(color: bgColor, shape: BoxShape.circle),
               child: Icon(
                 _isPlaying ? Icons.pause : Icons.play_arrow,
                 color: color,
@@ -411,8 +410,12 @@ class _VoiceMessagePlayerState extends State<VoiceMessagePlayer> {
                 SliderTheme(
                   data: SliderThemeData(
                     trackHeight: 3,
-                    thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 5),
-                    overlayShape: const RoundSliderOverlayShape(overlayRadius: 12),
+                    thumbShape: const RoundSliderThumbShape(
+                      enabledThumbRadius: 5,
+                    ),
+                    overlayShape: const RoundSliderOverlayShape(
+                      overlayRadius: 12,
+                    ),
                     activeTrackColor: color,
                     inactiveTrackColor: color.withOpacity(0.3),
                     thumbColor: color,
@@ -520,7 +523,7 @@ class MessageContextMenu extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isArabic = locale == 'ar';
-    
+
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 8),
       decoration: BoxDecoration(
@@ -586,7 +589,7 @@ class MessageContextMenu extends StatelessWidget {
     bool isDestructive = false,
   }) {
     final color = isDestructive ? Colors.red : Colors.black87;
-    
+
     return InkWell(
       onTap: onTap,
       child: Padding(
@@ -595,10 +598,7 @@ class MessageContextMenu extends StatelessWidget {
           children: [
             Icon(icon, size: 20, color: color),
             const SizedBox(width: 12),
-            Text(
-              label,
-              style: TextStyle(fontSize: 14, color: color),
-            ),
+            Text(label, style: TextStyle(fontSize: 14, color: color)),
           ],
         ),
       ),
@@ -610,11 +610,7 @@ class ReadReceiptIndicator extends StatelessWidget {
   final String status; // 'sent', 'delivered', 'read'
   final DateTime? readAt;
 
-  const ReadReceiptIndicator({
-    super.key,
-    required this.status,
-    this.readAt,
-  });
+  const ReadReceiptIndicator({super.key, required this.status, this.readAt});
 
   @override
   Widget build(BuildContext context) {

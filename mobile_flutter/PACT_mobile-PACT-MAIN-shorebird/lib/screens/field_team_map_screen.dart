@@ -6,7 +6,8 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../theme/app_colors.dart';
 import '../widgets/custom_drawer_menu.dart';
-import '../services/webrtc_service.dart';
+import '../services/agora_call_service.dart';
+import 'agora_call_screen.dart';
 import 'dart:async';
 
 class FieldTeamMapScreen extends StatefulWidget {
@@ -19,7 +20,7 @@ class FieldTeamMapScreen extends StatefulWidget {
 class _FieldTeamMapScreenState extends State<FieldTeamMapScreen> {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   final MapController _mapController = MapController();
-  
+
   bool _isLoading = true;
   bool _hasAccess = false;
   String? _userRole;
@@ -53,7 +54,7 @@ class _FieldTeamMapScreenState extends State<FieldTeamMapScreen> {
 
       final role = response?['role']?.toString().toLowerCase() ?? '';
       final allowedRoles = ['admin', 'super_admin', 'superadmin', 'ict'];
-      
+
       if (mounted) {
         setState(() {
           _userRole = role;
@@ -93,7 +94,9 @@ class _FieldTeamMapScreenState extends State<FieldTeamMapScreen> {
       // location column stores lat/lng as JSON: {lat: number, lng: number, timestamp: string}
       final response = await Supabase.instance.client
           .from('profiles')
-          .select('id, full_name, email, role, avatar_url, location, state_id, hub_id, status, location_sharing')
+          .select(
+            'id, full_name, email, role, avatar_url, location, state_id, hub_id, status, location_sharing',
+          )
           .not('status', 'eq', 'pending')
           .not('role', 'eq', 'admin')
           .not('role', 'eq', 'super_admin');
@@ -114,13 +117,13 @@ class _FieldTeamMapScreenState extends State<FieldTeamMapScreen> {
 
   List<Map<String, dynamic>> get _filteredMembers {
     if (_statusFilter == 'all') return _teamMembers;
-    
+
     final now = DateTime.now();
     return _teamMembers.where((member) {
       final lastUpdate = member['last_location_updated'] != null
           ? DateTime.parse(member['last_location_updated'])
           : null;
-      
+
       if (_statusFilter == 'online') {
         return lastUpdate != null && now.difference(lastUpdate).inMinutes < 15;
       } else if (_statusFilter == 'offline') {
@@ -134,9 +137,9 @@ class _FieldTeamMapScreenState extends State<FieldTeamMapScreen> {
     final lastUpdate = member['last_location_updated'] != null
         ? DateTime.parse(member['last_location_updated'])
         : null;
-    
+
     if (lastUpdate == null) return Colors.grey;
-    
+
     final minutesAgo = DateTime.now().difference(lastUpdate).inMinutes;
     if (minutesAgo < 15) return Colors.green;
     if (minutesAgo < 60) return Colors.orange;
@@ -147,20 +150,20 @@ class _FieldTeamMapScreenState extends State<FieldTeamMapScreen> {
     final lastUpdate = member['last_location_updated'] != null
         ? DateTime.parse(member['last_location_updated'])
         : null;
-    
+
     if (lastUpdate == null) {
       return isArabic ? 'غير متوفر' : 'No location';
     }
-    
+
     final minutesAgo = DateTime.now().difference(lastUpdate).inMinutes;
     if (minutesAgo < 15) return isArabic ? 'متصل الآن' : 'Online now';
     if (minutesAgo < 60) return isArabic ? 'نشط مؤخراً' : 'Recently active';
-    
+
     final hoursAgo = minutesAgo ~/ 60;
     if (hoursAgo < 24) {
       return isArabic ? 'منذ $hoursAgo ساعة' : '${hoursAgo}h ago';
     }
-    
+
     final daysAgo = hoursAgo ~/ 24;
     return isArabic ? 'منذ $daysAgo يوم' : '${daysAgo}d ago';
   }
@@ -174,7 +177,7 @@ class _FieldTeamMapScreenState extends State<FieldTeamMapScreen> {
   @override
   Widget build(BuildContext context) {
     final isArabic = _currentLocale == 'ar';
-    
+
     if (!_hasAccess && !_isLoading) {
       return Scaffold(
         appBar: AppBar(
@@ -195,7 +198,9 @@ class _FieldTeamMapScreenState extends State<FieldTeamMapScreen> {
               Icon(Icons.lock_outline, size: 80, color: Colors.grey[400]),
               const SizedBox(height: 16),
               Text(
-                isArabic ? 'ليس لديك صلاحية الوصول لهذه الصفحة' : 'You do not have permission to access this page',
+                isArabic
+                    ? 'ليس لديك صلاحية الوصول لهذه الصفحة'
+                    : 'You do not have permission to access this page',
                 style: GoogleFonts.poppins(
                   fontSize: 16,
                   color: Colors.grey[600],
@@ -212,7 +217,7 @@ class _FieldTeamMapScreenState extends State<FieldTeamMapScreen> {
         ),
       );
     }
-    
+
     return Directionality(
       textDirection: isArabic ? ui.TextDirection.rtl : ui.TextDirection.ltr,
       child: Scaffold(
@@ -291,11 +296,7 @@ class _FieldTeamMapScreenState extends State<FieldTeamMapScreen> {
       color: Colors.white,
       child: Row(
         children: [
-          _buildFilterChip(
-            isArabic ? 'الكل' : 'All',
-            'all',
-            isArabic,
-          ),
+          _buildFilterChip(isArabic ? 'الكل' : 'All', 'all', isArabic),
           const SizedBox(width: 8),
           _buildFilterChip(
             isArabic ? 'متصل' : 'Online',
@@ -315,7 +316,12 @@ class _FieldTeamMapScreenState extends State<FieldTeamMapScreen> {
     );
   }
 
-  Widget _buildFilterChip(String label, String value, bool isArabic, {Color? color}) {
+  Widget _buildFilterChip(
+    String label,
+    String value,
+    bool isArabic, {
+    Color? color,
+  }) {
     final isSelected = _statusFilter == value;
     return FilterChip(
       label: Row(
@@ -325,10 +331,7 @@ class _FieldTeamMapScreenState extends State<FieldTeamMapScreen> {
             Container(
               width: 8,
               height: 8,
-              decoration: BoxDecoration(
-                color: color,
-                shape: BoxShape.circle,
-              ),
+              decoration: BoxDecoration(color: color, shape: BoxShape.circle),
             ),
             const SizedBox(width: 6),
           ],
@@ -349,7 +352,8 @@ class _FieldTeamMapScreenState extends State<FieldTeamMapScreen> {
       final lastUpdate = m['last_location_updated'] != null
           ? DateTime.parse(m['last_location_updated'])
           : null;
-      return lastUpdate != null && DateTime.now().difference(lastUpdate).inMinutes < 15;
+      return lastUpdate != null &&
+          DateTime.now().difference(lastUpdate).inMinutes < 15;
     }).length;
 
     return Card(
@@ -401,7 +405,9 @@ class _FieldTeamMapScreenState extends State<FieldTeamMapScreen> {
                 ),
                 const SizedBox(width: 6),
                 Text(
-                  isArabic ? '${_teamMembers.length - onlineCount} غير متصل' : '${_teamMembers.length - onlineCount} Offline',
+                  isArabic
+                      ? '${_teamMembers.length - onlineCount} غير متصل'
+                      : '${_teamMembers.length - onlineCount} Offline',
                   style: GoogleFonts.poppins(fontSize: 11),
                 ),
               ],
@@ -518,7 +524,7 @@ class _FieldTeamMapScreenState extends State<FieldTeamMapScreen> {
   Widget _buildMemberCard(Map<String, dynamic> member, bool isArabic) {
     final statusColor = _getMemberStatusColor(member);
     final status = _getMemberStatus(member, isArabic);
-    
+
     return Card(
       elevation: 8,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -537,7 +543,8 @@ class _FieldTeamMapScreenState extends State<FieldTeamMapScreen> {
                       : null,
                   child: member['avatar_url'] == null
                       ? Text(
-                          (member['full_name'] as String? ?? 'U')[0].toUpperCase(),
+                          (member['full_name'] as String? ?? 'U')[0]
+                              .toUpperCase(),
                           style: GoogleFonts.poppins(
                             fontWeight: FontWeight.bold,
                             fontSize: 20,
@@ -604,7 +611,10 @@ class _FieldTeamMapScreenState extends State<FieldTeamMapScreen> {
                     const SizedBox(width: 4),
                     Text(
                       member['state'],
-                      style: GoogleFonts.poppins(fontSize: 12, color: Colors.grey[600]),
+                      style: GoogleFonts.poppins(
+                        fontSize: 12,
+                        color: Colors.grey[600],
+                      ),
                     ),
                     const SizedBox(width: 16),
                   ],
@@ -613,7 +623,10 @@ class _FieldTeamMapScreenState extends State<FieldTeamMapScreen> {
                     const SizedBox(width: 4),
                     Text(
                       member['hub'],
-                      style: GoogleFonts.poppins(fontSize: 12, color: Colors.grey[600]),
+                      style: GoogleFonts.poppins(
+                        fontSize: 12,
+                        color: Colors.grey[600],
+                      ),
                     ),
                   ],
                 ],
@@ -679,12 +692,58 @@ class _FieldTeamMapScreenState extends State<FieldTeamMapScreen> {
     if (currentUser == null) return;
 
     try {
-      final webRtcService = WebRTCService();
-      await webRtcService.initiateCall(
-        member['id'],
-        member['full_name'] ?? 'Team Member',
-        isAudioOnly: true,
+      final agoraService = AgoraCallService();
+      if (!agoraService.isReady) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Call service not ready. Try again in a moment.'),
+              backgroundColor: Colors.orange,
+            ),
+          );
+        }
+        return;
+      }
+      if (agoraService.isInCall) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('You are already in a call'),
+              backgroundColor: Colors.orange,
+            ),
+          );
+        }
+        return;
+      }
+
+      final result = await agoraService.startCall(
+        remoteUserId: member['id'],
+        remoteUserName: member['full_name'] ?? 'Team Member',
+        remoteUserAvatar: member['avatar_url'],
+        audioOnly: true,
       );
+
+      if (result.success && result.channelName != null && mounted) {
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (context) => AgoraCallScreen(
+              channelName: result.channelName!,
+              remoteUserId: member['id'],
+              remoteUserName: member['full_name'] ?? 'Team Member',
+              remoteUserAvatar: member['avatar_url'],
+              isAudioOnly: true,
+              isOutgoing: true,
+            ),
+          ),
+        );
+      } else if (!result.success && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(result.error ?? 'Call failed'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

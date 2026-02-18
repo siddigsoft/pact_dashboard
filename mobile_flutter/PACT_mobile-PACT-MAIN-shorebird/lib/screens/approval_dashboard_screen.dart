@@ -4,8 +4,6 @@ import 'package:pact_mobile/providers/cost_submission_provider.dart';
 import 'package:pact_mobile/providers/withdrawal_provider.dart';
 import 'package:pact_mobile/models/cost_submission_models.dart';
 import 'package:pact_mobile/models/wallet_models.dart';
-import 'package:pact_mobile/widgets/common_widgets.dart';
-import 'package:pact_mobile/theme/app_theme.dart';
 import 'package:intl/intl.dart';
 
 class ApprovalDashboardScreen extends ConsumerStatefulWidget {
@@ -203,7 +201,8 @@ class _CostSubmissionCard extends ConsumerStatefulWidget {
   const _CostSubmissionCard({required this.submission});
 
   @override
-  ConsumerState<_CostSubmissionCard> createState() => _CostSubmissionCardState();
+  ConsumerState<_CostSubmissionCard> createState() =>
+      _CostSubmissionCardState();
 }
 
 class _CostSubmissionCardState extends ConsumerState<_CostSubmissionCard> {
@@ -415,9 +414,9 @@ class _CostSubmissionCardState extends ConsumerState<_CostSubmissionCard> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error: $e')));
       }
     }
   }
@@ -458,10 +457,12 @@ class _WithdrawalRequestCard extends ConsumerStatefulWidget {
   const _WithdrawalRequestCard({required this.request});
 
   @override
-  ConsumerState<_WithdrawalRequestCard> createState() => _WithdrawalRequestCardState();
+  ConsumerState<_WithdrawalRequestCard> createState() =>
+      _WithdrawalRequestCardState();
 }
 
-class _WithdrawalRequestCardState extends ConsumerState<_WithdrawalRequestCard> {
+class _WithdrawalRequestCardState
+    extends ConsumerState<_WithdrawalRequestCard> {
   WithdrawalRequest get request => widget.request;
 
   @override
@@ -569,7 +570,9 @@ class _WithdrawalRequestCardState extends ConsumerState<_WithdrawalRequestCard> 
             children: [
               Text('Reference: ${request.referenceId ?? 'N/A'}'),
               Text('Amount: SDG ${request.amount}'),
-              Text('Payment Method: ${request.paymentMethod?.displayName ?? 'Not specified'}'),
+              Text(
+                'Payment Method: ${request.paymentMethod?.displayName ?? 'Not specified'}',
+              ),
               if (request.paymentMethodDetails?.isNotEmpty ?? false)
                 Text('Details: ${request.paymentMethodDetails}'),
               Text(
@@ -712,9 +715,9 @@ class _WithdrawalRequestCardState extends ConsumerState<_WithdrawalRequestCard> 
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error: $e')));
       }
     }
   }
@@ -741,9 +744,9 @@ class _WithdrawalRequestCardState extends ConsumerState<_WithdrawalRequestCard> 
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error: $e')));
       }
     }
   }

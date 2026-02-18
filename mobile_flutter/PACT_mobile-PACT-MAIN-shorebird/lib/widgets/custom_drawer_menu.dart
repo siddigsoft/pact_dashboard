@@ -10,6 +10,7 @@ import 'package:hive_flutter/hive_flutter.dart';
 import '../services/auth_service.dart';
 import '../providers/sync_provider.dart';
 import '../providers/profile_provider.dart';
+import '../services/offline/sync_manager.dart';
 import '../theme/app_design_system.dart';
 import '../theme/app_colors.dart';
 import '../widgets/app_widgets.dart';
@@ -69,19 +70,19 @@ class _CustomDrawerMenuState extends ConsumerState<CustomDrawerMenu> {
   Future<void> _fetchAppVersion() async {
     try {
       final packageInfo = await PackageInfo.fromPlatform();
-      
+
       // Get Shorebird patch number
       int? patchNumber;
       try {
         final codePush = ShorebirdCodePush();
-        final isAvailable = await codePush.isShorebirdAvailable();
+        final isAvailable = codePush.isShorebirdAvailable();
         if (isAvailable) {
           patchNumber = await codePush.currentPatchNumber();
         }
       } catch (e) {
         debugPrint('Error getting Shorebird patch number: $e');
       }
-      
+
       if (mounted) {
         setState(() {
           _appVersion = packageInfo.version;
@@ -96,19 +97,19 @@ class _CustomDrawerMenuState extends ConsumerState<CustomDrawerMenu> {
 
   Future<void> _fetchUserRole() async {
     if (widget.currentUser == null) return;
-    
+
     // Load cached role first for instant offline support
     await _loadCachedRole();
-    
+
     // Check connectivity
     final connectivity = await Connectivity().checkConnectivity();
     final isOnline = !connectivity.contains(ConnectivityResult.none);
-    
+
     if (!isOnline) {
       debugPrint('📴 Drawer: Offline mode - using cached role');
       return;
     }
-    
+
     try {
       // Try user_roles table first
       var response = await Supabase.instance.client
@@ -118,13 +119,11 @@ class _CustomDrawerMenuState extends ConsumerState<CustomDrawerMenu> {
           .maybeSingle();
 
       // Fallback to profiles table if user_roles doesn't have data
-      if (response == null) {
-        response = await Supabase.instance.client
-            .from('profiles')
-            .select('role')
-            .eq('id', widget.currentUser!.id)
-            .maybeSingle();
-      }
+      response ??= await Supabase.instance.client
+          .from('profiles')
+          .select('role')
+          .eq('id', widget.currentUser!.id)
+          .maybeSingle();
 
       if (response != null && mounted) {
         final role = response['role'] as String? ?? 'User';
@@ -138,7 +137,7 @@ class _CustomDrawerMenuState extends ConsumerState<CustomDrawerMenu> {
       debugPrint('Error fetching role: $e');
     }
   }
-  
+
   Future<void> _loadCachedRole() async {
     try {
       final box = await Hive.openBox('user_profile_cache');
@@ -153,7 +152,7 @@ class _CustomDrawerMenuState extends ConsumerState<CustomDrawerMenu> {
       debugPrint('Error loading cached role in drawer: $e');
     }
   }
-  
+
   Future<void> _cacheRole(String role) async {
     try {
       final box = await Hive.openBox('user_profile_cache');
@@ -248,7 +247,12 @@ class _CustomDrawerMenuState extends ConsumerState<CustomDrawerMenu> {
         );
       }
 
-      // Perform full sync
+      // Sync site visits, reports, pending actions (SyncManager)
+      final syncManager = SyncManager();
+      syncManager.setSupabaseClient(Supabase.instance.client);
+      await syncManager.forceSync();
+
+      // Perform full sync (tasks, equipment, profiles, etc.)
       await syncProvider.performFullSync();
 
       // Show success message
@@ -506,7 +510,8 @@ class _CustomDrawerMenuState extends ConsumerState<CustomDrawerMenu> {
                           Navigator.push(
                             context,
                             MaterialPageRoute(
-                              builder: (context) => const CostSubmissionScreen(),
+                              builder: (context) =>
+                                  CostSubmissionScreen(userRole: _userRole),
                             ),
                           );
                           widget.onClose();
@@ -532,7 +537,8 @@ class _CustomDrawerMenuState extends ConsumerState<CustomDrawerMenu> {
                             Navigator.push(
                               context,
                               MaterialPageRoute(
-                                builder: (context) => const AdvanceRequestsReportScreen(),
+                                builder: (context) =>
+                                    const AdvanceRequestsReportScreen(),
                               ),
                             );
                             widget.onClose();
@@ -629,7 +635,21 @@ class _CustomDrawerMenuState extends ConsumerState<CustomDrawerMenu> {
                           widget.onClose();
                         },
                       ),
-                      // Support Screen hidden - functionality merged into Help & Support screen
+                      _MenuItemData(
+                        icon: Icons.confirmation_number_rounded,
+                        title: 'Support Tickets',
+                        subtitle: 'Submit and view support requests',
+                        iconColor: Colors.orange,
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => const SupportScreen(),
+                            ),
+                          );
+                          widget.onClose();
+                        },
+                      ),
                       _MenuItemData(
                         icon: Icons.phone_in_talk_rounded,
                         title: 'Communications',
@@ -639,7 +659,8 @@ class _CustomDrawerMenuState extends ConsumerState<CustomDrawerMenu> {
                           Navigator.push(
                             context,
                             MaterialPageRoute(
-                              builder: (context) => const CommunicationsScreen(),
+                              builder: (context) =>
+                                  const CommunicationsScreen(),
                             ),
                           );
                           widget.onClose();
@@ -654,7 +675,8 @@ class _CustomDrawerMenuState extends ConsumerState<CustomDrawerMenu> {
                           Navigator.push(
                             context,
                             MaterialPageRoute(
-                              builder: (context) => const DigitalSignaturesScreen(),
+                              builder: (context) =>
+                                  const DigitalSignaturesScreen(),
                             ),
                           );
                           widget.onClose();
@@ -673,7 +695,8 @@ class _CustomDrawerMenuState extends ConsumerState<CustomDrawerMenu> {
                             Navigator.push(
                               context,
                               MaterialPageRoute(
-                                builder: (context) => const FieldTeamMapScreen(),
+                                builder: (context) =>
+                                    const FieldTeamMapScreen(),
                               ),
                             );
                             widget.onClose();
@@ -692,7 +715,8 @@ class _CustomDrawerMenuState extends ConsumerState<CustomDrawerMenu> {
                             Navigator.push(
                               context,
                               MaterialPageRoute(
-                                builder: (context) => const AdminDashboardScreen(),
+                                builder: (context) =>
+                                    const AdminDashboardScreen(),
                               ),
                             );
                             widget.onClose();
@@ -889,8 +913,8 @@ class _CustomDrawerMenuState extends ConsumerState<CustomDrawerMenu> {
                   Text(
                     _appVersion.isNotEmpty
                         ? (_patchNumber != null
-                            ? 'PACT Mobile v$_appVersion+$_buildNumber (Patch $_patchNumber)'
-                            : 'PACT Mobile v$_appVersion+$_buildNumber')
+                              ? 'PACT Mobile v$_appVersion+$_buildNumber (Patch $_patchNumber)'
+                              : 'PACT Mobile v$_appVersion+$_buildNumber')
                         : 'PACT Mobile',
                     style: const TextStyle(
                       color: Color(0xFF1565C0),

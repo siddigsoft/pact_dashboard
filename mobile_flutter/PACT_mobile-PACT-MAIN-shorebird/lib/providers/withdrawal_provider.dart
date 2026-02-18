@@ -10,18 +10,20 @@ final withdrawalRepositoryProvider = Provider<WalletRepository>((ref) {
 });
 
 // Provider for user's withdrawal requests
-final userWithdrawalRequestsProvider = StreamProvider.autoDispose<List<WithdrawalRequest>>((ref) {
-  final userId = ref.watch(currentUserIdProvider);
-  if (userId == null) {
-    return Stream.value([]);
-  }
+final userWithdrawalRequestsProvider =
+    StreamProvider.autoDispose<List<WithdrawalRequest>>((ref) {
+      final userId = ref.watch(currentUserIdProvider);
+      if (userId == null) {
+        return Stream.value([]);
+      }
 
-  final repository = ref.watch(withdrawalRepositoryProvider);
-  return repository.watchWithdrawalRequests(userId);
-});
+      final repository = ref.watch(withdrawalRepositoryProvider);
+      return repository.watchWithdrawalRequests(userId);
+    });
 
 // Create withdrawal request provider
-class CreateWithdrawalNotifier extends StateNotifier<AsyncValue<WithdrawalRequest?>> {
+class CreateWithdrawalNotifier
+    extends StateNotifier<AsyncValue<WithdrawalRequest?>> {
   final Ref ref;
 
   CreateWithdrawalNotifier(this.ref) : super(const AsyncValue.data(null));
@@ -62,50 +64,61 @@ class CreateWithdrawalNotifier extends StateNotifier<AsyncValue<WithdrawalReques
   }
 }
 
-final createWithdrawalProvider = StateNotifierProvider.autoDispose<CreateWithdrawalNotifier, AsyncValue<WithdrawalRequest?>>((ref) {
-  return CreateWithdrawalNotifier(ref);
-});
+final createWithdrawalProvider =
+    StateNotifierProvider.autoDispose<
+      CreateWithdrawalNotifier,
+      AsyncValue<WithdrawalRequest?>
+    >((ref) {
+      return CreateWithdrawalNotifier(ref);
+    });
 
 // Provider for pending withdrawal requests (for approval dashboard)
-final pendingWithdrawalRequestsProvider = FutureProvider.autoDispose<List<WithdrawalRequest>>((ref) async {
-  final userId = ref.watch(currentUserIdProvider);
-  
-  if (userId == null) {
-    return [];
-  }
-  
-  try {
-    final supabase = Supabase.instance.client;
-    
-    // Check user role
-    final profileResponse = await supabase
-        .from('profiles')
-        .select('role')
-        .eq('id', userId)
-        .maybeSingle();
-    
-    final userRole = profileResponse?['role']?.toString().toLowerCase() ?? '';
-    
-    // Only admins, super admins, and finance roles can see pending withdrawals
-    if (userRole.contains('admin') || userRole.contains('super') || userRole.contains('finance')) {
-      final response = await supabase
-          .from('wallet_transactions')
-          .select()
-          .eq('status', 'pending')
-          .eq('transaction_type', 'withdrawal')
-          .order('created_at', ascending: false);
-      
-      return (response as List)
-          .map((json) => WithdrawalRequest.fromJson(json as Map<String, dynamic>))
-          .toList();
-    }
-    
-    return [];
-  } catch (e) {
-    print('[pendingWithdrawalRequestsProvider] Error: $e');
-    return [];
-  }
-});
+final pendingWithdrawalRequestsProvider =
+    FutureProvider.autoDispose<List<WithdrawalRequest>>((ref) async {
+      final userId = ref.watch(currentUserIdProvider);
+
+      if (userId == null) {
+        return [];
+      }
+
+      try {
+        final supabase = Supabase.instance.client;
+
+        // Check user role
+        final profileResponse = await supabase
+            .from('profiles')
+            .select('role')
+            .eq('id', userId)
+            .maybeSingle();
+
+        final userRole =
+            profileResponse?['role']?.toString().toLowerCase() ?? '';
+
+        // Only admins, super admins, and finance roles can see pending withdrawals
+        if (userRole.contains('admin') ||
+            userRole.contains('super') ||
+            userRole.contains('finance')) {
+          final response = await supabase
+              .from('wallet_transactions')
+              .select()
+              .eq('status', 'pending')
+              .eq('transaction_type', 'withdrawal')
+              .order('created_at', ascending: false);
+
+          return (response as List)
+              .map(
+                (json) =>
+                    WithdrawalRequest.fromJson(json as Map<String, dynamic>),
+              )
+              .toList();
+        }
+
+        return [];
+      } catch (e) {
+        print('[pendingWithdrawalRequestsProvider] Error: $e');
+        return [];
+      }
+    });
 
 // Withdrawal approval notifier for supervisor and finance approval
 class WithdrawalApprovalNotifier extends StateNotifier<AsyncValue<void>> {
@@ -127,22 +140,24 @@ class WithdrawalApprovalNotifier extends StateNotifier<AsyncValue<void>> {
       }
 
       final supabase = Supabase.instance.client;
-      
+
       final updateData = {
         'status': approve ? 'supervisor_approved' : 'rejected',
         'supervisor_notes': notes,
-        'supervisor_approved_at': approve ? DateTime.now().toIso8601String() : null,
+        'supervisor_approved_at': approve
+            ? DateTime.now().toIso8601String()
+            : null,
         'reviewed_by': userId,
         'reviewed_at': DateTime.now().toIso8601String(),
       };
-      
+
       await supabase
           .from('wallet_transactions')
           .update(updateData)
           .eq('id', requestId);
 
       state = const AsyncValue.data(null);
-      
+
       // Invalidate related providers
       ref.invalidate(pendingWithdrawalRequestsProvider);
       ref.invalidate(userWithdrawalRequestsProvider);
@@ -166,7 +181,7 @@ class WithdrawalApprovalNotifier extends StateNotifier<AsyncValue<void>> {
       }
 
       final supabase = Supabase.instance.client;
-      
+
       final updateData = {
         'status': approve ? 'approved' : 'rejected',
         'admin_notes': notes,
@@ -174,14 +189,14 @@ class WithdrawalApprovalNotifier extends StateNotifier<AsyncValue<void>> {
         'final_approved_by': userId,
         'final_approved_at': DateTime.now().toIso8601String(),
       };
-      
+
       await supabase
           .from('wallet_transactions')
           .update(updateData)
           .eq('id', requestId);
 
       state = const AsyncValue.data(null);
-      
+
       // Invalidate related providers
       ref.invalidate(pendingWithdrawalRequestsProvider);
       ref.invalidate(userWithdrawalRequestsProvider);
@@ -196,6 +211,10 @@ class WithdrawalApprovalNotifier extends StateNotifier<AsyncValue<void>> {
   }
 }
 
-final withdrawalApprovalProvider = StateNotifierProvider.autoDispose<WithdrawalApprovalNotifier, AsyncValue<void>>((ref) {
-  return WithdrawalApprovalNotifier(ref);
-});
+final withdrawalApprovalProvider =
+    StateNotifierProvider.autoDispose<
+      WithdrawalApprovalNotifier,
+      AsyncValue<void>
+    >((ref) {
+      return WithdrawalApprovalNotifier(ref);
+    });

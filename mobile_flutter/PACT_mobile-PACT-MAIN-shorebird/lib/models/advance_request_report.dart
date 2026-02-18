@@ -94,44 +94,52 @@ class AdvanceRequestData {
   factory AdvanceRequestData.fromJson(Map<String, dynamic> json) {
     final profile = json['profiles'] as Map<String, dynamic>?;
     final mmpEntry = json['mmp_site_entries'] as Map<String, dynamic>?;
-    
+
     return AdvanceRequestData(
       id: json['id'] as String? ?? '',
       siteVisitId: json['site_visit_id'] as String? ?? '',
       mmpSiteEntryId: json['mmp_site_entry_id'] as String? ?? '',
       siteName: json['site_name'] as String? ?? '',
       requestedBy: json['requested_by'] as String? ?? '',
-      requestedAt: DateTime.tryParse(json['requested_at'] as String? ?? '') ?? DateTime.now(),
+      requestedAt:
+          DateTime.tryParse(json['requested_at'] as String? ?? '') ??
+          DateTime.now(),
       requesterRole: json['requester_role'] as String? ?? 'dataCollector',
       hubId: json['hub_id'] as String?,
       hubName: json['hub_name'] as String?,
-      totalTransportationBudget: (json['total_transportation_budget'] as num?)?.toDouble() ?? 0.0,
+      totalTransportationBudget:
+          (json['total_transportation_budget'] as num?)?.toDouble() ?? 0.0,
       requestedAmount: (json['requested_amount'] as num?)?.toDouble() ?? 0.0,
       paymentType: json['payment_type'] as String? ?? 'full_advance',
       justification: json['justification'] as String? ?? '',
       supervisorId: json['supervisor_id'] as String?,
       supervisorStatus: json['supervisor_status'] as String?,
       supervisorApprovedBy: json['supervisor_approved_by'] as String?,
-      supervisorApprovedAt: json['supervisor_approved_at'] != null 
-          ? DateTime.tryParse(json['supervisor_approved_at'] as String) 
+      supervisorApprovedAt: json['supervisor_approved_at'] != null
+          ? DateTime.tryParse(json['supervisor_approved_at'] as String)
           : null,
       supervisorNotes: json['supervisor_notes'] as String?,
       supervisorRejectionReason: json['supervisor_rejection_reason'] as String?,
       adminStatus: json['admin_status'] as String?,
       adminProcessedBy: json['admin_processed_by'] as String?,
-      adminProcessedAt: json['admin_processed_at'] != null 
-          ? DateTime.tryParse(json['admin_processed_at'] as String) 
+      adminProcessedAt: json['admin_processed_at'] != null
+          ? DateTime.tryParse(json['admin_processed_at'] as String)
           : null,
       adminNotes: json['admin_notes'] as String?,
       adminRejectionReason: json['admin_rejection_reason'] as String?,
       status: json['status'] as String? ?? 'pending_supervisor',
       totalPaidAmount: (json['total_paid_amount'] as num?)?.toDouble() ?? 0.0,
       remainingAmount: (json['remaining_amount'] as num?)?.toDouble(),
-      createdAt: DateTime.tryParse(json['created_at'] as String? ?? '') ?? DateTime.now(),
-      updatedAt: DateTime.tryParse(json['updated_at'] as String? ?? '') ?? DateTime.now(),
+      createdAt:
+          DateTime.tryParse(json['created_at'] as String? ?? '') ??
+          DateTime.now(),
+      updatedAt:
+          DateTime.tryParse(json['updated_at'] as String? ?? '') ??
+          DateTime.now(),
       stateName: mmpEntry?['state'] as String?,
       projectName: mmpEntry?['cp_name'] as String?,
-      requesterName: profile?['full_name'] as String? ?? profile?['username'] as String?,
+      requesterName:
+          profile?['full_name'] as String? ?? profile?['username'] as String?,
       requesterEmail: profile?['email'] as String?,
       metadata: json['metadata'] as Map<String, dynamic>?,
     );

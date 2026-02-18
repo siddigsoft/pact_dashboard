@@ -1031,7 +1031,7 @@ abstract class AppLocalizations {
   /// **'Speaker'**
   String get speaker;
 
-  /// Camera button
+  /// Camera option for file picker
   ///
   /// In en, this message translates to:
   /// **'Camera'**
@@ -1328,7 +1328,7 @@ abstract class AppLocalizations {
   /// Enter reason hint
   ///
   /// In en, this message translates to:
-  /// **'Enter reason'**
+  /// **'Please enter a reason'**
   String get enterReason;
 
   /// Select payment method prompt
@@ -1654,6 +1654,1032 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Passwords do not match'**
   String get passwordsDoNotMatch;
+
+  /// State permit label
+  ///
+  /// In en, this message translates to:
+  /// **'State Permit'**
+  String get statePermit;
+
+  /// Locality permit label
+  ///
+  /// In en, this message translates to:
+  /// **'Locality Permit'**
+  String get localityPermit;
+
+  /// Federal permit label
+  ///
+  /// In en, this message translates to:
+  /// **'Federal Permit'**
+  String get federalPermit;
+
+  /// Permit required message
+  ///
+  /// In en, this message translates to:
+  /// **'Permit Required'**
+  String get permitRequired;
+
+  /// Permit not required message
+  ///
+  /// In en, this message translates to:
+  /// **'Permit Not Required'**
+  String get permitNotRequired;
+
+  /// Upload state permit button
+  ///
+  /// In en, this message translates to:
+  /// **'Upload State Permit'**
+  String get uploadStatePermit;
+
+  /// Upload locality permit button
+  ///
+  /// In en, this message translates to:
+  /// **'Upload Locality Permit'**
+  String get uploadLocalityPermit;
+
+  /// State permit required title
+  ///
+  /// In en, this message translates to:
+  /// **'State Permit Required'**
+  String get statePermitRequired;
+
+  /// State permit required description
+  ///
+  /// In en, this message translates to:
+  /// **'Only the Federal permit has been uploaded. Upload the {state} state permit to continue.'**
+  String statePermitDescription(String state);
+
+  /// Locality permit required title
+  ///
+  /// In en, this message translates to:
+  /// **'Locality Permit Required'**
+  String get localityPermitRequired;
+
+  /// Locality permit required description
+  ///
+  /// In en, this message translates to:
+  /// **'Please upload the locality permit for {locality} to continue.'**
+  String localityPermitDescription(String locality);
+
+  /// Button to select a file
+  ///
+  /// In en, this message translates to:
+  /// **'Select File'**
+  String get selectFile;
+
+  /// Permit file label
+  ///
+  /// In en, this message translates to:
+  /// **'Permit File'**
+  String get permitFile;
+
+  /// Issue date label
+  ///
+  /// In en, this message translates to:
+  /// **'Issue Date'**
+  String get issueDate;
+
+  /// Expiry date label
+  ///
+  /// In en, this message translates to:
+  /// **'Expiry Date'**
+  String get expiryDate;
+
+  /// Comments label
+  ///
+  /// In en, this message translates to:
+  /// **'Comments'**
+  String get comments;
+
+  /// Add comments optional placeholder
+  ///
+  /// In en, this message translates to:
+  /// **'Add comments (optional)'**
+  String get addCommentsOptional;
+
+  /// Upload permit button
+  ///
+  /// In en, this message translates to:
+  /// **'Upload Permit'**
+  String get uploadPermit;
+
+  /// Uploading status
+  ///
+  /// In en, this message translates to:
+  /// **'Uploading...'**
+  String get uploading;
+
+  /// Permit upload success message
+  ///
+  /// In en, this message translates to:
+  /// **'Permit uploaded successfully'**
+  String get permitUploadSuccess;
+
+  /// Permit upload error message
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to upload permit'**
+  String get permitUploadError;
+
+  /// Invalid file type error
+  ///
+  /// In en, this message translates to:
+  /// **'Invalid file type'**
+  String get invalidFileType;
+
+  /// File too large error
+  ///
+  /// In en, this message translates to:
+  /// **'File too large'**
+  String get fileTooLarge;
+
+  /// Select PDF or image instruction
+  ///
+  /// In en, this message translates to:
+  /// **'Please select a PDF or image file (JPG, PNG)'**
+  String get selectPdfOrImage;
+
+  /// Max file size message
+  ///
+  /// In en, this message translates to:
+  /// **'Maximum file size: {size} MB'**
+  String maxFileSize(int size);
+
+  /// Dates required error
+  ///
+  /// In en, this message translates to:
+  /// **'Issue and expiry dates are required'**
+  String get datesRequired;
+
+  /// Expiry after issue date error
+  ///
+  /// In en, this message translates to:
+  /// **'Expiry date must be after issue date'**
+  String get expiryAfterIssue;
+
+  /// Show preview button
+  ///
+  /// In en, this message translates to:
+  /// **'Show Preview'**
+  String get showPreview;
+
+  /// Hide preview button
+  ///
+  /// In en, this message translates to:
+  /// **'Hide Preview'**
+  String get hidePreview;
+
+  /// Clear file button
+  ///
+  /// In en, this message translates to:
+  /// **'Clear File'**
+  String get clearFile;
+
+  /// Permit verification title
+  ///
+  /// In en, this message translates to:
+  /// **'Permit Verification'**
+  String get permitVerification;
+
+  /// Verify permits button
+  ///
+  /// In en, this message translates to:
+  /// **'Verify Permits'**
+  String get verifyPermits;
+
+  /// Permits attached status
+  ///
+  /// In en, this message translates to:
+  /// **'Permits Attached'**
+  String get permitsAttached;
+
+  /// Pending verification status
+  ///
+  /// In en, this message translates to:
+  /// **'Pending Verification'**
+  String get pendingVerification;
+
+  /// Verified status
+  ///
+  /// In en, this message translates to:
+  /// **'Verified'**
+  String get verified;
+
+  /// State permit attached status
+  ///
+  /// In en, this message translates to:
+  /// **'State Permit Attached'**
+  String get statePermitAttached;
+
+  /// Locality permit attached status
+  ///
+  /// In en, this message translates to:
+  /// **'Locality Permit Attached'**
+  String get localityPermitAttached;
+
+  /// Do you have state permit question
+  ///
+  /// In en, this message translates to:
+  /// **'Do you have the state permit for {state}?'**
+  String doYouHaveStatePermit(String state);
+
+  /// Do you have locality permit question
+  ///
+  /// In en, this message translates to:
+  /// **'Do you have the locality permit for {locality}?'**
+  String doYouHaveLocalityPermit(String locality);
+
+  /// Yes I have the permit option
+  ///
+  /// In en, this message translates to:
+  /// **'Yes, I have the permit'**
+  String get yesHaveIt;
+
+  /// Required but don't have option
+  ///
+  /// In en, this message translates to:
+  /// **'Required but I don\'t have it'**
+  String get noRequiredDontHave;
+
+  /// Not required in this locality option
+  ///
+  /// In en, this message translates to:
+  /// **'Not required in this locality'**
+  String get notRequiredInLocality;
+
+  /// Can proceed without permit question
+  ///
+  /// In en, this message translates to:
+  /// **'Can you proceed without the permit?'**
+  String get canProceedWithout;
+
+  /// Yes can proceed without option
+  ///
+  /// In en, this message translates to:
+  /// **'Yes, I can proceed'**
+  String get yesProceedWithout;
+
+  /// No cannot proceed without option
+  ///
+  /// In en, this message translates to:
+  /// **'No, I need the permit'**
+  String get noCannotProceed;
+
+  /// Send back to FOM button
+  ///
+  /// In en, this message translates to:
+  /// **'Send Back to FOM'**
+  String get sendBackToFom;
+
+  /// Site verification title
+  ///
+  /// In en, this message translates to:
+  /// **'Site Verification'**
+  String get siteVerification;
+
+  /// Verify site button
+  ///
+  /// In en, this message translates to:
+  /// **'Verify Site'**
+  String get verifySite;
+
+  /// Return to FOM button
+  ///
+  /// In en, this message translates to:
+  /// **'Return to FOM'**
+  String get returnToFom;
+
+  /// Pending sites tab
+  ///
+  /// In en, this message translates to:
+  /// **'Pending Sites'**
+  String get pendingSites;
+
+  /// CP Verification tab
+  ///
+  /// In en, this message translates to:
+  /// **'CP Verification'**
+  String get cpVerification;
+
+  /// Verified sites tab
+  ///
+  /// In en, this message translates to:
+  /// **'Verified Sites'**
+  String get verifiedSites;
+
+  /// Sites needing state permit count
+  ///
+  /// In en, this message translates to:
+  /// **'{count} sites need state permit'**
+  String sitesNeedStatePermit(int count);
+
+  /// Sites needing locality permit count
+  ///
+  /// In en, this message translates to:
+  /// **'{count} sites need locality permit'**
+  String sitesNeedLocalityPermit(int count);
+
+  /// Step 1 select file
+  ///
+  /// In en, this message translates to:
+  /// **'Step 1: Select File'**
+  String get step1SelectFile;
+
+  /// Step 2 enter dates
+  ///
+  /// In en, this message translates to:
+  /// **'Step 2: Enter Dates'**
+  String get step2EnterDates;
+
+  /// Step 3 add comments
+  ///
+  /// In en, this message translates to:
+  /// **'Step 3: Add Comments (Optional)'**
+  String get step3AddComments;
+
+  /// Step 4 upload
+  ///
+  /// In en, this message translates to:
+  /// **'Step 4: Upload Permit'**
+  String get step4Upload;
+
+  /// Tap to select file instruction
+  ///
+  /// In en, this message translates to:
+  /// **'Tap to select file'**
+  String get tapToSelectFile;
+
+  /// Supported formats list
+  ///
+  /// In en, this message translates to:
+  /// **'Supported formats: PDF, JPG, PNG'**
+  String get supportedFormats;
+
+  /// File selected message
+  ///
+  /// In en, this message translates to:
+  /// **'File selected: {fileName}'**
+  String fileSelected(String fileName);
+
+  /// Gallery option for file picker
+  ///
+  /// In en, this message translates to:
+  /// **'Gallery'**
+  String get gallery;
+
+  /// PDF document option
+  ///
+  /// In en, this message translates to:
+  /// **'PDF Document'**
+  String get pdfDocument;
+
+  /// Subtitle for yes have permit option
+  ///
+  /// In en, this message translates to:
+  /// **'I will upload the permit document'**
+  String get willUploadPermit;
+
+  /// Subtitle for required but don't have option
+  ///
+  /// In en, this message translates to:
+  /// **'The permit is required but I cannot provide it now'**
+  String get cannotProvideNow;
+
+  /// Subtitle for not required option
+  ///
+  /// In en, this message translates to:
+  /// **'No locality permit is needed for operations here'**
+  String get noPermitNeeded;
+
+  /// Subtitle for yes proceed option
+  ///
+  /// In en, this message translates to:
+  /// **'Continue without the locality permit'**
+  String get continueWithoutPermit;
+
+  /// Subtitle for no cannot proceed option
+  ///
+  /// In en, this message translates to:
+  /// **'Send back to Field Operations Manager'**
+  String get sendBackToManager;
+
+  /// Follow up question description
+  ///
+  /// In en, this message translates to:
+  /// **'Choose how to proceed for {count} {sitesLabel} in {locality}:'**
+  String chooseHowToProceed(int count, String sitesLabel, String locality);
+
+  /// Single site label
+  ///
+  /// In en, this message translates to:
+  /// **'site'**
+  String get site;
+
+  /// Multiple sites label
+  ///
+  /// In en, this message translates to:
+  /// **'sites'**
+  String get sites;
+
+  /// Upload failed message
+  ///
+  /// In en, this message translates to:
+  /// **'Upload failed'**
+  String get uploadFailed;
+
+  /// Database update failed message
+  ///
+  /// In en, this message translates to:
+  /// **'Database update failed. Please try again.'**
+  String get databaseUpdateFailed;
+
+  /// Select date placeholder
+  ///
+  /// In en, this message translates to:
+  /// **'Select date'**
+  String get selectDate;
+
+  /// Title for bulk state permit upload dialog
+  ///
+  /// In en, this message translates to:
+  /// **'Bulk State Permit Upload'**
+  String get bulkStatePermitUpload;
+
+  /// Title for bulk locality permit upload dialog
+  ///
+  /// In en, this message translates to:
+  /// **'Bulk Locality Permit Upload'**
+  String get bulkLocalityPermitUpload;
+
+  /// Label for number of states selected
+  ///
+  /// In en, this message translates to:
+  /// **'states selected'**
+  String get statesSelected;
+
+  /// Label for number of localities selected
+  ///
+  /// In en, this message translates to:
+  /// **'localities selected'**
+  String get localitiesSelected;
+
+  /// Instructions for bulk upload
+  ///
+  /// In en, this message translates to:
+  /// **'Select files and dates for each state. Only states with complete information will be uploaded.'**
+  String get bulkUploadInstructions;
+
+  /// Instructions for bulk locality upload
+  ///
+  /// In en, this message translates to:
+  /// **'Select files and dates for each locality. Only localities with complete information will be uploaded.'**
+  String get bulkLocalityUploadInstructions;
+
+  /// Error message when no permits are ready
+  ///
+  /// In en, this message translates to:
+  /// **'No permits ready for upload'**
+  String get noPermitsReady;
+
+  /// Status label for ready items
+  ///
+  /// In en, this message translates to:
+  /// **'Ready'**
+  String get ready;
+
+  /// Status label for uploaded items
+  ///
+  /// In en, this message translates to:
+  /// **'Uploaded'**
+  String get uploaded;
+
+  /// Status label for failed items
+  ///
+  /// In en, this message translates to:
+  /// **'Failed'**
+  String get failed;
+
+  /// Button to upload all ready permits
+  ///
+  /// In en, this message translates to:
+  /// **'Upload All'**
+  String get uploadAll;
+
+  /// Notification title for app update
+  ///
+  /// In en, this message translates to:
+  /// **'App Update Available'**
+  String get notificationAppUpdateTitle;
+
+  /// Notification body for app update
+  ///
+  /// In en, this message translates to:
+  /// **'A new version ({version}) is ready. Tap to update!'**
+  String notificationAppUpdateBody(String version);
+
+  /// Notification title for downloading update
+  ///
+  /// In en, this message translates to:
+  /// **'Downloading Update'**
+  String get notificationDownloadingTitle;
+
+  /// Notification body for downloading update
+  ///
+  /// In en, this message translates to:
+  /// **'Please wait...'**
+  String get notificationDownloadingBody;
+
+  /// Notification title for update installed
+  ///
+  /// In en, this message translates to:
+  /// **'Update Installed'**
+  String get notificationUpdateInstalledTitle;
+
+  /// Notification body for update installed
+  ///
+  /// In en, this message translates to:
+  /// **'Your app is now up to date. Restart to apply.'**
+  String get notificationUpdateInstalledBody;
+
+  /// Notification title for cost approved
+  ///
+  /// In en, this message translates to:
+  /// **'Cost Submission Approved'**
+  String get notificationCostApprovedTitle;
+
+  /// Notification body for cost approved
+  ///
+  /// In en, this message translates to:
+  /// **'Approved for site visit {siteId}. Amount: {amount} {currency}'**
+  String notificationCostApprovedBody(String siteId, String amount, String currency);
+
+  /// Notification title for cost rejected
+  ///
+  /// In en, this message translates to:
+  /// **'Cost Submission Rejected'**
+  String get notificationCostRejectedTitle;
+
+  /// Notification body for cost rejected
+  ///
+  /// In en, this message translates to:
+  /// **'Rejected for site visit {siteId}. Reason: {reason}'**
+  String notificationCostRejectedBody(String siteId, String reason);
+
+  /// Notification title for revision requested
+  ///
+  /// In en, this message translates to:
+  /// **'Revision Requested'**
+  String get notificationRevisionTitle;
+
+  /// Notification body for revision requested
+  ///
+  /// In en, this message translates to:
+  /// **'Site visit {siteId} needs revision. Notes: {notes}'**
+  String notificationRevisionBody(String siteId, String notes);
+
+  /// Notification title for sync completed
+  ///
+  /// In en, this message translates to:
+  /// **'Offline Sync Completed'**
+  String get notificationSyncCompletedTitle;
+
+  /// Notification body for sync completed
+  ///
+  /// In en, this message translates to:
+  /// **'{count} submission(s) synchronized successfully.'**
+  String notificationSyncCompletedBody(int count);
+
+  /// Notification title for budget alert
+  ///
+  /// In en, this message translates to:
+  /// **'Budget Alert'**
+  String get notificationBudgetAlertTitle;
+
+  /// Notification body for budget alert
+  ///
+  /// In en, this message translates to:
+  /// **'Remaining budget for {siteId}: {amount} {currency}'**
+  String notificationBudgetAlertBody(String siteId, String amount, String currency);
+
+  /// Notification title for new message
+  ///
+  /// In en, this message translates to:
+  /// **'New Message'**
+  String get notificationNewMessageTitle;
+
+  /// Notification title for signature verified
+  ///
+  /// In en, this message translates to:
+  /// **'Signature Verified'**
+  String get notificationSignatureVerifiedTitle;
+
+  /// Notification body for signature verified
+  ///
+  /// In en, this message translates to:
+  /// **'Your signature has been verified by admin.'**
+  String get notificationSignatureVerifiedBody;
+
+  /// Notification title for signature rejected
+  ///
+  /// In en, this message translates to:
+  /// **'Signature Rejected'**
+  String get notificationSignatureRejectedTitle;
+
+  /// Notification body for signature rejected
+  ///
+  /// In en, this message translates to:
+  /// **'Your signature was rejected. Please submit a new one.'**
+  String get notificationSignatureRejectedBody;
+
+  /// Notification title for site visit assigned
+  ///
+  /// In en, this message translates to:
+  /// **'Site Visit Assigned'**
+  String get notificationSiteAssignedTitle;
+
+  /// Notification body for site visit assigned
+  ///
+  /// In en, this message translates to:
+  /// **'You have been assigned to visit: {siteName}'**
+  String notificationSiteAssignedBody(String siteName);
+
+  /// Notification title for payment received
+  ///
+  /// In en, this message translates to:
+  /// **'Payment Received'**
+  String get notificationPaymentReceivedTitle;
+
+  /// Notification body for payment received
+  ///
+  /// In en, this message translates to:
+  /// **'You received {amount} {currency}.'**
+  String notificationPaymentReceivedBody(String amount, String currency);
+
+  /// Notification title for approval required
+  ///
+  /// In en, this message translates to:
+  /// **'Approval Required'**
+  String get notificationApprovalRequiredTitle;
+
+  /// Notification body for approval required
+  ///
+  /// In en, this message translates to:
+  /// **'A {itemType} requires your approval.'**
+  String notificationApprovalRequiredBody(String itemType);
+
+  /// Notification title for support ticket update
+  ///
+  /// In en, this message translates to:
+  /// **'Support Ticket Updated'**
+  String get notificationSupportTicketTitle;
+
+  /// Notification body for support ticket update
+  ///
+  /// In en, this message translates to:
+  /// **'Your support ticket #{ticketId} has been updated.'**
+  String notificationSupportTicketBody(String ticketId);
+
+  /// Notification title for incoming call
+  ///
+  /// In en, this message translates to:
+  /// **'Incoming Call'**
+  String get notificationIncomingCallTitle;
+
+  /// Notification body for incoming call
+  ///
+  /// In en, this message translates to:
+  /// **'{callerName} is calling you.'**
+  String notificationIncomingCallBody(String callerName);
+
+  /// Notification title for missed call
+  ///
+  /// In en, this message translates to:
+  /// **'Missed Call'**
+  String get notificationMissedCallTitle;
+
+  /// Notification body for missed call
+  ///
+  /// In en, this message translates to:
+  /// **'You missed a call from {callerName}.'**
+  String notificationMissedCallBody(String callerName);
+
+  /// No description provided for @mmpManagement.
+  ///
+  /// In en, this message translates to:
+  /// **'MMP Management'**
+  String get mmpManagement;
+
+  /// No description provided for @accessDenied.
+  ///
+  /// In en, this message translates to:
+  /// **'Access Denied'**
+  String get accessDenied;
+
+  /// No description provided for @noPermission.
+  ///
+  /// In en, this message translates to:
+  /// **'You don\'t have permission to access this page.'**
+  String get noPermission;
+
+  /// No description provided for @myAssignments.
+  ///
+  /// In en, this message translates to:
+  /// **'My Assignments'**
+  String get myAssignments;
+
+  /// No description provided for @claimManageComplete.
+  ///
+  /// In en, this message translates to:
+  /// **'Claim, manage, and complete site visits'**
+  String get claimManageComplete;
+
+  /// No description provided for @searchSites.
+  ///
+  /// In en, this message translates to:
+  /// **'Search sites...'**
+  String get searchSites;
+
+  /// No description provided for @claimable.
+  ///
+  /// In en, this message translates to:
+  /// **'Claimable'**
+  String get claimable;
+
+  /// No description provided for @assigned.
+  ///
+  /// In en, this message translates to:
+  /// **'Assigned'**
+  String get assigned;
+
+  /// No description provided for @mySites.
+  ///
+  /// In en, this message translates to:
+  /// **'My Sites'**
+  String get mySites;
+
+  /// No description provided for @inProgress.
+  ///
+  /// In en, this message translates to:
+  /// **'In Progress'**
+  String get inProgress;
+
+  /// No description provided for @claimSite.
+  ///
+  /// In en, this message translates to:
+  /// **'Claim Site'**
+  String get claimSite;
+
+  /// No description provided for @reclaimSite.
+  ///
+  /// In en, this message translates to:
+  /// **'Reclaim'**
+  String get reclaimSite;
+
+  /// No description provided for @completeVisit.
+  ///
+  /// In en, this message translates to:
+  /// **'Complete'**
+  String get completeVisit;
+
+  /// No description provided for @viewReport.
+  ///
+  /// In en, this message translates to:
+  /// **'View Report'**
+  String get viewReport;
+
+  /// No description provided for @requestAdvance.
+  ///
+  /// In en, this message translates to:
+  /// **'Request Advance'**
+  String get requestAdvance;
+
+  /// No description provided for @acknowledgeCost.
+  ///
+  /// In en, this message translates to:
+  /// **'Acknowledge Cost'**
+  String get acknowledgeCost;
+
+  /// No description provided for @siteClaimedSuccess.
+  ///
+  /// In en, this message translates to:
+  /// **'Site claimed successfully!'**
+  String get siteClaimedSuccess;
+
+  /// No description provided for @siteReclaimedSuccess.
+  ///
+  /// In en, this message translates to:
+  /// **'Site reclaimed successfully'**
+  String get siteReclaimedSuccess;
+
+  /// No description provided for @visitStartedSuccess.
+  ///
+  /// In en, this message translates to:
+  /// **'Visit started successfully'**
+  String get visitStartedSuccess;
+
+  /// No description provided for @visitCompletedSuccess.
+  ///
+  /// In en, this message translates to:
+  /// **'Visit completed and report submitted successfully'**
+  String get visitCompletedSuccess;
+
+  /// No description provided for @errorOccurred.
+  ///
+  /// In en, this message translates to:
+  /// **'Error occurred'**
+  String get errorOccurred;
+
+  /// No description provided for @call.
+  ///
+  /// In en, this message translates to:
+  /// **'Call'**
+  String get call;
+
+  /// No description provided for @sms.
+  ///
+  /// In en, this message translates to:
+  /// **'SMS'**
+  String get sms;
+
+  /// No description provided for @whatsapp.
+  ///
+  /// In en, this message translates to:
+  /// **'WhatsApp'**
+  String get whatsapp;
+
+  /// No description provided for @state.
+  ///
+  /// In en, this message translates to:
+  /// **'State'**
+  String get state;
+
+  /// No description provided for @locality.
+  ///
+  /// In en, this message translates to:
+  /// **'Locality'**
+  String get locality;
+
+  /// No description provided for @transportFee.
+  ///
+  /// In en, this message translates to:
+  /// **'Transport Fee'**
+  String get transportFee;
+
+  /// No description provided for @enumeratorFee.
+  ///
+  /// In en, this message translates to:
+  /// **'Enumerator Fee'**
+  String get enumeratorFee;
+
+  /// No description provided for @totalCost.
+  ///
+  /// In en, this message translates to:
+  /// **'Total Cost'**
+  String get totalCost;
+
+  /// No description provided for @noSitesAvailable.
+  ///
+  /// In en, this message translates to:
+  /// **'No sites available'**
+  String get noSitesAvailable;
+
+  /// No description provided for @pullToRefresh.
+  ///
+  /// In en, this message translates to:
+  /// **'Pull to refresh'**
+  String get pullToRefresh;
+
+  /// No description provided for @willSyncWhenOnline.
+  ///
+  /// In en, this message translates to:
+  /// **'Will sync when online'**
+  String get willSyncWhenOnline;
+
+  /// No description provided for @dispatched.
+  ///
+  /// In en, this message translates to:
+  /// **'Dispatched'**
+  String get dispatched;
+
+  /// No description provided for @onlyAdminsCanReclaim.
+  ///
+  /// In en, this message translates to:
+  /// **'Only admins can reclaim sites'**
+  String get onlyAdminsCanReclaim;
+
+  /// No description provided for @releaseSiteToPool.
+  ///
+  /// In en, this message translates to:
+  /// **'Release this site back to the dispatch pool?'**
+  String get releaseSiteToPool;
+
+  /// No description provided for @siteDetails.
+  ///
+  /// In en, this message translates to:
+  /// **'Site Details'**
+  String get siteDetails;
+
+  /// No description provided for @visitDetails.
+  ///
+  /// In en, this message translates to:
+  /// **'Visit Details'**
+  String get visitDetails;
+
+  /// No description provided for @auditTrail.
+  ///
+  /// In en, this message translates to:
+  /// **'Audit Trail'**
+  String get auditTrail;
+
+  /// No description provided for @assignedTo.
+  ///
+  /// In en, this message translates to:
+  /// **'Assigned To'**
+  String get assignedTo;
+
+  /// No description provided for @visitDate.
+  ///
+  /// In en, this message translates to:
+  /// **'Visit Date'**
+  String get visitDate;
+
+  /// No description provided for @project.
+  ///
+  /// In en, this message translates to:
+  /// **'Project'**
+  String get project;
+
+  /// No description provided for @activity.
+  ///
+  /// In en, this message translates to:
+  /// **'Activity'**
+  String get activity;
+
+  /// No description provided for @cpName.
+  ///
+  /// In en, this message translates to:
+  /// **'CP Name'**
+  String get cpName;
+
+  /// No description provided for @openInMaps.
+  ///
+  /// In en, this message translates to:
+  /// **'Open in Maps'**
+  String get openInMaps;
+
+  /// No description provided for @noData.
+  ///
+  /// In en, this message translates to:
+  /// **'No data available'**
+  String get noData;
+
+  /// No description provided for @view.
+  ///
+  /// In en, this message translates to:
+  /// **'View'**
+  String get view;
+
+  /// No description provided for @overdue.
+  ///
+  /// In en, this message translates to:
+  /// **'Overdue'**
+  String get overdue;
+
+  /// No description provided for @inbox.
+  ///
+  /// In en, this message translates to:
+  /// **'Inbox'**
+  String get inbox;
+
+  /// No description provided for @drafts.
+  ///
+  /// In en, this message translates to:
+  /// **'Drafts'**
+  String get drafts;
+
+  /// No description provided for @outbox.
+  ///
+  /// In en, this message translates to:
+  /// **'Outbox'**
+  String get outbox;
+
+  /// No description provided for @sent.
+  ///
+  /// In en, this message translates to:
+  /// **'Sent'**
+  String get sent;
+
+  /// No description provided for @accepted.
+  ///
+  /// In en, this message translates to:
+  /// **'Accepted'**
+  String get accepted;
+
+  /// No description provided for @ongoing.
+  ///
+  /// In en, this message translates to:
+  /// **'Ongoing'**
+  String get ongoing;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

@@ -179,16 +179,16 @@ class _LoginScreenState extends State<LoginScreen>
       // Check connectivity first - if offline, use cached session
       final connectivityResult = await Connectivity().checkConnectivity();
       final isOnline = !connectivityResult.contains(ConnectivityResult.none);
-      
+
       if (!isOnline) {
         // OFFLINE MODE: Check if we have a valid cached session
         debugPrint('📴 Device is offline - checking cached session...');
         final localAuthData = await _authService.getLocalAuthData();
-        
+
         if (localAuthData != null && localAuthData['user_id'] != null) {
           debugPrint('✅ Cached session found - proceeding offline');
           HapticFeedback.mediumImpact();
-          
+
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(
@@ -213,7 +213,9 @@ class _LoginScreenState extends State<LoginScreen>
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(
-                content: Text('No internet connection. Please connect to login for the first time.'),
+                content: Text(
+                  'No internet connection. Please connect to login for the first time.',
+                ),
                 backgroundColor: Colors.orange,
               ),
             );
@@ -239,11 +241,11 @@ class _LoginScreenState extends State<LoginScreen>
 
           // Fetch user profile for welcome screen
           final profile = await _fetchUserProfile(response.user!.id);
-          
+
           // Show welcome screen then navigate to main
           if (mounted) {
             await _navigateWithWelcome(
-              profile['fullName'] ?? email?.split('@').first ?? 'User',
+              profile['fullName'] ?? email.split('@').first ?? 'User',
               profile['avatarUrl'],
             );
           }
@@ -267,18 +269,18 @@ class _LoginScreenState extends State<LoginScreen>
       }
     } catch (e) {
       debugPrint('❌ Error during biometric login: $e');
-      
+
       // If network error, try offline mode
-      if (e.toString().contains('SocketException') || 
+      if (e.toString().contains('SocketException') ||
           e.toString().contains('Failed host lookup') ||
           e.toString().contains('No address associated')) {
         debugPrint('📴 Network error detected - attempting offline login...');
         final localAuthData = await _authService.getLocalAuthData();
-        
+
         if (localAuthData != null && localAuthData['user_id'] != null) {
           debugPrint('✅ Cached session found - proceeding offline');
           HapticFeedback.mediumImpact();
-          
+
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(
@@ -298,19 +300,17 @@ class _LoginScreenState extends State<LoginScreen>
           return;
         }
       }
-      
+
       setState(() => _isLoading = false);
       if (mounted) {
         String errorMessage = 'Biometric login error';
-        if (e.toString().contains('SocketException') || 
+        if (e.toString().contains('SocketException') ||
             e.toString().contains('Failed host lookup')) {
-          errorMessage = 'No internet connection. Please try again when online.';
+          errorMessage =
+              'No internet connection. Please try again when online.';
         }
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(errorMessage),
-            backgroundColor: Colors.red,
-          ),
+          SnackBar(content: Text(errorMessage), backgroundColor: Colors.red),
         );
       }
     }
@@ -394,12 +394,13 @@ class _LoginScreenState extends State<LoginScreen>
           .select('full_name, username, avatar_url')
           .eq('id', userId)
           .maybeSingle();
-      
+
       if (response != null) {
         return {
-          'fullName': response['full_name'] as String? ?? 
-                      response['username'] as String? ?? 
-                      _emailController.text.split('@').first,
+          'fullName':
+              response['full_name'] as String? ??
+              response['username'] as String? ??
+              _emailController.text.split('@').first,
           'avatarUrl': response['avatar_url'] as String?,
         };
       }
@@ -415,7 +416,7 @@ class _LoginScreenState extends State<LoginScreen>
   /// Navigate to main screen with welcome screen
   Future<void> _navigateWithWelcome(String fullName, String? avatarUrl) async {
     if (!mounted) return;
-    
+
     await showWelcomeScreen(
       context: context,
       fullName: fullName,
@@ -482,7 +483,7 @@ class _LoginScreenState extends State<LoginScreen>
 
               // Fetch user profile for welcome screen
               final profile = await _fetchUserProfile(userId);
-              
+
               // Show welcome screen then navigate to main
               await _navigateWithWelcome(
                 profile['fullName'] ?? _emailController.text.split('@').first,
@@ -519,7 +520,7 @@ class _LoginScreenState extends State<LoginScreen>
 
                 // Fetch user profile for welcome screen
                 final profile = await _fetchUserProfile(userId);
-                
+
                 // Show welcome screen then navigate to main
                 await _navigateWithWelcome(
                   profile['fullName'] ?? _emailController.text.split('@').first,
@@ -547,7 +548,7 @@ class _LoginScreenState extends State<LoginScreen>
 
                 // Fetch user profile for welcome screen
                 final profile = await _fetchUserProfile(userId);
-                
+
                 // Show welcome screen then navigate to main
                 await _navigateWithWelcome(
                   profile['fullName'] ?? _emailController.text.split('@').first,

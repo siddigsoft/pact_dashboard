@@ -9,7 +9,6 @@ import '../providers/offline_provider.dart';
 import '../models/pact_user_profile.dart';
 import '../models/site_visit.dart';
 import '../utils/site_visit_constraints.dart';
-import '../utils/geo_distance.dart';
 import '../utils/confirmation_deadlines.dart';
 import '../services/claim_fee_service.dart';
 import '../services/notification_trigger_service.dart';
@@ -47,9 +46,9 @@ class _ClaimSiteButtonState extends ConsumerState<ClaimSiteButton> {
 
   bool get _isFieldWorker {
     final role = widget.userProfile?.role.toLowerCase() ?? '';
-    return role == 'datacollector' || 
-           role == 'data_collector' || 
-           role == 'coordinator';
+    return role == 'datacollector' ||
+        role == 'data_collector' ||
+        role == 'coordinator';
   }
 
   bool get _canSeeBreakdown => !_isFieldWorker;
@@ -57,29 +56,30 @@ class _ClaimSiteButtonState extends ConsumerState<ClaimSiteButton> {
   @override
   Widget build(BuildContext context) {
     return ElevatedButton.icon(
-      onPressed: _isLoading || _isClaimed || _isCalculatingFee 
-          ? null 
-          : _handleClaimInitiate,
-      icon: _isLoading || _isCalculatingFee
-          ? const SizedBox(
-              width: 16,
-              height: 16,
-              child: CircularProgressIndicator(
-                strokeWidth: 2,
-                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-              ),
-            )
-          : Icon(_isClaimed ? Icons.check_circle : Icons.add_task),
-      label: Text(_getButtonText()),
-      style: ElevatedButton.styleFrom(
-        backgroundColor: _isClaimed ? AppColors.success : AppColors.primary,
-        foregroundColor: Colors.white,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(8),
-        ),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      ),
-    ).animate(target: _isClaimed ? 1 : 0)
+          onPressed: _isLoading || _isClaimed || _isCalculatingFee
+              ? null
+              : _handleClaimInitiate,
+          icon: _isLoading || _isCalculatingFee
+              ? const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                  ),
+                )
+              : Icon(_isClaimed ? Icons.check_circle : Icons.add_task),
+          label: Text(_getButtonText()),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: _isClaimed ? AppColors.success : AppColors.primary,
+            foregroundColor: Colors.white,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          ),
+        )
+        .animate(target: _isClaimed ? 1 : 0)
         .scale(duration: const Duration(milliseconds: 300));
   }
 
@@ -160,10 +160,7 @@ class _ClaimSiteButtonState extends ConsumerState<ClaimSiteButton> {
             Icon(Icons.assignment_turned_in, color: AppColors.primary),
             const SizedBox(width: 8),
             const Expanded(
-              child: Text(
-                'Confirm Site Claim',
-                style: TextStyle(fontSize: 18),
-              ),
+              child: Text('Confirm Site Claim', style: TextStyle(fontSize: 18)),
             ),
           ],
         ),
@@ -204,10 +201,7 @@ class _ClaimSiteButtonState extends ConsumerState<ClaimSiteButton> {
               const SizedBox(height: 16),
               const Text(
                 'Payment Breakdown',
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 14,
-                ),
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
               ),
               const SizedBox(height: 8),
               _buildFeeRow(
@@ -231,10 +225,7 @@ class _ClaimSiteButtonState extends ConsumerState<ClaimSiteButton> {
                 children: [
                   const Text(
                     'Total Payout',
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 16,
-                    ),
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                   ),
                   Container(
                     padding: const EdgeInsets.symmetric(
@@ -266,7 +257,11 @@ class _ClaimSiteButtonState extends ConsumerState<ClaimSiteButton> {
                   ),
                   child: Row(
                     children: [
-                      Icon(Icons.verified, size: 16, color: Colors.blue.shade700),
+                      Icon(
+                        Icons.verified,
+                        size: 16,
+                        color: Colors.blue.shade700,
+                      ),
                       const SizedBox(width: 6),
                       Expanded(
                         child: Text(
@@ -292,7 +287,11 @@ class _ClaimSiteButtonState extends ConsumerState<ClaimSiteButton> {
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Icon(Icons.info_outline, size: 18, color: Colors.orange.shade700),
+                    Icon(
+                      Icons.info_outline,
+                      size: 18,
+                      color: Colors.orange.shade700,
+                    ),
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
@@ -350,20 +349,14 @@ class _ClaimSiteButtonState extends ConsumerState<ClaimSiteButton> {
               if (subtitle != null)
                 Text(
                   subtitle,
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: Colors.grey.shade500,
-                  ),
+                  style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
                 ),
             ],
           ),
         ),
         Text(
           value,
-          style: const TextStyle(
-            fontWeight: FontWeight.bold,
-            fontSize: 14,
-          ),
+          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
         ),
       ],
     );
@@ -403,8 +396,10 @@ class _ClaimSiteButtonState extends ConsumerState<ClaimSiteButton> {
           type: SnackBarType.success,
         );
       }
-    } catch (e) {
-      debugPrint('Error claiming site: $e');
+    } catch (e, stack) {
+      debugPrint('[ClaimSiteButton] Error claiming site: $e');
+      debugPrint('[ClaimSiteButton] Exception type: ${e.runtimeType}');
+      debugPrint('[ClaimSiteButton] Stack: $stack');
       widget.onClaimError?.call();
 
       if (mounted) {
@@ -431,18 +426,25 @@ class _ClaimSiteButtonState extends ConsumerState<ClaimSiteButton> {
       throw Exception('User not authenticated');
     }
 
+    // Match web ClaimSiteButton: send full params (fee + normalized role_scope) so backend
+    // uses our values and does not SELECT from user_classifications (avoids enum error when DB has "enumerator").
+    final roleScope = ClaimFeeService.normalizeRoleScopeForEnum(breakdown.roleScope);
+    final params = {
+      'p_site_id': widget.siteEntryId,
+      'p_user_id': userId,
+      'p_enumerator_fee': breakdown.enumeratorFee,
+      'p_total_cost': breakdown.totalPayout,
+      'p_classification_level': breakdown.classificationLevel,
+      'p_role_scope': roleScope,
+      'p_fee_source': breakdown.feeSource,
+    };
+    debugPrint('[ClaimSiteButton] Calling claim_site_visit with params: $params');
     final response = await supabase.rpc(
       'claim_site_visit',
-      params: {
-        'p_site_id': widget.siteEntryId,
-        'p_user_id': userId,
-        'p_enumerator_fee': breakdown.enumeratorFee,
-        'p_total_cost': breakdown.totalPayout,
-        'p_classification_level': breakdown.classificationLevel,
-        'p_role_scope': breakdown.roleScope,
-        'p_fee_source': breakdown.feeSource,
-      },
+      params: params,
     );
+
+    debugPrint('[ClaimSiteButton] RPC raw response: $response');
 
     if (response == null) {
       throw Exception('Failed to claim site - unexpected response from server');
@@ -451,19 +453,27 @@ class _ClaimSiteButtonState extends ConsumerState<ClaimSiteButton> {
     final result = response as Map<String, dynamic>;
 
     if (result['success'] != true) {
+      debugPrint(
+        '[ClaimSiteButton] RPC returned failure: success=${result['success']}, '
+        'message=${result['message']}, error=${result['error']}',
+      );
       throw Exception(result['message'] ?? 'Failed to claim site');
     }
 
     await _setConfirmationDeadlines();
 
+    // Use fee from RPC result when present; fallback to breakdown for notifications
+    final enumeratorFee = (result['enumerator_fee'] as num?)?.toDouble() ?? breakdown.enumeratorFee;
+    final transportFee = (result['transport_fee'] as num?)?.toDouble() ?? breakdown.transportBudget;
+
     final notificationService = NotificationTriggerService();
-    
+
     await notificationService.siteAssigned(
       userId,
       widget.siteName,
       widget.siteEntryId,
-      enumeratorFee: breakdown.enumeratorFee,
-      transportFee: breakdown.transportBudget,
+      enumeratorFee: enumeratorFee,
+      transportFee: transportFee,
     );
 
     if (widget.userProfile != null) {
@@ -487,7 +497,7 @@ class _ClaimSiteButtonState extends ConsumerState<ClaimSiteButton> {
   Future<void> _setConfirmationDeadlines() async {
     try {
       DateTime? visitDate;
-      
+
       if (widget.scheduledDate != null) {
         visitDate = DateTime.tryParse(widget.scheduledDate!);
       }
@@ -509,17 +519,23 @@ class _ClaimSiteButtonState extends ConsumerState<ClaimSiteButton> {
           final visitDataRaw = siteData['visit_data'];
           if (dueDate != null) {
             visitDate = DateTime.tryParse(dueDate);
-          } else if (visitDataRaw is Map && visitDataRaw['scheduledDate'] != null) {
-            visitDate = DateTime.tryParse(visitDataRaw['scheduledDate'] as String);
+          } else if (visitDataRaw is Map &&
+              visitDataRaw['scheduledDate'] != null) {
+            visitDate = DateTime.tryParse(
+              visitDataRaw['scheduledDate'] as String,
+            );
           }
         }
       }
 
       if (visitDate != null) {
-        final deadlines = await ConfirmationDeadlineUtils.calculateConfirmationDeadlinesAsync(visitDate);
+        final deadlines =
+            await ConfirmationDeadlineUtils.calculateConfirmationDeadlinesAsync(
+              visitDate,
+            );
 
         final supabase = Supabase.instance.client;
-        
+
         // Try to update mmp_site_entries first (main table for site visits)
         final currentMmpData = await supabase
             .from('mmp_site_entries')
@@ -528,7 +544,9 @@ class _ClaimSiteButtonState extends ConsumerState<ClaimSiteButton> {
             .maybeSingle();
 
         if (currentMmpData != null) {
-          final existingAdditionalData = (currentMmpData['additional_data'] as Map<String, dynamic>?) ?? {};
+          final existingAdditionalData =
+              (currentMmpData['additional_data'] as Map<String, dynamic>?) ??
+              {};
 
           final updatedAdditionalData = {
             ...existingAdditionalData,
@@ -543,7 +561,9 @@ class _ClaimSiteButtonState extends ConsumerState<ClaimSiteButton> {
               })
               .eq('id', widget.siteEntryId);
 
-          debugPrint('Confirmation deadlines set in mmp_site_entries: ${deadlines.toJson()}');
+          debugPrint(
+            'Confirmation deadlines set in mmp_site_entries: ${deadlines.toJson()}',
+          );
         } else {
           // Fallback to site_visits table
           final currentData = await supabase
@@ -552,7 +572,8 @@ class _ClaimSiteButtonState extends ConsumerState<ClaimSiteButton> {
               .eq('id', widget.siteEntryId)
               .maybeSingle();
 
-          final existingVisitData = (currentData?['visit_data'] as Map<String, dynamic>?) ?? {};
+          final existingVisitData =
+              (currentData?['visit_data'] as Map<String, dynamic>?) ?? {};
 
           final updatedVisitData = {
             ...existingVisitData,
@@ -567,7 +588,9 @@ class _ClaimSiteButtonState extends ConsumerState<ClaimSiteButton> {
               })
               .eq('id', widget.siteEntryId);
 
-          debugPrint('Confirmation deadlines set in site_visits: ${deadlines.toJson()}');
+          debugPrint(
+            'Confirmation deadlines set in site_visits: ${deadlines.toJson()}',
+          );
         }
       }
     } catch (e) {
@@ -581,20 +604,19 @@ class _ClaimSiteButtonState extends ConsumerState<ClaimSiteButton> {
 
   void _showError(String message) {
     if (mounted) {
-      AppSnackBar.show(
-        context,
-        message: message,
-        type: SnackBarType.error,
-      );
+      AppSnackBar.show(context, message: message, type: SnackBarType.error);
     }
   }
 
   String _getErrorMessage(String error) {
-    if (error.contains('already claimed') || error.contains('ALREADY_CLAIMED')) {
+    if (error.contains('already claimed') ||
+        error.contains('ALREADY_CLAIMED')) {
       return 'Site already claimed by another user';
-    } else if (error.contains('not available') || error.contains('INVALID_STATUS')) {
+    } else if (error.contains('not available') ||
+        error.contains('INVALID_STATUS')) {
       return 'Site is not available for claiming';
-    } else if (error.contains('in progress') || error.contains('CLAIM_IN_PROGRESS')) {
+    } else if (error.contains('in progress') ||
+        error.contains('CLAIM_IN_PROGRESS')) {
       return 'Another claim is in progress';
     } else if (error.contains('proximity') || error.contains('km away')) {
       return error;

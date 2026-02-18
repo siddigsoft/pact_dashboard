@@ -26,17 +26,35 @@ class DashboardCard extends StatelessWidget {
   List<Color> _getGradientColors() {
     // Match React gradient colors
     if (color == AppColors.primaryBlue || color == Colors.blue) {
-      return [const Color(0xFF3B82F6), const Color(0xFF1D4ED8)]; // blue-500 to blue-700
+      return [
+        const Color(0xFF3B82F6),
+        const Color(0xFF1D4ED8)
+      ]; // blue-500 to blue-700
     } else if (color == AppColors.accentGreen || color == Colors.green) {
-      return [const Color(0xFF10B981), const Color(0xFF047857)]; // green-500 to emerald-700
+      return [
+        const Color(0xFF10B981),
+        const Color(0xFF047857)
+      ]; // green-500 to emerald-700
     } else if (color == AppColors.primaryOrange || color == Colors.orange) {
-      return [const Color(0xFFF97316), const Color(0xFFC2410C)]; // orange-500 to orange-700
+      return [
+        const Color(0xFFF97316),
+        const Color(0xFFC2410C)
+      ]; // orange-500 to orange-700
     } else if (color == AppColors.accentRed || color == Colors.red) {
-      return [const Color(0xFFEF4444), const Color(0xFFB91C1C)]; // red-500 to red-700
+      return [
+        const Color(0xFFEF4444),
+        const Color(0xFFB91C1C)
+      ]; // red-500 to red-700
     } else if (color == Colors.cyan) {
-      return [const Color(0xFF06B6D4), const Color(0xFF0E7490)]; // cyan-500 to cyan-700
+      return [
+        const Color(0xFF06B6D4),
+        const Color(0xFF0E7490)
+      ]; // cyan-500 to cyan-700
     } else if (color == Colors.purple) {
-      return [const Color(0xFFA855F7), const Color(0xFF7E22CE)]; // purple-500 to purple-700
+      return [
+        const Color(0xFFA855F7),
+        const Color(0xFF7E22CE)
+      ]; // purple-500 to purple-700
     } else {
       // Default gradient
       return [color, color.withOpacity(0.7)];
@@ -46,7 +64,7 @@ class DashboardCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final gradientColors = _getGradientColors();
-    
+
     return GestureDetector(
       onTap: onTap,
       child: Container(
@@ -69,7 +87,7 @@ class DashboardCard extends StatelessWidget {
         child: Stack(
           children: [
             // Decorative sparkles pattern (subtle background element)
-            Positioned(
+            const Positioned(
               right: -16,
               bottom: -16,
               child: Opacity(
@@ -147,4 +165,3 @@ class DashboardCard extends StatelessWidget {
     );
   }
 }
-

@@ -19,18 +19,22 @@ class MessageReaction {
     String userName = '';
     if (json['profiles'] != null && json['profiles'] is Map) {
       final profile = json['profiles'] as Map;
-      userName = profile['full_name']?.toString() ?? 
-                 profile['username']?.toString() ?? 
-                 profile['email']?.toString() ?? '';
+      userName =
+          profile['full_name']?.toString() ??
+          profile['username']?.toString() ??
+          profile['email']?.toString() ??
+          '';
     }
-    
+
     return MessageReaction(
       id: json['id']?.toString() ?? '',
       messageId: json['message_id']?.toString() ?? '',
       userId: json['user_id']?.toString() ?? '',
       userName: userName,
       emoji: json['emoji']?.toString() ?? '',
-      createdAt: DateTime.tryParse(json['created_at']?.toString() ?? '') ?? DateTime.now(),
+      createdAt:
+          DateTime.tryParse(json['created_at']?.toString() ?? '') ??
+          DateTime.now(),
     );
   }
 

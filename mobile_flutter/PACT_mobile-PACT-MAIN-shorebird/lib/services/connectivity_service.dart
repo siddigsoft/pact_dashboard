@@ -5,7 +5,8 @@ import 'package:flutter/foundation.dart';
 class ConnectivityService {
   final Connectivity _connectivity;
   bool _isOnline = false;
-  final StreamController<bool> _connectivityController = StreamController<bool>.broadcast();
+  final StreamController<bool> _connectivityController =
+      StreamController<bool>.broadcast();
 
   ConnectivityService(this._connectivity);
 
@@ -28,9 +29,11 @@ class ConnectivityService {
 
   void _updateConnectionStatus(List<ConnectivityResult> results) {
     // Check if any result indicates connectivity
-    final hasConnection = results.any((result) =>
-      result != ConnectivityResult.none &&
-      result != ConnectivityResult.bluetooth);
+    final hasConnection = results.any(
+      (result) =>
+          result != ConnectivityResult.none &&
+          result != ConnectivityResult.bluetooth,
+    );
 
     _isOnline = hasConnection;
     _connectivityController.add(_isOnline);
@@ -41,10 +44,10 @@ class ConnectivityService {
     try {
       final results = await _connectivity.checkConnectivity();
       // Handle List<ConnectivityResult> from newer connectivity_plus
-      if (results is List) {
-        return (results as List).any((r) =>
-            r != ConnectivityResult.none && r != ConnectivityResult.bluetooth);
-      }
+      return (results as List).any(
+        (r) =>
+            r != ConnectivityResult.none && r != ConnectivityResult.bluetooth,
+      );
       return results != ConnectivityResult.none;
     } catch (e) {
       return false;

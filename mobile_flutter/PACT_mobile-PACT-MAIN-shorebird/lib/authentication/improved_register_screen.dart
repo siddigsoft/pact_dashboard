@@ -918,7 +918,7 @@ class _ImprovedRegisterScreenState extends State<ImprovedRegisterScreen>
               ),
               focusedBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(16),
-                borderSide: BorderSide(
+                borderSide: const BorderSide(
                   color: AppColors.primaryOrange,
                   width: 2,
                 ),
@@ -1016,7 +1016,7 @@ class _ImprovedRegisterScreenState extends State<ImprovedRegisterScreen>
               ),
               focusedBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(16),
-                borderSide: BorderSide(
+                borderSide: const BorderSide(
                   color: AppColors.primaryOrange,
                   width: 2,
                 ),
@@ -1083,7 +1083,7 @@ class _ImprovedRegisterScreenState extends State<ImprovedRegisterScreen>
                       : Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Icon(
+                            const Icon(
                               Icons.camera_alt_outlined,
                               size: 48,
                               color: AppColors.primaryOrange,

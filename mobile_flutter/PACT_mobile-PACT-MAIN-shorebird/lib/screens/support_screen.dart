@@ -2,62 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:package_info_plus/package_info_plus.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import '../theme/app_colors.dart';
 import '../widgets/reusable_app_bar.dart';
 import '../widgets/custom_drawer_menu.dart';
 import '../widgets/app_widgets.dart';
-
-class SupportTicket {
-  final String id;
-  final String subject;
-  final String description;
-  final String category;
-  final String priority;
-  final String status;
-  final DateTime createdAt;
-  
-  SupportTicket({
-    required this.id,
-    required this.subject,
-    required this.description,
-    required this.category,
-    required this.priority,
-    required this.status,
-    required this.createdAt,
-  });
-  
-  factory SupportTicket.fromJson(Map<String, dynamic> json) {
-    return SupportTicket(
-      id: json['id'] ?? '',
-      subject: json['subject'] ?? '',
-      description: json['description'] ?? '',
-      category: json['category'] ?? 'general',
-      priority: json['priority'] ?? 'medium',
-      status: json['status'] ?? 'open',
-      createdAt: DateTime.tryParse(json['created_at'] ?? '') ?? DateTime.now(),
-    );
-  }
-  
-  Color get statusColor {
-    switch (status) {
-      case 'open': return Colors.blue;
-      case 'in_progress': return Colors.orange;
-      case 'resolved': return Colors.green;
-      case 'closed': return Colors.grey;
-      default: return Colors.blue;
-    }
-  }
-  
-  Color get priorityColor {
-    switch (priority) {
-      case 'high': return Colors.red;
-      case 'medium': return Colors.orange;
-      case 'low': return Colors.green;
-      default: return Colors.grey;
-    }
-  }
-}
+import '../services/help_enhancements_service.dart';
+import 'support_ticket_detail_screen.dart';
 
 class SupportScreen extends StatefulWidget {
   const SupportScreen({super.key});
@@ -66,26 +16,32 @@ class SupportScreen extends StatefulWidget {
   State<SupportScreen> createState() => _SupportScreenState();
 }
 
-class _SupportScreenState extends State<SupportScreen> with SingleTickerProviderStateMixin {
+class _SupportScreenState extends State<SupportScreen>
+    with SingleTickerProviderStateMixin {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   final _subjectController = TextEditingController();
   final _messageController = TextEditingController();
   late TabController _tabController;
-  
+  final HelpEnhancementsService _helpService = HelpEnhancementsService();
+
   List<SupportTicket> _tickets = [];
   bool _isLoading = true;
   bool _isSubmitting = false;
   String _selectedCategory = 'general';
   String _selectedPriority = 'medium';
-  
+
   final List<Map<String, dynamic>> _categories = [
     {'value': 'general', 'label': 'General', 'icon': Icons.help_outline},
-    {'value': 'technical', 'label': 'Technical Issue', 'icon': Icons.bug_report},
+    {
+      'value': 'technical',
+      'label': 'Technical Issue',
+      'icon': Icons.bug_report,
+    },
     {'value': 'account', 'label': 'Account', 'icon': Icons.person},
     {'value': 'data', 'label': 'Data/Sync', 'icon': Icons.sync},
     {'value': 'feature', 'label': 'Feature Request', 'icon': Icons.lightbulb},
   ];
-  
+
   final List<Map<String, dynamic>> _priorities = [
     {'value': 'low', 'label': 'Low', 'color': Colors.green},
     {'value': 'medium', 'label': 'Medium', 'color': Colors.orange},
@@ -106,27 +62,13 @@ class _SupportScreenState extends State<SupportScreen> with SingleTickerProvider
     _tabController.dispose();
     super.dispose();
   }
-  
+
   Future<void> _loadTickets() async {
     try {
-      final userId = Supabase.instance.client.auth.currentUser?.id;
-      if (userId == null) {
-        setState(() {
-          _isLoading = false;
-          _tickets = [];
-        });
-        return;
-      }
-      
-      final response = await Supabase.instance.client
-          .from('support_tickets')
-          .select()
-          .eq('user_id', userId)
-          .order('created_at', ascending: false);
-      
+      final tickets = await _helpService.getMyTickets();
       if (mounted) {
         setState(() {
-          _tickets = (response as List).map((t) => SupportTicket.fromJson(t)).toList();
+          _tickets = tickets;
           _isLoading = false;
         });
       }
@@ -145,7 +87,7 @@ class _SupportScreenState extends State<SupportScreen> with SingleTickerProvider
       }
     }
   }
-  
+
   Future<void> _submitTicket() async {
     if (_subjectController.text.isEmpty || _messageController.text.isEmpty) {
       AppSnackBar.show(
@@ -155,39 +97,41 @@ class _SupportScreenState extends State<SupportScreen> with SingleTickerProvider
       );
       return;
     }
-    
+
     setState(() => _isSubmitting = true);
-    
+
     try {
-      final userId = Supabase.instance.client.auth.currentUser?.id;
-      if (userId == null) throw Exception('User not logged in');
-      
-      await Supabase.instance.client.from('support_tickets').insert({
-        'user_id': userId,
-        'subject': _subjectController.text,
-        'description': _messageController.text,
-        'category': _selectedCategory,
-        'priority': _selectedPriority,
-        'status': 'open',
-        'source': 'mobile',
-      });
-      
+      final ticket = await _helpService.createTicket(
+        subject: _subjectController.text,
+        description: _messageController.text,
+        category: _selectedCategory,
+        priority: _selectedPriority,
+      );
+
       _subjectController.clear();
       _messageController.clear();
       setState(() {
         _selectedCategory = 'general';
         _selectedPriority = 'medium';
       });
-      
+
       AppSnackBar.show(
         context,
         message: 'Support ticket submitted successfully!',
         type: SnackBarType.success,
       );
-      
-      // Reload tickets and switch to My Tickets tab
+
       await _loadTickets();
       _tabController.animateTo(1);
+      if (mounted && ticket != null) {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) =>
+                SupportTicketDetailScreen(ticketId: ticket.id),
+          ),
+        );
+      }
     } catch (e) {
       debugPrint('Error submitting ticket: $e');
       AppSnackBar.show(
@@ -329,7 +273,10 @@ PACT Mobile Support System
               ReusableAppBar(title: 'Support', scaffoldKey: _scaffoldKey),
               // Tab bar
               Container(
-                margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                margin: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 10,
+                ),
                 decoration: BoxDecoration(
                   color: Colors.grey.shade200,
                   borderRadius: BorderRadius.circular(12),
@@ -352,10 +299,7 @@ PACT Mobile Support System
               Expanded(
                 child: TabBarView(
                   controller: _tabController,
-                  children: [
-                    _buildNewTicketTab(),
-                    _buildMyTicketsTab(),
-                  ],
+                  children: [_buildNewTicketTab(), _buildMyTicketsTab()],
                 ),
               ),
             ],
@@ -364,12 +308,12 @@ PACT Mobile Support System
       ),
     );
   }
-  
+
   Widget _buildMyTicketsTab() {
     if (_isLoading) {
       return const Center(child: CircularProgressIndicator());
     }
-    
+
     if (_tickets.isEmpty) {
       return Center(
         child: Column(
@@ -397,7 +341,7 @@ PACT Mobile Support System
         ),
       );
     }
-    
+
     return RefreshIndicator(
       onRefresh: _loadTickets,
       child: ListView.builder(
@@ -410,125 +354,177 @@ PACT Mobile Support System
       ),
     );
   }
-  
+
+  Color _statusColor(String status) {
+    switch (status) {
+      case 'open':
+        return Colors.blue;
+      case 'in_progress':
+      case 'waiting':
+        return Colors.orange;
+      case 'resolved':
+        return Colors.green;
+      case 'closed':
+        return Colors.grey;
+      default:
+        return Colors.blue;
+    }
+  }
+
+  Color _priorityColor(String priority) {
+    switch (priority) {
+      case 'high':
+      case 'urgent':
+        return Colors.red;
+      case 'medium':
+        return Colors.orange;
+      case 'low':
+        return Colors.green;
+      default:
+        return Colors.grey;
+    }
+  }
+
   Widget _buildTicketCard(SupportTicket ticket) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 2),
+    return InkWell(
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) =>
+                SupportTicketDetailScreen(ticketId: ticket.id),
           ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  ticket.subject,
-                  style: GoogleFonts.poppins(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.textDark,
-                  ),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  color: ticket.statusColor.withOpacity(0.15),
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Text(
-                  ticket.status.replaceAll('_', ' ').toUpperCase(),
-                  style: GoogleFonts.poppins(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w600,
-                    color: ticket.statusColor,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Text(
-            ticket.description,
-            style: GoogleFonts.poppins(
-              fontSize: 14,
-              color: AppColors.textLight,
+        );
+      },
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 12),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.05),
+              blurRadius: 10,
+              offset: const Offset(0, 2),
             ),
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                decoration: BoxDecoration(
-                  color: ticket.priorityColor.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(4),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.flag, size: 12, color: ticket.priorityColor),
-                    const SizedBox(width: 4),
-                    Text(
-                      ticket.priority.toUpperCase(),
-                      style: GoogleFonts.poppins(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w600,
-                        color: ticket.priorityColor,
-                      ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    ticket.subject,
+                    style: GoogleFonts.poppins(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.textDark,
                     ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 8),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                decoration: BoxDecoration(
-                  color: Colors.grey.shade100,
-                  borderRadius: BorderRadius.circular(4),
-                ),
-                child: Text(
-                  ticket.category,
-                  style: GoogleFonts.poppins(
-                    fontSize: 10,
-                    color: Colors.grey.shade700,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
-              ),
-              const Spacer(),
-              Text(
-                _formatDate(ticket.createdAt),
-                style: GoogleFonts.poppins(
-                  fontSize: 12,
-                  color: Colors.grey,
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: _statusColor(ticket.status).withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    ticket.status.replaceAll('_', ' ').toUpperCase(),
+                    style: GoogleFonts.poppins(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w600,
+                      color: _statusColor(ticket.status),
+                    ),
+                  ),
                 ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              ticket.description,
+              style: GoogleFonts.poppins(
+                fontSize: 14,
+                color: AppColors.textLight,
               ),
-            ],
-          ),
-        ],
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 2,
+                  ),
+                  decoration: BoxDecoration(
+                    color: _priorityColor(ticket.priority).withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.flag,
+                        size: 12,
+                        color: _priorityColor(ticket.priority),
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        ticket.priority.toUpperCase(),
+                        style: GoogleFonts.poppins(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w600,
+                          color: _priorityColor(ticket.priority),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 2,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade100,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Text(
+                    ticket.category,
+                    style: GoogleFonts.poppins(
+                      fontSize: 10,
+                      color: Colors.grey.shade700,
+                    ),
+                  ),
+                ),
+                const Spacer(),
+                Text(
+                  _formatDate(ticket.createdAt),
+                  style: GoogleFonts.poppins(fontSize: 12, color: Colors.grey),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
-  
+
   String _formatDate(DateTime date) {
     final now = DateTime.now();
     final diff = now.difference(date);
-    
+
     if (diff.inDays == 0) {
       if (diff.inHours == 0) {
         return '${diff.inMinutes}m ago';
@@ -540,7 +536,7 @@ PACT Mobile Support System
       return '${date.day}/${date.month}/${date.year}';
     }
   }
-  
+
   Widget _buildNewTicketTab() {
     return SingleChildScrollView(
       padding: const EdgeInsets.all(20),
@@ -564,7 +560,7 @@ PACT Mobile Support System
             ),
           ),
           const SizedBox(height: 24),
-          
+
           // Category Selection
           Text(
             'Category',
@@ -584,12 +580,17 @@ PACT Mobile Support System
                   onTap: () => setState(() => _selectedCategory = cat['value']),
                   child: Container(
                     margin: const EdgeInsets.only(right: 8),
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 10,
+                    ),
                     decoration: BoxDecoration(
                       color: isSelected ? AppColors.primaryBlue : Colors.white,
                       borderRadius: BorderRadius.circular(20),
                       border: Border.all(
-                        color: isSelected ? AppColors.primaryBlue : Colors.grey.shade300,
+                        color: isSelected
+                            ? AppColors.primaryBlue
+                            : Colors.grey.shade300,
                       ),
                     ),
                     child: Row(
@@ -605,7 +606,9 @@ PACT Mobile Support System
                           style: GoogleFonts.poppins(
                             fontSize: 13,
                             fontWeight: FontWeight.w500,
-                            color: isSelected ? Colors.white : AppColors.textDark,
+                            color: isSelected
+                                ? Colors.white
+                                : AppColors.textDark,
                           ),
                         ),
                       ],
@@ -616,7 +619,7 @@ PACT Mobile Support System
             ),
           ),
           const SizedBox(height: 20),
-          
+
           // Priority Selection
           Text(
             'Priority',
@@ -637,7 +640,9 @@ PACT Mobile Support System
                     margin: const EdgeInsets.only(right: 8),
                     padding: const EdgeInsets.symmetric(vertical: 12),
                     decoration: BoxDecoration(
-                      color: isSelected ? (p['color'] as Color).withOpacity(0.15) : Colors.white,
+                      color: isSelected
+                          ? (p['color'] as Color).withOpacity(0.15)
+                          : Colors.white,
                       borderRadius: BorderRadius.circular(12),
                       border: Border.all(
                         color: isSelected ? p['color'] : Colors.grey.shade300,
@@ -646,17 +651,15 @@ PACT Mobile Support System
                     ),
                     child: Column(
                       children: [
-                        Icon(
-                          Icons.flag,
-                          color: p['color'],
-                          size: 20,
-                        ),
+                        Icon(Icons.flag, color: p['color'], size: 20),
                         const SizedBox(height: 4),
                         Text(
                           p['label'],
                           style: GoogleFonts.poppins(
                             fontSize: 12,
-                            fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+                            fontWeight: isSelected
+                                ? FontWeight.w600
+                                : FontWeight.w500,
                             color: p['color'],
                           ),
                         ),
@@ -668,7 +671,7 @@ PACT Mobile Support System
             }).toList(),
           ),
           const SizedBox(height: 20),
-          
+
           // Subject
           Text(
             'Subject',
@@ -696,7 +699,7 @@ PACT Mobile Support System
             ),
           ),
           const SizedBox(height: 20),
-          
+
           // Description
           Text(
             'Description',
@@ -725,7 +728,7 @@ PACT Mobile Support System
             ),
           ),
           const SizedBox(height: 24),
-          
+
           // Submit Button
           SizedBox(
             width: double.infinity,
@@ -758,14 +761,14 @@ PACT Mobile Support System
             ),
           ),
           const SizedBox(height: 32),
-          
+
           // Contact Info
           _buildContactInfo(),
         ],
       ),
     );
   }
-  
+
   Widget _buildContactInfo() {
     return Container(
       padding: const EdgeInsets.all(16),
@@ -794,10 +797,7 @@ PACT Mobile Support System
           const SizedBox(height: 8),
           Text(
             'For urgent issues, you can also reach us at:',
-            style: GoogleFonts.poppins(
-              fontSize: 13,
-              color: AppColors.textDark,
-            ),
+            style: GoogleFonts.poppins(fontSize: 13, color: AppColors.textDark),
           ),
           const SizedBox(height: 8),
           Row(
