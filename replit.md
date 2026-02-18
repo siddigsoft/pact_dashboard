@@ -32,7 +32,7 @@ The frontend is built with React 18, TypeScript, Tailwind CSS v3, and Shadcn UI,
 *   **Super Admin Data Management Center:** Comprehensive interface for managing site visits, wallets, transactions, and MMPs, with advanced search and full audit logging. A Role Perspective Viewer allows simulating user permissions.
 *   **Security & Tracking:** Security-Hardened Activity Tracking System for user activity logging.
 *   **Dashboard Global MMP Filter:** A persistent multi-select MMP filter for dashboard navigation.
-*   **Reporting & Analytics:** Comprehensive Coverage Analytics Dashboard with various reports and export functionality. Includes Site Visit Quality Scoring analytics and a Data Export Center for bulk exports.
+*   **Reporting & Analytics:** Comprehensive Coverage Analytics Dashboard with various reports and export functionality. Includes Site Visit Quality Scoring analytics and a Data Export Center for bulk exports. Coverage Tracker export and email attachment share a single `buildCoverageTrackerWorkbook` builder ensuring identical format with classification lookups, fees, and bank info.
 *   **Mobile Specific Features:** Bilingual welcome screen, Admin-Managed Support Contacts, Mobile Admin Dashboard, Help & Support System, Unified Communications Screen (WebRTC), Shorebird OTA Updates, Mobile Digital Signatures, Mobile Field Team Map, and Mobile Operational Cost Submission System. A dedicated bilingual mobile user manual is available at `/mobile-documentation`, complemented by web admin pages for managing mobile support.
 *   **Sidebar Favorites System:** User-customizable sidebar with drag & drop reordering.
 *   **Retainer Management System:** Comprehensive retainer payment tracking and processing at `/retainer-management`.
