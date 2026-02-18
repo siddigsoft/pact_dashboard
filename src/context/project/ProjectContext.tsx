@@ -81,45 +81,96 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
       setLoading(true);
       setError(null);
       
-      const { data: projectsData, error: projectsError } = await supabase
-        .from('projects')
-        .select(`
-          id,
-          name,
-          project_code,
-          description,
-          project_type,
-          status,
-          start_date,
-          end_date,
-          budget,
-          location,
-          team,
-          created_at,
-          updated_at,
-          project_activities (
+      // Try the nested select first (project_activities -> sub_activities).
+      // Some Supabase/Postgres setups don't expose relationship info in the schema cache
+      // which causes the nested select to fail with a specific error. In that case
+      // fall back to a simpler query and map sub_activities to empty arrays.
+      let projectsData: any[] | null = null;
+      try {
+        const { data, error } = await supabase
+          .from('projects')
+          .select(`
             id,
             name,
+            project_code,
             description,
+            project_type,
+            status,
             start_date,
             end_date,
-            status,
-            is_active,
-            assigned_to,
-            sub_activities (
+            budget,
+            location,
+            team,
+            created_at,
+            updated_at,
+            project_activities (
               id,
               name,
               description,
+              start_date,
+              end_date,
               status,
               is_active,
-              due_date,
-              assigned_to
+              assigned_to,
+              sub_activities (
+                id,
+                name,
+                description,
+                status,
+                is_active,
+                due_date,
+                assigned_to
+              )
             )
-          )
-        `);
+          `);
 
-      if (projectsError) {
-        throw new Error(projectsError.message);
+        if (error) throw error;
+        projectsData = data as any[];
+      } catch (err: any) {
+        const msg = err?.message || String(err);
+        // Known Supabase schema cache error when relationships are not present
+        if (msg.includes("Could not find a relationship between 'project_activities' and 'sub_activities'")
+          || msg.includes('Could not find a relationship between')) {
+          console.warn('[ProjectContext] Nested relation select failed, falling back to simpler query:', msg);
+
+          // Fall back to a simpler select that omits nested sub_activities
+          const { data: fallbackData, error: fallbackError } = await supabase
+            .from('projects')
+            .select(`
+              id,
+              name,
+              project_code,
+              description,
+              project_type,
+              status,
+              start_date,
+              end_date,
+              budget,
+              location,
+              team,
+              created_at,
+              updated_at,
+              project_activities (
+                id,
+                name,
+                description,
+                start_date,
+                end_date,
+                status,
+                is_active,
+                assigned_to
+              )
+            `);
+
+          if (fallbackError) {
+            throw new Error(fallbackError.message);
+          }
+
+          projectsData = fallbackData as any[];
+        } else {
+          // rethrow unknown errors
+          throw err;
+        }
       }
 
       const formattedProjects: Project[] = (projectsData || []).map((dbProject: any) => {
