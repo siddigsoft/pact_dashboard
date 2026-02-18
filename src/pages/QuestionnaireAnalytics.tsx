@@ -3051,10 +3051,25 @@ const QuestionnaireAnalytics = () => {
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
-              <Button variant="outline" size="sm" className="gap-1.5" onClick={openEmailDialog} data-testid="button-send-report">
-                <Mail className="h-4 w-4" />
-                Send Report
-              </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="sm" className="gap-1.5" data-testid="button-send-report">
+                    <Mail className="h-4 w-4" />
+                    Send Email
+                    <ChevronDown className="h-3 w-3" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={openEmailDialog} data-testid="button-send-data-report">
+                    <FileSpreadsheet className="h-4 w-4 mr-2" />
+                    Data Report (Review + Cleaned)
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={openCoverageEmailDialog} data-testid="button-send-coverage-report">
+                    <Layers className="h-4 w-4 mr-2" />
+                    Coverage Tracker
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </>
           )}
         </div>
