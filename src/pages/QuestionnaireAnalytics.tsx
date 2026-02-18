@@ -250,6 +250,7 @@ const QuestionnaireAnalytics = () => {
   const [emailSending, setEmailSending] = useState(false);
   const [emailUsers, setEmailUsers] = useState<{id: string; name: string; email: string; role: string}[]>([]);
   const [emailHighPriority, setEmailHighPriority] = useState(true);
+  const [emailType, setEmailType] = useState<'report' | 'coverage'>('report');
   const [reportIssuesExpanded, setReportIssuesExpanded] = useState(false);
 
   useEffect(() => {
@@ -1267,25 +1268,53 @@ const QuestionnaireAnalytics = () => {
     return computeSummaryFromData(filteredData, data, fileName, cleanResults);
   }, [filteredData, data, cleanResults, fileName]);
 
-  const openEmailDialog = useCallback(async () => {
-    const month = computeReportSummary?.monthCoverage || format(new Date(), 'MMMM yyyy');
-    setEmailSubject(`Questionnaire Data Report - ${month}`);
-    setShowEmailDialog(true);
+  const fetchEmailProfiles = useCallback(async () => {
     try {
-      let { data: profiles, error } = await supabase.from('profiles').select('id, name, email, role').eq('status', 'approved');
+      let { data: profiles, error } = await supabase.from('profiles').select('id, full_name, email, role').eq('status', 'approved');
       if (error || !profiles || profiles.length === 0) {
-        const fallback = await supabase.from('profiles').select('id, name, email, role');
+        const fallback = await supabase.from('profiles').select('id, full_name, email, role');
         if (fallback.data && fallback.data.length > 0) {
           profiles = fallback.data;
         }
       }
       if (profiles && profiles.length > 0) {
-        setEmailUsers(profiles.filter((p: any) => p.email && p.name) as any);
+        const mapped = profiles
+          .filter((p: any) => p.email)
+          .map((p: any) => ({ id: p.id, name: p.full_name || p.email, email: p.email, role: p.role || 'Other' }));
+        setEmailUsers(mapped);
       }
     } catch (e) {
       console.error('Failed to fetch profiles:', e);
     }
-  }, [computeReportSummary]);
+  }, []);
+
+  const openEmailDialog = useCallback(async () => {
+    const month = computeReportSummary?.monthCoverage || format(new Date(), 'MMMM yyyy');
+    setEmailSubject(`Questionnaire Data Report - ${month}`);
+    setEmailType('report');
+    setEmailAttachReview(true);
+    setEmailAttachCleaned(true);
+    setEmailToUsers([]);
+    setEmailToInput('');
+    setEmailCcRoles([]);
+    setEmailHighPriority(true);
+    setShowEmailDialog(true);
+    await fetchEmailProfiles();
+  }, [computeReportSummary, fetchEmailProfiles]);
+
+  const openCoverageEmailDialog = useCallback(async () => {
+    const month = computeReportSummary?.monthCoverage || format(new Date(), 'MMMM yyyy');
+    setEmailSubject(`Coverage Tracker Report - ${month}`);
+    setEmailType('coverage');
+    setEmailAttachReview(false);
+    setEmailAttachCleaned(false);
+    setEmailToUsers([]);
+    setEmailToInput('');
+    setEmailCcRoles([]);
+    setEmailHighPriority(false);
+    setShowEmailDialog(true);
+    await fetchEmailProfiles();
+  }, [computeReportSummary, fetchEmailProfiles]);
 
   const getEmailCcList = useMemo(() => {
     if (emailCcRoles.length === 0) return [];
@@ -1346,16 +1375,17 @@ const QuestionnaireAnalytics = () => {
     setEmailToUsers(prev => prev.filter(u => u.email !== email));
   }, []);
 
-  const buildEmailBody = useCallback((recipientName?: string, isSystemUser?: boolean) => {
+  const buildEmailBody = useCallback((recipientName?: string, isSystemUser?: boolean, type?: 'report' | 'coverage') => {
     const s = computeReportSummary;
     const month = s?.monthCoverage || '';
-
     const greeting = recipientName || 'Team';
+    const reportLabel = type === 'coverage' ? 'Coverage Tracker Report' : 'Questionnaire Data Report';
+    const reportLabelAr = type === 'coverage' ? 'تقرير متابعة التغطية' : 'تقرير بيانات الاستبيانات';
 
     const en = [
       `Dear ${greeting},`,
       '',
-      `Please find attached the Questionnaire Data Report${month ? ` for ${month}` : ''}.`,
+      `Please find attached the ${reportLabel}${month ? ` for ${month}` : ''}.`,
       'Kindly review and confirm.',
       '',
       'Best regards,',
@@ -1368,7 +1398,7 @@ const QuestionnaireAnalytics = () => {
       '',
       `عزيزي/عزيزتي ${greeting}،`,
       '',
-      `يرجى الاطلاع على تقرير بيانات الاستبيانات المرفق${month ? ` لشهر ${month}` : ''}.`,
+      `يرجى الاطلاع على ${reportLabelAr} المرفق${month ? ` لشهر ${month}` : ''}.`,
       'يرجى المراجعة والتأكيد.',
       '',
       'مع أطيب التحيات،',
@@ -1381,9 +1411,10 @@ const QuestionnaireAnalytics = () => {
   const getEmailBody = useMemo(() => {
     return buildEmailBody(
       emailToUsers.length > 0 ? emailToRecipientLabel : undefined,
-      emailToUsers.some(u => u.isSystemUser)
+      emailToUsers.some(u => u.isSystemUser),
+      emailType
     );
-  }, [buildEmailBody, emailToUsers, emailToRecipientLabel]);
+  }, [buildEmailBody, emailToUsers, emailToRecipientLabel, emailType]);
 
   const generateExcelBase64 = useCallback(async (type: 'cleaned' | 'review'): Promise<string | null> => {
     if (!cleanResults) return null;
@@ -1416,6 +1447,55 @@ const QuestionnaireAnalytics = () => {
     } catch { return null; }
   }, [cleanResults, data, getCustomCleanedData]);
 
+  const generateCoverageTrackerBase64 = useCallback(async (): Promise<string | null> => {
+    if (!filteredData || filteredData.length === 0) return null;
+    try {
+      const ExcelJSLib = await import('exceljs');
+      const wb = new ExcelJSLib.default.Workbook();
+      wb.creator = 'PACT Command Center';
+      wb.created = new Date();
+      const label = currentSessionName?.trim() || new Date().toLocaleString('en-US', { month: 'long', year: 'numeric' });
+
+      const hubStateRows = new Map<string, Map<string, { collector: string; deviceId: string; activity: string }[]>>();
+      const hubOrder: string[] = [];
+      const hubSet = new Set<string>();
+      filteredData.forEach(row => {
+        if (!row.hub || !row.state || !row.activity) return;
+        const hub = row.hub;
+        const state = row.state;
+        if (!hubSet.has(hub)) { hubSet.add(hub); hubOrder.push(hub); }
+        if (!hubStateRows.has(hub)) hubStateRows.set(hub, new Map());
+        const stateMap = hubStateRows.get(hub)!;
+        if (!stateMap.has(state)) stateMap.set(state, []);
+        stateMap.get(state)!.push({ collector: row.dataCollector || '', deviceId: row.deviceId || '', activity: row.activity });
+      });
+
+      hubOrder.forEach(hub => {
+        const sheetName = hub.substring(0, 31);
+        const ws = wb.addWorksheet(sheetName);
+        const stateMap = hubStateRows.get(hub)!;
+        ws.addRow([`Coverage Tracker - ${hub}`, '', label]);
+        ws.addRow([]);
+        const headers = ['State', 'Collector', 'Device ID', 'Activity'];
+        ws.addRow(headers);
+        stateMap.forEach((rows, state) => {
+          rows.forEach(r => {
+            ws.addRow([state, r.collector, r.deviceId, r.activity]);
+          });
+        });
+      });
+
+      const buffer = await wb.xlsx.writeBuffer();
+      const bytes = new Uint8Array(buffer as ArrayBuffer);
+      let binary = '';
+      for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+      return btoa(binary);
+    } catch (e) {
+      console.error('Failed to generate coverage tracker base64:', e);
+      return null;
+    }
+  }, [filteredData, currentSessionName]);
+
   const sendEmailReport = useCallback(async () => {
     if (emailToUsers.length === 0) {
       toast({ title: 'Error', description: 'Please add at least one recipient', variant: 'destructive' });
@@ -1425,29 +1505,26 @@ const QuestionnaireAnalytics = () => {
     try {
       const ccEmails = getEmailCcList.map(u => u.email).filter(Boolean);
       const s = computeReportSummary;
-      const arBody = s ? [
-        `${emailToRecipientLabel} عزيزي/عزيزتي`,
-        '',
-        `يرجى الاطلاع على تقرير بيانات الاستبيانات المرفق لشهر ${s.monthCoverage}.`,
-        '',
-        `إجمالي الاستبيانات: ${s.totalQuestionnaires}`,
-        `المواقع الفريدة: ${s.uniqueSites}`,
-        `المحاور: ${s.uniqueHubs} | الولايات: ${s.uniqueStates} | المحليات: ${s.uniqueLocalities}`,
-        `جامعي البيانات: ${s.totalCollectors} | المشرفين: ${s.totalSupervisors}`,
-        s.qualityReport ? `درجة جودة البيانات: ${s.qualityReport.qualityScore}%` : '',
-        '',
-        'مع أطيب التحيات،',
-        'مركز قيادة PACT',
-      ].filter(Boolean).join('\n') : '';
+      const month = s?.monthCoverage || '';
+      const isCoverage = emailType === 'coverage';
+      const reportLabelAr = isCoverage ? 'تقرير متابعة التغطية' : 'تقرير بيانات الاستبيانات';
+      const titleAr = s ? `${reportLabelAr} - ${s.monthCoverage}` : emailSubject;
+
       const attachments: { filename: string; content: string; type: string }[] = [];
       const baseName = fileName.replace(/\.[^.]+$/, '') || 'report';
-      if (emailAttachCleaned && cleanResults) {
-        const b64 = await generateExcelBase64('cleaned');
-        if (b64) attachments.push({ filename: `${baseName}_cleaned.xlsx`, content: b64, type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-      }
-      if (emailAttachReview && cleanResults) {
-        const b64 = await generateExcelBase64('review');
-        if (b64) attachments.push({ filename: `${baseName}_review.xlsx`, content: b64, type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+
+      if (isCoverage) {
+        const b64 = await generateCoverageTrackerBase64();
+        if (b64) attachments.push({ filename: `coverage_tracker_${baseName}.xlsx`, content: b64, type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      } else {
+        if (emailAttachCleaned && cleanResults) {
+          const b64 = await generateExcelBase64('cleaned');
+          if (b64) attachments.push({ filename: `${baseName}_cleaned.xlsx`, content: b64, type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+        }
+        if (emailAttachReview && cleanResults) {
+          const b64 = await generateExcelBase64('review');
+          if (b64) attachments.push({ filename: `${baseName}_review.xlsx`, content: b64, type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+        }
       }
 
       let sentCount = 0;
@@ -1456,12 +1533,11 @@ const QuestionnaireAnalytics = () => {
           const displayName = recipient.isSystemUser && recipient.name && recipient.name !== recipient.email
             ? recipient.name
             : recipient.name || recipient.email;
-          const personalBody = buildEmailBody(displayName, !!recipient.isSystemUser);
-          const month = s?.monthCoverage || '';
+          const personalBody = buildEmailBody(displayName, !!recipient.isSystemUser, emailType);
           const personalArBody = [
             `عزيزي/عزيزتي ${displayName}،`,
             '',
-            `يرجى الاطلاع على تقرير بيانات الاستبيانات المرفق${month ? ` لشهر ${month}` : ''}.`,
+            `يرجى الاطلاع على ${reportLabelAr} المرفق${month ? ` لشهر ${month}` : ''}.`,
             'يرجى المراجعة والتأكيد.',
             '',
             'مع أطيب التحيات،',
@@ -1473,7 +1549,7 @@ const QuestionnaireAnalytics = () => {
             {
               title: emailSubject,
               message: personalBody,
-              titleAr: s ? `تقرير بيانات الاستبيانات - ${s.monthCoverage}` : emailSubject,
+              titleAr: titleAr,
               messageAr: personalArBody,
               type: emailHighPriority ? 'warning' : 'info',
               cc: sentCount === 0 && ccEmails.length > 0 ? ccEmails : undefined,
@@ -1500,7 +1576,7 @@ const QuestionnaireAnalytics = () => {
     } finally {
       setEmailSending(false);
     }
-  }, [emailToUsers, emailSubject, emailHighPriority, buildEmailBody, getEmailCcList, toast, emailAttachCleaned, emailAttachReview, cleanResults, fileName, generateExcelBase64, computeReportSummary]);
+  }, [emailToUsers, emailSubject, emailHighPriority, emailType, buildEmailBody, getEmailCcList, toast, emailAttachCleaned, emailAttachReview, cleanResults, fileName, generateExcelBase64, generateCoverageTrackerBase64, computeReportSummary]);
 
   const exportToExcel = useCallback(() => {
     const wb = XLSX.utils.book_new();
@@ -3989,28 +4065,34 @@ const QuestionnaireAnalytics = () => {
                         </CardTitle>
                         <CardDescription>Each hub: Activity (rows) x State (columns) with Sites, Questionnaires & Collectors</CardDescription>
                       </div>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button size="sm" variant="outline" className="gap-1.5" data-testid="button-export-hub-tracker">
-                            <Download className="h-4 w-4" />
-                            Export
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem onClick={exportTrackerPerHubPdf}>
-                            <FileDown className="h-4 w-4 mr-2" />
-                            PDF
-                          </DropdownMenuItem>
-                          <DropdownMenuItem onClick={exportTrackerPerHubExcel}>
-                            <FileSpreadsheet className="h-4 w-4 mr-2" />
-                            Excel
-                          </DropdownMenuItem>
-                          <DropdownMenuItem onClick={exportTrackerPerHubFormattedExcel}>
-                            <FileSpreadsheet className="h-4 w-4 mr-2" />
-                            Formatted Excel
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button size="sm" variant="outline" className="gap-1.5" data-testid="button-export-hub-tracker">
+                              <Download className="h-4 w-4" />
+                              Export
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={exportTrackerPerHubPdf}>
+                              <FileDown className="h-4 w-4 mr-2" />
+                              PDF
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={exportTrackerPerHubExcel}>
+                              <FileSpreadsheet className="h-4 w-4 mr-2" />
+                              Excel
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={exportTrackerPerHubFormattedExcel}>
+                              <FileSpreadsheet className="h-4 w-4 mr-2" />
+                              Formatted Excel
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                        <Button size="sm" variant="outline" className="gap-1.5" onClick={openCoverageEmailDialog} data-testid="button-send-coverage-email">
+                          <Mail className="h-4 w-4" />
+                          Send Email
+                        </Button>
+                      </div>
                     </div>
                   </CardHeader>
                   <CardContent className="space-y-4">
@@ -4957,7 +5039,7 @@ const QuestionnaireAnalytics = () => {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Mail className="h-5 w-5" />
-              Send Report Email
+              {emailType === 'coverage' ? 'Send Coverage Tracker' : 'Send Report Email'}
               {emailHighPriority && <Badge variant="destructive" className="text-xs gap-1"><AlertTriangle className="h-3 w-3" />High Priority</Badge>}
             </DialogTitle>
           </DialogHeader>
@@ -5094,17 +5176,24 @@ const QuestionnaireAnalytics = () => {
             </div>
 
             <div className="flex flex-wrap items-center gap-4">
-              <div className="flex items-center gap-2">
-                <Label className="mb-0">Attachments:</Label>
-                <label className="flex items-center gap-1.5 text-sm cursor-pointer">
-                  <Checkbox checked={emailAttachReview} onCheckedChange={(checked) => setEmailAttachReview(!!checked)} data-testid="checkbox-attach-review" />
-                  Review File
-                </label>
-                <label className="flex items-center gap-1.5 text-sm cursor-pointer">
-                  <Checkbox checked={emailAttachCleaned} onCheckedChange={(checked) => setEmailAttachCleaned(!!checked)} data-testid="checkbox-attach-cleaned" />
-                  Cleaned File
-                </label>
-              </div>
+              {emailType === 'report' ? (
+                <div className="flex items-center gap-2">
+                  <Label className="mb-0">Attachments:</Label>
+                  <label className="flex items-center gap-1.5 text-sm cursor-pointer">
+                    <Checkbox checked={emailAttachReview} onCheckedChange={(checked) => setEmailAttachReview(!!checked)} data-testid="checkbox-attach-review" />
+                    Review File
+                  </label>
+                  <label className="flex items-center gap-1.5 text-sm cursor-pointer">
+                    <Checkbox checked={emailAttachCleaned} onCheckedChange={(checked) => setEmailAttachCleaned(!!checked)} data-testid="checkbox-attach-cleaned" />
+                    Cleaned File
+                  </label>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <Label className="mb-0">Attachment:</Label>
+                  <Badge variant="secondary" className="text-xs">Coverage Tracker Excel</Badge>
+                </div>
+              )}
               <div className="flex items-center gap-2 ml-auto">
                 <Label htmlFor="email-priority" className="mb-0 text-sm flex items-center gap-1">
                   <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />
