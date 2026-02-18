@@ -245,6 +245,9 @@ const QuestionnaireAnalytics = () => {
   const [emailToSearchOpen, setEmailToSearchOpen] = useState(false);
   const [emailSubject, setEmailSubject] = useState('');
   const [emailCcRoles, setEmailCcRoles] = useState<string[]>([]);
+  const [emailCcUsers, setEmailCcUsers] = useState<{id?: string; name: string; email: string; role?: string; isSystemUser?: boolean}[]>([]);
+  const [emailCcInput, setEmailCcInput] = useState('');
+  const [emailCcSearchOpen, setEmailCcSearchOpen] = useState(false);
   const [emailAttachReview, setEmailAttachReview] = useState(true);
   const [emailAttachCleaned, setEmailAttachCleaned] = useState(true);
   const [emailSending, setEmailSending] = useState(false);
@@ -1302,6 +1305,9 @@ const QuestionnaireAnalytics = () => {
     setEmailToUsers([]);
     setEmailToInput('');
     setEmailCcRoles([]);
+    setEmailCcUsers([]);
+    setEmailCcInput('');
+    setEmailCcSearchOpen(false);
     setEmailHighPriority(isReport);
     setShowEmailDialog(true);
     await fetchEmailProfiles();
@@ -1311,9 +1317,13 @@ const QuestionnaireAnalytics = () => {
   const openCoverageEmailDialog = useCallback(() => openSectionEmailDialog('Coverage Tracker Report', 'coverage'), [openSectionEmailDialog]);
 
   const getEmailCcList = useMemo(() => {
-    if (emailCcRoles.length === 0) return [];
-    return emailUsers.filter(u => emailCcRoles.includes(u.role));
-  }, [emailCcRoles, emailUsers]);
+    const fromRoles = emailCcRoles.length > 0 ? emailUsers.filter(u => emailCcRoles.includes(u.role)) : [];
+    const combined = [...emailCcUsers];
+    fromRoles.forEach(u => {
+      if (!combined.find(c => c.email === u.email)) combined.push(u);
+    });
+    return combined;
+  }, [emailCcRoles, emailUsers, emailCcUsers]);
 
   const emailToFilteredUsers = useMemo(() => {
     const q = emailToInput.trim().toLowerCase();
@@ -1367,6 +1377,53 @@ const QuestionnaireAnalytics = () => {
 
   const removeEmailToUser = useCallback((email: string) => {
     setEmailToUsers(prev => prev.filter(u => u.email !== email));
+  }, []);
+
+  const emailCcFilteredUsers = useMemo(() => {
+    const q = emailCcInput.trim().toLowerCase();
+    const filtered = !q ? emailUsers : emailUsers.filter(u =>
+      u.name.toLowerCase().includes(q) || u.email.toLowerCase().includes(q) || u.role.toLowerCase().includes(q)
+    );
+    return filtered.slice(0, 30);
+  }, [emailCcInput, emailUsers]);
+
+  const emailCcGroupedUsers = useMemo(() => {
+    const groups: Record<string, typeof emailCcFilteredUsers> = {};
+    emailCcFilteredUsers.forEach(u => {
+      const role = u.role || 'Other';
+      if (!groups[role]) groups[role] = [];
+      groups[role].push(u);
+    });
+    return groups;
+  }, [emailCcFilteredUsers]);
+
+  const addEmailCcUser = useCallback((user: {id?: string; name: string; email: string; role?: string; isSystemUser?: boolean}) => {
+    setEmailCcUsers(prev => {
+      if (prev.find(u => u.email === user.email)) return prev;
+      return [...prev, user];
+    });
+    setEmailCcInput('');
+    setEmailCcSearchOpen(false);
+  }, []);
+
+  const addEmailCcManual = useCallback(() => {
+    const email = emailCcInput.trim();
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return;
+    addEmailCcUser({ name: email, email, isSystemUser: false });
+    setEmailCcSearchOpen(false);
+  }, [emailCcInput, addEmailCcUser]);
+
+  const addEmailCcGroup = useCallback((role: string) => {
+    const groupUsers = emailUsers.filter(u => u.role === role);
+    setEmailCcUsers(prev => {
+      const existing = new Set(prev.map(u => u.email));
+      const newUsers = groupUsers.filter(u => !existing.has(u.email)).map(u => ({ ...u, isSystemUser: true }));
+      return [...prev, ...newUsers];
+    });
+  }, [emailUsers]);
+
+  const removeEmailCcUser = useCallback((email: string) => {
+    setEmailCcUsers(prev => prev.filter(u => u.email !== email));
   }, []);
 
   const buildEmailBody = useCallback((recipientName?: string, isSystemUser?: boolean, type?: 'report' | 'coverage') => {
@@ -5194,33 +5251,102 @@ const QuestionnaireAnalytics = () => {
             </div>
 
             <div>
-              <Label className="mb-2 block">CC by Role</Label>
-              <div className="flex flex-wrap gap-3">
-                {['Super Admin', 'Admin', 'FOM', 'Supervisor', 'Data Team', 'Finance'].map(role => {
-                  const roleUserCount = emailUsers.filter(u => u.role === role).length;
-                  return (
-                    <label key={role} className="flex items-center gap-1.5 text-sm cursor-pointer">
-                      <Checkbox
-                        checked={emailCcRoles.includes(role)}
-                        onCheckedChange={(checked) => {
-                          setEmailCcRoles(prev => checked ? [...prev, role] : prev.filter(r => r !== role));
-                        }}
-                        data-testid={`checkbox-cc-role-${role.toLowerCase().replace(/\s+/g, '-')}`}
-                      />
-                      {role} {roleUserCount > 0 && <span className="text-xs text-muted-foreground">({roleUserCount})</span>}
-                    </label>
-                  );
-                })}
-              </div>
-              {getEmailCcList.length > 0 && (
-                <div className="flex flex-wrap gap-1.5 mt-2">
-                  {getEmailCcList.map(u => (
-                    <Badge key={u.id} variant="secondary" className="text-xs gap-1" data-testid={`badge-cc-user-${u.id}`}>
-                      {u.name} ({u.email})
-                    </Badge>
-                  ))}
+              <Label className="mb-2 block">CC</Label>
+              <div className="space-y-2">
+                <div className="flex flex-wrap gap-2 mb-2">
+                  {emailProfilesLoading ? (
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground py-1">
+                      <div className="h-4 w-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                      Loading users...
+                    </div>
+                  ) : (
+                    ['FOM', 'Admin', 'Supervisor', 'Super Admin'].map(role => {
+                      const count = emailUsers.filter(u => u.role === role).length;
+                      const allAdded = count > 0 && emailUsers.filter(u => u.role === role).every(u => emailCcUsers.some(cu => cu.email === u.email));
+                      return (
+                        <Button key={role} size="sm" variant={allAdded ? 'default' : 'outline'} className="gap-1.5 text-xs" onClick={() => addEmailCcGroup(role)} disabled={count === 0 || allAdded} data-testid={`button-cc-group-${role.toLowerCase().replace(/\s+/g, '-')}`}>
+                          <UserPlus className="h-3 w-3" />
+                          {role} {count > 0 ? `(${count})` : '(0)'}
+                          {allAdded && <CheckCircle2 className="h-3 w-3" />}
+                        </Button>
+                      );
+                    })
+                  )}
                 </div>
-              )}
+
+                <div className="relative">
+                  <div className="flex gap-2">
+                    <Input
+                      value={emailCcInput}
+                      onChange={(e) => { setEmailCcInput(e.target.value); setEmailCcSearchOpen(true); }}
+                      onFocus={() => setEmailCcSearchOpen(true)}
+                      onBlur={() => setTimeout(() => setEmailCcSearchOpen(false), 200)}
+                      onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addEmailCcManual(); } }}
+                      placeholder="Search users or type email for CC..."
+                      className="flex-1"
+                      data-testid="input-email-cc"
+                    />
+                  </div>
+                  {emailCcSearchOpen && (emailCcFilteredUsers.length > 0 || (emailCcInput.trim() && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailCcInput.trim()))) && (
+                    <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-popover border rounded-md shadow-md max-h-[200px] overflow-y-auto">
+                      {Object.entries(emailCcGroupedUsers).map(([role, users]) => (
+                        <div key={role}>
+                          <div className="px-3 py-1.5 text-xs font-semibold text-muted-foreground bg-muted/50 sticky top-0">{role} ({users.length})</div>
+                          {users.map(u => {
+                            const isAdded = emailCcUsers.some(cu => cu.email === u.email);
+                            return (
+                              <button
+                                key={u.id}
+                                type="button"
+                                className={`w-full text-left px-3 py-2 text-sm hover:bg-muted/50 flex items-center justify-between gap-2 ${isAdded ? 'opacity-50' : ''}`}
+                                onMouseDown={(e) => { e.preventDefault(); if (!isAdded) addEmailCcUser({ ...u, isSystemUser: true }); }}
+                                disabled={isAdded}
+                                data-testid={`button-cc-select-user-${u.id}`}
+                              >
+                                <div className="min-w-0">
+                                  <div className="font-medium truncate">{u.name}</div>
+                                  <div className="text-xs text-muted-foreground truncate">{u.email}</div>
+                                </div>
+                                {isAdded && <Badge variant="secondary" className="text-xs shrink-0">Added</Badge>}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      ))}
+                      {emailCcInput.trim() && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailCcInput.trim()) && (
+                        <button
+                          type="button"
+                          className="w-full text-left px-3 py-2 text-sm hover:bg-muted/50 border-t flex items-center gap-2 text-primary"
+                          onMouseDown={(e) => { e.preventDefault(); addEmailCcManual(); }}
+                          data-testid="button-add-manual-cc-email"
+                        >
+                          <Plus className="h-3 w-3" />
+                          Add "{emailCcInput.trim()}" as external CC
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {emailCcUsers.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 pt-1">
+                    {emailCcUsers.map(u => (
+                      <Badge key={u.email} variant={u.isSystemUser ? 'default' : 'secondary'} className="text-xs gap-1 pr-1" data-testid={`badge-cc-${u.email}`}>
+                        {u.name !== u.email ? u.name : u.email}
+                        {u.role && <span className="opacity-70">({u.role})</span>}
+                        <button type="button" className="ml-0.5 hover:text-destructive" onClick={() => removeEmailCcUser(u.email)} data-testid={`button-remove-cc-${u.email}`}>
+                          <X className="h-3 w-3" />
+                        </button>
+                      </Badge>
+                    ))}
+                    {emailCcUsers.length > 1 && (
+                      <Button size="sm" variant="ghost" className="h-6 text-xs text-muted-foreground" onClick={() => setEmailCcUsers([])} data-testid="button-clear-all-cc">
+                        Clear all
+                      </Button>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
 
             <div className="flex flex-wrap items-center gap-4">
