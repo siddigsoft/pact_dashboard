@@ -2696,7 +2696,7 @@ const QuestionnaireAnalytics = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {savedSessions.map((session, idx) => {
+                  {[...savedSessions].sort((a, b) => new Date(b.savedAt).getTime() - new Date(a.savedAt).getTime()).map((session, idx) => {
                     const savedDate = new Date(session.savedAt);
                     const isActive = currentSessionName === session.name;
                     return (
@@ -4285,7 +4285,7 @@ const QuestionnaireAnalytics = () => {
             {savedSessions.length === 0 ? (
               <p className="text-muted-foreground text-center py-8">No saved sessions yet</p>
             ) : (
-              savedSessions.map(session => (
+              [...savedSessions].sort((a, b) => new Date(b.savedAt).getTime() - new Date(a.savedAt).getTime()).map(session => (
                 <div key={session.id} className="flex items-center justify-between p-3 border rounded-lg hover:bg-muted/30 transition-colors" data-testid={`session-${session.id}`}>
                   <button type="button" className="flex-1 min-w-0 cursor-pointer text-left" onClick={() => loadSession(session)} data-testid={`button-session-select-${session.id}`}>
                     <div className="font-medium truncate">{session.name}</div>
