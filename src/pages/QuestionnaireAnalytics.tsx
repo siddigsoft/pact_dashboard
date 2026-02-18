@@ -8,16 +8,20 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
-import { Upload, FileSpreadsheet, BarChart3, Download, Search, Filter, X, ChevronDown, ChevronUp, Users, MapPin, Building2, Activity, Layers, FileDown, Save, FolderOpen, Trash2, Clock, Globe, PieChart, Lock, Sparkles, CheckCircle2, AlertCircle, ArrowRight, FileSearch } from 'lucide-react';
+import { Upload, FileSpreadsheet, BarChart3, Download, Search, Filter, X, ChevronDown, ChevronUp, Users, MapPin, Building2, Activity, Layers, FileDown, Save, FolderOpen, Trash2, Clock, Globe, PieChart, Lock, Sparkles, CheckCircle2, AlertCircle, ArrowRight, FileSearch, Mail, FileText, Send, ClipboardList } from 'lucide-react';
 import { useAuthorization } from '@/hooks/use-authorization';
 import * as XLSX from 'xlsx';
 import ExcelJS from 'exceljs';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { format } from 'date-fns';
+import { format, parse, isValid } from 'date-fns';
 import { drawPdfHeader, styledAutoTable, addAllFooters, addPageHeader, loadArabicFont, arText, C } from '@/utils/analyticsPdfUtils';
 import { exportFormattedExcel, exportFormattedTrackerExcel, exportCoverageTrackerExcel } from '@/utils/analyticsExcelUtils';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, PieChart as RechartsPie, Pie, Cell, Legend } from 'recharts';
+import { supabase } from '@/integrations/supabase/client';
+import { EmailNotificationService } from '@/services/email-notification.service';
+import { Textarea } from '@/components/ui/textarea';
+import { useToast } from '@/hooks/use-toast';
 
 interface QuestionnaireRow {
   hub: string;
@@ -114,6 +118,7 @@ const AccessDenied = () => (
 
 const QuestionnaireAnalytics = () => {
   const { isSuperAdmin } = useAuthorization();
+  const { toast } = useToast();
   const [data, setData] = useState<QuestionnaireRow[]>([]);
   const [fileName, setFileName] = useState<string>('');
   const [activeTab, setActiveTab] = useState('overview');
@@ -149,6 +154,15 @@ const QuestionnaireAnalytics = () => {
     trimmedDetails: { index: number; field: string; before: string; after: string }[];
     nameChanges: { index: number; deviceId: string; oldName: string; newName: string }[];
   } | null>(null);
+  const [showEmailDialog, setShowEmailDialog] = useState(false);
+  const [emailTo, setEmailTo] = useState('');
+  const [emailSubject, setEmailSubject] = useState('');
+  const [emailCcRoles, setEmailCcRoles] = useState<string[]>([]);
+  const [emailAttachReview, setEmailAttachReview] = useState(true);
+  const [emailAttachCleaned, setEmailAttachCleaned] = useState(true);
+  const [emailSending, setEmailSending] = useState(false);
+  const [emailUsers, setEmailUsers] = useState<{id: string; name: string; email: string; role: string}[]>([]);
+  const [reportIssuesExpanded, setReportIssuesExpanded] = useState(false);
 
   useEffect(() => {
     try {
@@ -412,21 +426,54 @@ const QuestionnaireAnalytics = () => {
     ws['!cols'] = [{ wch: 18 }, { wch: 16 }, { wch: 18 }, { wch: 30 }, { wch: 16 }, { wch: 20 }, { wch: 25 }, { wch: 20 }, { wch: 20 }, { wch: 14 }, { wch: 14 }, { wch: 20 }];
     XLSX.utils.book_append_sheet(wb, ws, 'Cleaned Data');
 
-    const summaryRows = [
+    const reportSummary = computeReportSummary;
+    const summaryRows: { Metric: string; Value: string | number }[] = [
+      { Metric: 'REPORT INFORMATION', Value: '' },
+      { Metric: 'Report Title', Value: 'Data Quality & Coverage Report' },
+      { Metric: 'Generated Date', Value: format(new Date(), 'MMMM d, yyyy h:mm a') },
+      { Metric: 'File Name', Value: fileName },
+      { Metric: 'Month Coverage', Value: reportSummary?.monthCoverage || 'N/A' },
+      { Metric: '', Value: '' },
+      { Metric: 'CLEANING METRICS', Value: '' },
       { Metric: 'Original Rows', Value: cleanResults.originalCount },
       { Metric: 'Cleaned Rows', Value: finalData.length },
       { Metric: 'Duplicates Removed', Value: customDupsRemoved },
       { Metric: 'Empty Rows Removed', Value: cleanResults.emptyRowsRemoved },
       { Metric: 'Fields Trimmed', Value: cleanResults.trimmedFields },
       { Metric: 'Names Standardized', Value: cleanResults.namesStandardized },
+      { Metric: 'Data Quality Score', Value: cleanResults.originalCount > 0 ? ((finalData.length / cleanResults.originalCount) * 100).toFixed(1) + '%' : '100%' },
+      { Metric: '', Value: '' },
+      { Metric: 'COVERAGE TOTALS', Value: '' },
+      { Metric: 'Total Questionnaires', Value: reportSummary?.totalQuestionnaires || finalData.length },
+      { Metric: 'Unique Sites', Value: reportSummary?.uniqueSites || 0 },
+      { Metric: 'Hubs', Value: reportSummary?.uniqueHubs || 0 },
+      { Metric: 'States', Value: reportSummary?.uniqueStates || 0 },
+      { Metric: 'Localities', Value: reportSummary?.uniqueLocalities || 0 },
+      { Metric: 'Data Collectors', Value: reportSummary?.totalCollectors || 0 },
+      { Metric: 'Supervisors', Value: reportSummary?.totalSupervisors || 0 },
     ];
+    if (reportSummary) {
+      summaryRows.push({ Metric: '', Value: '' });
+      summaryRows.push({ Metric: 'TEAM ROSTER', Value: '' });
+      reportSummary.teamOverview.forEach(team => {
+        summaryRows.push({ Metric: `Supervisor: ${team.supervisor}`, Value: `${team.teamSize} DCs, ${team.totalQ} Q` });
+        team.collectors.forEach(dc => {
+          summaryRows.push({ Metric: `  ${dc.name}`, Value: `Device: ${dc.deviceId} | ${dc.count} Q` });
+        });
+      });
+      summaryRows.push({ Metric: '', Value: '' });
+      summaryRows.push({ Metric: 'HUB COVERAGE', Value: '' });
+      reportSummary.hubBreakdown.forEach(h => {
+        summaryRows.push({ Metric: h.hub, Value: `${h.questionnaires} Q, ${h.sites} sites` });
+      });
+    }
     const summaryWs = XLSX.utils.json_to_sheet(summaryRows);
-    summaryWs['!cols'] = [{ wch: 25 }, { wch: 12 }];
+    summaryWs['!cols'] = [{ wch: 35 }, { wch: 40 }];
     XLSX.utils.book_append_sheet(wb, summaryWs, 'Cleaning Summary');
 
     const baseName = fileName.replace(/\.[^.]+$/, '') || 'questionnaire_data';
     XLSX.writeFile(wb, `${baseName}_cleaned.xlsx`);
-  }, [cleanResults, fileName, getCustomCleanedData, customDupsRemoved]);
+  }, [cleanResults, fileName, getCustomCleanedData, customDupsRemoved, computeReportSummary]);
 
   const downloadReviewExcel = useCallback(async () => {
     if (!cleanResults) return;
@@ -580,23 +627,61 @@ const QuestionnaireAnalytics = () => {
     legendWs.columns = [{ width: 12 }, { width: 25 }, { width: 80 }];
 
     const summaryWs = wb.addWorksheet('Summary');
-    const summaryHeaders = summaryWs.addRow(['Metric', 'Count']);
-    summaryHeaders.eachCell(cell => {
-      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F2937' } };
-      cell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 11 };
-    });
-    [
-      ['Total Rows', data.length],
-      ['Duplicate Rows', cleanResults.duplicateGroups.reduce((sum, g) => sum + g.rows.length, 0)],
-      ['Duplicate Groups', cleanResults.duplicateGroups.length],
-      ['Empty Rows', cleanResults.emptyRowsRemoved],
-      ['Fields Trimmed', cleanResults.trimmedFields],
-      ['Names Standardized', cleanResults.namesStandardized],
-      ['Clean Rows', data.length - cleanResults.emptyRowsRemoved - cleanResults.duplicateGroups.reduce((sum, g) => sum + g.rows.length, 0)],
-    ].forEach(([metric, value]) => {
-      summaryWs.addRow([metric, value]);
-    });
-    summaryWs.columns = [{ width: 25 }, { width: 15 }];
+    const rptSummary = computeReportSummary;
+    const addSectionHeader = (text: string) => {
+      const r = summaryWs.addRow([text, '']);
+      r.getCell(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F2937' } };
+      r.getCell(1).font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 11 };
+      r.getCell(2).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F2937' } };
+      r.getCell(2).font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 11 };
+    };
+    const addRow = (label: string, value: string | number) => summaryWs.addRow([label, value]);
+
+    addSectionHeader('Report Information');
+    addRow('Report Title', 'Data Quality & Coverage Report');
+    addRow('Generated Date', format(new Date(), 'MMMM d, yyyy h:mm a'));
+    addRow('File Name', fileName);
+    addRow('Month Coverage', rptSummary?.monthCoverage || 'N/A');
+    summaryWs.addRow([]);
+
+    addSectionHeader('Data Quality Metrics');
+    addRow('Total Rows', data.length);
+    addRow('Duplicate Rows', cleanResults.duplicateGroups.reduce((sum, g) => sum + g.rows.length, 0));
+    addRow('Duplicate Groups', cleanResults.duplicateGroups.length);
+    addRow('Empty Rows', cleanResults.emptyRowsRemoved);
+    addRow('Fields Trimmed', cleanResults.trimmedFields);
+    addRow('Names Standardized', cleanResults.namesStandardized);
+    const cleanRowCount = data.length - cleanResults.emptyRowsRemoved - cleanResults.duplicateGroups.reduce((sum, g) => sum + g.rows.length, 0);
+    addRow('Clean Rows', cleanRowCount);
+    addRow('Data Quality Score', data.length > 0 ? ((cleanRowCount / data.length) * 100).toFixed(1) + '%' : '100%');
+    summaryWs.addRow([]);
+
+    addSectionHeader('Coverage Totals');
+    addRow('Total Questionnaires', rptSummary?.totalQuestionnaires || filteredData.length);
+    addRow('Unique Sites', rptSummary?.uniqueSites || 0);
+    addRow('Hubs', rptSummary?.uniqueHubs || 0);
+    addRow('States', rptSummary?.uniqueStates || 0);
+    addRow('Localities', rptSummary?.uniqueLocalities || 0);
+    addRow('Data Collectors', rptSummary?.totalCollectors || 0);
+    addRow('Supervisors', rptSummary?.totalSupervisors || 0);
+
+    if (rptSummary) {
+      summaryWs.addRow([]);
+      addSectionHeader('Team Roster');
+      rptSummary.teamOverview.forEach(team => {
+        const supRow = summaryWs.addRow([`Supervisor: ${team.supervisor}`, `${team.teamSize} DCs, ${team.totalQ} Q`]);
+        supRow.getCell(1).font = { bold: true };
+        team.collectors.forEach(dc => {
+          addRow(`  ${dc.name}`, `Device: ${dc.deviceId} | ${dc.count} Q`);
+        });
+      });
+      summaryWs.addRow([]);
+      addSectionHeader('Hub Coverage');
+      rptSummary.hubBreakdown.forEach(h => {
+        addRow(h.hub, `${h.questionnaires} Q, ${h.sites} sites`);
+      });
+    }
+    summaryWs.columns = [{ width: 35 }, { width: 40 }];
 
     const buffer = await wb.xlsx.writeBuffer();
     const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
@@ -607,7 +692,7 @@ const QuestionnaireAnalytics = () => {
     a.download = `${baseName}_review.xlsx`;
     a.click();
     URL.revokeObjectURL(url);
-  }, [cleanResults, data, fileName]);
+  }, [cleanResults, data, fileName, filteredData, computeReportSummary]);
 
   const handleFileUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -1088,6 +1173,225 @@ const QuestionnaireAnalytics = () => {
 
     return { hubs, activities, matrix, hubTotals, grandQ, grandSites: grandSites.size, grandCollectors: grandColl.size, stateBreakdown, hubTrackers, stateTrackers };
   }, [filteredData]);
+
+  const computeReportSummary = useMemo(() => {
+    if (filteredData.length === 0) return null;
+
+    const parseDateStr = (d: string): Date | null => {
+      if (!d) return null;
+      const fmts = ['yyyy-MM-dd', 'MM/dd/yyyy', 'dd/MM/yyyy', 'yyyy/MM/dd', 'M/d/yyyy', 'd/M/yyyy'];
+      for (const fmt of fmts) {
+        const parsed = parse(d, fmt, new Date());
+        if (isValid(parsed)) return parsed;
+      }
+      const fallback = new Date(d);
+      return isValid(fallback) ? fallback : null;
+    };
+
+    const allDates = filteredData.map(r => parseDateStr(r.date)).filter((d): d is Date => d !== null);
+    let monthCoverage = 'N/A';
+    if (allDates.length > 0) {
+      const sorted = allDates.sort((a, b) => a.getTime() - b.getTime());
+      const minDate = sorted[0];
+      const maxDate = sorted[sorted.length - 1];
+      const minStr = format(minDate, 'MMMM yyyy');
+      const maxStr = format(maxDate, 'MMMM yyyy');
+      monthCoverage = minStr === maxStr ? minStr : `${minStr} - ${maxStr}`;
+    }
+
+    const supervisorMap = new Map<string, { collectors: Map<string, { deviceId: string; count: number }> }>();
+    filteredData.forEach(r => {
+      const sup = r.supervisor || 'Unassigned';
+      const dc = r.dataCollector || 'Unknown';
+      const devId = r.deviceId || '-';
+      if (!supervisorMap.has(sup)) supervisorMap.set(sup, { collectors: new Map() });
+      const supEntry = supervisorMap.get(sup)!;
+      if (!supEntry.collectors.has(dc)) supEntry.collectors.set(dc, { deviceId: devId, count: 0 });
+      supEntry.collectors.get(dc)!.count++;
+    });
+
+    const teamOverview = Array.from(supervisorMap.entries()).map(([sup, data]) => ({
+      supervisor: sup,
+      collectors: Array.from(data.collectors.entries()).map(([name, info]) => ({
+        name, deviceId: info.deviceId, count: info.count
+      })),
+      teamSize: data.collectors.size,
+      totalQ: Array.from(data.collectors.values()).reduce((s, c) => s + c.count, 0),
+    }));
+
+    const uniqueSites = new Set(filteredData.map(r => r.activitySite).filter(Boolean)).size;
+    const uniqueHubs = new Set(filteredData.map(r => r.hub).filter(Boolean));
+    const uniqueStates = new Set(filteredData.map(r => r.state).filter(Boolean));
+    const uniqueLocalities = new Set(filteredData.map(r => r.locality).filter(Boolean));
+
+    const hubBreakdown = Array.from(uniqueHubs).map(hub => {
+      const hubRows = filteredData.filter(r => r.hub === hub);
+      return { hub, sites: new Set(hubRows.map(r => r.activitySite).filter(Boolean)).size, questionnaires: hubRows.length };
+    });
+
+    const activityBreakdownReport = Array.from(new Set(filteredData.map(r => r.activity).filter(Boolean))).map(act => {
+      const actRows = filteredData.filter(r => r.activity === act);
+      return { activity: act, count: actRows.length };
+    });
+
+    let qualityReport = null;
+    if (cleanResults) {
+      const qualityScore = cleanResults.originalCount > 0
+        ? ((cleanResults.cleanedCount / cleanResults.originalCount) * 100).toFixed(1)
+        : '100.0';
+      qualityReport = {
+        originalRows: cleanResults.originalCount,
+        cleanRows: cleanResults.cleanedCount,
+        duplicatesRemoved: cleanResults.duplicatesRemoved,
+        emptyRowsRemoved: cleanResults.emptyRowsRemoved,
+        trimmedFields: cleanResults.trimmedDetails.length,
+        namesStandardized: cleanResults.nameChanges.length,
+        qualityScore,
+        duplicateGroups: cleanResults.duplicateGroups,
+        nameChanges: cleanResults.nameChanges,
+      };
+    }
+
+    return {
+      monthCoverage,
+      generatedDate: format(new Date(), 'MMMM d, yyyy h:mm a'),
+      fileName,
+      teamOverview,
+      totalQuestionnaires: filteredData.length,
+      originalRows: data.length,
+      uniqueSites,
+      uniqueHubs: uniqueHubs.size,
+      uniqueStates: uniqueStates.size,
+      uniqueLocalities: uniqueLocalities.size,
+      hubBreakdown,
+      activityBreakdown: activityBreakdownReport,
+      qualityReport,
+      totalCollectors: new Set(filteredData.map(r => r.dataCollector).filter(Boolean)).size,
+      totalSupervisors: supervisorMap.size,
+    };
+  }, [filteredData, data, cleanResults, fileName]);
+
+  const openEmailDialog = useCallback(async () => {
+    const month = computeReportSummary?.monthCoverage || format(new Date(), 'MMMM yyyy');
+    setEmailSubject(`Questionnaire Data Report - ${month}`);
+    setShowEmailDialog(true);
+    try {
+      const { data: profiles } = await supabase.from('profiles').select('id, name, email, role').eq('status', 'approved');
+      if (profiles) setEmailUsers(profiles as any);
+    } catch (e) {
+      console.error('Failed to fetch profiles:', e);
+    }
+  }, [computeReportSummary]);
+
+  const getEmailCcList = useMemo(() => {
+    if (emailCcRoles.length === 0) return [];
+    return emailUsers.filter(u => emailCcRoles.includes(u.role));
+  }, [emailCcRoles, emailUsers]);
+
+  const getEmailBody = useMemo(() => {
+    const s = computeReportSummary;
+    if (!s) return '';
+    const qScore = s.qualityReport ? `Data Quality Score: ${s.qualityReport.qualityScore}%` : '';
+    const en = [
+      `Questionnaire Data Report - ${s.monthCoverage}`,
+      '',
+      `Total Questionnaires: ${s.totalQuestionnaires}`,
+      `Unique Sites: ${s.uniqueSites}`,
+      `Hubs: ${s.uniqueHubs} | States: ${s.uniqueStates} | Localities: ${s.uniqueLocalities}`,
+      `Data Collectors: ${s.totalCollectors} | Supervisors: ${s.totalSupervisors}`,
+      qScore,
+      '',
+      'Hub Coverage:',
+      ...s.hubBreakdown.map(h => `  ${h.hub}: ${h.questionnaires} questionnaires, ${h.sites} sites`),
+    ].filter(Boolean).join('\n');
+
+    const ar = [
+      `تقرير بيانات الاستبيانات - ${s.monthCoverage}`,
+      '',
+      `إجمالي الاستبيانات: ${s.totalQuestionnaires}`,
+      `المواقع الفريدة: ${s.uniqueSites}`,
+      `المحاور: ${s.uniqueHubs} | الولايات: ${s.uniqueStates} | المحليات: ${s.uniqueLocalities}`,
+      `جامعي البيانات: ${s.totalCollectors} | المشرفين: ${s.totalSupervisors}`,
+      s.qualityReport ? `درجة جودة البيانات: ${s.qualityReport.qualityScore}%` : '',
+    ].filter(Boolean).join('\n');
+
+    return `${en}\n\n---\n\n${ar}`;
+  }, [computeReportSummary]);
+
+  const generateExcelBase64 = useCallback(async (type: 'cleaned' | 'review'): Promise<string | null> => {
+    if (!cleanResults) return null;
+    try {
+      if (type === 'cleaned') {
+        const finalData = getCustomCleanedData();
+        const rows = finalData.map(r => ({
+          Hub: r.hub, State: r.state, Locality: r.locality, 'Activity Site': r.activitySite,
+          Activity: r.activity, 'Sub Activity': r.subActivity, 'Data Collector': r.dataCollector,
+          'Device ID': r.deviceId, Supervisor: r.supervisor, Date: r.date, 'Site ID': r.siteId, Partner: r.partner,
+        }));
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), 'Cleaned Data');
+        const buf = XLSX.write(wb, { type: 'base64', bookType: 'xlsx' });
+        return buf;
+      } else {
+        const wb = new ExcelJS.Workbook();
+        const ws = wb.addWorksheet('Summary');
+        const headerRow = ws.addRow(['Metric', 'Value']);
+        headerRow.eachCell(c => { c.font = { bold: true }; });
+        ws.addRow(['Total Rows', data.length]);
+        ws.addRow(['Duplicates Removed', cleanResults.duplicatesRemoved]);
+        ws.addRow(['Empty Rows Removed', cleanResults.emptyRowsRemoved]);
+        ws.addRow(['Clean Rows', cleanResults.cleanedCount]);
+        ws.columns = [{ width: 25 }, { width: 15 }];
+        const buf = await wb.xlsx.writeBuffer();
+        const base64 = btoa(String.fromCharCode(...new Uint8Array(buf as ArrayBuffer)));
+        return base64;
+      }
+    } catch { return null; }
+  }, [cleanResults, data, getCustomCleanedData]);
+
+  const sendEmailReport = useCallback(async () => {
+    if (!emailTo.trim()) {
+      toast({ title: 'Error', description: 'Please enter a recipient email', variant: 'destructive' });
+      return;
+    }
+    setEmailSending(true);
+    try {
+      const ccEmails = getEmailCcList.map(u => u.email).filter(Boolean);
+      const s = computeReportSummary;
+      const arBody = s ? `تقرير بيانات الاستبيانات - ${s.monthCoverage}\nإجمالي الاستبيانات: ${s.totalQuestionnaires}\nالمواقع الفريدة: ${s.uniqueSites}` : '';
+      const attachments: { filename: string; content: string; type: string }[] = [];
+      const baseName = fileName.replace(/\.[^.]+$/, '') || 'report';
+      if (emailAttachCleaned && cleanResults) {
+        const b64 = await generateExcelBase64('cleaned');
+        if (b64) attachments.push({ filename: `${baseName}_cleaned.xlsx`, content: b64, type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      }
+      if (emailAttachReview && cleanResults) {
+        const b64 = await generateExcelBase64('review');
+        if (b64) attachments.push({ filename: `${baseName}_review.xlsx`, content: b64, type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      }
+      await EmailNotificationService.sendNotification(
+        emailTo.trim(),
+        'Recipient',
+        {
+          title: emailSubject,
+          message: getEmailBody,
+          titleAr: s ? `تقرير بيانات الاستبيانات - ${s.monthCoverage}` : emailSubject,
+          messageAr: arBody,
+          type: 'info',
+          cc: ccEmails.length > 0 ? ccEmails : undefined,
+          attachments: attachments.length > 0 ? attachments : undefined,
+        }
+      );
+      toast({ title: 'Email Sent', description: 'Report email sent successfully' });
+      setShowEmailDialog(false);
+      setEmailTo('');
+      setEmailCcRoles([]);
+    } catch (e: any) {
+      toast({ title: 'Email Failed', description: e.message || 'Failed to send email', variant: 'destructive' });
+    } finally {
+      setEmailSending(false);
+    }
+  }, [emailTo, emailSubject, getEmailBody, getEmailCcList, toast, emailAttachCleaned, emailAttachReview, cleanResults, fileName, generateExcelBase64, computeReportSummary]);
 
   const exportToExcel = useCallback(() => {
     const wb = XLSX.utils.book_new();
@@ -2331,6 +2635,10 @@ const QuestionnaireAnalytics = () => {
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
+              <Button variant="outline" size="sm" className="gap-1.5" onClick={openEmailDialog} data-testid="button-send-report">
+                <Mail className="h-4 w-4" />
+                Send Report
+              </Button>
             </>
           )}
         </div>
@@ -2580,7 +2888,7 @@ const QuestionnaireAnalytics = () => {
           </Card>
 
           <Tabs value={activeTab} onValueChange={setActiveTab}>
-            <TabsList className="grid grid-cols-4 sm:grid-cols-8 w-full">
+            <TabsList className="grid grid-cols-4 sm:grid-cols-9 w-full">
               <TabsTrigger value="overview" data-testid="tab-overview" className="gap-1">
                 <BarChart3 className="h-3 w-3 hidden sm:inline" />Overview
               </TabsTrigger>
@@ -2604,6 +2912,9 @@ const QuestionnaireAnalytics = () => {
               </TabsTrigger>
               <TabsTrigger value="tracker" data-testid="tab-tracker" className="gap-1">
                 <Layers className="h-3 w-3 hidden sm:inline" />Tracker
+              </TabsTrigger>
+              <TabsTrigger value="reports" data-testid="tab-reports" className="gap-1">
+                <ClipboardList className="h-3 w-3 hidden sm:inline" />Reports
               </TabsTrigger>
             </TabsList>
 
@@ -3577,6 +3888,313 @@ const QuestionnaireAnalytics = () => {
                 </Card>
               )}
             </TabsContent>
+
+            <TabsContent value="reports" className="mt-4 space-y-4" data-testid="reports-tab-content">
+              {computeReportSummary && (
+                <>
+                  <Card>
+                    <CardHeader className="pb-3">
+                      <CardTitle className="flex items-center gap-2 text-lg" data-testid="text-report-title">
+                        <FileText className="h-5 w-5 text-primary" />
+                        Data Quality & Coverage Report
+                      </CardTitle>
+                      <CardDescription>
+                        <span className="flex flex-wrap items-center gap-2">
+                          <Badge variant="outline" className="gap-1" data-testid="text-report-month">
+                            <Clock className="h-3 w-3" />
+                            {computeReportSummary.monthCoverage}
+                          </Badge>
+                          <Badge variant="secondary" className="gap-1" data-testid="text-report-file">
+                            <FileSpreadsheet className="h-3 w-3" />
+                            {computeReportSummary.fileName}
+                          </Badge>
+                          <span className="text-xs text-muted-foreground">Generated: {computeReportSummary.generatedDate}</span>
+                        </span>
+                      </CardDescription>
+                    </CardHeader>
+                  </Card>
+
+                  <Card>
+                    <CardHeader className="pb-3">
+                      <CardTitle className="flex items-center gap-2 text-base">
+                        <Users className="h-4 w-4 text-primary" />
+                        Team Overview
+                      </CardTitle>
+                      <CardDescription>
+                        {computeReportSummary.totalCollectors} Data Collectors across {computeReportSummary.totalSupervisors} Supervisors
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-4">
+                        {computeReportSummary.teamOverview.map(team => (
+                          <div key={team.supervisor} className="border rounded-lg">
+                            <div className="flex items-center justify-between gap-2 p-3 bg-muted/30">
+                              <div className="flex items-center gap-2">
+                                <Users className="h-4 w-4 text-muted-foreground" />
+                                <span className="font-semibold text-sm">{team.supervisor}</span>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <Badge variant="outline" className="font-mono text-xs">{team.teamSize} DCs</Badge>
+                                <Badge variant="secondary" className="font-mono text-xs">{team.totalQ} Q</Badge>
+                              </div>
+                            </div>
+                            <div className="overflow-x-auto">
+                              <table className="w-full text-sm" data-testid={`table-team-${team.supervisor}`}>
+                                <thead>
+                                  <tr className="border-b bg-muted/10">
+                                    <th className="text-left py-2 px-3 font-medium text-xs text-muted-foreground">Data Collector</th>
+                                    <th className="text-left py-2 px-3 font-medium text-xs text-muted-foreground">Device ID</th>
+                                    <th className="text-center py-2 px-3 font-medium text-xs text-muted-foreground">Questionnaires</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {team.collectors.map(dc => (
+                                    <tr key={dc.name} className="border-b last:border-b-0 hover:bg-muted/20">
+                                      <td className="py-1.5 px-3">{dc.name}</td>
+                                      <td className="py-1.5 px-3 font-mono text-xs text-muted-foreground">{dc.deviceId}</td>
+                                      <td className="py-1.5 px-3 text-center font-mono">{dc.count}</td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  <Card>
+                    <CardHeader className="pb-3">
+                      <CardTitle className="flex items-center gap-2 text-base">
+                        <Globe className="h-4 w-4 text-primary" />
+                        Coverage Summary
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
+                        <div className="text-center p-3 bg-muted/30 rounded-lg">
+                          <div className="text-xl font-bold text-primary" data-testid="text-report-total-q">{computeReportSummary.totalQuestionnaires}</div>
+                          <div className="text-xs text-muted-foreground">Questionnaires{cleanResults ? ' (Cleaned)' : ''}</div>
+                          {cleanResults && (
+                            <div className="text-[10px] text-muted-foreground mt-0.5">Original: {computeReportSummary.originalRows}</div>
+                          )}
+                        </div>
+                        <div className="text-center p-3 bg-muted/30 rounded-lg">
+                          <div className="text-xl font-bold text-teal-600" data-testid="text-report-sites">{computeReportSummary.uniqueSites}</div>
+                          <div className="text-xs text-muted-foreground">Unique Sites</div>
+                        </div>
+                        <div className="text-center p-3 bg-muted/30 rounded-lg">
+                          <div className="text-xl font-bold text-blue-600">{computeReportSummary.uniqueHubs}</div>
+                          <div className="text-xs text-muted-foreground">Hubs</div>
+                        </div>
+                        <div className="text-center p-3 bg-muted/30 rounded-lg">
+                          <div className="text-xl font-bold text-green-600">{computeReportSummary.uniqueStates}</div>
+                          <div className="text-xs text-muted-foreground">States</div>
+                        </div>
+                        <div className="text-center p-3 bg-muted/30 rounded-lg">
+                          <div className="text-xl font-bold text-orange-600">{computeReportSummary.uniqueLocalities}</div>
+                          <div className="text-xs text-muted-foreground">Localities</div>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                          <h4 className="text-sm font-semibold text-muted-foreground mb-2 flex items-center gap-1">
+                            <Building2 className="h-3.5 w-3.5" /> Coverage by Hub
+                          </h4>
+                          <div className="border rounded-lg overflow-hidden">
+                            <table className="w-full text-sm" data-testid="table-report-hub-coverage">
+                              <thead>
+                                <tr className="bg-muted/40 border-b">
+                                  <th className="text-left py-2 px-3 font-medium text-xs">Hub</th>
+                                  <th className="text-center py-2 px-3 font-medium text-xs">Sites</th>
+                                  <th className="text-center py-2 px-3 font-medium text-xs">Questionnaires</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {computeReportSummary.hubBreakdown.map(h => (
+                                  <tr key={h.hub} className="border-b last:border-b-0 hover:bg-muted/20">
+                                    <td className="py-1.5 px-3 font-medium">{h.hub}</td>
+                                    <td className="py-1.5 px-3 text-center font-mono text-blue-600">{h.sites}</td>
+                                    <td className="py-1.5 px-3 text-center font-mono">{h.questionnaires}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                        <div>
+                          <h4 className="text-sm font-semibold text-muted-foreground mb-2 flex items-center gap-1">
+                            <Activity className="h-3.5 w-3.5" /> Coverage by Activity
+                          </h4>
+                          <div className="border rounded-lg overflow-hidden">
+                            <table className="w-full text-sm" data-testid="table-report-activity-coverage">
+                              <thead>
+                                <tr className="bg-muted/40 border-b">
+                                  <th className="text-left py-2 px-3 font-medium text-xs">Activity</th>
+                                  <th className="text-center py-2 px-3 font-medium text-xs">Questionnaires</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {computeReportSummary.activityBreakdown.map(a => (
+                                  <tr key={a.activity} className="border-b last:border-b-0 hover:bg-muted/20">
+                                    <td className="py-1.5 px-3 font-medium">{a.activity}</td>
+                                    <td className="py-1.5 px-3 text-center font-mono">{a.count}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  {computeReportSummary.qualityReport && (
+                    <Card>
+                      <CardHeader className="pb-3">
+                        <CardTitle className="flex items-center gap-2 text-base">
+                          <CheckCircle2 className="h-4 w-4 text-primary" />
+                          Data Quality Report
+                        </CardTitle>
+                        <CardDescription>
+                          Quality Score: <span className="font-bold text-primary" data-testid="text-quality-score">{computeReportSummary.qualityReport.qualityScore}%</span>
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent className="space-y-4">
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                          <div className="text-center p-3 bg-red-50 dark:bg-red-950/20 rounded-lg">
+                            <div className="text-xl font-bold text-red-600">{computeReportSummary.qualityReport.duplicatesRemoved}</div>
+                            <div className="text-xs text-muted-foreground">Duplicates Removed</div>
+                          </div>
+                          <div className="text-center p-3 bg-orange-50 dark:bg-orange-950/20 rounded-lg">
+                            <div className="text-xl font-bold text-orange-600">{computeReportSummary.qualityReport.emptyRowsRemoved}</div>
+                            <div className="text-xs text-muted-foreground">Empty Rows Removed</div>
+                          </div>
+                          <div className="text-center p-3 bg-blue-50 dark:bg-blue-950/20 rounded-lg">
+                            <div className="text-xl font-bold text-blue-600">{computeReportSummary.qualityReport.trimmedFields}</div>
+                            <div className="text-xs text-muted-foreground">Fields Trimmed</div>
+                          </div>
+                          <div className="text-center p-3 bg-purple-50 dark:bg-purple-950/20 rounded-lg">
+                            <div className="text-xl font-bold text-purple-600">{computeReportSummary.qualityReport.namesStandardized}</div>
+                            <div className="text-xs text-muted-foreground">Names Standardized</div>
+                          </div>
+                        </div>
+
+                        <div className="p-3 bg-muted/30 rounded-lg border-l-4 border-l-amber-500">
+                          <div className="flex items-start gap-2">
+                            <AlertCircle className="h-4 w-4 text-amber-500 mt-0.5 flex-shrink-0" />
+                            <p className="text-sm text-muted-foreground">
+                              Data collectors should ensure consistent naming, avoid duplicate entries, and fill all required fields.
+                            </p>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )}
+
+                  {computeReportSummary.qualityReport && (
+                    <Card>
+                      <CardHeader className="pb-3">
+                        <button
+                          type="button"
+                          className="w-full flex items-center justify-between text-left"
+                          onClick={() => setReportIssuesExpanded(!reportIssuesExpanded)}
+                          data-testid="button-toggle-report-issues"
+                        >
+                          <CardTitle className="flex items-center gap-2 text-base">
+                            <FileSearch className="h-4 w-4 text-primary" />
+                            Detailed Issues
+                          </CardTitle>
+                          <div className="flex items-center gap-1">
+                            <Badge variant="outline" className="font-mono text-xs">
+                              {computeReportSummary.qualityReport.duplicateGroups.length} dup groups
+                            </Badge>
+                            <Badge variant="outline" className="font-mono text-xs">
+                              {computeReportSummary.qualityReport.nameChanges.length} name changes
+                            </Badge>
+                            {reportIssuesExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                          </div>
+                        </button>
+                      </CardHeader>
+                      {reportIssuesExpanded && (
+                        <CardContent className="space-y-4">
+                          {computeReportSummary.qualityReport.duplicateGroups.length > 0 && (
+                            <div>
+                              <h4 className="text-sm font-semibold text-muted-foreground mb-2">Duplicate Groups</h4>
+                              <div className="space-y-2 max-h-[400px] overflow-y-auto">
+                                {computeReportSummary.qualityReport.duplicateGroups.map((group, gi) => (
+                                  <div key={gi} className="border rounded-lg p-2.5 text-sm">
+                                    <div className="flex items-center gap-2 mb-1">
+                                      <Badge variant="destructive" className="text-[10px] px-1.5">Group {gi + 1}</Badge>
+                                      <span className="text-xs text-muted-foreground">{group.rows.length} rows</span>
+                                    </div>
+                                    <div className="text-xs text-muted-foreground">
+                                      Rows: {group.rows.map(r => r.index + 1).join(', ')}
+                                    </div>
+                                    <div className="text-xs mt-1">
+                                      Key: <span className="font-mono text-muted-foreground">{group.key}</span>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {computeReportSummary.qualityReport.nameChanges.length > 0 && (
+                            <div>
+                              <h4 className="text-sm font-semibold text-muted-foreground mb-2">Name Standardization Changes</h4>
+                              <div className="border rounded-lg overflow-hidden max-h-[300px] overflow-y-auto">
+                                <table className="w-full text-sm" data-testid="table-report-name-changes">
+                                  <thead>
+                                    <tr className="bg-muted/40 border-b sticky top-0">
+                                      <th className="text-left py-2 px-3 font-medium text-xs">Row</th>
+                                      <th className="text-left py-2 px-3 font-medium text-xs">Device ID</th>
+                                      <th className="text-left py-2 px-3 font-medium text-xs">Old Name</th>
+                                      <th className="text-left py-2 px-3 font-medium text-xs">New Name</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {computeReportSummary.qualityReport.nameChanges.slice(0, 100).map((nc, i) => (
+                                      <tr key={i} className="border-b last:border-b-0">
+                                        <td className="py-1.5 px-3 font-mono text-xs">{nc.index + 1}</td>
+                                        <td className="py-1.5 px-3 font-mono text-xs text-muted-foreground">{nc.deviceId}</td>
+                                        <td className="py-1.5 px-3 text-red-600 line-through">{nc.oldName}</td>
+                                        <td className="py-1.5 px-3 text-green-600">{nc.newName}</td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                              {computeReportSummary.qualityReport.nameChanges.length > 100 && (
+                                <p className="text-xs text-muted-foreground mt-1">Showing first 100 of {computeReportSummary.qualityReport.nameChanges.length} changes</p>
+                              )}
+                            </div>
+                          )}
+
+                          <div className="p-3 bg-muted/30 rounded-lg">
+                            <h4 className="text-sm font-semibold mb-2">Recommendations</h4>
+                            <ul className="text-sm text-muted-foreground space-y-1 list-disc list-inside">
+                              <li>Use standardized naming conventions for data collectors across all devices</li>
+                              <li>Verify entries before submission to reduce duplicate records</li>
+                              <li>Ensure all required fields are completed before saving questionnaires</li>
+                              <li>Coordinate with supervisors to maintain consistent site naming</li>
+                            </ul>
+                          </div>
+                        </CardContent>
+                      )}
+                    </Card>
+                  )}
+                </>
+              )}
+              {!computeReportSummary && (
+                <Card className="p-8 text-center">
+                  <FileText className="h-12 w-12 text-muted-foreground mx-auto mb-3" />
+                  <p className="text-muted-foreground">Upload data to generate the report</p>
+                </Card>
+              )}
+            </TabsContent>
           </Tabs>
         </>
       )}
@@ -3910,6 +4528,123 @@ const QuestionnaireAnalytics = () => {
                 </Button>
               </div>
             )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showEmailDialog} onOpenChange={setShowEmailDialog}>
+        <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Mail className="h-5 w-5" />
+              Send Report Email
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div>
+              <Label htmlFor="email-to">To</Label>
+              <Input
+                id="email-to"
+                type="email"
+                value={emailTo}
+                onChange={(e) => setEmailTo(e.target.value)}
+                placeholder="recipient@example.com"
+                className="mt-1"
+                data-testid="input-email-to"
+              />
+            </div>
+
+            <div>
+              <Label htmlFor="email-subject">Subject</Label>
+              <Input
+                id="email-subject"
+                value={emailSubject}
+                onChange={(e) => setEmailSubject(e.target.value)}
+                className="mt-1"
+                data-testid="input-email-subject"
+              />
+            </div>
+
+            <div>
+              <Label className="mb-2 block">CC by Role</Label>
+              <div className="flex flex-wrap gap-3">
+                {['Super Admin', 'Admin', 'FOM', 'Supervisor', 'Data Team', 'Finance'].map(role => (
+                  <label key={role} className="flex items-center gap-1.5 text-sm cursor-pointer">
+                    <Checkbox
+                      checked={emailCcRoles.includes(role)}
+                      onCheckedChange={(checked) => {
+                        setEmailCcRoles(prev => checked ? [...prev, role] : prev.filter(r => r !== role));
+                      }}
+                      data-testid={`checkbox-cc-role-${role.toLowerCase().replace(/\s+/g, '-')}`}
+                    />
+                    {role}
+                  </label>
+                ))}
+              </div>
+              {getEmailCcList.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 mt-2">
+                  {getEmailCcList.map(u => (
+                    <Badge key={u.id} variant="secondary" className="text-xs gap-1" data-testid={`badge-cc-user-${u.id}`}>
+                      {u.name} ({u.email})
+                    </Badge>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div>
+              <Label className="mb-2 block">Attachments</Label>
+              <div className="flex gap-4">
+                <label className="flex items-center gap-1.5 text-sm cursor-pointer">
+                  <Checkbox
+                    checked={emailAttachReview}
+                    onCheckedChange={(checked) => setEmailAttachReview(!!checked)}
+                    data-testid="checkbox-attach-review"
+                  />
+                  Review File
+                </label>
+                <label className="flex items-center gap-1.5 text-sm cursor-pointer">
+                  <Checkbox
+                    checked={emailAttachCleaned}
+                    onCheckedChange={(checked) => setEmailAttachCleaned(!!checked)}
+                    data-testid="checkbox-attach-cleaned"
+                  />
+                  Cleaned File
+                </label>
+              </div>
+            </div>
+
+            <div>
+              <Label className="mb-2 block">Email Preview</Label>
+              <Card className="p-4">
+                <div className="space-y-2">
+                  <div className="text-sm font-semibold" data-testid="text-email-preview-subject">{emailSubject}</div>
+                  <div className="border-t pt-2">
+                    <pre className="text-xs text-muted-foreground whitespace-pre-wrap font-sans leading-relaxed max-h-[200px] overflow-y-auto" data-testid="text-email-preview-body">
+                      {getEmailBody}
+                    </pre>
+                  </div>
+                </div>
+              </Card>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowEmailDialog(false)} data-testid="button-email-cancel">
+              Cancel
+            </Button>
+            <Button onClick={sendEmailReport} disabled={emailSending || !emailTo.trim()} className="gap-1.5" data-testid="button-email-send">
+              {emailSending ? (
+                <>
+                  <span className="animate-spin h-4 w-4 border-2 border-current border-t-transparent rounded-full inline-block" />
+                  Sending...
+                </>
+              ) : (
+                <>
+                  <Send className="h-4 w-4" />
+                  Send Email
+                </>
+              )}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
