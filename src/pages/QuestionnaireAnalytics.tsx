@@ -104,6 +104,90 @@ const HEADER_KEYWORDS: Record<string, string[]> = {
 
 const isPdmActivity = (activity: string) => /pdm/i.test(activity);
 
+const DATE_FORMATS = ['yyyy-MM-dd', 'MM/dd/yyyy', 'dd/MM/yyyy', 'yyyy/MM/dd', 'M/d/yyyy', 'd/M/yyyy'];
+
+function computeSummaryFromData(rows: QuestionnaireRow[], allRows: QuestionnaireRow[], fName: string, cleanRes: any) {
+  const dates: Date[] = [];
+  rows.forEach(r => {
+    if (!r.date) return;
+    for (const fmt of DATE_FORMATS) {
+      const d = parse(r.date, fmt, new Date());
+      if (isValid(d)) { dates.push(d); break; }
+    }
+  });
+  let monthCoverage = 'N/A';
+  if (dates.length > 0) {
+    dates.sort((a, b) => a.getTime() - b.getTime());
+    const first = format(dates[0], 'MMMM yyyy');
+    const last = format(dates[dates.length - 1], 'MMMM yyyy');
+    monthCoverage = first === last ? first : `${first} - ${last}`;
+  }
+
+  const supervisorMap = new Map<string, { collectors: { name: string; deviceId: string; count: number }[]; totalQ: number }>();
+  const collectorBySup = new Map<string, Map<string, { deviceId: string; count: number }>>();
+  rows.forEach(r => {
+    const sup = r.supervisor || '(Unassigned)';
+    if (!collectorBySup.has(sup)) collectorBySup.set(sup, new Map());
+    const cm = collectorBySup.get(sup)!;
+    const dc = r.dataCollector || '(Unknown)';
+    if (!cm.has(dc)) cm.set(dc, { deviceId: r.deviceId || '', count: 0 });
+    cm.get(dc)!.count++;
+  });
+  collectorBySup.forEach((dcMap, sup) => {
+    const collectors = [...dcMap.entries()].map(([name, d]) => ({ name, deviceId: d.deviceId, count: d.count })).sort((a, b) => b.count - a.count);
+    supervisorMap.set(sup, { collectors, totalQ: collectors.reduce((s, c) => s + c.count, 0) });
+  });
+  const teamOverview = [...supervisorMap.entries()].map(([supervisor, d]) => ({
+    supervisor, collectors: d.collectors, teamSize: d.collectors.length, totalQ: d.totalQ,
+  })).sort((a, b) => b.totalQ - a.totalQ);
+
+  const uniqueSites = new Set(rows.map(r => r.activitySite).filter(Boolean)).size;
+  const uniqueHubsSet = new Set(rows.map(r => r.hub).filter(Boolean));
+  const uniqueStatesSet = new Set(rows.map(r => r.state).filter(Boolean));
+  const uniqueLocalitiesSet = new Set(rows.map(r => r.locality).filter(Boolean));
+
+  const hubBreakdown = Array.from(uniqueHubsSet).map(hub => {
+    const hubRows = rows.filter(r => r.hub === hub);
+    return { hub, sites: new Set(hubRows.map(r => r.activitySite).filter(Boolean)).size, questionnaires: hubRows.length };
+  });
+
+  const activityBreakdown = Array.from(new Set(rows.map(r => r.activity).filter(Boolean))).map(act => {
+    return { activity: act, count: rows.filter(r => r.activity === act).length };
+  });
+
+  let qualityReport = null;
+  if (cleanRes) {
+    const qScore = cleanRes.originalCount > 0 ? ((cleanRes.cleanedCount / cleanRes.originalCount) * 100).toFixed(1) : '100.0';
+    qualityReport = {
+      originalRows: cleanRes.originalCount, cleanRows: cleanRes.cleanedCount,
+      duplicatesRemoved: cleanRes.duplicatesRemoved, emptyRowsRemoved: cleanRes.emptyRowsRemoved,
+      trimmedFields: cleanRes.trimmedDetails?.length || cleanRes.trimmedFields || 0,
+      namesStandardized: cleanRes.nameChanges?.length || cleanRes.namesStandardized || 0,
+      qualityScore: qScore,
+      duplicateGroups: cleanRes.duplicateGroups || [],
+      nameChanges: cleanRes.nameChanges || [],
+    };
+  }
+
+  return {
+    monthCoverage,
+    generatedDate: format(new Date(), 'MMMM d, yyyy h:mm a'),
+    fileName: fName,
+    teamOverview,
+    totalQuestionnaires: rows.length,
+    originalRows: allRows.length,
+    uniqueSites,
+    uniqueHubs: uniqueHubsSet.size,
+    uniqueStates: uniqueStatesSet.size,
+    uniqueLocalities: uniqueLocalitiesSet.size,
+    hubBreakdown,
+    activityBreakdown,
+    qualityReport,
+    totalCollectors: new Set(rows.map(r => r.dataCollector).filter(Boolean)).size,
+    totalSupervisors: supervisorMap.size,
+  };
+}
+
 const AccessDenied = () => (
   <div className="flex items-center justify-center h-[60vh]">
     <Card className="max-w-md w-full">
@@ -426,7 +510,7 @@ const QuestionnaireAnalytics = () => {
     ws['!cols'] = [{ wch: 18 }, { wch: 16 }, { wch: 18 }, { wch: 30 }, { wch: 16 }, { wch: 20 }, { wch: 25 }, { wch: 20 }, { wch: 20 }, { wch: 14 }, { wch: 14 }, { wch: 20 }];
     XLSX.utils.book_append_sheet(wb, ws, 'Cleaned Data');
 
-    const reportSummary = computeReportSummary;
+    const reportSummary = computeSummaryFromData(finalData, data, fileName, cleanResults);
     const summaryRows: { Metric: string; Value: string | number }[] = [
       { Metric: 'REPORT INFORMATION', Value: '' },
       { Metric: 'Report Title', Value: 'Data Quality & Coverage Report' },
@@ -473,7 +557,7 @@ const QuestionnaireAnalytics = () => {
 
     const baseName = fileName.replace(/\.[^.]+$/, '') || 'questionnaire_data';
     XLSX.writeFile(wb, `${baseName}_cleaned.xlsx`);
-  }, [cleanResults, fileName, getCustomCleanedData, customDupsRemoved, computeReportSummary]);
+  }, [cleanResults, fileName, getCustomCleanedData, customDupsRemoved, data]);
 
   const downloadReviewExcel = useCallback(async () => {
     if (!cleanResults) return;
@@ -627,7 +711,7 @@ const QuestionnaireAnalytics = () => {
     legendWs.columns = [{ width: 12 }, { width: 25 }, { width: 80 }];
 
     const summaryWs = wb.addWorksheet('Summary');
-    const rptSummary = computeReportSummary;
+    const rptSummary = computeSummaryFromData(data, data, fileName, cleanResults);
     const addSectionHeader = (text: string) => {
       const r = summaryWs.addRow([text, '']);
       r.getCell(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F2937' } };
@@ -657,7 +741,7 @@ const QuestionnaireAnalytics = () => {
     summaryWs.addRow([]);
 
     addSectionHeader('Coverage Totals');
-    addRow('Total Questionnaires', rptSummary?.totalQuestionnaires || filteredData.length);
+    addRow('Total Questionnaires', rptSummary?.totalQuestionnaires || data.length);
     addRow('Unique Sites', rptSummary?.uniqueSites || 0);
     addRow('Hubs', rptSummary?.uniqueHubs || 0);
     addRow('States', rptSummary?.uniqueStates || 0);
@@ -692,7 +776,7 @@ const QuestionnaireAnalytics = () => {
     a.download = `${baseName}_review.xlsx`;
     a.click();
     URL.revokeObjectURL(url);
-  }, [cleanResults, data, fileName, filteredData, computeReportSummary]);
+  }, [cleanResults, data, fileName]);
 
   const handleFileUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -1176,99 +1260,7 @@ const QuestionnaireAnalytics = () => {
 
   const computeReportSummary = useMemo(() => {
     if (filteredData.length === 0) return null;
-
-    const parseDateStr = (d: string): Date | null => {
-      if (!d) return null;
-      const fmts = ['yyyy-MM-dd', 'MM/dd/yyyy', 'dd/MM/yyyy', 'yyyy/MM/dd', 'M/d/yyyy', 'd/M/yyyy'];
-      for (const fmt of fmts) {
-        const parsed = parse(d, fmt, new Date());
-        if (isValid(parsed)) return parsed;
-      }
-      const fallback = new Date(d);
-      return isValid(fallback) ? fallback : null;
-    };
-
-    const allDates = filteredData.map(r => parseDateStr(r.date)).filter((d): d is Date => d !== null);
-    let monthCoverage = 'N/A';
-    if (allDates.length > 0) {
-      const sorted = allDates.sort((a, b) => a.getTime() - b.getTime());
-      const minDate = sorted[0];
-      const maxDate = sorted[sorted.length - 1];
-      const minStr = format(minDate, 'MMMM yyyy');
-      const maxStr = format(maxDate, 'MMMM yyyy');
-      monthCoverage = minStr === maxStr ? minStr : `${minStr} - ${maxStr}`;
-    }
-
-    const supervisorMap = new Map<string, { collectors: Map<string, { deviceId: string; count: number }> }>();
-    filteredData.forEach(r => {
-      const sup = r.supervisor || 'Unassigned';
-      const dc = r.dataCollector || 'Unknown';
-      const devId = r.deviceId || '-';
-      if (!supervisorMap.has(sup)) supervisorMap.set(sup, { collectors: new Map() });
-      const supEntry = supervisorMap.get(sup)!;
-      if (!supEntry.collectors.has(dc)) supEntry.collectors.set(dc, { deviceId: devId, count: 0 });
-      supEntry.collectors.get(dc)!.count++;
-    });
-
-    const teamOverview = Array.from(supervisorMap.entries()).map(([sup, data]) => ({
-      supervisor: sup,
-      collectors: Array.from(data.collectors.entries()).map(([name, info]) => ({
-        name, deviceId: info.deviceId, count: info.count
-      })),
-      teamSize: data.collectors.size,
-      totalQ: Array.from(data.collectors.values()).reduce((s, c) => s + c.count, 0),
-    }));
-
-    const uniqueSites = new Set(filteredData.map(r => r.activitySite).filter(Boolean)).size;
-    const uniqueHubs = new Set(filteredData.map(r => r.hub).filter(Boolean));
-    const uniqueStates = new Set(filteredData.map(r => r.state).filter(Boolean));
-    const uniqueLocalities = new Set(filteredData.map(r => r.locality).filter(Boolean));
-
-    const hubBreakdown = Array.from(uniqueHubs).map(hub => {
-      const hubRows = filteredData.filter(r => r.hub === hub);
-      return { hub, sites: new Set(hubRows.map(r => r.activitySite).filter(Boolean)).size, questionnaires: hubRows.length };
-    });
-
-    const activityBreakdownReport = Array.from(new Set(filteredData.map(r => r.activity).filter(Boolean))).map(act => {
-      const actRows = filteredData.filter(r => r.activity === act);
-      return { activity: act, count: actRows.length };
-    });
-
-    let qualityReport = null;
-    if (cleanResults) {
-      const qualityScore = cleanResults.originalCount > 0
-        ? ((cleanResults.cleanedCount / cleanResults.originalCount) * 100).toFixed(1)
-        : '100.0';
-      qualityReport = {
-        originalRows: cleanResults.originalCount,
-        cleanRows: cleanResults.cleanedCount,
-        duplicatesRemoved: cleanResults.duplicatesRemoved,
-        emptyRowsRemoved: cleanResults.emptyRowsRemoved,
-        trimmedFields: cleanResults.trimmedDetails.length,
-        namesStandardized: cleanResults.nameChanges.length,
-        qualityScore,
-        duplicateGroups: cleanResults.duplicateGroups,
-        nameChanges: cleanResults.nameChanges,
-      };
-    }
-
-    return {
-      monthCoverage,
-      generatedDate: format(new Date(), 'MMMM d, yyyy h:mm a'),
-      fileName,
-      teamOverview,
-      totalQuestionnaires: filteredData.length,
-      originalRows: data.length,
-      uniqueSites,
-      uniqueHubs: uniqueHubs.size,
-      uniqueStates: uniqueStates.size,
-      uniqueLocalities: uniqueLocalities.size,
-      hubBreakdown,
-      activityBreakdown: activityBreakdownReport,
-      qualityReport,
-      totalCollectors: new Set(filteredData.map(r => r.dataCollector).filter(Boolean)).size,
-      totalSupervisors: supervisorMap.size,
-    };
+    return computeSummaryFromData(filteredData, data, fileName, cleanResults);
   }, [filteredData, data, cleanResults, fileName]);
 
   const openEmailDialog = useCallback(async () => {
