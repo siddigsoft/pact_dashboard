@@ -194,6 +194,8 @@ export function CycleMMPCard({
   const [expanded, setExpanded] = useState(false);
   const [closeScope, setCloseScope] = useState<CloseScope>('full');
   const [closeScopeValue, setCloseScopeValue] = useState<string>('');
+  const [activitySubFilter, setActivitySubFilter] = useState<'none' | 'hub' | 'state'>('none');
+  const [activitySubValue, setActivitySubValue] = useState<string>('');
   const [showCloseHistory, setShowCloseHistory] = useState(false);
   const navigate = useNavigate();
 
@@ -467,7 +469,15 @@ export function CycleMMPCard({
                       </div>
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2 flex-wrap">
-                          <span className="font-medium">{SCOPE_LABELS[record.scope]}: {record.scopeValue}</span>
+                          <span className="font-medium">
+                            {record.scope === 'activity' && record.scopeValue?.includes('||') ? (() => {
+                              const parts = record.scopeValue.split('||');
+                              const actName = parts[0];
+                              const subParts = parts[1]?.split(':');
+                              const subLabel = subParts?.[0] === 'state' ? 'State' : 'Hub';
+                              return <>{SCOPE_LABELS[record.scope]}: {actName} <span className="text-muted-foreground font-normal">({subLabel}: {subParts?.[1]})</span></>;
+                            })() : <>{SCOPE_LABELS[record.scope]}: {record.scopeValue}</>}
+                          </span>
                           <Badge variant={record.status === 'closed' ? 'default' : 'secondary'}>
                             {record.status === 'closed' ? 'Closed' : record.status === 'pending_approval' ? 'Pending' : 'Closing'}
                           </Badge>
@@ -499,7 +509,7 @@ export function CycleMMPCard({
                   </div>
                   <div className="bg-muted/30 rounded-lg p-3">
                     <div className="flex flex-wrap gap-2 items-end">
-                      <Select value={closeScope} onValueChange={(v) => { setCloseScope(v as CloseScope); setCloseScopeValue(''); }}>
+                      <Select value={closeScope} onValueChange={(v) => { setCloseScope(v as CloseScope); setCloseScopeValue(''); setActivitySubFilter('none'); setActivitySubValue(''); }}>
                         <SelectTrigger className="w-[140px]" data-testid={`select-close-scope-${mmp.id}`}>
                           <SelectValue placeholder="Close Scope" />
                         </SelectTrigger>
@@ -510,7 +520,7 @@ export function CycleMMPCard({
                           {(scopeOptions?.activities?.length ?? 0) > 0 && <SelectItem value="activity">By Activity</SelectItem>}
                         </SelectContent>
                       </Select>
-                      {closeScope !== 'full' && (
+                      {closeScope !== 'full' && closeScope !== 'activity' && (
                         <Select value={closeScopeValue} onValueChange={setCloseScopeValue}>
                           <SelectTrigger className="w-[180px]" data-testid={`select-close-scope-value-${mmp.id}`}>
                             <SelectValue placeholder={`Select ${SCOPE_LABELS[closeScope]}`} />
@@ -518,16 +528,50 @@ export function CycleMMPCard({
                           <SelectContent>
                             {closeScope === 'hub' && scopeOptions?.hubs?.map(h => <SelectItem key={h} value={h}>{h}</SelectItem>)}
                             {closeScope === 'state' && scopeOptions?.states?.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
-                            {closeScope === 'activity' && scopeOptions?.activities?.map(a => <SelectItem key={a} value={a}>{a}</SelectItem>)}
                           </SelectContent>
                         </Select>
+                      )}
+                      {closeScope === 'activity' && (
+                        <>
+                          <Select value={closeScopeValue} onValueChange={(v) => { setCloseScopeValue(v); setActivitySubFilter('none'); setActivitySubValue(''); }}>
+                            <SelectTrigger className="w-[180px]" data-testid={`select-close-activity-${mmp.id}`}>
+                              <SelectValue placeholder="Select Activity" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {scopeOptions?.activities?.map(a => <SelectItem key={a} value={a}>{a}</SelectItem>)}
+                            </SelectContent>
+                          </Select>
+                          {closeScopeValue && (
+                            <Select value={activitySubFilter} onValueChange={(v) => { setActivitySubFilter(v as 'none' | 'hub' | 'state'); setActivitySubValue(''); }}>
+                              <SelectTrigger className="w-[140px]" data-testid={`select-activity-sub-scope-${mmp.id}`}>
+                                <SelectValue placeholder="Filter by..." />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="none">All Areas</SelectItem>
+                                {(scopeOptions?.states?.length ?? 0) > 0 && <SelectItem value="state">By State</SelectItem>}
+                                {(scopeOptions?.hubs?.length ?? 0) > 0 && <SelectItem value="hub">By Hub</SelectItem>}
+                              </SelectContent>
+                            </Select>
+                          )}
+                          {closeScopeValue && activitySubFilter !== 'none' && (
+                            <Select value={activitySubValue} onValueChange={setActivitySubValue}>
+                              <SelectTrigger className="w-[160px]" data-testid={`select-activity-sub-value-${mmp.id}`}>
+                                <SelectValue placeholder={`Select ${activitySubFilter === 'state' ? 'State' : 'Hub'}`} />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {activitySubFilter === 'state' && scopeOptions?.states?.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                                {activitySubFilter === 'hub' && scopeOptions?.hubs?.map(h => <SelectItem key={h} value={h}>{h}</SelectItem>)}
+                              </SelectContent>
+                            </Select>
+                          )}
+                        </>
                       )}
                       <AlertDialog>
                         <AlertDialogTrigger asChild>
                           <Button
                             size="sm"
                             variant="destructive"
-                            disabled={closingCycle || (closeScope !== 'full' && !closeScopeValue)}
+                            disabled={closingCycle || (closeScope !== 'full' && !closeScopeValue) || (closeScope === 'activity' && activitySubFilter !== 'none' && !activitySubValue)}
                             data-testid={`button-start-close-${mmp.id}`}
                           >
                             <AlertTriangle className="h-3.5 w-3.5 mr-1.5" />
@@ -537,7 +581,9 @@ export function CycleMMPCard({
                         <AlertDialogContent>
                           <AlertDialogHeader>
                             <AlertDialogTitle>
-                              {closeScope === 'full' ? 'Start Full MMP Cycle Close' : `Close by ${SCOPE_LABELS[closeScope]}: ${closeScopeValue}`}
+                              {closeScope === 'full' ? 'Start Full MMP Cycle Close' : closeScope === 'activity'
+                                ? `Close Activity: ${closeScopeValue}${activitySubFilter !== 'none' && activitySubValue ? ` (${activitySubFilter === 'state' ? 'State' : 'Hub'}: ${activitySubValue})` : ''}`
+                                : `Close by ${SCOPE_LABELS[closeScope]}: ${closeScopeValue}`}
                             </AlertDialogTitle>
                             <AlertDialogDescription asChild>
                               <div className="space-y-3">
@@ -545,6 +591,14 @@ export function CycleMMPCard({
                                   <p>
                                     This will flag all incomplete site visits (pending, assigned, dispatched) as &quot;Not Covered&quot;.
                                     Supervisors will need to provide a reason for each uncovered site before the cycle can be fully closed.
+                                  </p>
+                                ) : closeScope === 'activity' ? (
+                                  <p>
+                                    This will flag all incomplete site visits for <strong>Activity: {closeScopeValue}</strong>
+                                    {activitySubFilter !== 'none' && activitySubValue && (
+                                      <> in <strong>{activitySubFilter === 'state' ? 'State' : 'Hub'}: {activitySubValue}</strong></>
+                                    )} as &quot;Not Covered&quot;.
+                                    Only sites matching this scope will be affected.
                                   </p>
                                 ) : (
                                   <p>
@@ -557,7 +611,13 @@ export function CycleMMPCard({
                                     {(() => { const ScopeIcon = SCOPE_ICONS[closeScope]; return <ScopeIcon className="h-4 w-4 text-muted-foreground" />; })()}
                                     <span className="font-medium">Scope: {SCOPE_LABELS[closeScope]}</span>
                                   </div>
-                                  {closeScope !== 'full' && (
+                                  {closeScope === 'activity' && closeScopeValue && (
+                                    <div className="text-muted-foreground">Activity: {closeScopeValue}</div>
+                                  )}
+                                  {closeScope === 'activity' && activitySubFilter !== 'none' && activitySubValue && (
+                                    <div className="text-muted-foreground">{activitySubFilter === 'state' ? 'State' : 'Hub'}: {activitySubValue}</div>
+                                  )}
+                                  {closeScope !== 'full' && closeScope !== 'activity' && (
                                     <div className="text-muted-foreground">Target: {closeScopeValue}</div>
                                   )}
                                   <div className="text-muted-foreground">Close date will be recorded: {new Date().toLocaleDateString()}</div>
@@ -572,6 +632,11 @@ export function CycleMMPCard({
                               onClick={() => {
                                 if (closeScope === 'full') {
                                   handleStartClosingCycle(mmp.id);
+                                } else if (closeScope === 'activity') {
+                                  const scopeVal = activitySubFilter !== 'none' && activitySubValue
+                                    ? `${closeScopeValue}||${activitySubFilter}:${activitySubValue}`
+                                    : closeScopeValue;
+                                  handleScopedClose(mmp.id, 'activity', scopeVal);
                                 } else {
                                   handleScopedClose(mmp.id, closeScope, closeScopeValue);
                                 }
@@ -657,7 +722,7 @@ export function CycleMMPCard({
                         <Building2 className="h-3.5 w-3.5" /> Close Additional Scope <span dir="rtl" className="font-normal text-muted-foreground/70">/ نطاق اضافي</span>
                       </div>
                       <div className="flex flex-wrap gap-2 items-end">
-                        <Select value={closeScope} onValueChange={(v) => { setCloseScope(v as CloseScope); setCloseScopeValue(''); }}>
+                        <Select value={closeScope} onValueChange={(v) => { setCloseScope(v as CloseScope); setCloseScopeValue(''); setActivitySubFilter('none'); setActivitySubValue(''); }}>
                           <SelectTrigger className="w-[140px]" data-testid={`select-close-scope-closing-${mmp.id}`}>
                             <SelectValue placeholder="Scope" />
                           </SelectTrigger>
@@ -667,7 +732,7 @@ export function CycleMMPCard({
                             {(scopeOptions?.activities?.length ?? 0) > 0 && <SelectItem value="activity">By Activity</SelectItem>}
                           </SelectContent>
                         </Select>
-                        {closeScope !== 'full' && (
+                        {closeScope !== 'full' && closeScope !== 'activity' && (
                           <Select value={closeScopeValue} onValueChange={setCloseScopeValue}>
                             <SelectTrigger className="w-[160px]" data-testid={`select-scope-val-closing-${mmp.id}`}>
                               <SelectValue placeholder={`Select ${SCOPE_LABELS[closeScope]}`} />
@@ -675,15 +740,58 @@ export function CycleMMPCard({
                             <SelectContent>
                               {closeScope === 'hub' && scopeOptions?.hubs?.map(h => <SelectItem key={h} value={h}>{h}</SelectItem>)}
                               {closeScope === 'state' && scopeOptions?.states?.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
-                              {closeScope === 'activity' && scopeOptions?.activities?.map(a => <SelectItem key={a} value={a}>{a}</SelectItem>)}
                             </SelectContent>
                           </Select>
+                        )}
+                        {closeScope === 'activity' && (
+                          <>
+                            <Select value={closeScopeValue} onValueChange={(v) => { setCloseScopeValue(v); setActivitySubFilter('none'); setActivitySubValue(''); }}>
+                              <SelectTrigger className="w-[160px]" data-testid={`select-close-activity-closing-${mmp.id}`}>
+                                <SelectValue placeholder="Select Activity" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {scopeOptions?.activities?.map(a => <SelectItem key={a} value={a}>{a}</SelectItem>)}
+                              </SelectContent>
+                            </Select>
+                            {closeScopeValue && (
+                              <Select value={activitySubFilter} onValueChange={(v) => { setActivitySubFilter(v as 'none' | 'hub' | 'state'); setActivitySubValue(''); }}>
+                                <SelectTrigger className="w-[130px]" data-testid={`select-activity-sub-closing-${mmp.id}`}>
+                                  <SelectValue placeholder="Filter by..." />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="none">All Areas</SelectItem>
+                                  {(scopeOptions?.states?.length ?? 0) > 0 && <SelectItem value="state">By State</SelectItem>}
+                                  {(scopeOptions?.hubs?.length ?? 0) > 0 && <SelectItem value="hub">By Hub</SelectItem>}
+                                </SelectContent>
+                              </Select>
+                            )}
+                            {closeScopeValue && activitySubFilter !== 'none' && (
+                              <Select value={activitySubValue} onValueChange={setActivitySubValue}>
+                                <SelectTrigger className="w-[150px]" data-testid={`select-activity-sub-val-closing-${mmp.id}`}>
+                                  <SelectValue placeholder={`Select ${activitySubFilter === 'state' ? 'State' : 'Hub'}`} />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {activitySubFilter === 'state' && scopeOptions?.states?.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                                  {activitySubFilter === 'hub' && scopeOptions?.hubs?.map(h => <SelectItem key={h} value={h}>{h}</SelectItem>)}
+                                </SelectContent>
+                              </Select>
+                            )}
+                          </>
                         )}
                         <Button
                           size="sm"
                           variant="destructive"
-                          disabled={closingCycle || !closeScopeValue}
-                          onClick={() => handleScopedClose(mmp.id, closeScope, closeScopeValue)}
+                          disabled={closingCycle || !closeScopeValue || (closeScope === 'activity' && activitySubFilter !== 'none' && !activitySubValue)}
+                          onClick={() => {
+                            if (closeScope === 'activity') {
+                              const scopeVal = activitySubFilter !== 'none' && activitySubValue
+                                ? `${closeScopeValue}||${activitySubFilter}:${activitySubValue}`
+                                : closeScopeValue;
+                              handleScopedClose(mmp.id, 'activity', scopeVal);
+                            } else {
+                              handleScopedClose(mmp.id, closeScope, closeScopeValue);
+                            }
+                          }}
                           data-testid={`button-scoped-close-${mmp.id}`}
                         >
                           <AlertTriangle className="h-3.5 w-3.5 mr-1.5" /> Close

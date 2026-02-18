@@ -403,11 +403,27 @@ const MMPCycleClose = () => {
           .eq('state', scopeValue);
         siteEntryIds = (entries || []).map((e: any) => e.id);
       } else if (scope === 'activity') {
-        const { data: entries } = await supabase
+        let activityName = scopeValue;
+        let subFilterField: string | null = null;
+        let subFilterValue: string | null = null;
+        if (scopeValue.includes('||')) {
+          const parts = scopeValue.split('||');
+          activityName = parts[0];
+          const subParts = parts[1]?.split(':');
+          if (subParts && subParts.length === 2) {
+            subFilterField = subParts[0] === 'state' ? 'state' : 'hub_office';
+            subFilterValue = subParts[1];
+          }
+        }
+        let query = supabase
           .from('mmp_site_entries')
           .select('id')
           .eq('mmp_file_id', mmpId)
-          .or(`main_activity.eq.${scopeValue},activity_at_site.eq.${scopeValue}`);
+          .or(`main_activity.eq.${activityName},activity_at_site.eq.${activityName}`);
+        if (subFilterField && subFilterValue) {
+          query = query.eq(subFilterField, subFilterValue);
+        }
+        const { data: entries } = await query;
         siteEntryIds = (entries || []).map((e: any) => e.id);
       }
 
@@ -485,9 +501,15 @@ const MMPCycleClose = () => {
         },
       });
 
+      let displayValue = scopeValue;
+      if (scope === 'activity' && scopeValue.includes('||')) {
+        const parts = scopeValue.split('||');
+        const subParts = parts[1]?.split(':');
+        displayValue = `${parts[0]} (${subParts?.[0] === 'state' ? 'State' : 'Hub'}: ${subParts?.[1]})`;
+      }
       toast({
         title: `${scopeLabels[scope]} Close Started`,
-        description: `Closing ${scopeValue}: ${visitIds.length} site visits flagged as not covered.`,
+        description: `Closing ${displayValue}: ${visitIds.length} site visits flagged as not covered.`,
       });
       await refreshMMPFiles();
       await fetchUncoveredSites();
