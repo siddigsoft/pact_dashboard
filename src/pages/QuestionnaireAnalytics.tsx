@@ -8,9 +8,10 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
-import { Upload, FileSpreadsheet, BarChart3, Download, Search, Filter, X, ChevronDown, ChevronUp, Users, MapPin, Building2, Activity, Layers, FileDown, Save, FolderOpen, Trash2, Clock, Globe, PieChart, Lock, Sparkles, CheckCircle2, AlertCircle, ArrowRight } from 'lucide-react';
+import { Upload, FileSpreadsheet, BarChart3, Download, Search, Filter, X, ChevronDown, ChevronUp, Users, MapPin, Building2, Activity, Layers, FileDown, Save, FolderOpen, Trash2, Clock, Globe, PieChart, Lock, Sparkles, CheckCircle2, AlertCircle, ArrowRight, FileSearch } from 'lucide-react';
 import { useAuthorization } from '@/hooks/use-authorization';
 import * as XLSX from 'xlsx';
+import ExcelJS from 'exceljs';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { format } from 'date-fns';
@@ -424,6 +425,187 @@ const QuestionnaireAnalytics = () => {
     const baseName = fileName.replace(/\.[^.]+$/, '') || 'questionnaire_data';
     XLSX.writeFile(wb, `${baseName}_cleaned.xlsx`);
   }, [cleanResults, fileName, getCustomCleanedData, customDupsRemoved]);
+
+  const downloadReviewExcel = useCallback(async () => {
+    if (!cleanResults) return;
+    const safe = (v: string | undefined | null) => (v || '').trim();
+
+    const dupRowIndices = new Set<number>();
+    const dupGroupMap = new Map<number, number>();
+    cleanResults.duplicateGroups.forEach((group, gi) => {
+      group.rows.forEach(r => {
+        dupRowIndices.add(r.index);
+        dupGroupMap.set(r.index, gi + 1);
+      });
+    });
+    const emptyRowIndices = new Set(cleanResults.emptyRows.map(r => r.index));
+    const trimMap = new Map<string, { before: string; after: string }>();
+    cleanResults.trimmedDetails.forEach(td => {
+      trimMap.set(`${td.index}|${td.field}`, { before: td.before, after: td.after });
+    });
+    const nameMap = new Map<number, { oldName: string; newName: string }>();
+    cleanResults.nameChanges.forEach(nc => {
+      nameMap.set(nc.index, { oldName: nc.oldName, newName: nc.newName });
+    });
+
+    const wb = new ExcelJS.Workbook();
+    const ws = wb.addWorksheet('Data Review');
+
+    const headers = ['Row #', 'Issue', 'Hub', 'State', 'Locality', 'Activity Site', 'Activity', 'Sub Activity', 'Data Collector', 'Device ID', 'Supervisor', 'Date', 'Site ID', 'Partner'];
+    const fieldKeys: (keyof QuestionnaireRow)[] = ['hub', 'state', 'locality', 'activitySite', 'activity', 'subActivity', 'dataCollector', 'deviceId', 'supervisor', 'date', 'siteId', 'partner'];
+    const headerRow = ws.addRow(headers);
+    headerRow.eachCell(cell => {
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F2937' } };
+      cell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 11 };
+      cell.alignment = { horizontal: 'center', vertical: 'middle' };
+      cell.border = { bottom: { style: 'thin', color: { argb: 'FF374151' } } };
+    });
+
+    const redFill: ExcelJS.FillPattern = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFEE2E2' } };
+    const orangeFill: ExcelJS.FillPattern = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFF7ED' } };
+    const blueFill: ExcelJS.FillPattern = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFEFF6FF' } };
+    const purpleFill: ExcelJS.FillPattern = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF5F3FF' } };
+    const greenFill: ExcelJS.FillPattern = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF0FDF4' } };
+
+    const redFont: Partial<ExcelJS.Font> = { color: { argb: 'FFDC2626' } };
+    const orangeFont: Partial<ExcelJS.Font> = { color: { argb: 'FFEA580C' } };
+    const blueFont: Partial<ExcelJS.Font> = { color: { argb: 'FF2563EB' } };
+    const purpleFont: Partial<ExcelJS.Font> = { color: { argb: 'FF9333EA' } };
+
+    data.forEach((row, idx) => {
+      const issues: string[] = [];
+      let rowFill: ExcelJS.FillPattern | null = null;
+      let issueFont: Partial<ExcelJS.Font> = {};
+
+      const isDuplicate = dupRowIndices.has(idx);
+      const isEmpty = emptyRowIndices.has(idx);
+      const hasNameChange = nameMap.has(idx);
+      const hasTrim = fieldKeys.some(k => trimMap.has(`${idx}|${k}`));
+
+      if (isDuplicate) {
+        const groupNum = dupGroupMap.get(idx);
+        issues.push(`DUPLICATE (Group ${groupNum})`);
+        rowFill = redFill;
+        issueFont = redFont;
+      }
+      if (isEmpty) {
+        issues.push('EMPTY ROW');
+        rowFill = orangeFill;
+        issueFont = orangeFont;
+      }
+      if (hasNameChange) {
+        const nc = nameMap.get(idx)!;
+        issues.push(`NAME: "${nc.oldName}" → "${nc.newName}"`);
+        if (!rowFill) { rowFill = purpleFill; issueFont = purpleFont; }
+      }
+      if (hasTrim) {
+        const trimmedFields = fieldKeys.filter(k => trimMap.has(`${idx}|${k}`)).map(k => k);
+        issues.push(`TRIMMED: ${trimmedFields.join(', ')}`);
+        if (!rowFill) { rowFill = blueFill; issueFont = blueFont; }
+      }
+
+      const values = [idx + 1, issues.join(' | ') || '', ...fieldKeys.map(k => row[k] || '')];
+      const excelRow = ws.addRow(values);
+
+      if (rowFill) {
+        excelRow.eachCell((cell, colNum) => {
+          cell.fill = rowFill!;
+        });
+      }
+      if (issues.length > 0) {
+        const issueCell = excelRow.getCell(2);
+        issueCell.font = { ...issueFont, bold: true, size: 10 };
+      }
+      if (!issues.length) {
+        excelRow.eachCell((cell, colNum) => {
+          if (colNum > 2) cell.fill = greenFill;
+        });
+        const issueCell = excelRow.getCell(2);
+        issueCell.value = 'OK';
+        issueCell.font = { color: { argb: 'FF16A34A' }, italic: true, size: 10 };
+      }
+
+      fieldKeys.forEach((key, ki) => {
+        const trimKey = `${idx}|${key}`;
+        if (trimMap.has(trimKey)) {
+          const td = trimMap.get(trimKey)!;
+          const cell = excelRow.getCell(ki + 3);
+          cell.note = `Whitespace trimmed:\nBefore: "${td.before}"\nAfter: "${td.after}"`;
+          cell.font = { color: { argb: 'FF2563EB' }, italic: true };
+        }
+      });
+
+      if (hasNameChange) {
+        const nc = nameMap.get(idx)!;
+        const dcCell = excelRow.getCell(fieldKeys.indexOf('dataCollector') + 3);
+        dcCell.note = `Name standardized:\nOriginal: "${nc.oldName}"\nStandard: "${nc.newName}"`;
+        dcCell.font = { color: { argb: 'FF9333EA' }, bold: true };
+      }
+
+      if (isDuplicate) {
+        const groupNum = dupGroupMap.get(idx);
+        const firstCell = excelRow.getCell(1);
+        firstCell.note = `This row is part of duplicate group ${groupNum}.\nRows with identical key fields are highlighted.`;
+      }
+    });
+
+    ws.columns = [
+      { width: 8 }, { width: 35 }, { width: 18 }, { width: 16 }, { width: 18 },
+      { width: 30 }, { width: 16 }, { width: 20 }, { width: 25 }, { width: 20 },
+      { width: 20 }, { width: 14 }, { width: 14 }, { width: 20 },
+    ];
+
+    ws.autoFilter = { from: 'A1', to: `N${data.length + 1}` };
+
+    const legendWs = wb.addWorksheet('Legend');
+    const legendHeaders = legendWs.addRow(['Color', 'Meaning', 'Details']);
+    legendHeaders.eachCell(cell => {
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F2937' } };
+      cell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 11 };
+    });
+    const legends = [
+      { color: 'FFFEE2E2', label: 'Red', meaning: 'Duplicate Row', details: 'Row has identical key fields to another row. Check Group number in Issue column.' },
+      { color: 'FFFFF7ED', label: 'Orange', meaning: 'Empty Row', details: 'Row has no meaningful data in any key field.' },
+      { color: 'FFEFF6FF', label: 'Blue', meaning: 'Trimmed Fields', details: 'One or more fields had extra whitespace removed. Hover cells for before/after details.' },
+      { color: 'FFF5F3FF', label: 'Purple', meaning: 'Name Standardized', details: 'Data collector name was unified to the most common name for this device ID.' },
+      { color: 'FFF0FDF4', label: 'Green', meaning: 'No Issues', details: 'Row passed all quality checks.' },
+    ];
+    legends.forEach(l => {
+      const row = legendWs.addRow([l.label, l.meaning, l.details]);
+      row.getCell(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: l.color } };
+      row.getCell(1).font = { bold: true };
+    });
+    legendWs.columns = [{ width: 12 }, { width: 25 }, { width: 80 }];
+
+    const summaryWs = wb.addWorksheet('Summary');
+    const summaryHeaders = summaryWs.addRow(['Metric', 'Count']);
+    summaryHeaders.eachCell(cell => {
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F2937' } };
+      cell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 11 };
+    });
+    [
+      ['Total Rows', data.length],
+      ['Duplicate Rows', cleanResults.duplicateGroups.reduce((sum, g) => sum + g.rows.length, 0)],
+      ['Duplicate Groups', cleanResults.duplicateGroups.length],
+      ['Empty Rows', cleanResults.emptyRowsRemoved],
+      ['Fields Trimmed', cleanResults.trimmedFields],
+      ['Names Standardized', cleanResults.namesStandardized],
+      ['Clean Rows', data.length - cleanResults.emptyRowsRemoved - cleanResults.duplicateGroups.reduce((sum, g) => sum + g.rows.length, 0)],
+    ].forEach(([metric, value]) => {
+      summaryWs.addRow([metric, value]);
+    });
+    summaryWs.columns = [{ width: 25 }, { width: 15 }];
+
+    const buffer = await wb.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    const baseName = fileName.replace(/\.[^.]+$/, '') || 'questionnaire_data';
+    a.download = `${baseName}_review.xlsx`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }, [cleanResults, data, fileName]);
 
   const handleFileUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -3711,7 +3893,11 @@ const QuestionnaireAnalytics = () => {
           <DialogFooter className="flex-col sm:flex-row gap-2 pt-1">
             <Button variant="outline" onClick={() => setShowCleanDialog(false)} data-testid="button-clean-cancel">Close</Button>
             {cleanResults && (cleanResults.duplicatesRemoved > 0 || cleanResults.emptyRowsRemoved > 0 || cleanResults.trimmedFields > 0 || cleanResults.namesStandardized > 0) && (
-              <div className="flex gap-2 flex-1 sm:justify-end">
+              <div className="flex gap-2 flex-wrap flex-1 sm:justify-end">
+                <Button variant="outline" className="gap-1.5" onClick={downloadReviewExcel} data-testid="button-download-review">
+                  <FileSearch className="h-4 w-4" />
+                  Download Review
+                </Button>
                 <Button variant="outline" className="gap-1.5" onClick={downloadCleanedExcel} data-testid="button-download-cleaned">
                   <Download className="h-4 w-4" />
                   Download Cleaned
