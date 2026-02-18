@@ -23,8 +23,11 @@ import {
   ArrowRight, FileText, BarChart3, Filter, Download,
   ChevronDown, ChevronUp, Search, RefreshCw, FileSpreadsheet,
   Bell, TrendingUp, TrendingDown, Minus, Star, Shield,
-  Activity, Target, Layers, SortAsc, SortDesc
+  Activity, Target, Layers, SortAsc, SortDesc,
+  BookOpen, RotateCcw, HelpCircle
 } from 'lucide-react';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
 import { CycleMMPCard } from '@/components/cycle/CycleMMPCard';
 import { CycleCoveragePredictor } from '@/components/cycle/CycleCoveragePredictor';
 import { CycleReportsTab } from '@/components/cycle/CycleReportsTab';
@@ -154,6 +157,7 @@ const MMPCycleClose = () => {
   const [activeSort, setActiveSort] = useState<'name' | 'coverage' | 'status'>('status');
   const [activeSortDir, setActiveSortDir] = useState<'asc' | 'desc'>('desc');
   const [archiveSearch, setArchiveSearch] = useState('');
+  const [guideOpen, setGuideOpen] = useState(false);
 
   const isAdmin = hasAnyRole(['admin', 'Admin', 'super_admin', 'Super Admin']);
   const isSupervisor = hasAnyRole(['Supervisor', 'supervisor']);
@@ -1012,12 +1016,20 @@ const MMPCycleClose = () => {
 
   return (
     <div className="container mx-auto px-4 py-6 max-w-7xl" data-testid="mmp-cycle-close-page">
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-6 gap-4">
-        <div>
-          <h1 className="text-2xl font-bold" data-testid="text-page-title">MMP Cycle Close</h1>
-          <p className="text-muted-foreground text-sm mt-1">
-            Manage MMP cycle lifecycle and track coverage gaps
-          </p>
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-4">
+        <div className="flex items-center gap-3">
+          <div className="flex items-center justify-center h-10 w-10 rounded-lg bg-blue-600 text-white shrink-0">
+            <RotateCcw className="h-5 w-5" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <h1 className="text-2xl font-bold" data-testid="text-page-title">MMP Cycle Close</h1>
+              {(isAdmin || isFOM) && <Badge variant="outline"><Shield className="h-3 w-3 mr-1" /> {isAdmin ? 'Admin' : 'FOM'} View</Badge>}
+            </div>
+            <p className="text-muted-foreground text-sm mt-0.5">
+              Manage MMP cycle lifecycle, track coverage gaps, and close monitoring periods
+            </p>
+          </div>
         </div>
         <div className="flex flex-wrap gap-2">
           <Button variant="outline" size="sm" onClick={() => { fetchUncoveredSites(); fetchClosedCycles(); }} data-testid="button-refresh">
@@ -1031,6 +1043,107 @@ const MMPCycleClose = () => {
           </Button>
         </div>
       </div>
+
+      <PageInfoBanner
+        title="MMP Cycle Close - Coverage Management"
+        description="This page manages the full lifecycle of Monthly Monitoring Plan (MMP) cycles. When a monitoring period ends, you use this page to: (1) Review which sites were visited and which were not, (2) Assign reasons for uncovered sites (security, access, budget, etc.), (3) Start the cycle closing process, (4) Get approval from FOM/Country Director, and (5) Finalize and archive the cycle with full coverage reports. The page also shows trend analysis, performance scorecards, and historical comparisons across closed cycles."
+        descriptionAr="تدير هذه الصفحة دورة حياة خطط المراقبة الشهرية (MMP) بالكامل. عند انتهاء فترة المراقبة، تستخدم هذه الصفحة لـ: (١) مراجعة المواقع التي تمت زيارتها والتي لم تتم زيارتها، (٢) تعيين أسباب عدم تغطية المواقع (أمنية، وصول، ميزانية، إلخ)، (٣) بدء عملية إغلاق الدورة، (٤) الحصول على موافقة مدير العمليات الميدانية / المدير القطري، و(٥) إنهاء وأرشفة الدورة مع تقارير التغطية الكاملة. تعرض الصفحة أيضاً تحليل الاتجاهات وبطاقات أداء ومقارنات تاريخية عبر الدورات المغلقة."
+        workflowSteps={[
+          { step: 1, role: 'Admin', action: 'Starts Cycle Close', description: 'Admin initiates the closing process for an MMP. The system auto-flags all sites that were not visited during this monitoring period.' },
+          { step: 2, role: 'Supervisor', action: 'Assigns reasons for uncovered sites', description: 'Supervisors review each uncovered site and assign a reason (security, access denied, budget, time constraints, etc.). Bulk assignment is available.' },
+          { step: 3, role: 'Admin', action: 'Reviews and finalizes', description: 'Admin reviews all reason assignments, checks the coverage report, and submits the cycle for approval.' },
+          { step: 4, role: 'FOM', action: 'Approves cycle close', description: 'Field Operations Manager reviews the final report and approves or rejects the cycle close. Comments can be added.' },
+          { step: 5, role: 'System', action: 'Archives the cycle', description: 'Once approved, the cycle is archived with full statistics, reason breakdowns, and performance data for historical analysis.' },
+        ]}
+        workflowStepsAr={[
+          { step: 1, role: 'المدير', action: 'يبدأ إغلاق الدورة', description: 'يبدأ المدير عملية الإغلاق لخطة المراقبة. يقوم النظام تلقائياً بتحديد جميع المواقع التي لم تتم زيارتها خلال فترة المراقبة.' },
+          { step: 2, role: 'المشرف', action: 'يعين أسباب المواقع غير المغطاة', description: 'يراجع المشرفون كل موقع غير مغطى ويعينون سبباً (أمني، وصول مرفوض، ميزانية، قيود وقت، إلخ). التعيين الجماعي متاح.' },
+          { step: 3, role: 'المدير', action: 'يراجع ويُنهي', description: 'يراجع المدير جميع تعيينات الأسباب، ويتحقق من تقرير التغطية، ويقدم الدورة للموافقة.' },
+          { step: 4, role: 'المشرف والمدير', action: 'يوافق على إغلاق الدورة', description: 'يراجع مدير العمليات الميدانية التقرير النهائي ويوافق أو يرفض إغلاق الدورة. يمكن إضافة تعليقات.' },
+          { step: 5, role: 'النظام', action: 'يؤرشف الدورة', description: 'بمجرد الموافقة، تتم أرشفة الدورة مع الإحصائيات الكاملة وتفاصيل الأسباب وبيانات الأداء للتحليل التاريخي.' },
+        ]}
+      />
+
+      <Collapsible open={guideOpen} onOpenChange={setGuideOpen}>
+        <div className="rounded-md border border-green-200 dark:border-green-800 bg-green-50/50 dark:bg-green-950/30 mb-4" data-testid="operational-guide">
+          <CollapsibleTrigger asChild>
+            <button
+              className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-green-100/50 dark:hover:bg-green-900/30 rounded-md transition-colors"
+              data-testid="button-toggle-guide"
+            >
+              <BookOpen className="h-4 w-4 text-green-600 dark:text-green-400 shrink-0" />
+              <span className="text-sm font-medium text-green-700 dark:text-green-300 flex-1">
+                MMP Cycle Close Operational Guide / دليل إغلاق دورة خطة المراقبة الشهرية
+              </span>
+              <ChevronDown className={`h-3.5 w-3.5 text-green-600 dark:text-green-400 transition-transform duration-200 ${guideOpen ? '' : '-rotate-90'}`} />
+            </button>
+          </CollapsibleTrigger>
+          <CollapsibleContent>
+            <div className="px-4 pb-4 space-y-4">
+              <div className="grid gap-3 sm:grid-cols-2" data-testid="guide-tabs-section">
+                <div className="space-y-2">
+                  <h4 className="text-xs font-semibold uppercase tracking-wide text-green-700 dark:text-green-400">Understanding Each Tab</h4>
+                  <div className="space-y-1.5 text-sm text-muted-foreground">
+                    <div className="flex items-start gap-2">
+                      <Badge variant="secondary">Active Cycles</Badge>
+                      <span>View all current MMPs with their coverage status, site visit counts, and start the closing process.</span>
+                    </div>
+                    <div className="flex items-start gap-2">
+                      <Badge variant="secondary">Uncovered Sites</Badge>
+                      <span>List of all sites not visited during the cycle. Assign reasons individually or in bulk.</span>
+                    </div>
+                    <div className="flex items-start gap-2">
+                      <Badge variant="secondary">Reports</Badge>
+                      <span>Coverage statistics, reason breakdowns by hub, follow-up actions for high-priority gaps, and quality scores.</span>
+                    </div>
+                    <div className="flex items-start gap-2">
+                      <Badge variant="secondary">Comparison</Badge>
+                      <span>Compare two closed cycles side-by-side to spot coverage trends and recurring issues.</span>
+                    </div>
+                    <div className="flex items-start gap-2">
+                      <Badge variant="secondary">Scorecard</Badge>
+                      <span>Performance metrics per hub showing coverage trends, gap patterns, and improvement areas.</span>
+                    </div>
+                    <div className="flex items-start gap-2">
+                      <Badge variant="secondary">Closed Cycles</Badge>
+                      <span>Archive of past cycles with full statistics, reason breakdowns, trend analysis, and export options.</span>
+                    </div>
+                  </div>
+                </div>
+                <div className="space-y-2" dir="rtl">
+                  <h4 className="text-xs font-semibold uppercase tracking-wide text-green-700 dark:text-green-400">فهم كل تبويب</h4>
+                  <div className="space-y-1.5 text-sm text-muted-foreground">
+                    <div className="flex items-start gap-2 flex-row-reverse text-right">
+                      <Badge variant="secondary">الدورات النشطة</Badge>
+                      <span>عرض جميع خطط المراقبة الحالية مع حالة التغطية وعدد زيارات المواقع وبدء عملية الإغلاق.</span>
+                    </div>
+                    <div className="flex items-start gap-2 flex-row-reverse text-right">
+                      <Badge variant="secondary">المواقع غير المغطاة</Badge>
+                      <span>قائمة بجميع المواقع التي لم تتم زيارتها. تعيين الأسباب فردياً أو بالجملة.</span>
+                    </div>
+                    <div className="flex items-start gap-2 flex-row-reverse text-right">
+                      <Badge variant="secondary">التقارير</Badge>
+                      <span>إحصائيات التغطية وتفاصيل الأسباب حسب المحور والإجراءات المتابعة ودرجات الجودة.</span>
+                    </div>
+                    <div className="flex items-start gap-2 flex-row-reverse text-right">
+                      <Badge variant="secondary">المقارنة</Badge>
+                      <span>مقارنة دورتين مغلقتين جنباً إلى جنب لرصد اتجاهات التغطية والمشاكل المتكررة.</span>
+                    </div>
+                    <div className="flex items-start gap-2 flex-row-reverse text-right">
+                      <Badge variant="secondary">بطاقة الأداء</Badge>
+                      <span>مقاييس الأداء لكل محور تعرض اتجاهات التغطية وأنماط الفجوات ومجالات التحسين.</span>
+                    </div>
+                    <div className="flex items-start gap-2 flex-row-reverse text-right">
+                      <Badge variant="secondary">الدورات المغلقة</Badge>
+                      <span>أرشيف الدورات السابقة مع إحصائيات كاملة وتحليل الاتجاهات وخيارات التصدير.</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </CollapsibleContent>
+        </div>
+      </Collapsible>
 
       {overallSummary.totalMmps > 0 && (
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-6" data-testid="summary-dashboard">
@@ -1581,37 +1694,37 @@ const SiteRow = ({ site, selected, onToggle, onAssignReason, canAssign, saving }
   };
 
   return (
-    <div className={`border rounded-lg px-3 py-2 ${selected ? 'bg-blue-50 dark:bg-blue-950 border-blue-200 dark:border-blue-800' : 'bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-700'}`} data-testid={`row-site-${site.id}`}>
+    <div className={`border rounded-lg px-3 py-2 ${selected ? 'bg-blue-50 dark:bg-blue-950 border-blue-200 dark:border-blue-800' : 'bg-card'}`} data-testid={`row-site-${site.id}`}>
       <div className="flex items-center">
         <div className="w-8">
           <Checkbox checked={selected} onCheckedChange={onToggle} data-testid={`checkbox-site-${site.id}`} />
         </div>
         <div className="flex-1 grid grid-cols-6 gap-2 items-center text-sm cursor-pointer" onClick={() => setExpanded(!expanded)}>
           <div className="col-span-2">
-            <div className="font-medium text-gray-900 dark:text-white truncate">{site.site_name}</div>
-            <div className="text-xs text-gray-500">{site.site_code}</div>
+            <div className="font-medium truncate">{site.site_name}</div>
+            <div className="text-xs text-muted-foreground">{site.site_code}</div>
           </div>
-          <div className="text-gray-600 dark:text-gray-400 truncate">{site.state}</div>
-          <div className="text-gray-600 dark:text-gray-400 truncate">{site.hub || '—'}</div>
+          <div className="text-muted-foreground truncate">{site.state}</div>
+          <div className="text-muted-foreground truncate">{site.hub || '—'}</div>
           <div>
-            <Badge variant="outline" className="text-xs">{site.status}</Badge>
+            <Badge variant="outline">{site.status}</Badge>
           </div>
           <div>
-            <Badge variant={getReasonBadgeVariant(site.not_covered_reason)} className="text-xs" data-testid={`badge-reason-${site.id}`}>
+            <Badge variant={getReasonBadgeVariant(site.not_covered_reason)} data-testid={`badge-reason-${site.id}`}>
               {site.not_covered_reason ? getReasonLabel(site.not_covered_reason) : 'No Reason'}
             </Badge>
           </div>
         </div>
         <div className="w-6">
-          {expanded ? <ChevronUp className="h-4 w-4 text-gray-400" /> : <ChevronDown className="h-4 w-4 text-gray-400" />}
+          {expanded ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
         </div>
       </div>
 
       {expanded && canAssign && (
-        <div className="mt-3 pt-3 border-t border-gray-200 dark:border-gray-700 pl-8">
+        <div className="mt-3 pt-3 border-t pl-8">
           <div className="flex flex-col sm:flex-row gap-2 items-start sm:items-end">
             <div className="space-y-1 flex-1">
-              <label className="text-xs text-gray-500">Reason for Not Covered</label>
+              <label className="text-xs text-muted-foreground">Reason for Not Covered</label>
               <Select value={localReason} onValueChange={v => setLocalReason(v as NotCoveredReason)}>
                 <SelectTrigger className="w-full" data-testid={`select-reason-${site.id}`}>
                   <SelectValue placeholder="Select reason..." />
@@ -1623,7 +1736,7 @@ const SiteRow = ({ site, selected, onToggle, onAssignReason, canAssign, saving }
             </div>
             {localReason === 'other' && (
               <div className="space-y-1 flex-1">
-                <label className="text-xs text-gray-500">Details</label>
+                <label className="text-xs text-muted-foreground">Details</label>
                 <Textarea
                   value={localOther}
                   onChange={e => setLocalOther(e.target.value)}
@@ -1643,7 +1756,7 @@ const SiteRow = ({ site, selected, onToggle, onAssignReason, canAssign, saving }
             </Button>
           </div>
           {site.not_covered_at && (
-            <p className="text-xs text-gray-400 mt-2">
+            <p className="text-xs text-muted-foreground mt-2">
               Last updated: {new Date(site.not_covered_at).toLocaleString()}
             </p>
           )}
