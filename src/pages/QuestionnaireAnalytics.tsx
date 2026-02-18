@@ -9,7 +9,6 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { Upload, FileSpreadsheet, BarChart3, Download, Search, Filter, X, ChevronDown, ChevronUp, Users, MapPin, Building2, Activity, Layers, FileDown, Save, FolderOpen, Trash2, Clock, Globe, PieChart, Lock, Sparkles, CheckCircle2, AlertCircle, ArrowRight, FileSearch, Mail, FileText, Send, ClipboardList, AlertTriangle, Plus, UserPlus } from 'lucide-react';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Switch } from '@/components/ui/switch';
 import { useAuthorization } from '@/hooks/use-authorization';
 import * as XLSX from 'xlsx';
@@ -1273,8 +1272,16 @@ const QuestionnaireAnalytics = () => {
     setEmailSubject(`Questionnaire Data Report - ${month}`);
     setShowEmailDialog(true);
     try {
-      const { data: profiles } = await supabase.from('profiles').select('id, name, email, role').eq('status', 'approved');
-      if (profiles) setEmailUsers(profiles as any);
+      let { data: profiles, error } = await supabase.from('profiles').select('id, name, email, role').eq('status', 'approved');
+      if (error || !profiles || profiles.length === 0) {
+        const fallback = await supabase.from('profiles').select('id, name, email, role');
+        if (fallback.data && fallback.data.length > 0) {
+          profiles = fallback.data;
+        }
+      }
+      if (profiles && profiles.length > 0) {
+        setEmailUsers(profiles.filter((p: any) => p.email && p.name) as any);
+      }
     } catch (e) {
       console.error('Failed to fetch profiles:', e);
     }
@@ -1287,11 +1294,21 @@ const QuestionnaireAnalytics = () => {
 
   const emailToFilteredUsers = useMemo(() => {
     const q = emailToInput.trim().toLowerCase();
-    if (!q) return emailUsers.slice(0, 20);
-    return emailUsers.filter(u =>
+    const filtered = !q ? emailUsers : emailUsers.filter(u =>
       u.name.toLowerCase().includes(q) || u.email.toLowerCase().includes(q) || u.role.toLowerCase().includes(q)
-    ).slice(0, 20);
+    );
+    return filtered.slice(0, 30);
   }, [emailToInput, emailUsers]);
+
+  const emailToGroupedUsers = useMemo(() => {
+    const groups: Record<string, typeof emailToFilteredUsers> = {};
+    emailToFilteredUsers.forEach(u => {
+      const role = u.role || 'Other';
+      if (!groups[role]) groups[role] = [];
+      groups[role].push(u);
+    });
+    return groups;
+  }, [emailToFilteredUsers]);
 
   const emailToRecipientLabel = useMemo(() => {
     if (emailToUsers.length === 0) return '';
@@ -4983,32 +5000,32 @@ const QuestionnaireAnalytics = () => {
                   })}
                 </div>
 
-                <div className="flex gap-2">
-                  <Popover open={emailToSearchOpen} onOpenChange={setEmailToSearchOpen}>
-                    <PopoverTrigger asChild>
-                      <div className="flex-1 relative">
-                        <Input
-                          value={emailToInput}
-                          onChange={(e) => { setEmailToInput(e.target.value); setEmailToSearchOpen(true); }}
-                          onFocus={() => setEmailToSearchOpen(true)}
-                          onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addEmailToManual(); } }}
-                          placeholder="Search users or type email..."
-                          className="w-full"
-                          data-testid="input-email-to"
-                        />
-                      </div>
-                    </PopoverTrigger>
-                    <PopoverContent className="p-0 w-[400px]" align="start" onOpenAutoFocus={(e) => e.preventDefault()}>
-                      <div className="max-h-[250px] overflow-y-auto">
-                        {emailToFilteredUsers.length > 0 ? (
-                          emailToFilteredUsers.map(u => {
+                <div className="relative">
+                  <div className="flex gap-2">
+                    <Input
+                      value={emailToInput}
+                      onChange={(e) => { setEmailToInput(e.target.value); setEmailToSearchOpen(true); }}
+                      onFocus={() => setEmailToSearchOpen(true)}
+                      onBlur={() => setTimeout(() => setEmailToSearchOpen(false), 200)}
+                      onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addEmailToManual(); } }}
+                      placeholder="Search users or type email..."
+                      className="flex-1"
+                      data-testid="input-email-to"
+                    />
+                  </div>
+                  {emailToSearchOpen && (emailToFilteredUsers.length > 0 || (emailToInput.trim() && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailToInput.trim()))) && (
+                    <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-popover border rounded-md shadow-md max-h-[280px] overflow-y-auto">
+                      {Object.entries(emailToGroupedUsers).map(([role, users]) => (
+                        <div key={role}>
+                          <div className="px-3 py-1.5 text-xs font-semibold text-muted-foreground bg-muted/50 sticky top-0">{role} ({users.length})</div>
+                          {users.map(u => {
                             const isAdded = emailToUsers.some(eu => eu.email === u.email);
                             return (
                               <button
                                 key={u.id}
                                 type="button"
                                 className={`w-full text-left px-3 py-2 text-sm hover:bg-muted/50 flex items-center justify-between gap-2 ${isAdded ? 'opacity-50' : ''}`}
-                                onClick={() => !isAdded && addEmailToUser({ ...u, isSystemUser: true })}
+                                onMouseDown={(e) => { e.preventDefault(); if (!isAdded) addEmailToUser({ ...u, isSystemUser: true }); }}
                                 disabled={isAdded}
                                 data-testid={`button-select-user-${u.id}`}
                               >
@@ -5016,27 +5033,25 @@ const QuestionnaireAnalytics = () => {
                                   <div className="font-medium truncate">{u.name}</div>
                                   <div className="text-xs text-muted-foreground truncate">{u.email}</div>
                                 </div>
-                                <Badge variant="outline" className="text-xs shrink-0">{u.role}</Badge>
+                                {isAdded && <Badge variant="secondary" className="text-xs shrink-0">Added</Badge>}
                               </button>
                             );
-                          })
-                        ) : (
-                          <div className="px-3 py-4 text-sm text-muted-foreground text-center">No users found</div>
-                        )}
-                        {emailToInput.trim() && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailToInput.trim()) && (
-                          <button
-                            type="button"
-                            className="w-full text-left px-3 py-2 text-sm hover:bg-muted/50 border-t flex items-center gap-2 text-primary"
-                            onClick={addEmailToManual}
-                            data-testid="button-add-manual-email"
-                          >
-                            <Plus className="h-3 w-3" />
-                            Add "{emailToInput.trim()}" as external recipient
-                          </button>
-                        )}
-                      </div>
-                    </PopoverContent>
-                  </Popover>
+                          })}
+                        </div>
+                      ))}
+                      {emailToInput.trim() && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailToInput.trim()) && (
+                        <button
+                          type="button"
+                          className="w-full text-left px-3 py-2 text-sm hover:bg-muted/50 border-t flex items-center gap-2 text-primary"
+                          onMouseDown={(e) => { e.preventDefault(); addEmailToManual(); }}
+                          data-testid="button-add-manual-email"
+                        >
+                          <Plus className="h-3 w-3" />
+                          Add "{emailToInput.trim()}" as external recipient
+                        </button>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 {emailToUsers.length > 0 && (
