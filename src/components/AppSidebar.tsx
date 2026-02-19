@@ -247,6 +247,7 @@
     const isCoordinator = hasRole('coordinator');
     const isFOM = hasRole('fom');
     const isSupervisor = hasRole('supervisor');
+    const isDataTeam = hasRole('dataTeam');
 
     const isHidden = (url: string) => menuPrefs.hiddenItems.includes(url);
     const isPinned = (url: string) => menuPrefs.pinnedItems.includes(url);
@@ -278,7 +279,7 @@
     if (!isHidden('/projects') && (isSuperAdmin || isAdmin || isICT || perms.projects)) {
       planningItems.push({ id: 'projects', title: "Projects", url: "/projects", icon: FolderKanban, priority: 1, isPinned: isPinned('/projects') });
     }
-    if (!isHidden('/mmp') && (isSuperAdmin || isAdmin || isICT || perms.mmp || isCoordinator || isDataCollector || isFOM)) {
+    if (!isHidden('/mmp') && (isSuperAdmin || isAdmin || isICT || isDataTeam || perms.mmp || isCoordinator || isDataCollector || isFOM)) {
       const mmpTitle = (!isSuperAdmin && (isDataCollector || isCoordinator)) ? "My Sites Management" : "MMP Management";
       planningItems.push({ id: 'mmp-management', title: mmpTitle, url: "/mmp", icon: Database, priority: 2, isPinned: isPinned('/mmp') });
     }
