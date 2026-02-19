@@ -100,7 +100,8 @@ const MMPDetailView = () => {
   const isAdmin = hasAnyRole(['admin']);
   const isFOM = hasAnyRole(['fom']);
   const isCoordinator = hasAnyRole(['coordinator']);
-  const canRead = checkPermission('mmp', 'read') || isAdmin || isFOM || isCoordinator;
+  const isDataTeam = hasAnyRole(['DataTeam', 'dataTeam', 'data_team', 'Data Team']);
+  const canRead = checkPermission('mmp', 'read') || isAdmin || isFOM || isCoordinator || isDataTeam;
   const canEdit = (checkPermission('mmp', 'update') || isAdmin || isCoordinator) ? true : false;
   const canDelete = (checkPermission('mmp', 'delete') || isAdmin) ? true : false;
   const canArchive = (checkPermission('mmp', 'archive') || isAdmin) ? true : false;

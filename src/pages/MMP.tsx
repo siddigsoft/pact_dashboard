@@ -4388,7 +4388,7 @@ const MMP = () => {
 
             {!canClaimSites && (
               <TabsContent value="new">
-                {(isFOM || isSupervisor || isAdmin || isICT) && (
+                {(isFOM || isSupervisor || isAdmin || isICT || isDataTeam) && (
                   <div className="mb-6">
                     <div className="text-sm font-medium text-muted-foreground mb-3">{t('mmpPage.subcategory')}:</div>
                     <div className="flex gap-2 flex-wrap">
@@ -4880,7 +4880,7 @@ const MMP = () => {
               )}
 
               {/* Subcategory tabs - below filters */}
-              {(isAdmin || isICT || isFOM || isCoordinator) && (
+              {(isAdmin || isICT || isFOM || isCoordinator || isDataTeam) && (
                 <div className="mb-6">
                   <div className="text-sm font-medium text-muted-foreground mb-3">{t('mmpPage.subcategory')}:</div>
                   <div className="flex gap-2 overflow-x-auto pb-2 flex-wrap">
