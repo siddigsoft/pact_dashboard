@@ -924,21 +924,6 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const registerUser = async (userData: Partial<User>): Promise<boolean> => {
     try {
-      const emailToCheck = (userData.email || '').trim().toLowerCase();
-
-      const { data: emailExists } = await supabase.rpc('check_email_exists', {
-        check_email: emailToCheck
-      });
-
-      if (emailExists === true) {
-        toast({
-          title: "Email already registered",
-          description: "This email is already in use. Please sign in or reset your password.",
-          variant: "destructive",
-        });
-        return false;
-      }
-
       const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
         email: userData.email || '',
         password: userData.password || '',
@@ -958,9 +943,20 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
       
       if (signUpError) {
         console.error("Supabase signup error:", signUpError);
+        let errorDesc = "There was a problem creating your account. Please try again.";
+        const msg = (signUpError.message || '').toLowerCase();
+        if (msg.includes('already registered') || msg.includes('already been registered')) {
+          errorDesc = "This email is already registered. Please sign in or reset your password.";
+        } else if (msg.includes('password')) {
+          errorDesc = "Password must be at least 6 characters long.";
+        } else if (msg.includes('rate limit') || msg.includes('too many')) {
+          errorDesc = "Too many attempts. Please wait a moment and try again.";
+        } else if (msg.includes('network') || msg.includes('fetch')) {
+          errorDesc = "Network error. Please check your internet connection and try again.";
+        }
         toast({
           title: "Registration failed",
-          description: "There was a problem creating your account. Please try again.",
+          description: errorDesc,
           variant: "destructive",
         });
         return false;

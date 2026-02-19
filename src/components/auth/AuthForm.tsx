@@ -146,9 +146,14 @@ const AuthForm = ({ mode }: AuthFormProps) => {
 
     setCheckingEmail(true);
     try {
-      const { data, error } = await supabase.rpc('check_email_exists', {
+      const timeoutPromise = new Promise<{ data: null; error: { message: string } }>((resolve) =>
+        setTimeout(() => resolve({ data: null, error: { message: 'timeout' } }), 8000)
+      );
+      const rpcPromise = supabase.rpc('check_email_exists', {
         check_email: emailToCheck.trim()
       });
+
+      const { data, error } = await Promise.race([rpcPromise, timeoutPromise]);
 
       if (!error && data === true) {
         setEmailAlreadyRegistered(true);
@@ -268,20 +273,28 @@ const AuthForm = ({ mode }: AuthFormProps) => {
         }
 
         if (email.trim() && /\S+@\S+\.\S+/.test(email)) {
-          const { data: emailExists } = await supabase.rpc('check_email_exists', {
-            check_email: email.trim()
-          });
-
-          if (emailExists === true) {
-            setEmailAlreadyRegistered(true);
-            toast({
-              title: "Email already registered",
-              description: "This email is already in use. Please sign in or reset your password.",
-              variant: "destructive",
+          try {
+            const timeoutPromise = new Promise<{ data: null; error: { message: string } }>((resolve) =>
+              setTimeout(() => resolve({ data: null, error: { message: 'timeout' } }), 8000)
+            );
+            const rpcPromise = supabase.rpc('check_email_exists', {
+              check_email: email.trim()
             });
-            setIsLoading(false);
-            scrollToField('email');
-            return;
+            const { data: emailExists, error: emailCheckErr } = await Promise.race([rpcPromise, timeoutPromise]);
+
+            if (!emailCheckErr && emailExists === true) {
+              setEmailAlreadyRegistered(true);
+              toast({
+                title: "Email already registered",
+                description: "This email is already in use. Please sign in or reset your password.",
+                variant: "destructive",
+              });
+              setIsLoading(false);
+              scrollToField('email');
+              return;
+            }
+          } catch {
+            // If email check fails, let Supabase Auth handle duplicate detection
           }
         }
 
