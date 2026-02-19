@@ -12,7 +12,8 @@ interface SiteStatusDetail {
   siteCode: string;
   status: string;
   statusLabel: string;
-  statusCategory: 'verified' | 'returned' | 'in_progress' | 'pending';
+  statusCategory: 'verified' | 'returned' | 'rejected' | 'in_progress' | 'pending';
+  locality: string;
   reason: string;
   actionBy: string;
   actionAt: string;
@@ -43,16 +44,18 @@ interface CoordinatorSummaryCardProps {
   mmpId?: string;
 }
 
-function SiteDetailRow({ site }: { site: SiteStatusDetail }) {
+function SiteDetailRow({ site, userNames }: { site: SiteStatusDetail; userNames: Record<string, string> }) {
   const categoryColors: Record<string, string> = {
     verified: 'bg-green-50/80 dark:bg-green-900/15 border-green-100 dark:border-green-900/30',
-    returned: 'bg-red-50/80 dark:bg-red-900/15 border-red-100 dark:border-red-900/30',
+    returned: 'bg-orange-50/80 dark:bg-orange-900/15 border-orange-100 dark:border-orange-900/30',
+    rejected: 'bg-red-50/80 dark:bg-red-900/15 border-red-100 dark:border-red-900/30',
     in_progress: 'bg-blue-50/80 dark:bg-blue-900/15 border-blue-100 dark:border-blue-900/30',
     pending: 'bg-muted/50 border-border',
   };
   const badgeColors: Record<string, string> = {
     verified: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
-    returned: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
+    returned: 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400',
+    rejected: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
     in_progress: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
     pending: 'bg-muted text-muted-foreground',
   };
@@ -65,6 +68,12 @@ function SiteDetailRow({ site }: { site: SiteStatusDetail }) {
     } catch { /* ignore */ }
     return '';
   };
+
+  const resolvedActionBy = site.actionBy
+    ? (userNames[site.actionBy] || site.actionBy)
+    : '';
+
+  const isUuid = (str: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
 
   return (
     <div className={`flex items-start gap-2 p-1.5 rounded border text-xs ${categoryColors[site.statusCategory]}`}>
@@ -81,12 +90,74 @@ function SiteDetailRow({ site }: { site: SiteStatusDetail }) {
             {site.reason}
           </p>
         )}
-        {(site.actionBy || site.actionAt) && (
+        {(resolvedActionBy || site.actionAt) && (
           <p className="text-[10px] text-muted-foreground mt-0.5">
-            {site.actionBy && <>By: {site.actionBy}</>}
-            {site.actionAt && <>{site.actionBy ? ' ' : ''}{formatDate(site.actionAt)}</>}
+            {resolvedActionBy && !isUuid(resolvedActionBy) && <>By: {resolvedActionBy}</>}
+            {site.actionAt && <>{resolvedActionBy ? ' ' : ''}{formatDate(site.actionAt)}</>}
           </p>
         )}
+      </div>
+    </div>
+  );
+}
+
+function LocalityGroup({ locality, sites, userNames }: { locality: string; sites: SiteStatusDetail[]; userNames: Record<string, string> }) {
+  return (
+    <div className="ml-2" data-testid={`locality-group-${locality}`}>
+      <div className="flex items-center gap-1.5 mb-1">
+        <MapPin className="h-3 w-3 text-muted-foreground" />
+        <span className="text-[11px] font-medium text-muted-foreground">{locality}</span>
+        <span className="text-[10px] text-muted-foreground">({sites.length})</span>
+      </div>
+      <div className="space-y-1 ml-4">
+        {sites.map((site) => (
+          <SiteDetailRow key={site.id} site={site} userNames={userNames} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function StatusCategorySection({ 
+  category, 
+  sites, 
+  userNames 
+}: { 
+  category: 'verified' | 'returned' | 'rejected' | 'in_progress' | 'pending'; 
+  sites: SiteStatusDetail[]; 
+  userNames: Record<string, string>;
+}) {
+  if (sites.length === 0) return null;
+
+  const categoryConfig: Record<string, { label: string; icon: any; colorClass: string }> = {
+    verified: { label: 'Verified', icon: CheckCircle2, colorClass: 'text-green-700 dark:text-green-400' },
+    returned: { label: 'Returned', icon: XCircle, colorClass: 'text-orange-700 dark:text-orange-400' },
+    rejected: { label: 'Rejected', icon: XCircle, colorClass: 'text-red-700 dark:text-red-400' },
+    in_progress: { label: 'In Progress', icon: Clock, colorClass: 'text-blue-700 dark:text-blue-400' },
+    pending: { label: 'Pending', icon: AlertCircle, colorClass: 'text-muted-foreground' },
+  };
+
+  const config = categoryConfig[category];
+  const Icon = config.icon;
+
+  const byLocality = new Map<string, SiteStatusDetail[]>();
+  sites.forEach(site => {
+    const loc = site.locality || 'Unknown Locality';
+    if (!byLocality.has(loc)) byLocality.set(loc, []);
+    byLocality.get(loc)!.push(site);
+  });
+
+  const sortedLocalities = Array.from(byLocality.entries()).sort((a, b) => a[0].localeCompare(b[0]));
+
+  return (
+    <div>
+      <p className={`text-[11px] font-semibold mb-1.5 flex items-center gap-1 ${config.colorClass}`}>
+        <Icon className="h-3 w-3" /> {config.label} ({sites.length})
+      </p>
+      <div className="space-y-2">
+        {sortedLocalities.map(([locality, locSites]) => (
+          <LocalityGroup key={locality} locality={locality} sites={locSites} userNames={userNames} />
+        ))}
       </div>
     </div>
   );
@@ -95,6 +166,7 @@ function SiteDetailRow({ site }: { site: SiteStatusDetail }) {
 export default function CoordinatorSummaryCard({ siteEntries, mmpId }: CoordinatorSummaryCardProps) {
   const [isOpen, setIsOpen] = useState(true);
   const [coordinatorNames, setCoordinatorNames] = useState<Record<string, string>>({});
+  const [actionByNames, setActionByNames] = useState<Record<string, string>>({});
 
   const coordinatorsByState = useMemo(() => {
     if (!siteEntries || siteEntries.length === 0) return [];
@@ -103,7 +175,8 @@ export default function CoordinatorSummaryCard({ siteEntries, mmpId }: Coordinat
     const coordIds = new Set<string>();
 
     const verifiedStatuses = ['verified', 'approved', 'approved and costed', 'costed', 'dispatched', 'completed'];
-    const returnedStatuses = ['returned_to_fom', 'returned', 'rejected', 'recalled', 'sent_back', 'sent_back_to_fom'];
+    const returnedStatuses = ['returned_to_fom', 'returned', 'recalled', 'sent_back', 'sent_back_to_fom'];
+    const rejectedStatuses = ['rejected'];
     const inProgressStatuses = ['in_progress', 'accepted', 'forwarded', 'forwarded_to_fom', 'forwarded_to_coordinator', 'forwarded_to_coordinators'];
 
     siteEntries.forEach((entry: any) => {
@@ -135,23 +208,26 @@ export default function CoordinatorSummaryCard({ siteEntries, mmpId }: Coordinat
       const entryStatus = (entry.status || '').toLowerCase();
       const isVerified = verifiedStatuses.includes(entryStatus);
       const isReturned = returnedStatuses.includes(entryStatus);
+      const isRejected = rejectedStatuses.includes(entryStatus);
       const isInProgress = inProgressStatuses.includes(entryStatus);
       
-      if (isVerified) {
-        stateData.verifiedSites++;
-      }
-      if (isReturned) {
-        stateData.returnedSites++;
-      }
+      if (isVerified) stateData.verifiedSites++;
+      if (isReturned || isRejected) stateData.returnedSites++;
 
       const ad = entry.additional_data || entry.additionalData || {};
-      const statusCategory: SiteStatusDetail['statusCategory'] = isVerified ? 'verified' : isReturned ? 'returned' : isInProgress ? 'in_progress' : 'pending';
+      const statusCategory: SiteStatusDetail['statusCategory'] = isVerified ? 'verified' : isRejected ? 'rejected' : isReturned ? 'returned' : isInProgress ? 'in_progress' : 'pending';
       const statusLabels: Record<string, string> = {
         verified: 'Verified', approved: 'Approved', 'approved and costed': 'Costed', costed: 'Costed', dispatched: 'Dispatched', completed: 'Completed',
         returned_to_fom: 'Returned to FOM', returned: 'Returned', rejected: 'Rejected', recalled: 'Recalled', sent_back: 'Sent Back', sent_back_to_fom: 'Sent Back to FOM',
         in_progress: 'In Progress', accepted: 'Accepted', forwarded: 'Forwarded', forwarded_to_fom: 'With FOM', forwarded_to_coordinator: 'With Coordinator', forwarded_to_coordinators: 'With Coordinators',
       };
-      
+
+      const actionByRaw = isVerified 
+        ? (entry.verified_by || '') 
+        : (isReturned || isRejected)
+          ? (entry.verified_by || ad.sent_back_by || entry.rejected_by || ad.rejected_by || '') 
+          : '';
+
       const siteDetail: SiteStatusDetail = {
         id: entry.id || '',
         name: entry.site_name || entry.siteName || 'Unknown',
@@ -159,8 +235,9 @@ export default function CoordinatorSummaryCard({ siteEntries, mmpId }: Coordinat
         status: entryStatus,
         statusLabel: statusLabels[entryStatus] || entryStatus.replace(/_/g, ' '),
         statusCategory,
+        locality: entry.locality || entry.localityName || '',
         reason: entry.verification_notes || ad.rejection_comments || ad.rejection_reason || ad.return_reason || entry.rejection_comments || '',
-        actionBy: isVerified ? (entry.verified_by || '') : isReturned ? (entry.verified_by || ad.sent_back_by || entry.rejected_by || ad.rejected_by || '') : '',
+        actionBy: actionByRaw,
         actionAt: isVerified ? (entry.verified_at || '') : isReturned ? (entry.verified_at || entry.rejected_at || ad.rejected_at || ad.sent_back_at || '') : (entry.dispatched_at || entry.forwarded_at || ''),
       };
 
@@ -171,9 +248,9 @@ export default function CoordinatorSummaryCard({ siteEntries, mmpId }: Coordinat
         if (existingCoord) {
           existingCoord.sitesAssigned++;
           if (isVerified) existingCoord.sitesVerified++;
-          if (isReturned) existingCoord.sitesReturned++;
+          if (isReturned || isRejected) existingCoord.sitesReturned++;
           if (isInProgress) existingCoord.sitesInProgress++;
-          if (!isVerified && !isReturned && !isInProgress) existingCoord.sitesPending++;
+          if (!isVerified && !isReturned && !isRejected && !isInProgress) existingCoord.sitesPending++;
           existingCoord.siteDetails.push(siteDetail);
         } else {
           stateData.coordinators.push({ 
@@ -181,9 +258,9 @@ export default function CoordinatorSummaryCard({ siteEntries, mmpId }: Coordinat
             name: coordName || coordinatorNames[coordId] || coordId.substring(0, 8),
             sitesAssigned: 1,
             sitesVerified: isVerified ? 1 : 0,
-            sitesReturned: isReturned ? 1 : 0,
+            sitesReturned: (isReturned || isRejected) ? 1 : 0,
             sitesInProgress: isInProgress ? 1 : 0,
-            sitesPending: (!isVerified && !isReturned && !isInProgress) ? 1 : 0,
+            sitesPending: (!isVerified && !isReturned && !isRejected && !isInProgress) ? 1 : 0,
             receivedAt: receivedAt,
             siteDetails: [siteDetail],
           });
@@ -197,8 +274,11 @@ export default function CoordinatorSummaryCard({ siteEntries, mmpId }: Coordinat
   }, [siteEntries, coordinatorNames]);
 
   useEffect(() => {
-    const fetchCoordinatorNames = async () => {
+    const fetchNames = async () => {
       const coordIds = new Set<string>();
+      const actionByIds = new Set<string>();
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
       siteEntries.forEach((entry: any) => {
         const coordId = entry.additional_data?.assigned_to || 
                        entry.additionalData?.assigned_to ||
@@ -207,26 +287,46 @@ export default function CoordinatorSummaryCard({ siteEntries, mmpId }: Coordinat
         if (coordId && !entry.additional_data?.assigned_to_name && !entry.coordinator_name) {
           coordIds.add(coordId);
         }
+
+        const actionFields = [
+          entry.verified_by,
+          entry.rejected_by,
+          entry.additional_data?.sent_back_by,
+          entry.additional_data?.rejected_by,
+          entry.additionalData?.sent_back_by,
+          entry.additionalData?.rejected_by,
+        ];
+        actionFields.forEach(id => {
+          if (id && uuidRegex.test(id)) {
+            actionByIds.add(id);
+          }
+        });
       });
 
-      if (coordIds.size === 0) return;
+      const allIds = new Set([...coordIds, ...actionByIds]);
+      if (allIds.size === 0) return;
 
       const { data } = await supabase
         .from('profiles')
         .select('id, full_name')
-        .in('id', Array.from(coordIds));
+        .in('id', Array.from(allIds));
 
       if (data) {
-        const names: Record<string, string> = {};
+        const coordNameMap: Record<string, string> = {};
+        const actionNameMap: Record<string, string> = {};
         data.forEach((p: any) => {
-          names[p.id] = p.full_name || p.id.substring(0, 8);
+          const name = p.full_name || p.id.substring(0, 8);
+          if (coordIds.has(p.id)) coordNameMap[p.id] = name;
+          if (actionByIds.has(p.id)) actionNameMap[p.id] = name;
+          actionNameMap[p.id] = name;
         });
-        setCoordinatorNames(names);
+        setCoordinatorNames(coordNameMap);
+        setActionByNames(actionNameMap);
       }
     };
 
     if (siteEntries.length > 0) {
-      fetchCoordinatorNames();
+      fetchNames();
     }
   }, [siteEntries]);
 
@@ -275,7 +375,7 @@ export default function CoordinatorSummaryCard({ siteEntries, mmpId }: Coordinat
   return (
     <Card className="bg-gradient-to-br from-purple-50 to-purple-100 dark:from-purple-900/30 dark:to-purple-800/20 border-purple-200 dark:border-purple-800">
       <CardHeader className="pb-2">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-2 flex-wrap">
           <CardTitle className="text-base flex items-center gap-2">
             <Users className="h-5 w-5 text-purple-600 dark:text-purple-400" />
             Coordinator Assignments
@@ -335,7 +435,7 @@ export default function CoordinatorSummaryCard({ siteEntries, mmpId }: Coordinat
             {coordinatorsByState.map((stateData) => (
               <div 
                 key={stateData.state} 
-                className="border border-purple-200 dark:border-purple-800 rounded-lg p-3 bg-background/80"
+                className="border border-purple-200 dark:border-purple-800 rounded-md p-3 bg-background/80"
                 data-testid={`coordinator-state-${stateData.state}`}
               >
                 <div className="flex items-center justify-between gap-2 mb-2 flex-wrap">
@@ -377,6 +477,7 @@ export default function CoordinatorSummaryCard({ siteEntries, mmpId }: Coordinat
                   {stateData.coordinators.map((coord) => {
                     const verifiedSites = coord.siteDetails.filter(s => s.statusCategory === 'verified');
                     const returnedSites = coord.siteDetails.filter(s => s.statusCategory === 'returned');
+                    const rejectedSites = coord.siteDetails.filter(s => s.statusCategory === 'rejected');
                     const inProgressSites = coord.siteDetails.filter(s => s.statusCategory === 'in_progress');
                     const pendingSites = coord.siteDetails.filter(s => s.statusCategory === 'pending');
 
@@ -445,55 +546,12 @@ export default function CoordinatorSummaryCard({ siteEntries, mmpId }: Coordinat
                         </div>
                       </CollapsibleTrigger>
                       <CollapsibleContent>
-                        <div className="px-2 pb-2 space-y-2 mt-1">
-                          {verifiedSites.length > 0 && (
-                            <div>
-                              <p className="text-[11px] font-semibold text-green-700 dark:text-green-400 mb-1 flex items-center gap-1">
-                                <CheckCircle2 className="h-3 w-3" /> Verified ({verifiedSites.length})
-                              </p>
-                              <div className="space-y-1">
-                                {verifiedSites.map((site) => (
-                                  <SiteDetailRow key={site.id} site={site} />
-                                ))}
-                              </div>
-                            </div>
-                          )}
-                          {returnedSites.length > 0 && (
-                            <div>
-                              <p className="text-[11px] font-semibold text-red-700 dark:text-red-400 mb-1 flex items-center gap-1">
-                                <XCircle className="h-3 w-3" /> Returned / Rejected ({returnedSites.length})
-                              </p>
-                              <div className="space-y-1">
-                                {returnedSites.map((site) => (
-                                  <SiteDetailRow key={site.id} site={site} />
-                                ))}
-                              </div>
-                            </div>
-                          )}
-                          {inProgressSites.length > 0 && (
-                            <div>
-                              <p className="text-[11px] font-semibold text-blue-700 dark:text-blue-400 mb-1 flex items-center gap-1">
-                                <Clock className="h-3 w-3" /> In Progress ({inProgressSites.length})
-                              </p>
-                              <div className="space-y-1">
-                                {inProgressSites.map((site) => (
-                                  <SiteDetailRow key={site.id} site={site} />
-                                ))}
-                              </div>
-                            </div>
-                          )}
-                          {pendingSites.length > 0 && (
-                            <div>
-                              <p className="text-[11px] font-semibold text-muted-foreground mb-1 flex items-center gap-1">
-                                <AlertCircle className="h-3 w-3" /> Pending ({pendingSites.length})
-                              </p>
-                              <div className="space-y-1">
-                                {pendingSites.map((site) => (
-                                  <SiteDetailRow key={site.id} site={site} />
-                                ))}
-                              </div>
-                            </div>
-                          )}
+                        <div className="px-2 pb-2 space-y-3 mt-2">
+                          <StatusCategorySection category="verified" sites={verifiedSites} userNames={actionByNames} />
+                          <StatusCategorySection category="pending" sites={pendingSites} userNames={actionByNames} />
+                          <StatusCategorySection category="returned" sites={returnedSites} userNames={actionByNames} />
+                          <StatusCategorySection category="rejected" sites={rejectedSites} userNames={actionByNames} />
+                          <StatusCategorySection category="in_progress" sites={inProgressSites} userNames={actionByNames} />
                         </div>
                       </CollapsibleContent>
                     </Collapsible>
