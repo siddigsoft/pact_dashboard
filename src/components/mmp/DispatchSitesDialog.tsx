@@ -200,12 +200,6 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
               );
             });
             
-            // Debug: Log all profiles with their roles and localities
-            console.log(`[DispatchSitesDialog] Loaded ${filtered.length} collectors/coordinators from ${data?.length || 0} total profiles`);
-            filtered.forEach(p => {
-              console.log(`  - ${p.full_name || p.username}: role=${p.role}, state_id=${p.state_id}, locality_id=${p.locality_id}`);
-            });
-            
             setCollectors(filtered as any[] as DataCollector[]);
           }
         }
@@ -678,16 +672,9 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
   };
 
   const handleDispatch = async () => {
-    console.log("🚀 Starting dispatch process...");
-    console.log("📍 Dispatch type:", dispatchType);
-    console.log("📍 Selected sites count:", selectedSites.size);
-    console.log("📍 Filtered site entries:", filteredSiteEntries.length);
-
-    // Validate that all selected sites have transportation costs entered
     const selectedSiteObjects = filteredSiteEntries.filter((s) =>
       selectedSites.has(s.id),
     );
-    console.log("📍 Selected site objects:", selectedSiteObjects.length);
 
     const missingTransportation = selectedSiteObjects.filter((site) => {
       const costs = siteCosts.get(site.id);
@@ -721,9 +708,6 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
     }, 120000); // 2 minutes - gives enough time for all operations
     
     try {
-      // 🔐 CRITICAL: Ensure valid session before database operations to prevent RLS failures
-      console.log("📍 Checking session validity...");
-      
       let sessionResult: { success: boolean; user?: { id: string; email?: string }; error?: string };
       const maxRetries = 3;
       
@@ -734,7 +718,6 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
             const expiresAt = localSession.session.expires_at || 0;
             const now = Math.floor(Date.now() / 1000);
             if (expiresAt > now + 30) {
-              console.log("📍 Session valid (fast path), expires in", expiresAt - now, "seconds");
               sessionResult = {
                 success: true,
                 user: {
@@ -744,7 +727,6 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
               };
               break;
             } else {
-              console.log(`📍 Session expiring soon, refreshing (attempt ${attempt}/${maxRetries})...`);
               const sessionPromise = ensureValidSession();
               const sessionTimeoutPromise = new Promise<{ success: boolean; error: string }>((resolve) => 
                 setTimeout(() => resolve({ success: false, error: 'timeout' }), 20000)
@@ -753,7 +735,6 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
               if (sessionResult.success) break;
             }
           } else {
-            console.log(`📍 No local session, doing full refresh (attempt ${attempt}/${maxRetries})...`);
             const sessionPromise = ensureValidSession();
             const sessionTimeoutPromise = new Promise<{ success: boolean; error: string }>((resolve) => 
               setTimeout(() => resolve({ success: false, error: 'timeout' }), 20000)
@@ -762,17 +743,14 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
             if (sessionResult.success) break;
           }
         } catch (sessionErr: any) {
-          console.error(`❌ Session check failed (attempt ${attempt}/${maxRetries}):`, sessionErr);
           sessionResult = { success: false, error: sessionErr.message || 'Session check failed' };
         }
 
         if (attempt < maxRetries) {
-          console.log(`📍 Retrying session check in 2 seconds...`);
           await new Promise(resolve => setTimeout(resolve, 2000));
         }
       }
       
-      console.log("📍 Session check complete:", sessionResult!.success ? "valid" : "invalid");
       if (!sessionResult!.success) {
         clearTimeout(dispatchTimeout);
         setLoading(false);
@@ -810,9 +788,6 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
       // Get current user from validated session
       const assignedBy = sessionResult.user?.id;
 
-      // Step 0: Fetch Sites Registry to get GPS coordinates FIRST (needed for coverage gap check)
-      // Use timeout to prevent hanging - skip if takes too long
-      console.log("📍 Fetching Sites Registry for GPS coordinates...");
       let registrySites: any[] = [];
       try {
         const registryPromise = fetchAllRegistrySites();
@@ -820,14 +795,9 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
           setTimeout(() => reject(new Error('Registry fetch timeout')), 10000)
         );
         registrySites = await Promise.race([registryPromise, timeoutPromise]);
-        console.log(`📍 Found ${registrySites.length} sites in registry`);
       } catch (registryError) {
-        console.warn("⚠️ Registry fetch failed or timed out, continuing without GPS enrichment:", registryError);
         registrySites = [];
       }
-
-      // Step 0.5: Check coverage gaps and notify admins (with GPS from registry)
-      console.log("📍 Checking coverage gaps for selected sites...");
       const uniqueLocalitiesForGapCheck = new Map<string, { state: string; locality: string; coords?: { latitude: number; longitude: number }; siteCount: number }>();
       
       for (const site of selectedSiteObjects) {
@@ -835,23 +805,13 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
         const rawState = site.state || site.state_name || '';
         const rawLocality = site.locality || site.locality_name || '';
         
-        // Skip sites with no raw state/locality data at all
         if (!rawState && !rawLocality) {
-          console.warn(`⚠️ Site ${site.id} has no state/locality data - skipping coverage check`);
           continue;
         }
         
         // Use helper functions to convert IDs to proper names (returns fallback if unrecognized)
         const siteState = getStateName(rawState) || rawState;
         const siteLocality = getLocalityName(rawLocality, rawState) || rawLocality;
-        
-        // Log normalization for debugging
-        if (siteState !== rawState || siteLocality !== rawLocality) {
-          console.log(`📍 Normalized: "${rawState}|${rawLocality}" → "${siteState}|${siteLocality}"`);
-        }
-        
-        // Proceed with coverage check even if normalization returned fallback values
-        // The coverage service will handle unrecognized localities gracefully
         
         const key = `${siteState}|${siteLocality}`;
         

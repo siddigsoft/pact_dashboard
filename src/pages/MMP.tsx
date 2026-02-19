@@ -1921,11 +1921,8 @@ const MMP = () => {
   useEffect(() => {
     const loadDispatchedSitesForEnumerator = async () => {
       if (!canClaimSites || !currentUser?.id) {
-        console.log('[MMP Direct Load] Skipped - canClaimSites:', canClaimSites, 'userId:', currentUser?.id);
         return;
       }
-      
-      console.log('[MMP Direct Load] Starting... User stateId:', currentUser?.stateId, 'localityId:', currentUser?.localityId);
       
       setLoadingEnumerator(true);
       try {
@@ -1957,12 +1954,9 @@ const MMP = () => {
           return;
         }
 
-        console.log('[MMP Direct Load] Querying dispatched sites for state:', collectorStateName);
-
-        // Query dispatched sites directly from database
         const { data: dispatchedSites, error } = await supabase
           .from('mmp_site_entries')
-          .select('*')
+          .select('id, site_code, hub_office, state, locality, site_name, cp_name, visit_type, visit_date, main_activity, activity_at_site, monitoring_by, survey_tool, use_market_diversion, use_warehouse_monitoring, comments, cost, enumerator_fee, transport_fee, dispatched_by, dispatched_at, accepted_by, accepted_at, cost_acknowledged, additional_data, status, forwarded_to_user_id, mmp_file_id, created_at')
           .ilike('status', 'Dispatched')
           .is('accepted_by', null)
           .ilike('state', `%${collectorStateName}%`)
@@ -1973,8 +1967,6 @@ const MMP = () => {
           console.error('[MMP Direct Load] DB Error:', error);
           return;
         }
-
-        console.log(`📊 [MMP Direct Load] Found ${dispatchedSites?.length || 0} dispatched sites for "${collectorStateName}"`);
 
         enumeratorDbLoadedRef.current = true;
         if (dispatchedSites && dispatchedSites.length > 0) {
@@ -2020,18 +2012,13 @@ const MMP = () => {
   useEffect(() => {
     const loadMySitesForEnumerator = async () => {
       if (!canClaimSites || !currentUser?.id) {
-        console.log('[MMP My Sites Load] Skipped - canClaimSites:', canClaimSites, 'userId:', currentUser?.id);
         return;
       }
       
-      console.log('[MMP My Sites Load] Loading sites accepted/claimed by user:', currentUser?.id);
-      
       try {
-        // Query 1a: Sites accepted by this user (accepted_by = user.id)
-        // Exclude pre-claim statuses - sites sent back to earlier workflow stages shouldn't appear in My Sites
         const { data: acceptedData, error } = await supabase
           .from('mmp_site_entries')
-          .select('*')
+          .select('id, site_code, hub_office, state, locality, site_name, cp_name, visit_type, visit_date, main_activity, activity_at_site, monitoring_by, survey_tool, comments, cost, enumerator_fee, transport_fee, dispatched_by, dispatched_at, accepted_by, accepted_at, cost_acknowledged, additional_data, status, forwarded_to_user_id, mmp_file_id, created_at')
           .eq('accepted_by', currentUser.id)
           .or('status.is.null,status.not.in.("Rejected","rejected")')
           .order('created_at', { ascending: false })

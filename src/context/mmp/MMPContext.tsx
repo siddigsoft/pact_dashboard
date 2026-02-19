@@ -371,45 +371,34 @@ export const useMMPProvider = () => {
     }).eq('id', id);
   };
 
-  // Fast count query using parallel COUNT queries for each status
-  // This is much faster than fetching all records and counting in memory
-  // Uses .ilike for case-insensitive matching to handle mixed-case statuses in production data
+  // Fast count query: single fetch of status + accepted_by, then count in memory
+  // This is faster than 8 separate network round-trips to the database
   const refreshSiteEntryCounts = useCallback(async () => {
     try {
       if (!navigator.onLine) return;
       
-      // Run all count queries in parallel for maximum speed
-      // Use .ilike for case-insensitive matching (handles "Dispatched", "dispatched", etc.)
-      const [
-        dispatchedResult,
-        acceptedResult,
-        assignedResult,
-        ongoingResult,
-        completedResult,
-        rejectedResult,
-        approvedCostedResult,
-        totalResult
-      ] = await Promise.all([
-        supabase.from('mmp_site_entries').select('*', { count: 'exact', head: true }).ilike('status', 'dispatched').is('accepted_by', null),
-        supabase.from('mmp_site_entries').select('*', { count: 'exact', head: true }).ilike('status', 'accepted'),
-        supabase.from('mmp_site_entries').select('*', { count: 'exact', head: true }).ilike('status', 'assigned'),
-        supabase.from('mmp_site_entries').select('*', { count: 'exact', head: true }).or('status.ilike.inprogress,status.ilike.in_progress,status.ilike.ongoing'),
-        supabase.from('mmp_site_entries').select('*', { count: 'exact', head: true }).ilike('status', 'completed'),
-        supabase.from('mmp_site_entries').select('*', { count: 'exact', head: true }).or('status.ilike.rejected,status.ilike.declined'),
-        supabase.from('mmp_site_entries').select('*', { count: 'exact', head: true }).ilike('status', 'approved and costed'),
-        supabase.from('mmp_site_entries').select('*', { count: 'exact', head: true })
-      ]);
+      const { data: rows, error } = await supabase
+        .from('mmp_site_entries')
+        .select('status, accepted_by');
       
-      setSiteEntryCounts({
-        dispatched: dispatchedResult.count || 0,
-        accepted: acceptedResult.count || 0,
-        smartAssigned: assignedResult.count || 0,
-        ongoing: ongoingResult.count || 0,
-        completed: completedResult.count || 0,
-        rejected: rejectedResult.count || 0,
-        approvedCosted: approvedCostedResult.count || 0,
-        total: totalResult.count || 0
-      });
+      if (error) { console.warn('Count query error:', error); return; }
+      
+      let dispatched = 0, accepted = 0, smartAssigned = 0, ongoing = 0;
+      let completed = 0, rejected = 0, approvedCosted = 0;
+      const total = rows?.length || 0;
+      
+      for (const r of (rows || [])) {
+        const s = (r.status || '').toLowerCase();
+        if (s === 'dispatched' && !r.accepted_by) dispatched++;
+        else if (s === 'accepted') accepted++;
+        else if (s === 'assigned') smartAssigned++;
+        else if (s === 'inprogress' || s === 'in_progress' || s === 'ongoing') ongoing++;
+        else if (s === 'completed') completed++;
+        else if (s === 'rejected' || s === 'declined') rejected++;
+        else if (s === 'approved and costed' || s === 'costed') approvedCosted++;
+      }
+      
+      setSiteEntryCounts({ dispatched, accepted, smartAssigned, ongoing, completed, rejected, approvedCosted, total });
     } catch (err) {
       console.warn('Failed to refresh site entry counts:', err);
     }
@@ -467,15 +456,6 @@ export const useMMPProvider = () => {
       }
 
       const mapped = (rows || []).map(transformDBToMMPFile);
-      console.log('[MMP Context] Loaded MMP files:', mapped.length, 'files');
-      if (mapped.length > 0) {
-        console.log('[MMP Context] First MMP:', { 
-          id: mapped[0].id, 
-          name: mapped[0].name, 
-          status: mapped[0].status,
-          workflow: mapped[0].workflow 
-        });
-      }
       setMMPFiles(mapped);
       setError(null); // Clear any previous errors on successful refresh
       if (!hasLoadedOnce) {
@@ -511,7 +491,7 @@ export const useMMPProvider = () => {
           try {
             const { data, error } = await supabase
               .from('mmp_site_entries')
-              .select('*')
+              .select('id, site_code, hub_office, state, locality, site_name, cp_name, visit_type, visit_date, main_activity, activity_at_site, monitoring_by, survey_tool, use_market_diversion, use_warehouse_monitoring, comments, cost, enumerator_fee, transport_fee, verified_by, verified_at, verification_notes, dispatched_by, dispatched_at, accepted_by, accepted_at, cost_acknowledged, additional_data, status, forwarded_to_user_id, mmp_file_id, created_at')
               .eq('mmp_file_id', mmpId)
               .order('created_at', { ascending: true });
 
