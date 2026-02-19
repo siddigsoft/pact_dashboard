@@ -510,6 +510,7 @@ const MMPSiteEntriesTable = ({
                                   displayStatus === 'accepted' ? 'bg-purple-100 text-purple-700' :
                                   displayStatus === 'dispatched' ? 'bg-indigo-100 text-indigo-700' :
                                   displayStatus === 'completed' ? 'bg-emerald-100 text-emerald-700' :
+                                  displayStatus === 'returned_to_fom' || displayStatus === 'returned' ? 'bg-orange-100 text-orange-700' :
                                   'bg-gray-100 text-gray-700'
                                 }
                               >
@@ -595,9 +596,21 @@ const MMPSiteEntriesTable = ({
                         )}
 
                         {row.status?.toLowerCase() === 'rejected' && row.rejectionComments && (
-                          <div className="bg-red-50 p-2 rounded border border-red-200">
-                            <span className="text-red-700 font-medium text-xs">Rejection: </span>
-                            <span className="text-sm text-gray-900 line-clamp-1">{row.rejectionComments}</span>
+                          <div className="bg-red-50 dark:bg-red-900/20 p-2 rounded border border-red-200 dark:border-red-800">
+                            <span className="text-red-700 dark:text-red-400 font-medium text-xs">Rejection Reason: </span>
+                            <span className="text-sm text-gray-900 dark:text-gray-300 line-clamp-1">{row.rejectionComments}</span>
+                          </div>
+                        )}
+
+                        {(row.status?.toLowerCase() === 'returned_to_fom' || row.status?.toLowerCase() === 'returned') && (row.verificationNotes || row.rejectionComments) && (
+                          <div className="bg-orange-50 dark:bg-orange-900/20 p-2 rounded border border-orange-200 dark:border-orange-800">
+                            <span className="text-orange-700 dark:text-orange-400 font-medium text-xs">Return Reason: </span>
+                            <span className="text-sm text-gray-900 dark:text-gray-300 line-clamp-2">{row.verificationNotes || row.rejectionComments}</span>
+                            {row.rejectedBy && (
+                              <span className="text-xs text-muted-foreground ml-2">
+                                - by {row.rejectedBy}{row.rejectedAt ? ` on ${new Date(row.rejectedAt).toLocaleDateString()}` : ''}
+                              </span>
+                            )}
                           </div>
                         )}
                       </div>

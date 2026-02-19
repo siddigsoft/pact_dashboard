@@ -1,15 +1,34 @@
 
 import React from 'react';
-import { CheckCircle, XCircle, AlertTriangle, Clock } from 'lucide-react';
+import { CheckCircle, XCircle, AlertTriangle, Clock, RotateCcw } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { MMPStatus } from '@/types';
 
 interface MMPStatusBadgeProps {
-  status: MMPStatus;
+  status: MMPStatus | string;
+  reason?: string;
 }
 
-export const MMPStatusBadge: React.FC<MMPStatusBadgeProps> = ({ status }) => {
+export const MMPStatusBadge: React.FC<MMPStatusBadgeProps> = ({ status, reason }) => {
   const getStatusConfig = () => {
+    const statusLower = (status || '').toLowerCase();
+    
+    if (statusLower === 'returned_to_fom' || statusLower === 'returned') {
+      return {
+        icon: <RotateCcw className="h-3 w-3 mr-1" />,
+        text: 'Returned',
+        variant: 'warning' as const
+      };
+    }
+    
+    if (statusLower === 'recalled') {
+      return {
+        icon: <RotateCcw className="h-3 w-3 mr-1" />,
+        text: 'Recalled',
+        variant: 'warning' as const
+      };
+    }
+    
     switch (status) {
       case 'verified':
         return {
@@ -54,9 +73,16 @@ export const MMPStatusBadge: React.FC<MMPStatusBadgeProps> = ({ status }) => {
   const { icon, text, variant } = getStatusConfig();
 
   return (
-    <Badge variant={variant} className="flex items-center">
-      {icon}
-      {text}
-    </Badge>
+    <div className="inline-flex flex-col items-start gap-0.5">
+      <Badge variant={variant} className="flex items-center">
+        {icon}
+        {text}
+      </Badge>
+      {reason && (
+        <p className="text-xs text-muted-foreground line-clamp-1 max-w-[200px]" title={reason}>
+          {reason}
+        </p>
+      )}
+    </div>
   );
 };
