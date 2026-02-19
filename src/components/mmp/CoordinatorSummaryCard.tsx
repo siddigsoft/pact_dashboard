@@ -1,11 +1,19 @@
 import { useMemo, useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Progress } from '@/components/ui/progress';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { Users, MapPin, ChevronDown, ChevronRight, CheckCircle2, AlertCircle, Clock } from 'lucide-react';
+import { Users, MapPin, ChevronDown, ChevronRight, CheckCircle2, AlertCircle, Clock, XCircle } from 'lucide-react';
 import { format } from 'date-fns';
 import { supabase } from '@/integrations/supabase/client';
+
+interface ReturnedSiteDetail {
+  id: string;
+  name: string;
+  status: string;
+  reason: string;
+  returnedBy: string;
+  returnedAt: string;
+}
 
 interface CoordinatorInfo {
   id: string;
@@ -16,6 +24,7 @@ interface CoordinatorInfo {
   sitesInProgress: number;
   sitesPending: number;
   receivedAt?: string;
+  returnedSiteDetails: ReturnedSiteDetail[];
 }
 
 interface StateCoordinatorGroup {
@@ -83,6 +92,16 @@ export default function CoordinatorSummaryCard({ siteEntries, mmpId }: Coordinat
         stateData.returnedSites++;
       }
 
+      const ad = entry.additional_data || entry.additionalData || {};
+      const returnedDetail: ReturnedSiteDetail | null = isReturned ? {
+        id: entry.id || '',
+        name: entry.site_name || entry.siteName || entry.site_code || 'Unknown',
+        status: entryStatus === 'rejected' ? 'Rejected' : 'Returned',
+        reason: entry.verification_notes || ad.rejection_comments || ad.rejection_reason || ad.return_reason || entry.rejection_comments || '',
+        returnedBy: entry.verified_by || ad.sent_back_by || entry.rejected_by || ad.rejected_by || '',
+        returnedAt: entry.verified_at || entry.rejected_at || ad.rejected_at || ad.sent_back_at || '',
+      } : null;
+
       if (coordId) {
         coordIds.add(coordId);
         const existingCoord = stateData.coordinators.find(c => c.id === coordId);
@@ -93,6 +112,7 @@ export default function CoordinatorSummaryCard({ siteEntries, mmpId }: Coordinat
           if (isReturned) existingCoord.sitesReturned++;
           if (isInProgress) existingCoord.sitesInProgress++;
           if (!isVerified && !isReturned && !isInProgress) existingCoord.sitesPending++;
+          if (returnedDetail) existingCoord.returnedSiteDetails.push(returnedDetail);
         } else {
           stateData.coordinators.push({ 
             id: coordId, 
@@ -103,6 +123,7 @@ export default function CoordinatorSummaryCard({ siteEntries, mmpId }: Coordinat
             sitesInProgress: isInProgress ? 1 : 0,
             sitesPending: (!isVerified && !isReturned && !isInProgress) ? 1 : 0,
             receivedAt: receivedAt,
+            returnedSiteDetails: returnedDetail ? [returnedDetail] : [],
           });
         }
       }
@@ -294,79 +315,117 @@ export default function CoordinatorSummaryCard({ siteEntries, mmpId }: Coordinat
                   {stateData.coordinators.map((coord) => (
                     <div 
                       key={coord.id}
-                      className="flex items-center justify-between gap-2 p-2 rounded-md bg-muted/50 text-sm"
+                      className="rounded-md bg-muted/50 text-sm"
                       data-testid={`coordinator-${coord.id}`}
                     >
-                      <div className="flex items-center gap-2 min-w-0">
-                        <div className="w-8 h-8 rounded-full bg-purple-200 dark:bg-purple-800 flex items-center justify-center flex-shrink-0">
-                          <Users className="h-4 w-4 text-purple-600 dark:text-purple-400" />
-                        </div>
-                        <div className="min-w-0">
-                          <p className="font-medium truncate">
-                            {coordinatorNames[coord.id] || coord.name}
-                          </p>
-                          {coord.receivedAt && (
-                            <p className="text-xs text-muted-foreground flex items-center gap-1">
-                              <Clock className="h-3 w-3" />
-                              {(() => {
-                                try {
-                                  const date = new Date(coord.receivedAt);
-                                  if (!isNaN(date.getTime())) {
-                                    return format(date, 'MMM d, yyyy');
-                                  }
-                                } catch {
-                                  return null;
-                                }
-                                return 'Date unavailable';
-                              })()}
+                      <div className="flex items-center justify-between gap-2 p-2">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <div className="w-8 h-8 rounded-full bg-purple-200 dark:bg-purple-800 flex items-center justify-center flex-shrink-0">
+                            <Users className="h-4 w-4 text-purple-600 dark:text-purple-400" />
+                          </div>
+                          <div className="min-w-0">
+                            <p className="font-medium truncate">
+                              {coordinatorNames[coord.id] || coord.name}
                             </p>
-                          )}
+                            {coord.receivedAt && (
+                              <p className="text-xs text-muted-foreground flex items-center gap-1">
+                                <Clock className="h-3 w-3" />
+                                {(() => {
+                                  try {
+                                    const date = new Date(coord.receivedAt);
+                                    if (!isNaN(date.getTime())) {
+                                      return format(date, 'MMM d, yyyy');
+                                    }
+                                  } catch {
+                                    return null;
+                                  }
+                                  return 'Date unavailable';
+                                })()}
+                              </p>
+                            )}
+                          </div>
                         </div>
-                      </div>
-                      <div className="flex items-center gap-3 flex-shrink-0">
-                        {coord.sitesReturned > 0 && (
+                        <div className="flex items-center gap-3 flex-shrink-0">
+                          {coord.sitesReturned > 0 && (
+                            <div className="text-right">
+                              <div className="flex items-center gap-1">
+                                <AlertCircle className="h-3.5 w-3.5 text-red-500" />
+                                <span className="text-sm font-medium text-red-600 dark:text-red-400">
+                                  {coord.sitesReturned}
+                                </span>
+                              </div>
+                              <span className="text-[10px] text-red-500 dark:text-red-400">returned</span>
+                            </div>
+                          )}
                           <div className="text-right">
                             <div className="flex items-center gap-1">
-                              <AlertCircle className="h-3.5 w-3.5 text-red-500" />
-                              <span className="text-sm font-medium text-red-600 dark:text-red-400">
-                                {coord.sitesReturned}
+                              {coord.sitesVerified === coord.sitesAssigned && coord.sitesAssigned > 0 ? (
+                                <CheckCircle2 className="h-4 w-4 text-green-600" />
+                              ) : coord.sitesReturned === coord.sitesAssigned && coord.sitesAssigned > 0 ? (
+                                <AlertCircle className="h-4 w-4 text-red-500" />
+                              ) : null}
+                              <span className={`text-sm font-medium ${
+                                coord.sitesVerified === coord.sitesAssigned && coord.sitesAssigned > 0
+                                  ? 'text-green-600 dark:text-green-400'
+                                  : coord.sitesReturned > 0 && coord.sitesVerified === 0
+                                    ? 'text-red-600 dark:text-red-400'
+                                    : ''
+                              }`}>
+                                {coord.sitesVerified}/{coord.sitesAssigned}
                               </span>
                             </div>
-                            <span className="text-[10px] text-red-500 dark:text-red-400">returned</span>
+                            <span className="text-xs text-muted-foreground">verified</span>
                           </div>
-                        )}
-                        <div className="text-right">
-                          <div className="flex items-center gap-1">
-                            {coord.sitesVerified === coord.sitesAssigned && coord.sitesAssigned > 0 ? (
-                              <CheckCircle2 className="h-4 w-4 text-green-600" />
-                            ) : coord.sitesReturned === coord.sitesAssigned && coord.sitesAssigned > 0 ? (
-                              <AlertCircle className="h-4 w-4 text-red-500" />
-                            ) : null}
-                            <span className={`text-sm font-medium ${
-                              coord.sitesVerified === coord.sitesAssigned && coord.sitesAssigned > 0
-                                ? 'text-green-600 dark:text-green-400'
-                                : coord.sitesReturned > 0 && coord.sitesVerified === 0
-                                  ? 'text-red-600 dark:text-red-400'
-                                  : ''
-                            }`}>
-                              {coord.sitesVerified}/{coord.sitesAssigned}
-                            </span>
-                          </div>
-                          <span className="text-xs text-muted-foreground">sites verified</span>
-                        </div>
-                        <div className="w-12">
-                          <div className="flex h-1.5 rounded-full overflow-hidden bg-muted">
-                            <div 
-                              className="bg-green-500 transition-all" 
-                              style={{ width: `${coord.sitesAssigned > 0 ? (coord.sitesVerified / coord.sitesAssigned) * 100 : 0}%` }} 
-                            />
-                            <div 
-                              className="bg-red-500 transition-all" 
-                              style={{ width: `${coord.sitesAssigned > 0 ? (coord.sitesReturned / coord.sitesAssigned) * 100 : 0}%` }} 
-                            />
+                          <div className="w-12">
+                            <div className="flex h-1.5 rounded-full overflow-hidden bg-muted">
+                              <div 
+                                className="bg-green-500 transition-all" 
+                                style={{ width: `${coord.sitesAssigned > 0 ? (coord.sitesVerified / coord.sitesAssigned) * 100 : 0}%` }} 
+                              />
+                              <div 
+                                className="bg-red-500 transition-all" 
+                                style={{ width: `${coord.sitesAssigned > 0 ? (coord.sitesReturned / coord.sitesAssigned) * 100 : 0}%` }} 
+                              />
+                            </div>
                           </div>
                         </div>
                       </div>
+                      {coord.returnedSiteDetails.length > 0 && (
+                        <div className="px-2 pb-2 pt-0">
+                          <div className="border-t border-red-200 dark:border-red-900/50 pt-2 mt-1 space-y-1.5">
+                            {coord.returnedSiteDetails.map((site, idx) => (
+                              <div key={site.id || idx} className="flex items-start gap-2 p-1.5 rounded bg-red-50/80 dark:bg-red-900/20 border border-red-100 dark:border-red-900/40">
+                                <XCircle className="h-3.5 w-3.5 text-red-500 flex-shrink-0 mt-0.5" />
+                                <div className="min-w-0 flex-1">
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <span className="text-xs font-medium">{site.name}</span>
+                                    <Badge variant="secondary" className={`text-[10px] px-1.5 py-0 ${site.status === 'Rejected' ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' : 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400'}`}>
+                                      {site.status}
+                                    </Badge>
+                                  </div>
+                                  {site.reason && (
+                                    <p className="text-[11px] text-muted-foreground mt-0.5 line-clamp-2">
+                                      {site.reason}
+                                    </p>
+                                  )}
+                                  {(site.returnedBy || site.returnedAt) && (
+                                    <p className="text-[10px] text-muted-foreground mt-0.5">
+                                      {site.returnedBy && <>By: {site.returnedBy}</>}
+                                      {site.returnedAt && (() => {
+                                        try {
+                                          const d = new Date(site.returnedAt);
+                                          if (!isNaN(d.getTime())) return <> on {format(d, 'MMM d, yyyy')}</>;
+                                        } catch { /* ignore */ }
+                                        return null;
+                                      })()}
+                                    </p>
+                                  )}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>

@@ -9,7 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { 
-  Search, ArrowLeft, CheckCircle, XCircle, Download, 
+  Search, ArrowLeft, CheckCircle, Download, 
   FileSpreadsheet as FileSpreadsheetIcon, Upload, Calendar, Wrench, AlertTriangle,
   Archive, Trash2, History, Shield, Eye, RefreshCw, FileCheck, Edit, Send,
   MapPin, Users, Clock, BarChart3, FileText
@@ -484,78 +484,27 @@ const MMPDetailView = () => {
         </Card>
       </div>
 
-      {/* Return/Recall Information Banner */}
-      {(recallInfo.wasRecalled || returnedSitesInfo.length > 0) && (
+      {/* Recall Information Banner */}
+      {recallInfo.wasRecalled && (
         <Card className="shadow-md bg-gradient-to-r from-orange-50/80 to-amber-50/50 dark:from-orange-900/20 dark:to-amber-900/10 border-orange-200 dark:border-orange-800" data-testid="card-return-recall-info">
-          <CardContent className="p-4 space-y-3">
-            {recallInfo.wasRecalled && (
-              <div className="flex items-start gap-3">
-                <div className="w-8 h-8 rounded-full bg-orange-200/50 dark:bg-orange-800/50 flex items-center justify-center flex-shrink-0 mt-0.5">
-                  <AlertTriangle className="h-4 w-4 text-orange-600 dark:text-orange-400" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-orange-800 dark:text-orange-300">MMP Recalled</p>
-                  {recallInfo.reason && (
-                    <p className="text-sm text-orange-700 dark:text-orange-400 mt-0.5">
-                      Reason: {recallInfo.reason}
-                    </p>
-                  )}
-                  <p className="text-xs text-muted-foreground mt-1">
-                    {recallInfo.recalledBy && <>By: {recallInfo.recalledBy}</>}
-                    {recallInfo.recalledAt && <> on {format(new Date(recallInfo.recalledAt), 'MMM d, yyyy HH:mm')}</>}
-                  </p>
-                </div>
+          <CardContent className="p-4">
+            <div className="flex items-start gap-3">
+              <div className="w-8 h-8 rounded-full bg-orange-200/50 dark:bg-orange-800/50 flex items-center justify-center flex-shrink-0 mt-0.5">
+                <AlertTriangle className="h-4 w-4 text-orange-600 dark:text-orange-400" />
               </div>
-            )}
-
-            {returnedSitesInfo.length > 0 && (
-              <div className="flex items-start gap-3">
-                <div className="w-8 h-8 rounded-full bg-orange-200/50 dark:bg-orange-800/50 flex items-center justify-center flex-shrink-0 mt-0.5">
-                  <XCircle className="h-4 w-4 text-orange-600 dark:text-orange-400" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-orange-800 dark:text-orange-300">
-                    {returnedSitesInfo.length} Site{returnedSitesInfo.length > 1 ? 's' : ''} Returned / Rejected
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold text-orange-800 dark:text-orange-300">MMP Recalled</p>
+                {recallInfo.reason && (
+                  <p className="text-sm text-orange-700 dark:text-orange-400 mt-0.5">
+                    Reason: {recallInfo.reason}
                   </p>
-                  <div className="mt-2 space-y-1.5 max-h-40 overflow-y-auto">
-                    {returnedSitesInfo.slice(0, 10).map((site: any, idx: number) => {
-                      const ad = site.additional_data || {};
-                      const reason = site.verification_notes || ad.rejection_comments || ad.rejection_reason || ad.return_reason || site.rejection_comments || '';
-                      const returnedBy = site.verified_by || ad.sent_back_by || site.rejected_by || ad.rejected_by || '';
-                      const returnedAt = site.verified_at || site.rejected_at || ad.rejected_at || ad.sent_back_at || '';
-                      const name = site.site_name || site.siteName || site.site_code || 'Unknown';
-                      const st = (site.status || '').toLowerCase();
-                      return (
-                        <div key={site.id || idx} className="bg-white/60 dark:bg-white/5 rounded p-2 border border-orange-100 dark:border-orange-900/50">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className="text-xs font-medium text-foreground">{name}</span>
-                            <Badge className={st === 'rejected' ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' : 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400'} variant="secondary">
-                              {st === 'rejected' ? 'Rejected' : 'Returned'}
-                            </Badge>
-                          </div>
-                          {reason && (
-                            <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
-                              Reason: {reason}
-                            </p>
-                          )}
-                          {(returnedBy || returnedAt) && (
-                            <p className="text-xs text-muted-foreground mt-0.5">
-                              {returnedBy && <>By: {returnedBy}</>}
-                              {returnedAt && <> on {format(new Date(returnedAt), 'MMM d, yyyy')}</>}
-                            </p>
-                          )}
-                        </div>
-                      );
-                    })}
-                    {returnedSitesInfo.length > 10 && (
-                      <p className="text-xs text-muted-foreground text-center pt-1">
-                        and {returnedSitesInfo.length - 10} more...
-                      </p>
-                    )}
-                  </div>
-                </div>
+                )}
+                <p className="text-xs text-muted-foreground mt-1">
+                  {recallInfo.recalledBy && <>By: {recallInfo.recalledBy}</>}
+                  {recallInfo.recalledAt && <> on {format(new Date(recallInfo.recalledAt), 'MMM d, yyyy HH:mm')}</>}
+                </p>
               </div>
-            )}
+            </div>
           </CardContent>
         </Card>
       )}
