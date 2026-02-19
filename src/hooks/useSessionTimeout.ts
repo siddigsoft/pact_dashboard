@@ -80,7 +80,7 @@ export const useSessionTimeout = (config: Partial<SessionTimeoutConfig> = {}) =>
       if (finalConfig.logout) {
         await finalConfig.logout();
       } else {
-        await supabase.auth.signOut();
+        await supabase.auth.signOut({ scope: 'local' });
         clearAllAuthData();
       }
       toast.success('You have been logged out due to inactivity.');

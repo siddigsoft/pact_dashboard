@@ -41,7 +41,7 @@ The frontend is built with React 18, TypeScript, Tailwind CSS v3, and Shadcn UI,
 *   **Notification System:** A robust system integrating `NotificationTriggerService` with Supabase Realtime for in-app bell dropdown notifications, WhatsApp-style toasts, and persistent notifications. Email notifications are handled by `EmailNotificationService` via IONOS SMTP with bilingual templates, and a `NotificationDigestService` generates daily/weekly email summaries. Specialized services like `BudgetNotificationService` and `CoverageGapNotificationService` provide domain-specific alerts. Notifications are categorized, grouped, support quick actions, and feature browser badge updates. Read receipts and auto-cleanup mechanisms are implemented.
 
 ### System Design Choices
-The project utilizes a unified Supabase client for all interactions, ensuring consistent authentication and session management. It integrates the complete Sudan administrative structure.
+The project utilizes a unified Supabase client for all interactions, ensuring consistent authentication and session management. It integrates the complete Sudan administrative structure. Multiple concurrent sessions are supported for the same user across devices/browsers — all `signOut()` calls use `scope: 'local'` to only end the current session without invalidating sessions on other devices.
 
 ## External Dependencies
 *   **Supabase:** PostgreSQL database, Authentication, Realtime, Storage, Row Level Security.

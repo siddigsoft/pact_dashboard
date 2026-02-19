@@ -316,7 +316,7 @@ export function MobileAuthScreen({ onAuthSuccess }: MobileAuthScreenProps) {
   };
 
   const handleMFACancel = async () => {
-    await supabase.auth.signOut();
+    await supabase.auth.signOut({ scope: 'local' });
     setShowMFAChallenge(false);
     setPendingCredentials(null);
     hapticPresets.buttonPress();

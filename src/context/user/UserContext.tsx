@@ -494,7 +494,7 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
           title: i18n.t('notifications.auth.pendingApproval'),
           description: i18n.t('notifications.auth.pendingApprovalDesc'),
         });
-        await supabase.auth.signOut();
+        await supabase.auth.signOut({ scope: 'local' });
         return false;
       }
 
@@ -820,7 +820,7 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
             title: i18n.t('notifications.auth.pendingApproval'),
             description: i18n.t('notifications.auth.pendingApprovalDesc'),
           });
-          await supabase.auth.signOut();
+          await supabase.auth.signOut({ scope: 'local' });
           return false;
         }
         
@@ -906,7 +906,8 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
       localStorage.removeItem('PACTCurrentUser');
 
       // Then sign out from Supabase (network async)
-      await supabase.auth.signOut();
+      // Use scope: 'local' to only end this session, not all sessions for the user
+      await supabase.auth.signOut({ scope: 'local' });
       
       toast({
         title: "Logout successful",

@@ -481,7 +481,7 @@ const AuthForm = ({ mode }: AuthFormProps) => {
   };
 
   const handleMFACancel = async () => {
-    await supabase.auth.signOut();
+    await supabase.auth.signOut({ scope: 'local' });
     setShowMFAChallenge(false);
     setPendingLoginEmail('');
     setPendingLoginPassword('');
