@@ -4116,10 +4116,10 @@ const MMP = () => {
       return allVerifiedMMPs.filter(mmp => mmpIdsWithVerifiedSites.has(mmp.id));
     }
     
-    return (isAdmin || isICT || isFOM || isSupervisor || isCoordinator)
+    return (isAdmin || isICT || isFOM || isSupervisor || isCoordinator || isDataTeam)
       ? (verifiedSubcategories[verifiedSubTab] || [])
       : (categorizedMMPs.verified || []);
-  }, [isAdmin, isICT, isFOM, isSupervisor, isCoordinator, verifiedSubTab, verifiedSubcategories, categorizedMMPs.verified, filteredVerifiedCategorySiteRows]);
+  }, [isAdmin, isICT, isFOM, isSupervisor, isCoordinator, isDataTeam, verifiedSubTab, verifiedSubcategories, categorizedMMPs.verified, filteredVerifiedCategorySiteRows]);
 
   const verifiedGroupedRows = useMemo(() => {
     // Group the precomputed site rows by MMP (using filtered data)
@@ -4144,7 +4144,7 @@ const MMP = () => {
 
   // Aggregated site entries (raw MMP.siteEntries) for Forwarded section
   const forwardedEntries = useMemo(() => {
-    const mmps = (isAdmin || isICT || isFOM || isSupervisor) ? (forwardedSubcategories[forwardedSubTab] || []) : (categorizedMMPs.forwarded || []);
+    const mmps = (isAdmin || isICT || isFOM || isSupervisor || isDataTeam) ? (forwardedSubcategories[forwardedSubTab] || []) : (categorizedMMPs.forwarded || []);
     const entries: any[] = [];
     for (const m of mmps) {
       const list = (m as any).siteEntries || [];
@@ -4160,18 +4160,18 @@ const MMP = () => {
       }
     }
     return entries;
-  }, [isAdmin, isICT, isFOM, isSupervisor, forwardedSubTab, forwardedSubcategories, categorizedMMPs.forwarded]);
+  }, [isAdmin, isICT, isFOM, isSupervisor, isDataTeam, forwardedSubTab, forwardedSubcategories, categorizedMMPs.forwarded]);
 
   // Derive site visit stats from context (Admin/ICT/FOM/Supervisor/Coordinator)
   const { siteVisitStats: derivedStats, siteVisitRows: derivedRows } = useMemo(() => {
-    if (!(isAdmin || isICT || isFOM || isSupervisor || isCoordinator)) {
+    if (!(isAdmin || isICT || isFOM || isSupervisor || isCoordinator || isDataTeam)) {
       return { siteVisitStats: {}, siteVisitRows: [] };
     }
     
     let list: any[] = [];
     if (isFOM || isSupervisor) {
       list = [ ...(categorizedMMPs.verified || []), ...(categorizedMMPs.forwarded || []) ];
-    } else if (isAdmin || isICT || isCoordinator) {
+    } else if (isAdmin || isICT || isCoordinator || isDataTeam) {
       list = [ ...(categorizedMMPs.verified || []) ];
     }
     if (list.length === 0) {
@@ -4739,7 +4739,7 @@ const MMP = () => {
                     </CardContent>
                   </Card>
                 ) : (
-                  <MMPList mmpFiles={(isAdmin || isICT || isFOM || isSupervisor) ? forwardedSubcategories[forwardedSubTab] : categorizedMMPs.forwarded} />
+                  <MMPList mmpFiles={(isAdmin || isICT || isFOM || isSupervisor || isDataTeam) ? forwardedSubcategories[forwardedSubTab] : categorizedMMPs.forwarded} />
                 )}
                 {(isFOM || isSupervisor) && (
                   <SitesDisplayTable 
@@ -4753,7 +4753,7 @@ const MMP = () => {
 
             <TabsContent value="verified">
               {/* Global Site Entry Filters - above subcategory tabs */}
-              {(isAdmin || isICT || isFOM || isCoordinator || isSupervisor) && (
+              {(isAdmin || isICT || isFOM || isCoordinator || isSupervisor || isDataTeam) && (
                 <Card className="mb-4">
                   <CardContent className="py-3">
                     <div className="flex flex-wrap items-center gap-3">
@@ -4988,7 +4988,7 @@ const MMP = () => {
                   <MMPList mmpFiles={verifiedVisibleMMPs} />
                 )
               )}
-              {(isAdminOrSuperUser || isAdmin || isICT || isFOM || isSupervisor || isCoordinator) && verifiedSubTab === 'newSites' && (
+              {(isAdminOrSuperUser || isAdmin || isICT || isFOM || isSupervisor || isCoordinator || isDataTeam) && verifiedSubTab === 'newSites' && (
                 <>
                   {(isAdminOrSuperUser || isAdmin || isICT) && filteredVerifiedCategorySiteRows.length > 0 && (
                     <div className="mb-4">
@@ -5206,7 +5206,7 @@ const MMP = () => {
                   />
                 </>
               )}
-              {(isAdmin || isICT || isFOM || isSupervisor || isCoordinator) && verifiedSubTab === 'approvedCosted' && (
+              {(isAdmin || isICT || isFOM || isSupervisor || isCoordinator || isDataTeam) && verifiedSubTab === 'approvedCosted' && (
                 <div className="mt-6">
                   {loadingApprovedCosted ? (
                     <Card>
@@ -5385,7 +5385,7 @@ const MMP = () => {
                   )}
                 </div>
               )}
-              {(isAdmin || isICT || isFOM || isSupervisor || isCoordinator) && verifiedSubTab === 'dispatched' && (
+              {(isAdmin || isICT || isFOM || isSupervisor || isCoordinator || isDataTeam) && verifiedSubTab === 'dispatched' && (
                 <div className="mt-6">
                   {loadingDispatched ? (
                     <Card>
@@ -5465,7 +5465,7 @@ const MMP = () => {
                   )}
                 </div>
               )}
-              {(isAdmin || isICT || isFOM || isSupervisor) && verifiedSubTab === 'smartAssigned' && (
+              {(isAdmin || isICT || isFOM || isSupervisor || isDataTeam) && verifiedSubTab === 'smartAssigned' && (
                 <div className="mt-6">
                   {loadingSmartAssigned ? (
                     <Card>
@@ -5493,7 +5493,7 @@ const MMP = () => {
                   )}
                 </div>
               )}
-              {(isAdmin || isICT || isFOM || isSupervisor || isCoordinator) && verifiedSubTab === 'accepted' && (
+              {(isAdmin || isICT || isFOM || isSupervisor || isCoordinator || isDataTeam) && verifiedSubTab === 'accepted' && (
                 <div className="mt-6">
                   {loadingAccepted ? (
                     <Card>
@@ -5521,7 +5521,7 @@ const MMP = () => {
                   )}
                 </div>
               )}
-              {(isAdmin || isICT || isFOM || isSupervisor || isCoordinator) && verifiedSubTab === 'ongoing' && (
+              {(isAdmin || isICT || isFOM || isSupervisor || isCoordinator || isDataTeam) && verifiedSubTab === 'ongoing' && (
                 <div className="mt-6">
                   {loadingOngoing ? (
                     <Card>
@@ -5549,7 +5549,7 @@ const MMP = () => {
                   )}
                 </div>
               )}
-              {(isAdmin || isICT || isFOM || isSupervisor || isCoordinator) && verifiedSubTab === 'completed' && (
+              {(isAdmin || isICT || isFOM || isSupervisor || isCoordinator || isDataTeam) && verifiedSubTab === 'completed' && (
                 <div className="mt-6">
                   {loadingCompleted ? (
                     <Card>
@@ -5577,7 +5577,7 @@ const MMP = () => {
                   )}
                 </div>
               )}
-              {(isAdmin || isICT || isFOM || isSupervisor || isCoordinator) && verifiedSubTab === 'rejected' && (
+              {(isAdmin || isICT || isFOM || isSupervisor || isCoordinator || isDataTeam) && verifiedSubTab === 'rejected' && (
                 <div className="mt-6">
                   {loadingRejected ? (
                     <Card>
@@ -5605,7 +5605,7 @@ const MMP = () => {
                   )}
                 </div>
               )}
-              {(isAdmin || isICT || isFOM || isSupervisor || isCoordinator) && verifiedSubTab !== 'newSites' && verifiedSubTab !== 'approvedCosted' && verifiedSubTab !== 'dispatched' && verifiedSubTab !== 'accepted' && verifiedSubTab !== 'ongoing' && verifiedSubTab !== 'completed' && verifiedSubTab !== 'rejected' && (
+              {(isAdmin || isICT || isFOM || isSupervisor || isCoordinator || isDataTeam) && verifiedSubTab !== 'newSites' && verifiedSubTab !== 'approvedCosted' && verifiedSubTab !== 'dispatched' && verifiedSubTab !== 'accepted' && verifiedSubTab !== 'ongoing' && verifiedSubTab !== 'completed' && verifiedSubTab !== 'rejected' && (
                 <div className="mt-6">
                   <div className="flex items-center justify-between mb-2">
                     <h3 className="text-lg font-semibold">Sites by MMP</h3>
