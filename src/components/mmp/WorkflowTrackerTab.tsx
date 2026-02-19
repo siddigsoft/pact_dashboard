@@ -31,6 +31,8 @@ interface LocalityBreakdown {
   verifiedSites: number;
   pendingSites: number;
   dispatchedSites: number;
+  returnedSites: number;
+  rejectedSites: number;
   percentage: number;
   sites: SiteDetail[];
 }
@@ -41,18 +43,24 @@ interface StateBreakdown {
   verifiedSites: number;
   pendingSites: number;
   dispatchedSites: number;
-  status: 'pending' | 'in_progress' | 'verified' | 'completed';
+  returnedSites: number;
+  rejectedSites: number;
+  status: 'pending' | 'in_progress' | 'verified' | 'completed' | 'returned' | 'rejected';
   coordinators: { id: string; name: string }[];
   percentage: number;
   localities: LocalityBreakdown[];
 }
 
-const verifiedStatuses = ['verified', 'approved', 'approved and costed', 'dispatched', 'completed'];
-const inProgressStatuses = ['in_progress', 'accepted'];
+const verifiedStatuses = ['verified', 'approved', 'approved and costed', 'costed', 'dispatched', 'completed'];
+const inProgressStatuses = ['in_progress', 'accepted', 'forwarded', 'forwarded_to_fom', 'forwarded_to_coordinator', 'forwarded_to_coordinators'];
+const returnedStatuses = ['returned_to_fom', 'returned', 'recalled', 'sent_back', 'sent_back_to_fom'];
+const rejectedStatuses = ['rejected'];
 
-function classifySiteStatus(status: string): 'verified' | 'dispatched' | 'pending' {
+function classifySiteStatus(status: string): 'verified' | 'dispatched' | 'returned' | 'rejected' | 'pending' {
   const s = status.toLowerCase();
   if (verifiedStatuses.includes(s)) return 'verified';
+  if (returnedStatuses.includes(s)) return 'returned';
+  if (rejectedStatuses.includes(s)) return 'rejected';
   if (inProgressStatuses.includes(s)) return 'dispatched';
   return 'pending';
 }
@@ -109,6 +117,8 @@ function getStateBreakdown(mmp: any, coordNameLookup?: Map<string, string>): Sta
         verifiedSites: 0,
         pendingSites: 0,
         dispatchedSites: 0,
+        returnedSites: 0,
+        rejectedSites: 0,
         status: 'pending',
         coordinators: [],
         percentage: 0,
@@ -123,6 +133,8 @@ function getStateBreakdown(mmp: any, coordNameLookup?: Map<string, string>): Sta
         verifiedSites: 0,
         pendingSites: 0,
         dispatchedSites: 0,
+        returnedSites: 0,
+        rejectedSites: 0,
         percentage: 0,
         sites: [],
       });
@@ -137,6 +149,12 @@ function getStateBreakdown(mmp: any, coordNameLookup?: Map<string, string>): Sta
     if (classification === 'verified') {
       stateData.verifiedSites++;
       locData.verifiedSites++;
+    } else if (classification === 'returned') {
+      stateData.returnedSites++;
+      locData.returnedSites++;
+    } else if (classification === 'rejected') {
+      stateData.rejectedSites++;
+      locData.rejectedSites++;
     } else if (classification === 'dispatched') {
       stateData.dispatchedSites++;
       locData.dispatchedSites++;
@@ -170,6 +188,10 @@ function getStateBreakdown(mmp: any, coordNameLookup?: Map<string, string>): Sta
       data.status = 'completed';
     } else if (data.verifiedSites > 0) {
       data.status = 'verified';
+    } else if (data.rejectedSites > 0) {
+      data.status = 'rejected';
+    } else if (data.returnedSites > 0) {
+      data.status = 'returned';
     } else if (data.dispatchedSites > 0) {
       data.status = 'in_progress';
     } else {
@@ -186,8 +208,8 @@ function getSiteStatusBadgeClass(status: string): string {
   const s = status.toLowerCase();
   if (verifiedStatuses.includes(s)) return 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300';
   if (inProgressStatuses.includes(s)) return 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300';
-  if (s === 'returned_to_fom' || s === 'returned') return 'bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300';
-  if (s === 'rejected') return 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300';
+  if (returnedStatuses.includes(s)) return 'bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300';
+  if (rejectedStatuses.includes(s)) return 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300';
   return 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300';
 }
 
@@ -209,7 +231,24 @@ function LocalitySitesSection({ locality }: { locality: LocalityBreakdown }) {
           <span className="text-xs text-muted-foreground">
             {locality.verifiedSites}/{locality.totalSites} verified
           </span>
-          <Progress value={locality.percentage} className="w-16 h-1" />
+          <div className="w-16 h-1 bg-muted rounded-full overflow-hidden flex">
+            {locality.totalSites > 0 && (
+              <>
+                {locality.verifiedSites > 0 && (
+                  <div className="h-full bg-green-500 dark:bg-green-400" style={{ width: `${(locality.verifiedSites / locality.totalSites) * 100}%` }} />
+                )}
+                {locality.dispatchedSites > 0 && (
+                  <div className="h-full bg-blue-500 dark:bg-blue-400" style={{ width: `${(locality.dispatchedSites / locality.totalSites) * 100}%` }} />
+                )}
+                {locality.returnedSites > 0 && (
+                  <div className="h-full bg-orange-500 dark:bg-orange-400" style={{ width: `${(locality.returnedSites / locality.totalSites) * 100}%` }} />
+                )}
+                {locality.rejectedSites > 0 && (
+                  <div className="h-full bg-red-500 dark:bg-red-400" style={{ width: `${(locality.rejectedSites / locality.totalSites) * 100}%` }} />
+                )}
+              </>
+            )}
+          </div>
         </div>
       </button>
       
@@ -229,8 +268,10 @@ function LocalitySitesSection({ locality }: { locality: LocalityBreakdown }) {
                 <div className="mt-0.5">
                   {isVerified ? (
                     <CheckCircle2 className="h-3.5 w-3.5 text-green-600 dark:text-green-400" />
-                  ) : statusLower === 'rejected' || statusLower === 'returned_to_fom' || statusLower === 'returned' ? (
-                    <AlertCircle className="h-3.5 w-3.5 text-orange-500" />
+                  ) : statusLower === 'rejected' ? (
+                    <AlertCircle className="h-3.5 w-3.5 text-red-500" />
+                  ) : returnedStatuses.includes(statusLower) ? (
+                    <RotateCcw className="h-3.5 w-3.5 text-orange-500" />
                   ) : (
                     <Clock className="h-3.5 w-3.5 text-muted-foreground" />
                   )}
@@ -307,6 +348,8 @@ function StateBreakdownSection({ breakdowns }: { breakdowns: StateBreakdown[] })
     in_progress: 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300',
     verified: 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300',
     completed: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900 dark:text-emerald-300',
+    returned: 'bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-300',
+    rejected: 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300',
   };
 
   const statusLabels: Record<string, string> = {
@@ -314,6 +357,8 @@ function StateBreakdownSection({ breakdowns }: { breakdowns: StateBreakdown[] })
     in_progress: 'In Progress',
     verified: 'Verified',
     completed: 'Completed',
+    returned: 'Returned',
+    rejected: 'Rejected',
   };
 
   return (
@@ -344,7 +389,40 @@ function StateBreakdownSection({ breakdowns }: { breakdowns: StateBreakdown[] })
               </div>
               
               <div className="flex items-center gap-2 mb-2">
-                <Progress value={stateData.percentage} className="flex-1 h-1.5" />
+                <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden flex">
+                  {stateData.totalSites > 0 && (
+                    <>
+                      {stateData.verifiedSites > 0 && (
+                        <div
+                          className="h-full bg-green-500 dark:bg-green-400"
+                          style={{ width: `${(stateData.verifiedSites / stateData.totalSites) * 100}%` }}
+                          title={`${stateData.verifiedSites} verified`}
+                        />
+                      )}
+                      {stateData.dispatchedSites > 0 && (
+                        <div
+                          className="h-full bg-blue-500 dark:bg-blue-400"
+                          style={{ width: `${(stateData.dispatchedSites / stateData.totalSites) * 100}%` }}
+                          title={`${stateData.dispatchedSites} in progress`}
+                        />
+                      )}
+                      {stateData.returnedSites > 0 && (
+                        <div
+                          className="h-full bg-orange-500 dark:bg-orange-400"
+                          style={{ width: `${(stateData.returnedSites / stateData.totalSites) * 100}%` }}
+                          title={`${stateData.returnedSites} returned`}
+                        />
+                      )}
+                      {stateData.rejectedSites > 0 && (
+                        <div
+                          className="h-full bg-red-500 dark:bg-red-400"
+                          style={{ width: `${(stateData.rejectedSites / stateData.totalSites) * 100}%` }}
+                          title={`${stateData.rejectedSites} rejected`}
+                        />
+                      )}
+                    </>
+                  )}
+                </div>
                 <span className="text-xs text-muted-foreground w-20 text-right">
                   {stateData.verifiedSites}/{stateData.totalSites} verified
                 </span>
@@ -361,7 +439,17 @@ function StateBreakdownSection({ breakdowns }: { breakdowns: StateBreakdown[] })
                 )}
                 {stateData.dispatchedSites > 0 && (
                   <Badge variant="outline" className="text-xs py-0 border-blue-300 text-blue-700 dark:border-blue-700 dark:text-blue-300">
-                    {stateData.dispatchedSites} dispatched
+                    {stateData.dispatchedSites} in progress
+                  </Badge>
+                )}
+                {stateData.returnedSites > 0 && (
+                  <Badge variant="outline" className="text-xs py-0 border-orange-300 text-orange-700 dark:border-orange-700 dark:text-orange-300">
+                    {stateData.returnedSites} returned
+                  </Badge>
+                )}
+                {stateData.rejectedSites > 0 && (
+                  <Badge variant="outline" className="text-xs py-0 border-red-300 text-red-700 dark:border-red-700 dark:text-red-300">
+                    {stateData.rejectedSites} rejected
                   </Badge>
                 )}
                 {stateData.verifiedSites > 0 && (
