@@ -12,6 +12,9 @@ interface CoordinatorInfo {
   name: string;
   sitesAssigned: number;
   sitesVerified: number;
+  sitesReturned: number;
+  sitesInProgress: number;
+  sitesPending: number;
   receivedAt?: string;
 }
 
@@ -20,6 +23,7 @@ interface StateCoordinatorGroup {
   coordinators: CoordinatorInfo[];
   totalSites: number;
   verifiedSites: number;
+  returnedSites: number;
 }
 
 interface CoordinatorSummaryCardProps {
@@ -37,6 +41,10 @@ export default function CoordinatorSummaryCard({ siteEntries, mmpId }: Coordinat
     const stateMap = new Map<string, StateCoordinatorGroup>();
     const coordIds = new Set<string>();
 
+    const verifiedStatuses = ['verified', 'approved', 'approved and costed', 'dispatched', 'completed'];
+    const returnedStatuses = ['returned_to_fom', 'returned', 'rejected', 'recalled', 'sent_back'];
+    const inProgressStatuses = ['in_progress', 'accepted'];
+
     siteEntries.forEach((entry: any) => {
       const stateName = entry.state || entry.stateName || 'Unknown State';
       
@@ -46,6 +54,7 @@ export default function CoordinatorSummaryCard({ siteEntries, mmpId }: Coordinat
           coordinators: [],
           totalSites: 0,
           verifiedSites: 0,
+          returnedSites: 0,
         });
       }
 
@@ -63,10 +72,15 @@ export default function CoordinatorSummaryCard({ siteEntries, mmpId }: Coordinat
       const receivedAt = entry.forwarded_at || entry.forwardedAt || entry.dispatched_at || entry.dispatchedAt;
       
       const entryStatus = (entry.status || '').toLowerCase();
-      const isVerified = ['verified', 'approved', 'approved and costed', 'dispatched', 'completed'].includes(entryStatus);
+      const isVerified = verifiedStatuses.includes(entryStatus);
+      const isReturned = returnedStatuses.includes(entryStatus);
+      const isInProgress = inProgressStatuses.includes(entryStatus);
       
       if (isVerified) {
         stateData.verifiedSites++;
+      }
+      if (isReturned) {
+        stateData.returnedSites++;
       }
 
       if (coordId) {
@@ -76,12 +90,18 @@ export default function CoordinatorSummaryCard({ siteEntries, mmpId }: Coordinat
         if (existingCoord) {
           existingCoord.sitesAssigned++;
           if (isVerified) existingCoord.sitesVerified++;
+          if (isReturned) existingCoord.sitesReturned++;
+          if (isInProgress) existingCoord.sitesInProgress++;
+          if (!isVerified && !isReturned && !isInProgress) existingCoord.sitesPending++;
         } else {
           stateData.coordinators.push({ 
             id: coordId, 
             name: coordName || coordinatorNames[coordId] || coordId.substring(0, 8),
             sitesAssigned: 1,
             sitesVerified: isVerified ? 1 : 0,
+            sitesReturned: isReturned ? 1 : 0,
+            sitesInProgress: isInProgress ? 1 : 0,
+            sitesPending: (!isVerified && !isReturned && !isInProgress) ? 1 : 0,
             receivedAt: receivedAt,
           });
         }
@@ -145,6 +165,11 @@ export default function CoordinatorSummaryCard({ siteEntries, mmpId }: Coordinat
       sum + state.coordinators.reduce((s, c) => s + c.sitesVerified, 0), 0);
   }, [coordinatorsByState]);
 
+  const totalReturned = useMemo(() => {
+    return coordinatorsByState.reduce((sum, state) => 
+      sum + state.coordinators.reduce((s, c) => s + c.sitesReturned, 0), 0);
+  }, [coordinatorsByState]);
+
   if (coordinatorsByState.length === 0) {
     return (
       <Card className="bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-900/30 dark:to-slate-800/20 border-slate-200 dark:border-slate-800">
@@ -181,7 +206,7 @@ export default function CoordinatorSummaryCard({ siteEntries, mmpId }: Coordinat
             </Badge>
           </div>
         </div>
-        <div className="flex items-center gap-4 mt-2 text-sm">
+        <div className="flex items-center gap-4 mt-2 text-sm flex-wrap">
           <div className="flex items-center gap-1">
             <div className="w-2 h-2 rounded-full bg-blue-500" />
             <span className="text-muted-foreground">{totalAssigned} assigned</span>
@@ -190,10 +215,28 @@ export default function CoordinatorSummaryCard({ siteEntries, mmpId }: Coordinat
             <div className="w-2 h-2 rounded-full bg-green-500" />
             <span className="text-muted-foreground">{totalVerified} verified</span>
           </div>
-          <Progress 
-            value={totalAssigned > 0 ? (totalVerified / totalAssigned) * 100 : 0} 
-            className="flex-1 h-2 max-w-[100px]" 
-          />
+          {totalReturned > 0 && (
+            <div className="flex items-center gap-1">
+              <div className="w-2 h-2 rounded-full bg-red-500" />
+              <span className="text-muted-foreground">{totalReturned} returned</span>
+            </div>
+          )}
+          <div className="flex-1 min-w-[80px] max-w-[120px]">
+            <div className="flex h-2 rounded-full overflow-hidden bg-muted">
+              {totalAssigned > 0 && (
+                <>
+                  <div 
+                    className="bg-green-500 transition-all" 
+                    style={{ width: `${(totalVerified / totalAssigned) * 100}%` }} 
+                  />
+                  <div 
+                    className="bg-red-500 transition-all" 
+                    style={{ width: `${(totalReturned / totalAssigned) * 100}%` }} 
+                  />
+                </>
+              )}
+            </div>
+          </div>
         </div>
       </CardHeader>
       <CardContent className="pt-2">
@@ -221,16 +264,31 @@ export default function CoordinatorSummaryCard({ siteEntries, mmpId }: Coordinat
                     <Badge variant="secondary" className="text-xs">
                       {stateData.verifiedSites}/{stateData.totalSites} verified
                     </Badge>
+                    {stateData.returnedSites > 0 && (
+                      <Badge className="text-xs bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300">
+                        {stateData.returnedSites} returned
+                      </Badge>
+                    )}
                     <Badge variant="outline" className="text-xs">
                       {stateData.coordinators.length} coordinator{stateData.coordinators.length !== 1 ? 's' : ''}
                     </Badge>
                   </div>
                 </div>
                 
-                <Progress 
-                  value={stateData.totalSites > 0 ? (stateData.verifiedSites / stateData.totalSites) * 100 : 0} 
-                  className="h-1.5 mb-3" 
-                />
+                <div className="flex h-1.5 rounded-full overflow-hidden bg-muted mb-3">
+                  {stateData.totalSites > 0 && (
+                    <>
+                      <div 
+                        className="bg-green-500 transition-all" 
+                        style={{ width: `${(stateData.verifiedSites / stateData.totalSites) * 100}%` }} 
+                      />
+                      <div 
+                        className="bg-red-500 transition-all" 
+                        style={{ width: `${(stateData.returnedSites / stateData.totalSites) * 100}%` }} 
+                      />
+                    </>
+                  )}
+                </div>
 
                 <div className="space-y-2">
                   {stateData.coordinators.map((coord) => (
@@ -265,17 +323,48 @@ export default function CoordinatorSummaryCard({ siteEntries, mmpId }: Coordinat
                           )}
                         </div>
                       </div>
-                      <div className="flex items-center gap-2 flex-shrink-0">
+                      <div className="flex items-center gap-3 flex-shrink-0">
+                        {coord.sitesReturned > 0 && (
+                          <div className="text-right">
+                            <div className="flex items-center gap-1">
+                              <AlertCircle className="h-3.5 w-3.5 text-red-500" />
+                              <span className="text-sm font-medium text-red-600 dark:text-red-400">
+                                {coord.sitesReturned}
+                              </span>
+                            </div>
+                            <span className="text-[10px] text-red-500 dark:text-red-400">returned</span>
+                          </div>
+                        )}
                         <div className="text-right">
                           <div className="flex items-center gap-1">
                             {coord.sitesVerified === coord.sitesAssigned && coord.sitesAssigned > 0 ? (
                               <CheckCircle2 className="h-4 w-4 text-green-600" />
+                            ) : coord.sitesReturned === coord.sitesAssigned && coord.sitesAssigned > 0 ? (
+                              <AlertCircle className="h-4 w-4 text-red-500" />
                             ) : null}
-                            <span className="text-sm font-medium">
+                            <span className={`text-sm font-medium ${
+                              coord.sitesVerified === coord.sitesAssigned && coord.sitesAssigned > 0
+                                ? 'text-green-600 dark:text-green-400'
+                                : coord.sitesReturned > 0 && coord.sitesVerified === 0
+                                  ? 'text-red-600 dark:text-red-400'
+                                  : ''
+                            }`}>
                               {coord.sitesVerified}/{coord.sitesAssigned}
                             </span>
                           </div>
                           <span className="text-xs text-muted-foreground">sites verified</span>
+                        </div>
+                        <div className="w-12">
+                          <div className="flex h-1.5 rounded-full overflow-hidden bg-muted">
+                            <div 
+                              className="bg-green-500 transition-all" 
+                              style={{ width: `${coord.sitesAssigned > 0 ? (coord.sitesVerified / coord.sitesAssigned) * 100 : 0}%` }} 
+                            />
+                            <div 
+                              className="bg-red-500 transition-all" 
+                              style={{ width: `${coord.sitesAssigned > 0 ? (coord.sitesReturned / coord.sitesAssigned) * 100 : 0}%` }} 
+                            />
+                          </div>
                         </div>
                       </div>
                     </div>
