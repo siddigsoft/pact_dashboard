@@ -17,7 +17,7 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { format, parse, isValid } from 'date-fns';
 import { drawPdfHeader, styledAutoTable, addAllFooters, addPageHeader, loadArabicFont, arText, C } from '@/utils/analyticsPdfUtils';
-import { exportFormattedExcel, exportFormattedTrackerExcel, exportCoverageTrackerExcel, generateCoverageTrackerBase64ForEmail } from '@/utils/analyticsExcelUtils';
+import { exportFormattedExcel, exportFormattedTrackerExcel, exportCoverageTrackerExcel } from '@/utils/analyticsExcelUtils';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, PieChart as RechartsPie, Pie, Cell, Legend } from 'recharts';
 import { supabase } from '@/integrations/supabase/client';
 import { EmailNotificationService } from '@/services/email-notification.service';
@@ -1688,8 +1688,67 @@ const QuestionnaireAnalytics = () => {
   }, [cleanResults, data, getCustomCleanedData, fileName, customDupsRemoved, bufferToBase64]);
 
   const generateCoverageTrackerBase64 = useCallback(async (): Promise<string | null> => {
-    return generateCoverageTrackerBase64ForEmail(filteredData, currentSessionName);
-  }, [filteredData, currentSessionName]);
+    if (!filteredData || filteredData.length === 0) return null;
+    try {
+      const wb = new ExcelJS.Workbook();
+      wb.creator = 'PACT Command Center';
+      wb.created = new Date();
+      const label = currentSessionName?.trim() || new Date().toLocaleString('en-US', { month: 'long', year: 'numeric' });
+      const hFill: ExcelJS.Fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0F2041' } };
+      const hFont: Partial<ExcelJS.Font> = { bold: true, color: { argb: 'FFFFFFFF' }, size: 10, name: 'Calibri' };
+      const bFont: Partial<ExcelJS.Font> = { size: 10, name: 'Calibri' };
+      const border: Partial<ExcelJS.Borders> = { top: { style: 'thin', color: { argb: 'FFC8CDD7' } }, bottom: { style: 'thin', color: { argb: 'FFC8CDD7' } }, left: { style: 'thin', color: { argb: 'FFC8CDD7' } }, right: { style: 'thin', color: { argb: 'FFC8CDD7' } } };
+      const altBg: ExcelJS.Fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF5F7FC' } };
+      const totalFill: ExcelJS.Fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE2E8F0' } };
+
+      const hubStateRows = new Map<string, Map<string, { collector: string; deviceId: string; activity: string }[]>>();
+      const hubOrder: string[] = [];
+      const hubSet = new Set<string>();
+      filteredData.forEach(row => {
+        if (!row.hub || !row.state || !row.activity) return;
+        const hub = row.hub;
+        const state = row.state;
+        if (!hubSet.has(hub)) { hubSet.add(hub); hubOrder.push(hub); }
+        if (!hubStateRows.has(hub)) hubStateRows.set(hub, new Map());
+        const stateMap = hubStateRows.get(hub)!;
+        if (!stateMap.has(state)) stateMap.set(state, []);
+        stateMap.get(state)!.push({ collector: row.dataCollector || '', deviceId: row.deviceId || '', activity: row.activity });
+      });
+
+      hubOrder.forEach(hub => {
+        const sheetName = hub.substring(0, 31);
+        const ws = wb.addWorksheet(sheetName);
+        const stateMap = hubStateRows.get(hub)!;
+        const titleRow = ws.addRow([`Coverage Tracker - ${hub}`, '', '', label]);
+        titleRow.getCell(1).font = { bold: true, size: 14, name: 'Calibri', color: { argb: 'FF0F2041' } };
+        titleRow.getCell(4).font = { bold: true, size: 11, name: 'Calibri', color: { argb: 'FF2563EB' } };
+        ws.addRow([]);
+        const headers = ['State', 'Data Collector', 'Device ID', 'Activity'];
+        const hr = ws.addRow(headers);
+        hr.eachCell(c => { c.fill = hFill; c.font = hFont; c.border = border; c.alignment = { horizontal: 'center', vertical: 'middle' }; });
+        hr.height = 22;
+        let rowIdx = 0;
+        let totalRows = 0;
+        stateMap.forEach((rows, state) => {
+          rows.forEach(r => {
+            const dr = ws.addRow([state, r.collector, r.deviceId, r.activity]);
+            dr.eachCell(c => { c.font = bFont; c.border = border; if (rowIdx % 2 === 1) c.fill = altBg; });
+            rowIdx++;
+            totalRows++;
+          });
+        });
+        const tr = ws.addRow(['Total', `${totalRows} entries`, '', '']);
+        tr.eachCell(c => { c.fill = totalFill; c.font = { ...bFont, bold: true }; c.border = border; });
+        ws.columns = [{ width: 20 }, { width: 28 }, { width: 28 }, { width: 22 }];
+      });
+
+      const buffer = await wb.xlsx.writeBuffer();
+      return bufferToBase64(buffer as ArrayBuffer);
+    } catch (e) {
+      console.error('Failed to generate coverage tracker base64:', e);
+      return null;
+    }
+  }, [filteredData, currentSessionName, bufferToBase64]);
 
   const generatePdfBase64 = useCallback(async (type: 'cleaned' | 'review' | 'coverage'): Promise<string | null> => {
     try {

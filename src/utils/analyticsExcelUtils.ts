@@ -515,17 +515,16 @@ function matchCollectorClassification(
   return null;
 }
 
-async function buildCoverageTrackerWorkbook(
+export async function exportCoverageTrackerExcel(
   filteredData: FilteredRow[],
+  filename: string,
   sessionName?: string
-): Promise<ExcelJS.Workbook> {
+) {
   const wb = new ExcelJS.Workbook();
   wb.creator = 'PACT Command Center';
   wb.created = new Date();
 
   const label = sessionName?.trim() || new Date().toLocaleString('en-US', { month: 'long', year: 'numeric' });
-
-  const classificationMap = await fetchCollectorClassifications();
 
   const hubStateRows = new Map<string, Map<string, { collector: string; deviceId: string; activity: string; abbr: string }[]>>();
   const hubStateMap = new Map<string, Map<string, Map<string, number>>>();
@@ -572,10 +571,10 @@ async function buildCoverageTrackerWorkbook(
     return hRow;
   }
 
-  function addGreenTotalRowDetail(sheet: ExcelJS.Worksheet, lbl: string, totals: Map<string, number>, pdmSites: number, colOffset: number) {
+  function addGreenTotalRow(sheet: ExcelJS.Worksheet, label: string, totals: Map<string, number>, pdmSites: number, colOffset: number) {
     const vals: (string | number)[] = [];
     for (let i = 0; i < colOffset - 1; i++) vals.push('');
-    vals.push(lbl);
+    vals.push(label);
     let overall = 0;
     ACTIVITY_COLS.forEach(col => {
       const v = totals.get(col) || 0;
@@ -601,10 +600,10 @@ async function buildCoverageTrackerWorkbook(
     return row;
   }
 
-  function addGreenTotalRowSummary(sheet: ExcelJS.Worksheet, lbl: string, totals: Map<string, number>, pdmSites: number, colOffset: number) {
+  function addGreenTotalRowSummary(sheet: ExcelJS.Worksheet, label: string, totals: Map<string, number>, pdmSites: number, colOffset: number) {
     const vals: (string | number)[] = [];
     for (let i = 0; i < colOffset - 1; i++) vals.push('');
-    vals.push(lbl);
+    vals.push(label);
     let overall = 0;
     ACTIVITY_COLS.forEach(col => {
       const v = totals.get(col) || 0;
@@ -652,7 +651,6 @@ async function buildCoverageTrackerWorkbook(
 
       merged.forEach(mc => {
         const isDup = dupNames.has(mc.primaryName.trim().toLowerCase());
-        const classInfo = matchCollectorClassification(mc.primaryName, classificationMap);
         const vals: (string | number)[] = [hub, state, mc.primaryName];
         let rowTotal = 0;
         let nonPdmTotal = 0;
@@ -671,13 +669,12 @@ async function buildCoverageTrackerWorkbook(
         const siteTotal = nonPdmTotal + pdmSites;
         vals.push(siteTotal || '');
 
-        vals.push(classInfo?.classificationLevel || '');
-        vals.push(classInfo?.baseFee || '');
-        vals.push(classInfo?.transportFee || '');
-        const totalCost = siteTotal * (classInfo?.baseFee || 0) + (classInfo?.transportFee || 0);
-        vals.push(totalCost || '');
-        vals.push(classInfo?.bankAccountNumber || '');
-        vals.push(classInfo?.bankBranch || '');
+        vals.push('');
+        vals.push('');
+        vals.push('');
+        vals.push('');
+        vals.push('');
+        vals.push('');
 
         const dataRow = ws.addRow(vals);
         dataRow.eachCell((cell, ci) => {
@@ -693,7 +690,7 @@ async function buildCoverageTrackerWorkbook(
         dataRow.height = 20;
       });
 
-      addGreenTotalRowDetail(ws, `Total ${state}`, stateTotals, statePdmSites, 3);
+      addGreenTotalRow(ws, `Total ${state}`, stateTotals, statePdmSites, 3);
       ws.addRow([]);
     });
   });
@@ -786,35 +783,6 @@ async function buildCoverageTrackerWorkbook(
     buildSummarySheet(wb, filteredData, 'Coverage Tracker Summary');
   }
 
-  return wb;
-}
-
-export async function exportCoverageTrackerExcel(
-  filteredData: FilteredRow[],
-  filename: string,
-  sessionName?: string
-) {
-  const wb = await buildCoverageTrackerWorkbook(filteredData, sessionName);
   const buf = await wb.xlsx.writeBuffer();
   saveAs(new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), filename);
-}
-
-export async function generateCoverageTrackerBase64ForEmail(
-  filteredData: FilteredRow[],
-  sessionName?: string
-): Promise<string | null> {
-  if (!filteredData || filteredData.length === 0) return null;
-  try {
-    const wb = await buildCoverageTrackerWorkbook(filteredData, sessionName);
-    const buf = await wb.xlsx.writeBuffer();
-    const bytes = new Uint8Array(buf as ArrayBuffer);
-    let binary = '';
-    for (let i = 0; i < bytes.length; i++) {
-      binary += String.fromCharCode(bytes[i]);
-    }
-    return btoa(binary);
-  } catch (e) {
-    console.error('Failed to generate coverage tracker base64 for email:', e);
-    return null;
-  }
 }
