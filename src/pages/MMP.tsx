@@ -5,8 +5,8 @@ import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { 
-  Upload, ChevronLeft, Trash2, Hand, FileText, ListChecks, CheckCircle, Eye, BarChart3, MapPin, AlertTriangle, Activity,
-  ClipboardList, Send, ShieldCheck, LayoutDashboard, FilePlus, CheckSquare, Truck, Wand2, Handshake, PlayCircle, CheckCircle2, XCircle, Clock, UserCheck, FileCheck, Filter, X
+  Upload, ChevronLeft, ChevronRight, Trash2, Hand, FileText, ListChecks, CheckCircle, Eye, BarChart3, MapPin, AlertTriangle, Activity,
+  ClipboardList, Send, ShieldCheck, LayoutDashboard, FilePlus, CheckSquare, Truck, Wand2, Handshake, PlayCircle, CheckCircle2, XCircle, Clock, UserCheck, FileCheck, Filter, X, RefreshCw, User
 } from 'lucide-react';
 import { DataFreshnessBadge } from '@/components/realtime';
 import { queryClient } from '@/lib/queryClient';
@@ -420,11 +420,15 @@ const MMP = () => {
   const [newFomSubTab, setNewFomSubTab] = useState<'pending' | 'verified' | 'returned'>('pending');
   // Expanded states for returned sites view
   const [expandedReturnedStates, setExpandedReturnedStates] = useState<Set<string>>(new Set());
+  const [expandedReturnedLocalities, setExpandedReturnedLocalities] = useState<Set<string>>(new Set());
   // State permit upload dialog for returned sites
   const [returnedStatePermitDialogOpen, setReturnedStatePermitDialogOpen] = useState(false);
   const [selectedReturnedState, setSelectedReturnedState] = useState<{ state: string; sites: any[]; mmpFileId?: string; stateId?: string } | null>(null);
   const [selectedCoordinatorForReturned, setSelectedCoordinatorForReturned] = useState<string>('');
   const [selectedSupervisorForReturned, setSelectedSupervisorForReturned] = useState<string>('');
+  // Returned sites action dialogs
+  const [returnedSiteActionDialog, setReturnedSiteActionDialog] = useState<{ open: boolean; site: any; action: 'sendback' | 'report' | 'redispatch' }>({ open: false, site: null, action: 'sendback' });
+  const [returnedActionNotes, setReturnedActionNotes] = useState('');
   const [coordinatorsList, setCoordinatorsList] = useState<any[]>([]);
   const [supervisorsList, setSupervisorsList] = useState<any[]>([]);
   const [hubStatesList, setHubStatesList] = useState<any[]>([]);
@@ -662,6 +666,126 @@ const MMP = () => {
       toast({
         title: 'Send Back Failed',
         description: error.message || 'Failed to send the site back. Please try again.',
+        variant: 'destructive'
+      });
+    }
+  }, [currentUser?.id, toast, refreshMMPFiles]);
+
+  // Handle re-dispatching a returned site (reset to approved and costed status)
+  const handleRedispatchReturnedSite = useCallback(async (site: any, notes: string) => {
+    try {
+      const now = new Date().toISOString();
+      const existingAdditionalData = site.additional_data || {};
+      
+      const { error: updateError } = await supabase
+        .from('mmp_site_entries')
+        .update({
+          status: 'approved and costed',
+          verification_notes: notes.trim() || null,
+          updated_at: now,
+          additional_data: {
+            ...existingAdditionalData,
+            redispatched_by: currentUser?.id,
+            redispatched_at: now,
+            redispatch_notes: notes.trim() || undefined,
+            previous_return_reason: site.verification_notes || existingAdditionalData.return_reason || undefined
+          }
+        })
+        .eq('id', site.id);
+
+      if (updateError) throw updateError;
+
+      toast({
+        title: 'Site Ready for Re-dispatch',
+        description: `The site "${site.site_name || site.siteName || 'Site'}" has been moved back to Approved & Costed for re-dispatching.`,
+      });
+
+      await refreshMMPFiles();
+    } catch (error: any) {
+      console.error('Failed to re-dispatch site:', error);
+      toast({
+        title: 'Re-dispatch Failed',
+        description: error.message || 'Failed to re-dispatch the site. Please try again.',
+        variant: 'destructive'
+      });
+    }
+  }, [currentUser?.id, toast, refreshMMPFiles]);
+
+  // Handle reporting issue with returned site
+  const handleReportReturnedSite = useCallback(async (site: any, reportNotes: string) => {
+    if (!reportNotes.trim()) {
+      toast({
+        title: 'Report Notes Required',
+        description: 'Please provide details about the issue you are reporting.',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    try {
+      const now = new Date().toISOString();
+      const existingAdditionalData = site.additional_data || {};
+      const reports = existingAdditionalData.fom_reports || [];
+      reports.push({
+        reported_by: currentUser?.id,
+        reported_by_name: currentUser?.name || currentUser?.fullName || currentUser?.username,
+        reported_at: now,
+        notes: reportNotes.trim()
+      });
+
+      const { error: updateError } = await supabase
+        .from('mmp_site_entries')
+        .update({
+          updated_at: now,
+          additional_data: {
+            ...existingAdditionalData,
+            fom_reports: reports,
+            last_reported_at: now,
+            last_reported_by: currentUser?.id
+          }
+        })
+        .eq('id', site.id);
+
+      if (updateError) throw updateError;
+
+      // Notify admins about the report
+      try {
+        const { data: admins } = await supabase
+          .from('profiles')
+          .select('id')
+          .in('role', ['admin', 'Admin', 'ict', 'ICT', 'countryDirector', 'CountryDirector'])
+          .eq('status', 'approved');
+
+        if (admins && admins.length > 0) {
+          const siteName = site.site_name || site.siteName || 'Site';
+          await insertNotifications(admins.map(admin => ({
+            recipient_id: admin.id,
+            title_en: 'Returned Site Issue Reported',
+            title_ar: 'تم الإبلاغ عن مشكلة في الموقع المرتجع',
+            message_en: `FOM reported an issue with returned site "${siteName}" in ${site.state || 'Unknown'}: ${reportNotes.trim().substring(0, 100)}${reportNotes.length > 100 ? '...' : ''}`,
+            message_ar: `أبلغ مدير العمليات الميدانية عن مشكلة في الموقع المرتجع "${siteName}" في ${site.state || 'غير معروف'}: ${reportNotes.trim().substring(0, 100)}${reportNotes.length > 100 ? '...' : ''}`,
+            event_type: 'approvals',
+            entity_id: site.id,
+            entity_type: 'mmpFile',
+            priority: 'high',
+            status: 'pending'
+          })));
+        }
+      } catch (notifErr) {
+        console.warn('Failed to notify admins about returned site report:', notifErr);
+      }
+
+      toast({
+        title: 'Report Submitted',
+        description: 'Your report about this returned site has been submitted to administrators.',
+      });
+
+      await refreshMMPFiles();
+    } catch (error: any) {
+      console.error('Failed to report returned site:', error);
+      toast({
+        title: 'Report Failed',
+        description: error.message || 'Failed to submit the report. Please try again.',
         variant: 'destructive'
       });
     }
@@ -4400,27 +4524,154 @@ const MMP = () => {
                                       </div>
                                     </div>
                                     
-                                    {/* Show localities when state is expanded */}
+                                    {/* Show localities and individual sites when state is expanded */}
                                     {isExpanded && (
                                       <div className="mt-4" onClick={(e) => e.stopPropagation()}>
                                         <div className="text-sm text-muted-foreground mb-2">
                                           Localities in this state:
                                         </div>
                                         <div className="space-y-2">
-                                          {Object.entries(sitesByLocality).map(([locality, sites]) => (
-                                            <div 
-                                              key={locality}
-                                              className="flex items-center justify-between p-3 bg-gray-50 rounded cursor-pointer hover:bg-gray-100"
-                                            >
-                                              <div>
-                                                <span className="font-medium">{locality}</span>
-                                                <span className="text-muted-foreground ml-2">({sites.length} sites)</span>
+                                          {Object.entries(sitesByLocality).map(([locality, sites]) => {
+                                            const locKey = `${stateGroup.state}|${locality}`;
+                                            const isLocExpanded = expandedReturnedLocalities.has(locKey);
+                                            return (
+                                              <div key={locality} className="space-y-1">
+                                                <div 
+                                                  className="flex items-center justify-between p-3 bg-muted/50 dark:bg-muted/20 rounded-md cursor-pointer hover-elevate"
+                                                  onClick={() => {
+                                                    setExpandedReturnedLocalities(prev => {
+                                                      const newSet = new Set(prev);
+                                                      if (newSet.has(locKey)) newSet.delete(locKey);
+                                                      else newSet.add(locKey);
+                                                      return newSet;
+                                                    });
+                                                  }}
+                                                >
+                                                  <div className="flex items-center gap-2">
+                                                    <ChevronRight className={`h-4 w-4 transition-transform ${isLocExpanded ? 'rotate-90' : ''}`} />
+                                                    <span className="font-medium">{locality}</span>
+                                                    <span className="text-muted-foreground text-sm">({sites.length} site{sites.length !== 1 ? 's' : ''})</span>
+                                                  </div>
+                                                  <Badge variant="outline" className="bg-orange-100 text-orange-800 border-orange-300 dark:bg-orange-900/30 dark:text-orange-300 dark:border-orange-700 text-xs">
+                                                    Returned
+                                                  </Badge>
+                                                </div>
+                                                {isLocExpanded && (
+                                                  <div className="ml-6 space-y-2 pt-1">
+                                                    {sites.map((site: any) => {
+                                                      const returnReason = site.verification_notes || site.additional_data?.rejection_comments || site.additional_data?.rejection_reason || site.additional_data?.return_reason || site.rejection_comments || '';
+                                                      const returnedBy = site.verified_by || site.additional_data?.sent_back_by || site.rejected_by || site.additional_data?.rejected_by || site.additional_data?.returned_by_name || '';
+                                                      const returnedAt = site.verified_at || site.rejected_at || site.additional_data?.rejected_at || site.additional_data?.sent_back_at || site.additional_data?.returned_at || '';
+                                                      const siteName = site.site_name || site.siteName || site.site_code || 'Unknown Site';
+                                                      const siteCode = site.site_code || site.siteCode || '';
+                                                      const fomReports = site.additional_data?.fom_reports || [];
+                                                      
+                                                      return (
+                                                        <Card key={site.id} className="border-l-0 shadow-sm">
+                                                          <CardContent className="p-3 space-y-2">
+                                                            <div className="flex items-start justify-between gap-2">
+                                                              <div className="flex-1 min-w-0">
+                                                                <div className="flex items-center gap-2 flex-wrap">
+                                                                  <span className="font-medium text-sm">{siteName}</span>
+                                                                  {siteCode && <span className="text-xs text-muted-foreground">({siteCode})</span>}
+                                                                </div>
+                                                                {site.mmpName && (
+                                                                  <p className="text-xs text-muted-foreground mt-0.5">MMP: {site.mmpName}</p>
+                                                                )}
+                                                              </div>
+                                                              <div className="flex items-center gap-1 flex-shrink-0">
+                                                                <Button
+                                                                  size="sm"
+                                                                  variant="outline"
+                                                                  className="text-xs h-7"
+                                                                  data-testid={`button-redispatch-${site.id}`}
+                                                                  onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    setReturnedSiteActionDialog({ open: true, site, action: 'redispatch' });
+                                                                    setReturnedActionNotes('');
+                                                                  }}
+                                                                >
+                                                                  <RefreshCw className="h-3 w-3 mr-1" />
+                                                                  Re-dispatch
+                                                                </Button>
+                                                                <Button
+                                                                  size="sm"
+                                                                  variant="outline"
+                                                                  className="text-xs h-7"
+                                                                  data-testid={`button-sendback-returned-${site.id}`}
+                                                                  onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    setReturnedSiteActionDialog({ open: true, site, action: 'sendback' });
+                                                                    setReturnedActionNotes('');
+                                                                  }}
+                                                                >
+                                                                  <Send className="h-3 w-3 mr-1" />
+                                                                  Send Back
+                                                                </Button>
+                                                                <Button
+                                                                  size="sm"
+                                                                  variant="outline"
+                                                                  className="text-xs h-7 text-orange-600 border-orange-300 dark:text-orange-400 dark:border-orange-700"
+                                                                  data-testid={`button-report-returned-${site.id}`}
+                                                                  onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    setReturnedSiteActionDialog({ open: true, site, action: 'report' });
+                                                                    setReturnedActionNotes('');
+                                                                  }}
+                                                                >
+                                                                  <AlertTriangle className="h-3 w-3 mr-1" />
+                                                                  Report
+                                                                </Button>
+                                                              </div>
+                                                            </div>
+                                                            
+                                                            {/* Return reason section */}
+                                                            {returnReason && (
+                                                              <div className="bg-orange-50 dark:bg-orange-950/30 border border-orange-200 dark:border-orange-800 rounded-md p-2.5">
+                                                                <div className="flex items-start gap-2">
+                                                                  <AlertTriangle className="h-3.5 w-3.5 text-orange-600 dark:text-orange-400 mt-0.5 flex-shrink-0" />
+                                                                  <div className="flex-1 min-w-0">
+                                                                    <p className="text-xs font-medium text-orange-800 dark:text-orange-300 mb-0.5">Return Reason:</p>
+                                                                    <p className="text-sm text-orange-900 dark:text-orange-200">{returnReason}</p>
+                                                                  </div>
+                                                                </div>
+                                                              </div>
+                                                            )}
+                                                            {!returnReason && (
+                                                              <div className="bg-muted/50 rounded-md p-2.5">
+                                                                <p className="text-xs text-muted-foreground italic">No return reason provided.</p>
+                                                              </div>
+                                                            )}
+                                                            
+                                                            {/* Returned by info */}
+                                                            <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                                                              {returnedBy && (
+                                                                <span className="flex items-center gap-1">
+                                                                  <User className="h-3 w-3" />
+                                                                  Returned by: {returnedBy}
+                                                                </span>
+                                                              )}
+                                                              {returnedAt && (
+                                                                <span className="flex items-center gap-1">
+                                                                  <Clock className="h-3 w-3" />
+                                                                  {new Date(returnedAt).toLocaleDateString()} {new Date(returnedAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                                                                </span>
+                                                              )}
+                                                              {fomReports.length > 0 && (
+                                                                <Badge variant="outline" className="text-xs bg-red-50 text-red-700 border-red-200 dark:bg-red-950/30 dark:text-red-400 dark:border-red-800">
+                                                                  {fomReports.length} report{fomReports.length !== 1 ? 's' : ''} filed
+                                                                </Badge>
+                                                              )}
+                                                            </div>
+                                                          </CardContent>
+                                                        </Card>
+                                                      );
+                                                    })}
+                                                  </div>
+                                                )}
                                               </div>
-                                              <Badge variant="outline" className="bg-orange-100 text-orange-800 border-orange-300 text-xs">
-                                                Returned
-                                              </Badge>
-                                            </div>
-                                          ))}
+                                            );
+                                          })}
                                         </div>
                                       </div>
                                     )}
@@ -6584,6 +6835,116 @@ const MMP = () => {
               setSelectedSupervisorForReturned('');
             }}>
               Cancel
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Returned Site Action Dialog (Send Back / Report / Re-dispatch) */}
+      <Dialog 
+        open={returnedSiteActionDialog.open} 
+        onOpenChange={(open) => {
+          if (!open) {
+            setReturnedSiteActionDialog({ open: false, site: null, action: 'sendback' });
+            setReturnedActionNotes('');
+          }
+        }}
+      >
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>
+              {returnedSiteActionDialog.action === 'sendback' && 'Send Site Back to Coordinator'}
+              {returnedSiteActionDialog.action === 'redispatch' && 'Re-dispatch Site'}
+              {returnedSiteActionDialog.action === 'report' && 'Report Issue with Returned Site'}
+            </DialogTitle>
+            <DialogDescription>
+              {returnedSiteActionDialog.action === 'sendback' && 'Send this site back to the coordinator with your comments.'}
+              {returnedSiteActionDialog.action === 'redispatch' && 'Move this site back to Approved & Costed so it can be dispatched again.'}
+              {returnedSiteActionDialog.action === 'report' && 'Report an issue with this returned site to administrators.'}
+            </DialogDescription>
+          </DialogHeader>
+          {returnedSiteActionDialog.site && (
+            <div className="space-y-4 py-2">
+              <div className="bg-muted/50 rounded-md p-3 space-y-1">
+                <p className="text-sm font-medium">{returnedSiteActionDialog.site.site_name || returnedSiteActionDialog.site.siteName || 'Unknown Site'}</p>
+                {returnedSiteActionDialog.site.site_code && (
+                  <p className="text-xs text-muted-foreground">Code: {returnedSiteActionDialog.site.site_code}</p>
+                )}
+                <p className="text-xs text-muted-foreground">
+                  {returnedSiteActionDialog.site.state || ''}{returnedSiteActionDialog.site.locality ? ` - ${returnedSiteActionDialog.site.locality}` : ''}
+                </p>
+                {(returnedSiteActionDialog.site.verification_notes || returnedSiteActionDialog.site.additional_data?.rejection_comments || returnedSiteActionDialog.site.additional_data?.rejection_reason || returnedSiteActionDialog.site.additional_data?.return_reason || returnedSiteActionDialog.site.rejection_comments) && (
+                  <div className="mt-2 pt-2 border-t border-border">
+                    <p className="text-xs font-medium text-orange-700 dark:text-orange-400">Original Return Reason:</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">{returnedSiteActionDialog.site.verification_notes || returnedSiteActionDialog.site.additional_data?.rejection_comments || returnedSiteActionDialog.site.additional_data?.rejection_reason || returnedSiteActionDialog.site.additional_data?.return_reason || returnedSiteActionDialog.site.rejection_comments}</p>
+                  </div>
+                )}
+              </div>
+              
+              <div className="space-y-2">
+                <label className="text-sm font-medium">
+                  {returnedSiteActionDialog.action === 'sendback' && 'Comments for Coordinator *'}
+                  {returnedSiteActionDialog.action === 'redispatch' && 'Notes (Optional)'}
+                  {returnedSiteActionDialog.action === 'report' && 'Report Details *'}
+                </label>
+                <Textarea
+                  value={returnedActionNotes}
+                  onChange={(e) => setReturnedActionNotes(e.target.value)}
+                  placeholder={
+                    returnedSiteActionDialog.action === 'sendback' ? 'Explain why this site needs to go back to the coordinator...' :
+                    returnedSiteActionDialog.action === 'redispatch' ? 'Add any notes for re-dispatching this site...' :
+                    'Describe the issue you want to report...'
+                  }
+                  className="min-h-[100px]"
+                  data-testid="textarea-returned-action-notes"
+                />
+              </div>
+            </div>
+          )}
+          <DialogFooter className="gap-2">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setReturnedSiteActionDialog({ open: false, site: null, action: 'sendback' });
+                setReturnedActionNotes('');
+              }}
+              data-testid="button-cancel-returned-action"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={async () => {
+                const site = returnedSiteActionDialog.site;
+                const action = returnedSiteActionDialog.action;
+                if (!site) return;
+                
+                if (action === 'sendback') {
+                  await handleSendBackToCoordinator(site, returnedActionNotes);
+                } else if (action === 'redispatch') {
+                  await handleRedispatchReturnedSite(site, returnedActionNotes);
+                } else if (action === 'report') {
+                  await handleReportReturnedSite(site, returnedActionNotes);
+                }
+                
+                setReturnedSiteActionDialog({ open: false, site: null, action: 'sendback' });
+                setReturnedActionNotes('');
+              }}
+              disabled={
+                (returnedSiteActionDialog.action === 'sendback' && !returnedActionNotes.trim()) ||
+                (returnedSiteActionDialog.action === 'report' && !returnedActionNotes.trim())
+              }
+              className={
+                returnedSiteActionDialog.action === 'report' 
+                  ? 'bg-orange-600 hover:bg-orange-700 text-white' 
+                  : returnedSiteActionDialog.action === 'redispatch'
+                    ? 'bg-blue-600 hover:bg-blue-700 text-white'
+                    : ''
+              }
+              data-testid="button-confirm-returned-action"
+            >
+              {returnedSiteActionDialog.action === 'sendback' && 'Send Back'}
+              {returnedSiteActionDialog.action === 'redispatch' && 'Re-dispatch'}
+              {returnedSiteActionDialog.action === 'report' && 'Submit Report'}
             </Button>
           </DialogFooter>
         </DialogContent>
