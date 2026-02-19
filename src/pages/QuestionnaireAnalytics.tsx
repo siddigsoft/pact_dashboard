@@ -1707,6 +1707,7 @@ const QuestionnaireAnalytics = () => {
 
       if (type === 'coverage') {
         if (!filteredData || filteredData.length === 0) return null;
+        const hasArabicFont = await loadArabicFont(doc);
         const label = currentSessionName?.trim() || new Date().toLocaleString('en-US', { month: 'long', year: 'numeric' });
         doc.text(`Coverage Tracker Report - ${label}`, 14, 15);
         doc.setFontSize(9);
@@ -1722,6 +1723,7 @@ const QuestionnaireAnalytics = () => {
         });
 
         let yPos = 28;
+        const bodyFontName = hasArabicFont ? 'Amiri' : 'helvetica';
         hubGroups.forEach((rows, hub) => {
           if (yPos > 170) { doc.addPage(); yPos = 15; }
           doc.setFontSize(11);
@@ -1735,7 +1737,7 @@ const QuestionnaireAnalytics = () => {
             body: rows.map(r => [r.state, r.collector, r.deviceId, r.activity]),
             theme: 'grid',
             headStyles: { fillColor: [15, 32, 65], textColor: [255, 255, 255], fontSize: 8, fontStyle: 'bold' },
-            bodyStyles: { fontSize: 7, textColor: [20, 20, 30] },
+            bodyStyles: { fontSize: 7, textColor: [20, 20, 30], font: bodyFontName },
             alternateRowStyles: { fillColor: [245, 247, 252] },
             margin: { left: 14, right: 14 },
             tableWidth: 'auto',
