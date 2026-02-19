@@ -92,6 +92,7 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
     totalFee: number;
   } | null>(null);
   const [loadingClassificationFee, setLoadingClassificationFee] = useState(false);
+  const [lastVisitData, setLastVisitData] = useState<Map<string, { amount: number; date: string }>>(new Map());
   const { toast } = useToast();
 
   // Load selected collector's classification fee when selecting individual dispatch
@@ -551,6 +552,45 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
 
     setSiteCosts(newCosts);
     setStep("costs");
+
+    // Fetch last visit data for selected sites
+    (async () => {
+      try {
+        const siteCodes = selectedSiteObjects
+          .map((s) => s.site_code)
+          .filter(Boolean);
+        if (siteCodes.length > 0) {
+          const { data: visits } = await supabase
+            .from("site_visits")
+            .select("mmp_site_entry_id, site_code, transport_fee, cost, visit_date, status")
+            .in("site_code", siteCodes)
+            .in("status", ["completed", "claimed", "accepted"])
+            .order("visit_date", { ascending: false });
+
+          if (visits && visits.length > 0) {
+            const visitMap = new Map<string, { amount: number; date: string }>();
+            for (const v of visits) {
+              const entryMatch = selectedSiteObjects.find(
+                (s) => s.site_code === v.site_code
+              );
+              if (entryMatch && !visitMap.has(entryMatch.id)) {
+                const totalCost =
+                  (Number(v.transport_fee) || 0) + (Number(v.cost) || 0);
+                if (totalCost > 0 || v.visit_date) {
+                  visitMap.set(entryMatch.id, {
+                    amount: totalCost,
+                    date: v.visit_date || "",
+                  });
+                }
+              }
+            }
+            setLastVisitData(visitMap);
+          }
+        }
+      } catch (e) {
+        console.error("Error fetching last visit data:", e);
+      }
+    })();
 
     // Fetch cost predictions in the background
     fetchCostPredictions(selectedSiteObjects);
@@ -2062,6 +2102,21 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
                             {site.locality && `${site.locality}, `}
                             {site.state}
                           </p>
+                          {lastVisitData.has(siteId) && (
+                            <div className="flex items-center gap-1.5 mt-1">
+                              <Badge
+                                variant="outline"
+                                className="text-xs bg-green-50 dark:bg-green-950 border-green-300 dark:border-green-700 text-green-700 dark:text-green-300"
+                              >
+                                Last Visit: {lastVisitData.get(siteId)!.amount.toLocaleString()} SDG
+                                {lastVisitData.get(siteId)!.date && (
+                                  <span className="ml-1 opacity-75">
+                                    ({new Date(lastVisitData.get(siteId)!.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })})
+                                  </span>
+                                )}
+                              </Badge>
+                            </div>
+                          )}
                           {prediction && (
                             <div className="flex items-center gap-2 mt-1">
                               <Tooltip>
