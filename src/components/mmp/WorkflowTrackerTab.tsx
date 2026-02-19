@@ -5,8 +5,34 @@ import { Progress } from '@/components/ui/progress';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { ArrowRight, Clock, CheckCircle2, AlertCircle, RotateCcw, Users, MapPin, Calendar, Search, ChevronDown, ChevronRight, Building2 } from 'lucide-react';
+import { ArrowRight, Clock, CheckCircle2, AlertCircle, RotateCcw, Users, MapPin, Calendar, Search, ChevronDown, ChevronRight, Building2, Download } from 'lucide-react';
 import { format } from 'date-fns';
+
+interface SiteDetail {
+  id: string;
+  siteCode: string;
+  siteName: string;
+  status: string;
+  verifiedBy?: string;
+  verifiedAt?: string;
+  verificationNotes?: string;
+  rejectionComments?: string;
+  rejectedBy?: string;
+  rejectedAt?: string;
+  dispatchedAt?: string;
+  acceptedBy?: string;
+  acceptedAt?: string;
+}
+
+interface LocalityBreakdown {
+  locality: string;
+  totalSites: number;
+  verifiedSites: number;
+  pendingSites: number;
+  dispatchedSites: number;
+  percentage: number;
+  sites: SiteDetail[];
+}
 
 interface StateBreakdown {
   state: string;
@@ -17,6 +43,50 @@ interface StateBreakdown {
   status: 'pending' | 'in_progress' | 'verified' | 'completed';
   coordinators: { id: string; name: string }[];
   percentage: number;
+  localities: LocalityBreakdown[];
+}
+
+const verifiedStatuses = ['verified', 'approved', 'approved and costed', 'dispatched', 'completed'];
+const inProgressStatuses = ['in_progress', 'accepted'];
+
+function classifySiteStatus(status: string): 'verified' | 'dispatched' | 'pending' {
+  const s = status.toLowerCase();
+  if (verifiedStatuses.includes(s)) return 'verified';
+  if (inProgressStatuses.includes(s)) return 'dispatched';
+  return 'pending';
+}
+
+function resolveReturnReason(entry: any): string | undefined {
+  const ad = entry.additional_data || {};
+  return entry.verification_notes
+    || entry.rejection_comments
+    || ad['rejection_reason']
+    || ad['return_reason']
+    || ad['Verification Notes']
+    || ad['rejection_comments']
+    || ad['sent_back_reason']
+    || (ad['sent_back_by'] ? `Sent back by ${ad['sent_back_by']}` : undefined)
+    || undefined;
+}
+
+function buildSiteDetail(entry: any): SiteDetail {
+  const ad = entry.additional_data || {};
+  const reason = resolveReturnReason(entry);
+  return {
+    id: entry.id || '',
+    siteCode: entry.site_code || entry.siteCode || '',
+    siteName: entry.site_name || entry.siteName || entry.site_code || 'Unknown',
+    status: entry.status || 'Pending',
+    verifiedBy: entry.verified_by || ad['Verified By'] || ad['verified_by'] || undefined,
+    verifiedAt: entry.verified_at || ad['verified_at'] || ad['Verified At'] || undefined,
+    verificationNotes: entry.verification_notes || ad['Verification Notes'] || undefined,
+    rejectionComments: reason,
+    rejectedBy: entry.rejected_by || ad['rejected_by'] || ad['sent_back_by'] || undefined,
+    rejectedAt: entry.rejected_at || ad['rejected_at'] || undefined,
+    dispatchedAt: entry.dispatched_at || ad['dispatched_at'] || undefined,
+    acceptedBy: entry.accepted_by || entry.acceptedBy || ad['accepted_by'] || undefined,
+    acceptedAt: entry.accepted_at || ad['accepted_at'] || undefined,
+  };
 }
 
 function getStateBreakdown(mmp: any, coordNameLookup?: Map<string, string>): StateBreakdown[] {
@@ -24,9 +94,12 @@ function getStateBreakdown(mmp: any, coordNameLookup?: Map<string, string>): Sta
   if (siteEntries.length === 0) return [];
 
   const stateMap = new Map<string, StateBreakdown>();
+  const localityMap = new Map<string, LocalityBreakdown>();
 
   siteEntries.forEach((entry: any) => {
     const stateName = entry.state || entry.stateName || 'Unknown State';
+    const localityName = entry.locality || entry.localityName || 'Unknown Locality';
+    const locKey = `${stateName}|||${localityName}`;
     
     if (!stateMap.has(stateName)) {
       stateMap.set(stateName, {
@@ -38,29 +111,41 @@ function getStateBreakdown(mmp: any, coordNameLookup?: Map<string, string>): Sta
         status: 'pending',
         coordinators: [],
         percentage: 0,
+        localities: [],
+      });
+    }
+
+    if (!localityMap.has(locKey)) {
+      localityMap.set(locKey, {
+        locality: localityName,
+        totalSites: 0,
+        verifiedSites: 0,
+        pendingSites: 0,
+        dispatchedSites: 0,
+        percentage: 0,
+        sites: [],
       });
     }
 
     const stateData = stateMap.get(stateName)!;
+    const locData = localityMap.get(locKey)!;
     stateData.totalSites++;
+    locData.totalSites++;
 
-    const entryStatus = (entry.status || '').toLowerCase();
-    // Match the global getVerificationProgress logic for consistency
-    // Verified statuses = fully processed (same as global progress bar)
-    const verifiedStatuses = ['verified', 'approved', 'approved and costed', 'dispatched', 'completed'];
-    // In-progress statuses = work actively being done
-    const inProgressStatuses = ['in_progress', 'accepted'];
-
-    if (verifiedStatuses.includes(entryStatus)) {
+    const classification = classifySiteStatus(entry.status || '');
+    if (classification === 'verified') {
       stateData.verifiedSites++;
-    } else if (inProgressStatuses.includes(entryStatus)) {
+      locData.verifiedSites++;
+    } else if (classification === 'dispatched') {
       stateData.dispatchedSites++;
+      locData.dispatchedSites++;
     } else {
-      // Pending, new, or unassigned entries
       stateData.pendingSites++;
+      locData.pendingSites++;
     }
 
-    // Track coordinators for this state
+    locData.sites.push(buildSiteDetail(entry));
+
     const coordId = entry.additional_data?.assigned_to || entry.forwarded_to_user_id;
     const coordName = entry.additional_data?.assigned_to_name || entry.coordinator_name || coordNameLookup?.get(coordId);
     if (coordId && !stateData.coordinators.find(c => c.id === coordId)) {
@@ -68,32 +153,144 @@ function getStateBreakdown(mmp: any, coordNameLookup?: Map<string, string>): Sta
     }
   });
 
-  // Calculate status and percentage for each state
-  // Percentage = verified sites / total (like the global progress)
+  localityMap.forEach((locData, locKey) => {
+    locData.percentage = locData.totalSites > 0 ? Math.round((locData.verifiedSites / locData.totalSites) * 100) : 0;
+    const stateName = locKey.split('|||')[0];
+    const stateData = stateMap.get(stateName);
+    if (stateData) {
+      stateData.localities.push(locData);
+    }
+  });
+
   stateMap.forEach((data) => {
     data.percentage = data.totalSites > 0 ? Math.round((data.verifiedSites / data.totalSites) * 100) : 0;
     
-    // Determine status based on site distribution
     if (data.verifiedSites === data.totalSites && data.totalSites > 0) {
-      // All sites verified
       data.status = 'completed';
     } else if (data.verifiedSites > 0) {
-      // Some verified, some still in progress
       data.status = 'verified';
     } else if (data.dispatchedSites > 0) {
-      // Work has started but nothing verified yet
       data.status = 'in_progress';
     } else {
-      // Nothing started
       data.status = 'pending';
     }
+
+    data.localities.sort((a, b) => a.locality.localeCompare(b.locality));
   });
 
   return Array.from(stateMap.values()).sort((a, b) => a.state.localeCompare(b.state));
 }
 
+function getSiteStatusBadgeClass(status: string): string {
+  const s = status.toLowerCase();
+  if (verifiedStatuses.includes(s)) return 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300';
+  if (inProgressStatuses.includes(s)) return 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300';
+  if (s === 'returned_to_fom' || s === 'returned') return 'bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300';
+  if (s === 'rejected') return 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300';
+  return 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300';
+}
+
+function LocalitySitesSection({ locality }: { locality: LocalityBreakdown }) {
+  const [expanded, setExpanded] = useState(false);
+  
+  return (
+    <div className="border rounded-md bg-background/50 dark:bg-background/20">
+      <button
+        onClick={() => setExpanded(!expanded)}
+        className="flex items-center justify-between gap-2 w-full px-3 py-2 text-left hover-elevate rounded-md"
+        data-testid={`trigger-locality-${locality.locality}`}
+      >
+        <div className="flex items-center gap-2 min-w-0">
+          {expanded ? <ChevronDown className="h-3 w-3 flex-shrink-0" /> : <ChevronRight className="h-3 w-3 flex-shrink-0" />}
+          <span className="text-sm font-medium truncate">{locality.locality}</span>
+        </div>
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <span className="text-xs text-muted-foreground">
+            {locality.verifiedSites}/{locality.totalSites} verified
+          </span>
+          <Progress value={locality.percentage} className="w-16 h-1" />
+        </div>
+      </button>
+      
+      {expanded && (
+        <div className="px-3 pb-3 pt-1 space-y-1 border-t">
+          {locality.sites.map((site, idx) => {
+            const statusLower = (site.status || '').toLowerCase();
+            const isVerified = verifiedStatuses.includes(statusLower);
+            const ts = site.verifiedAt || site.dispatchedAt || site.acceptedAt;
+            
+            return (
+              <div 
+                key={site.id || idx} 
+                className="flex items-start gap-2 py-1.5 border-b border-border/30 last:border-b-0"
+                data-testid={`site-detail-${site.id || idx}`}
+              >
+                <div className="mt-0.5">
+                  {isVerified ? (
+                    <CheckCircle2 className="h-3.5 w-3.5 text-green-600 dark:text-green-400" />
+                  ) : statusLower === 'rejected' || statusLower === 'returned_to_fom' || statusLower === 'returned' ? (
+                    <AlertCircle className="h-3.5 w-3.5 text-orange-500" />
+                  ) : (
+                    <Clock className="h-3.5 w-3.5 text-muted-foreground" />
+                  )}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-xs font-medium truncate">{site.siteName}</span>
+                    {site.siteCode && <span className="text-xs text-muted-foreground">({site.siteCode})</span>}
+                    <Badge className={`text-[10px] py-0 px-1.5 ${getSiteStatusBadgeClass(site.status)}`}>
+                      {site.status?.replace(/_/g, ' ')}
+                    </Badge>
+                  </div>
+                  {site.verifiedBy && (
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Verified by: {site.verifiedBy}
+                      {site.verifiedAt && <> on {format(new Date(site.verifiedAt), 'MMM d, yyyy HH:mm')}</>}
+                    </p>
+                  )}
+                  {site.acceptedBy && !site.verifiedBy && (
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Accepted by: {site.acceptedBy}
+                      {site.acceptedAt && <> on {format(new Date(site.acceptedAt), 'MMM d, yyyy HH:mm')}</>}
+                    </p>
+                  )}
+                  {site.rejectionComments && (
+                    <p className="text-xs text-orange-600 dark:text-orange-400 mt-0.5">
+                      Reason: {site.rejectionComments}
+                    </p>
+                  )}
+                  {site.verificationNotes && !site.rejectionComments && (
+                    <p className="text-xs text-muted-foreground mt-0.5 italic">
+                      {site.verificationNotes}
+                    </p>
+                  )}
+                  {ts && !site.verifiedBy && !site.acceptedBy && (
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      {format(new Date(ts), 'MMM d, yyyy HH:mm')}
+                    </p>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function StateBreakdownSection({ breakdowns }: { breakdowns: StateBreakdown[] }) {
   const [isOpen, setIsOpen] = useState(false);
+  const [expandedStates, setExpandedStates] = useState<Set<string>>(new Set());
+
+  const toggleState = (state: string) => {
+    setExpandedStates(prev => {
+      const next = new Set(prev);
+      if (next.has(state)) next.delete(state);
+      else next.add(state);
+      return next;
+    });
+  };
 
   if (breakdowns.length === 0) {
     return (
@@ -127,63 +324,87 @@ function StateBreakdownSection({ breakdowns }: { breakdowns: StateBreakdown[] })
         <Badge variant="secondary" className="ml-auto">{breakdowns.length} states</Badge>
       </CollapsibleTrigger>
       <CollapsibleContent className="mt-2 space-y-2">
-        {breakdowns.map((stateData) => (
-          <div 
-            key={stateData.state} 
-            className="border rounded-md p-3 bg-muted/30"
-            data-testid={`state-breakdown-${stateData.state}`}
-          >
-            <div className="flex items-center justify-between gap-2 mb-2 flex-wrap">
-              <div className="flex items-center gap-2">
-                <MapPin className="h-4 w-4 text-muted-foreground" />
-                <span className="font-medium text-sm">{stateData.state}</span>
+        {breakdowns.map((stateData) => {
+          const isStateExpanded = expandedStates.has(stateData.state);
+          return (
+            <div 
+              key={stateData.state} 
+              className="border rounded-md p-3 bg-muted/30"
+              data-testid={`state-breakdown-${stateData.state}`}
+            >
+              <div className="flex items-center justify-between gap-2 mb-2 flex-wrap">
+                <div className="flex items-center gap-2">
+                  <MapPin className="h-4 w-4 text-muted-foreground" />
+                  <span className="font-medium text-sm">{stateData.state}</span>
+                </div>
+                <Badge className={statusColors[stateData.status]}>
+                  {statusLabels[stateData.status]}
+                </Badge>
               </div>
-              <Badge className={statusColors[stateData.status]}>
-                {statusLabels[stateData.status]}
-              </Badge>
-            </div>
-            
-            <div className="flex items-center gap-2 mb-2">
-              <Progress value={stateData.percentage} className="flex-1 h-1.5" />
-              <span className="text-xs text-muted-foreground w-20 text-right">
-                {stateData.verifiedSites}/{stateData.totalSites} verified
-              </span>
-            </div>
+              
+              <div className="flex items-center gap-2 mb-2">
+                <Progress value={stateData.percentage} className="flex-1 h-1.5" />
+                <span className="text-xs text-muted-foreground w-20 text-right">
+                  {stateData.verifiedSites}/{stateData.totalSites} verified
+                </span>
+              </div>
 
-            <div className="flex flex-wrap gap-2 text-xs">
-              <span className="text-muted-foreground">
-                Sites: {stateData.totalSites}
-              </span>
-              {stateData.pendingSites > 0 && (
-                <Badge variant="outline" className="text-xs py-0">
-                  {stateData.pendingSites} pending
-                </Badge>
-              )}
-              {stateData.dispatchedSites > 0 && (
-                <Badge variant="outline" className="text-xs py-0 border-blue-300 text-blue-700 dark:border-blue-700 dark:text-blue-300">
-                  {stateData.dispatchedSites} dispatched
-                </Badge>
-              )}
-              {stateData.verifiedSites > 0 && (
-                <Badge variant="outline" className="text-xs py-0 border-green-300 text-green-700 dark:border-green-700 dark:text-green-300">
-                  {stateData.verifiedSites} verified
-                </Badge>
-              )}
-            </div>
-
-            {stateData.coordinators.length > 0 && (
-              <div className="mt-2 pt-2 border-t flex items-center gap-1 flex-wrap">
-                <Users className="h-3 w-3 text-muted-foreground" />
-                <span className="text-xs text-muted-foreground">Coordinators:</span>
-                {stateData.coordinators.map((coord, idx) => (
-                  <Badge key={coord.id} variant="secondary" className="text-xs py-0">
-                    {coord.name}
+              <div className="flex flex-wrap gap-2 text-xs">
+                <span className="text-muted-foreground">
+                  Sites: {stateData.totalSites}
+                </span>
+                {stateData.pendingSites > 0 && (
+                  <Badge variant="outline" className="text-xs py-0">
+                    {stateData.pendingSites} pending
                   </Badge>
-                ))}
+                )}
+                {stateData.dispatchedSites > 0 && (
+                  <Badge variant="outline" className="text-xs py-0 border-blue-300 text-blue-700 dark:border-blue-700 dark:text-blue-300">
+                    {stateData.dispatchedSites} dispatched
+                  </Badge>
+                )}
+                {stateData.verifiedSites > 0 && (
+                  <Badge variant="outline" className="text-xs py-0 border-green-300 text-green-700 dark:border-green-700 dark:text-green-300">
+                    {stateData.verifiedSites} verified
+                  </Badge>
+                )}
               </div>
-            )}
-          </div>
-        ))}
+
+              {stateData.coordinators.length > 0 && (
+                <div className="mt-2 pt-2 border-t flex items-center gap-1 flex-wrap">
+                  <Users className="h-3 w-3 text-muted-foreground" />
+                  <span className="text-xs text-muted-foreground">Coordinators:</span>
+                  {stateData.coordinators.map((coord) => (
+                    <Badge key={coord.id} variant="secondary" className="text-xs py-0">
+                      {coord.name}
+                    </Badge>
+                  ))}
+                </div>
+              )}
+
+              {stateData.localities.length > 0 && (
+                <div className="mt-2 pt-2 border-t">
+                  <button
+                    onClick={() => toggleState(stateData.state)}
+                    className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover-elevate rounded px-1 py-0.5 -mx-1 w-full"
+                    data-testid={`trigger-localities-${stateData.state}`}
+                  >
+                    {isStateExpanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+                    <MapPin className="h-3 w-3" />
+                    <span>Localities ({stateData.localities.length})</span>
+                  </button>
+                  {isStateExpanded && (
+                    <div className="mt-1.5 space-y-1.5 ml-2">
+                      {stateData.localities.map((loc) => (
+                        <LocalitySitesSection key={loc.locality} locality={loc} />
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })}
       </CollapsibleContent>
     </Collapsible>
   );
@@ -909,11 +1130,70 @@ export default function WorkflowTrackerTab({ mmpFiles, coordinators = [] }: Work
     return Object.entries(workload).map(([id, data]) => ({ id, ...data }));
   }, [enrichedMMPs]);
 
-  // Handler for coordinator card click - clears other filters for clarity
   const handleCoordinatorClick = (coordId: string) => {
     setStageFilter('all');
     setSearchQuery('');
     setCoordinatorFilter(coordinatorFilter === coordId ? 'all' : coordId);
+  };
+
+  const exportStatusReport = () => {
+    const rows: string[][] = [];
+    rows.push([
+      'MMP Name', 'Hub', 'Stage', 'Overall Progress',
+      'Total Sites', 'Verified', 'Pending', 'In Progress',
+      'State', 'Locality', 'Site Code', 'Site Name', 'Site Status',
+      'Verified By', 'Verified At', 'Accepted By', 'Accepted At',
+      'Rejection/Return Reason', 'Notes'
+    ]);
+
+    filteredMMPs.forEach((mmp: any) => {
+      const mmpName = mmp.mmpName || mmp.name || '';
+      const hub = mmp.hub || mmp.hubOffice || '';
+      const stage = mmp.derivedStage || '';
+      const progress = mmp.verificationProgress ? `${mmp.verificationProgress.percentage}%` : '0%';
+      const total = mmp.verificationProgress?.total || 0;
+      const verified = mmp.verificationProgress?.verified || 0;
+      const pending = mmp.verificationProgress?.pending || 0;
+      const inProg = mmp.verificationProgress?.inProgress || 0;
+
+      if (mmp.stateBreakdown && mmp.stateBreakdown.length > 0) {
+        mmp.stateBreakdown.forEach((st: StateBreakdown) => {
+          st.localities.forEach((loc: LocalityBreakdown) => {
+            loc.sites.forEach((site: SiteDetail) => {
+              rows.push([
+                mmpName, hub, stage, progress,
+                String(total), String(verified), String(pending), String(inProg),
+                st.state, loc.locality,
+                site.siteCode, site.siteName, site.status,
+                site.verifiedBy || '', site.verifiedAt ? format(new Date(site.verifiedAt), 'yyyy-MM-dd HH:mm') : '',
+                site.acceptedBy || '', site.acceptedAt ? format(new Date(site.acceptedAt), 'yyyy-MM-dd HH:mm') : '',
+                site.rejectionComments || '', site.verificationNotes || ''
+              ]);
+            });
+          });
+        });
+      } else {
+        rows.push([
+          mmpName, hub, stage, progress,
+          String(total), String(verified), String(pending), String(inProg),
+          '', '', '', '', '', '', '', '', '', '', ''
+        ]);
+      }
+    });
+
+    const csvContent = rows.map(row =>
+      row.map(cell => `"${(cell || '').replace(/"/g, '""')}"`).join(',')
+    ).join('\n');
+
+    const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `MMP_Status_Report_${format(new Date(), 'yyyy-MM-dd_HHmm')}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
   };
 
   return (
@@ -967,6 +1247,16 @@ export default function WorkflowTrackerTab({ mmpFiles, coordinators = [] }: Work
             ))}
           </SelectContent>
         </Select>
+        
+        <Button 
+          variant="outline" 
+          onClick={exportStatusReport}
+          disabled={filteredMMPs.length === 0}
+          data-testid="button-export-status-report"
+        >
+          <Download className="h-4 w-4 mr-2" />
+          Export Status Report
+        </Button>
       </div>
 
       <div className="flex gap-2 flex-wrap">

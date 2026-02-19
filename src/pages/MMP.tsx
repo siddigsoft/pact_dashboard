@@ -2017,6 +2017,7 @@ const MMP = () => {
   const isSupervisor = hasRole(['Supervisor', 'supervisor']);
   const isCoordinator = hasRole(['Coordinator', 'coordinator']);
   const isDataCollector = hasRole(['DataCollector', 'datacollector', 'Data Collector', 'data collector', 'enumerator', 'Enumerator']);
+  const isDataTeam = hasRole(['DataTeam', 'dataTeam', 'data_team', 'Data Team']);
   // Coordinators have full data collector capabilities (can claim sites, view transport fees, etc.)
   const canClaimSites = isDataCollector || isCoordinator;
   
@@ -2272,7 +2273,7 @@ const MMP = () => {
     loadMySitesForEnumerator();
   }, [canClaimSites, currentUser?.id, enumeratorRefreshTrigger]);
 
-  const canRead = checkPermission('mmp', 'read') || isAdmin || isFOM || isSupervisor || isCoordinator || isICT || isDataCollector;
+  const canRead = checkPermission('mmp', 'read') || isAdmin || isFOM || isSupervisor || isCoordinator || isICT || isDataCollector || isDataTeam;
   // Only Admin and ICT accounts should see the Upload button on the MMP management page.
   // We intentionally DO NOT fallback to checkPermission here to prevent other roles (e.g. FOM)
   // that may have broad permissions from seeing the upload control.
@@ -2429,7 +2430,7 @@ const MMP = () => {
     // PROJECT TEAM MEMBERSHIP FILTER
     // Only show MMPs from projects the user belongs to (unless admin/superuser).
     // For FOMs and Supervisors, still honor project membership but also allow MMPs explicitly forwarded to them.
-    if (!isAdminOrSuperUser) {
+    if (!isAdminOrSuperUser && !isDataTeam) {
       if (userProjectIds.length > 0) {
         filteredMMPs = mmpFiles.filter(mmp => {
           const inProject = mmp.projectId ? userProjectIds.includes(mmp.projectId) : false;
@@ -2488,8 +2489,8 @@ const MMP = () => {
       } else if (isCoordinator) {
         // For Coordinator: They don't see "new" MMPs, only verified ones with sites to verify
         return false;
-      } else if (isAdmin || isICT) {
-        // For admin/ICT: New MMPs are those uploaded but not forwarded to any FOM yet
+      } else if (isAdmin || isICT || isDataTeam) {
+        // For admin/ICT/DataTeam: New MMPs are those uploaded but not forwarded to any FOM yet
         return mmp.status === 'pending' && 
                (!(mmp.workflow as any)?.forwardedToFomIds || (mmp.workflow as any)?.forwardedToFomIds.length === 0);
       }
@@ -2516,8 +2517,8 @@ const MMP = () => {
       } else if (isCoordinator) {
         // For Coordinator: They don't have a "forwarded" category
         return false;
-      } else if (isAdmin || isICT) {
-        // For admin/ICT: Forwarded means MMPs that have been forwarded to FOMs or coordinators
+      } else if (isAdmin || isICT || isDataTeam) {
+        // For admin/ICT/DataTeam: Forwarded means MMPs that have been forwarded to FOMs or coordinators
         const hasForwardedToFomIds = workflow?.forwardedToFomIds && workflow?.forwardedToFomIds.length > 0;
         const hasForwardedToCoordinators = workflow?.forwardedToCoordinators === true || 
                                            (workflow?.forwardedToCoordinatorAt && !workflow?.isRecalled) ||
@@ -2589,7 +2590,7 @@ const MMP = () => {
       forwarded: forwardedMMPs,
       verified: verifiedMMPs
     };
-  }, [mmpFiles, isFOM, isSupervisor, isCoordinator, currentUser, isAdminOrSuperUser, userProjectIds, canClaimSites, mmpIdsWithVerifiedSites, applyHubFilter, hubAccessInfo]);
+  }, [mmpFiles, isFOM, isSupervisor, isCoordinator, isDataTeam, currentUser, isAdminOrSuperUser, userProjectIds, canClaimSites, mmpIdsWithVerifiedSites, applyHubFilter, hubAccessInfo]);
 
   // Load site entries for MMPs when tabs become active (ensures site data is synchronized)
   useEffect(() => {
@@ -2635,7 +2636,7 @@ const MMP = () => {
 
   // New MMP subcategories for FOM, Supervisor and Admin (Removed Rejected)
   const newFomSubcategories = useMemo(() => {
-    if (!isFOM && !isSupervisor && !isAdmin && !isICT) return { pending: [], verified: [], returned: [] } as Record<string, typeof categorizedMMPs.new>;
+    if (!isFOM && !isSupervisor && !isAdmin && !isICT && !isDataTeam) return { pending: [], verified: [], returned: [] } as Record<string, typeof categorizedMMPs.new>;
     const base = categorizedMMPs.new || [];
     const pending = base.filter(mmp => {
       const status = (mmp.status || '').toLowerCase();
@@ -2653,7 +2654,7 @@ const MMP = () => {
       })
     );
     return { pending, verified, returned };
-  }, [isFOM, isSupervisor, isAdmin, isICT, categorizedMMPs.new, mmpFiles]);
+  }, [isFOM, isSupervisor, isAdmin, isICT, isDataTeam, categorizedMMPs.new, mmpFiles]);
 
   // Returned sites grouped by state for FOM view
   const returnedSitesByState = useMemo(() => {
