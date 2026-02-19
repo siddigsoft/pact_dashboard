@@ -515,11 +515,10 @@ function matchCollectorClassification(
   return null;
 }
 
-export async function exportCoverageTrackerExcel(
+export async function buildCoverageTrackerWorkbook(
   filteredData: FilteredRow[],
-  filename: string,
   sessionName?: string
-) {
+): Promise<ArrayBuffer> {
   const wb = new ExcelJS.Workbook();
   wb.creator = 'PACT Command Center';
   wb.created = new Date();
@@ -784,5 +783,14 @@ export async function exportCoverageTrackerExcel(
   }
 
   const buf = await wb.xlsx.writeBuffer();
+  return buf as ArrayBuffer;
+}
+
+export async function exportCoverageTrackerExcel(
+  filteredData: FilteredRow[],
+  filename: string,
+  sessionName?: string
+) {
+  const buf = await buildCoverageTrackerWorkbook(filteredData, sessionName);
   saveAs(new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), filename);
 }
