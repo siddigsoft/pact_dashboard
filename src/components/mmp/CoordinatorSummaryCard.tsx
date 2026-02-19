@@ -6,13 +6,16 @@ import { Users, MapPin, ChevronDown, ChevronRight, CheckCircle2, AlertCircle, Cl
 import { format } from 'date-fns';
 import { supabase } from '@/integrations/supabase/client';
 
-interface ReturnedSiteDetail {
+interface SiteStatusDetail {
   id: string;
   name: string;
+  siteCode: string;
   status: string;
+  statusLabel: string;
+  statusCategory: 'verified' | 'returned' | 'in_progress' | 'pending';
   reason: string;
-  returnedBy: string;
-  returnedAt: string;
+  actionBy: string;
+  actionAt: string;
 }
 
 interface CoordinatorInfo {
@@ -24,7 +27,7 @@ interface CoordinatorInfo {
   sitesInProgress: number;
   sitesPending: number;
   receivedAt?: string;
-  returnedSiteDetails: ReturnedSiteDetail[];
+  siteDetails: SiteStatusDetail[];
 }
 
 interface StateCoordinatorGroup {
@@ -40,6 +43,55 @@ interface CoordinatorSummaryCardProps {
   mmpId?: string;
 }
 
+function SiteDetailRow({ site }: { site: SiteStatusDetail }) {
+  const categoryColors: Record<string, string> = {
+    verified: 'bg-green-50/80 dark:bg-green-900/15 border-green-100 dark:border-green-900/30',
+    returned: 'bg-red-50/80 dark:bg-red-900/15 border-red-100 dark:border-red-900/30',
+    in_progress: 'bg-blue-50/80 dark:bg-blue-900/15 border-blue-100 dark:border-blue-900/30',
+    pending: 'bg-muted/50 border-border',
+  };
+  const badgeColors: Record<string, string> = {
+    verified: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
+    returned: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
+    in_progress: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
+    pending: 'bg-muted text-muted-foreground',
+  };
+
+  const formatDate = (dateStr: string) => {
+    if (!dateStr) return '';
+    try {
+      const d = new Date(dateStr);
+      if (!isNaN(d.getTime())) return format(d, 'MMM d, yyyy HH:mm');
+    } catch { /* ignore */ }
+    return '';
+  };
+
+  return (
+    <div className={`flex items-start gap-2 p-1.5 rounded border text-xs ${categoryColors[site.statusCategory]}`}>
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="font-medium">{site.name}</span>
+          {site.siteCode && <span className="text-muted-foreground">({site.siteCode})</span>}
+          <Badge variant="secondary" className={`text-[10px] px-1.5 py-0 ${badgeColors[site.statusCategory]}`}>
+            {site.statusLabel}
+          </Badge>
+        </div>
+        {site.reason && (
+          <p className="text-[11px] text-muted-foreground mt-0.5 line-clamp-2">
+            {site.reason}
+          </p>
+        )}
+        {(site.actionBy || site.actionAt) && (
+          <p className="text-[10px] text-muted-foreground mt-0.5">
+            {site.actionBy && <>By: {site.actionBy}</>}
+            {site.actionAt && <>{site.actionBy ? ' ' : ''}{formatDate(site.actionAt)}</>}
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function CoordinatorSummaryCard({ siteEntries, mmpId }: CoordinatorSummaryCardProps) {
   const [isOpen, setIsOpen] = useState(true);
   const [coordinatorNames, setCoordinatorNames] = useState<Record<string, string>>({});
@@ -50,9 +102,9 @@ export default function CoordinatorSummaryCard({ siteEntries, mmpId }: Coordinat
     const stateMap = new Map<string, StateCoordinatorGroup>();
     const coordIds = new Set<string>();
 
-    const verifiedStatuses = ['verified', 'approved', 'approved and costed', 'dispatched', 'completed'];
-    const returnedStatuses = ['returned_to_fom', 'returned', 'rejected', 'recalled', 'sent_back'];
-    const inProgressStatuses = ['in_progress', 'accepted'];
+    const verifiedStatuses = ['verified', 'approved', 'approved and costed', 'costed', 'dispatched', 'completed'];
+    const returnedStatuses = ['returned_to_fom', 'returned', 'rejected', 'recalled', 'sent_back', 'sent_back_to_fom'];
+    const inProgressStatuses = ['in_progress', 'accepted', 'forwarded', 'forwarded_to_fom', 'forwarded_to_coordinator', 'forwarded_to_coordinators'];
 
     siteEntries.forEach((entry: any) => {
       const stateName = entry.state || entry.stateName || 'Unknown State';
@@ -93,14 +145,24 @@ export default function CoordinatorSummaryCard({ siteEntries, mmpId }: Coordinat
       }
 
       const ad = entry.additional_data || entry.additionalData || {};
-      const returnedDetail: ReturnedSiteDetail | null = isReturned ? {
+      const statusCategory: SiteStatusDetail['statusCategory'] = isVerified ? 'verified' : isReturned ? 'returned' : isInProgress ? 'in_progress' : 'pending';
+      const statusLabels: Record<string, string> = {
+        verified: 'Verified', approved: 'Approved', 'approved and costed': 'Costed', costed: 'Costed', dispatched: 'Dispatched', completed: 'Completed',
+        returned_to_fom: 'Returned to FOM', returned: 'Returned', rejected: 'Rejected', recalled: 'Recalled', sent_back: 'Sent Back', sent_back_to_fom: 'Sent Back to FOM',
+        in_progress: 'In Progress', accepted: 'Accepted', forwarded: 'Forwarded', forwarded_to_fom: 'With FOM', forwarded_to_coordinator: 'With Coordinator', forwarded_to_coordinators: 'With Coordinators',
+      };
+      
+      const siteDetail: SiteStatusDetail = {
         id: entry.id || '',
-        name: entry.site_name || entry.siteName || entry.site_code || 'Unknown',
-        status: entryStatus === 'rejected' ? 'Rejected' : 'Returned',
+        name: entry.site_name || entry.siteName || 'Unknown',
+        siteCode: entry.site_code || entry.siteCode || '',
+        status: entryStatus,
+        statusLabel: statusLabels[entryStatus] || entryStatus.replace(/_/g, ' '),
+        statusCategory,
         reason: entry.verification_notes || ad.rejection_comments || ad.rejection_reason || ad.return_reason || entry.rejection_comments || '',
-        returnedBy: entry.verified_by || ad.sent_back_by || entry.rejected_by || ad.rejected_by || '',
-        returnedAt: entry.verified_at || entry.rejected_at || ad.rejected_at || ad.sent_back_at || '',
-      } : null;
+        actionBy: isVerified ? (entry.verified_by || '') : isReturned ? (entry.verified_by || ad.sent_back_by || entry.rejected_by || ad.rejected_by || '') : '',
+        actionAt: isVerified ? (entry.verified_at || '') : isReturned ? (entry.verified_at || entry.rejected_at || ad.rejected_at || ad.sent_back_at || '') : (entry.dispatched_at || entry.forwarded_at || ''),
+      };
 
       if (coordId) {
         coordIds.add(coordId);
@@ -112,7 +174,7 @@ export default function CoordinatorSummaryCard({ siteEntries, mmpId }: Coordinat
           if (isReturned) existingCoord.sitesReturned++;
           if (isInProgress) existingCoord.sitesInProgress++;
           if (!isVerified && !isReturned && !isInProgress) existingCoord.sitesPending++;
-          if (returnedDetail) existingCoord.returnedSiteDetails.push(returnedDetail);
+          existingCoord.siteDetails.push(siteDetail);
         } else {
           stateData.coordinators.push({ 
             id: coordId, 
@@ -123,7 +185,7 @@ export default function CoordinatorSummaryCard({ siteEntries, mmpId }: Coordinat
             sitesInProgress: isInProgress ? 1 : 0,
             sitesPending: (!isVerified && !isReturned && !isInProgress) ? 1 : 0,
             receivedAt: receivedAt,
-            returnedSiteDetails: returnedDetail ? [returnedDetail] : [],
+            siteDetails: [siteDetail],
           });
         }
       }
@@ -312,122 +374,131 @@ export default function CoordinatorSummaryCard({ siteEntries, mmpId }: Coordinat
                 </div>
 
                 <div className="space-y-2">
-                  {stateData.coordinators.map((coord) => (
-                    <div 
+                  {stateData.coordinators.map((coord) => {
+                    const verifiedSites = coord.siteDetails.filter(s => s.statusCategory === 'verified');
+                    const returnedSites = coord.siteDetails.filter(s => s.statusCategory === 'returned');
+                    const inProgressSites = coord.siteDetails.filter(s => s.statusCategory === 'in_progress');
+                    const pendingSites = coord.siteDetails.filter(s => s.statusCategory === 'pending');
+
+                    return (
+                    <Collapsible 
                       key={coord.id}
-                      className="rounded-md bg-muted/50 text-sm"
                       data-testid={`coordinator-${coord.id}`}
                     >
-                      <div className="flex items-center justify-between gap-2 p-2">
-                        <div className="flex items-center gap-2 min-w-0">
-                          <div className="w-8 h-8 rounded-full bg-purple-200 dark:bg-purple-800 flex items-center justify-center flex-shrink-0">
-                            <Users className="h-4 w-4 text-purple-600 dark:text-purple-400" />
-                          </div>
-                          <div className="min-w-0">
-                            <p className="font-medium truncate">
-                              {coordinatorNames[coord.id] || coord.name}
-                            </p>
-                            {coord.receivedAt && (
-                              <p className="text-xs text-muted-foreground flex items-center gap-1">
-                                <Clock className="h-3 w-3" />
-                                {(() => {
-                                  try {
-                                    const date = new Date(coord.receivedAt);
-                                    if (!isNaN(date.getTime())) {
-                                      return format(date, 'MMM d, yyyy');
-                                    }
-                                  } catch {
-                                    return null;
-                                  }
-                                  return 'Date unavailable';
-                                })()}
+                      <CollapsibleTrigger className="w-full rounded-md bg-muted/50 text-sm hover-elevate">
+                        <div className="flex items-center justify-between gap-2 p-2">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <div className="w-8 h-8 rounded-full bg-purple-200 dark:bg-purple-800 flex items-center justify-center flex-shrink-0">
+                              <Users className="h-4 w-4 text-purple-600 dark:text-purple-400" />
+                            </div>
+                            <div className="min-w-0 text-left">
+                              <p className="font-medium truncate">
+                                {coordinatorNames[coord.id] || coord.name}
                               </p>
-                            )}
+                              {coord.receivedAt && (
+                                <p className="text-xs text-muted-foreground flex items-center gap-1">
+                                  <Clock className="h-3 w-3" />
+                                  {(() => {
+                                    try {
+                                      const date = new Date(coord.receivedAt);
+                                      if (!isNaN(date.getTime())) {
+                                        return format(date, 'MMM d, yyyy');
+                                      }
+                                    } catch {
+                                      return null;
+                                    }
+                                    return '';
+                                  })()}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-3 flex-shrink-0">
+                            <div className="flex items-center gap-1.5">
+                              {coord.sitesVerified > 0 && (
+                                <Badge variant="secondary" className="text-[10px] bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">
+                                  {coord.sitesVerified} verified
+                                </Badge>
+                              )}
+                              {coord.sitesReturned > 0 && (
+                                <Badge variant="secondary" className="text-[10px] bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400">
+                                  {coord.sitesReturned} returned
+                                </Badge>
+                              )}
+                              {coord.sitesInProgress > 0 && (
+                                <Badge variant="secondary" className="text-[10px] bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400">
+                                  {coord.sitesInProgress} active
+                                </Badge>
+                              )}
+                            </div>
+                            <span className="text-xs text-muted-foreground">
+                              {coord.sitesAssigned} sites
+                            </span>
+                            <div className="w-12">
+                              <div className="flex h-1.5 rounded-full overflow-hidden bg-muted">
+                                <div className="bg-green-500 transition-all" style={{ width: `${coord.sitesAssigned > 0 ? (coord.sitesVerified / coord.sitesAssigned) * 100 : 0}%` }} />
+                                <div className="bg-red-500 transition-all" style={{ width: `${coord.sitesAssigned > 0 ? (coord.sitesReturned / coord.sitesAssigned) * 100 : 0}%` }} />
+                              </div>
+                            </div>
+                            <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform" />
                           </div>
                         </div>
-                        <div className="flex items-center gap-3 flex-shrink-0">
-                          {coord.sitesReturned > 0 && (
-                            <div className="text-right">
-                              <div className="flex items-center gap-1">
-                                <AlertCircle className="h-3.5 w-3.5 text-red-500" />
-                                <span className="text-sm font-medium text-red-600 dark:text-red-400">
-                                  {coord.sitesReturned}
-                                </span>
+                      </CollapsibleTrigger>
+                      <CollapsibleContent>
+                        <div className="px-2 pb-2 space-y-2 mt-1">
+                          {verifiedSites.length > 0 && (
+                            <div>
+                              <p className="text-[11px] font-semibold text-green-700 dark:text-green-400 mb-1 flex items-center gap-1">
+                                <CheckCircle2 className="h-3 w-3" /> Verified ({verifiedSites.length})
+                              </p>
+                              <div className="space-y-1">
+                                {verifiedSites.map((site) => (
+                                  <SiteDetailRow key={site.id} site={site} />
+                                ))}
                               </div>
-                              <span className="text-[10px] text-red-500 dark:text-red-400">returned</span>
                             </div>
                           )}
-                          <div className="text-right">
-                            <div className="flex items-center gap-1">
-                              {coord.sitesVerified === coord.sitesAssigned && coord.sitesAssigned > 0 ? (
-                                <CheckCircle2 className="h-4 w-4 text-green-600" />
-                              ) : coord.sitesReturned === coord.sitesAssigned && coord.sitesAssigned > 0 ? (
-                                <AlertCircle className="h-4 w-4 text-red-500" />
-                              ) : null}
-                              <span className={`text-sm font-medium ${
-                                coord.sitesVerified === coord.sitesAssigned && coord.sitesAssigned > 0
-                                  ? 'text-green-600 dark:text-green-400'
-                                  : coord.sitesReturned > 0 && coord.sitesVerified === 0
-                                    ? 'text-red-600 dark:text-red-400'
-                                    : ''
-                              }`}>
-                                {coord.sitesVerified}/{coord.sitesAssigned}
-                              </span>
-                            </div>
-                            <span className="text-xs text-muted-foreground">verified</span>
-                          </div>
-                          <div className="w-12">
-                            <div className="flex h-1.5 rounded-full overflow-hidden bg-muted">
-                              <div 
-                                className="bg-green-500 transition-all" 
-                                style={{ width: `${coord.sitesAssigned > 0 ? (coord.sitesVerified / coord.sitesAssigned) * 100 : 0}%` }} 
-                              />
-                              <div 
-                                className="bg-red-500 transition-all" 
-                                style={{ width: `${coord.sitesAssigned > 0 ? (coord.sitesReturned / coord.sitesAssigned) * 100 : 0}%` }} 
-                              />
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                      {coord.returnedSiteDetails.length > 0 && (
-                        <div className="px-2 pb-2 pt-0">
-                          <div className="border-t border-red-200 dark:border-red-900/50 pt-2 mt-1 space-y-1.5">
-                            {coord.returnedSiteDetails.map((site, idx) => (
-                              <div key={site.id || idx} className="flex items-start gap-2 p-1.5 rounded bg-red-50/80 dark:bg-red-900/20 border border-red-100 dark:border-red-900/40">
-                                <XCircle className="h-3.5 w-3.5 text-red-500 flex-shrink-0 mt-0.5" />
-                                <div className="min-w-0 flex-1">
-                                  <div className="flex items-center gap-2 flex-wrap">
-                                    <span className="text-xs font-medium">{site.name}</span>
-                                    <Badge variant="secondary" className={`text-[10px] px-1.5 py-0 ${site.status === 'Rejected' ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' : 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400'}`}>
-                                      {site.status}
-                                    </Badge>
-                                  </div>
-                                  {site.reason && (
-                                    <p className="text-[11px] text-muted-foreground mt-0.5 line-clamp-2">
-                                      {site.reason}
-                                    </p>
-                                  )}
-                                  {(site.returnedBy || site.returnedAt) && (
-                                    <p className="text-[10px] text-muted-foreground mt-0.5">
-                                      {site.returnedBy && <>By: {site.returnedBy}</>}
-                                      {site.returnedAt && (() => {
-                                        try {
-                                          const d = new Date(site.returnedAt);
-                                          if (!isNaN(d.getTime())) return <> on {format(d, 'MMM d, yyyy')}</>;
-                                        } catch { /* ignore */ }
-                                        return null;
-                                      })()}
-                                    </p>
-                                  )}
-                                </div>
+                          {returnedSites.length > 0 && (
+                            <div>
+                              <p className="text-[11px] font-semibold text-red-700 dark:text-red-400 mb-1 flex items-center gap-1">
+                                <XCircle className="h-3 w-3" /> Returned / Rejected ({returnedSites.length})
+                              </p>
+                              <div className="space-y-1">
+                                {returnedSites.map((site) => (
+                                  <SiteDetailRow key={site.id} site={site} />
+                                ))}
                               </div>
-                            ))}
-                          </div>
+                            </div>
+                          )}
+                          {inProgressSites.length > 0 && (
+                            <div>
+                              <p className="text-[11px] font-semibold text-blue-700 dark:text-blue-400 mb-1 flex items-center gap-1">
+                                <Clock className="h-3 w-3" /> In Progress ({inProgressSites.length})
+                              </p>
+                              <div className="space-y-1">
+                                {inProgressSites.map((site) => (
+                                  <SiteDetailRow key={site.id} site={site} />
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                          {pendingSites.length > 0 && (
+                            <div>
+                              <p className="text-[11px] font-semibold text-muted-foreground mb-1 flex items-center gap-1">
+                                <AlertCircle className="h-3 w-3" /> Pending ({pendingSites.length})
+                              </p>
+                              <div className="space-y-1">
+                                {pendingSites.map((site) => (
+                                  <SiteDetailRow key={site.id} site={site} />
+                                ))}
+                              </div>
+                            </div>
+                          )}
                         </div>
-                      )}
-                    </div>
-                  ))}
+                      </CollapsibleContent>
+                    </Collapsible>
+                    );
+                  })}
                 </div>
               </div>
             ))}

@@ -39,6 +39,12 @@ import { useAuthorization } from "@/hooks/use-authorization";
 import ForwardToFOMDialog from "@/components/mmp/ForwardToFOMDialog";
 import ForwardToCoordinatorsDialog from "@/components/mmp/ForwardToCoordinatorsDialog";
 import CoordinatorSummaryCard from "@/components/mmp/CoordinatorSummaryCard";
+import WorkflowTrackerTab from "@/components/mmp/WorkflowTrackerTab";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { saveAs } from 'file-saver';
+import * as XLSX from 'xlsx';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 const MMPDetailView = () => {
   const { id } = useParams<{ id: string }>();
@@ -246,10 +252,89 @@ const MMPDetailView = () => {
     }
   };
   
-  const handleDownload = () => {
-    toast({ 
-      description: "MMP file download started",
-    });
+  const exportToExcel = () => {
+    try {
+      const exportData = siteEntries.map((site: any) => {
+        const ad = site.additional_data || {};
+        return {
+          'Site Code': site.site_code || site.siteCode || '',
+          'Site Name': site.site_name || site.siteName || '',
+          'State': site.state || '',
+          'Locality': site.locality || '',
+          'Hub Office': site.hub_office || site.hubOffice || '',
+          'Status': (site.status || '').replace(/_/g, ' '),
+          'Visit Type': site.visit_type || site.visitType || '',
+          'Main Activity': site.main_activity || site.mainActivity || '',
+          'Coordinator': ad.assigned_to_name || site.coordinator_name || '',
+          'Verified By': site.verified_by || '',
+          'Verified At': site.verified_at ? format(new Date(site.verified_at), 'MMM d, yyyy HH:mm') : '',
+          'Verification Notes': site.verification_notes || '',
+          'Rejected By': site.rejected_by || ad.rejected_by || '',
+          'Rejected At': site.rejected_at || ad.rejected_at ? format(new Date(site.rejected_at || ad.rejected_at), 'MMM d, yyyy HH:mm') : '',
+          'Rejection Comments': ad.rejection_comments || site.rejection_comments || '',
+          'Return Reason': ad.return_reason || ad.rejection_reason || '',
+        };
+      });
+
+      const wb = XLSX.utils.book_new();
+      const ws = XLSX.utils.json_to_sheet(exportData);
+      const colWidths = Object.keys(exportData[0] || {}).map(key => ({ wch: Math.max(key.length, 15) }));
+      ws['!cols'] = colWidths;
+      XLSX.utils.book_append_sheet(wb, ws, 'Sites');
+
+      const excelBuffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+      const blobData = new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const fileName = `${mmpFile?.name || 'MMP'}-${format(new Date(), 'yyyy-MM-dd')}.xlsx`;
+      saveAs(blobData, fileName);
+      toast({ description: "Excel file downloaded successfully" });
+    } catch (error) {
+      console.error('Excel export error:', error);
+      toast({ description: "Failed to export Excel file", variant: "destructive" });
+    }
+  };
+
+  const exportToPdf = () => {
+    try {
+      const doc = new jsPDF({ orientation: 'landscape' });
+      doc.setFontSize(16);
+      doc.text(mmpFile?.name || 'MMP Report', 14, 15);
+      doc.setFontSize(10);
+      doc.text(`MMP ID: ${mmpFile?.mmpId || id}`, 14, 22);
+      doc.text(`Status: ${(mmpFile?.status || '').replace(/_/g, ' ')}`, 14, 28);
+      doc.text(`Total Sites: ${siteEntries.length}`, 14, 34);
+      doc.text(`Generated: ${format(new Date(), 'MMM d, yyyy HH:mm')}`, 14, 40);
+
+      const tableData = siteEntries.map((site: any) => {
+        const ad = site.additional_data || {};
+        return [
+          site.site_code || site.siteCode || '',
+          site.site_name || site.siteName || '',
+          site.state || '',
+          site.locality || '',
+          (site.status || '').replace(/_/g, ' '),
+          ad.assigned_to_name || site.coordinator_name || '',
+          site.verified_by || '',
+          site.verified_at ? format(new Date(site.verified_at), 'MMM d') : '',
+          site.verification_notes || ad.rejection_comments || ad.return_reason || '',
+        ];
+      });
+
+      autoTable(doc, {
+        startY: 46,
+        head: [['Code', 'Site Name', 'State', 'Locality', 'Status', 'Coordinator', 'Verified By', 'Date', 'Notes']],
+        body: tableData,
+        styles: { fontSize: 7, cellPadding: 2 },
+        headStyles: { fillColor: [59, 130, 246], fontSize: 8 },
+        alternateRowStyles: { fillColor: [245, 247, 250] },
+      });
+
+      const fileName = `${mmpFile?.name || 'MMP'}-${format(new Date(), 'yyyy-MM-dd')}.pdf`;
+      doc.save(fileName);
+      toast({ description: "PDF file downloaded successfully" });
+    } catch (error) {
+      console.error('PDF export error:', error);
+      toast({ description: "Failed to export PDF file", variant: "destructive" });
+    }
   };
 
   const handleReset = async () => {
@@ -407,10 +492,24 @@ const MMPDetailView = () => {
           >
             {mmpFile?.status || 'Unknown'}
           </Badge>
-          <Button variant="outline" size="sm" onClick={handleDownload} data-testid="button-export-mmp">
-            <Download className="h-4 w-4 mr-2" />
-            Export
-          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm" data-testid="button-export-mmp">
+                <Download className="h-4 w-4 mr-2" />
+                Export
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={exportToExcel} data-testid="menu-export-excel">
+                <FileSpreadsheet className="h-4 w-4 mr-2" />
+                Export as Excel
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={exportToPdf} data-testid="menu-export-pdf">
+                <FileText className="h-4 w-4 mr-2" />
+                Export as PDF
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
           <Button variant="outline" size="sm" onClick={() => setShowAuditTrail(true)} data-testid="button-audit-trail">
             <History className="h-4 w-4 mr-2" />
             Audit
@@ -695,42 +794,56 @@ const MMPDetailView = () => {
         </CardHeader>
         <CardContent>
           <Tabs defaultValue="list" className="w-full">
-            <TabsList className="grid grid-cols-2 md:grid-cols-6 w-full bg-muted/50">
+            <TabsList className="grid grid-cols-3 md:grid-cols-7 w-full bg-muted/50">
               <TabsTrigger 
                 value="list" 
                 className="data-[state=active]:bg-blue-600 data-[state=active]:text-white dark:data-[state=active]:bg-blue-700 transition-all"
+                data-testid="tab-site-entries"
               >
                 <span className="hidden sm:inline">Site Entries</span>
                 <span className="sm:hidden">List</span>
                 <Badge variant="secondary" className="ml-2 bg-white/20">{siteEntries.length}</Badge>
               </TabsTrigger>
               <TabsTrigger 
+                value="tracker" 
+                className="data-[state=active]:bg-blue-600 data-[state=active]:text-white dark:data-[state=active]:bg-blue-700 transition-all"
+                data-testid="tab-mmp-tracker"
+              >
+                <span className="hidden sm:inline">MMP Tracker</span>
+                <span className="sm:hidden">Tracker</span>
+              </TabsTrigger>
+              <TabsTrigger 
                 value="detail" 
                 className="data-[state=active]:bg-blue-600 data-[state=active]:text-white dark:data-[state=active]:bg-blue-700 transition-all"
+                data-testid="tab-details"
               >
                 Details
               </TabsTrigger>
               <TabsTrigger 
                 value="validation" 
                 className="data-[state=active]:bg-blue-600 data-[state=active]:text-white dark:data-[state=active]:bg-blue-700 transition-all"
+                data-testid="tab-validation"
               >
                 Validation
               </TabsTrigger>
               <TabsTrigger 
                 value="audit" 
                 className="data-[state=active]:bg-blue-600 data-[state=active]:text-white dark:data-[state=active]:bg-blue-700 transition-all"
+                data-testid="tab-audit"
               >
                 Audit
               </TabsTrigger>
               <TabsTrigger 
                 value="compliance" 
                 className="data-[state=active]:bg-blue-600 data-[state=active]:text-white dark:data-[state=active]:bg-blue-700 transition-all"
+                data-testid="tab-compliance"
               >
                 Compliance
               </TabsTrigger>
               <TabsTrigger 
                 value="version-history" 
                 className="data-[state=active]:bg-blue-600 data-[state=active]:text-white dark:data-[state=active]:bg-blue-700 transition-all"
+                data-testid="tab-version-history"
               >
                 <span className="hidden sm:inline">Version History</span>
                 <span className="sm:hidden">Versions</span>
@@ -744,6 +857,23 @@ const MMPDetailView = () => {
               />
             </TabsContent>
         
+            <TabsContent value="tracker" className="mt-6">
+              {mmpFile && (
+                <WorkflowTrackerTab 
+                  mmpFiles={[mmpFile]}
+                  coordinators={(() => {
+                    const coordMap = new Map<string, string>();
+                    siteEntries.forEach((entry: any) => {
+                      const coordId = entry.additional_data?.assigned_to || entry.forwarded_to_user_id;
+                      const coordName = entry.additional_data?.assigned_to_name || entry.coordinator_name;
+                      if (coordId && coordName) coordMap.set(coordId, coordName);
+                    });
+                    return Array.from(coordMap.entries()).map(([id, name]) => ({ id, name }));
+                  })()}
+                />
+              )}
+            </TabsContent>
+
             <TabsContent value="detail" className="mt-6">
               <div className="space-y-4">
                 {siteEntries.map((site) => (
