@@ -386,8 +386,9 @@ const Users = () => {
     }
     setIsChangingPassword(true);
     try {
-      const { data, error } = await supabase.functions.invoke('admin-change-password', {
-        body: { userId: adminPasswordDialog.user.id, newPassword }
+      const { data, error } = await supabase.rpc('admin_change_user_password', {
+        target_user_id: adminPasswordDialog.user.id,
+        new_password: newPassword
       });
       if (error) throw error;
       if (data?.success) {
