@@ -247,41 +247,55 @@ export const OperationsZone: React.FC = () => {
       return filtered;
     }
     
-    // Coordinator: build site visits from forwarded MMP site entries + dispatched sites in their state
+    // Coordinator: show all site visits relevant to this coordinator
     if (isCoordinator) {
       if (!currentUser?.id) {
         console.log(`📊 OperationsZone: Coordinator - no user, showing no sites`);
         return [];
       }
       
+      const seenIds = new Set<string>();
       const allSites: any[] = [];
       
-      // First, add dispatched sites loaded directly from database
-      // These are sites in the coordinator's state that are available to claim
+      // 1. Include site visits from the main context that are assigned to this coordinator
+      allSiteVisits.forEach(visit => {
+        if (seenIds.has(visit.id)) return;
+        const isAssigned = visit.assignedTo === currentUser.id;
+        const isForwarded = (visit as any).forwardedToUserId === currentUser.id;
+        const isAccepted = (visit as any).acceptedBy === currentUser.id;
+        if (isAssigned || isForwarded || isAccepted) {
+          seenIds.add(visit.id);
+          allSites.push(visit);
+        }
+      });
+      console.log(`📊 OperationsZone: Added ${allSites.length} assigned/accepted site visits from context`);
+      
+      // 2. Add dispatched sites in the coordinator's state (available to claim)
       if (dispatchedSitesFromDB.length > 0) {
-        allSites.push(...dispatchedSitesFromDB);
-        console.log(`📊 OperationsZone: Added ${dispatchedSitesFromDB.length} dispatched sites from DB`);
+        dispatchedSitesFromDB.forEach(site => {
+          if (!seenIds.has(site.id)) {
+            seenIds.add(site.id);
+            allSites.push(site);
+          }
+        });
+        console.log(`📊 OperationsZone: Added dispatched sites from DB (total now: ${allSites.length})`);
       }
       
-      // Also collect site entries from context that are forwarded to this coordinator
+      // 3. Also collect site entries from MMP context forwarded to this coordinator
       if (contextMmpFiles && !contextLoading) {
         contextMmpFiles.forEach((mmp: any) => {
           if (!mmp.siteEntries || !Array.isArray(mmp.siteEntries)) return;
           
           mmp.siteEntries.forEach((entry: any) => {
-            // Filter by forwarded_to_user_id
             if (entry.forwardedToUserId !== currentUser.id) return;
+            if (seenIds.has(entry.id)) return;
             
-            // Skip if already added from dispatchedSitesFromDB
-            if (allSites.some(s => s.id === entry.id)) return;
-            
-            // For non-admins, also check project membership
             if (!isAdminOrSuperUser) {
               const projectId = mmp.projectId;
               if (!projectId || !userProjectIds.includes(projectId)) return;
             }
             
-            // Transform entry to SiteVisit-like format (minimal for metrics)
+            seenIds.add(entry.id);
             allSites.push({
               id: entry.id,
               siteName: entry.siteName || entry.site_name,
@@ -305,19 +319,19 @@ export const OperationsZone: React.FC = () => {
               verifiedBy: entry.verified_by,
               verificationNotes: entry.verification_notes,
               additionalData: entry.additionalData || entry.additional_data || {},
-              dueDate: entry.dueDate || new Date().toISOString(), // Fallback for overdue calc
+              dueDate: entry.dueDate || new Date().toISOString(),
             });
           });
         });
       }
       
-      console.log(`📊 OperationsZone: Coordinator filtered to ${allSites.length} forwarded sites`);
+      console.log(`📊 OperationsZone: Coordinator total sites: ${allSites.length}`);
       return allSites;
     }
     
     // Admin/other roles: show all
     return allSiteVisits;
-  }, [allSiteVisits, isSupervisor, supervisorHubName, isCoordinator, coordinatorStateName, currentUser?.stateId, contextMmpFiles, contextLoading, userProjectIds, isAdminOrSuperUser, dispatchedSitesFromDB]);
+  }, [allSiteVisits, isSupervisor, supervisorHubName, isCoordinator, coordinatorStateName, currentUser?.id, currentUser?.stateId, contextMmpFiles, contextLoading, userProjectIds, isAdminOrSuperUser, dispatchedSitesFromDB]);
 
   const siteVisits = useMemo(() => {
     return filterSiteVisitsByMmp(roleFilteredSiteVisits);
@@ -333,15 +347,25 @@ export const OperationsZone: React.FC = () => {
     .sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime())
     .slice(0, 5);
 
-  // Calculate metrics
+  // Calculate metrics - account for all possible status values including coordinator-specific ones
   const totalVisits = siteVisits.length;
-  const completedVisits = siteVisits.filter(v => v.status === 'completed').length;
-  const pendingVisits = siteVisits.filter(v => v.status === 'pending' || v.status === 'permitVerified').length;
-  const assignedVisits = siteVisits.filter(v => v.status === 'assigned' || v.status === 'inProgress').length;
+  const completedVisits = siteVisits.filter(v => {
+    const s = (v.status || '').toLowerCase();
+    return s === 'completed';
+  }).length;
+  const pendingVisits = siteVisits.filter(v => {
+    const s = (v.status || '').toLowerCase();
+    return s === 'pending' || s === 'permitverified' || s === 'verified' || s === 'dispatched';
+  }).length;
+  const assignedVisits = siteVisits.filter(v => {
+    const s = (v.status || '').toLowerCase();
+    return s === 'assigned' || s === 'inprogress' || s === 'in progress' || s === 'accepted';
+  }).length;
   const overdueVisits = siteVisits.filter(v => {
     const dueDate = new Date(v.dueDate);
     const today = new Date();
-    return dueDate < today && v.status !== 'completed';
+    const s = (v.status || '').toLowerCase();
+    return dueDate < today && s !== 'completed';
   }).length;
   const completionRate = totalVisits > 0 ? Math.round((completedVisits / totalVisits) * 100) : 0;
 
