@@ -440,6 +440,8 @@ const CoordinatorSites: React.FC = () => {
   const [activeTab, setActiveTab] = useState('new');
   const [verifyDialogOpen, setVerifyDialogOpen] = useState(false);
   const [rejectDialogOpen, setRejectDialogOpen] = useState(false);
+  const [returnSiteDialogOpen, setReturnSiteDialogOpen] = useState(false);
+  const [returnSiteReason, setReturnSiteReason] = useState('');
   const [selectedSiteId, setSelectedSiteId] = useState<string | null>(null);
   const [verificationNotes, setVerificationNotes] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
@@ -1265,6 +1267,62 @@ const CoordinatorSites: React.FC = () => {
         description: 'Failed to reject site. Please try again.',
         variant: 'destructive'
       });
+    }
+  };
+
+  // Handle returning a single site back to FOM
+  const handleReturnSingleSite = async (siteId: string, reason: string) => {
+    try {
+      const site = coordinatorSites.find(s => s.id === siteId);
+      if (!site) {
+        toast({ title: 'Error', description: 'Site not found.', variant: 'destructive' });
+        return;
+      }
+
+      const { error } = await supabase
+        .from('mmp_site_entries')
+        .update({
+          status: 'returned_to_fom',
+          verification_notes: reason,
+          verified_at: new Date().toISOString(),
+          verified_by: currentUser?.username || currentUser?.fullName || currentUser?.email || 'System',
+        })
+        .eq('id', siteId);
+      if (error) throw error;
+
+      try {
+        if (site.hub_office) {
+          const { data: hubData } = await supabase
+            .from('hubs')
+            .select('id')
+            .eq('name', site.hub_office)
+            .single();
+          if (hubData?.id) {
+            await NotificationTriggerService.siteReturnedToFOM(
+              hubData.id,
+              site.site_name,
+              1,
+              reason,
+              currentUser?.fullName || currentUser?.username || 'Coordinator'
+            );
+          }
+        }
+      } catch (notifyErr) {
+        console.warn('Failed to notify on site return:', notifyErr);
+      }
+
+      toast({
+        title: 'Site Returned',
+        description: `${site.site_name} has been sent back to FOM.`,
+      });
+
+      await refreshAll();
+      setReturnSiteDialogOpen(false);
+      setReturnSiteReason('');
+      setSelectedSiteId(null);
+    } catch (error) {
+      console.error('Error returning site:', error);
+      toast({ title: 'Error', description: 'Failed to return site. Please try again.', variant: 'destructive' });
     }
   };
 
@@ -2545,6 +2603,40 @@ const CoordinatorSites: React.FC = () => {
                     </Button>
                   )}
                 </div>
+                <div className="flex gap-2 mt-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setSelectedSiteId(site.id);
+                      setReturnSiteReason('');
+                      setReturnSiteDialogOpen(true);
+                    }}
+                    className="flex-1 text-xs py-3 h-auto min-h-[44px] text-orange-600 border-orange-200 hover:bg-orange-50 dark:text-orange-400 dark:border-orange-800 dark:hover:bg-orange-950 active:scale-95"
+                    data-testid={`button-return-site-${site.id}`}
+                    aria-label={`Return ${site.site_name} to FOM`}
+                  >
+                    <ArrowLeft className="h-4 w-4 mr-2" />
+                    Return to FOM
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setSelectedSiteId(site.id);
+                      setVerificationNotes('');
+                      setRejectDialogOpen(true);
+                    }}
+                    className="flex-1 text-xs py-3 h-auto min-h-[44px] text-red-600 border-red-200 hover:bg-red-50 dark:text-red-400 dark:border-red-800 dark:hover:bg-red-950 active:scale-95"
+                    data-testid={`button-reject-site-${site.id}`}
+                    aria-label={`Reject ${site.site_name}`}
+                  >
+                    <XCircle className="h-4 w-4 mr-2" />
+                    Reject
+                  </Button>
+                </div>
               </div>
             )}
           </div>
@@ -3582,6 +3674,52 @@ const CoordinatorSites: React.FC = () => {
             >
               <XCircle className="h-4 w-4 mr-2" />
               Confirm Rejection
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Return to FOM Dialog */}
+      <Dialog open={returnSiteDialogOpen} onOpenChange={setReturnSiteDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Return Site to FOM</DialogTitle>
+            <DialogDescription>
+              Send this site back to the Field Operations Manager for further action.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <label htmlFor="return-reason" className="text-sm font-medium mb-2 block">
+              Reason for Return
+            </label>
+            <Textarea
+              id="return-reason"
+              placeholder="Please explain why this site needs to be returned..."
+              value={returnSiteReason}
+              onChange={(e) => setReturnSiteReason(e.target.value)}
+              className="mt-1"
+              rows={4}
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => {
+              setReturnSiteDialogOpen(false);
+              setReturnSiteReason('');
+              setSelectedSiteId(null);
+            }}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                if (selectedSiteId && returnSiteReason.trim()) {
+                  handleReturnSingleSite(selectedSiteId, returnSiteReason);
+                }
+              }}
+              disabled={!returnSiteReason.trim()}
+              className="bg-orange-600 hover:bg-orange-700"
+            >
+              <ArrowLeft className="h-4 w-4 mr-2" />
+              Confirm Return
             </Button>
           </DialogFooter>
         </DialogContent>
