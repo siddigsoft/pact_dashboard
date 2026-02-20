@@ -2081,7 +2081,7 @@ const MMP = () => {
 
         const { data: dispatchedSites, error } = await supabase
           .from('mmp_site_entries')
-          .select('id, site_code, hub_office, state, locality, site_name, cp_name, visit_type, visit_date, main_activity, activity_at_site, monitoring_by, survey_tool, use_market_diversion, use_warehouse_monitoring, comments, cost, enumerator_fee, transport_fee, dispatched_by, dispatched_at, accepted_by, accepted_at, cost_acknowledged, additional_data, status, forwarded_to_user_id, mmp_file_id, created_at')
+          .select('id, site_code, hub_office, state, locality, site_name, cp_name, visit_type, visit_date, main_activity, activity_at_site, monitoring_by, survey_tool, use_market_diversion, use_warehouse_monitoring, comments, cost, enumerator_fee, transport_fee, dispatched_by, dispatched_at, accepted_by, accepted_at, cost_acknowledged, additional_data, status, mmp_file_id, created_at')
           .ilike('status', 'Dispatched')
           .is('accepted_by', null)
           .ilike('state', `%${collectorStateName}%`)
@@ -2090,9 +2090,12 @@ const MMP = () => {
 
         if (error) {
           console.error('[MMP Direct Load] DB Error:', error);
+          console.error('[MMP Direct Load] Query details - state filter:', collectorStateName, 'user:', currentUser.id);
+          setLoadingEnumerator(false);
           return;
         }
 
+        console.log(`[MMP Direct Load] Found ${dispatchedSites?.length || 0} dispatched sites for state "${collectorStateName}"`);
         enumeratorDbLoadedRef.current = true;
         if (dispatchedSites && dispatchedSites.length > 0) {
           const formattedEntries = dispatchedSites.map(entry => ({
@@ -2143,7 +2146,7 @@ const MMP = () => {
       try {
         const { data: acceptedData, error } = await supabase
           .from('mmp_site_entries')
-          .select('id, site_code, hub_office, state, locality, site_name, cp_name, visit_type, visit_date, main_activity, activity_at_site, monitoring_by, survey_tool, comments, cost, enumerator_fee, transport_fee, dispatched_by, dispatched_at, accepted_by, accepted_at, cost_acknowledged, additional_data, status, forwarded_to_user_id, mmp_file_id, created_at')
+          .select('id, site_code, hub_office, state, locality, site_name, cp_name, visit_type, visit_date, main_activity, activity_at_site, monitoring_by, survey_tool, comments, cost, enumerator_fee, transport_fee, dispatched_by, dispatched_at, accepted_by, accepted_at, cost_acknowledged, additional_data, status, mmp_file_id, created_at')
           .eq('accepted_by', currentUser.id)
           .or('status.is.null,status.not.in.("Rejected","rejected")')
           .order('created_at', { ascending: false })
@@ -3036,9 +3039,19 @@ const MMP = () => {
     }
 
     // Convert collector's stateId/localityId to names for matching
-    const collectorStateName = currentUser.stateId 
+    let collectorStateName = currentUser.stateId 
       ? sudanStates.find(s => s.id === currentUser.stateId)?.name 
       : undefined;
+    if (!collectorStateName && currentUser.stateId) {
+      const stateByName = sudanStates.find(s => 
+        s.name.toLowerCase() === (currentUser.stateId || '').toLowerCase()
+      );
+      if (stateByName) {
+        collectorStateName = stateByName.name;
+      } else {
+        collectorStateName = currentUser.stateId;
+      }
+    }
     const collectorLocalityName = currentUser.stateId && currentUser.localityId
       ? sudanStates.find(s => s.id === currentUser.stateId)
           ?.localities.find(l => l.id === currentUser.localityId)?.name
