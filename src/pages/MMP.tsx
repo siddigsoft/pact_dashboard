@@ -47,6 +47,7 @@ import { useOfflineSiteVisit } from '@/hooks/useOfflineSiteVisit';
 import { useOffline } from '@/hooks/use-offline';
 import WorkflowTrackerTab from '@/components/mmp/WorkflowTrackerTab';
 import { getHubAccessInfo, filterByHubAccess, shouldApplyHubFilter } from '@/utils/hubAccessControl';
+import { getStateName, normalizeStateId } from '@/utils/siteNormalization';
 // Helper component to convert SiteVisitRow[] to site entries and display using MMPSiteEntriesTable
 interface SitesDisplayTableProps {
   siteRows: SiteVisitRow[]; 
@@ -2051,27 +2052,8 @@ const MMP = () => {
       
       setLoadingEnumerator(true);
       try {
-        // Try multiple approaches to determine the collector's state name
-        // 1. Look up by ID in sudanStates (e.g., 'northern' -> 'Northern')
-        // 2. Use stateId directly if it looks like a state name (e.g., 'Northern')
-        // 3. Case-insensitive matching
-        let collectorStateName = sudanStates.find(s => s.id === currentUser.stateId)?.name;
-        
-        if (!collectorStateName) {
-          // stateId might already be the state name (e.g., 'Northern' instead of 'northern')
-          const stateByName = sudanStates.find(s => 
-            s.name.toLowerCase() === (currentUser.stateId || '').toLowerCase()
-          );
-          if (stateByName) {
-            collectorStateName = stateByName.name;
-          }
-        }
-        
-        if (!collectorStateName && currentUser.stateId) {
-          // Use stateId directly as a fallback - might be stored as name
-          collectorStateName = currentUser.stateId;
-          console.log('[MMP Direct Load] Using stateId directly as state name:', collectorStateName);
-        }
+        // Use siteNormalization utility to resolve state name with alias support (e.g., Gedaref -> Gedarif)
+        const collectorStateName = getStateName(currentUser.stateId);
         
         if (!collectorStateName) {
           console.warn('[MMP Direct Load] No state found for user. stateId:', currentUser.stateId);
@@ -2079,12 +2061,43 @@ const MMP = () => {
           return;
         }
 
-        const { data: dispatchedSites, error } = await supabase
+        // Build state filter that handles aliases (e.g., both "Gedaref" and "Gedarif")
+        const normalizedStateId = normalizeStateId(currentUser.stateId);
+        const stateObj = normalizedStateId ? sudanStates.find(s => s.id === normalizedStateId) : null;
+        const stateVariants = new Set<string>();
+        stateVariants.add(collectorStateName);
+        if (stateObj) {
+          stateVariants.add(stateObj.name);
+          stateVariants.add(stateObj.id);
+        }
+        if (currentUser.stateId) stateVariants.add(currentUser.stateId);
+
+        // Remove any empty/whitespace-only variants
+        const validVariants = [...stateVariants].filter(v => v && v.trim().length > 0);
+        
+        if (validVariants.length === 0) {
+          console.warn('[MMP Direct Load] No valid state variants found for filtering');
+          setLoadingEnumerator(false);
+          return;
+        }
+
+        // Query with OR filter for all state name variants
+        const stateFilterStr = validVariants.map(v => `state.ilike.%${v}%`).join(',');
+        
+        let query = supabase
           .from('mmp_site_entries')
           .select('id, site_code, hub_office, state, locality, site_name, cp_name, visit_type, visit_date, main_activity, activity_at_site, monitoring_by, survey_tool, use_market_diversion, use_warehouse_monitoring, comments, cost, enumerator_fee, transport_fee, dispatched_by, dispatched_at, accepted_by, accepted_at, cost_acknowledged, additional_data, status, mmp_file_id, created_at')
           .ilike('status', 'Dispatched')
-          .is('accepted_by', null)
-          .ilike('state', `%${collectorStateName}%`)
+          .is('accepted_by', null);
+
+        // Use OR for multiple variants, simple ilike for single variant
+        if (validVariants.length === 1) {
+          query = query.ilike('state', `%${validVariants[0]}%`);
+        } else {
+          query = query.or(stateFilterStr);
+        }
+        
+        const { data: dispatchedSites, error } = await query
           .order('created_at', { ascending: false })
           .limit(500);
 
@@ -3038,22 +3051,11 @@ const MMP = () => {
       };
     }
 
-    // Convert collector's stateId/localityId to names for matching
-    let collectorStateName = currentUser.stateId 
-      ? sudanStates.find(s => s.id === currentUser.stateId)?.name 
-      : undefined;
-    if (!collectorStateName && currentUser.stateId) {
-      const stateByName = sudanStates.find(s => 
-        s.name.toLowerCase() === (currentUser.stateId || '').toLowerCase()
-      );
-      if (stateByName) {
-        collectorStateName = stateByName.name;
-      } else {
-        collectorStateName = currentUser.stateId;
-      }
-    }
-    const collectorLocalityName = currentUser.stateId && currentUser.localityId
-      ? sudanStates.find(s => s.id === currentUser.stateId)
+    // Convert collector's stateId/localityId to names for matching using siteNormalization
+    const collectorStateName = getStateName(currentUser.stateId) || undefined;
+    const normalizedCollectorStateId = normalizeStateId(currentUser.stateId);
+    const collectorLocalityName = normalizedCollectorStateId && currentUser.localityId
+      ? sudanStates.find(s => s.id === normalizedCollectorStateId)
           ?.localities.find(l => l.id === currentUser.localityId)?.name
       : undefined;
 
@@ -3076,12 +3078,12 @@ const MMP = () => {
       if (entry.accepted_by) return false; // Must be unclaimed
 
       // Filter by STATE only - users can claim any site in their state
+      // Use getStateName() for normalized comparison (handles aliases like Gedaref/Gedarif)
       if (collectorStateName) {
-        const entryState = String(entry.state || '').toLowerCase();
-        const matches = entryState === collectorStateName.toLowerCase();
+        const normalizedEntryState = getStateName(entry.state);
+        const matches = normalizedEntryState.toLowerCase() === collectorStateName.toLowerCase();
         if (!matches && dispatchedEntries.length > 0) {
-          // Only log first few mismatches
-          console.log(`📊 [State Mismatch] Entry state: "${entry.state}" vs Collector state: "${collectorStateName}"`);
+          console.log(`📊 [State Mismatch] Entry state: "${entry.state}" (normalized: "${normalizedEntryState}") vs Collector state: "${collectorStateName}"`);
         }
         return matches;
       }

@@ -52,10 +52,12 @@ function computeCounts(sites: SiteVisit[]): SiteEntryCounts {
   };
   sites.forEach((entry) => {
     const status = (entry.status || '').toLowerCase().trim();
-    if (status === 'pending' || status === 'dispatched' || status === 'assigned' ||
-        status === 'inprogress' || status === 'in_progress' || status === 'accepted' ||
+    if (status === 'pending' ||
+        status === 'inprogress' || status === 'in_progress' ||
         status === 'forwarded' || status === 'forwarded_to_coordinator' || status === 'forwarded_to_coordinators') {
       counts.new++;
+    } else if (status === 'dispatched' || status === 'assigned' || status === 'accepted') {
+      // Dispatched/assigned/accepted sites are already in the workflow pipeline - don't count as new
     } else if (status === 'permits_attached' || status === 'cp_verified' || status === 'cp_verification') {
       counts.permitsAttached++;
     } else if (status === 'verified') {
