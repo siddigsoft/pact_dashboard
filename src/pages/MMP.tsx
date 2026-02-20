@@ -2034,7 +2034,7 @@ const MMP = () => {
       try {
         const feeResult = await calculateEnumeratorFeeForUser(currentUser.id);
         setViewerEnumeratorFee(feeResult.fee);
-        console.log('[MMP] Loaded viewer enumerator fee:', feeResult.fee, 'Level:', feeResult.level);
+        console.log('[MMP] Loaded viewer enumerator fee:', feeResult.fee, 'Level:', feeResult.classificationLevel);
       } catch (error) {
         console.warn('[MMP] Could not load viewer enumerator fee:', error);
       }
@@ -2888,10 +2888,11 @@ const MMP = () => {
     const statesByHub: Record<string, Set<string>> = {};
     
     verifiedSiteEntries.forEach(entry => {
-      const status = entry.status || '';
-      const hub = entry.hubOffice || entry.hub_office || entry.hub || entry.hubName || '';
-      const state = entry.state || entry.stateName || '';
-      const locality = entry.locality || entry.localityName || '';
+      const e = entry as any;
+      const status = e.status || '';
+      const hub = e.hubOffice || e.hub_office || e.hub || e.hubName || '';
+      const state = e.state || e.stateName || '';
+      const locality = e.locality || e.localityName || '';
       
       if (status) statuses.add(status);
       if (hub) {
@@ -2983,6 +2984,11 @@ const MMP = () => {
     return filtered;
   }, [siteStatusFilter, siteHubFilter, siteStateFilter, siteLocalityFilter, siteMmpFilter]);
 
+  // Check if global filters are active (moved before globalFilteredDispatchedEntries which depends on it)
+  const hasActiveGlobalFilters = useMemo(() => {
+    return siteStatusFilter !== 'all' || siteHubFilter !== 'all' || siteStateFilter !== 'all' || siteLocalityFilter !== 'all' || siteMmpFilter !== 'all';
+  }, [siteStatusFilter, siteHubFilter, siteStateFilter, siteLocalityFilter, siteMmpFilter]);
+
   // Filtered dispatched entries based on state/locality selection
   const globalFilteredDispatchedEntries = useMemo(() => {
     if (!hasActiveGlobalFilters) return dispatchedSiteEntries;
@@ -3030,11 +3036,6 @@ const MMP = () => {
     
     return filtered;
   }, [globalFilteredDispatchedEntries, dispatchedStateFilter, dispatchedLocalityFilter]);
-
-  // Check if global filters are active
-  const hasActiveGlobalFilters = useMemo(() => {
-    return siteStatusFilter !== 'all' || siteHubFilter !== 'all' || siteStateFilter !== 'all' || siteLocalityFilter !== 'all' || siteMmpFilter !== 'all';
-  }, [siteStatusFilter, siteHubFilter, siteStateFilter, siteLocalityFilter, siteMmpFilter]);
 
   // Note: verifiedTabSiteEntryCounts is now derived from precomputedSubcategorySites
   // which is calculated after buildSiteRowsFromMMPs is defined (around line 2736)
@@ -3949,6 +3950,7 @@ const MMP = () => {
           // Skip if this site entry already has a visit row
           if (visitRowSiteIds.has(siteId)) continue;
           
+          const seAny = se as any;
           const row = {
             id: siteId,
             mmpId: mmp.id,
@@ -3962,10 +3964,10 @@ const MMP = () => {
             assignedAt: undefined,
             completedAt: undefined,
             rejectionReason: undefined,
-            accepted_by: se.accepted_by,
-            dispatched_by: se.dispatched_by,
-            dispatched_at: se.dispatched_at,
-            verified_by: se.verified_by,
+            accepted_by: seAny.accepted_by,
+            dispatched_by: seAny.dispatched_by,
+            dispatched_at: seAny.dispatched_at,
+            verified_by: seAny.verified_by,
           } as SiteVisitRow;
           
           const category = categorizeRow(row);
@@ -4096,46 +4098,27 @@ const MMP = () => {
     }
     
     return verifiedCategorySiteRows.filter(entry => {
-      // MMP filter
+      const e = entry as any;
       if (siteMmpFilter !== 'all') {
-        const entryMmpId = entry.mmpId || entry.mmp_file_id || '';
-        if (entryMmpId !== siteMmpFilter) {
-          return false;
-        }
+        const entryMmpId = e.mmpId || e.mmp_file_id || '';
+        if (entryMmpId !== siteMmpFilter) return false;
       }
-      
-      // Status filter
       if (siteStatusFilter !== 'all') {
-        const status = entry.status || '';
-        if (status.toLowerCase() !== siteStatusFilter.toLowerCase()) {
-          return false;
-        }
+        const status = e.status || '';
+        if (status.toLowerCase() !== siteStatusFilter.toLowerCase()) return false;
       }
-      
-      // Hub filter
       if (siteHubFilter !== 'all') {
-        const hub = entry.hub || entry.hubName || '';
-        if (hub !== siteHubFilter) {
-          return false;
-        }
+        const hub = e.hubOffice || e.hub || e.hubName || '';
+        if (hub !== siteHubFilter) return false;
       }
-      
-      // State filter
       if (siteStateFilter !== 'all') {
-        const state = entry.state || entry.stateName || '';
-        if (state !== siteStateFilter) {
-          return false;
-        }
+        const state = e.state || e.stateName || '';
+        if (state !== siteStateFilter) return false;
       }
-      
-      // Locality filter
       if (siteLocalityFilter !== 'all') {
-        const locality = entry.locality || entry.localityName || '';
-        if (locality !== siteLocalityFilter) {
-          return false;
-        }
+        const locality = e.locality || e.localityName || '';
+        if (locality !== siteLocalityFilter) return false;
       }
-      
       return true;
     });
   }, [verifiedCategorySiteRows, hasActiveGlobalFilters, siteStatusFilter, siteHubFilter, siteStateFilter, siteLocalityFilter, siteMmpFilter]);

@@ -952,17 +952,17 @@ const CoordinatorSites: React.FC = () => {
       .flatMap((state: any) => state.localities)
       .filter((locality: any) => !locality.hasPermit)
       .filter((locality: any) => {
-        const validStatuses = ['pending', 'dispatched', 'assigned', 'inprogress', 'in_progress', 'new', 'forwarded'];
+        const permitPendingStatuses = ['pending', 'new', 'forwarded', 'forwarded_to_coordinator', 'forwarded_to_coordinators'];
         return locality.sites.some((site: SiteVisit) => {
           const status = (site.status || '').toLowerCase().replace(/\s+/g, '_');
-          return validStatuses.includes(status);
+          return permitPendingStatuses.includes(status);
         });
       })
       .reduce((total: number, locality: any) => {
-        const validStatuses = ['pending', 'dispatched', 'assigned', 'inprogress', 'in_progress', 'new', 'forwarded'];
+        const permitPendingStatuses = ['pending', 'new', 'forwarded', 'forwarded_to_coordinator', 'forwarded_to_coordinators'];
         const pendingSites = locality.sites.filter((site: SiteVisit) => {
           const status = (site.status || '').toLowerCase().replace(/\s+/g, '_');
-          return validStatuses.includes(status);
+          return permitPendingStatuses.includes(status);
         });
         return total + pendingSites.length;
       }, 0);
