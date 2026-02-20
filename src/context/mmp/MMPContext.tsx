@@ -428,8 +428,8 @@ export const useMMPProvider = () => {
         setLoading(true);
       }
       
-      // OPTIMIZATION: Don't fetch mmp_site_entries on initial load for faster list rendering
-      // Site entries will be fetched on-demand when viewing a specific MMP
+      // Load mmp_files with mmp_site_entries so coordinator Site Verification page
+      // can show sites from context (same as backup). On-demand load still used when opening a single MMP.
       const { data: mmpData, error } = await supabase
         .from('mmp_files')
         .select(`
@@ -438,7 +438,8 @@ export const useMMPProvider = () => {
             id,
             name,
             project_code
-          )
+          ),
+          mmp_site_entries (*)
         `)
         .order('created_at', { ascending: false });
 

@@ -1,7 +1,7 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useMemo } from 'react';
+import { useMMP } from '@/context/mmp/MMPContext';
 import { useAppContext } from '@/context/AppContext';
 import { useUserProjects } from '@/hooks/useUserProjects';
-import { supabase } from '@/integrations/supabase/client';
 
 export interface SiteEntryCounts {
   new: number;
@@ -39,248 +39,123 @@ export interface SiteVisit {
 }
 
 /**
- * Custom hook to fetch coordinator-specific sites directly from database
- * This fetches mmp_site_entries where forwarded_to_user_id matches the current user
+ * Compute tab counts from sites (same logic as previous direct-query implementation).
  */
-export const useCoordinatorSites = () => {
-  const { currentUser } = useAppContext();
-  const { userProjectIds, isAdminOrSuperUser } = useUserProjects();
-  const [coordinatorSites, setCoordinatorSites] = useState<SiteVisit[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [initialLoadComplete, setInitialLoadComplete] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [siteCounts, setSiteCounts] = useState<SiteEntryCounts>({
+function computeCounts(sites: SiteVisit[]): SiteEntryCounts {
+  const counts: SiteEntryCounts = {
     new: 0,
     permitsAttached: 0,
     verified: 0,
     approved: 0,
     completed: 0,
     rejected: 0
-  });
-
-  // Compute counts from sites data (runs after sites are loaded)
-  const computeCountsFromSites = useCallback((sites: SiteVisit[]) => {
-    const counts: SiteEntryCounts = {
-      new: 0,
-      permitsAttached: 0,
-      verified: 0,
-      approved: 0,
-      completed: 0,
-      rejected: 0
-    };
-
-    sites.forEach((entry) => {
-      const status = (entry.status || '').toLowerCase().trim();
-      if (status === 'pending' || status === 'dispatched' || status === 'assigned' || 
-          status === 'inprogress' || status === 'in_progress' || status === 'accepted' ||
-          status === 'forwarded' || status === 'forwarded_to_coordinator' || status === 'forwarded_to_coordinators') {
-        counts.new++;
-      } else if (status === 'permits_attached' || status === 'cp_verified' || status === 'cp_verification') {
-        counts.permitsAttached++;
-      } else if (status === 'verified') {
-        counts.verified++;
-      } else if (status === 'approved' || status === 'costed') {
-        counts.approved++;
-      } else if (status === 'completed') {
-        counts.completed++;
-      } else if (status === 'rejected') {
-        counts.rejected++;
-      } else {
-        counts.new++;
-      }
-    });
-
-    setSiteCounts(counts);
-  }, []);
-
-  const fetchCoordinatorSites = useCallback(async (isBackgroundRefresh = false) => {
-    if (!currentUser?.id) {
-      setCoordinatorSites([]);
-      setLoading(false);
-      setInitialLoadComplete(true);
-      return;
+  };
+  sites.forEach((entry) => {
+    const status = (entry.status || '').toLowerCase().trim();
+    if (status === 'pending' || status === 'dispatched' || status === 'assigned' ||
+        status === 'inprogress' || status === 'in_progress' || status === 'accepted' ||
+        status === 'forwarded' || status === 'forwarded_to_coordinator' || status === 'forwarded_to_coordinators') {
+      counts.new++;
+    } else if (status === 'permits_attached' || status === 'cp_verified' || status === 'cp_verification') {
+      counts.permitsAttached++;
+    } else if (status === 'verified') {
+      counts.verified++;
+    } else if (status === 'approved' || status === 'costed') {
+      counts.approved++;
+    } else if (status === 'completed') {
+      counts.completed++;
+    } else if (status === 'rejected') {
+      counts.rejected++;
+    } else {
+      counts.new++;
     }
+  });
+  return counts;
+}
+
+/**
+ * Custom hook to filter and transform coordinator-specific sites from MMP context data.
+ * Matches backup behavior: sites come from MMP context (all MMPs + site entries loaded
+ * in context), then filtered client-side by assignment to current user.
+ */
+export const useCoordinatorSites = () => {
+  const { currentUser } = useAppContext();
+  const { mmpFiles: contextMmpFiles, loading: contextLoading, refreshMMPFiles } = useMMP();
+  const { userProjectIds, isAdminOrSuperUser } = useUserProjects();
+
+  const coordinatorSites = useMemo(() => {
+    if (!currentUser?.id || !contextMmpFiles || contextLoading) return [];
 
     // Non-admin users with no project assignments should see nothing
     if (!isAdminOrSuperUser && userProjectIds.length === 0) {
-      setCoordinatorSites([]);
-      setLoading(false);
-      setInitialLoadComplete(true);
-      return;
+      return [];
     }
 
-    try {
-      // Only show loading spinner for initial load, not background refreshes
-      if (!isBackgroundRefresh && !initialLoadComplete) {
-        setLoading(true);
-      }
-      setError(null);
+    const allSites: SiteVisit[] = [];
 
-      // Fetch site entries assigned to this coordinator through any assignment method
-      let query = supabase
-        .from('mmp_site_entries')
-        .select(`
-          id,
-          site_name,
-          site_code,
-          status,
-          state,
-          locality,
-          main_activity,
-          activity_at_site,
-          visit_date,
-          comments,
-          mmp_file_id,
-          hub_office,
-          cp_name,
-          monitoring_by,
-          survey_tool,
-          use_market_diversion,
-          use_warehouse_monitoring,
-          verified_at,
-          verified_by,
-          verification_notes,
-          forwarded_at,
-          accepted_by,
-          dispatched_by,
-          additional_data,
-          mmp_files!inner (
-            id,
-            name,
-            project_id,
-            project_name,
-            status,
-            hub,
-            projects (
-              name
-            )
-          )
-        `)
-        .neq('status', 'returned_to_fom');
-      
-      // Match sites assigned to this coordinator through any method:
-      // 1. forwarded_to_user_id - directly forwarded to coordinator
-      // 2. additional_data.assigned_to - assigned via additional_data
-      // 3. accepted_by - coordinator accepted/claimed the site
-      // 4. forwarded_by_user_id - forwarded by this coordinator (for tracking)
-      query = query.or(`forwarded_to_user_id.eq.${currentUser.id},additional_data->>assigned_to.eq.${currentUser.id},accepted_by.eq.${currentUser.id}`);
+    contextMmpFiles.forEach((mmp: any) => {
+      if (!mmp.siteEntries || !Array.isArray(mmp.siteEntries)) return;
 
-      // For non-admins, filter by project membership
-      if (!isAdminOrSuperUser && userProjectIds.length > 0) {
-        query = query.in('mmp_files.project_id', userProjectIds);
-      }
+      mmp.siteEntries.forEach((entry: any) => {
+        // Match sites assigned to this coordinator (same as previous direct query):
+        // forwarded_to_user_id, additional_data.assigned_to, or accepted_by
+        const forwardedToMe = entry.forwardedToUserId === currentUser.id;
+        const assignedToMe = (entry.additionalData?.assigned_to || entry.additional_data?.assigned_to) === currentUser.id;
+        const acceptedByMe = entry.accepted_by === currentUser.id;
+        if (!forwardedToMe && !assignedToMe && !acceptedByMe) return;
 
-      const { data, error: fetchError } = await query;
+        if (entry.status === 'returned_to_fom') return;
 
-      if (fetchError) {
-        console.error('Error fetching coordinator sites:', fetchError);
-        setError(fetchError.message);
-        setCoordinatorSites([]);
-        return;
-      }
-
-      // Transform data to SiteVisit format
-      const sites: SiteVisit[] = (data || []).map((entry: any) => {
-        const isUnverified = entry.status === 'Pending' || entry.status === 'Dispatched' || 
-                            entry.status === 'assigned' || entry.status === 'inProgress' || 
-                            entry.status === 'in_progress';
-        const visitDate = isUnverified ? null : entry.visit_date;
-
-        // Parse activity_at_site
-        let activityAtSite = entry.activity_at_site;
-        if (typeof activityAtSite === 'string') {
-          activityAtSite = activityAtSite.split(', ').filter((a: string) => a.trim() !== '');
+        if (!isAdminOrSuperUser) {
+          const projectId = mmp.projectId;
+          if (!projectId || !userProjectIds.includes(projectId)) return;
         }
 
-        return {
+        const isUnverified = entry.status === 'Pending' || entry.status === 'Dispatched' ||
+                            entry.status === 'assigned' || entry.status === 'inProgress' ||
+                            entry.status === 'in_progress';
+        const visitDate = isUnverified ? null : (entry.visitDate ?? entry.visit_date);
+
+        allSites.push({
           id: entry.id,
-          site_name: entry.site_name,
-          site_code: entry.site_code,
+          site_name: entry.siteName || entry.site_name,
+          site_code: entry.siteCode || entry.site_code,
           status: entry.status,
           state: entry.state,
           locality: entry.locality,
-          activity: entry.activity_at_site || entry.main_activity,
-          main_activity: entry.main_activity,
-          activity_at_site: activityAtSite || [],
+          activity: entry.siteActivity || entry.activity_at_site || entry.mainActivity,
+          main_activity: entry.mainActivity || entry.main_activity,
+          activity_at_site: entry.siteActivity
+            ? (typeof entry.siteActivity === 'string' ? entry.siteActivity.split(', ').filter((a: string) => a.trim() !== '') : entry.siteActivity)
+            : [],
           visit_date: visitDate,
-          assigned_at: entry.additional_data?.assigned_at || entry.forwarded_at,
+          assigned_at: entry.additionalData?.assigned_at || entry.additional_data?.assigned_at,
           comments: entry.comments,
-          mmp_file_id: entry.mmp_file_id,
-          hub_office: entry.hub_office,
-          cp_name: entry.cp_name || (entry as any).mmp_files?.projects?.name || (entry as any).mmp_files?.project_name || '',
-          monitoring_by: entry.monitoring_by,
-          survey_tool: entry.survey_tool,
-          use_market_diversion: entry.use_market_diversion ?? false,
-          use_warehouse_monitoring: entry.use_warehouse_monitoring ?? false,
+          mmp_file_id: mmp.id,
+          hub_office: entry.hubOffice || entry.hub_office,
+          cp_name: entry.cpName || entry.cp_name,
+          monitoring_by: entry.monitoringBy || entry.monitoring_by,
+          survey_tool: entry.surveyTool || entry.survey_tool,
+          use_market_diversion: entry.useMarketDiversion ?? entry.use_market_diversion ?? false,
+          use_warehouse_monitoring: entry.useWarehouseMonitoring ?? entry.use_warehouse_monitoring ?? false,
           verified_at: entry.verified_at,
           verified_by: entry.verified_by,
           verification_notes: entry.verification_notes,
-          additional_data: entry.additional_data || {},
-        };
+          additional_data: entry.additionalData || entry.additional_data || {},
+        });
       });
+    });
 
-      console.log('[useCoordinatorSites] Fetched', sites.length, 'sites for coordinator', currentUser.id);
-      setCoordinatorSites(sites);
-      // Compute counts from the fetched sites data
-      computeCountsFromSites(sites);
-    } catch (err) {
-      console.error('Error in useCoordinatorSites:', err);
-      setError('Failed to fetch coordinator sites');
-      setCoordinatorSites([]);
-    } finally {
-      setLoading(false);
-      setInitialLoadComplete(true);
-    }
-  }, [currentUser?.id, userProjectIds, isAdminOrSuperUser, initialLoadComplete, computeCountsFromSites]);
+    return allSites;
+  }, [contextMmpFiles, contextLoading, currentUser?.id, userProjectIds, isAdminOrSuperUser]);
 
-  // Initial fetch
-  useEffect(() => {
-    fetchCoordinatorSites();
-  }, [fetchCoordinatorSites]);
-
-  // Debounce timer for realtime updates
-  const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
-
-  // Set up realtime subscription for updates with debouncing
-  useEffect(() => {
-    if (!currentUser?.id) return;
-
-    const channel = supabase
-      .channel('coordinator-sites-updates')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'mmp_site_entries',
-          filter: `forwarded_to_user_id=eq.${currentUser.id}`,
-        },
-        () => {
-          // Debounce realtime updates to prevent rapid refetches
-          if (debounceTimerRef.current) {
-            clearTimeout(debounceTimerRef.current);
-          }
-          debounceTimerRef.current = setTimeout(() => {
-            // Background refresh - counts are computed automatically after sites load
-            fetchCoordinatorSites(true);
-          }, 500);
-        }
-      )
-      .subscribe();
-
-    return () => {
-      if (debounceTimerRef.current) {
-        clearTimeout(debounceTimerRef.current);
-      }
-      supabase.removeChannel(channel);
-    };
-  }, [currentUser?.id, fetchCoordinatorSites]);
+  const siteCounts = useMemo(() => computeCounts(coordinatorSites), [coordinatorSites]);
 
   return {
     coordinatorSites,
-    loading,
-    error,
+    loading: contextLoading,
+    error: null,
     siteCounts,
-    refetch: fetchCoordinatorSites,
+    refetch: refreshMMPFiles,
   };
 };
