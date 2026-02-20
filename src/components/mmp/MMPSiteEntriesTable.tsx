@@ -541,7 +541,7 @@ const MMPSiteEntriesTable = ({
                                 // Check if site has been claimed: acceptedBy is set OR status indicates claimed
                                 const status = (row.status || '').toLowerCase();
                                 const acceptedBy = row.acceptedBy || (site as any).accepted_by;
-                                const costVisibleStatuses = ['accepted', 'ongoing', 'inprogress', 'in_progress', 'in progress', 'completed', 'approved and costed', 'costed', 'claimed', 'acknowledged', 'cost and acknowledged', 'dispatched'];
+                                const costVisibleStatuses = ['accepted', 'ongoing', 'inprogress', 'in_progress', 'in progress', 'completed', 'claimed', 'acknowledged', 'cost and acknowledged', 'verified'];
                                 const hasCostStatus = costVisibleStatuses.some(s => status.includes(s));
                                 
                                 if (!hasCostStatus && !acceptedBy) {
