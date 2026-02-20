@@ -18,7 +18,7 @@ import {
 } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Link } from 'react-router-dom';
+import { Link, Navigate } from 'react-router-dom';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { toDisplayLabel } from '@/utils/roleMapping';
 import { useApproval } from '@/context/approval/ApprovalContext';
@@ -110,6 +110,10 @@ const Users = () => {
     primaryRole === 'admin' ||
     primaryRole === 'ict' ||
     primaryRole === 'superadmin';
+
+  if (!isAdminOrICT && !canManageRoles) {
+    return <Navigate to="/dashboard" replace />;
+  }
 
   const getInitials = (name: string | undefined | null): string => {
     if (!name || typeof name !== 'string') return '?';
