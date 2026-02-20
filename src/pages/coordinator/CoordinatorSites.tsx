@@ -918,8 +918,9 @@ const CoordinatorSites: React.FC = () => {
 
       const allSitesInState = localitiesArray.flatMap((loc: any) => loc.sites || []);
       const pendingSitesInState = allSitesInState.filter(isPending);
+      const sitesNeedingStatePermitInState = pendingSitesInState.filter((s: any) => siteNeedsStatePermit(s));
       // State goes in "State Permit" tab if at least one pending site needs state permit (mobile logic)
-      const anySiteNeedsStatePermit = pendingSitesInState.some((s: any) => siteNeedsStatePermit(s));
+      const anySiteNeedsStatePermit = sitesNeedingStatePermitInState.length > 0;
       const hasStatePermitForTab = !anySiteNeedsStatePermit;
 
       return {
@@ -927,7 +928,8 @@ const CoordinatorSites: React.FC = () => {
         localities: localitiesArray,
         hasStatePermit: hasStatePermitForTab,
         statePermitUploadedAt: null,
-        statePermitVerified: false
+        statePermitVerified: false,
+        statePermitRequiredCount: sitesNeedingStatePermitInState.length
       };
     });
 
@@ -2736,7 +2738,12 @@ const CoordinatorSites: React.FC = () => {
                 <div className="flex-1">
                   <h3 className="font-semibold text-lg">{stateData.state}</h3>
                   <p className="text-sm text-muted-foreground">{stateData.localities.length} localit{stateData.localities.length !== 1 ? 'ies' : 'y'}</p>
-                  <p className="text-sm text-muted-foreground">{stateData.totalSites} site{stateData.totalSites !== 1 ? 's' : ''} assigned</p>
+                  <p className="text-sm text-muted-foreground">
+                    {stateData.hasStatePermit
+                      ? `${stateData.totalSites} site${stateData.totalSites !== 1 ? 's' : ''} assigned`
+                      : `${stateData.statePermitRequiredCount ?? stateData.totalSites} site${(stateData.statePermitRequiredCount ?? stateData.totalSites) !== 1 ? 's' : ''} require state permit`
+                    }
+                  </p>
                 </div>
                 <div className="flex flex-col sm:flex-row sm:items-center gap-2">
                   {stateData.hasStatePermit ? (
