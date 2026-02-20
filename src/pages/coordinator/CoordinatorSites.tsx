@@ -49,6 +49,26 @@ const MONITORING_BY_OPTIONS = [
   'PACT'
 ];
 
+// Permit tab classification (aligned with mobile app: site_verification_screen.dart)
+// State tab = sites that need state permit; Locality tab = sites that have state permit but need locality permit
+function getParsedAdditionalData(site: any): Record<string, any> {
+  const ad = site?.additional_data;
+  if (ad == null) return {};
+  if (typeof ad === 'string') {
+    try { return JSON.parse(ad) || {}; } catch { return {}; }
+  }
+  return ad || {};
+}
+function siteNeedsStatePermit(site: any): boolean {
+  const ad = getParsedAdditionalData(site);
+  return ad.state_permit_attached !== true && ad.state_permit_not_required !== true;
+}
+function siteNeedsLocalityPermit(site: any): boolean {
+  const ad = getParsedAdditionalData(site);
+  const hasState = ad.state_permit_attached === true || ad.state_permit_not_required === true;
+  return hasState && ad.locality_permit_attached !== true;
+}
+
 const SURVEY_TOOL_OPTIONS = [
   'Kobo Toolbox', 'ODK', 'SurveyCTO', 'CommCare', 'ONA', 'Magpi',
   'Excel', 'Paper-based', 'Other'
@@ -878,7 +898,16 @@ const CoordinatorSites: React.FC = () => {
       stateData.totalSites++;
     });
 
-    // Build state/locality aggregates
+    // Build state/locality aggregates (per-site logic aligned with mobile app)
+    // Use same "new" definition as useCoordinatorSites so permit sub-tabs sum matches New Sites badge
+    const prePipelineStatuses = ['pending', 'inprogress', 'in_progress', 'forwarded', 'forwarded_to_coordinator', 'forwarded_to_coordinators', 'new'];
+    const isPending = (site: any) => {
+      const status = (site?.status || '').toLowerCase().trim().replace(/\s+/g, '_');
+      if (prePipelineStatuses.includes(status)) return true;
+      if (['dispatched', 'assigned', 'accepted', 'permits_attached', 'cp_verified', 'cp_verification', 'verified', 'approved', 'costed', 'approved_and_costed', 'completed', 'rejected'].includes(status)) return false;
+      return true; // else branch: unknown status counts as new (match hook)
+    };
+
     const statesArray = Array.from(statesMap.values()).map((stateData: any) => {
       const localitiesArray = Array.from(stateData.localities.values()).map((locality: any) => ({
         ...locality,
@@ -887,26 +916,22 @@ const CoordinatorSites: React.FC = () => {
         permitUploadedAt: null
       }));
 
-      // Check if any site has state permit flag or state permit not required
-      let anySiteHasStatePermitFlag = false;
-      try {
-        const allSitesInState = localitiesArray.flatMap((loc: any) => loc.sites || []);
-        anySiteHasStatePermitFlag = allSitesInState.some((s: any) => 
-          s?.additional_data?.state_permit_attached === true || 
-          s?.additional_data?.state_permit_not_required === true
-        );
-      } catch {}
+      const allSitesInState = localitiesArray.flatMap((loc: any) => loc.sites || []);
+      const pendingSitesInState = allSitesInState.filter(isPending);
+      // State goes in "State Permit" tab if at least one pending site needs state permit (mobile logic)
+      const anySiteNeedsStatePermit = pendingSitesInState.some((s: any) => siteNeedsStatePermit(s));
+      const hasStatePermitForTab = !anySiteNeedsStatePermit;
 
       return {
         ...stateData,
         localities: localitiesArray,
-        hasStatePermit: anySiteHasStatePermitFlag,
+        hasStatePermit: hasStatePermitForTab,
         statePermitUploadedAt: null,
         statePermitVerified: false
       };
     });
 
-    // Update permit statuses by checking MMP context
+    // Update permit statuses by checking MMP context (display only; do not overwrite hasStatePermit for tab)
     const enrichedStatesArray = statesArray.map((stateData: any) => {
       const firstLocality = stateData.localities[0];
       const mmpFileId = firstLocality?.sites?.[0]?.mmp_file_id;
@@ -915,9 +940,9 @@ const CoordinatorSites: React.FC = () => {
         if (mmpFile?.permits?.statePermits) {
           const statePermit = (mmpFile.permits.statePermits as any[]).find((sp: any) => sp.state === stateData.state);
           if (statePermit) {
-            stateData.hasStatePermit = true;
             stateData.statePermitVerified = !!statePermit.verified;
             stateData.statePermitUploadedAt = statePermit.uploadedAt || null;
+            // Do not set hasStatePermit from MMP; tab/count use per-site flags only (match mobile)
           }
         }
       }
@@ -944,39 +969,47 @@ const CoordinatorSites: React.FC = () => {
 
     setLocalitiesData(enrichedStatesArray);
 
-    // Calculate subcategory counts for new sites tabs
-    // Only count sites that are still pre-pipeline (not dispatched/assigned/accepted/verified)
-    // Must match the prePipelineStatuses used in badgeCounts and useCoordinatorSites hook
-    const permitPendingStatuses = ['pending', 'new', 'forwarded', 'forwarded_to_coordinator', 'forwarded_to_coordinators', 'inprogress', 'in_progress'];
-    const statePermitRequired = enrichedStatesArray
-      .filter((state: any) => !state.hasStatePermit)
-      .reduce((total: number, state: any) => {
-        const prePipelineSites = state.localities
-          .flatMap((loc: any) => loc.sites || [])
-          .filter((site: any) => {
-            const status = (site.status || '').toLowerCase().replace(/\s+/g, '_');
-            return permitPendingStatuses.includes(status);
-          });
-        return total + prePipelineSites.length;
-      }, 0);
+    // Calculate subcategory counts (per-site logic, aligned with mobile app)
+    const allPendingSites = enrichedStatesArray.flatMap((state: any) =>
+      state.localities.flatMap((loc: any) => (loc.sites || [])).filter(isPending)
+    );
+    const sitesNeedingStatePermit = allPendingSites.filter((site: any) => siteNeedsStatePermit(site));
+    const sitesNeedingLocalityPermit = allPendingSites.filter((site: any) => siteNeedsLocalityPermit(site));
+    const statePermitRequired = sitesNeedingStatePermit.length;
+    const localPermitRequired = sitesNeedingLocalityPermit.length;
 
-    const localPermitRequired = enrichedStatesArray
-      .filter((state: any) => state.hasStatePermit)
-      .flatMap((state: any) => state.localities)
-      .filter((locality: any) => !locality.hasPermit)
-      .filter((locality: any) => {
-        return locality.sites.some((site: SiteVisit) => {
-          const status = (site.status || '').toLowerCase().replace(/\s+/g, '_');
-          return permitPendingStatuses.includes(status);
-        });
-      })
-      .reduce((total: number, locality: any) => {
-        const pendingSites = locality.sites.filter((site: SiteVisit) => {
-          const status = (site.status || '').toLowerCase().replace(/\s+/g, '_');
-          return permitPendingStatuses.includes(status);
-        });
-        return total + pendingSites.length;
-      }, 0);
+    // Console logs for permit tab counts (Site Verification)
+    if (allPendingSites.length > 0) {
+      const stateBreakdown = enrichedStatesArray
+        .filter((s: any) => !s.hasStatePermit)
+        .map((s: any) => ({ state: s.state, count: s.localities.flatMap((l: any) => (l.sites || []).filter(isPending).filter((site: any) => siteNeedsStatePermit(site))).length }))
+        .filter((x: { count: number }) => x.count > 0);
+      const localityBreakdown = enrichedStatesArray
+        .filter((s: any) => s.hasStatePermit)
+        .flatMap((s: any) => s.localities.map((l: any) => ({ state: s.state, locality: l.locality, count: (l.sites || []).filter(isPending).filter((site: any) => siteNeedsLocalityPermit(site)).length })))
+        .filter((x: { count: number }) => x.count > 0);
+      const newSitesFromHook = coordinatorSites.filter((e: any) => {
+        const status = (e.status || '').toLowerCase().trim().replace(/\s+/g, '_');
+        if (prePipelineStatuses.includes(status)) return true;
+        if (['dispatched', 'assigned', 'accepted', 'permits_attached', 'cp_verified', 'cp_verification', 'verified', 'approved', 'costed', 'completed', 'rejected'].includes(status)) return false;
+        return true;
+      }).length;
+      const needsState = (s: any) => siteNeedsStatePermit(s);
+      const needsLocality = (s: any) => siteNeedsLocalityPermit(s);
+      const permitsAlreadyDone = allPendingSites.filter((s: any) => !needsState(s) && !needsLocality(s));
+      console.log('[Site Verification – Permit counts]', {
+        totalPendingSites: allPendingSites.length,
+        statePermitRequired,
+        localPermitRequired,
+        statePlusLocality: statePermitRequired + localPermitRequired,
+        newSitesBadgeShouldBe: newSitesFromHook,
+        match: allPendingSites.length === newSitesFromHook ? 'yes' : `no (${newSitesFromHook - allPendingSites.length} difference)`,
+        permitsAlreadyDoneCount: permitsAlreadyDone.length,
+        permitsAlreadyDoneSites: permitsAlreadyDone.length > 0 ? permitsAlreadyDone.map((s: any) => ({ id: s.id, site_code: s.site_code, state: s.state, locality: s.locality })) : undefined,
+        stateTabBreakdown: stateBreakdown,
+        localityTabBreakdown: localityBreakdown,
+      });
+    }
 
     setStatePermitRequiredCount(statePermitRequired);
     setLocalPermitRequiredCount(localPermitRequired);
@@ -3185,7 +3218,7 @@ const CoordinatorSites: React.FC = () => {
                     const validStatuses = ['pending', 'dispatched', 'assigned', 'inprogress', 'in_progress', 'new', 'forwarded'];
                     return locality.sites.some((site: SiteVisit) => {
                       const status = (site.status || '').toLowerCase().replace(/\s+/g, '_');
-                      return validStatuses.includes(status);
+                      return validStatuses.includes(status) && siteNeedsLocalityPermit(site);
                     });
                   });
 

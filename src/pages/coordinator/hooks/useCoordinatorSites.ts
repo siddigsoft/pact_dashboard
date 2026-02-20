@@ -61,7 +61,7 @@ function computeCounts(sites: SiteVisit[]): SiteEntryCounts {
       counts.permitsAttached++;
     } else if (status === 'verified') {
       counts.verified++;
-    } else if (status === 'approved' || status === 'costed') {
+    } else if (status === 'approved' || status === 'costed' || status === 'approved_and_costed') {
       counts.approved++;
     } else if (status === 'completed') {
       counts.completed++;
