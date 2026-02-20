@@ -2968,8 +2968,35 @@ const MMP = () => {
   }, [siteStatusFilter, siteHubFilter, siteStateFilter, siteLocalityFilter, siteMmpFilter]);
 
   // Filtered dispatched entries based on state/locality selection
+  const globalFilteredDispatchedEntries = useMemo(() => {
+    if (!hasActiveGlobalFilters) return dispatchedSiteEntries;
+    return dispatchedSiteEntries.filter(entry => {
+      if (siteMmpFilter !== 'all') {
+        const entryMmpId = entry.mmpId || entry.mmp_file_id || '';
+        if (entryMmpId !== siteMmpFilter) return false;
+      }
+      if (siteStatusFilter !== 'all') {
+        const status = entry.status || '';
+        if (status.toLowerCase() !== siteStatusFilter.toLowerCase()) return false;
+      }
+      if (siteHubFilter !== 'all') {
+        const hub = entry.hub || entry.hubName || entry.hubOffice || entry.hub_office || '';
+        if (hub !== siteHubFilter) return false;
+      }
+      if (siteStateFilter !== 'all') {
+        const state = entry.state || entry.stateName || '';
+        if (state !== siteStateFilter) return false;
+      }
+      if (siteLocalityFilter !== 'all') {
+        const locality = entry.locality || entry.localityName || '';
+        if (locality !== siteLocalityFilter) return false;
+      }
+      return true;
+    });
+  }, [dispatchedSiteEntries, hasActiveGlobalFilters, siteMmpFilter, siteStatusFilter, siteHubFilter, siteStateFilter, siteLocalityFilter]);
+
   const filteredDispatchedEntries = useMemo(() => {
-    let filtered = dispatchedSiteEntries;
+    let filtered = globalFilteredDispatchedEntries;
     
     if (dispatchedStateFilter !== 'all') {
       filtered = filtered.filter(entry => {
@@ -2986,7 +3013,7 @@ const MMP = () => {
     }
     
     return filtered;
-  }, [dispatchedSiteEntries, dispatchedStateFilter, dispatchedLocalityFilter]);
+  }, [globalFilteredDispatchedEntries, dispatchedStateFilter, dispatchedLocalityFilter]);
 
   // Check if global filters are active
   const hasActiveGlobalFilters = useMemo(() => {
@@ -5404,7 +5431,7 @@ const MMP = () => {
                       <div className="flex flex-col gap-3 mb-4">
                         <div className="flex items-center justify-between">
                           <h3 className="text-lg font-semibold">Dispatched Site Entries</h3>
-                          <Badge variant="secondary">{filteredDispatchedEntries.length} of {dispatchedSiteEntries.length} entries</Badge>
+                          <Badge variant="secondary">{filteredDispatchedEntries.length} of {globalFilteredDispatchedEntries.length} entries</Badge>
                         </div>
                         <div className="flex flex-wrap items-center gap-2">
                           <div className="flex items-center gap-2">
