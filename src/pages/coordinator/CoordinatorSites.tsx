@@ -776,9 +776,11 @@ const CoordinatorSites: React.FC = () => {
 
   // Calculate badge counts from coordinator sites (using useMemo like MMP.tsx pattern)
   const badgeCounts = useMemo(() => {
-    const newCount = coordinatorSites.filter((e: any) => 
-      e.status === 'Pending' || e.status === 'Dispatched' || e.status === 'assigned' || e.status === 'inProgress' || e.status === 'in_progress'
-    ).length;
+    const prePipelineStatuses = ['pending', 'inprogress', 'in_progress', 'forwarded', 'forwarded_to_coordinator', 'forwarded_to_coordinators', 'new'];
+    const newCount = coordinatorSites.filter((e: any) => {
+      const status = (e.status || '').toLowerCase().trim().replace(/\s+/g, '_');
+      return prePipelineStatuses.includes(status);
+    }).length;
     const permitsAttachedCount = coordinatorSites.filter((e: any) => 
       e.status?.toLowerCase() === 'permits_attached'
     ).length;
@@ -943,23 +945,32 @@ const CoordinatorSites: React.FC = () => {
     setLocalitiesData(enrichedStatesArray);
 
     // Calculate subcategory counts for new sites tabs
+    // Only count sites that are still pre-pipeline (not dispatched/assigned/accepted/verified)
+    // Must match the prePipelineStatuses used in badgeCounts and useCoordinatorSites hook
+    const permitPendingStatuses = ['pending', 'new', 'forwarded', 'forwarded_to_coordinator', 'forwarded_to_coordinators', 'inprogress', 'in_progress'];
     const statePermitRequired = enrichedStatesArray
       .filter((state: any) => !state.hasStatePermit)
-      .reduce((total: number, state: any) => total + state.totalSites, 0);
+      .reduce((total: number, state: any) => {
+        const prePipelineSites = state.localities
+          .flatMap((loc: any) => loc.sites || [])
+          .filter((site: any) => {
+            const status = (site.status || '').toLowerCase().replace(/\s+/g, '_');
+            return permitPendingStatuses.includes(status);
+          });
+        return total + prePipelineSites.length;
+      }, 0);
 
     const localPermitRequired = enrichedStatesArray
       .filter((state: any) => state.hasStatePermit)
       .flatMap((state: any) => state.localities)
       .filter((locality: any) => !locality.hasPermit)
       .filter((locality: any) => {
-        const permitPendingStatuses = ['pending', 'new', 'forwarded', 'forwarded_to_coordinator', 'forwarded_to_coordinators'];
         return locality.sites.some((site: SiteVisit) => {
           const status = (site.status || '').toLowerCase().replace(/\s+/g, '_');
           return permitPendingStatuses.includes(status);
         });
       })
       .reduce((total: number, locality: any) => {
-        const permitPendingStatuses = ['pending', 'new', 'forwarded', 'forwarded_to_coordinator', 'forwarded_to_coordinators'];
         const pendingSites = locality.sites.filter((site: SiteVisit) => {
           const status = (site.status || '').toLowerCase().replace(/\s+/g, '_');
           return permitPendingStatuses.includes(status);

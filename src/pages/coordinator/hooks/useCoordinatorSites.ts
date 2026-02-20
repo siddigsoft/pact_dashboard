@@ -50,11 +50,10 @@ function computeCounts(sites: SiteVisit[]): SiteEntryCounts {
     completed: 0,
     rejected: 0
   };
+  const prePipelineStatuses = ['pending', 'inprogress', 'in_progress', 'forwarded', 'forwarded_to_coordinator', 'forwarded_to_coordinators', 'new'];
   sites.forEach((entry) => {
-    const status = (entry.status || '').toLowerCase().trim();
-    if (status === 'pending' ||
-        status === 'inprogress' || status === 'in_progress' ||
-        status === 'forwarded' || status === 'forwarded_to_coordinator' || status === 'forwarded_to_coordinators') {
+    const status = (entry.status || '').toLowerCase().trim().replace(/\s+/g, '_');
+    if (prePipelineStatuses.includes(status)) {
       counts.new++;
     } else if (status === 'dispatched' || status === 'assigned' || status === 'accepted') {
       // Dispatched/assigned/accepted sites are already in the workflow pipeline - don't count as new
