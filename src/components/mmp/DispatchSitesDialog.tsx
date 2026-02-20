@@ -93,6 +93,9 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
   } | null>(null);
   const [loadingClassificationFee, setLoadingClassificationFee] = useState(false);
   const [lastVisitData, setLastVisitData] = useState<Map<string, { amount: number; date: string }>>(new Map());
+  const [returnDialogOpen, setReturnDialogOpen] = useState(false);
+  const [returnReason, setReturnReason] = useState('');
+  const [returningLoading, setReturningLoading] = useState(false);
   const { toast } = useToast();
 
   // Load selected collector's classification fee when selecting individual dispatch
@@ -669,6 +672,37 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
       description: `Applied uniform costs to ${selectedSites.size} site(s).`,
       variant: "default",
     });
+  };
+
+  const handleReturnSelectedSites = async () => {
+    if (!returnReason.trim() || selectedSites.size === 0) return;
+    setReturningLoading(true);
+    try {
+      const siteIds = Array.from(selectedSites);
+      const { error } = await supabase
+        .from('mmp_site_entries')
+        .update({
+          status: 'returned_to_fom',
+          verification_notes: returnReason,
+          verified_at: new Date().toISOString(),
+        })
+        .in('id', siteIds);
+      if (error) throw error;
+
+      toast({
+        title: 'Sites Returned to FOM',
+        description: `${siteIds.length} site(s) have been sent back to FOM.`,
+      });
+      setReturnDialogOpen(false);
+      setReturnReason('');
+      onOpenChange(false);
+      onDispatched?.();
+    } catch (err) {
+      console.error('Error returning sites:', err);
+      toast({ title: 'Error', description: 'Failed to return sites. Please try again.', variant: 'destructive' });
+    } finally {
+      setReturningLoading(false);
+    }
   };
 
   const handleDispatch = async () => {
@@ -2294,6 +2328,18 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
           >
             Cancel
           </Button>
+          {step === "select" && selectedSites.size > 0 && (
+            <Button
+              variant="outline"
+              onClick={() => { setReturnReason(''); setReturnDialogOpen(true); }}
+              disabled={loading}
+              className="text-orange-600 border-orange-200 hover:bg-orange-50 dark:text-orange-400 dark:border-orange-800 dark:hover:bg-orange-950"
+              data-testid="button-return-to-fom"
+            >
+              <ArrowLeft className="mr-2 h-4 w-4" />
+              Return to FOM
+            </Button>
+          )}
           {step === "select" && (
             <Button
               onClick={handleProceedToCosts}
@@ -2322,6 +2368,51 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
           )}
         </DialogFooter>
       </DialogContent>
+
+      {/* Return to FOM Confirmation Dialog */}
+      <Dialog open={returnDialogOpen} onOpenChange={setReturnDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Return Sites to FOM</DialogTitle>
+            <DialogDescription>
+              Send {selectedSites.size} selected site(s) back to the Field Operations Manager.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <Label htmlFor="return-reason-dispatch">Reason for Return</Label>
+            <Textarea
+              id="return-reason-dispatch"
+              placeholder="Please explain why these sites need to be returned..."
+              value={returnReason}
+              onChange={(e) => setReturnReason(e.target.value)}
+              className="mt-2"
+              rows={4}
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setReturnDialogOpen(false)} disabled={returningLoading}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleReturnSelectedSites}
+              disabled={!returnReason.trim() || returningLoading}
+              className="bg-orange-600 hover:bg-orange-700"
+            >
+              {returningLoading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Returning...
+                </>
+              ) : (
+                <>
+                  <ArrowLeft className="mr-2 h-4 w-4" />
+                  Confirm Return
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Dialog>
   );
 };
