@@ -222,6 +222,23 @@ export async function recallSites(request: SiteRecallRequest): Promise<SiteRecal
         delete updatedData.cp_verification_by;
       }
 
+      // When recalling to pre-permit or early-permit status, clear permit flags so the site
+      // re-enters the permit workflow (State/Locality tabs) instead of "permits already done"
+      if (['new', 'pending', 'forwarded'].includes(targetStatus)) {
+        delete updatedData.state_permit_attached;
+        delete updatedData.state_permit_not_required;
+        delete updatedData.state_permit_issue_date;
+        delete updatedData.state_permit_expiry_date;
+        delete updatedData.state_permit_verified_at;
+        delete updatedData.state_permit_verified_by;
+        delete updatedData.locality_permit_attached;
+        delete updatedData.locality_permit_not_required;
+        delete updatedData.locality_permit_issue_date;
+        delete updatedData.locality_permit_expiry_date;
+        delete updatedData.locality_permit_uploaded_at;
+        delete updatedData.locality_permit_uploaded_by;
+      }
+
       const currentStatusIndex = getStatusIndex(currentSite.status);
       const targetStatusIndex = getStatusIndex(targetStatus);
       
