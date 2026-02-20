@@ -70,20 +70,23 @@ export const useCoordinatorSites = () => {
     };
 
     sites.forEach((entry) => {
-      const status = (entry.status || '').toLowerCase();
+      const status = (entry.status || '').toLowerCase().trim();
       if (status === 'pending' || status === 'dispatched' || status === 'assigned' || 
-          status === 'inprogress' || status === 'in_progress') {
+          status === 'inprogress' || status === 'in_progress' || status === 'accepted' ||
+          status === 'forwarded' || status === 'forwarded_to_coordinator' || status === 'forwarded_to_coordinators') {
         counts.new++;
-      } else if (status === 'permits_attached') {
+      } else if (status === 'permits_attached' || status === 'cp_verified' || status === 'cp_verification') {
         counts.permitsAttached++;
       } else if (status === 'verified') {
         counts.verified++;
-      } else if (status === 'approved') {
+      } else if (status === 'approved' || status === 'costed') {
         counts.approved++;
       } else if (status === 'completed') {
         counts.completed++;
       } else if (status === 'rejected') {
         counts.rejected++;
+      } else {
+        counts.new++;
       }
     });
 
@@ -113,9 +116,7 @@ export const useCoordinatorSites = () => {
       }
       setError(null);
 
-      // OPTIMIZATION: Fetch only essential columns for faster initial load
-      // Select specific fields instead of * for better performance
-      // Use dual-approach: Try forwarded_to_user_id column first, fallback to additional_data
+      // Fetch site entries assigned to this coordinator through any assignment method
       let query = supabase
         .from('mmp_site_entries')
         .select(`
@@ -140,6 +141,8 @@ export const useCoordinatorSites = () => {
           verified_by,
           verification_notes,
           forwarded_at,
+          accepted_by,
+          dispatched_by,
           additional_data,
           mmp_files!inner (
             id,
@@ -155,9 +158,12 @@ export const useCoordinatorSites = () => {
         `)
         .neq('status', 'returned_to_fom');
       
-      // Use OR filter to match either forwarded_to_user_id column or additional_data.assigned_to
-      // This provides backward compatibility while the database is being migrated
-      query = query.or(`forwarded_to_user_id.eq.${currentUser.id},additional_data->>assigned_to.eq.${currentUser.id}`);
+      // Match sites assigned to this coordinator through any method:
+      // 1. forwarded_to_user_id - directly forwarded to coordinator
+      // 2. additional_data.assigned_to - assigned via additional_data
+      // 3. accepted_by - coordinator accepted/claimed the site
+      // 4. forwarded_by_user_id - forwarded by this coordinator (for tracking)
+      query = query.or(`forwarded_to_user_id.eq.${currentUser.id},additional_data->>assigned_to.eq.${currentUser.id},accepted_by.eq.${currentUser.id}`);
 
       // For non-admins, filter by project membership
       if (!isAdminOrSuperUser && userProjectIds.length > 0) {
