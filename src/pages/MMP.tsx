@@ -3357,20 +3357,11 @@ const MMP = () => {
       return;
     }
 
+    let cancelled = false;
     const loadDispatchedFromDB = async () => {
       setLoadingDispatched(true);
       
       try {
-        let viewerEnumeratorFee = 0;
-        if (currentUser?.id) {
-          try {
-            const feeResult = await calculateEnumeratorFeeForUser(currentUser.id);
-            viewerEnumeratorFee = feeResult.fee;
-          } catch (error) {
-            console.warn('[Dispatched] Could not calculate viewer enumerator fee:', error);
-          }
-        }
-
         const verifiedMmpIds = (categorizedMMPs.verified || []).map(mmp => mmp.id);
         if (verifiedMmpIds.length === 0) {
           setDispatchedSiteEntries([]);
@@ -3379,47 +3370,53 @@ const MMP = () => {
           return;
         }
 
-        const { data: dbEntries, error } = await supabase
-          .from('mmp_site_entries')
-          .select('*')
-          .in('mmp_file_id', verifiedMmpIds)
-          .ilike('status', 'dispatched')
-          .is('accepted_by', null)
-          .order('dispatched_at', { ascending: false })
-          .limit(2000);
+        const batchSize = 50;
+        let allEntries: any[] = [];
+        for (let i = 0; i < verifiedMmpIds.length; i += batchSize) {
+          const batch = verifiedMmpIds.slice(i, i + batchSize);
+          const { data: dbEntries, error } = await supabase
+            .from('mmp_site_entries')
+            .select('id, site_code, hub_office, state, locality, site_name, cp_name, visit_type, visit_date, main_activity, activity_at_site, monitoring_by, survey_tool, use_market_diversion, use_warehouse_monitoring, comments, cost, enumerator_fee, transport_fee, dispatched_by, dispatched_at, accepted_by, accepted_at, additional_data, status, mmp_file_id, created_at, verified_by, verified_at, updated_at')
+            .in('mmp_file_id', batch)
+            .ilike('status', 'dispatched')
+            .is('accepted_by', null)
+            .order('dispatched_at', { ascending: false })
+            .limit(2000);
 
-        if (error) {
-          console.error('[Dispatched] DB query error:', error);
-          setLoadingDispatched(false);
-          return;
+          if (error) {
+            console.error('[Dispatched] DB query error:', error);
+            continue;
+          }
+          if (dbEntries) allEntries = allEntries.concat(dbEntries);
         }
 
-        const formattedEntries = (dbEntries || []).map(entry => {
+        if (cancelled) return;
+
+        const mmpLookup = new Map(mmpFiles.map(m => [m.id, m.name || '']));
+        const formattedEntries = allEntries.map(entry => {
           const formatted = formatSiteEntry(entry);
-          const transportFee = Number(formatted.transport_fee) || 0;
-          const totalCost = viewerEnumeratorFee + transportFee;
-          const parentMmp = mmpFiles.find(m => m.id === entry.mmp_file_id);
           return {
             ...formatted,
             mmp_file_id: entry.mmp_file_id,
             mmpId: entry.mmp_file_id,
-            mmpName: parentMmp?.name || '',
-            enumerator_fee: formatted.enumerator_fee || viewerEnumeratorFee,
-            cost: totalCost
+            mmpName: mmpLookup.get(entry.mmp_file_id) || '',
           };
         });
 
-        setDispatchedSiteEntries(formattedEntries);
-        setDispatchedCount(formattedEntries.length);
+        if (!cancelled) {
+          setDispatchedSiteEntries(formattedEntries);
+          setDispatchedCount(formattedEntries.length);
+        }
       } catch (err) {
         console.error('[Dispatched] Failed to load:', err);
       } finally {
-        setLoadingDispatched(false);
+        if (!cancelled) setLoadingDispatched(false);
       }
     };
     
     loadDispatchedFromDB();
-  }, [verifiedSubTab, categorizedMMPs.verified, formatSiteEntry, currentUser?.id, adminRefreshTrigger]);
+    return () => { cancelled = true; };
+  }, [verifiedSubTab, categorizedMMPs.verified, adminRefreshTrigger]);
 
   // Load accepted site entries directly from database for fresh data
   useEffect(() => {
