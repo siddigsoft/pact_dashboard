@@ -70,6 +70,32 @@ class PermitStatus {
   }
 }
 
+/// Helper to safely extract statePermits from a site's mmp_files join data.
+/// Handles both object and array responses from Supabase joins.
+List<dynamic> _extractStatePermits(Map<String, dynamic> site) {
+  final raw = site['mmp_files'];
+  Map<String, dynamic> mmpFile = {};
+  if (raw is Map<String, dynamic>) {
+    mmpFile = raw;
+  } else if (raw is List && raw.isNotEmpty && raw.first is Map<String, dynamic>) {
+    mmpFile = raw.first as Map<String, dynamic>;
+  }
+  final permits = mmpFile['permits'] as Map<String, dynamic>? ?? {};
+  return permits['statePermits'] as List<dynamic>? ?? [];
+}
+
+/// Check if a site's state has a state permit via MMP file-level permits.
+bool _hasStatePermitFromMmpFile(Map<String, dynamic> site) {
+  final stateName = site['state']?.toString() ?? '';
+  final statePermits = _extractStatePermits(site);
+  for (final sp in statePermits) {
+    if (sp is Map<String, dynamic> && sp['state']?.toString() == stateName) {
+      return true;
+    }
+  }
+  return false;
+}
+
 /// Site Verification Screen for Coordinators
 /// Allows coordinators to verify sites, manage permits, and approve site visits
 class SiteVerificationScreen extends StatefulWidget {
@@ -342,7 +368,7 @@ class _SiteVerificationScreenState extends State<SiteVerificationScreen>
       try {
         final response = await _supabase
             .from('mmp_site_entries')
-            .select('*, mmp_files(name, workflow, project_id)')
+            .select('*, mmp_files(name, workflow, project_id, permits)')
             .eq('forwarded_to_user_id', _userId!)
             .order('created_at', ascending: false)
             .limit(1000);
@@ -381,7 +407,7 @@ class _SiteVerificationScreenState extends State<SiteVerificationScreen>
         try {
           final response2 = await _supabase
               .from('mmp_site_entries')
-              .select('*, mmp_files(name, workflow, project_id)')
+              .select('*, mmp_files(name, workflow, project_id, permits)')
               .order('created_at', ascending: false)
               .limit(500);
 
@@ -428,7 +454,7 @@ class _SiteVerificationScreenState extends State<SiteVerificationScreen>
           );
           var query = _supabase
               .from('mmp_site_entries')
-              .select('*, mmp_files(name, workflow)')
+              .select('*, mmp_files(name, workflow, permits)')
               .eq('state', _userState!);
 
           if (_userHub != null && _userHub!.isNotEmpty) {
@@ -638,10 +664,15 @@ class _SiteVerificationScreenState extends State<SiteVerificationScreen>
     final additionalData =
         site['additional_data'] as Map<String, dynamic>? ?? {};
 
-    // Check state permit
-    final hasStatePermit = additionalData['state_permit_attached'] == true;
+    // Check state permit - check both site-level flags AND MMP file-level state permits
+    var hasStatePermit = additionalData['state_permit_attached'] == true;
     final stateNotRequired =
         additionalData['state_permit_not_required'] == true;
+
+    // Also check MMP file-level state permits (matching web logic)
+    if (!hasStatePermit && !stateNotRequired) {
+      hasStatePermit = _hasStatePermitFromMmpFile(site);
+    }
 
     if (!hasStatePermit && !stateNotRequired) {
       return 'State permit must be verified before site verification';
@@ -1065,22 +1096,35 @@ class _SiteVerificationScreenState extends State<SiteVerificationScreen>
       return _buildEmptyState('new');
     }
 
-    // Filter sites that need STATE permit (don't have state permit yet)
-    final sitesNeedingStatePermit = filteredNewSites.where((s) {
+    // STATE-LEVEL permit grouping (matching web CoordinatorSites.tsx logic)
+    // A state has its permit if ANY site in that state has state_permit_attached/not_required
+    // OR if the MMP file has statePermits for that state
+    final statesWithPermit = <String>{};
+    for (final site in filteredNewSites) {
+      final stateName = site['state']?.toString() ?? '';
       final additionalData =
-          s['additional_data'] as Map<String, dynamic>? ?? {};
-      return additionalData['state_permit_attached'] != true &&
-          additionalData['state_permit_not_required'] != true;
+          site['additional_data'] as Map<String, dynamic>? ?? {};
+      if (additionalData['state_permit_attached'] == true ||
+          additionalData['state_permit_not_required'] == true) {
+        statesWithPermit.add(stateName);
+      }
+      if (_hasStatePermitFromMmpFile(site)) {
+        statesWithPermit.add(stateName);
+      }
+    }
+
+    // Filter sites that need STATE permit (state does NOT have state permit)
+    final sitesNeedingStatePermit = filteredNewSites.where((s) {
+      final stateName = s['state']?.toString() ?? '';
+      return !statesWithPermit.contains(stateName);
     }).toList();
 
-    // Filter sites that need LOCALITY permit (have state permit but not locality)
+    // Filter sites that need LOCALITY permit (state HAS state permit but no locality permit)
     final sitesNeedingLocalityPermit = filteredNewSites.where((s) {
+      final stateName = s['state']?.toString() ?? '';
       final additionalData =
           s['additional_data'] as Map<String, dynamic>? ?? {};
-      final hasStatePermit =
-          additionalData['state_permit_attached'] == true ||
-          additionalData['state_permit_not_required'] == true;
-      return hasStatePermit &&
+      return statesWithPermit.contains(stateName) &&
           additionalData['locality_permit_attached'] != true;
     }).toList();
 
@@ -2067,7 +2111,7 @@ class _SiteVerificationScreenState extends State<SiteVerificationScreen>
                 ],
                 // Permit status indicators
                 const SizedBox(height: 16),
-                _buildPermitIndicators(additionalData),
+                _buildPermitIndicators(additionalData, site),
                 // Action buttons based on category
                 if (category == 'new' ||
                     category == 'new_state_tab_site' ||
@@ -2167,10 +2211,13 @@ class _SiteVerificationScreenState extends State<SiteVerificationScreen>
     }
   }
 
-  Widget _buildPermitIndicators(Map<String, dynamic> additionalData) {
-    final hasStatePermit = additionalData['state_permit_attached'] == true;
+  Widget _buildPermitIndicators(Map<String, dynamic> additionalData, [Map<String, dynamic>? site]) {
+    var hasStatePermit = additionalData['state_permit_attached'] == true;
     final stateNotRequired =
         additionalData['state_permit_not_required'] == true;
+    if (!hasStatePermit && !stateNotRequired && site != null) {
+      hasStatePermit = _hasStatePermitFromMmpFile(site);
+    }
     final hasLocalityPermit =
         additionalData['locality_permit_attached'] == true;
 
@@ -2265,9 +2312,12 @@ class _SiteVerificationScreenState extends State<SiteVerificationScreen>
   Widget _buildActionButtons(Map<String, dynamic> site, String category) {
     final additionalData =
         site['additional_data'] as Map<String, dynamic>? ?? {};
-    final hasStatePermit =
+    var hasStatePermit =
         additionalData['state_permit_attached'] == true ||
         additionalData['state_permit_not_required'] == true;
+    if (!hasStatePermit) {
+      hasStatePermit = _hasStatePermitFromMmpFile(site);
+    }
     final hasLocalityPermit =
         additionalData['locality_permit_attached'] == true;
 
