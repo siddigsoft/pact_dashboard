@@ -23,7 +23,8 @@ export type MMPAuditAction =
   | 'permit_upload'
   | 'permit_verify'
   | 'cost_update'
-  | 'bulk_operation';
+  | 'bulk_operation'
+  | 'reclaim_from_coordinator';
 
 export interface MMPAuditContext {
   mmpId: string;
@@ -77,7 +78,8 @@ const ACTION_DESCRIPTIONS: Record<MMPAuditAction, string> = {
   permit_upload: 'Permit document uploaded',
   permit_verify: 'Permit verified',
   cost_update: 'Cost information updated',
-  bulk_operation: 'Bulk operation performed'
+  bulk_operation: 'Bulk operation performed',
+  reclaim_from_coordinator: 'MMP reclaimed from coordinators back to FOM'
 };
 
 export async function logMMPAudit(context: MMPAuditContext): Promise<string | null> {

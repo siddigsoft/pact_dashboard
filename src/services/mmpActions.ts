@@ -331,6 +331,139 @@ export async function forwardSitesToCoordinator(opts: {
   }
 }
 
+// Reclaim MMP from coordinators back to FOM
+export async function reclaimFromCoordinator(opts: {
+  mmpId: string;
+  reason: string;
+  reasonCategory: string;
+  currentUserId: string;
+  additionalNotes?: string;
+}) {
+  const { mmpId, reason, reasonCategory, currentUserId, additionalNotes } = opts;
+  if (!mmpId) return;
+
+  const now = new Date().toISOString();
+
+  // 1. Get current MMP data
+  const { data: mmpData, error: fetchError } = await supabase
+    .from('mmp_files')
+    .select('workflow, name, status')
+    .eq('id', mmpId)
+    .single();
+  if (fetchError) throw fetchError;
+
+  const wf = (mmpData?.workflow as any) || {};
+  
+  // 2. Build reclaim history entry
+  const reclaimEntry = {
+    reclaimedAt: now,
+    reclaimedBy: currentUserId,
+    reason: reason,
+    reasonCategory: reasonCategory,
+    additionalNotes: additionalNotes || '',
+    previousStage: wf.currentStage || 'forwarded_to_coordinator',
+    previousCoordinatorId: wf.lastCoordinatorId || null,
+  };
+
+  const reclaimHistory = Array.isArray(wf.reclaimHistory) ? [...wf.reclaimHistory, reclaimEntry] : [reclaimEntry];
+
+  // 3. Update MMP workflow - revert to forwarded_to_fom stage
+  const updatedWorkflow = {
+    ...wf,
+    currentStage: 'forwarded_to_fom',
+    reclaimedFromCoordinator: true,
+    reclaimedAt: now,
+    reclaimedBy: currentUserId,
+    reclaimReason: reason,
+    reclaimReasonCategory: reasonCategory,
+    reclaimHistory: reclaimHistory,
+    lastUpdated: now,
+    // Clear coordinator forwarding fields
+    forwardedToCoordinatorAt: null,
+    forwardedToCoordinatorBy: null,
+    lastCoordinatorId: null,
+  };
+
+  const { error: mmpUpdateError } = await supabase
+    .from('mmp_files')
+    .update({
+      status: 'forwarded_to_fom',
+      workflow: updatedWorkflow,
+    })
+    .eq('id', mmpId);
+  if (mmpUpdateError) throw mmpUpdateError;
+
+  // 4. Reset ALL site entries for this MMP - clear coordinator assignments completely
+  const { data: siteEntries, error: entriesError } = await supabase
+    .from('mmp_site_entries')
+    .select('id, forwarded_to_user_id, forwarded_at, dispatched_at, additional_data, status')
+    .eq('mmp_file_id', mmpId);
+  if (entriesError) throw entriesError;
+
+  // Identify entries that have any forwarding/assignment indicators
+  const forwardedEntryIds = (siteEntries || [])
+    .filter((e: any) => e.forwarded_to_user_id || e.forwarded_at || e.dispatched_at || 
+      (e.additional_data && (e.additional_data.assigned_to || e.additional_data.assigned_by)))
+    .map((e: any) => e.id);
+
+  if (forwardedEntryIds.length > 0) {
+    // Row-by-row update to also clear additional_data assignment fields
+    const resetPromises = forwardedEntryIds.map(async (entryId: string) => {
+      const entry = (siteEntries || []).find((e: any) => e.id === entryId);
+      const existingAD = entry?.additional_data || {};
+      // Clear coordinator assignment fields from additional_data while preserving other data
+      const cleanedAD = { ...existingAD };
+      delete cleanedAD.assigned_to;
+      delete cleanedAD.assigned_by;
+      delete cleanedAD.assigned_at;
+      delete cleanedAD.supervisor_id;
+      delete cleanedAD.notes;
+      delete cleanedAD.state_permit_attached;
+      delete cleanedAD.state_permit_state_id;
+      delete cleanedAD.state_permit_attached_at;
+
+      const { error: rowError } = await supabase
+        .from('mmp_site_entries')
+        .update({
+          status: 'verified',
+          forwarded_to_user_id: null,
+          forwarded_by_user_id: null,
+          forwarded_at: null,
+          dispatched_by: null,
+          dispatched_at: null,
+          additional_data: cleanedAD,
+        })
+        .eq('id', entryId);
+      if (rowError) {
+        console.error(`Failed to reset site entry ${entryId}:`, rowError);
+      }
+    });
+    await Promise.all(resetPromises);
+  }
+
+  // Log audit
+  try {
+    await logStatusChangeAudit(
+      'mmp',
+      mmpId,
+      mmpData?.name || 'Unknown MMP',
+      mmpData?.status || 'forwarded_to_coordinator',
+      'forwarded_to_fom',
+      currentUserId,
+      undefined,
+      undefined,
+      `Reclaimed from coordinator: ${reasonCategory} - ${reason}`
+    );
+  } catch (auditError) {
+    console.warn('[MMP Actions] Reclaim audit log failed:', auditError);
+  }
+
+  return {
+    affectedSites: forwardedEntryIds.length,
+    mmpName: mmpData?.name || 'Unknown MMP',
+  };
+}
+
 // Location data service helpers
 export async function fetchHubs() {
   const { data, error } = await supabase

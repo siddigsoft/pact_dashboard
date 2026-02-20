@@ -6,7 +6,7 @@ import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from '@
 import { Checkbox } from '@/components/ui/checkbox';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
-import { ChevronDown, ChevronRight, ArrowLeft, Eye, Pencil } from 'lucide-react';
+import { ChevronDown, ChevronRight, ArrowLeft, Eye, Pencil, RotateCcw } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useMMP } from '@/context/mmp/MMPContext';
 import { useAppContext } from '@/context/AppContext';
@@ -23,6 +23,7 @@ import {
 import { EmailNotificationService } from '@/services/email-notification.service';
 import { normalizeStateId, normalizeLocalityId } from '@/utils/siteNormalization';
 import { sudanStates } from '@/data/sudanStates';
+import { ReclaimFromCoordinatorDialog } from '@/components/mmp/ReclaimFromCoordinatorDialog';
 
 const ReviewAssignCoordinators: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -46,6 +47,7 @@ const ReviewAssignCoordinators: React.FC = () => {
   const [selectedSiteForView, setSelectedSiteForView] = useState<any>(null);
   const [viewDialogOpen, setViewDialogOpen] = useState(false);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [reclaimDialogOpen, setReclaimDialogOpen] = useState(false);
 
   // State permit attachment state - per group
   const [attachStatePermitMap, setAttachStatePermitMap] = useState<Record<string, boolean>>({});
@@ -609,7 +611,7 @@ const ReviewAssignCoordinators: React.FC = () => {
 
   return (
     <div className="container mx-auto px-4 py-8">
-      <div className="mb-6">
+      <div className="mb-6 flex items-center justify-between flex-wrap gap-2">
         <Button
           variant="outline"
           onClick={() => navigate('/mmp')}
@@ -618,6 +620,17 @@ const ReviewAssignCoordinators: React.FC = () => {
           <ArrowLeft className="h-4 w-4" />
           Back to MMP Management
         </Button>
+        {mmpFile && forwardedSiteIds.size > 0 && (
+          <Button
+            variant="outline"
+            onClick={() => setReclaimDialogOpen(true)}
+            className="flex items-center gap-2 border-orange-300 text-orange-600 hover:bg-orange-50 dark:border-orange-700 dark:text-orange-400 dark:hover:bg-orange-950"
+            data-testid="button-reclaim-from-coordinator"
+          >
+            <RotateCcw className="h-4 w-4" />
+            Reclaim MMP
+          </Button>
+        )}
       </div>
 
       <Card className="max-w-4xl mx-auto">
@@ -1264,6 +1277,19 @@ const ReviewAssignCoordinators: React.FC = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {mmpFile && (
+        <ReclaimFromCoordinatorDialog
+          open={reclaimDialogOpen}
+          onOpenChange={setReclaimDialogOpen}
+          mmpId={mmpFile.id}
+          mmpName={mmpFile.name || 'Unknown MMP'}
+          siteCount={forwardedSiteIds.size}
+          onReclaimComplete={() => {
+            navigate('/mmp');
+          }}
+        />
+      )}
     </div>
   );
 };

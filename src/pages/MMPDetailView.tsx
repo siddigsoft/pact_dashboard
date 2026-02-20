@@ -12,7 +12,7 @@ import {
   Search, ArrowLeft, CheckCircle, Download, 
   FileSpreadsheet as FileSpreadsheetIcon, Upload, Calendar, Wrench, AlertTriangle,
   Archive, Trash2, History, Shield, Eye, RefreshCw, FileCheck, Edit, Send,
-  MapPin, Users, Clock, BarChart3, FileText
+  MapPin, Users, Clock, BarChart3, FileText, RotateCcw
 } from "lucide-react";
 import { format } from "date-fns";
 import { useAppContext } from "@/context/AppContext";
@@ -37,6 +37,7 @@ import MMPFileManagement from "@/components/mmp/MMPFileManagement";
 import RecallHistory from "@/components/mmp/RecallHistory";
 import { useAuthorization } from "@/hooks/use-authorization";
 import ForwardToFOMDialog from "@/components/mmp/ForwardToFOMDialog";
+import { ReclaimFromCoordinatorDialog } from "@/components/mmp/ReclaimFromCoordinatorDialog";
 import ForwardToCoordinatorsDialog from "@/components/mmp/ForwardToCoordinatorsDialog";
 import CoordinatorSummaryCard from "@/components/mmp/CoordinatorSummaryCard";
 import WorkflowTrackerTab from "@/components/mmp/WorkflowTrackerTab";
@@ -61,6 +62,7 @@ const MMPDetailView = () => {
   const [siteDetailOpen, setSiteDetailOpen] = useState(false);
   const [siteEntriesDB, setSiteEntriesDB] = useState<any[]>([]);
   const [forwardOpen, setForwardOpen] = useState(false);
+  const [reclaimDialogOpen, setReclaimDialogOpen] = useState(false);
   const [forwardedLocal, setForwardedLocal] = useState(false);
   const [forwardedCount, setForwardedCount] = useState<number | null>(null);
   const [forwardToCoordinatorsOpen, setForwardToCoordinatorsOpen] = useState(false);
@@ -721,14 +723,27 @@ const MMPDetailView = () => {
         )}
         
         {(isFOM || isAdmin) && isForwarded && (
-          <Button 
-            onClick={() => navigate(`/mmp/${mmpFile.id}/review-assign-coordinators`)}
-            className="bg-green-600 hover:bg-green-700"
-            data-testid="button-review-assign-coordinators"
-          >
-            <Users className="mr-2 h-4 w-4" />
-            Review & Assign Coordinators
-          </Button>
+          <>
+            <Button 
+              onClick={() => navigate(`/mmp/${mmpFile.id}/review-assign-coordinators`)}
+              className="bg-green-600 hover:bg-green-700"
+              data-testid="button-review-assign-coordinators"
+            >
+              <Users className="mr-2 h-4 w-4" />
+              Review & Assign Coordinators
+            </Button>
+            {(mmpFile as any)?.workflow?.currentStage === 'forwarded_to_coordinator' && (
+              <Button
+                variant="outline"
+                onClick={() => setReclaimDialogOpen(true)}
+                className="border-orange-300 text-orange-600 hover:bg-orange-50 dark:border-orange-700 dark:text-orange-400 dark:hover:bg-orange-950"
+                data-testid="button-reclaim-mmp"
+              >
+                <RotateCcw className="mr-2 h-4 w-4" />
+                Reclaim from Coordinators
+              </Button>
+            )}
+          </>
         )}
 
         {(isCoordinator || isAdmin) && (mmpFile as any)?.workflow?.forwardedToCoordinators && (
@@ -1210,6 +1225,19 @@ const MMPDetailView = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {mmpFile && (
+        <ReclaimFromCoordinatorDialog
+          open={reclaimDialogOpen}
+          onOpenChange={setReclaimDialogOpen}
+          mmpId={mmpFile.id}
+          mmpName={mmpFile.name || 'Unknown MMP'}
+          siteCount={mmpFile.siteEntries?.length || 0}
+          onReclaimComplete={() => {
+            navigate('/mmp');
+          }}
+        />
+      )}
     </div>
   );
 };
