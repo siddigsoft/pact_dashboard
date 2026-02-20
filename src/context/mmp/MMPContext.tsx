@@ -1,290 +1,25 @@
-import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
+import React, { createContext, useContext, useEffect, useCallback } from 'react';
 import { MMPFile } from '@/types';
 import { supabase } from '@/integrations/supabase/client';
+import { useQueryClient } from '@tanstack/react-query';
 import { MMPContextType } from './types';
 import { useMMPOperations } from './hooks/useMMPOperations';
 import { useMMPStatusOperations } from './hooks/useMMPStatusOperations';
 import { useMMPVersioning } from './hooks/useMMPVersioning';
 import { useMMPUpload } from './hooks/useMMPUpload';
-
-// Migration function: Move data from additional_data to proper columns if column is empty
-const migrateAdditionalDataToColumns = (entry: any): any => {
-  const migrated = { ...entry };
-  const ad = migrated.additional_data || migrated.additionalData || {};
-  
-  // Mapping of additional_data keys (various formats) to column names (snake_case)
-  const columnMappings: Record<string, string> = {
-    // Direct mappings
-    'Site Code': 'site_code',
-    'site_code': 'site_code',
-    'siteCode': 'site_code',
-    'Hub Office': 'hub_office',
-    'Hub Office:': 'hub_office',
-    'hub_office': 'hub_office',
-    'hubOffice': 'hub_office',
-    'State': 'state',
-    'State:': 'state',
-    'state': 'state',
-    'state_name': 'state',
-    'Locality': 'locality',
-    'Locality:': 'locality',
-    'locality': 'locality',
-    'locality_name': 'locality',
-    'Site Name': 'site_name',
-    'Site Name:': 'site_name',
-    'site_name': 'site_name',
-    'siteName': 'site_name',
-    'CP Name': 'cp_name',
-    'CP name': 'cp_name',
-    'CP Name:': 'cp_name',
-    'cp_name': 'cp_name',
-    'cpName': 'cp_name',
-    'Visit Type': 'visit_type',
-    'visit_type': 'visit_type',
-    'visitType': 'visit_type',
-    'Visit Date': 'visit_date',
-    'visit_date': 'visit_date',
-    'visitDate': 'visit_date',
-    'Main Activity': 'main_activity',
-    'main_activity': 'main_activity',
-    'mainActivity': 'main_activity',
-    'Activity at Site': 'activity_at_site',
-    'Activity at the site': 'activity_at_site',
-    'Activity at the site:': 'activity_at_site',
-    'activity_at_site': 'activity_at_site',
-    'siteActivity': 'activity_at_site',
-    'Monitoring By': 'monitoring_by',
-    'monitoring by': 'monitoring_by',
-    'monitoring by:': 'monitoring_by',
-    'monitoring_by': 'monitoring_by',
-    'monitoringBy': 'monitoring_by',
-    'Survey Tool': 'survey_tool',
-    'Survey under Master tool': 'survey_tool',
-    'Survey under Master tool:': 'survey_tool',
-    'survey_tool': 'survey_tool',
-    'surveyTool': 'survey_tool',
-    'Use Market Diversion Monitoring': 'use_market_diversion',
-    'use_market_diversion': 'use_market_diversion',
-    'useMarketDiversion': 'use_market_diversion',
-    'Use Warehouse Monitoring': 'use_warehouse_monitoring',
-    'use_warehouse_monitoring': 'use_warehouse_monitoring',
-    'useWarehouseMonitoring': 'use_warehouse_monitoring',
-    'Comments': 'comments',
-    'comments': 'comments',
-    'Cost': 'cost',
-    'Price': 'cost',
-    'Amount': 'cost',
-    'cost': 'cost',
-    'price': 'cost',
-    'Enumerator Fee': 'enumerator_fee',
-    'enumerator_fee': 'enumerator_fee',
-    'Transport Fee': 'transport_fee',
-    'transport_fee': 'transport_fee',
-    'Verification Notes': 'verification_notes',
-    'Verification Notes:': 'verification_notes',
-    'verification_notes': 'verification_notes',
-    'Verified By': 'verified_by',
-    'Verified By:': 'verified_by',
-    'verified_by': 'verified_by',
-    'Verified At': 'verified_at',
-    'verified_at': 'verified_at',
-    'Dispatched By': 'dispatched_by',
-    'dispatched_by': 'dispatched_by',
-    'Dispatched At': 'dispatched_at',
-    'dispatched_at': 'dispatched_at',
-    'Status': 'status',
-    'Status:': 'status',
-    'status': 'status',
-    'Rejection Comments': 'rejection_comments',
-    'rejection_comments': 'rejection_comments',
-    'rejection_reason': 'rejection_comments',
-    'Rejected By': 'rejected_by',
-    'rejected_by': 'rejected_by',
-    'Rejected At': 'rejected_at',
-    'rejected_at': 'rejected_at',
-  };
-
-  // Helper to convert value to boolean
-  const toBool = (v: any): boolean | null => {
-    if (typeof v === 'boolean') return v;
-    if (v === null || v === undefined || v === '') return null;
-    const s = String(v).toLowerCase().trim();
-    return s === 'yes' || s === 'true' || s === '1' || s === 'y';
-  };
-
-  // Helper to convert value to number
-  const toNum = (v: any): number | null => {
-    if (v === null || v === undefined || v === '') return null;
-    if (typeof v === 'number') return v;
-    const s = String(v).replace(/[^0-9.\-]/g, '');
-    if (!s) return null;
-    const n = parseFloat(s);
-    return isNaN(n) ? null : n;
-  };
-
-  // Helper to convert date string to ISO string
-  const toDate = (v: any): string | null => {
-    if (!v) return null;
-    try {
-      const d = new Date(v);
-      return isNaN(d.getTime()) ? null : d.toISOString();
-    } catch {
-      return null;
-    }
-  };
-
-  // Migrate each field from additional_data to column if column is empty
-  for (const [adKey, columnName] of Object.entries(columnMappings)) {
-    const columnValue = migrated[columnName];
-    const adValue = ad[adKey];
-    
-    // Only migrate if column is empty/null/undefined and additional_data has a value
-    if ((columnValue === null || columnValue === undefined || columnValue === '') && 
-        adValue !== null && adValue !== undefined && adValue !== '') {
-      
-      // Type conversion based on column
-      if (columnName === 'use_market_diversion' || columnName === 'use_warehouse_monitoring') {
-        const boolVal = toBool(adValue);
-        if (boolVal !== null) {
-          migrated[columnName] = boolVal;
-        }
-      } else if (columnName === 'cost' || columnName === 'enumerator_fee' || columnName === 'transport_fee') {
-        const numVal = toNum(adValue);
-        if (numVal !== null) {
-          migrated[columnName] = numVal;
-        }
-      } else if (columnName === 'verified_at' || columnName === 'dispatched_at' || columnName === 'accepted_at' || columnName === 'rejected_at') {
-        const dateVal = toDate(adValue);
-        if (dateVal !== null) {
-          migrated[columnName] = dateVal;
-        }
-      } else if (columnName === 'rejected_by') {
-        // Handle UUID for rejected_by
-        const uuidVal = String(adValue).trim();
-        if (uuidVal && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(uuidVal)) {
-          migrated[columnName] = uuidVal;
-        }
-      } else {
-        // String fields
-        migrated[columnName] = String(adValue).trim();
-      }
-    }
-  }
-
-  return migrated;
-};
-
-// Transform database record (snake_case) to MMPFile interface (camelCase)
-const transformDBToMMPFile = (dbRecord: any): MMPFile => {
-  // Prefer site entries from the relational table if present; fallback to JSONB
-  let siteEntries: any[] = [];
-  if (dbRecord.mmp_site_entries) {
-    siteEntries = (dbRecord.mmp_site_entries as any[]).map((entry: any) => {
-      // Migrate data from additional_data to columns
-      const migrated = migrateAdditionalDataToColumns(entry);
-      
-      return {
-        id: migrated.id,
-        siteCode: migrated.site_code,
-        hubOffice: migrated.hub_office,
-        state: migrated.state,
-        locality: migrated.locality,
-        siteName: migrated.site_name,
-        cpName: migrated.cp_name,
-        visitType: migrated.visit_type,
-        visitDate: migrated.visit_date,
-        mainActivity: migrated.main_activity,
-        siteActivity: migrated.activity_at_site,
-        monitoringBy: migrated.monitoring_by,
-        surveyTool: migrated.survey_tool,
-        useMarketDiversion: migrated.use_market_diversion,
-        useWarehouseMonitoring: migrated.use_warehouse_monitoring,
-        comments: migrated.comments,
-        cost: migrated.cost,
-        enumerator_fee: migrated.enumerator_fee,
-        transport_fee: migrated.transport_fee,
-        verified_by: migrated.verified_by,
-        verified_at: migrated.verified_at,
-        verification_notes: migrated.verification_notes,
-        dispatched_by: migrated.dispatched_by,
-        dispatched_at: migrated.dispatched_at,
-        accepted_by: migrated.accepted_by,
-        accepted_at: migrated.accepted_at,
-        claimed_by: (migrated.additional_data || {})?.claimed_by || null,
-        claimed_at: (migrated.additional_data || {})?.claimed_at || null,
-        cost_acknowledged: migrated.cost_acknowledged ?? (migrated.additional_data || {})?.cost_acknowledged,
-        additionalData: migrated.additional_data || {},
-        status: migrated.status,
-        forwardedToUserId: migrated.forwarded_to_user_id,
-      };
-    });
-  } else if (dbRecord.site_entries) {
-    siteEntries = dbRecord.site_entries;
-  }
-
-  return {
-    id: dbRecord.id,
-    name: dbRecord.name,
-    hub: dbRecord.hub,
-    month: dbRecord.month,
-    uploadedBy: dbRecord.uploaded_by || 'Unknown',
-    uploadedAt: dbRecord.uploaded_at,
-    status: dbRecord.status,
-    entries: dbRecord.entries,
-    processedEntries: dbRecord.processed_entries,
-    mmpId: dbRecord.mmp_id,
-    rejectionReason: dbRecord.rejection_reason || dbRecord.rejectionreason,
-    approvedBy: dbRecord.approved_by || dbRecord.approvedby,
-    approvedAt: dbRecord.approved_at || dbRecord.approvedat,
-    verifiedBy: dbRecord.verified_by,
-    verifiedAt: dbRecord.verified_at,
-    archivedAt: dbRecord.archived_at || dbRecord.archivedat,
-    archivedBy: dbRecord.archived_by || dbRecord.archivedby,
-    deletedAt: dbRecord.deleted_at || dbRecord.deletedat,
-    deletedBy: dbRecord.deleted_by || dbRecord.deletedby,
-    expiryDate: dbRecord.expiry_date || dbRecord.expirydate,
-    region: dbRecord.region,
-    year: dbRecord.year,
-    version: dbRecord.version,
-    modificationHistory: dbRecord.modification_history || dbRecord.modificationhistory,
-    modifiedAt: dbRecord.modified_at,
-    description: dbRecord.description,
-    type: dbRecord.type,
-    filePath: dbRecord.file_path,
-    originalFilename: dbRecord.original_filename,
-    fileUrl: dbRecord.file_url,
-    projectId: dbRecord.project_id,
-    projectName: dbRecord.project?.name || dbRecord.project_name || dbRecord.projectname || dbRecord.name,
-    siteEntries: (() => {
-      const resolvedProjectName = dbRecord.project?.name || dbRecord.project_name || dbRecord.projectname || '';
-      if (!resolvedProjectName) return siteEntries;
-      return siteEntries.map((entry: any) => ({
-        ...entry,
-        cpName: entry.cpName || resolvedProjectName,
-        cp_name: entry.cp_name || resolvedProjectName,
-      }));
-    })(),
-    workflow: dbRecord.workflow,
-    approvalWorkflow: dbRecord.approval_workflow,
-    location: dbRecord.location,
-    team: dbRecord.team,
-    permits: dbRecord.permits,
-    siteVisit: dbRecord.site_visit || dbRecord.sitevisit,
-    financial: dbRecord.financial,
-    performance: dbRecord.performance,
-    cpVerification: dbRecord.cp_verification || dbRecord.cpverification,
-    comprehensiveVerification: dbRecord.comprehensive_verification,
-    activities: dbRecord.activities,
-  } as MMPFile; // Type assertion to handle any remaining type issues
-};
-
-const defaultCounts = { dispatched: 0, accepted: 0, smartAssigned: 0, ongoing: 0, completed: 0, rejected: 0, approvedCosted: 0, total: 0 };
+import { migrateAdditionalDataToColumns } from './mmpTransform';
+import {
+  useMMPFilesQuery,
+  useMMPSiteEntryCountsQuery,
+  mmpQueryKeys,
+  defaultSiteEntryCounts,
+} from './mmpQueries';
 
 const MMPContext = createContext<MMPContextType>({
   mmpFiles: [],
   loading: true,
   error: null,
-  siteEntryCounts: defaultCounts,
+  siteEntryCounts: defaultSiteEntryCounts,
   currentMMP: null,
   setCurrentMMP: () => {},
   addMMPFile: () => {},
@@ -311,11 +46,23 @@ const MMPContext = createContext<MMPContextType>({
 });
 
 export const useMMPProvider = () => {
-  const [mmpFiles, setMMPFiles] = useState<MMPFile[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [siteEntryCounts, setSiteEntryCounts] = useState(defaultCounts);
+  const queryClient = useQueryClient();
+  const filesQuery = useMMPFilesQuery();
+  const countsQuery = useMMPSiteEntryCountsQuery();
+
+  const mmpFiles = filesQuery.data ?? [];
+  const loading = filesQuery.isLoading;
+  const error = filesQuery.error ? 'Failed to load MMP files' : null;
+  const siteEntryCounts = countsQuery.data ?? defaultSiteEntryCounts;
+
+  const setMMPFiles = useCallback(
+    (updater: MMPFile[] | ((prev: MMPFile[]) => MMPFile[])) => {
+      queryClient.setQueryData(mmpQueryKeys.files(), (prev: MMPFile[] | undefined) =>
+        typeof updater === 'function' ? updater(prev ?? []) : updater
+      );
+    },
+    [queryClient]
+  );
 
   const {
     currentMMP,
@@ -371,109 +118,14 @@ export const useMMPProvider = () => {
     }).eq('id', id);
   };
 
-  // Fast count query: single fetch of status + accepted_by, then count in memory
-  // This is faster than 8 separate network round-trips to the database
   const refreshSiteEntryCounts = useCallback(async () => {
-    try {
-      if (!navigator.onLine) return;
-      
-      const { data: rows, error } = await supabase
-        .from('mmp_site_entries')
-        .select('status, accepted_by');
-      
-      if (error) { console.warn('Count query error:', error); return; }
-      
-      let dispatched = 0, accepted = 0, smartAssigned = 0, ongoing = 0;
-      let completed = 0, rejected = 0, approvedCosted = 0;
-      const total = rows?.length || 0;
-      
-      for (const r of (rows || [])) {
-        const s = (r.status || '').toLowerCase();
-        if (s === 'dispatched' && !r.accepted_by) dispatched++;
-        else if (s === 'accepted') accepted++;
-        else if (s === 'assigned') smartAssigned++;
-        else if (s === 'inprogress' || s === 'in_progress' || s === 'ongoing') ongoing++;
-        else if (s === 'completed') completed++;
-        else if (s === 'rejected' || s === 'declined') rejected++;
-        else if (s === 'approved and costed' || s === 'costed') approvedCosted++;
-      }
-      
-      setSiteEntryCounts({ dispatched, accepted, smartAssigned, ongoing, completed, rejected, approvedCosted, total });
-    } catch (err) {
-      console.warn('Failed to refresh site entry counts:', err);
-    }
-  }, []);
+    await queryClient.invalidateQueries({ queryKey: mmpQueryKeys.siteEntryCounts() });
+  }, [queryClient]);
 
   const refreshMMPFiles = useCallback(async () => {
-    try {
-      // Check if user is authenticated before loading data
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        // Not authenticated - don't load MMP data
-        setMMPFiles([]);
-        setLoading(false);
-        return;
-      }
-
-      // Don't refresh if offline
-      if (!navigator.onLine) {
-        console.debug('MMP refresh skipped: device is offline');
-        return;
-      }
-
-      // Only show the global loading state on the very first load.
-      // For background/automatic refreshes after initial load, we keep
-      // the existing data on screen to avoid a "full page reload" effect.
-      if (!hasLoadedOnce) {
-        setLoading(true);
-      }
-      
-      // Load mmp_files with mmp_site_entries so coordinator Site Verification page
-      // can show sites from context (same as backup). On-demand load still used when opening a single MMP.
-      const { data: mmpData, error } = await supabase
-        .from('mmp_files')
-        .select(`
-          *,
-          project:projects(
-            id,
-            name,
-            project_code
-          ),
-          mmp_site_entries (*)
-        `)
-        .order('created_at', { ascending: false });
-
-      let rows = mmpData;
-      if (error) {
-        console.warn('Error loading MMP files with relations, trying fallback:', error);
-        const { data: fallbackData, error: fallbackError } = await supabase
-          .from('mmp_files')
-          .select('*')
-          .order('created_at', { ascending: false });
-        if (fallbackError) {
-          throw fallbackError;
-        }
-        rows = fallbackData;
-      }
-
-      const mapped = (rows || []).map(transformDBToMMPFile);
-      setMMPFiles(mapped);
-      setError(null); // Clear any previous errors on successful refresh
-      if (!hasLoadedOnce) {
-        setHasLoadedOnce(true);
-      }
-    } catch (err) {
-      console.error('Error loading MMP files:', err);
-      // Don't clear existing data on error, just log it
-      setError('Failed to load MMP files');
-      // Keep existing data instead of clearing it
-      // setMMPFiles([]);
-    } finally {
-      if (!hasLoadedOnce) {
-        setLoading(false);
-      }
-    }
-  }, [hasLoadedOnce]);
+    await queryClient.invalidateQueries({ queryKey: mmpQueryKeys.files() });
+    await queryClient.invalidateQueries({ queryKey: mmpQueryKeys.siteEntryCounts() });
+  }, [queryClient]);
 
   // Load site entries in parallel batches for speed
   const loadSiteEntriesInBackground = useCallback(async (mmpIds: string[]) => {
@@ -565,11 +217,6 @@ export const useMMPProvider = () => {
         );
       }
     }
-  }, []);
-
-  useEffect(() => {
-    // Load MMP files and counts in parallel for faster initial render
-    Promise.all([refreshMMPFiles(), refreshSiteEntryCounts()]);
   }, []);
 
   // PERFORMANCE OPTIMIZATION: Removed automatic background loading of ALL site entries
