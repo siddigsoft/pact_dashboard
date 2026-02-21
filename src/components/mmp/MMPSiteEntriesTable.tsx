@@ -210,11 +210,19 @@ const MMPSiteEntriesTable = ({
     const rejectedBy = site.rejected_by || ad['rejected_by'] || undefined;
     const rejectedAt = site.rejected_at || (ad['rejected_at'] ? new Date(ad['rejected_at']).toISOString() : undefined) || undefined;
     
+    // Completion information - for completed sites, the person who completed is typically the one who accepted/claimed
+    const siteStatusLower = (status || '').toString().toLowerCase();
+    const completedBy = site.completed_by || ad['completed_by'] || ad['Completed By'] || 
+      (siteStatusLower === 'completed' ? (site.accepted_by || site.acceptedBy || ad['accepted_by'] || ad['Accepted By']) : undefined) || undefined;
+    const completedAt = site.completed_at || ad['completed_at'] || (ad['Completed At'] ? new Date(ad['Completed At']).toISOString() : undefined) || 
+      (siteStatusLower === 'completed' ? (site.updated_at || site.last_modified) : undefined) || undefined;
+    
     // Timestamps
     const createdAt = site.created_at || undefined;
     const updatedAt = site.updated_at || site.last_modified || undefined;
 
     const acceptedByName = resolveUserName(acceptedBy) || null;
+    const completedByName = resolveUserName(completedBy) || null;
 
     return { 
       hubOffice, state, locality, siteCode, mmpName, siteName, cpName, siteActivity, 
@@ -223,6 +231,7 @@ const MMPSiteEntriesTable = ({
       enumeratorFee: enumeratorFee, transportFee: transportFee, cost: totalCost,
       verifiedBy, verifiedAt, verificationNotes, status,
       dispatchedAt, dispatchedBy, acceptedAt, acceptedBy, acceptedByName,
+      completedBy, completedAt, completedByName,
       rejectionComments, rejectedBy, rejectedAt,
       createdAt, updatedAt
     };
@@ -648,16 +657,32 @@ const MMPSiteEntriesTable = ({
                                 >
                                   {displayStatus || 'Pending'}
                                 </Badge>
-                                {row.acceptedByName && row.acceptedByName !== '—' && (
-                                  <span className="text-xs text-purple-600 dark:text-purple-400 font-medium" data-testid="text-accepted-by">
-                                    by {row.acceptedByName}
-                                  </span>
-                                )}
-                                {row.acceptedAt && (
-                                  <span className="text-xs text-muted-foreground" data-testid="text-accepted-at">
-                                    {new Date(row.acceptedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}{' '}
-                                    {new Date(row.acceptedAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}
-                                  </span>
+                                {displayStatus === 'completed' && row.completedByName && row.completedByName !== '—' ? (
+                                  <>
+                                    <span className="text-xs text-emerald-600 dark:text-emerald-400 font-medium" data-testid="text-completed-by">
+                                      By: {row.completedByName}
+                                    </span>
+                                    {row.completedAt && (
+                                      <span className="text-xs text-muted-foreground" data-testid="text-completed-at">
+                                        {new Date(row.completedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}{' '}
+                                        {new Date(row.completedAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}
+                                      </span>
+                                    )}
+                                  </>
+                                ) : (
+                                  <>
+                                    {row.acceptedByName && row.acceptedByName !== '—' && (
+                                      <span className="text-xs text-purple-600 dark:text-purple-400 font-medium" data-testid="text-accepted-by">
+                                        By: {row.acceptedByName}
+                                      </span>
+                                    )}
+                                    {row.acceptedAt && (
+                                      <span className="text-xs text-muted-foreground" data-testid="text-accepted-at">
+                                        {new Date(row.acceptedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}{' '}
+                                        {new Date(row.acceptedAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}
+                                      </span>
+                                    )}
+                                  </>
                                 )}
                               </div>
                             );
