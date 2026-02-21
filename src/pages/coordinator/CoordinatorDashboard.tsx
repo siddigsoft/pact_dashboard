@@ -121,20 +121,6 @@ const CoordinatorDashboard: React.FC = () => {
 
       if (error) throw error;
 
-      console.log('[CoordinatorDashboard] Total entries fetched:', allEntries?.length);
-      console.log('[CoordinatorDashboard] userId:', userId);
-      if (allEntries && allEntries.length > 0) {
-        const sampleEntry = allEntries[0];
-        console.log('[CoordinatorDashboard] Sample entry keys:', Object.keys(sampleEntry));
-        console.log('[CoordinatorDashboard] Sample forwarded_to_user_id:', sampleEntry.forwarded_to_user_id);
-        const forwardedToUser = allEntries.filter((e: any) => e.forwarded_to_user_id === userId);
-        const assignedToUser = allEntries.filter((e: any) => (e.additional_data || {}).assigned_to === userId);
-        const acceptedByUser = allEntries.filter((e: any) => e.accepted_by === userId);
-        console.log('[CoordinatorDashboard] forwarded_to_user_id matches:', forwardedToUser.length);
-        console.log('[CoordinatorDashboard] assigned_to matches:', assignedToUser.length);
-        console.log('[CoordinatorDashboard] accepted_by matches:', acceptedByUser.length);
-      }
-
       const userEntries = (allEntries || []).filter((entry: any) => {
         const ad = entry.additional_data || {};
         const isAssignedToUser = ad.assigned_to === userId;

@@ -3088,16 +3088,6 @@ const CoordinatorSites: React.FC = () => {
             Back
           </Button>
         </div>
-        {/* DEBUG PANEL - TEMPORARY */}
-        <div className="mt-2 p-3 bg-yellow-100 text-black rounded text-xs font-mono">
-          <div><strong>DEBUG:</strong> userId={currentUser?.id?.slice(0,8)}... | role={currentUser?.role}</div>
-          <div>MMP files loaded: {contextMmpFiles?.length ?? 'null'} | loading: {String(contextLoading)} | sites found: {coordinatorSites?.length ?? 0}</div>
-          <div>MMP files with entries: {contextMmpFiles?.filter((m: any) => m.siteEntries?.length > 0).length ?? 0}</div>
-          {contextMmpFiles?.length > 0 && contextMmpFiles[0].siteEntries?.length > 0 && (
-            <div>First entry sample: forwardedToUserId={String(contextMmpFiles[0].siteEntries[0]?.forwardedToUserId)?.slice(0,8) || 'null'}, status={contextMmpFiles[0].siteEntries[0]?.status}</div>
-          )}
-          <div>Total site entries across all MMPs: {contextMmpFiles?.reduce((sum: number, m: any) => sum + (m.siteEntries?.length || 0), 0) ?? 0}</div>
-        </div>
         <div className="mt-4 flex flex-wrap gap-3 text-sm">
           <div className="flex items-center gap-2 bg-white/10 rounded-full px-3 py-1">
             <ListChecks className="h-4 w-4" />
