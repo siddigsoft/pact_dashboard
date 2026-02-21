@@ -48,12 +48,24 @@ async function fetchMMPFiles(): Promise<MMPFile[]> {
 
   let rows = mmpData;
   if (error) {
+    console.warn('[fetchMMPFiles] Primary query failed, falling back:', error.message);
     const { data: fallbackData, error: fallbackError } = await supabase
       .from('mmp_files')
       .select('*')
       .order('created_at', { ascending: false });
     if (fallbackError) throw fallbackError;
     rows = fallbackData;
+  }
+
+  console.log('[fetchMMPFiles] Loaded', rows?.length, 'MMP files');
+  if (rows && rows.length > 0) {
+    const firstWithEntries = rows.find((r: any) => r.mmp_site_entries?.length > 0);
+    if (firstWithEntries) {
+      console.log('[fetchMMPFiles] Sample entry keys:', Object.keys(firstWithEntries.mmp_site_entries[0]));
+      console.log('[fetchMMPFiles] Sample forwarded_to_user_id:', firstWithEntries.mmp_site_entries[0].forwarded_to_user_id);
+    } else {
+      console.warn('[fetchMMPFiles] NO MMP files have site entries!');
+    }
   }
 
   return (rows || []).map(transformDBToMMPFile);

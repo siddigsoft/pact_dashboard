@@ -87,15 +87,28 @@ export const useCoordinatorSites = () => {
   const coordinatorSites = useMemo(() => {
     if (!currentUser?.id || !contextMmpFiles || contextLoading) return [];
 
+    console.log('[useCoordinatorSites] userId:', currentUser.id);
+    console.log('[useCoordinatorSites] contextMmpFiles count:', contextMmpFiles.length);
+    let totalEntries = 0;
+    let matchCount = 0;
+
     const allSites: SiteVisit[] = [];
 
     contextMmpFiles.forEach((mmp: any) => {
       if (!mmp.siteEntries || !Array.isArray(mmp.siteEntries)) return;
 
+      totalEntries += mmp.siteEntries.length;
+
       mmp.siteEntries.forEach((entry: any) => {
         const forwardedToMe = entry.forwardedToUserId === currentUser.id;
         const assignedToMe = (entry.additionalData?.assigned_to || entry.additional_data?.assigned_to) === currentUser.id;
         const acceptedByMe = entry.accepted_by === currentUser.id;
+
+        if (forwardedToMe || assignedToMe || acceptedByMe) {
+          matchCount++;
+          console.log('[useCoordinatorSites] MATCH:', { id: entry.id, forwardedToUserId: entry.forwardedToUserId, assigned_to: entry.additionalData?.assigned_to, accepted_by: entry.accepted_by, status: entry.status });
+        }
+
         if (!forwardedToMe && !assignedToMe && !acceptedByMe) return;
 
         if (entry.status === 'returned_to_fom') return;
