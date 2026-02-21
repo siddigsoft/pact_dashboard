@@ -65,6 +65,7 @@ interface CollectorDetail {
   percentage: number;
   activities: { name: string; count: number }[];
   localities: { name: string; count: number }[];
+  sites: { name: string; count: number; locality: string; state: string }[];
   hubs: string[];
   states: string[];
   nameVariants: { name: string; count: number }[];
@@ -1088,28 +1089,37 @@ const QuestionnaireAnalytics = () => {
   }, [filteredData]);
 
   const collectorDetails = useMemo((): CollectorDetail[] => {
-    const deviceMap = new Map<string, { names: Map<string, number>; activities: Map<string, number>; localities: Map<string, number>; hubs: Set<string>; states: Set<string>; count: number }>();
-    const noDeviceMap = new Map<string, { activities: Map<string, number>; localities: Map<string, number>; hubs: Set<string>; states: Set<string>; count: number }>();
+    const deviceMap = new Map<string, { names: Map<string, number>; activities: Map<string, number>; localities: Map<string, number>; sites: Map<string, { count: number; locality: string; state: string }>; hubs: Set<string>; states: Set<string>; count: number }>();
+    const noDeviceMap = new Map<string, { activities: Map<string, number>; localities: Map<string, number>; sites: Map<string, { count: number; locality: string; state: string }>; hubs: Set<string>; states: Set<string>; count: number }>();
 
     filteredData.forEach(row => {
       const name = row.dataCollector || '(Empty)';
       const devId = row.deviceId?.trim() || '';
+      const siteName = row.activitySite?.trim() || '';
 
       if (devId) {
-        if (!deviceMap.has(devId)) deviceMap.set(devId, { names: new Map(), activities: new Map(), localities: new Map(), hubs: new Set(), states: new Set(), count: 0 });
+        if (!deviceMap.has(devId)) deviceMap.set(devId, { names: new Map(), activities: new Map(), localities: new Map(), sites: new Map(), hubs: new Set(), states: new Set(), count: 0 });
         const entry = deviceMap.get(devId)!;
         entry.count++;
         entry.names.set(name, (entry.names.get(name) || 0) + 1);
         if (row.activity) entry.activities.set(row.activity, (entry.activities.get(row.activity) || 0) + 1);
         if (row.locality) entry.localities.set(row.locality, (entry.localities.get(row.locality) || 0) + 1);
+        if (siteName) {
+          const existing = entry.sites.get(siteName);
+          if (existing) { existing.count++; } else { entry.sites.set(siteName, { count: 1, locality: row.locality || '', state: row.state || '' }); }
+        }
         if (row.hub) entry.hubs.add(row.hub);
         if (row.state) entry.states.add(row.state);
       } else {
-        if (!noDeviceMap.has(name)) noDeviceMap.set(name, { activities: new Map(), localities: new Map(), hubs: new Set(), states: new Set(), count: 0 });
+        if (!noDeviceMap.has(name)) noDeviceMap.set(name, { activities: new Map(), localities: new Map(), sites: new Map(), hubs: new Set(), states: new Set(), count: 0 });
         const entry = noDeviceMap.get(name)!;
         entry.count++;
         if (row.activity) entry.activities.set(row.activity, (entry.activities.get(row.activity) || 0) + 1);
         if (row.locality) entry.localities.set(row.locality, (entry.localities.get(row.locality) || 0) + 1);
+        if (siteName) {
+          const existing = entry.sites.get(siteName);
+          if (existing) { existing.count++; } else { entry.sites.set(siteName, { count: 1, locality: row.locality || '', state: row.state || '' }); }
+        }
         if (row.hub) entry.hubs.add(row.hub);
         if (row.state) entry.states.add(row.state);
       }
@@ -1128,6 +1138,7 @@ const QuestionnaireAnalytics = () => {
         percentage: total > 0 ? (d.count / total) * 100 : 0,
         activities: [...d.activities.entries()].map(([n, c]) => ({ name: n, count: c })).sort((a, b) => b.count - a.count),
         localities: [...d.localities.entries()].map(([n, c]) => ({ name: n, count: c })).sort((a, b) => b.count - a.count),
+        sites: [...d.sites.entries()].map(([n, s]) => ({ name: n, count: s.count, locality: s.locality, state: s.state })).sort((a, b) => b.count - a.count),
         hubs: [...d.hubs],
         states: [...d.states],
         nameVariants: nameVariants.length > 1 ? nameVariants : [],
@@ -1142,6 +1153,7 @@ const QuestionnaireAnalytics = () => {
         percentage: total > 0 ? (d.count / total) * 100 : 0,
         activities: [...d.activities.entries()].map(([n, c]) => ({ name: n, count: c })).sort((a, b) => b.count - a.count),
         localities: [...d.localities.entries()].map(([n, c]) => ({ name: n, count: c })).sort((a, b) => b.count - a.count),
+        sites: [...d.sites.entries()].map(([n, s]) => ({ name: n, count: s.count, locality: s.locality, state: s.state })).sort((a, b) => b.count - a.count),
         hubs: [...d.hubs],
         states: [...d.states],
         nameVariants: [],
@@ -2024,10 +2036,10 @@ const QuestionnaireAnalytics = () => {
       actRows.push(['Total', String(totalSites), String(totalQ), '100%']);
       addSheet('By Activity', ['Activity', 'Sites', 'Questionnaires', '%'], actRows);
 
-      addSheet('By Collector', ['#', 'Device ID', 'Data Collector', 'Hub', 'State', 'Activities', 'Questionnaires', '%'],
+      addSheet('By Collector', ['#', 'Device ID', 'Data Collector', 'Hub', 'State', 'Sites', 'Activities', 'Questionnaires', '%'],
         [...collectorDetails.map((c, i) => [i + 1, c.deviceId || '-', c.name, c.hubs.join(', '), c.states.join(', '),
-          c.activities.map((a: any) => `${a.name} (${a.count})`).join(', '), c.count, c.percentage.toFixed(1) + '%']),
-        ['', '', 'Total', '', '', '', totalQ, '100%']]);
+          c.sites.length, c.activities.map((a: any) => `${a.name} (${a.count})`).join(', '), c.count, c.percentage.toFixed(1) + '%']),
+        ['', '', 'Total', '', '', '', '', totalQ, '100%']]);
 
       const { hubs, matrix: tMatrix, hubTotals: tHubTotals } = trackerData;
       if (hubs.length > 0 && tMatrix.length > 0) {
@@ -2101,9 +2113,9 @@ const QuestionnaireAnalytics = () => {
       if (y > 220) { doc.addPage(); addPageHeader(doc, 'By Data Collector'); y = 18; }
       doc.setFontSize(12); doc.setTextColor(15, 32, 65); doc.setFont('helvetica', 'bold');
       doc.text('By Data Collector', 14, y); y += 3;
-      const dcRows = collectorDetails.map((c, i) => [String(i + 1), c.deviceId || '-', c.name, c.hubs.join(', '), c.states.join(', '), c.activities.map((a: any) => a.name).join(', '), String(c.count), c.percentage.toFixed(1) + '%']);
-      dcRows.push(['', '', 'Total', '', '', '', String(totalQ), '100%']);
-      y = styledAutoTable(doc, [['#', 'Device ID', 'Collector', 'Hub', 'State', 'Activities', 'Q', '%']], dcRows, y, { fontSize: 7, boldLastRow: true, useArabicFont: hasArabic });
+      const dcRows = collectorDetails.map((c, i) => [String(i + 1), c.deviceId || '-', c.name, c.hubs.join(', '), c.states.join(', '), String(c.sites.length), c.activities.map((a: any) => a.name).join(', '), String(c.count), c.percentage.toFixed(1) + '%']);
+      dcRows.push(['', '', 'Total', '', '', '', '', String(totalQ), '100%']);
+      y = styledAutoTable(doc, [['#', 'Device ID', 'Collector', 'Hub', 'State', 'Sites', 'Activities', 'Q', '%']], dcRows, y, { fontSize: 7, boldLastRow: true, useArabicFont: hasArabic });
       y += 4;
 
       collectorDetails.forEach(c => {
@@ -2139,6 +2151,16 @@ const QuestionnaireAnalytics = () => {
         const clRows = c.localities.map((l: any, i: number) => [String(i + 1), l.name, String(l.count)]);
         clRows.push(['', 'Total', String(c.count)]);
         y = styledAutoTable(doc, [['#', 'Locality', 'Count']], clRows, y, { fontSize: 9, boldLastRow: true, useArabicFont: hasArabic });
+        y += 4;
+        if (c.sites.length > 0) {
+          if (y > 240) { doc.addPage(); addPageHeader(doc, 'Data Collector Report'); y = 18; }
+          doc.setFontSize(10); doc.setTextColor(15, 32, 65); doc.setFont('helvetica', 'bold');
+          doc.text(`Activity Sites (${c.sites.length})`, 14, y); y += 3;
+          const csRows = c.sites.map((s: any, i: number) => [String(i + 1), s.name, s.locality || '-', s.state || '-', String(s.count)]);
+          const csTotal = c.sites.reduce((sum: number, s: any) => sum + s.count, 0);
+          csRows.push(['', 'Total', '', '', String(csTotal)]);
+          y = styledAutoTable(doc, [['#', 'Site', 'Locality', 'State', 'Count']], csRows, y, { fontSize: 8, boldLastRow: true, useArabicFont: hasArabic });
+        }
       });
 
       const { hubs: tHubs, matrix: tMatrix, hubTotals: tHubTotals, hubTrackers: tHubTrackers, stateTrackers: tStateTrackers } = trackerData;
@@ -2468,6 +2490,8 @@ const QuestionnaireAnalytics = () => {
       'Name Variants': c.nameVariants.length > 0 ? c.nameVariants.map(v => `${v.name} (${v.count})`).join(', ') : '',
       Hub: c.hubs.join(', '),
       State: c.states.join(', '),
+      'Sites Count': c.sites.length,
+      'Sites': c.sites.map(s => `${s.name} (${s.count})`).join(', '),
       'Total Activities': c.activities.reduce((s, a) => s + a.count, 0),
       Activities: c.activities.map(a => `${a.name} (${a.count})`).join(', '),
       Localities: c.localities.map(l => `${l.name} (${l.count})`).join(', '),
@@ -2496,6 +2520,12 @@ const QuestionnaireAnalytics = () => {
       detailRows.push({ Section: '' });
       detailRows.push({ Section: 'LOCALITIES', Field: 'Locality', Value: 'Count' });
       c.localities.forEach(l => detailRows.push({ Section: '', Field: l.name, Value: l.count }));
+      if (c.sites.length > 0) {
+        detailRows.push({ Section: '' });
+        detailRows.push({ Section: 'ACTIVITY SITES', Field: 'Site Name', Value: 'Count' });
+        c.sites.forEach(s => detailRows.push({ Section: '', Field: s.name, Value: s.count }));
+        detailRows.push({ Section: '', Field: 'Total Sites', Value: c.sites.length });
+      }
       let sheetName = `DC-${c.name}`.replace(/[\\/*?[\]:]/g, '').slice(0, 28);
       if (usedSheetNames.has(sheetName)) sheetName = `${sheetName.slice(0, 25)}-${ci + 1}`;
       usedSheetNames.add(sheetName);
@@ -2629,9 +2659,9 @@ const QuestionnaireAnalytics = () => {
     if (y > 220) { doc.addPage(); addPageHeader(doc, 'By Data Collector'); y = 18; }
     doc.setFontSize(12); doc.setTextColor(15, 32, 65); doc.setFont('helvetica', 'bold');
     doc.text('By Data Collector', 14, y); y += 3;
-    const dcRows = collectorDetails.map((c, i) => [String(i + 1), c.deviceId || '-', c.name, c.hubs.join(', '), c.states.join(', '), c.activities.map((a: any) => a.name).join(', '), String(c.count), c.percentage.toFixed(1) + '%']);
-    dcRows.push(['', '', 'Total', '', '', '', String(totalQ), '100%']);
-    y = styledAutoTable(doc, [['#', 'Device ID', 'Collector', 'Hub', 'State', 'Activities', 'Q', '%']], dcRows, y, { fontSize: 7, boldLastRow: true, useArabicFont: hasArabic });
+    const dcRows = collectorDetails.map((c, i) => [String(i + 1), c.deviceId || '-', c.name, c.hubs.join(', '), c.states.join(', '), String(c.sites.length), c.activities.map((a: any) => a.name).join(', '), String(c.count), c.percentage.toFixed(1) + '%']);
+    dcRows.push(['', '', 'Total', '', '', '', '', String(totalQ), '100%']);
+    y = styledAutoTable(doc, [['#', 'Device ID', 'Collector', 'Hub', 'State', 'Sites', 'Activities', 'Q', '%']], dcRows, y, { fontSize: 7, boldLastRow: true, useArabicFont: hasArabic });
     y += 4;
 
     collectorDetails.forEach(c => {
@@ -2645,7 +2675,7 @@ const QuestionnaireAnalytics = () => {
       doc.setFont('helvetica', 'normal');
       y += 5;
       doc.setFontSize(9); doc.setTextColor(90, 95, 110);
-      doc.text(`Device ID: ${c.deviceId || '-'}  |  Hub: ${c.hubs.join(', ')}  |  State: ${c.states.join(', ')}  |  ${c.count} Q (${c.percentage.toFixed(1)}%)`, 14, y);
+      doc.text(`Device ID: ${c.deviceId || '-'}  |  Hub: ${c.hubs.join(', ')}  |  State: ${c.states.join(', ')}  |  Sites: ${c.sites.length}  |  ${c.count} Q (${c.percentage.toFixed(1)}%)`, 14, y);
       y += 6;
       if (c.nameVariants.length > 0) {
         doc.setFontSize(10); doc.setTextColor(15, 32, 65); doc.setFont('helvetica', 'bold');
@@ -2667,6 +2697,16 @@ const QuestionnaireAnalytics = () => {
       const clRows = c.localities.map((l: any, i: number) => [String(i + 1), l.name, String(l.count)]);
       clRows.push(['', 'Total', String(c.count)]);
       y = styledAutoTable(doc, [['#', 'Locality', 'Count']], clRows, y, { fontSize: 9, boldLastRow: true, useArabicFont: hasArabic });
+      y += 4;
+      if (c.sites.length > 0) {
+        if (y > 240) { doc.addPage(); addPageHeader(doc, 'Data Collector Report'); y = 18; }
+        doc.setFontSize(10); doc.setTextColor(15, 32, 65); doc.setFont('helvetica', 'bold');
+        doc.text(`Activity Sites (${c.sites.length})`, 14, y); y += 3;
+        const csRows = c.sites.map((s: any, i: number) => [String(i + 1), s.name, s.locality || '-', s.state || '-', String(s.count)]);
+        const csTotal = c.sites.reduce((sum: number, s: any) => sum + s.count, 0);
+        csRows.push(['', 'Total', '', '', String(csTotal)]);
+        y = styledAutoTable(doc, [['#', 'Site', 'Locality', 'State', 'Count']], csRows, y, { fontSize: 8, boldLastRow: true, useArabicFont: hasArabic });
+      }
     });
 
     const { hubs: tHubs, matrix: tMatrix, hubTotals: tHubTotals, grandQ: tGrandQ, grandSites: tGrandSites, grandCollectors: tGrandCollectors, hubTrackers: tHubTrackers, stateTrackers: tStateTrackers } = trackerData;
@@ -3105,6 +3145,20 @@ const QuestionnaireAnalytics = () => {
     y += 2;
     const locRows = collector.localities.map((l: any, i: number) => [String(i + 1), l.name, String(l.count)]);
     y = styledAutoTable(doc, [['#', 'Locality', 'Count']], locRows, y, { fontSize: 9, useArabicFont: hasArabic });
+    y += 6;
+
+    if (collector.sites.length > 0) {
+      if (y > 240) { doc.addPage(); addPageHeader(doc, 'Data Collector Report'); y = 18; }
+      doc.setFontSize(11);
+      doc.setTextColor(15, 32, 65);
+      doc.setFont('helvetica', 'bold');
+      doc.text(`Activity Sites (${collector.sites.length})`, ml, y);
+      y += 2;
+      const siteRows = collector.sites.map((s: any, i: number) => [String(i + 1), s.name, s.locality || '-', s.state || '-', String(s.count)]);
+      const siteTotal = collector.sites.reduce((sum: number, s: any) => sum + s.count, 0);
+      siteRows.push(['', 'Total', '', '', String(siteTotal)]);
+      y = styledAutoTable(doc, [['#', 'Site Name', 'Locality', 'State', 'Count']], siteRows, y, { fontSize: 8, boldLastRow: true, useArabicFont: hasArabic });
+    }
 
     addAllFooters(doc);
 
@@ -4716,6 +4770,7 @@ const QuestionnaireAnalytics = () => {
                             </div>
                           </div>
                           <div className="flex items-center gap-2 flex-shrink-0 flex-wrap justify-end">
+                            <Badge variant="outline" className="text-xs">{item.sites.length} sites</Badge>
                             <Badge variant="outline" className="text-xs">{item.activities.length} activities</Badge>
                             <Badge variant="outline" className="text-xs">{item.localities.length} localities</Badge>
                             <Badge variant="secondary" className="font-mono">{item.count}</Badge>
@@ -4769,6 +4824,33 @@ const QuestionnaireAnalytics = () => {
                                 </div>
                               </div>
                             </div>
+                            {item.sites.length > 0 && (
+                              <div className="mt-3">
+                                <h4 className="text-xs font-semibold text-muted-foreground mb-2 flex items-center gap-1">
+                                  <MapPin className="h-3 w-3" /> ACTIVITY SITES
+                                  <Badge variant="secondary" className="text-[10px] px-1 py-0 ml-1">{item.sites.length} sites</Badge>
+                                  <Badge variant="secondary" className="text-[10px] px-1 py-0 ml-1">{item.sites.reduce((s, st) => s + st.count, 0)} questionnaires</Badge>
+                                </h4>
+                                <div className="border rounded-md overflow-hidden">
+                                  <div className="grid grid-cols-[1fr_auto_auto_auto] gap-x-3 px-2 py-1.5 bg-muted/50 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
+                                    <span>Site Name</span>
+                                    <span>Locality</span>
+                                    <span>State</span>
+                                    <span className="text-right">Count</span>
+                                  </div>
+                                  <div className="max-h-48 overflow-y-auto">
+                                    {item.sites.map((s, si) => (
+                                      <div key={si} className={`grid grid-cols-[1fr_auto_auto_auto] gap-x-3 px-2 py-1 text-sm ${si % 2 === 0 ? 'bg-muted/10' : ''}`}>
+                                        <span className="truncate">{s.name}</span>
+                                        <span className="text-xs text-muted-foreground truncate max-w-[120px]">{s.locality || '-'}</span>
+                                        <span className="text-xs text-muted-foreground truncate max-w-[100px]">{s.state || '-'}</span>
+                                        <Badge variant="outline" className="font-mono text-xs ml-1 justify-self-end">{s.count}</Badge>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              </div>
+                            )}
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                               {item.hubs.length > 0 && (
                                 <div>
