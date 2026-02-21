@@ -2844,9 +2844,101 @@ const QuestionnaireAnalytics = () => {
     doc.save('questionnaire_analytics.pdf');
   }, [filteredData, hubSummary, stateSummary, localitySummary, activityBreakdown, collectorDetails, trackerData]);
 
-  const exportTrackerToExcel = useCallback(async () => {
-    await exportFormattedTrackerExcel(trackerData, isPdmActivity, 'tracker_report.xlsx', filteredData);
-  }, [trackerData, filteredData]);
+  const exportTrackerToExcel = useCallback(() => {
+    const wb = XLSX.utils.book_new();
+    const { hubs, activities, matrix, hubTotals, grandQ, grandSites, grandCollectors, stateBreakdown, hubTrackers, stateTrackers } = trackerData;
+
+    const rows: any[] = [];
+    matrix.forEach(row => {
+      const r: any = { Activity: row.activity };
+      hubs.forEach((hub, hi) => {
+        r[`${hub} Sites`] = row.cells[hi].sites;
+        r[`${hub} Actual`] = row.cells[hi].questionnaires;
+        r[`${hub} PDM Sites`] = isPdmActivity(row.activity) ? Math.floor(row.cells[hi].questionnaires / 7) : 0;
+        r[`${hub} DC`] = row.cells[hi].collectors;
+      });
+      r['Total Sites'] = row.totalSites;
+      r['Total Actual'] = row.totalQ;
+      r['Total PDM Sites'] = isPdmActivity(row.activity) ? Math.floor(row.totalQ / 7) : 0;
+      r['Total DC'] = row.totalCollectors;
+      rows.push(r);
+    });
+    const totalRow: any = { Activity: 'Grand Total' };
+    hubs.forEach((hub, hi) => {
+      totalRow[`${hub} Sites`] = hubTotals[hi].sites;
+      totalRow[`${hub} Actual`] = hubTotals[hi].questionnaires;
+      const pdmSitesCol = matrix.reduce((a, r) => a + (isPdmActivity(r.activity) ? (r.cells[hi].questionnaires ? Math.floor(r.cells[hi].questionnaires / 7) : 0) : r.cells[hi].questionnaires), 0);
+      totalRow[`${hub} PDM Sites`] = pdmSitesCol || 0;
+      totalRow[`${hub} DC`] = hubTotals[hi].collectors;
+    });
+    totalRow['Total Sites'] = grandSites;
+    totalRow['Total Actual'] = grandQ;
+    const pdmSitesGrand2 = matrix.reduce((a, r) => a + (isPdmActivity(r.activity) ? Math.floor(r.totalQ / 7) : r.totalQ), 0);
+    totalRow['Total PDM Sites'] = pdmSitesGrand2 || 0;
+    totalRow['Total DC'] = grandCollectors;
+    rows.push(totalRow);
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), 'Activity x Hub');
+
+    const stateRows: any[] = [];
+    stateBreakdown.forEach(sb => {
+      sb.activities.forEach(a => {
+        if (a.questionnaires > 0) {
+          stateRows.push({ State: sb.state, Activity: a.activity, Sites: a.sites, Questionnaires: a.questionnaires, 'PDM Sites': isPdmActivity(a.activity) ? Math.floor(a.questionnaires / 7) : 0 });
+        }
+      });
+    });
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(stateRows), 'Activity x State');
+
+    hubTrackers.forEach(ht => {
+      const htRows: any[] = [];
+      ht.matrix.forEach(row => {
+        const r: any = { Activity: row.activity };
+        ht.states.forEach((st, si) => {
+          r[`${st} Sites`] = row.cells[si].sites;
+          r[`${st} Actual`] = row.cells[si].questionnaires;
+          r[`${st} PDM Sites`] = isPdmActivity(row.activity) ? Math.floor(row.cells[si].questionnaires / 7) : 0;
+          r[`${st} DC`] = row.cells[si].collectors;
+        });
+        r['Total Sites'] = row.totalSites; r['Total Actual'] = row.totalQ; r['Total PDM Sites'] = isPdmActivity(row.activity) ? Math.floor(row.totalQ / 7) : 0; r['Total DC'] = row.totalCollectors;
+        htRows.push(r);
+      });
+      const htTotal: any = { Activity: 'Total' };
+      ht.colTotals.forEach((ct, ci) => {
+        const pdmSitesCol = ht.matrix.reduce((a, r) => a + (isPdmActivity(r.activity) ? (r.cells[ci].questionnaires ? Math.floor(r.cells[ci].questionnaires / 7) : 0) : r.cells[ci].questionnaires), 0);
+        htTotal[`${ht.states[ci]} Sites`] = ct.sites; htTotal[`${ht.states[ci]} Actual`] = ct.questionnaires; htTotal[`${ht.states[ci]} PDM Sites`] = pdmSitesCol || 0; htTotal[`${ht.states[ci]} DC`] = ct.collectors;
+      });
+      const htPdmSitesGrand = ht.matrix.reduce((a, r) => a + (isPdmActivity(r.activity) ? Math.floor(r.totalQ / 7) : r.totalQ), 0);
+      htTotal['Total Sites'] = ht.grandSites; htTotal['Total Actual'] = ht.grandQ; htTotal['Total PDM Sites'] = htPdmSitesGrand || 0; htTotal['Total DC'] = ht.grandCollectors;
+      htRows.push(htTotal);
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(htRows), `Hub-${ht.hub}`.slice(0, 31));
+    });
+
+    stateTrackers.forEach(st => {
+      const stRows: any[] = [];
+      st.matrix.forEach(row => {
+        const r: any = { Activity: row.activity };
+        st.localities.forEach((loc, li) => {
+          r[`${loc} Sites`] = row.cells[li].sites;
+          r[`${loc} Actual`] = row.cells[li].questionnaires;
+          r[`${loc} PDM Sites`] = isPdmActivity(row.activity) ? Math.floor(row.cells[li].questionnaires / 7) : 0;
+          r[`${loc} DC`] = row.cells[li].collectors;
+        });
+        r['Total Sites'] = row.totalSites; r['Total Actual'] = row.totalQ; r['Total PDM Sites'] = isPdmActivity(row.activity) ? Math.floor(row.totalQ / 7) : 0; r['Total DC'] = row.totalCollectors;
+        stRows.push(r);
+      });
+      const stTotal: any = { Activity: 'Total' };
+      st.colTotals.forEach((ct, ci) => {
+        const pdmSitesCol = st.matrix.reduce((a, r) => a + (isPdmActivity(r.activity) ? (r.cells[ci].questionnaires ? Math.floor(r.cells[ci].questionnaires / 7) : 0) : r.cells[ci].questionnaires), 0);
+        stTotal[`${st.localities[ci]} Sites`] = ct.sites; stTotal[`${st.localities[ci]} Actual`] = ct.questionnaires; stTotal[`${st.localities[ci]} PDM Sites`] = pdmSitesCol || 0; stTotal[`${st.localities[ci]} DC`] = ct.collectors;
+      });
+      const stPdmSitesGrand = st.matrix.reduce((a, r) => a + (isPdmActivity(r.activity) ? Math.floor(r.totalQ / 7) : r.totalQ), 0);
+      stTotal['Total Sites'] = st.grandSites; stTotal['Total Actual'] = st.grandQ; stTotal['Total PDM Sites'] = stPdmSitesGrand || 0; stTotal['Total DC'] = st.grandCollectors;
+      stRows.push(stTotal);
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(stRows), `State-${st.state}`.slice(0, 31));
+    });
+
+    XLSX.writeFile(wb, 'tracker_report.xlsx');
+  }, [trackerData]);
 
   const exportActivityByStateExcel = useCallback(() => {
     const wb = XLSX.utils.book_new();

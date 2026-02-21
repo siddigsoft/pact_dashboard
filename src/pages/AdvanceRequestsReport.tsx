@@ -48,12 +48,13 @@ import {
   Send,
 } from 'lucide-react';
 import { format, parseISO, startOfMonth, endOfMonth, subMonths, isWithinInterval, differenceInDays } from 'date-fns';
-import * as XLSX from 'xlsx';
+
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
 import { supabase } from '@/integrations/supabase/client';
 import { generateTransportAdvanceCertificatePdf, generateTransportAdvanceCertificateBase64, generateBulkPaymentPdfBase64 } from '@/utils/transportAdvanceCertificatePdf';
+import { exportOverviewToFormattedExcel, exportAgingToFormattedExcel, exportGroupedToFormattedExcel } from '@/utils/advanceReportExcelUtils';
 import { useToast } from '@/hooks/use-toast';
 import type { DownPaymentRequest } from '@/types/down-payment';
 import { EmailNotificationService } from '@/services/email-notification.service';
@@ -769,27 +770,22 @@ function AdvanceRequestsReportContent() {
   };
 
   const exportAgingToExcel = () => {
-    const detailData = agingData.items.map(item => ({
-      'Staff Name': getProfileName(item.requestedBy),
-      'Hub': item.hubName || 'N/A',
-      'Amount (SDG)': item.requestedAmount,
-      'Request Date': format(parseISO(item.createdAt || item.requestedAt), 'yyyy-MM-dd'),
-      'Days Outstanding': item.daysOutstanding,
-      'Aging Bucket': item.bucket,
-      'Status': item.status.replace(/_/g, ' ').toUpperCase(),
-      'Site': item.siteName,
-      'Project': item.projectName || 'N/A',
-    }));
-    const summaryData = Object.entries(agingData.buckets).map(([key, b]) => ({
-      'Aging Bucket': b.label,
-      'Count': b.count,
-      'Total Amount (SDG)': b.total,
-    }));
-    summaryData.push({ 'Aging Bucket': 'TOTAL', 'Count': agingData.totalCount, 'Total Amount (SDG)': agingData.totalAmount });
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(summaryData), 'Aging Summary');
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(detailData), 'Aging Details');
-    XLSX.writeFile(wb, `advance_aging_report_${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
+    exportAgingToFormattedExcel({
+      totalCount: agingData.totalCount,
+      totalAmount: agingData.totalAmount,
+      buckets: agingData.buckets,
+      items: agingData.items.map((item: any) => ({
+        requester: getProfileName(item.requestedBy),
+        amount: item.requestedAmount,
+        daysOutstanding: item.daysOutstanding,
+        siteName: item.siteName,
+        projectName: item.projectName || 'N/A',
+        hubName: item.hubName || 'N/A',
+        bucket: item.bucket,
+        status: item.status?.replace(/_/g, ' ').toUpperCase() || '',
+        requestDate: item.createdAt || item.requestedAt ? format(parseISO(item.createdAt || item.requestedAt), 'yyyy-MM-dd') : 'N/A',
+      })),
+    }).catch(() => {});
   };
 
   const uniqueHubs = useMemo(() => {
@@ -803,35 +799,7 @@ function AdvanceRequestsReportContent() {
   }, [requests]);
 
   const exportToExcel = () => {
-    const data = filteredRequests.map(req => ({
-      'Request Date': format(parseISO(req.requestedAt), 'yyyy-MM-dd HH:mm'),
-      'Requested By': getProfileName(req.requestedBy),
-      'Site Name': req.siteName,
-      'Hub': req.hubName || 'N/A',
-      'Requested Amount (SDG)': req.requestedAmount,
-      'Status': req.status.replace(/_/g, ' ').toUpperCase(),
-      'Paid Amount (SDG)': req.totalPaidAmount || 0,
-      'Remaining (SDG)': req.remainingAmount || 0,
-      'Payment Type': req.paymentType === 'full_advance' ? 'Full Advance' : 'Installments',
-      'Justification': req.justification || '',
-    }));
-
-    const ws = XLSX.utils.json_to_sheet(data);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Advance Requests');
-    
-    const summaryData = [
-      { Metric: 'Total Requests', Value: stats.totalCount },
-      { Metric: 'Total Requested (SDG)', Value: stats.totalRequested },
-      { Metric: 'Total Approved (SDG)', Value: stats.totalApproved },
-      { Metric: 'Total Pending (SDG)', Value: stats.totalPending },
-      { Metric: 'Total Rejected (SDG)', Value: stats.totalRejected },
-      { Metric: 'Total Paid (SDG)', Value: stats.totalPaid },
-    ];
-    const summarySheet = XLSX.utils.json_to_sheet(summaryData);
-    XLSX.utils.book_append_sheet(wb, summarySheet, 'Summary');
-
-    XLSX.writeFile(wb, `transportation_advance_cost_${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
+    exportOverviewToFormattedExcel(filteredRequests, stats, getProfileName).catch(() => {});
   };
 
   const exportToPDF = () => {
@@ -943,40 +911,14 @@ function AdvanceRequestsReportContent() {
 
   // Export By Team Member
   const exportTeamToExcel = () => {
-    const summaryData: Record<string, string | number>[] = byTeamMember.map(m => ({
-      'Team Member': m.name,
-      'Total Requests': m.requests,
-      'Total Requested (SDG)': m.totalRequested,
-      'Total Approved (SDG)': m.totalApproved,
-      'Pending Requests': m.pending,
-    }));
-    const teamTotalsExcel = byTeamMember.reduce((acc, m) => ({
-      requests: acc.requests + m.requests,
-      totalRequested: acc.totalRequested + m.totalRequested,
-      totalApproved: acc.totalApproved + m.totalApproved,
-      pending: acc.pending + m.pending,
-    }), { requests: 0, totalRequested: 0, totalApproved: 0, pending: 0 });
-    summaryData.push({
-      'Team Member': 'SUBTOTAL',
-      'Total Requests': teamTotalsExcel.requests,
-      'Total Requested (SDG)': teamTotalsExcel.totalRequested,
-      'Total Approved (SDG)': teamTotalsExcel.totalApproved,
-      'Pending Requests': teamTotalsExcel.pending,
-    });
-    const detailData = filteredRequests.map(req => ({
-      'Team Member': getProfileName(req.requestedBy),
-      'Request Date': format(parseISO(req.requestedAt), 'yyyy-MM-dd'),
-      'Site': req.siteName,
-      'Hub': req.hubName || 'N/A',
-      'Amount (SDG)': req.requestedAmount,
-      'Status': req.status.replace(/_/g, ' ').toUpperCase(),
-      'Paid (SDG)': req.totalPaidAmount || 0,
-      'Remaining (SDG)': req.remainingAmount || 0,
-    }));
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(summaryData), 'Summary by Team');
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(detailData), 'All Requests');
-    XLSX.writeFile(wb, `advance_by_team_${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
+    exportGroupedToFormattedExcel(
+      'Team Member',
+      byTeamMember.map(m => ({ name: m.name, requests: m.requests, totalRequested: m.totalRequested, totalApproved: m.totalApproved, pending: m.pending })),
+      filteredRequests,
+      getProfileName,
+      `advance_by_team_${format(new Date(), 'yyyy-MM-dd')}.xlsx`,
+      (req) => getProfileName(req.requestedBy)
+    ).catch(() => {});
   };
 
   const exportTeamToPDF = () => {
@@ -1024,40 +966,14 @@ function AdvanceRequestsReportContent() {
 
   // Export By Hub
   const exportHubToExcel = () => {
-    const summaryData: Record<string, string | number>[] = byHub.map(h => ({
-      'Hub': h.name,
-      'Total Requests': h.requests,
-      'Total Requested (SDG)': h.totalRequested,
-      'Total Approved (SDG)': h.totalApproved,
-      'Pending Requests': h.pending,
-    }));
-    const hubTotalsExcel = byHub.reduce((acc, h) => ({
-      requests: acc.requests + h.requests,
-      totalRequested: acc.totalRequested + h.totalRequested,
-      totalApproved: acc.totalApproved + h.totalApproved,
-      pending: acc.pending + h.pending,
-    }), { requests: 0, totalRequested: 0, totalApproved: 0, pending: 0 });
-    summaryData.push({
-      'Hub': 'SUBTOTAL',
-      'Total Requests': hubTotalsExcel.requests,
-      'Total Requested (SDG)': hubTotalsExcel.totalRequested,
-      'Total Approved (SDG)': hubTotalsExcel.totalApproved,
-      'Pending Requests': hubTotalsExcel.pending,
-    });
-    const detailData = filteredRequests.map(req => ({
-      'Hub': req.hubName || 'N/A',
-      'Request Date': format(parseISO(req.requestedAt), 'yyyy-MM-dd'),
-      'Requested By': getProfileName(req.requestedBy),
-      'Site': req.siteName,
-      'Amount (SDG)': req.requestedAmount,
-      'Status': req.status.replace(/_/g, ' ').toUpperCase(),
-      'Paid (SDG)': req.totalPaidAmount || 0,
-      'Remaining (SDG)': req.remainingAmount || 0,
-    }));
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(summaryData), 'Summary by Hub');
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(detailData), 'All Requests');
-    XLSX.writeFile(wb, `advance_by_hub_${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
+    exportGroupedToFormattedExcel(
+      'Hub',
+      byHub.map(h => ({ name: h.name, requests: h.requests, totalRequested: h.totalRequested, totalApproved: h.totalApproved, pending: h.pending })),
+      filteredRequests,
+      getProfileName,
+      `advance_by_hub_${format(new Date(), 'yyyy-MM-dd')}.xlsx`,
+      (req) => req.hubName || 'N/A'
+    ).catch(() => {});
   };
 
   const exportHubToPDF = () => {
@@ -1105,37 +1021,14 @@ function AdvanceRequestsReportContent() {
 
   // Export By Status
   const exportStatusToExcel = () => {
-    const summaryData: Record<string, string | number>[] = byStatus.map(s => ({
-      'Status': s.name,
-      'Total Requests': s.requests,
-      'Total Requested (SDG)': s.totalRequested,
-      'Total Approved (SDG)': s.totalApproved,
-    }));
-    const statusTotalsExcel = byStatus.reduce((acc, s) => ({
-      requests: acc.requests + s.requests,
-      totalRequested: acc.totalRequested + s.totalRequested,
-      totalApproved: acc.totalApproved + s.totalApproved,
-    }), { requests: 0, totalRequested: 0, totalApproved: 0 });
-    summaryData.push({
-      'Status': 'SUBTOTAL',
-      'Total Requests': statusTotalsExcel.requests,
-      'Total Requested (SDG)': statusTotalsExcel.totalRequested,
-      'Total Approved (SDG)': statusTotalsExcel.totalApproved,
-    });
-    const detailData = filteredRequests.map(req => ({
-      'Status': req.status.replace(/_/g, ' ').toUpperCase(),
-      'Request Date': format(parseISO(req.requestedAt), 'yyyy-MM-dd'),
-      'Requested By': getProfileName(req.requestedBy),
-      'Site': req.siteName,
-      'Hub': req.hubName || 'N/A',
-      'Amount (SDG)': req.requestedAmount,
-      'Paid (SDG)': req.totalPaidAmount || 0,
-      'Remaining (SDG)': req.remainingAmount || 0,
-    }));
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(summaryData), 'Summary by Status');
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(detailData), 'All Requests');
-    XLSX.writeFile(wb, `advance_by_status_${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
+    exportGroupedToFormattedExcel(
+      'Status',
+      byStatus.map(s => ({ name: s.name, requests: s.requests, totalRequested: s.totalRequested, totalApproved: s.totalApproved })),
+      filteredRequests,
+      getProfileName,
+      `advance_by_status_${format(new Date(), 'yyyy-MM-dd')}.xlsx`,
+      (req) => req.status.replace(/_/g, ' ').toUpperCase()
+    ).catch(() => {});
   };
 
   const exportStatusToPDF = () => {
@@ -1181,41 +1074,14 @@ function AdvanceRequestsReportContent() {
 
   // Export By State
   const exportStateToExcel = () => {
-    const summaryData: Record<string, string | number>[] = byState.map(s => ({
-      'State': s.name,
-      'Total Requests': s.requests,
-      'Total Requested (SDG)': s.totalRequested,
-      'Total Approved (SDG)': s.totalApproved,
-      'Pending': s.pending,
-    }));
-    const stateTotalsExcel = byState.reduce((acc, s) => ({
-      requests: acc.requests + s.requests,
-      totalRequested: acc.totalRequested + s.totalRequested,
-      totalApproved: acc.totalApproved + s.totalApproved,
-      pending: acc.pending + s.pending,
-    }), { requests: 0, totalRequested: 0, totalApproved: 0, pending: 0 });
-    summaryData.push({
-      'State': 'SUBTOTAL',
-      'Total Requests': stateTotalsExcel.requests,
-      'Total Requested (SDG)': stateTotalsExcel.totalRequested,
-      'Total Approved (SDG)': stateTotalsExcel.totalApproved,
-      'Pending': stateTotalsExcel.pending,
-    });
-    const detailData = filteredRequests.map(req => ({
-      'State': req.stateName || 'Unknown',
-      'Request Date': format(parseISO(req.requestedAt), 'yyyy-MM-dd'),
-      'Requested By': getProfileName(req.requestedBy),
-      'Site': req.siteName,
-      'Hub': req.hubName || 'N/A',
-      'Amount (SDG)': req.requestedAmount,
-      'Status': req.status.replace(/_/g, ' ').toUpperCase(),
-      'Paid (SDG)': req.totalPaidAmount || 0,
-      'Remaining (SDG)': req.remainingAmount || 0,
-    }));
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(summaryData), 'Summary by State');
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(detailData), 'All Requests');
-    XLSX.writeFile(wb, `advance_by_state_${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
+    exportGroupedToFormattedExcel(
+      'State',
+      byState.map(s => ({ name: s.name, requests: s.requests, totalRequested: s.totalRequested, totalApproved: s.totalApproved, pending: s.pending })),
+      filteredRequests,
+      getProfileName,
+      `advance_by_state_${format(new Date(), 'yyyy-MM-dd')}.xlsx`,
+      (req) => req.stateName || 'Unknown'
+    ).catch(() => {});
   };
 
   const exportStateToPDF = () => {
@@ -1264,41 +1130,14 @@ function AdvanceRequestsReportContent() {
 
   // Export By Project
   const exportProjectToExcel = () => {
-    const summaryData: Record<string, string | number>[] = byProject.map(p => ({
-      'Project': p.name,
-      'Total Requests': p.requests,
-      'Total Requested (SDG)': p.totalRequested,
-      'Total Approved (SDG)': p.totalApproved,
-      'Pending': p.pending,
-    }));
-    const projectTotalsExcel = byProject.reduce((acc, p) => ({
-      requests: acc.requests + p.requests,
-      totalRequested: acc.totalRequested + p.totalRequested,
-      totalApproved: acc.totalApproved + p.totalApproved,
-      pending: acc.pending + p.pending,
-    }), { requests: 0, totalRequested: 0, totalApproved: 0, pending: 0 });
-    summaryData.push({
-      'Project': 'SUBTOTAL',
-      'Total Requests': projectTotalsExcel.requests,
-      'Total Requested (SDG)': projectTotalsExcel.totalRequested,
-      'Total Approved (SDG)': projectTotalsExcel.totalApproved,
-      'Pending': projectTotalsExcel.pending,
-    });
-    const detailData = filteredRequests.map(req => ({
-      'Project': req.projectName || 'Unknown',
-      'Request Date': format(parseISO(req.requestedAt), 'yyyy-MM-dd'),
-      'Requested By': getProfileName(req.requestedBy),
-      'Site': req.siteName,
-      'Hub': req.hubName || 'N/A',
-      'Amount (SDG)': req.requestedAmount,
-      'Status': req.status.replace(/_/g, ' ').toUpperCase(),
-      'Paid (SDG)': req.totalPaidAmount || 0,
-      'Remaining (SDG)': req.remainingAmount || 0,
-    }));
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(summaryData), 'Summary by Project');
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(detailData), 'All Requests');
-    XLSX.writeFile(wb, `advance_by_project_${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
+    exportGroupedToFormattedExcel(
+      'Project',
+      byProject.map(p => ({ name: p.name, requests: p.requests, totalRequested: p.totalRequested, totalApproved: p.totalApproved, pending: p.pending })),
+      filteredRequests,
+      getProfileName,
+      `advance_by_project_${format(new Date(), 'yyyy-MM-dd')}.xlsx`,
+      (req) => req.projectName || 'Unknown'
+    ).catch(() => {});
   };
 
   const exportProjectToPDF = () => {
