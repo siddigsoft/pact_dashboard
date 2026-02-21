@@ -64,7 +64,7 @@ const CoordinatorDashboard: React.FC = () => {
   useEffect(() => {
     if (!currentUser?.id) return;
     loadDashboardData();
-  }, [currentUser, userProjectIds, isAdminOrSuperUser]);
+  }, [currentUser]);
 
   // Real-time subscription for automatic updates without page refresh
   useEffect(() => {
@@ -102,7 +102,7 @@ const CoordinatorDashboard: React.FC = () => {
       if (debounceTimer) clearTimeout(debounceTimer);
       clearInterval(pollInterval);
     };
-  }, [currentUser?.id, userProjectIds, isAdminOrSuperUser]);
+  }, [currentUser?.id]);
 
   const loadDashboardData = async () => {
     if (!currentUser?.id) return;

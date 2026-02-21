@@ -136,7 +136,7 @@ export const useCoordinatorSites = () => {
     });
 
     return allSites;
-  }, [contextMmpFiles, contextLoading, currentUser?.id, userProjectIds, isAdminOrSuperUser]);
+  }, [contextMmpFiles, contextLoading, currentUser?.id]);
 
   const siteCounts = useMemo(() => computeCounts(coordinatorSites), [coordinatorSites]);
 
