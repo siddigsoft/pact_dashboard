@@ -152,23 +152,6 @@ const SitesForVerification: React.FC = () => {
   const navigate = useNavigate();
   const { localitiesWithPermitStatus, totalLocalities, localitiesWithPermits, localitiesWithoutPermits } = useLocalityPermitStatus(siteVisits);
 
-  // Debug logging
-  React.useEffect(() => {
-    console.log('SitesForVerification Debug:', {
-      currentUser: currentUser?.id,
-      siteVisitsCount: siteVisits?.length || 0,
-      localitiesWithPermitStatusCount: localitiesWithPermitStatus.length,
-      totalLocalities,
-      localitiesWithPermitsCount: localitiesWithPermits.length,
-      localitiesWithoutPermitsCount: localitiesWithoutPermits.length,
-      localitiesWithPermitStatus: localitiesWithPermitStatus.map(l => ({
-        state: l.state,
-        locality: l.locality,
-        hasPermit: l.hasPermit,
-        siteCount: l.siteCount
-      }))
-    });
-  }, [currentUser, siteVisits, localitiesWithPermitStatus, totalLocalities, localitiesWithPermits, localitiesWithoutPermits]);
 
   const handlePermitUploaded = () => {
     // The hook will automatically refresh the data
