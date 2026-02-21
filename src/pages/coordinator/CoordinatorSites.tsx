@@ -498,6 +498,7 @@ const CoordinatorSites: React.FC = () => {
   }, [selectedLocalityForBulkVerify]);
   
   // Filter states
+  const [mmpFilter, setMmpFilter] = useState<string>('all');
   const [hubFilter, setHubFilter] = useState<string>('all');
   const [stateFilter, setStateFilter] = useState<string>('all');
   const [localityFilter, setLocalityFilter] = useState<string>('all');
@@ -679,11 +680,24 @@ const CoordinatorSites: React.FC = () => {
 
   // Coordinator sites are now provided by useCoordinatorSites hook (following MMP.tsx pattern)
 
+  const mmpFilterOptions = useMemo(() => {
+    const mmpMap = new Map<string, { id: string; name: string; count: number }>();
+    coordinatorSites.forEach((site: SiteVisit) => {
+      if (!mmpMap.has(site.mmp_file_id)) {
+        mmpMap.set(site.mmp_file_id, { id: site.mmp_file_id, name: site.mmp_name, count: 0 });
+      }
+      mmpMap.get(site.mmp_file_id)!.count++;
+    });
+    return Array.from(mmpMap.values()).sort((a, b) => a.name.localeCompare(b.name));
+  }, [coordinatorSites]);
+
   // Filter sites by active tab status
   const sitesByTab = useMemo(() => {
     if (!coordinatorSites) return [];
     
-    let result = [...coordinatorSites];
+    let result = mmpFilter !== 'all'
+      ? coordinatorSites.filter((s: SiteVisit) => s.mmp_file_id === mmpFilter)
+      : [...coordinatorSites];
     
     // Filter by status based on active tab
     switch (activeTab) {
@@ -727,7 +741,7 @@ const CoordinatorSites: React.FC = () => {
     });
     
     return result;
-  }, [coordinatorSites, activeTab]);
+  }, [coordinatorSites, activeTab, mmpFilter]);
 
   // Memoize filtered sites to avoid recalculation on every render
   const filteredSites = useMemo(() => {
@@ -743,6 +757,11 @@ const CoordinatorSites: React.FC = () => {
         site.site_code?.toLowerCase().includes(query) ||
         site.locality?.toLowerCase().includes(query)
       );
+    }
+    
+    // Apply MMP filter
+    if (mmpFilter !== 'all') {
+      result = result.filter(site => site.mmp_file_id === mmpFilter);
     }
     
     // Apply location filters
@@ -766,7 +785,7 @@ const CoordinatorSites: React.FC = () => {
     }
     
     return result;
-  }, [sitesByTab, debouncedSearchQuery, hubFilter, stateFilter, localityFilter, activityFilter, monitoringFilter, surveyToolFilter]);
+  }, [sitesByTab, debouncedSearchQuery, mmpFilter, hubFilter, stateFilter, localityFilter, activityFilter, monitoringFilter, surveyToolFilter]);
 
   // Memoize paginated sites
   const paginatedSites = useMemo(() => {
@@ -796,24 +815,27 @@ const CoordinatorSites: React.FC = () => {
 
   // Calculate badge counts from coordinator sites (using useMemo like MMP.tsx pattern)
   const badgeCounts = useMemo(() => {
+    const sitesForCounts = mmpFilter !== 'all'
+      ? coordinatorSites.filter((s: SiteVisit) => s.mmp_file_id === mmpFilter)
+      : coordinatorSites;
     const prePipelineStatuses = ['pending', 'inprogress', 'in_progress', 'forwarded', 'forwarded_to_coordinator', 'forwarded_to_coordinators', 'new'];
-    const newCount = coordinatorSites.filter((e: any) => {
+    const newCount = sitesForCounts.filter((e: any) => {
       const status = (e.status || '').toLowerCase().trim().replace(/\s+/g, '_');
       return prePipelineStatuses.includes(status);
     }).length;
-    const permitsAttachedCount = coordinatorSites.filter((e: any) => 
+    const permitsAttachedCount = sitesForCounts.filter((e: any) => 
       e.status?.toLowerCase() === 'permits_attached'
     ).length;
-    const verifiedCount = coordinatorSites.filter((e: any) => 
+    const verifiedCount = sitesForCounts.filter((e: any) => 
       e.status?.toLowerCase() === 'verified'
     ).length;
-    const approvedCount = coordinatorSites.filter((e: any) => 
+    const approvedCount = sitesForCounts.filter((e: any) => 
       e.status?.toLowerCase() === 'approved'
     ).length;
-    const completedCount = coordinatorSites.filter((e: any) => 
+    const completedCount = sitesForCounts.filter((e: any) => 
       e.status?.toLowerCase() === 'completed'
     ).length;
-    const rejectedCount = coordinatorSites.filter((e: any) => 
+    const rejectedCount = sitesForCounts.filter((e: any) => 
       e.status?.toLowerCase() === 'rejected'
     ).length;
 
@@ -825,7 +847,7 @@ const CoordinatorSites: React.FC = () => {
       completed: completedCount,
       rejected: rejectedCount
     };
-  }, [coordinatorSites]);
+  }, [coordinatorSites, mmpFilter]);
 
   // Sync badge counts to state from fast counts (loaded separately for speed)
   useEffect(() => {
@@ -855,9 +877,13 @@ const CoordinatorSites: React.FC = () => {
 
 
 
-  // Build locality data from coordinator sites
+  // Build locality data from coordinator sites (filtered by MMP if selected)
   useEffect(() => {
-    if (!coordinatorSites || coordinatorSites.length === 0) {
+    const sitesForLocalities = mmpFilter !== 'all'
+      ? coordinatorSites.filter((s: SiteVisit) => s.mmp_file_id === mmpFilter)
+      : coordinatorSites;
+
+    if (!sitesForLocalities || sitesForLocalities.length === 0) {
       setLocalitiesData([]);
       setStatePermitRequiredCount(0);
       setLocalPermitRequiredCount(0);
@@ -867,7 +893,7 @@ const CoordinatorSites: React.FC = () => {
     // Group sites by state first, then by locality within each state
     const statesMap = new Map<string, any>();
     
-    coordinatorSites.forEach((site: any) => {
+    sitesForLocalities.forEach((site: any) => {
       const stateKey = site.state;
       if (!statesMap.has(stateKey)) {
         statesMap.set(stateKey, {
@@ -1015,7 +1041,7 @@ const CoordinatorSites: React.FC = () => {
 
     setStatePermitRequiredCount(statePermitRequired);
     setLocalPermitRequiredCount(localPermitRequired);
-  }, [coordinatorSites, contextMmpFiles, hubStates, localities, permits]);
+  }, [coordinatorSites, contextMmpFiles, hubStates, localities, permits, mmpFilter]);
 
   const handleVerifySite = async (siteId: string, notes?: string) => {
     // Detect if running in Capacitor
@@ -2529,7 +2555,12 @@ const CoordinatorSites: React.FC = () => {
             <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 sm:gap-4">
               <div className="flex-1 min-w-0 space-y-2">
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-                  <h3 className="font-semibold text-base sm:text-lg truncate pr-2">{site.site_name}</h3>
+                  <div className="min-w-0">
+                    <h3 className="font-semibold text-base sm:text-lg truncate pr-2">{site.site_name}</h3>
+                    {site.mmp_name && (
+                      <span className="text-[11px] text-blue-600 dark:text-blue-400 font-medium truncate block">{site.mmp_name}</span>
+                    )}
+                  </div>
                   <Badge variant={
                     site.status === 'verified' ? 'default' :
                     site.status === 'approved' ? 'success' :
@@ -3106,6 +3137,37 @@ const CoordinatorSites: React.FC = () => {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+        {mmpFilterOptions.length > 1 && (
+          <Card className="mb-3">
+            <CardContent className="py-2 px-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="flex items-center gap-1.5">
+                  <FileCheck2 className="h-3.5 w-3.5 text-muted-foreground" />
+                  <span className="text-xs font-medium text-muted-foreground">MMP:</span>
+                </div>
+                <Select value={mmpFilter} onValueChange={setMmpFilter}>
+                  <SelectTrigger className="w-[280px] h-8 text-xs" data-testid="select-mmp-filter">
+                    <SelectValue placeholder="All MMPs" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All MMPs ({mmpFilterOptions.reduce((sum, m) => sum + m.count, 0)} sites)</SelectItem>
+                    {mmpFilterOptions.map(mmp => (
+                      <SelectItem key={mmp.id} value={mmp.id}>
+                        {mmp.name} ({mmp.count} sites)
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {mmpFilter !== 'all' && (
+                  <Button variant="ghost" size="sm" onClick={() => setMmpFilter('all')} className="h-7 px-2 text-xs">
+                    Clear
+                  </Button>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         <div className="overflow-x-auto mb-6">
           <TabsList className="inline-flex w-max bg-gradient-to-r from-slate-900/90 to-blue-900/90 border border-blue-500/40 backdrop-blur-xl p-1.5 min-h-[48px] rounded-xl shadow-lg">
             <TabsTrigger value="new" className="flex items-center gap-2 data-[state=active]:bg-gradient-to-r data-[state=active]:from-emerald-500 data-[state=active]:to-emerald-600 data-[state=active]:text-white data-[state=active]:shadow-md min-h-[40px] text-xs sm:text-sm flex-shrink-0 whitespace-nowrap rounded-lg px-4 text-blue-100 hover:text-white transition-all">

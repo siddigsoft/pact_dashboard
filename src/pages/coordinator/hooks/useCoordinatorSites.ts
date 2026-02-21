@@ -25,6 +25,7 @@ export interface SiteVisit {
   assigned_at: string;
   comments: string;
   mmp_file_id: string;
+  mmp_name: string;
   hub_office: string;
   cp_name?: string;
   activity_at_site?: string[] | string;
@@ -121,6 +122,7 @@ export const useCoordinatorSites = () => {
           assigned_at: entry.additionalData?.assigned_at || entry.additional_data?.assigned_at,
           comments: entry.comments,
           mmp_file_id: mmp.id,
+          mmp_name: mmp.name || 'Unknown MMP',
           hub_office: entry.hubOffice || entry.hub_office,
           cp_name: entry.cpName || entry.cp_name,
           monitoring_by: entry.monitoringBy || entry.monitoring_by,
