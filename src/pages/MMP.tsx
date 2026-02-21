@@ -2310,6 +2310,13 @@ const MMP = () => {
     checkClosingCycles();
   }, [isAdmin]);
 
+  useEffect(() => {
+    if (!isAdmin && !isSupervisor && !isDataTeam) return;
+    import('@/services/verificationReminderService').then(({ checkAndSendVerificationReminders }) => {
+      checkAndSendVerificationReminders().catch(console.error);
+    });
+  }, [isAdmin, isSupervisor, isDataTeam]);
+
   // Real-time subscription for site claims (Uber-like first-claim system)
   // When another enumerator claims a site, it will be removed from available sites in real-time
   const handleSiteClaimedRealtime = React.useCallback((siteId: string, claimedBy: string) => {

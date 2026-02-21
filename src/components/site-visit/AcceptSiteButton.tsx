@@ -14,6 +14,8 @@ import { getStateName, getLocalityName } from '@/data/sudanStates';
 import { useSuperAdmin } from '@/context/superAdmin/SuperAdminContext';
 import { useAuditLog } from '@/hooks/use-audit-log';
 import { calculateConfirmationDeadlines } from '@/utils/confirmationDeadlines';
+import { NotificationTriggerService } from '@/services/NotificationTriggerService';
+import { sendSiteClaimNotifications } from '@/services/verificationReminderService';
 
 interface AcceptSiteButtonProps {
   site: {
@@ -370,6 +372,20 @@ export function AcceptSiteButton({
           newState: { status: isDispatchedSite ? 'claimed' : 'accepted', acceptedBy: userId },
         }
       );
+
+      NotificationTriggerService.siteAssigned(userId, siteName, site.id);
+      
+      if (currentUser) {
+        sendSiteClaimNotifications(
+          userId,
+          currentUser.fullName || currentUser.name || 'A team member',
+          currentUser.role || 'data_collector',
+          siteName,
+          site.id,
+          site.state,
+          currentUser.hubId
+        );
+      }
 
       onAccepted?.();
     } catch (err) {
