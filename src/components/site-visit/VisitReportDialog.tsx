@@ -3,7 +3,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
-import { Camera, Upload, FileText, MapPin, Clock, User, AlertCircle, Navigation, Compass, ImageIcon, Save, Car, CheckCircle, X } from 'lucide-react';
+import { Camera, Upload, FileText, MapPin, Clock, User, AlertCircle, Navigation, Compass, ImageIcon, Save, Car, CheckCircle, X, ShoppingCart, ClipboardList } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { MMPSiteEntry } from '@/types/mmp';
@@ -60,6 +60,17 @@ export const VisitReportDialog: React.FC<VisitReportDialogProps> = ({
   const { toast } = useToast();
   const [finishing, setFinishing] = useState(false);
   const [locationError, setLocationError] = useState<string | null>(null);
+  const [pdmQuestionnaires, setPdmQuestionnaires] = useState<string>('');
+  const [mdmQuestionnaires, setMdmQuestionnaires] = useState<string>('');
+
+  const siteAny = site as any;
+  const activityLower = (site?.siteActivity || siteAny?.activity_at_site || '').toLowerCase();
+  const isPDMActivity = activityLower === 'pdm' || activityLower.includes('post distribution monitoring');
+  const mdmRaw = site?.useMarketDiversion ?? siteAny?.use_market_diversion;
+  const hasMDM = typeof mdmRaw === 'boolean' ? mdmRaw : (() => { const s = String(mdmRaw || '').toLowerCase(); return s === 'yes' || s === 'true' || s === '1'; })();
+  const pdmCount = Number(pdmQuestionnaires) || 0;
+  const pdmSiteVisits = Math.floor(pdmCount / 7);
+  const pdmRemainder = pdmCount % 7;
 
   const locationTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const LAST_KNOWN_LOCATION_KEY = 'visitReport.lastKnownLocation';
@@ -102,6 +113,8 @@ export const VisitReportDialog: React.FC<VisitReportDialogProps> = ({
         setNotes(draftData.draft_notes || '');
         setActivities(draftData.draft_activities || '');
         setVisitDuration(typeof draftData.draft_visit_duration === 'number' ? draftData.draft_visit_duration : 0);
+        setPdmQuestionnaires(draftData.pdm_questionnaires_submitted ? String(draftData.pdm_questionnaires_submitted) : '');
+        setMdmQuestionnaires(draftData.mdm_questionnaires_submitted ? String(draftData.mdm_questionnaires_submitted) : '');
         if (draftData.draft_coordinates && typeof draftData.draft_coordinates === 'object') {
           setCoordinates(draftData.draft_coordinates);
           setLocationEnabled(true);
@@ -131,6 +144,8 @@ export const VisitReportDialog: React.FC<VisitReportDialogProps> = ({
         setPhotos([]);
         setDraftPhotoUrls([]);
         setVisitDuration(0);
+        setPdmQuestionnaires('');
+        setMdmQuestionnaires('');
       }
 
       setVisitStartTime(new Date());
@@ -532,7 +547,28 @@ export const VisitReportDialog: React.FC<VisitReportDialogProps> = ({
         }
       }
 
-      // Delegate storage + report creation to parent handler to avoid duplicate uploads and delays
+      if (isPDMActivity || hasMDM) {
+        const extraData: Record<string, any> = {};
+        if (isPDMActivity && pdmQuestionnaires) {
+          extraData.pdm_questionnaires_submitted = Number(pdmQuestionnaires) || 0;
+          extraData.pdm_site_visits = Math.floor((Number(pdmQuestionnaires) || 0) / 7);
+        }
+        if (hasMDM && mdmQuestionnaires) {
+          extraData.mdm_questionnaires_submitted = Number(mdmQuestionnaires) || 0;
+        }
+        if (Object.keys(extraData).length > 0) {
+          await supabase
+            .from('mmp_site_entries')
+            .update({
+              additional_data: {
+                ...(site.additionalData || {}),
+                ...extraData
+              }
+            })
+            .eq('id', site.id);
+        }
+      }
+
       const visitReportData: VisitReportData = {
         notes,
         activities,
@@ -637,7 +673,7 @@ export const VisitReportDialog: React.FC<VisitReportDialogProps> = ({
         }
       }
 
-      const draftData = {
+      const draftData: Record<string, any> = {
         draft_notes: notes || '',
         draft_activities: activities || '',
         draft_photo_urls: photoUrls,
@@ -647,6 +683,12 @@ export const VisitReportDialog: React.FC<VisitReportDialogProps> = ({
         draft_location_accuracy: hasLocation ? coordinates.accuracy : (site.additionalData?.draft_location_accuracy || null),
         status: 'In Progress'
       };
+      if (isPDMActivity && pdmQuestionnaires) {
+        draftData.pdm_questionnaires_submitted = Number(pdmQuestionnaires) || 0;
+      }
+      if (hasMDM && mdmQuestionnaires) {
+        draftData.mdm_questionnaires_submitted = Number(mdmQuestionnaires) || 0;
+      }
 
       const { error: updateError } = await supabase
         .from('mmp_site_entries')
@@ -833,6 +875,107 @@ export const VisitReportDialog: React.FC<VisitReportDialogProps> = ({
               </div>
             </div>
           </div>
+
+          {/* PDM Questionnaire Input - Only for PDM activity sites */}
+          {isPDMActivity && (
+            <div className="rounded-2xl p-5 shadow-lg bg-violet-50 dark:bg-violet-900/20 border border-violet-200 dark:border-violet-800">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-10 h-10 rounded-full bg-violet-600 dark:bg-violet-500 flex items-center justify-center">
+                  <ClipboardList className="h-5 w-5 text-white" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-violet-900 dark:text-violet-100">
+                    PDM Questionnaires
+                  </h3>
+                  <p className="text-xs text-violet-700 dark:text-violet-300">
+                    Enter total number of questionnaires submitted
+                  </p>
+                </div>
+              </div>
+              <div className="space-y-3">
+                <div className="space-y-2">
+                  <Label htmlFor="pdmCount" className="text-xs font-medium text-violet-800 dark:text-violet-200 uppercase">
+                    Total Questionnaires Submitted
+                  </Label>
+                  <input
+                    id="pdmCount"
+                    type="number"
+                    min="0"
+                    step="1"
+                    placeholder="Enter number..."
+                    value={pdmQuestionnaires}
+                    onChange={(e) => setPdmQuestionnaires(e.target.value)}
+                    className="w-full h-12 rounded-xl border border-violet-200 dark:border-violet-700 bg-white dark:bg-neutral-800 px-4 text-lg font-bold text-violet-900 dark:text-violet-100 placeholder:text-violet-300 focus:ring-2 focus:ring-violet-500 focus:border-transparent"
+                    data-testid="input-pdm-questionnaires"
+                  />
+                </div>
+                {pdmCount > 0 && (
+                  <div className="bg-white dark:bg-neutral-800 rounded-xl p-4 border border-violet-100 dark:border-violet-700">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-violet-700 dark:text-violet-300">Equivalent Site Visits:</span>
+                      <span className="text-2xl font-black text-violet-700 dark:text-violet-300">{pdmSiteVisits}</span>
+                    </div>
+                    <div className="mt-2 bg-violet-100 dark:bg-violet-800/40 rounded-full h-2 overflow-hidden">
+                      <div
+                        className="bg-violet-600 dark:bg-violet-400 h-full rounded-full transition-all duration-300"
+                        style={{ width: `${(pdmRemainder / 7) * 100}%` }}
+                      />
+                    </div>
+                    <p className="text-xs text-violet-500 dark:text-violet-400 mt-1">
+                      {pdmRemainder > 0
+                        ? `${pdmRemainder}/7 questionnaires toward next site visit`
+                        : 'Exactly complete — no partial progress'}
+                    </p>
+                    <p className="text-xs text-violet-600 dark:text-violet-300 mt-2 font-medium">
+                      Formula: {pdmCount} questionnaires ÷ 7 = {pdmSiteVisits} site visit{pdmSiteVisits !== 1 ? 's' : ''}
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* MDM Questionnaire Input - When Market Diversion Monitoring is required */}
+          {hasMDM && (
+            <div className="rounded-2xl p-5 shadow-lg bg-pink-50 dark:bg-pink-900/20 border border-pink-200 dark:border-pink-800">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-10 h-10 rounded-full bg-pink-600 dark:bg-pink-500 flex items-center justify-center">
+                  <ShoppingCart className="h-5 w-5 text-white" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-pink-900 dark:text-pink-100">
+                    MDM Questionnaires
+                  </h3>
+                  <p className="text-xs text-pink-700 dark:text-pink-300">
+                    Market Diversion Monitoring — enter questionnaire count
+                  </p>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="mdmCount" className="text-xs font-medium text-pink-800 dark:text-pink-200 uppercase">
+                  Total MDM Questionnaires Submitted
+                </Label>
+                <input
+                  id="mdmCount"
+                  type="number"
+                  min="0"
+                  step="1"
+                  placeholder="Enter number..."
+                  value={mdmQuestionnaires}
+                  onChange={(e) => setMdmQuestionnaires(e.target.value)}
+                  className="w-full h-12 rounded-xl border border-pink-200 dark:border-pink-700 bg-white dark:bg-neutral-800 px-4 text-lg font-bold text-pink-900 dark:text-pink-100 placeholder:text-pink-300 focus:ring-2 focus:ring-pink-500 focus:border-transparent"
+                  data-testid="input-mdm-questionnaires"
+                />
+              </div>
+              {Number(mdmQuestionnaires) > 0 && (
+                <div className="mt-3 bg-white dark:bg-neutral-800 rounded-xl p-3 border border-pink-100 dark:border-pink-700">
+                  <p className="text-sm font-medium text-pink-700 dark:text-pink-300">
+                    {mdmQuestionnaires} MDM questionnaire{Number(mdmQuestionnaires) !== 1 ? 's' : ''} recorded
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Activities Performed */}
           <div className="space-y-3">

@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { MapPin, User, Clock, Play, Car, Navigation, CheckCircle, Calendar } from 'lucide-react';
+import { MapPin, User, Clock, Play, Car, Navigation, CheckCircle, Calendar, ShoppingCart, ClipboardList, AlertTriangle } from 'lucide-react';
 import { MMPSiteEntry } from '@/types/mmp';
 
 const MONTHS = [
@@ -39,10 +39,12 @@ export const StartVisitDialog: React.FC<StartVisitDialogProps> = ({
   const [cycleStartDate, setCycleStartDate] = useState<string>('');
   const [cycleEndDate, setCycleEndDate] = useState<string>('');
 
-  const isDMActivity = site?.siteActivity?.toLowerCase()?.includes('distribution monitoring') || 
-                       site?.siteActivity?.toLowerCase()?.includes('dm') ||
-                       site?.activity_at_site?.toLowerCase()?.includes('distribution monitoring') ||
-                       site?.activity_at_site?.toLowerCase()?.includes('dm');
+  const siteAny = site as any;
+  const activityLower = (site?.siteActivity || siteAny?.activity_at_site || '').toLowerCase();
+  const isDMActivity = activityLower.includes('distribution monitoring') || activityLower.includes('dm');
+  const isPDMActivity = activityLower === 'pdm' || activityLower.includes('post distribution monitoring');
+  const mdmRaw = site?.useMarketDiversion ?? siteAny?.use_market_diversion;
+  const hasMDM = typeof mdmRaw === 'boolean' ? mdmRaw : (() => { const s = String(mdmRaw || '').toLowerCase(); return s === 'yes' || s === 'true' || s === '1'; })();
 
   useEffect(() => {
     if (open && isDMActivity) {
@@ -171,6 +173,64 @@ export const StartVisitDialog: React.FC<StartVisitDialogProps> = ({
               </p>
             </div>
           </div>
+
+          {/* MDM Info Card - When Market Diversion Monitoring is required */}
+          {hasMDM && (
+            <div className="rounded-2xl p-5 shadow-lg bg-pink-50 dark:bg-pink-900/20 border border-pink-200 dark:border-pink-800">
+              <div className="flex items-center gap-3 mb-3">
+                <div className="w-10 h-10 rounded-full bg-pink-600 dark:bg-pink-500 flex items-center justify-center">
+                  <ShoppingCart className="h-5 w-5 text-white" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-pink-900 dark:text-pink-100">
+                    Market Diversion Monitoring (MDM)
+                  </h3>
+                  <p className="text-xs text-pink-700 dark:text-pink-300">
+                    This site requires an additional activity
+                  </p>
+                </div>
+              </div>
+              <div className="bg-white dark:bg-neutral-800 rounded-xl p-3 border border-pink-100 dark:border-pink-700">
+                <div className="flex items-start gap-2">
+                  <AlertTriangle className="h-4 w-4 text-pink-600 mt-0.5 flex-shrink-0" />
+                  <div className="text-xs text-pink-800 dark:text-pink-200 space-y-1">
+                    <p className="font-semibold">This site has 2 activities:</p>
+                    <p>1. <span className="font-medium">{site?.siteActivity || siteAny?.activity_at_site || 'Main Activity'}</span> (primary)</p>
+                    <p>2. <span className="font-medium">Market Diversion Monitoring</span> (additional)</p>
+                    <p className="mt-2 text-pink-600 dark:text-pink-400">You will need to report MDM questionnaire count in the visit report.</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* PDM Info Card - When activity is PDM */}
+          {isPDMActivity && (
+            <div className="rounded-2xl p-5 shadow-lg bg-violet-50 dark:bg-violet-900/20 border border-violet-200 dark:border-violet-800">
+              <div className="flex items-center gap-3 mb-3">
+                <div className="w-10 h-10 rounded-full bg-violet-600 dark:bg-violet-500 flex items-center justify-center">
+                  <ClipboardList className="h-5 w-5 text-white" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-violet-900 dark:text-violet-100">
+                    Post Distribution Monitoring (PDM)
+                  </h3>
+                  <p className="text-xs text-violet-700 dark:text-violet-300">
+                    Questionnaire-based site visit tracking
+                  </p>
+                </div>
+              </div>
+              <div className="bg-white dark:bg-neutral-800 rounded-xl p-3 border border-violet-100 dark:border-violet-700">
+                <div className="text-xs text-violet-800 dark:text-violet-200 space-y-1.5">
+                  <p className="font-semibold">PDM Site Visit Formula:</p>
+                  <div className="flex items-center gap-2 bg-violet-100 dark:bg-violet-800/40 rounded-lg px-3 py-2">
+                    <span className="font-bold text-violet-700 dark:text-violet-300 text-sm">7 questionnaires = 1 site visit</span>
+                  </div>
+                  <p className="text-violet-600 dark:text-violet-400 mt-1">You will enter the total number of questionnaires submitted in the visit report.</p>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Cycle Month Section - Only for DM Activities */}
           {isDMActivity && (
