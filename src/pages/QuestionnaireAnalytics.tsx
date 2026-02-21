@@ -106,7 +106,7 @@ const HEADER_KEYWORDS: Record<string, string[]> = {
   dataCollector: ['data collector', 'datacollector', 'enumerator', 'collector name', 'اسم الجامع', 'data_collector'],
 };
 
-const isPdmActivity = (activity: string) => /pdm/i.test(activity);
+import { isPdmActivity } from '@/utils/pdmMdmUtils';
 
 const DATE_FORMATS = ['yyyy-MM-dd', 'MM/dd/yyyy', 'dd/MM/yyyy', 'yyyy/MM/dd', 'M/d/yyyy', 'd/M/yyyy'];
 

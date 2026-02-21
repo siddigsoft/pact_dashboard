@@ -367,7 +367,7 @@ interface FilteredRow {
   date?: string;
 }
 
-const isPdmActivity = (activity: string) => /pdm/i.test(activity);
+import { isPdmActivity } from '@/utils/pdmMdmUtils';
 
 interface MergedCollector {
   primaryName: string;

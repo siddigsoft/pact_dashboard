@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { MapPin, User, Clock, Play, Car, Navigation, CheckCircle, Calendar, ShoppingCart, ClipboardList, AlertTriangle } from 'lucide-react';
 import { MMPSiteEntry } from '@/types/mmp';
+import { isPdmActivity, isMdmRequired } from '@/utils/pdmMdmUtils';
 
 const MONTHS = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -42,9 +43,8 @@ export const StartVisitDialog: React.FC<StartVisitDialogProps> = ({
   const siteAny = site as any;
   const activityLower = (site?.siteActivity || siteAny?.activity_at_site || '').toLowerCase();
   const isDMActivity = activityLower.includes('distribution monitoring') || activityLower.includes('dm');
-  const isPDMActivity = activityLower === 'pdm' || activityLower.includes('post distribution monitoring');
-  const mdmRaw = site?.useMarketDiversion ?? siteAny?.use_market_diversion;
-  const hasMDM = typeof mdmRaw === 'boolean' ? mdmRaw : (() => { const s = String(mdmRaw || '').toLowerCase(); return s === 'yes' || s === 'true' || s === '1'; })();
+  const isPDMActivity = isPdmActivity(site?.siteActivity || siteAny?.activity_at_site || '');
+  const hasMDM = isMdmRequired(site?.useMarketDiversion ?? siteAny?.use_market_diversion);
 
   useEffect(() => {
     if (open && isDMActivity) {

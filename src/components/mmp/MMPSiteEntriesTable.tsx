@@ -5,7 +5,8 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Search, Eye, ChevronLeft, ChevronRight, Play, CalendarDays, CheckCircle, Loader2, Filter, X, ShoppingCart, ClipboardList } from 'lucide-react';
+import { Search, Eye, ChevronLeft, ChevronRight, Play, CalendarDays, CheckCircle, Loader2, Filter, X, ShoppingCart, ClipboardList, ExternalLink } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import SiteDetailDialog from './SiteDetailDialog';
 import { PostponementDialog } from './PostponementDialog';
 import { AcceptSiteButton } from '@/components/site-visit/AcceptSiteButton';
@@ -13,6 +14,7 @@ import { RequestDownPaymentButton } from '@/components/site-visit/RequestDownPay
 import { calculateEnumeratorFeeForUser } from '@/hooks/use-claim-fee-calculation';
 import { PostponementHistoryEntry } from '@/types/mmp/site';
 import { useUser } from '@/context/user/UserContext';
+import { isPdmActivity, isMdmRequired, calculatePdmSiteVisits, calculatePdmRemainder } from '@/utils/pdmMdmUtils';
 
 interface MMPSiteEntriesTableProps {
   siteEntries: any[];
@@ -60,6 +62,7 @@ const MMPSiteEntriesTable = ({
   showApproveButton = false
 }: MMPSiteEntriesTableProps) => {
   const { currentUser, users } = useUser();
+  const navigate = useNavigate();
 
   const resolveUserName = (userId: string | undefined): string | null => {
     if (!userId) return null;
@@ -80,6 +83,7 @@ const MMPSiteEntriesTable = ({
   const [stateFilter, setStateFilter] = useState("all");
   const [localityFilter, setLocalityFilter] = useState("all");
   const [enumeratorFilter, setEnumeratorFilter] = useState("all");
+  const [activityTypeFilter, setActivityTypeFilter] = useState("all");
   const [showFilters, setShowFilters] = useState(false);
 
   // Debounce search query to reduce filtering operations
@@ -280,13 +284,14 @@ const MMPSiteEntriesTable = ({
     };
   }, [normalizedEntries]);
 
-  const activeFilterCount = [hubFilter, stateFilter, localityFilter, enumeratorFilter].filter(f => f !== 'all').length;
+  const activeFilterCount = [hubFilter, stateFilter, localityFilter, enumeratorFilter, activityTypeFilter].filter(f => f !== 'all').length;
 
   const clearAllFilters = () => {
     setHubFilter("all");
     setStateFilter("all");
     setLocalityFilter("all");
     setEnumeratorFilter("all");
+    setActivityTypeFilter("all");
     setCurrentPage(1);
   };
 
@@ -306,6 +311,14 @@ const MMPSiteEntriesTable = ({
       results = results.filter(({ norm }) => norm.acceptedByName === enumeratorFilter || norm.monitoringBy === enumeratorFilter);
     }
 
+    if (activityTypeFilter !== 'all') {
+      results = results.filter(({ norm }) => {
+        if (activityTypeFilter === 'pdm') return isPdmActivity(norm.siteActivity || '');
+        if (activityTypeFilter === 'mdm') return isMdmRequired(norm.useMarketDiversion);
+        return true;
+      });
+    }
+
     if (debouncedSearchQuery.trim() !== "") {
       const q = debouncedSearchQuery.toLowerCase();
       results = results.filter(({ norm }) => {
@@ -316,7 +329,7 @@ const MMPSiteEntriesTable = ({
     }
 
     return results.map(({ raw }) => raw);
-  }, [normalizedEntries, debouncedSearchQuery, hubFilter, stateFilter, localityFilter, enumeratorFilter]);
+  }, [normalizedEntries, debouncedSearchQuery, hubFilter, stateFilter, localityFilter, enumeratorFilter, activityTypeFilter]);
 
   // Paginate filtered results
   const paginatedSites = useMemo(() => {
@@ -327,12 +340,6 @@ const MMPSiteEntriesTable = ({
 
   const totalPages = Math.ceil(filteredSites.length / itemsPerPage);
 
-  const toBool = (v: any) => {
-    if (typeof v === 'boolean') return v;
-    const s = String(v || '').toLowerCase();
-    return s === 'yes' || s === 'true' || s === '1';
-  };
-
   const pdmMdmSummary = useMemo(() => {
     let pdmSites = 0;
     let pdmTotalQ = 0;
@@ -341,16 +348,16 @@ const MMPSiteEntriesTable = ({
     for (const site of siteEntries) {
       const norm = normalizeSite(site);
       const ad = site?.additionalData || site?.additional_data || {};
-      if (/pdm/i.test(norm.siteActivity || '')) {
+      if (isPdmActivity(norm.siteActivity || '')) {
         pdmSites++;
         pdmTotalQ += Number(ad.pdm_questionnaires_submitted) || 0;
       }
-      if (toBool(norm.useMarketDiversion)) {
+      if (isMdmRequired(norm.useMarketDiversion)) {
         mdmSites++;
         mdmTotalQ += Number(ad.mdm_questionnaires_submitted) || 0;
       }
     }
-    return { pdmSites, pdmTotalQ, pdmSiteVisits: Math.floor(pdmTotalQ / 7), pdmRemainder: pdmTotalQ % 7, mdmSites, mdmTotalQ };
+    return { pdmSites, pdmTotalQ, pdmSiteVisits: calculatePdmSiteVisits(pdmTotalQ), pdmRemainder: calculatePdmRemainder(pdmTotalQ), mdmSites, mdmTotalQ };
   }, [siteEntries]);
 
   return (
@@ -393,7 +400,7 @@ const MMPSiteEntriesTable = ({
         </div>
         {showFilters && (
           <div className="mt-4 pt-4 border-t border-border/50">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
               <div className="space-y-1.5">
                 <label className="text-xs font-medium text-muted-foreground">Hub</label>
                 <Select value={hubFilter} onValueChange={(val) => { setHubFilter(val); setCurrentPage(1); }}>
@@ -455,6 +462,19 @@ const MMPSiteEntriesTable = ({
                   </SelectContent>
                 </Select>
               </div>
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-muted-foreground">Activity Type</label>
+                <Select value={activityTypeFilter} onValueChange={(val) => { setActivityTypeFilter(val); setCurrentPage(1); }}>
+                  <SelectTrigger className="w-full" data-testid="select-activity-type-filter">
+                    <SelectValue placeholder="All Types" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Types</SelectItem>
+                    <SelectItem value="pdm">PDM Sites Only</SelectItem>
+                    <SelectItem value="mdm">MDM Sites Only</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
             {activeFilterCount > 0 && (
               <div className="flex items-center gap-2 mt-3">
@@ -483,6 +503,12 @@ const MMPSiteEntriesTable = ({
                       <X className="h-3 w-3 cursor-pointer" onClick={() => { setEnumeratorFilter("all"); setCurrentPage(1); }} />
                     </Badge>
                   )}
+                  {activityTypeFilter !== 'all' && (
+                    <Badge variant="secondary" className={`gap-1 ${activityTypeFilter === 'pdm' ? 'bg-violet-100 text-violet-800' : 'bg-pink-100 text-pink-800'}`}>
+                      {activityTypeFilter === 'pdm' ? 'PDM Sites' : 'MDM Sites'}
+                      <X className="h-3 w-3 cursor-pointer" onClick={() => { setActivityTypeFilter("all"); setCurrentPage(1); }} />
+                    </Badge>
+                  )}
                 </div>
                 <Button variant="ghost" size="sm" onClick={clearAllFilters} data-testid="button-clear-filters">
                   Clear All
@@ -498,9 +524,21 @@ const MMPSiteEntriesTable = ({
           <div className="mb-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
             {pdmMdmSummary.pdmSites > 0 && (
               <div className="rounded-xl p-4 bg-violet-50 dark:bg-violet-900/20 border border-violet-200 dark:border-violet-800">
-                <div className="flex items-center gap-2 mb-2">
-                  <ClipboardList className="h-5 w-5 text-violet-600" />
-                  <h4 className="text-sm font-bold text-violet-900 dark:text-violet-100">PDM Summary</h4>
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <ClipboardList className="h-5 w-5 text-violet-600" />
+                    <h4 className="text-sm font-bold text-violet-900 dark:text-violet-100">PDM Summary</h4>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <Button variant="ghost" size="sm" className="h-7 text-xs text-violet-600 hover:text-violet-800 hover:bg-violet-100 px-2" onClick={() => { setActivityTypeFilter('pdm'); setShowFilters(true); }} data-testid="button-filter-pdm">
+                      <Filter className="h-3 w-3 mr-1" />
+                      Filter
+                    </Button>
+                    <Button variant="ghost" size="sm" className="h-7 text-xs text-violet-600 hover:text-violet-800 hover:bg-violet-100 px-2" onClick={() => navigate('/questionnaire-analytics')} data-testid="button-view-pdm-analytics">
+                      <ExternalLink className="h-3 w-3 mr-1" />
+                      Analytics
+                    </Button>
+                  </div>
                 </div>
                 <div className="grid grid-cols-3 gap-3 text-center">
                   <div>
@@ -530,9 +568,15 @@ const MMPSiteEntriesTable = ({
             )}
             {pdmMdmSummary.mdmSites > 0 && (
               <div className="rounded-xl p-4 bg-pink-50 dark:bg-pink-900/20 border border-pink-200 dark:border-pink-800">
-                <div className="flex items-center gap-2 mb-2">
-                  <ShoppingCart className="h-5 w-5 text-pink-600" />
-                  <h4 className="text-sm font-bold text-pink-900 dark:text-pink-100">MDM Summary</h4>
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <ShoppingCart className="h-5 w-5 text-pink-600" />
+                    <h4 className="text-sm font-bold text-pink-900 dark:text-pink-100">MDM Summary</h4>
+                  </div>
+                  <Button variant="ghost" size="sm" className="h-7 text-xs text-pink-600 hover:text-pink-800 hover:bg-pink-100 px-2" onClick={() => { setActivityTypeFilter('mdm'); setShowFilters(true); }} data-testid="button-filter-mdm">
+                    <Filter className="h-3 w-3 mr-1" />
+                    Filter
+                  </Button>
                 </div>
                 <div className="grid grid-cols-2 gap-3 text-center">
                   <div>
@@ -567,7 +611,7 @@ const MMPSiteEntriesTable = ({
                                   {row.mmpName}
                                 </Badge>
                               )}
-                              {toBool(row.useMarketDiversion) && (
+                              {isMdmRequired(row.useMarketDiversion) && (
                                 <Badge variant="outline" className="text-xs bg-pink-50 text-pink-700 border-pink-300 gap-1">
                                   <ShoppingCart className="h-3 w-3" />
                                   MDM
@@ -656,13 +700,13 @@ const MMPSiteEntriesTable = ({
                         </div>
 
                         {(() => {
-                          const isPdm = /pdm/i.test(row.siteActivity || '');
-                          const hasMdm = toBool(row.useMarketDiversion);
+                          const isPdm = isPdmActivity(row.siteActivity || '');
+                          const hasMdm = isMdmRequired(row.useMarketDiversion);
                           const ad = site?.additionalData || site?.additional_data || {};
                           const pdmCount = Number(ad.pdm_questionnaires_submitted) || 0;
                           const mdmCount = Number(ad.mdm_questionnaires_submitted) || 0;
-                          const pdmSiteVisits = Math.floor(pdmCount / 7);
-                          const pdmRemainder = pdmCount % 7;
+                          const pdmSiteVisits = calculatePdmSiteVisits(pdmCount);
+                          const pdmRemainder = calculatePdmRemainder(pdmCount);
                           if (!isPdm && !hasMdm) return null;
                           return (
                             <div className="flex flex-wrap gap-3 mt-1">

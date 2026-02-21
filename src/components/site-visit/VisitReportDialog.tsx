@@ -7,6 +7,7 @@ import { Camera, Upload, FileText, MapPin, Clock, User, AlertCircle, Navigation,
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { MMPSiteEntry } from '@/types/mmp';
+import { isPdmActivity, isMdmRequired, calculatePdmSiteVisits, calculatePdmRemainder } from '@/utils/pdmMdmUtils';
 
 interface VisitReportDialogProps {
   open: boolean;
@@ -64,13 +65,11 @@ export const VisitReportDialog: React.FC<VisitReportDialogProps> = ({
   const [mdmQuestionnaires, setMdmQuestionnaires] = useState<string>('');
 
   const siteAny = site as any;
-  const activityLower = (site?.siteActivity || siteAny?.activity_at_site || '').toLowerCase();
-  const isPDMActivity = activityLower === 'pdm' || activityLower.includes('post distribution monitoring');
-  const mdmRaw = site?.useMarketDiversion ?? siteAny?.use_market_diversion;
-  const hasMDM = typeof mdmRaw === 'boolean' ? mdmRaw : (() => { const s = String(mdmRaw || '').toLowerCase(); return s === 'yes' || s === 'true' || s === '1'; })();
+  const isPDMActivity = isPdmActivity(site?.siteActivity || siteAny?.activity_at_site || '');
+  const hasMDM = isMdmRequired(site?.useMarketDiversion ?? siteAny?.use_market_diversion);
   const pdmCount = Number(pdmQuestionnaires) || 0;
-  const pdmSiteVisits = Math.floor(pdmCount / 7);
-  const pdmRemainder = pdmCount % 7;
+  const pdmSiteVisits = calculatePdmSiteVisits(pdmCount);
+  const pdmRemainder = calculatePdmRemainder(pdmCount);
 
   const locationTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const LAST_KNOWN_LOCATION_KEY = 'visitReport.lastKnownLocation';
