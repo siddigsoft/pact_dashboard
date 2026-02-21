@@ -632,21 +632,34 @@ const MMPSiteEntriesTable = ({
                             const displayStatus = acceptedBy && (!rawStatus || rawStatus === 'pending' || rawStatus === 'dispatched' || rawStatus === 'assigned' || rawStatus === 'claimed')
                               ? 'accepted' : rawStatus;
                             return (
-                              <Badge 
-                                className={
-                                  displayStatus === 'verified' ? 'bg-green-100 text-green-700' :
-                                  displayStatus === 'rejected' ? 'bg-red-100 text-red-700' :
-                                  displayStatus === 'pending' ? 'bg-yellow-100 text-yellow-700' :
-                                  displayStatus === 'approved' ? 'bg-blue-100 text-blue-700' :
-                                  displayStatus === 'accepted' ? 'bg-purple-100 text-purple-700' :
-                                  displayStatus === 'dispatched' ? 'bg-indigo-100 text-indigo-700' :
-                                  displayStatus === 'completed' ? 'bg-emerald-100 text-emerald-700' :
-                                  displayStatus === 'returned_to_fom' || displayStatus === 'returned' ? 'bg-orange-100 text-orange-700' :
-                                  'bg-gray-100 text-gray-700'
-                                }
-                              >
-                                {displayStatus || 'Pending'}
-                              </Badge>
+                              <div className="flex flex-col items-end gap-1">
+                                <Badge 
+                                  className={
+                                    displayStatus === 'verified' ? 'bg-green-100 text-green-700' :
+                                    displayStatus === 'rejected' ? 'bg-red-100 text-red-700' :
+                                    displayStatus === 'pending' ? 'bg-yellow-100 text-yellow-700' :
+                                    displayStatus === 'approved' ? 'bg-blue-100 text-blue-700' :
+                                    displayStatus === 'accepted' ? 'bg-purple-100 text-purple-700' :
+                                    displayStatus === 'dispatched' ? 'bg-indigo-100 text-indigo-700' :
+                                    displayStatus === 'completed' ? 'bg-emerald-100 text-emerald-700' :
+                                    displayStatus === 'returned_to_fom' || displayStatus === 'returned' ? 'bg-orange-100 text-orange-700' :
+                                    'bg-gray-100 text-gray-700'
+                                  }
+                                >
+                                  {displayStatus || 'Pending'}
+                                </Badge>
+                                {row.acceptedByName && row.acceptedByName !== '—' && (
+                                  <span className="text-xs text-purple-600 dark:text-purple-400 font-medium" data-testid="text-accepted-by">
+                                    by {row.acceptedByName}
+                                  </span>
+                                )}
+                                {row.acceptedAt && (
+                                  <span className="text-xs text-muted-foreground" data-testid="text-accepted-at">
+                                    {new Date(row.acceptedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}{' '}
+                                    {new Date(row.acceptedAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}
+                                  </span>
+                                )}
+                              </div>
                             );
                           })()}
                         </div>
@@ -737,25 +750,6 @@ const MMPSiteEntriesTable = ({
                           );
                         })()}
 
-                        {(() => {
-                          const st = (row.status || '').toLowerCase();
-                          const postClaimStatuses = ['claimed', 'accepted', 'acknowledged', 'cost and acknowledged', 'ongoing', 'inprogress', 'in_progress', 'in progress', 'completed'];
-                          const isPostClaim = postClaimStatuses.some(s => st.includes(s));
-                          if (row.acceptedByName && isPostClaim) {
-                            return (
-                              <div className="flex items-center gap-2 text-sm">
-                                <span className="text-muted-foreground">Claimed By:</span>
-                                <span className="font-medium text-purple-700">{row.acceptedByName}</span>
-                                {row.acceptedAt && (
-                                  <span className="text-xs text-muted-foreground">
-                                    ({new Date(row.acceptedAt).toLocaleDateString()})
-                                  </span>
-                                )}
-                              </div>
-                            );
-                          }
-                          return null;
-                        })()}
 
                         {row.comments && row.comments !== '—' && (
                           <div>
