@@ -106,52 +106,27 @@ const CoordinatorDashboard: React.FC = () => {
 
   const loadDashboardData = async () => {
     if (!currentUser?.id) return;
-    
-    // Non-admin users with no project assignments should see nothing
-    if (!isAdminOrSuperUser && userProjectIds.length === 0) {
-      setStats({
-        totalSites: 0,
-        newSites: 0,
-        permitsAttached: 0,
-        verifiedSites: 0,
-        approvedSites: 0,
-        completedSites: 0,
-        rejectedSites: 0,
-        pendingLocalPermits: 0,
-        pendingStatePermits: 0
-      });
-      setRecentActivity([]);
-      setLoading(false);
-      return;
-    }
 
     setLoading(true);
     try {
       const userId = currentUser.id;
 
-      // Load mmp_site_entries with mmp_files join to get project_id for filtering
       const { data: allEntries, error } = await supabase
         .from('mmp_site_entries')
         .select(`
           *,
           mmp_file:mmp_files!mmp_file_id(project_id)
         `)
-        .limit(1000);
+        .limit(2000);
 
       if (error) throw error;
 
-      // Filter entries assigned to current user AND by project membership for non-admins
       const userEntries = (allEntries || []).filter((entry: any) => {
         const ad = entry.additional_data || {};
         const isAssignedToUser = ad.assigned_to === userId;
-        
-        // For non-admins, also check project membership (userProjectIds.length > 0 is guaranteed here)
-        if (!isAdminOrSuperUser) {
-          const projectId = entry.mmp_file?.project_id;
-          return isAssignedToUser && projectId && userProjectIds.includes(projectId);
-        }
-        
-        return isAssignedToUser;
+        const isForwardedToUser = entry.forwarded_to_user_id === userId;
+        const isAcceptedByUser = entry.accepted_by === userId;
+        return isAssignedToUser || isForwardedToUser || isAcceptedByUser;
       });
 
       // Calculate stats

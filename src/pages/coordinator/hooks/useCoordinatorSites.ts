@@ -87,30 +87,18 @@ export const useCoordinatorSites = () => {
   const coordinatorSites = useMemo(() => {
     if (!currentUser?.id || !contextMmpFiles || contextLoading) return [];
 
-    // Non-admin users with no project assignments should see nothing
-    if (!isAdminOrSuperUser && userProjectIds.length === 0) {
-      return [];
-    }
-
     const allSites: SiteVisit[] = [];
 
     contextMmpFiles.forEach((mmp: any) => {
       if (!mmp.siteEntries || !Array.isArray(mmp.siteEntries)) return;
 
       mmp.siteEntries.forEach((entry: any) => {
-        // Match sites assigned to this coordinator (same as previous direct query):
-        // forwarded_to_user_id, additional_data.assigned_to, or accepted_by
         const forwardedToMe = entry.forwardedToUserId === currentUser.id;
         const assignedToMe = (entry.additionalData?.assigned_to || entry.additional_data?.assigned_to) === currentUser.id;
         const acceptedByMe = entry.accepted_by === currentUser.id;
         if (!forwardedToMe && !assignedToMe && !acceptedByMe) return;
 
         if (entry.status === 'returned_to_fom') return;
-
-        if (!isAdminOrSuperUser) {
-          const projectId = mmp.projectId;
-          if (!projectId || !userProjectIds.includes(projectId)) return;
-        }
 
         const isUnverified = entry.status === 'Pending' || entry.status === 'Dispatched' ||
                             entry.status === 'assigned' || entry.status === 'inProgress' ||

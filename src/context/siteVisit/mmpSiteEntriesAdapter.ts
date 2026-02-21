@@ -59,7 +59,8 @@ interface MMPSiteEntry {
  */
 export const mapMMPSiteEntryToSiteVisit = (entry: MMPSiteEntry): SiteVisit => {
   const totalFee = entry.cost || (entry.enumerator_fee || 0) + (entry.transport_fee || 0);
-  const assignedTo = (entry as any).accepted_by || (entry as any).additional_data?.assigned_to || '';
+  const forwardedToUserId = (entry as any).forwarded_to_user_id || '';
+  const assignedTo = (entry as any).accepted_by || (entry as any).additional_data?.assigned_to || forwardedToUserId || '';
   const assignedBy = (entry as any).additional_data?.assigned_by || entry.dispatched_by;
   const assignedAt = (entry as any).additional_data?.assigned_at || entry.dispatched_at;
   const appStatus = inferStatus(entry, assignedTo);
@@ -78,6 +79,8 @@ export const mapMMPSiteEntryToSiteVisit = (entry: MMPSiteEntry): SiteVisit => {
     assignedTo,
     assignedBy,
     assignedAt,
+    forwardedToUserId,
+    acceptedBy: (entry as any).accepted_by || '',
     notes: entry.comments || '',
     attachments: [],
     completedAt: appStatus === 'completed' ? entry.updated_at : undefined,

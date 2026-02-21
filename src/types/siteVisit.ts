@@ -117,4 +117,5 @@ export interface SiteVisit {
   enumerator_fee?: number;
   accepted_by?: string;
   acceptedBy?: string;
+  forwardedToUserId?: string;
 }

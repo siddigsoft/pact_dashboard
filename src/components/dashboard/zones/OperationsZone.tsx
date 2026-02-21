@@ -281,19 +281,17 @@ export const OperationsZone: React.FC = () => {
         console.log(`📊 OperationsZone: Added dispatched sites from DB (total now: ${allSites.length})`);
       }
       
-      // 3. Also collect site entries from MMP context forwarded to this coordinator
+      // 3. Also collect site entries from MMP context forwarded/assigned to this coordinator
       if (contextMmpFiles && !contextLoading) {
         contextMmpFiles.forEach((mmp: any) => {
           if (!mmp.siteEntries || !Array.isArray(mmp.siteEntries)) return;
           
           mmp.siteEntries.forEach((entry: any) => {
-            if (entry.forwardedToUserId !== currentUser.id) return;
+            const isForwardedToMe = entry.forwardedToUserId === currentUser.id;
+            const isAssignedToMe = (entry.additionalData?.assigned_to || entry.additional_data?.assigned_to) === currentUser.id;
+            const isAcceptedByMe = entry.accepted_by === currentUser.id;
+            if (!isForwardedToMe && !isAssignedToMe && !isAcceptedByMe) return;
             if (seenIds.has(entry.id)) return;
-            
-            if (!isAdminOrSuperUser) {
-              const projectId = mmp.projectId;
-              if (!projectId || !userProjectIds.includes(projectId)) return;
-            }
             
             seenIds.add(entry.id);
             allSites.push({
