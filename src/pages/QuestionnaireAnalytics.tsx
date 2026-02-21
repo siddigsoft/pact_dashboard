@@ -43,6 +43,7 @@ interface SummaryWithSites {
   name: string;
   questionnaires: number;
   sites: number;
+  collectors: number;
   percentage: number;
 }
 
@@ -61,6 +62,7 @@ interface ActivityBreakdown {
 interface CollectorDetail {
   name: string;
   deviceId: string;
+  profileId: string;
   count: number;
   percentage: number;
   activities: { name: string; count: number }[];
@@ -935,20 +937,22 @@ const QuestionnaireAnalytics = () => {
   };
 
   const buildSummaryWithSites = useCallback((items: QuestionnaireRow[], key: keyof QuestionnaireRow): SummaryWithSites[] => {
-    const map = new Map<string, { questionnaires: number; sites: Set<string> }>();
+    const map = new Map<string, { questionnaires: number; sites: Set<string>; collectors: Set<string> }>();
     items.forEach(row => {
       const val = row[key] || '(Empty)';
-      if (!map.has(val)) map.set(val, { questionnaires: 0, sites: new Set() });
+      if (!map.has(val)) map.set(val, { questionnaires: 0, sites: new Set(), collectors: new Set() });
       const entry = map.get(val)!;
       entry.questionnaires++;
       if (row.activitySite) entry.sites.add(row.activitySite);
+      if (row.dataCollector) entry.collectors.add(row.deviceId?.trim() ? row.deviceId.trim() : row.dataCollector);
     });
     const total = items.length;
     return [...map.entries()]
-      .map(([name, { questionnaires, sites }]) => ({
+      .map(([name, { questionnaires, sites, collectors }]) => ({
         name,
         questionnaires,
         sites: sites.size,
+        collectors: collectors.size,
         percentage: total > 0 ? (questionnaires / total) * 100 : 0,
       }))
       .sort((a, b) => b.questionnaires - a.questionnaires);
@@ -958,6 +962,33 @@ const QuestionnaireAnalytics = () => {
   const stateSummary = useMemo(() => buildSummaryWithSites(filteredData, 'state'), [filteredData, buildSummaryWithSites]);
   const localitySummary = useMemo(() => buildSummaryWithSites(filteredData, 'locality'), [filteredData, buildSummaryWithSites]);
   const siteSummary = useMemo(() => buildSummaryWithSites(filteredData, 'activitySite'), [filteredData, buildSummaryWithSites]);
+
+  const siteDetailsWithActivity = useMemo(() => {
+    const map = new Map<string, { questionnaires: number; activities: Map<string, number>; collectors: Set<string>; state: string; locality: string }>();
+    filteredData.forEach(row => {
+      const site = row.activitySite || '(Empty)';
+      if (!map.has(site)) map.set(site, { questionnaires: 0, activities: new Map(), collectors: new Set(), state: '', locality: '' });
+      const entry = map.get(site)!;
+      entry.questionnaires++;
+      if (row.activity) entry.activities.set(row.activity, (entry.activities.get(row.activity) || 0) + 1);
+      if (row.dataCollector) entry.collectors.add(row.deviceId?.trim() ? row.deviceId.trim() : row.dataCollector);
+      if (row.state && !entry.state) entry.state = row.state;
+      if (row.locality && !entry.locality) entry.locality = row.locality;
+    });
+    const total = filteredData.length;
+    return [...map.entries()]
+      .map(([name, d]) => ({
+        name,
+        questionnaires: d.questionnaires,
+        activities: [...d.activities.entries()].map(([n, c]) => ({ name: n, count: c })).sort((a, b) => b.count - a.count),
+        activityNames: [...d.activities.keys()].join(', '),
+        collectors: d.collectors.size,
+        state: d.state,
+        locality: d.locality,
+        percentage: total > 0 ? (d.questionnaires / total) * 100 : 0,
+      }))
+      .sort((a, b) => b.questionnaires - a.questionnaires);
+  }, [filteredData]);
 
   const hubDrilldown = useMemo(() => {
     const hubMap = new Map<string, {
@@ -1088,6 +1119,39 @@ const QuestionnaireAnalytics = () => {
       .sort((a, b) => b.siteCount - a.siteCount);
   }, [filteredData]);
 
+  const [profileLookup, setProfileLookup] = useState<Map<string, string>>(new Map());
+
+  useEffect(() => {
+    const fetchProfiles = async () => {
+      try {
+        const { data } = await supabase.from('profiles').select('id, full_name');
+        if (data && data.length > 0) {
+          const lookup = new Map<string, string>();
+          data.forEach((p: any) => {
+            if (p.full_name) {
+              const normalized = p.full_name.trim().toLowerCase();
+              if (!lookup.has(normalized)) lookup.set(normalized, p.id);
+            }
+          });
+          setProfileLookup(lookup);
+        }
+      } catch (_) {}
+    };
+    fetchProfiles();
+  }, []);
+
+  const matchProfileId = useCallback((collectorName: string, variants?: { name: string; count: number }[]): string => {
+    const norm = collectorName.trim().toLowerCase();
+    if (profileLookup.has(norm)) return profileLookup.get(norm)!;
+    if (variants) {
+      for (const v of variants) {
+        const vn = v.name.trim().toLowerCase();
+        if (profileLookup.has(vn)) return profileLookup.get(vn)!;
+      }
+    }
+    return '';
+  }, [profileLookup]);
+
   const collectorDetails = useMemo((): CollectorDetail[] => {
     const deviceMap = new Map<string, { names: Map<string, number>; activities: Map<string, number>; localities: Map<string, number>; sites: Map<string, { count: number; locality: string; state: string }>; hubs: Set<string>; states: Set<string>; count: number }>();
     const noDeviceMap = new Map<string, { activities: Map<string, number>; localities: Map<string, number>; sites: Map<string, { count: number; locality: string; state: string }>; hubs: Set<string>; states: Set<string>; count: number }>();
@@ -1134,6 +1198,7 @@ const QuestionnaireAnalytics = () => {
       results.push({
         name: primaryName,
         deviceId: devId,
+        profileId: matchProfileId(primaryName, nameVariants),
         count: d.count,
         percentage: total > 0 ? (d.count / total) * 100 : 0,
         activities: [...d.activities.entries()].map(([n, c]) => ({ name: n, count: c })).sort((a, b) => b.count - a.count),
@@ -1149,6 +1214,7 @@ const QuestionnaireAnalytics = () => {
       results.push({
         name,
         deviceId: '',
+        profileId: matchProfileId(name),
         count: d.count,
         percentage: total > 0 ? (d.count / total) * 100 : 0,
         activities: [...d.activities.entries()].map(([n, c]) => ({ name: n, count: c })).sort((a, b) => b.count - a.count),
@@ -1161,7 +1227,7 @@ const QuestionnaireAnalytics = () => {
     });
 
     return results.sort((a, b) => b.count - a.count);
-  }, [filteredData]);
+  }, [filteredData, matchProfileId]);
 
   const toggleExpand = (key: string) => {
     setExpandedRows(prev => {
@@ -2018,16 +2084,16 @@ const QuestionnaireAnalytics = () => {
         [...hubSummary.map((h, i) => [i + 1, h.name, h.sites, h.questionnaires, h.percentage.toFixed(1) + '%']),
         ['', 'Total', totalSites, totalQ, '100%']]);
 
-      addSheet('By State', ['#', 'State', 'Sites', 'Questionnaires', '%'],
-        [...stateSummary.map((s, i) => [i + 1, s.name, s.sites, s.questionnaires, s.percentage.toFixed(1) + '%']),
-        ['', 'Total', totalSites, totalQ, '100%']]);
+      addSheet('By State', ['#', 'State', 'Sites', 'DC', 'Questionnaires', '%'],
+        [...stateSummary.map((s, i) => [i + 1, s.name, s.sites, s.collectors, s.questionnaires, s.percentage.toFixed(1) + '%']),
+        ['', 'Total', totalSites, '', totalQ, '100%']]);
 
       addSheet('By Locality', ['#', 'Locality', 'Sites', 'Questionnaires', '%'],
         [...localitySummary.map((l, i) => [i + 1, l.name, l.sites, l.questionnaires, l.percentage.toFixed(1) + '%']),
         ['', 'Total', totalSites, totalQ, '100%']]);
 
-      addSheet('By Site', ['#', 'Site Name', 'Questionnaires', '%'],
-        siteSummary.map((s, i) => [i + 1, s.name, s.questionnaires, s.percentage.toFixed(1) + '%']));
+      addSheet('By Site', ['#', 'Site Name', 'Activity', 'State', 'Locality', 'DC', 'Questionnaires', '%'],
+        siteDetailsWithActivity.map((s, i) => [i + 1, s.name, s.activityNames, s.state, s.locality, s.collectors, s.questionnaires, s.percentage.toFixed(1) + '%']));
 
       const actRows: (string | number)[][] = [];
       activityBreakdown.forEach(a => {
@@ -2036,10 +2102,10 @@ const QuestionnaireAnalytics = () => {
       actRows.push(['Total', String(totalSites), String(totalQ), '100%']);
       addSheet('By Activity', ['Activity', 'Sites', 'Questionnaires', '%'], actRows);
 
-      addSheet('By Collector', ['#', 'Device ID', 'Data Collector', 'Hub', 'State', 'Sites', 'Activities', 'Questionnaires', '%'],
-        [...collectorDetails.map((c, i) => [i + 1, c.deviceId || '-', c.name, c.hubs.join(', '), c.states.join(', '),
+      addSheet('By Collector', ['#', 'UUID', 'Device ID', 'Data Collector', 'Hub', 'State', 'Sites', 'Activities', 'Questionnaires', '%'],
+        [...collectorDetails.map((c, i) => [i + 1, c.profileId || '-', c.deviceId || '-', c.name, c.hubs.join(', '), c.states.join(', '),
           c.sites.length, c.activities.map((a: any) => `${a.name} (${a.count})`).join(', '), c.count, c.percentage.toFixed(1) + '%']),
-        ['', '', 'Total', '', '', '', '', totalQ, '100%']]);
+        ['', '', '', 'Total', '', '', '', '', totalQ, '100%']]);
 
       const { hubs, matrix: tMatrix, hubTotals: tHubTotals } = trackerData;
       if (hubs.length > 0 && tMatrix.length > 0) {
@@ -2068,7 +2134,7 @@ const QuestionnaireAnalytics = () => {
       console.error('Failed to generate analytics Excel base64:', e);
       return null;
     }
-  }, [filteredData, hubSummary, stateSummary, localitySummary, siteSummary, activityBreakdown, collectorDetails, trackerData, bufferToBase64]);
+  }, [filteredData, hubSummary, stateSummary, localitySummary, siteSummary, siteDetailsWithActivity, activityBreakdown, collectorDetails, trackerData, bufferToBase64]);
 
   const generateAnalyticsPdfBase64 = useCallback(async (): Promise<string | null> => {
     try {
@@ -2088,9 +2154,9 @@ const QuestionnaireAnalytics = () => {
       if (y > 220) { doc.addPage(); addPageHeader(doc, 'By State'); y = 18; }
       doc.setFontSize(12); doc.setTextColor(15, 32, 65); doc.setFont('helvetica', 'bold');
       doc.text('By State', 14, y); y += 3;
-      const stateRows = stateSummary.map((s, i) => [String(i + 1), s.name, String(s.sites), String(s.questionnaires), s.percentage.toFixed(1) + '%']);
-      stateRows.push(['', 'Total', String(totalSites), String(totalQ), '100%']);
-      y = styledAutoTable(doc, [['#', 'State', 'Sites', 'Questionnaires', '%']], stateRows, y, { fontSize: 9, boldLastRow: true, useArabicFont: hasArabic });
+      const stateRows = stateSummary.map((s, i) => [String(i + 1), s.name, String(s.sites), String(s.collectors), String(s.questionnaires), s.percentage.toFixed(1) + '%']);
+      stateRows.push(['', 'Total', String(totalSites), '', String(totalQ), '100%']);
+      y = styledAutoTable(doc, [['#', 'State', 'Sites', 'DC', 'Questionnaires', '%']], stateRows, y, { fontSize: 9, boldLastRow: true, useArabicFont: hasArabic });
       y += 4;
 
       if (y > 220) { doc.addPage(); addPageHeader(doc, 'By Locality'); y = 18; }
@@ -2113,9 +2179,9 @@ const QuestionnaireAnalytics = () => {
       if (y > 220) { doc.addPage(); addPageHeader(doc, 'By Data Collector'); y = 18; }
       doc.setFontSize(12); doc.setTextColor(15, 32, 65); doc.setFont('helvetica', 'bold');
       doc.text('By Data Collector', 14, y); y += 3;
-      const dcRows = collectorDetails.map((c, i) => [String(i + 1), c.deviceId || '-', c.name, c.hubs.join(', '), c.states.join(', '), String(c.sites.length), c.activities.map((a: any) => a.name).join(', '), String(c.count), c.percentage.toFixed(1) + '%']);
-      dcRows.push(['', '', 'Total', '', '', '', '', String(totalQ), '100%']);
-      y = styledAutoTable(doc, [['#', 'Device ID', 'Collector', 'Hub', 'State', 'Sites', 'Activities', 'Q', '%']], dcRows, y, { fontSize: 7, boldLastRow: true, useArabicFont: hasArabic });
+      const dcRows = collectorDetails.map((c, i) => [String(i + 1), c.profileId || '-', c.deviceId || '-', c.name, c.hubs.join(', '), c.states.join(', '), String(c.sites.length), c.activities.map((a: any) => a.name).join(', '), String(c.count), c.percentage.toFixed(1) + '%']);
+      dcRows.push(['', '', '', 'Total', '', '', '', '', String(totalQ), '100%']);
+      y = styledAutoTable(doc, [['#', 'UUID', 'Device ID', 'Collector', 'Hub', 'State', 'Sites', 'Activities', 'Q', '%']], dcRows, y, { fontSize: 6.5, boldLastRow: true, useArabicFont: hasArabic });
       y += 4;
 
       collectorDetails.forEach(c => {
@@ -2129,7 +2195,7 @@ const QuestionnaireAnalytics = () => {
         doc.setFont('helvetica', 'normal');
         y += 5;
         doc.setFontSize(9); doc.setTextColor(90, 95, 110);
-        doc.text(`Device ID: ${c.deviceId || '-'}  |  Hub: ${c.hubs.join(', ')}  |  State: ${c.states.join(', ')}  |  ${c.count} Q (${c.percentage.toFixed(1)}%)`, 14, y);
+        doc.text(`UUID: ${c.profileId || '-'}  |  Device ID: ${c.deviceId || '-'}  |  Hub: ${c.hubs.join(', ')}  |  State: ${c.states.join(', ')}  |  ${c.count} Q (${c.percentage.toFixed(1)}%)`, 14, y);
         y += 6;
         if (c.nameVariants.length > 0) {
           doc.setFontSize(10); doc.setTextColor(15, 32, 65); doc.setFont('helvetica', 'bold');
@@ -2464,13 +2530,13 @@ const QuestionnaireAnalytics = () => {
     const hubData = hubSummary.map((h, i) => ({ '#': i + 1, Hub: h.name, Sites: h.sites, Questionnaires: h.questionnaires, '%': h.percentage.toFixed(1) + '%' }));
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(hubData), 'By Hub');
 
-    const stateData = stateSummary.map((s, i) => ({ '#': i + 1, State: s.name, Sites: s.sites, Questionnaires: s.questionnaires, '%': s.percentage.toFixed(1) + '%' }));
+    const stateData = stateSummary.map((s, i) => ({ '#': i + 1, State: s.name, Sites: s.sites, DC: s.collectors, Questionnaires: s.questionnaires, '%': s.percentage.toFixed(1) + '%' }));
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(stateData), 'By State');
 
     const localityData = localitySummary.map((l, i) => ({ '#': i + 1, Locality: l.name, Sites: l.sites, Questionnaires: l.questionnaires, '%': l.percentage.toFixed(1) + '%' }));
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(localityData), 'By Locality');
 
-    const siteData = siteSummary.map((s, i) => ({ '#': i + 1, 'Site Name': s.name, Questionnaires: s.questionnaires, '%': s.percentage.toFixed(1) + '%' }));
+    const siteData = siteDetailsWithActivity.map((s, i) => ({ '#': i + 1, 'Site Name': s.name, Activity: s.activityNames, State: s.state, Locality: s.locality, DC: s.collectors, Questionnaires: s.questionnaires, '%': s.percentage.toFixed(1) + '%' }));
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(siteData), 'By Site');
 
     const actRows: any[] = [];
@@ -2485,6 +2551,7 @@ const QuestionnaireAnalytics = () => {
 
     const collRows = collectorDetails.map((c, i) => ({
       '#': i + 1,
+      'UUID': c.profileId || '-',
       'Device ID': c.deviceId || '-',
       'Data Collector': c.name,
       'Name Variants': c.nameVariants.length > 0 ? c.nameVariants.map(v => `${v.name} (${v.count})`).join(', ') : '',
@@ -2504,6 +2571,7 @@ const QuestionnaireAnalytics = () => {
     collectorDetails.forEach((c, ci) => {
       const detailRows: any[] = [];
       detailRows.push({ Section: 'COLLECTOR INFO', Field: 'Name (Primary)', Value: c.name });
+      detailRows.push({ Section: '', Field: 'UUID', Value: c.profileId || '-' });
       detailRows.push({ Section: '', Field: 'Device ID', Value: c.deviceId || '-' });
       if (c.nameVariants.length > 0) {
         detailRows.push({ Section: '', Field: 'Name Variants', Value: '' });
@@ -2615,7 +2683,7 @@ const QuestionnaireAnalytics = () => {
     });
 
     XLSX.writeFile(wb, 'questionnaire_analytics.xlsx');
-  }, [hubSummary, stateSummary, localitySummary, siteSummary, activityBreakdown, collectorDetails, trackerData]);
+  }, [hubSummary, stateSummary, localitySummary, siteSummary, siteDetailsWithActivity, activityBreakdown, collectorDetails, trackerData]);
 
   const exportToPdf = useCallback(async () => {
     const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
@@ -2634,9 +2702,9 @@ const QuestionnaireAnalytics = () => {
     if (y > 220) { doc.addPage(); addPageHeader(doc, 'By State'); y = 18; }
     doc.setFontSize(12); doc.setTextColor(15, 32, 65); doc.setFont('helvetica', 'bold');
     doc.text('By State', 14, y); y += 3;
-    const stateRows = stateSummary.map((s, i) => [String(i + 1), s.name, String(s.sites), String(s.questionnaires), s.percentage.toFixed(1) + '%']);
-    stateRows.push(['', 'Total', String(totalSites), String(totalQ), '100%']);
-    y = styledAutoTable(doc, [['#', 'State', 'Sites', 'Questionnaires', '%']], stateRows, y, { fontSize: 9, boldLastRow: true, useArabicFont: hasArabic });
+    const stateRows = stateSummary.map((s, i) => [String(i + 1), s.name, String(s.sites), String(s.collectors), String(s.questionnaires), s.percentage.toFixed(1) + '%']);
+    stateRows.push(['', 'Total', String(totalSites), '', String(totalQ), '100%']);
+    y = styledAutoTable(doc, [['#', 'State', 'Sites', 'DC', 'Questionnaires', '%']], stateRows, y, { fontSize: 9, boldLastRow: true, useArabicFont: hasArabic });
     y += 4;
 
     if (y > 220) { doc.addPage(); addPageHeader(doc, 'By Locality'); y = 18; }
@@ -2659,9 +2727,9 @@ const QuestionnaireAnalytics = () => {
     if (y > 220) { doc.addPage(); addPageHeader(doc, 'By Data Collector'); y = 18; }
     doc.setFontSize(12); doc.setTextColor(15, 32, 65); doc.setFont('helvetica', 'bold');
     doc.text('By Data Collector', 14, y); y += 3;
-    const dcRows = collectorDetails.map((c, i) => [String(i + 1), c.deviceId || '-', c.name, c.hubs.join(', '), c.states.join(', '), String(c.sites.length), c.activities.map((a: any) => a.name).join(', '), String(c.count), c.percentage.toFixed(1) + '%']);
-    dcRows.push(['', '', 'Total', '', '', '', '', String(totalQ), '100%']);
-    y = styledAutoTable(doc, [['#', 'Device ID', 'Collector', 'Hub', 'State', 'Sites', 'Activities', 'Q', '%']], dcRows, y, { fontSize: 7, boldLastRow: true, useArabicFont: hasArabic });
+    const dcRows = collectorDetails.map((c, i) => [String(i + 1), c.profileId || '-', c.deviceId || '-', c.name, c.hubs.join(', '), c.states.join(', '), String(c.sites.length), c.activities.map((a: any) => a.name).join(', '), String(c.count), c.percentage.toFixed(1) + '%']);
+    dcRows.push(['', '', '', 'Total', '', '', '', '', String(totalQ), '100%']);
+    y = styledAutoTable(doc, [['#', 'UUID', 'Device ID', 'Collector', 'Hub', 'State', 'Sites', 'Activities', 'Q', '%']], dcRows, y, { fontSize: 6.5, boldLastRow: true, useArabicFont: hasArabic });
     y += 4;
 
     collectorDetails.forEach(c => {
@@ -2675,7 +2743,7 @@ const QuestionnaireAnalytics = () => {
       doc.setFont('helvetica', 'normal');
       y += 5;
       doc.setFontSize(9); doc.setTextColor(90, 95, 110);
-      doc.text(`Device ID: ${c.deviceId || '-'}  |  Hub: ${c.hubs.join(', ')}  |  State: ${c.states.join(', ')}  |  Sites: ${c.sites.length}  |  ${c.count} Q (${c.percentage.toFixed(1)}%)`, 14, y);
+      doc.text(`UUID: ${c.profileId || '-'}  |  Device ID: ${c.deviceId || '-'}  |  Hub: ${c.hubs.join(', ')}  |  State: ${c.states.join(', ')}  |  Sites: ${c.sites.length}  |  ${c.count} Q (${c.percentage.toFixed(1)}%)`, 14, y);
       y += 6;
       if (c.nameVariants.length > 0) {
         doc.setFontSize(10); doc.setTextColor(15, 32, 65); doc.setFont('helvetica', 'bold');
@@ -3856,7 +3924,7 @@ const QuestionnaireAnalytics = () => {
       </Card>
   );
 
-  const SummaryTableWithSites = ({ items, label, icon: Icon }: { items: SummaryWithSites[]; label: string; icon: React.ElementType }) => (
+  const SummaryTableWithSites = ({ items, label, icon: Icon, showCollectors = false }: { items: SummaryWithSites[]; label: string; icon: React.ElementType; showCollectors?: boolean }) => (
     <Card>
       <CardHeader className="pb-3">
         <CardTitle className="flex items-center gap-2 text-lg">
@@ -3873,6 +3941,7 @@ const QuestionnaireAnalytics = () => {
                 <th className="text-left py-2 px-3 font-medium">#</th>
                 <th className="text-left py-2 px-3 font-medium">{label}</th>
                 <th className="text-right py-2 px-3 font-medium">Sites</th>
+                {showCollectors && <th className="text-right py-2 px-3 font-medium">DC</th>}
                 <th className="text-right py-2 px-3 font-medium">Questionnaires</th>
                 <th className="text-right py-2 px-3 font-medium">%</th>
                 <th className="py-2 px-3 font-medium w-32">Distribution</th>
@@ -3884,6 +3953,7 @@ const QuestionnaireAnalytics = () => {
                   <td className="py-2 px-3 text-muted-foreground">{i + 1}</td>
                   <td className="py-2 px-3 font-medium">{item.name}</td>
                   <td className="py-2 px-3 text-right"><Badge variant="outline" className="font-mono text-blue-600">{item.sites}</Badge></td>
+                  {showCollectors && <td className="py-2 px-3 text-right"><Badge variant="outline" className="font-mono text-purple-600">{item.collectors}</Badge></td>}
                   <td className="py-2 px-3 text-right"><Badge variant="secondary" className="font-mono">{item.questionnaires}</Badge></td>
                   <td className="py-2 px-3 text-right text-muted-foreground">{item.percentage.toFixed(1)}%</td>
                   <td className="py-2 px-3">
@@ -3896,6 +3966,7 @@ const QuestionnaireAnalytics = () => {
               <tr className="bg-muted/50 font-semibold">
                 <td className="py-2 px-3" colSpan={2}>Total</td>
                 <td className="py-2 px-3 text-right"><Badge variant="outline" className="font-mono text-blue-700">{items.reduce((a, b) => a + b.sites, 0)}</Badge></td>
+                {showCollectors && <td className="py-2 px-3 text-right"><Badge variant="outline" className="font-mono text-purple-700">{items.reduce((a, b) => a + b.collectors, 0)}</Badge></td>}
                 <td className="py-2 px-3 text-right"><Badge className="font-mono">{items.reduce((a, b) => a + b.questionnaires, 0)}</Badge></td>
                 <td className="py-2 px-3 text-right">100%</td>
                 <td className="py-2 px-3" />
@@ -4536,7 +4607,7 @@ const QuestionnaireAnalytics = () => {
                   </div>
                 </CardContent>
               </Card>
-              <SummaryTableWithSites items={stateSummary} label="State" icon={MapPin} />
+              <SummaryTableWithSites items={stateSummary} label="State" icon={MapPin} showCollectors />
             </TabsContent>
 
             <TabsContent value="locality" className="mt-4 space-y-4">
@@ -4578,7 +4649,66 @@ const QuestionnaireAnalytics = () => {
                   </ResponsiveContainer>
                 </CardContent>
               </Card>
-              <SummaryTableWithSites items={siteSummary} label="Site" icon={MapPin} />
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="flex items-center gap-2 text-lg">
+                    <MapPin className="h-5 w-5 text-primary" />
+                    By Site
+                  </CardTitle>
+                  <CardDescription>{siteDetailsWithActivity.length} unique sites found</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm" data-testid="table-site-activity">
+                      <thead>
+                        <tr className="border-b bg-muted/50">
+                          <th className="text-left py-2 px-3 font-medium">#</th>
+                          <th className="text-left py-2 px-3 font-medium">Site</th>
+                          <th className="text-left py-2 px-3 font-medium">Activity</th>
+                          <th className="text-left py-2 px-3 font-medium">State</th>
+                          <th className="text-left py-2 px-3 font-medium">Locality</th>
+                          <th className="text-right py-2 px-3 font-medium">DC</th>
+                          <th className="text-right py-2 px-3 font-medium">Questionnaires</th>
+                          <th className="text-right py-2 px-3 font-medium">%</th>
+                          <th className="py-2 px-3 font-medium w-28">Distribution</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {siteDetailsWithActivity.map((item, i) => (
+                          <tr key={item.name} className="border-b hover:bg-muted/30 transition-colors" data-testid={`row-site-activity-${i}`}>
+                            <td className="py-2 px-3 text-muted-foreground">{i + 1}</td>
+                            <td className="py-2 px-3 font-medium">{item.name}</td>
+                            <td className="py-2 px-3">
+                              <div className="flex flex-wrap gap-1">
+                                {item.activities.map(a => (
+                                  <Badge key={a.name} variant="outline" className="text-[10px] px-1.5 py-0">{a.name} ({a.count})</Badge>
+                                ))}
+                              </div>
+                            </td>
+                            <td className="py-2 px-3 text-muted-foreground text-xs">{item.state || '-'}</td>
+                            <td className="py-2 px-3 text-muted-foreground text-xs">{item.locality || '-'}</td>
+                            <td className="py-2 px-3 text-right"><Badge variant="outline" className="font-mono text-purple-600">{item.collectors}</Badge></td>
+                            <td className="py-2 px-3 text-right"><Badge variant="secondary" className="font-mono">{item.questionnaires}</Badge></td>
+                            <td className="py-2 px-3 text-right text-muted-foreground">{item.percentage.toFixed(1)}%</td>
+                            <td className="py-2 px-3">
+                              <div className="w-full bg-muted rounded-full h-2">
+                                <div className="bg-primary rounded-full h-2 transition-all" style={{ width: `${Math.min(item.percentage, 100)}%` }} />
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                        <tr className="bg-muted/50 font-semibold">
+                          <td className="py-2 px-3" colSpan={5}>Total</td>
+                          <td className="py-2 px-3 text-right"><Badge variant="outline" className="font-mono text-purple-700">{siteDetailsWithActivity.reduce((a, b) => a + b.collectors, 0)}</Badge></td>
+                          <td className="py-2 px-3 text-right"><Badge className="font-mono">{siteDetailsWithActivity.reduce((a, b) => a + b.questionnaires, 0)}</Badge></td>
+                          <td className="py-2 px-3 text-right">100%</td>
+                          <td className="py-2 px-3" />
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </CardContent>
+              </Card>
             </TabsContent>
 
             <TabsContent value="activity" className="mt-4 space-y-4">
@@ -4763,6 +4893,8 @@ const QuestionnaireAnalytics = () => {
                               <span className="font-medium block truncate">{item.name}</span>
                               <div className="flex items-center gap-2 flex-wrap">
                                 {item.deviceId && <span className="text-xs text-muted-foreground font-mono">{item.deviceId}</span>}
+                                {item.profileId && <Badge variant="outline" className="text-[10px] px-1 py-0 text-green-600 border-green-300 font-mono">UUID: {item.profileId.slice(0, 8)}...</Badge>}
+                                {!item.profileId && <Badge variant="outline" className="text-[10px] px-1 py-0 text-red-500 border-red-200">No UUID Match</Badge>}
                                 {item.nameVariants.length > 0 && (
                                   <Badge variant="outline" className="text-[10px] px-1 py-0 text-amber-600 border-amber-300">{item.nameVariants.length} name variants</Badge>
                                 )}
@@ -4797,6 +4929,19 @@ const QuestionnaireAnalytics = () => {
                                 </div>
                               </div>
                             )}
+                            <div className="mt-3 p-2 bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-md">
+                              <h4 className="text-xs font-semibold text-blue-700 dark:text-blue-400 mb-1 flex items-center gap-1">
+                                <Lock className="h-3 w-3" /> PROFILE UUID
+                              </h4>
+                              {item.profileId ? (
+                                <div className="flex items-center gap-2">
+                                  <span className="text-sm font-mono text-blue-800 dark:text-blue-300 select-all">{item.profileId}</span>
+                                  <Badge variant="outline" className="text-[10px] text-green-600 border-green-300">Matched</Badge>
+                                </div>
+                              ) : (
+                                <span className="text-sm text-red-500">No matching profile found — name may differ from system records</span>
+                              )}
+                            </div>
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-3">
                               <div>
                                 <h4 className="text-xs font-semibold text-muted-foreground mb-2 flex items-center gap-1">
