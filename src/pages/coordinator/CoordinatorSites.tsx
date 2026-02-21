@@ -1046,6 +1046,59 @@ const CoordinatorSites: React.FC = () => {
     setLocalPermitRequiredCount(localPermitRequired);
   }, [coordinatorSites, contextMmpFiles, hubStates, localities, permits, mmpFilter]);
 
+  const mmpGroupedStatesData = useMemo(() => {
+    if (!localitiesData.length) return [];
+    const mmpMap = new Map<string, { mmpId: string; mmpName: string; states: any[] }>();
+    localitiesData.forEach((stateData: any) => {
+      const mmpSites = new Map<string, { name: string; sites: Map<string, any[]> }>();
+      stateData.localities.forEach((locality: any) => {
+        (locality.sites || []).forEach((site: any) => {
+          const mmpId = site.mmp_file_id;
+          if (!mmpSites.has(mmpId)) {
+            mmpSites.set(mmpId, { name: site.mmp_name || 'Unknown MMP', sites: new Map() });
+          }
+          if (!mmpSites.get(mmpId)!.sites.has(locality.locality)) {
+            mmpSites.get(mmpId)!.sites.set(locality.locality, []);
+          }
+          mmpSites.get(mmpId)!.sites.get(locality.locality)!.push(site);
+        });
+      });
+      mmpSites.forEach(({ name: mmpName, sites: localitySites }, mmpId) => {
+        if (!mmpMap.has(mmpId)) {
+          mmpMap.set(mmpId, { mmpId, mmpName, states: [] });
+        }
+        const localitiesArray = Array.from(localitySites.entries()).map(([locName, sites]) => {
+          const origLocality = stateData.localities.find((l: any) => l.locality === locName);
+          return { ...(origLocality || {}), locality: locName, sites, hasPermit: origLocality?.hasPermit || false };
+        });
+        const totalSites = localitiesArray.reduce((sum: number, l: any) => sum + l.sites.length, 0);
+        mmpMap.get(mmpId)!.states.push({
+          state: stateData.state,
+          localities: localitiesArray,
+          totalSites,
+          hasStatePermit: stateData.hasStatePermit,
+          statePermitVerified: stateData.statePermitVerified,
+          statePermitUploadedAt: stateData.statePermitUploadedAt,
+          statePermitRequiredCount: totalSites,
+          mmpNames: [mmpName]
+        });
+      });
+    });
+    return Array.from(mmpMap.values()).sort((a, b) => a.mmpName.localeCompare(b.mmpName));
+  }, [localitiesData]);
+
+  const groupSitesByMmp = (sites: SiteVisit[]) => {
+    const groups = new Map<string, { mmpId: string; mmpName: string; sites: SiteVisit[] }>();
+    sites.forEach(site => {
+      const mmpId = site.mmp_file_id;
+      if (!groups.has(mmpId)) {
+        groups.set(mmpId, { mmpId, mmpName: site.mmp_name || 'Unknown MMP', sites: [] });
+      }
+      groups.get(mmpId)!.sites.push(site);
+    });
+    return Array.from(groups.values()).sort((a, b) => a.mmpName.localeCompare(b.mmpName));
+  };
+
   const handleVerifySite = async (siteId: string, notes?: string) => {
     // Detect if running in Capacitor
     const isCapacitor = typeof (window as any).Capacitor !== 'undefined';
@@ -2725,6 +2778,67 @@ const CoordinatorSites: React.FC = () => {
     </Card>
   );
 
+  const renderMmpGroupedSites = (sites: SiteVisit[], showActions: boolean = true, isPreviewMode: boolean = false) => {
+    const groups = groupSitesByMmp(sites);
+    if (groups.length <= 1) {
+      return <>{sites.map(site => renderSiteCard(site, showActions, isPreviewMode))}</>;
+    }
+    return (
+      <>
+        {groups.map(group => (
+          <div key={group.mmpId} className="space-y-3">
+            <div className="flex items-center gap-2 border-l-4 border-l-blue-500 pl-3 py-1 bg-blue-50/50 dark:bg-blue-900/20 rounded-r">
+              <FileCheck2 className="h-3.5 w-3.5 text-blue-600" />
+              <span className="text-sm font-semibold text-blue-700 dark:text-blue-400">{group.mmpName}</span>
+              <Badge variant="secondary" className="text-xs">{group.sites.length} sites</Badge>
+            </div>
+            {group.sites.map(site => renderSiteCard(site, showActions, isPreviewMode))}
+          </div>
+        ))}
+      </>
+    );
+  };
+
+  const renderMmpGroupedLocalities = (groupedByLocality: { [key: string]: SiteVisit[] }) => {
+    const entries = Object.entries(groupedByLocality);
+    if (entries.length === 0) return null;
+    const allSites = entries.flatMap(([, sites]) => sites);
+    const mmpGroups = groupSitesByMmp(allSites);
+    if (mmpGroups.length <= 1) {
+      return (
+        <div className="space-y-4">
+          {entries.map(([localityKey, localitySites]) =>
+            renderPermitsAttachedLocalityCard(localityKey, localitySites)
+          )}
+        </div>
+      );
+    }
+    return (
+      <div className="space-y-5">
+        {mmpGroups.map(group => {
+          const mmpLocalities: { [key: string]: SiteVisit[] } = {};
+          group.sites.forEach(site => {
+            const key = `${site.state}|${site.locality}`;
+            if (!mmpLocalities[key]) mmpLocalities[key] = [];
+            mmpLocalities[key].push(site);
+          });
+          return (
+            <div key={group.mmpId} className="space-y-3">
+              <div className="flex items-center gap-2 border-l-4 border-l-blue-500 pl-3 py-1 bg-blue-50/50 dark:bg-blue-900/20 rounded-r">
+                <FileCheck2 className="h-3.5 w-3.5 text-blue-600" />
+                <span className="text-sm font-semibold text-blue-700 dark:text-blue-400">{group.mmpName}</span>
+                <Badge variant="secondary" className="text-xs">{group.sites.length} sites</Badge>
+              </div>
+              {Object.entries(mmpLocalities).map(([localityKey, localitySites]) =>
+                renderPermitsAttachedLocalityCard(localityKey, localitySites)
+              )}
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
+
   const renderStateCard = (stateData: any) => {
     const isExpanded = expandedStates.has(stateData.state);
 
@@ -3235,86 +3349,118 @@ const CoordinatorSites: React.FC = () => {
             </TabsList>
 
             <TabsContent value="state_required" className="space-y-4">
-              <Card>
-                <CardHeader>
-                  <div className="flex items-center justify-between">
-                    <CardTitle>States Requiring State Permits</CardTitle>
-                    <div className="relative w-full sm:w-auto max-w-sm">
-                      <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                      <Input
-                        type="search"
-                        placeholder="Search states..."
-                        className="pl-8 w-full sm:w-[300px]"
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                      />
-                    </div>
+              <div className="flex items-center justify-between mb-3">
+                <div className="text-sm text-muted-foreground">
+                  Sites grouped by MMP. Upload state permits to proceed.
+                </div>
+                <div className="relative w-full sm:w-auto max-w-sm">
+                  <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    type="search"
+                    placeholder="Search states..."
+                    className="pl-8 w-full sm:w-[300px]"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                  />
+                </div>
+              </div>
+              {isPermitsSectionLoading ? (
+                <div className="text-center py-8">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
+                  <p className="text-muted-foreground">Loading...</p>
+                </div>
+              ) : (() => {
+                const mmpGroups = mmpGroupedStatesData.map(mmpGroup => {
+                  const stateRequired = mmpGroup.states.filter((s: any) => !s.hasStatePermit);
+                  const filtered = stateRequired.filter((s: any) =>
+                    s.state.toLowerCase().includes(debouncedSearchQuery.toLowerCase())
+                  );
+                  return { ...mmpGroup, filteredStates: filtered };
+                }).filter(g => g.filteredStates.length > 0);
+
+                return mmpGroups.length === 0 ? (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <CheckCircle className="h-12 w-12 mx-auto mb-4 opacity-20" />
+                    <p>{searchQuery ? 'No states match your search.' : 'All states have state permits uploaded.'}</p>
                   </div>
-                  <div className="text-sm text-muted-foreground">
-                    These states require state permits to be uploaded before you can access local permits.
+                ) : (
+                  <div className="space-y-5">
+                    {mmpGroups.map(mmpGroup => (
+                      <Card key={mmpGroup.mmpId} className="border-l-4 border-l-blue-500">
+                        <CardHeader className="pb-2 pt-3 px-4">
+                          <div className="flex items-center gap-2">
+                            <FileCheck2 className="h-4 w-4 text-blue-600" />
+                            <CardTitle className="text-base text-blue-700 dark:text-blue-400">{mmpGroup.mmpName}</CardTitle>
+                            <Badge variant="secondary" className="text-xs">{mmpGroup.filteredStates.reduce((sum: number, s: any) => sum + s.totalSites, 0)} sites</Badge>
+                          </div>
+                        </CardHeader>
+                        <CardContent className="px-4 pb-3 space-y-3">
+                          {mmpGroup.filteredStates.map((state: any) => renderStateCard(state))}
+                        </CardContent>
+                      </Card>
+                    ))}
                   </div>
-                </CardHeader>
-                <CardContent>
-                  {isPermitsSectionLoading ? (
-                    <div className="text-center py-8">
-                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
-                      <p className="text-muted-foreground">Loading states...</p>
-                    </div>
-                  ) : (() => {
-                    const stateRequiredStates = localitiesData.filter((state: any) => !state.hasStatePermit);
-                    const filteredStates = stateRequiredStates.filter((state: any) => 
-                      state.state.toLowerCase().includes(debouncedSearchQuery.toLowerCase())
-                    );
-                    
-                    return filteredStates.length === 0 ? (
-                      <div className="text-center py-8 text-muted-foreground">
-                        <CheckCircle className="h-12 w-12 mx-auto mb-4 opacity-20" />
-                        <p>{searchQuery ? 'No states match your search.' : 'All states have state permits uploaded.'}</p>
-                      </div>
-                    ) : (
-                      <div className="space-y-4">
-                        {filteredStates.map(state => renderStateCard(state))}
-                      </div>
-                    );
-                  })()}
-                </CardContent>
-              </Card>
+                );
+              })()}
             </TabsContent>
 
             <TabsContent value="local_required" className="space-y-3 sm:space-y-4">
               {(() => {
-                const allLocalitiesFromStatePermits = localitiesData
-                  .filter((state: any) => state.hasStatePermit)
-                  .flatMap((state: any) => 
-                    state.localities.map((locality: any) => ({
-                      state: state.state,
-                      locality: locality.locality,
-                      siteCount: locality.sites?.length || 0,
-                      sites: locality.sites || [],
-                      hasPermit: locality.hasPermit || false,
-                      mmpFileId: locality.sites?.[0]?.mmp_file_id || ''
-                    }))
-                  )
-                  .filter((locality: any) => {
-                    const validStatuses = ['pending', 'dispatched', 'assigned', 'inprogress', 'in_progress', 'new', 'forwarded'];
-                    return locality.sites.some((site: SiteVisit) => {
-                      const status = (site.status || '').toLowerCase().replace(/\s+/g, '_');
-                      return validStatuses.includes(status) && siteNeedsLocalityPermit(site);
-                    });
-                  });
+                const validStatuses = ['pending', 'dispatched', 'assigned', 'inprogress', 'in_progress', 'new', 'forwarded'];
+                const mmpLocalityGroups = mmpGroupedStatesData.map(mmpGroup => {
+                  const localities = mmpGroup.states
+                    .filter((state: any) => state.hasStatePermit)
+                    .flatMap((state: any) =>
+                      state.localities.map((locality: any) => ({
+                        state: state.state,
+                        locality: locality.locality,
+                        siteCount: locality.sites?.length || 0,
+                        sites: locality.sites || [],
+                        hasPermit: locality.hasPermit || false,
+                        mmpFileId: locality.sites?.[0]?.mmp_file_id || ''
+                      }))
+                    )
+                    .filter((locality: any) =>
+                      locality.sites.some((site: SiteVisit) => {
+                        const status = (site.status || '').toLowerCase().replace(/\s+/g, '_');
+                        return validStatuses.includes(status) && siteNeedsLocalityPermit(site);
+                      })
+                    );
+                  return { ...mmpGroup, localities };
+                }).filter(g => g.localities.length > 0);
 
-                return (
-                  <LocalityPermitManager
-                    localities={allLocalitiesFromStatePermits}
-                    onPermitUploaded={() => {
-                      fetchPermits();
-                      refreshSites();
-                    }}
-                    onSitesAdvanced={(count) => {
-                      refreshSites();
-                    }}
-                    isLoading={isPermitsSectionLoading}
-                  />
+                return mmpLocalityGroups.length === 0 ? (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <CheckCircle className="h-12 w-12 mx-auto mb-4 opacity-20" />
+                    <p>No localities require permits.</p>
+                  </div>
+                ) : (
+                  <div className="space-y-5">
+                    {mmpLocalityGroups.map(mmpGroup => (
+                      <Card key={mmpGroup.mmpId} className="border-l-4 border-l-blue-500">
+                        <CardHeader className="pb-2 pt-3 px-4">
+                          <div className="flex items-center gap-2">
+                            <FileCheck2 className="h-4 w-4 text-blue-600" />
+                            <CardTitle className="text-base text-blue-700 dark:text-blue-400">{mmpGroup.mmpName}</CardTitle>
+                            <Badge variant="secondary" className="text-xs">{mmpGroup.localities.reduce((sum: number, l: any) => sum + l.sites.length, 0)} sites</Badge>
+                          </div>
+                        </CardHeader>
+                        <CardContent className="px-4 pb-3">
+                          <LocalityPermitManager
+                            localities={mmpGroup.localities}
+                            onPermitUploaded={() => {
+                              fetchPermits();
+                              refreshSites();
+                            }}
+                            onSitesAdvanced={() => {
+                              refreshSites();
+                            }}
+                            isLoading={isPermitsSectionLoading}
+                          />
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
                 );
               })()}
             </TabsContent>
@@ -3348,11 +3494,7 @@ const CoordinatorSites: React.FC = () => {
                   <p>{searchQuery ? 'No localities match your search.' : 'No sites with permits attached yet.'}</p>
                 </div>
               ) : (
-                <div className="space-y-4">
-                  {Object.entries(sitesGroupedByLocality).map(([localityKey, localitySites]) => 
-                    renderPermitsAttachedLocalityCard(localityKey, localitySites)
-                  )}
-                </div>
+                renderMmpGroupedLocalities(sitesGroupedByLocality)
               )}
             </CardContent>
           </Card>
@@ -3477,10 +3619,9 @@ const CoordinatorSites: React.FC = () => {
               ) : (
                 <>
                   <div className="space-y-4">
-                    {paginatedSites.map(site => renderSiteCard(site, true))}
+                    {renderMmpGroupedSites(paginatedSites, true)}
                   </div>
                   {totalPages > 1 && (
-                    // FIX: Wrap both "Showing ..." and pagination controls in a parent <div>
                     <div className="flex items-center justify-between mt-4 pt-4 border-t">
                       <div className="text-sm text-muted-foreground">
                         Showing {((currentPage - 1) * itemsPerPage) + 1} - {Math.min(currentPage * itemsPerPage, sitesByTab.length)} of {sitesByTab.length}
@@ -3543,7 +3684,7 @@ const CoordinatorSites: React.FC = () => {
               ) : (
                 <>
                   <div className="space-y-4">
-                    {paginatedSites.map(site => renderSiteCard(site, true))}
+                    {renderMmpGroupedSites(paginatedSites, true)}
                   </div>
                   {totalPages > 1 && (
                     <div className="flex items-center justify-between mt-4 pt-4 border-t">
@@ -3608,7 +3749,7 @@ const CoordinatorSites: React.FC = () => {
               ) : (
                 <>
                   <div className="space-y-4">
-                    {paginatedSites.map(site => renderSiteCard(site, false, true))}
+                    {renderMmpGroupedSites(paginatedSites, false, true)}
                   </div>
                   {totalPages > 1 && (
                     <div className="flex items-center justify-between mt-4 pt-4 border-t">
@@ -3675,7 +3816,7 @@ const CoordinatorSites: React.FC = () => {
               ) : (
                 <>
                   <div className="space-y-4">
-                    {paginatedSites.map(site => renderSiteCard(site, true))}
+                    {renderMmpGroupedSites(paginatedSites, true)}
                   </div>
                   {totalPages > 1 && (
                     <div className="flex items-center justify-between mt-4 pt-4 border-t">
