@@ -8,7 +8,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
-import { Upload, FileSpreadsheet, BarChart3, Download, Search, Filter, X, ChevronDown, ChevronUp, Users, MapPin, Building2, Activity, Layers, FileDown, Save, FolderOpen, Trash2, Clock, Globe, PieChart, Lock, Sparkles, CheckCircle2, AlertCircle, ArrowRight, FileSearch, Mail, FileText, Send, ClipboardList, AlertTriangle, Plus, UserPlus } from 'lucide-react';
+import { Upload, FileSpreadsheet, BarChart3, Download, Search, Filter, X, ChevronDown, ChevronUp, Users, MapPin, Building2, Activity, Layers, FileDown, Save, FolderOpen, Trash2, Clock, Globe, PieChart, Lock, Sparkles, CheckCircle2, AlertCircle, ArrowRight, FileSearch, Mail, FileText, Send, ClipboardList, AlertTriangle, Plus, UserPlus, RotateCcw } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
 import { useAuthorization } from '@/hooks/use-authorization';
 import * as XLSX from 'xlsx';
@@ -205,6 +205,9 @@ const QuestionnaireAnalytics = () => {
   const { isSuperAdmin } = useAuthorization();
   const { toast } = useToast();
   const [data, setData] = useState<QuestionnaireRow[]>([]);
+  const [originalData, setOriginalData] = useState<QuestionnaireRow[] | null>(null);
+  const [cleanedData, setCleanedData] = useState<QuestionnaireRow[] | null>(null);
+  const [isCleanedView, setIsCleanedView] = useState(false);
   const [fileName, setFileName] = useState<string>('');
   const [activeTab, setActiveTab] = useState('overview');
   const [searchQuery, setSearchQuery] = useState('');
@@ -292,6 +295,9 @@ const QuestionnaireAnalytics = () => {
     setData(session.data);
     setFileName(session.fileName);
     setCurrentSessionName(session.name);
+    setOriginalData(null);
+    setCleanedData(null);
+    setIsCleanedView(false);
     setFilterHubs([]);
     setFilterStates([]);
     setFilterActivities([]);
@@ -488,14 +494,60 @@ const QuestionnaireAnalytics = () => {
   const applyCleanedData = useCallback(() => {
     if (!cleanResults) return;
     const finalData = getCustomCleanedData();
+
+    const rawSnapshot = originalData || [...data];
+    setOriginalData(rawSnapshot);
+    setCleanedData(finalData);
     setData(finalData);
+    setIsCleanedView(true);
     setShowCleanDialog(false);
     setFilterHubs([]);
     setFilterStates([]);
     setFilterActivities([]);
     setFilterLocalities([]);
     setSearchQuery('');
-  }, [cleanResults, getCustomCleanedData]);
+
+    try {
+      const toRow = (r: QuestionnaireRow) => ({
+        Hub: r.hub, State: r.state, Locality: r.locality,
+        'Activity Site': r.activitySite, Activity: r.activity,
+        'Sub Activity': r.subActivity, 'Data Collector': r.dataCollector,
+        'Device ID': r.deviceId, Supervisor: r.supervisor,
+        Date: r.date, 'Site ID': r.siteId, Partner: r.partner,
+      });
+      const colWidths = [{ wch: 18 }, { wch: 16 }, { wch: 18 }, { wch: 30 }, { wch: 16 }, { wch: 20 }, { wch: 25 }, { wch: 20 }, { wch: 20 }, { wch: 14 }, { wch: 14 }, { wch: 20 }];
+      const wb = XLSX.utils.book_new();
+
+      const cleanedWs = XLSX.utils.json_to_sheet(finalData.map(toRow));
+      cleanedWs['!cols'] = colWidths;
+      XLSX.utils.book_append_sheet(wb, cleanedWs, 'Cleaned Data');
+
+      const rawWs = XLSX.utils.json_to_sheet(rawSnapshot.map(toRow));
+      rawWs['!cols'] = colWidths;
+      XLSX.utils.book_append_sheet(wb, rawWs, 'Raw Data');
+
+      const summaryRows = [
+        { Metric: 'Original Rows', Value: cleanResults.originalCount },
+        { Metric: 'Cleaned Rows', Value: finalData.length },
+        { Metric: 'Duplicates Removed', Value: customDupsRemoved },
+        { Metric: 'Empty Rows Removed', Value: cleanResults.emptyRowsRemoved },
+        { Metric: 'Fields Trimmed', Value: cleanResults.trimmedFields },
+        { Metric: 'Names Standardized', Value: cleanResults.namesStandardized },
+        { Metric: 'Applied At', Value: format(new Date(), 'yyyy-MM-dd HH:mm:ss') },
+      ];
+      const summaryWs = XLSX.utils.json_to_sheet(summaryRows);
+      summaryWs['!cols'] = [{ wch: 25 }, { wch: 30 }];
+      XLSX.utils.book_append_sheet(wb, summaryWs, 'Cleaning Summary');
+
+      const baseName = fileName ? fileName.replace(/\.[^/.]+$/, '') : 'questionnaire';
+      XLSX.writeFile(wb, `${baseName}_cleaned_${format(new Date(), 'yyyyMMdd_HHmm')}.xlsx`);
+
+      toast({ title: 'Cleaning applied', description: `${finalData.length} cleaned rows are now active. File saved with both cleaned and raw data.` });
+    } catch (err) {
+      console.error('Error saving combined file:', err);
+      toast({ title: 'Cleaning applied', description: `${finalData.length} cleaned rows are now active.` });
+    }
+  }, [cleanResults, getCustomCleanedData, data, originalData, fileName, customDupsRemoved, toast]);
 
   const downloadCleanedExcel = useCallback(() => {
     if (!cleanResults) return;
@@ -825,6 +877,9 @@ const QuestionnaireAnalytics = () => {
         })).filter(row => row.hub || row.state || row.dataCollector);
 
         setData(rows);
+        setOriginalData(null);
+        setCleanedData(null);
+        setIsCleanedView(false);
         setCurrentSessionName('');
         setFilterHubs([]);
         setFilterStates([]);
@@ -4006,6 +4061,56 @@ const QuestionnaireAnalytics = () => {
             </div>
           </CardContent>
         </Card>
+      )}
+
+      {data.length > 0 && originalData && cleanedData && (
+        <div className={`flex items-center justify-between gap-3 p-3 rounded-lg border ${isCleanedView ? 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800' : 'bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800'}`} data-testid="cleaned-data-banner">
+          <div className="flex items-center gap-2">
+            {isCleanedView ? (
+              <>
+                <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                <span className="text-sm font-medium text-emerald-800 dark:text-emerald-300">
+                  Viewing cleaned data ({cleanedData.length} rows)
+                </span>
+                <span className="text-xs text-emerald-600 dark:text-emerald-400">
+                  — Original had {originalData.length} rows
+                </span>
+              </>
+            ) : (
+              <>
+                <FileSpreadsheet className="h-4 w-4 text-amber-600" />
+                <span className="text-sm font-medium text-amber-800 dark:text-amber-300">
+                  Viewing raw data ({originalData.length} rows)
+                </span>
+                <span className="text-xs text-amber-600 dark:text-amber-400">
+                  — Cleaned version has {cleanedData.length} rows
+                </span>
+              </>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 text-xs gap-1.5"
+              onClick={() => {
+                if (isCleanedView) {
+                  setData(originalData);
+                  setIsCleanedView(false);
+                  toast({ title: 'Switched to raw data', description: `Showing all ${originalData.length} original rows.` });
+                } else {
+                  setData(cleanedData);
+                  setIsCleanedView(true);
+                  toast({ title: 'Switched to cleaned data', description: `Showing ${cleanedData.length} cleaned rows.` });
+                }
+              }}
+              data-testid="button-toggle-data-view"
+            >
+              <RotateCcw className="h-3 w-3" />
+              {isCleanedView ? 'Switch to Raw Data' : 'Switch to Cleaned Data'}
+            </Button>
+          </div>
+        </div>
       )}
 
       {data.length > 0 && (
