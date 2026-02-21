@@ -85,6 +85,7 @@ function transformFromDB(data: any): DownPaymentRequest {
     siteVisitId: data.site_visit_id,
     mmpSiteEntryId: data.mmp_site_entry_id,
     siteName: data.site_name,
+    mmpName: mmpEntry?.mmp_files?.name || data.metadata?.mmp_name || undefined,
     stateName,
     localityName: mmpEntry?.locality || data.metadata?.locality_name || undefined,
     projectName: mmpEntry?.cp_name || mmpEntry?.mmp_files?.projects?.name || mmpEntry?.mmp_files?.project_name || data.metadata?.project_name || 'PACT',
@@ -206,6 +207,7 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
           cp_name,
           activity_type,
           mmp_files (
+            name,
             project_name,
             projects (
               name

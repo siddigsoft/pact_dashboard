@@ -152,6 +152,7 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
   const uniqueHubs = useMemo(() => [...new Set(requests.map(r => r.hubName).filter(Boolean))], [requests]);
   const uniqueStates = useMemo(() => [...new Set(requests.map(r => r.stateName).filter(Boolean))], [requests]);
   const uniqueLocalities = useMemo(() => [...new Set(requests.map(r => r.localityName).filter(Boolean))], [requests]);
+  const uniqueMMPs = useMemo(() => [...new Set(requests.map(r => r.mmpName).filter(Boolean))].sort(), [requests]);
   const uniqueSites = useMemo(() => [...new Set(requests.filter(r => ['approved', 'partially_paid', 'fully_paid'].includes(r.status)).map(r => r.siteName).filter(Boolean))].sort(), [requests]);
   const uniqueSupervisors = useMemo(() => {
     const approvedReqs = requests.filter(r => ['approved', 'partially_paid', 'fully_paid'].includes(r.status));
@@ -1526,6 +1527,23 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
                 <SelectItem value="all">All Localities</SelectItem>
                 {uniqueLocalities.map(loc => (
                   <SelectItem key={loc} value={loc || ''}>{loc}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label className="text-xs">MMP</Label>
+            <Select
+              value={filters.mmpName || 'all'}
+              onValueChange={v => setFilters(f => ({ ...f, mmpName: v === 'all' ? undefined : v }))}
+            >
+              <SelectTrigger data-testid="select-filter-mmp">
+                <SelectValue placeholder="All MMPs" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All MMPs</SelectItem>
+                {uniqueMMPs.map(mmp => (
+                  <SelectItem key={mmp} value={mmp || ''}>{mmp}</SelectItem>
                 ))}
               </SelectContent>
             </Select>

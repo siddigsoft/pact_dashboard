@@ -75,6 +75,7 @@ export interface DownPaymentRequest {
   siteVisitId?: string;
   mmpSiteEntryId?: string;
   siteName: string;
+  mmpName?: string;
   
   // Geographic information (from related MMP entry)
   stateName?: string;
@@ -197,6 +198,7 @@ export interface DownPaymentFilter {
   siteName?: string;
   activityType?: string;
   dataCollectorId?: string;
+  mmpName?: string;
   dateFrom?: string;
   dateTo?: string;
   amountMin?: number;

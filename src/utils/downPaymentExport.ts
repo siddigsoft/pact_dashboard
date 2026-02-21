@@ -30,6 +30,9 @@ export function filterDownPayments(
     if (filters.dataCollectorId && req.requestedBy !== filters.dataCollectorId) {
       return false;
     }
+    if (filters.mmpName && req.mmpName?.toLowerCase() !== filters.mmpName.toLowerCase()) {
+      return false;
+    }
     if (filters.dateFrom && new Date(req.requestedAt) < new Date(filters.dateFrom)) {
       return false;
     }
@@ -51,6 +54,7 @@ export function filterDownPayments(
         req.localityName,
         req.requestedByName,
         req.justification,
+        req.mmpName,
       ].filter(Boolean);
       if (!searchFields.some(f => f?.toLowerCase().includes(term))) {
         return false;
