@@ -4316,17 +4316,17 @@ const MMP = () => {
   }
 
   return (
-    <div className="space-y-6 min-h-screen bg-slate-50 dark:bg-gray-900 py-4 sm:py-6 px-2 sm:px-4 md:px-8">
+    <div className="space-y-3 min-h-screen bg-slate-50 dark:bg-gray-900 py-2 sm:py-3 px-2 sm:px-4 md:px-6">
       {/* Blue Header Section */}
-      <div className="bg-gradient-to-r from-blue-600 to-blue-700 dark:from-blue-700 dark:to-blue-800 rounded-lg p-6 text-white shadow-lg">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div className="flex items-center gap-4">
-            <div className="p-3 bg-white/20 rounded-full">
-              <FileText className="h-8 w-8" />
+      <div className="bg-gradient-to-r from-blue-600 to-blue-700 dark:from-blue-700 dark:to-blue-800 rounded-lg p-3 sm:p-4 text-white shadow-lg">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-3">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-white/20 rounded-full">
+              <FileText className="h-6 w-6" />
             </div>
             <div>
-              <h1 className="text-2xl font-bold tracking-tight">{t('mmpPage.title')}</h1>
-              <p className="text-blue-100 mt-1">
+              <h1 className="text-lg sm:text-xl font-bold tracking-tight">{t('mmpPage.title')}</h1>
+              <p className="text-blue-100 text-sm mt-0.5">
                 {t('mmpPage.description')}
               </p>
             </div>
@@ -4336,79 +4336,81 @@ const MMP = () => {
               <Button
                 onClick={() => navigate('/mmp/cycle-close')}
                 variant="outline"
-                className="bg-white/10 text-white border-white/30 flex items-center gap-2"
+                size="sm"
+                className="bg-white/10 text-white border-white/30 flex items-center gap-1.5 text-xs"
                 data-testid="button-cycle-close"
               >
-                <CheckCircle2 className="h-4 w-4" />
+                <CheckCircle2 className="h-3.5 w-3.5" />
                 Close Cycle
               </Button>
             )}
             {canCreate && (
               <Button 
                 onClick={() => navigate('/mmp/upload')} 
-                className="bg-white text-blue-700 hover:bg-blue-50 shadow-md flex items-center gap-2"
+                size="sm"
+                className="bg-white text-blue-700 hover:bg-blue-50 shadow-md flex items-center gap-1.5 text-xs"
                 data-testid="button-upload-mmp"
                 disabled={hasClosingCycle}
                 title={hasClosingCycle ? 'Cannot upload while a cycle is being closed' : ''}
               >
-                <Upload className="h-4 w-4" />
+                <Upload className="h-3.5 w-3.5" />
                 {hasClosingCycle ? 'Upload Blocked (Cycle Closing)' : t('mmpPage.uploadMMP')}
               </Button>
             )}
           </div>
         </div>
-        <div className="mt-4 flex flex-wrap gap-3 text-sm">
-          <div className="flex items-center gap-2 bg-white/10 rounded-full px-3 py-1">
-            <ListChecks className="h-4 w-4" />
+        <div className="mt-2 flex flex-wrap gap-2 text-xs">
+          <div className="flex items-center gap-1.5 bg-white/10 rounded-full px-2.5 py-0.5">
+            <ListChecks className="h-3.5 w-3.5" />
             <span>{t('mmpPage.siteTracking')}</span>
           </div>
-          <div className="flex items-center gap-2 bg-white/10 rounded-full px-3 py-1">
-            <CheckCircle className="h-4 w-4" />
+          <div className="flex items-center gap-1.5 bg-white/10 rounded-full px-2.5 py-0.5">
+            <CheckCircle className="h-3.5 w-3.5" />
             <span>{t('mmpPage.verificationWorkflow')}</span>
           </div>
-          <div className="flex items-center gap-2 bg-white/10 rounded-full px-3 py-1">
-            <BarChart3 className="h-4 w-4" />
+          <div className="flex items-center gap-1.5 bg-white/10 rounded-full px-2.5 py-0.5">
+            <BarChart3 className="h-3.5 w-3.5" />
             <span>{t('mmpPage.progressAnalytics')}</span>
           </div>
-          <DataFreshnessBadge className="bg-white/10 rounded-full px-3 py-1" />
+          <DataFreshnessBadge className="bg-white/10 rounded-full px-2.5 py-0.5" />
         </div>
       </div>
 
       {/* Body - Show tabs immediately with loading states per section for faster perceived loading */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-            <div className="overflow-x-auto mb-6">
-              <TabsList className="inline-flex w-max bg-gradient-to-r from-slate-900/90 to-blue-900/90 border border-blue-500/40 backdrop-blur-xl p-1.5 min-h-[48px] rounded-xl shadow-lg">
+            <div className="overflow-x-auto mb-3">
+              <TabsList className="inline-flex w-max bg-gradient-to-r from-slate-900/90 to-blue-900/90 border border-blue-500/40 backdrop-blur-xl p-1 min-h-[38px] rounded-lg shadow-lg">
                 {canClaimSites && (
-                  <TabsTrigger value="enumerator" className="flex items-center gap-2 data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-500 data-[state=active]:to-blue-600 data-[state=active]:text-white data-[state=active]:shadow-md min-h-[40px] text-xs sm:text-sm flex-shrink-0 whitespace-nowrap rounded-lg px-4 text-blue-100 hover:text-white transition-all">
-                    <UserCheck className="h-4 w-4" />
+                  <TabsTrigger value="enumerator" className="flex items-center gap-1.5 data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-500 data-[state=active]:to-blue-600 data-[state=active]:text-white data-[state=active]:shadow-md min-h-[32px] text-xs flex-shrink-0 whitespace-nowrap rounded-md px-3 text-blue-100 hover:text-white transition-all">
+                    <UserCheck className="h-3.5 w-3.5" />
                     {t('mmpPage.tabs.myAssignments')}
-                    <Badge className="bg-blue-400/30 text-white border-0">{enumeratorMySites.length}</Badge>
+                    <Badge className="bg-blue-400/30 text-white border-0 text-[10px] px-1.5 py-0">{enumeratorMySites.length}</Badge>
                   </TabsTrigger>
                 )}
                 {!canClaimSites && (
-                  <TabsTrigger value="new" className="flex items-center gap-2 data-[state=active]:bg-gradient-to-r data-[state=active]:from-emerald-500 data-[state=active]:to-emerald-600 data-[state=active]:text-white data-[state=active]:shadow-md min-h-[40px] text-xs sm:text-sm flex-shrink-0 whitespace-nowrap rounded-lg px-4 text-blue-100 hover:text-white transition-all">
-                    <ClipboardList className="h-4 w-4" />
+                  <TabsTrigger value="new" className="flex items-center gap-1.5 data-[state=active]:bg-gradient-to-r data-[state=active]:from-emerald-500 data-[state=active]:to-emerald-600 data-[state=active]:text-white data-[state=active]:shadow-md min-h-[32px] text-xs flex-shrink-0 whitespace-nowrap rounded-md px-3 text-blue-100 hover:text-white transition-all">
+                    <ClipboardList className="h-3.5 w-3.5" />
                     {t('mmpPage.tabs.newMMPs')}
-                    <Badge className="bg-emerald-400/30 text-white border-0">{categorizedMMPs.new.length}</Badge>
+                    <Badge className="bg-emerald-400/30 text-white border-0 text-[10px] px-1.5 py-0">{categorizedMMPs.new.length}</Badge>
                   </TabsTrigger>
                 )}
                 {!canClaimSites && (
-                  <TabsTrigger value="forwarded" className="flex items-center gap-2 data-[state=active]:bg-gradient-to-r data-[state=active]:from-amber-500 data-[state=active]:to-orange-500 data-[state=active]:text-white data-[state=active]:shadow-md min-h-[40px] text-xs sm:text-sm flex-shrink-0 whitespace-nowrap rounded-lg px-4 text-blue-100 hover:text-white transition-all">
-                    <Send className="h-4 w-4" />
+                  <TabsTrigger value="forwarded" className="flex items-center gap-1.5 data-[state=active]:bg-gradient-to-r data-[state=active]:from-amber-500 data-[state=active]:to-orange-500 data-[state=active]:text-white data-[state=active]:shadow-md min-h-[32px] text-xs flex-shrink-0 whitespace-nowrap rounded-md px-3 text-blue-100 hover:text-white transition-all">
+                    <Send className="h-3.5 w-3.5" />
                     {(isFOM || isSupervisor) ? t('mmpPage.tabs.forwardedSites') : t('mmpPage.tabs.forwardedMMPs')}
-                    <Badge className="bg-amber-400/30 text-white border-0">{categorizedMMPs.forwarded.length}</Badge>
+                    <Badge className="bg-amber-400/30 text-white border-0 text-[10px] px-1.5 py-0">{categorizedMMPs.forwarded.length}</Badge>
                   </TabsTrigger>
                 )}
                 {!canClaimSites && (
-                  <TabsTrigger value="verified" className="flex items-center gap-2 data-[state=active]:bg-gradient-to-r data-[state=active]:from-violet-500 data-[state=active]:to-purple-600 data-[state=active]:text-white data-[state=active]:shadow-md min-h-[40px] text-xs sm:text-sm flex-shrink-0 whitespace-nowrap rounded-lg px-4 text-blue-100 hover:text-white transition-all">
-                    <ShieldCheck className="h-4 w-4" />
+                  <TabsTrigger value="verified" className="flex items-center gap-1.5 data-[state=active]:bg-gradient-to-r data-[state=active]:from-violet-500 data-[state=active]:to-purple-600 data-[state=active]:text-white data-[state=active]:shadow-md min-h-[32px] text-xs flex-shrink-0 whitespace-nowrap rounded-md px-3 text-blue-100 hover:text-white transition-all">
+                    <ShieldCheck className="h-3.5 w-3.5" />
                     {t('mmpPage.tabs.verifiedSites')}
-                    <Badge className="bg-violet-400/30 text-white border-0">{totalVerifiedSitesCount}</Badge>
+                    <Badge className="bg-violet-400/30 text-white border-0 text-[10px] px-1.5 py-0">{totalVerifiedSitesCount}</Badge>
                   </TabsTrigger>
                 )}
                 {!canClaimSites && (
-                  <TabsTrigger value="tracker" className="flex items-center gap-2 data-[state=active]:bg-gradient-to-r data-[state=active]:from-cyan-500 data-[state=active]:to-blue-500 data-[state=active]:text-white data-[state=active]:shadow-md min-h-[40px] text-xs sm:text-sm flex-shrink-0 whitespace-nowrap rounded-lg px-4 text-blue-100 hover:text-white transition-all">
-                    <LayoutDashboard className="h-4 w-4" />
+                  <TabsTrigger value="tracker" className="flex items-center gap-1.5 data-[state=active]:bg-gradient-to-r data-[state=active]:from-cyan-500 data-[state=active]:to-blue-500 data-[state=active]:text-white data-[state=active]:shadow-md min-h-[32px] text-xs flex-shrink-0 whitespace-nowrap rounded-md px-3 text-blue-100 hover:text-white transition-all">
+                    <LayoutDashboard className="h-3.5 w-3.5" />
                     {t('mmpPage.tabs.mmpTracker')}
                   </TabsTrigger>
                 )}
@@ -4418,9 +4420,9 @@ const MMP = () => {
             {!canClaimSites && (
               <TabsContent value="new">
                 {(isFOM || isSupervisor || isAdmin || isICT || isDataTeam) && (
-                  <div className="mb-6">
-                    <div className="text-sm font-medium text-muted-foreground mb-3">{t('mmpPage.subcategory')}:</div>
-                    <div className="flex gap-2 flex-wrap">
+                  <div className="mb-3">
+                    <div className="text-xs font-medium text-muted-foreground mb-2">{t('mmpPage.subcategory')}:</div>
+                    <div className="flex gap-1.5 flex-wrap">
                         {(isFOM || isSupervisor) && (
                           <>
                             <Button 
@@ -4732,9 +4734,9 @@ const MMP = () => {
             {!canClaimSites && (
               <TabsContent value="forwarded">
                 {(isAdmin || isICT || isFOM) && (
-                  <div className="mb-6">
-                    <div className="text-sm font-medium text-muted-foreground mb-3">{t('mmpPage.subcategory')}:</div>
-                    <div className="flex gap-2 flex-wrap">
+                  <div className="mb-3">
+                    <div className="text-xs font-medium text-muted-foreground mb-2">{t('mmpPage.subcategory')}:</div>
+                    <div className="flex gap-1.5 flex-wrap">
                         <Button 
                           variant={forwardedSubTab === 'pending' ? 'default' : 'outline'} 
                           size="sm" 
@@ -4783,12 +4785,12 @@ const MMP = () => {
             <TabsContent value="verified">
               {/* Global Site Entry Filters - above subcategory tabs */}
               {(isAdmin || isICT || isFOM || isCoordinator || isSupervisor || isDataTeam) && (
-                <Card className="mb-4">
-                  <CardContent className="py-3">
-                    <div className="flex flex-wrap items-center gap-3">
-                      <div className="flex items-center gap-2">
-                        <Filter className="h-4 w-4 text-muted-foreground" />
-                        <span className="text-sm font-medium text-muted-foreground">Filters:</span>
+                <Card className="mb-3">
+                  <CardContent className="py-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <div className="flex items-center gap-1.5">
+                        <Filter className="h-3.5 w-3.5 text-muted-foreground" />
+                        <span className="text-xs font-medium text-muted-foreground">Filters:</span>
                       </div>
                       
                       {/* MMP File Filter */}
@@ -4910,9 +4912,9 @@ const MMP = () => {
 
               {/* Subcategory tabs - below filters */}
               {(isAdmin || isICT || isFOM || isCoordinator || isDataTeam) && (
-                <div className="mb-6">
-                  <div className="text-sm font-medium text-muted-foreground mb-3">{t('mmpPage.subcategory')}:</div>
-                  <div className="flex gap-2 overflow-x-auto pb-2 flex-wrap">
+                <div className="mb-3">
+                  <div className="text-xs font-medium text-muted-foreground mb-2">{t('mmpPage.subcategory')}:</div>
+                  <div className="flex gap-1.5 overflow-x-auto pb-1 flex-wrap">
                     <Button 
                       variant={verifiedSubTab === 'newSites' ? 'default' : 'outline'} 
                       size="sm" 
