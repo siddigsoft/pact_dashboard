@@ -587,7 +587,7 @@ const documentationSections: Section[] = [
           "  - Rejected: Sites rejected during verification",
           "TRACKER TAB: Coverage analytics and progress tracking",
           "  - Shows completion percentages per hub, state, locality",
-          "  - PDM Sites calculation: Math.ceil(PDM count / 7) for accurate site counting",
+          "  - PDM Sites calculation: Math.floor(PDM count / 7) for accurate site counting (7 complete questionnaires = 1 site visit)",
           "  - Export options for Excel and PDF reports"
         ]
       },
@@ -2834,7 +2834,7 @@ const arabicDocumentationSections: Section[] = [
           "  - مرفوضة: المواقع رُفضت أثناء التحقق",
           "تبويب المتتبع: تحليلات التغطية وتتبع التقدم",
           "  - يعرض نسب الإنجاز لكل محور، ولاية، محلية",
-          "  - حساب مواقع PDM: Math.ceil(عدد PDM / 7) لحساب المواقع بدقة",
+          "  - حساب مواقع PDM: Math.floor(عدد PDM / 7) لحساب المواقع بدقة (7 استبيانات كاملة = زيارة موقع واحدة)",
           "  - خيارات التصدير لتقارير Excel وPDF"
         ]
       },
