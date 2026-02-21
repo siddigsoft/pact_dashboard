@@ -67,8 +67,13 @@ const MMPSiteEntriesTable = ({
   const resolveUserName = (userId: string | undefined): string | null => {
     if (!userId) return null;
     const user = users?.find(u => u.id === userId);
-    return user?.fullName || user?.name || user?.username || null;
+    if (user) return user.fullName || user.name || user.username || null;
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-/i.test(userId);
+    if (!isUuid) return userId;
+    return null;
   };
+
+  const [resolvedNames, setResolvedNames] = useState<Record<string, string>>({});
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
@@ -221,8 +226,8 @@ const MMPSiteEntriesTable = ({
     const createdAt = site.created_at || undefined;
     const updatedAt = site.updated_at || site.last_modified || undefined;
 
-    const acceptedByName = resolveUserName(acceptedBy) || null;
-    const completedByName = resolveUserName(completedBy) || null;
+    const acceptedByName = resolveUserName(acceptedBy) || (acceptedBy ? resolvedNames[acceptedBy] : null) || null;
+    const completedByName = resolveUserName(completedBy) || (completedBy ? resolvedNames[completedBy] : null) || null;
 
     return { 
       hubOffice, state, locality, siteCode, mmpName, siteName, cpName, siteActivity, 
@@ -271,7 +276,39 @@ const MMPSiteEntriesTable = ({
 
   const normalizedEntries = useMemo(() => {
     return siteEntries.map(site => ({ raw: site, norm: normalizeSite(site) }));
-  }, [siteEntries, users]);
+  }, [siteEntries, users, resolvedNames]);
+
+  useEffect(() => {
+    const unresolvedIds = new Set<string>();
+    normalizedEntries.forEach(({ norm }) => {
+      const checkId = (id: string | undefined) => {
+        if (!id) return;
+        if (/^[0-9a-f]{8}-[0-9a-f]{4}-/i.test(id) && !users?.find(u => u.id === id) && !resolvedNames[id]) {
+          unresolvedIds.add(id);
+        }
+      };
+      checkId(norm.acceptedBy);
+      checkId(norm.completedBy);
+    });
+    if (unresolvedIds.size === 0) return;
+    const fetchNames = async () => {
+      const ids = Array.from(unresolvedIds);
+      const { data } = await (await import('@/integrations/supabase/client')).supabase
+        .from('profiles')
+        .select('id, full_name, username')
+        .in('id', ids);
+      if (data && data.length > 0) {
+        const newNames: Record<string, string> = {};
+        data.forEach((p: any) => {
+          if (p.full_name || p.username) newNames[p.id] = p.full_name || p.username;
+        });
+        if (Object.keys(newNames).length > 0) {
+          setResolvedNames(prev => ({ ...prev, ...newNames }));
+        }
+      }
+    };
+    fetchNames();
+  }, [normalizedEntries, users]);
 
   const filterOptions = useMemo(() => {
     const hubs = new Set<string>();
