@@ -2772,9 +2772,13 @@ const CoordinatorSites: React.FC = () => {
                 <div className="flex-1">
                   <h3 className="font-semibold text-lg">{stateData.state}</h3>
                   {stateData.mmpNames?.length > 0 && (
-                    <p className="text-[11px] text-blue-600 dark:text-blue-400 font-medium truncate">
-                      {stateData.mmpNames.join(' · ')}
-                    </p>
+                    <div className="flex flex-wrap gap-1 mt-0.5">
+                      {stateData.mmpNames.map((name: string) => (
+                        <span key={name} className="inline-flex items-center text-[11px] bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 font-medium px-1.5 py-0.5 rounded">
+                          {name}
+                        </span>
+                      ))}
+                    </div>
                   )}
                   <p className="text-sm text-muted-foreground">{stateData.localities.length} localit{stateData.localities.length !== 1 ? 'ies' : 'y'}</p>
                   <p className="text-sm text-muted-foreground">
