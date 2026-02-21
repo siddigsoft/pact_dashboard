@@ -94,6 +94,7 @@ function getApprovalTypeLabel(type: string): string {
 export function exportToCSV(requests: DownPaymentRequest[], filename: string = 'down-payments'): void {
   const headers = [
     'Request ID',
+    'MMP',
     'Requester Name',
     'Site Name',
     'State',
@@ -116,6 +117,7 @@ export function exportToCSV(requests: DownPaymentRequest[], filename: string = '
 
   const rows = requests.map(req => [
     req.id,
+    req.mmpName || 'N/A',
     req.requestedByName || 'Unknown',
     req.siteName,
     req.stateName || 'N/A',
@@ -156,47 +158,139 @@ export function exportToCSV(requests: DownPaymentRequest[], filename: string = '
   link.click();
 }
 
-export function exportToExcel(requests: DownPaymentRequest[], filename: string = 'down-payments'): void {
-  const data = requests.map(req => ({
-    'Request ID': req.id,
-    'Requester Name': req.requestedByName || 'Unknown',
-    'Site Name': req.siteName,
-    'State': req.stateName || 'N/A',
-    'Locality': req.localityName || 'N/A',
-    'Hub': req.hubName || 'N/A',
-    'Activity Type': req.activityType || 'N/A',
-    'CP Name': req.projectName || 'N/A',
-    'Requested At': format(new Date(req.requestedAt), 'yyyy-MM-dd HH:mm'),
-    'Transportation Budget (SDG)': req.totalTransportationBudget,
-    'Requested Amount (SDG)': req.requestedAmount,
-    'Approval Type': req.approvalType ? getApprovalTypeLabel(req.approvalType) : 'Pending',
-    'Approval %': req.approvalPercentage ? `${req.approvalPercentage}%` : (req.approvalType === 'full' ? '100%' : 'N/A'),
-    'Approved Amount (SDG)': req.approvedAmount || 0,
-    'Paid Amount (SDG)': req.totalPaidAmount,
-    'Remaining (SDG)': req.remainingAmount,
-    'Status': getStatusLabel(req.status),
-    'Payment Type': req.paymentType === 'full_advance' ? 'Full Advance' : 'Installments',
-    'Supervisor Status': req.supervisorStatus ? getStatusLabel(req.supervisorStatus) : 'Pending',
-    'Supervisor Approved By': req.supervisorApprovedByName || req.supervisorApprovedBy || 'N/A',
-    'Supervisor Approved At': req.supervisorApprovedAt ? format(new Date(req.supervisorApprovedAt), 'yyyy-MM-dd HH:mm') : 'N/A',
-    'Supervisor Notes': req.supervisorNotes || '',
-    'Supervisor Rejection Reason': req.supervisorRejectionReason || '',
-    'Admin Status': req.adminStatus ? getStatusLabel(req.adminStatus) : 'Pending',
-    'Admin Processed By': req.adminProcessedByName || req.adminProcessedBy || 'N/A',
-    'Admin Processed At': req.adminProcessedAt ? format(new Date(req.adminProcessedAt), 'yyyy-MM-dd HH:mm') : 'N/A',
-    'Admin Notes': req.adminNotes || '',
-    'Admin Rejection Reason': req.adminRejectionReason || '',
-    'Justification': req.justification || '',
-    'Created At': format(new Date(req.createdAt), 'yyyy-MM-dd HH:mm'),
-    'Updated At': format(new Date(req.updatedAt), 'yyyy-MM-dd HH:mm'),
-  }));
-
-  const ws = XLSX.utils.json_to_sheet(data);
+export function exportToExcel(requests: DownPaymentRequest[], filename: string = 'down-payments', tabLabel: string = 'All'): void {
   const wb = XLSX.utils.book_new();
+
+  const totalRequested = requests.reduce((s, r) => s + r.requestedAmount, 0);
+  const totalApproved = requests.reduce((s, r) => s + (r.approvedAmount || 0), 0);
+  const totalPaid = requests.reduce((s, r) => s + r.totalPaidAmount, 0);
+  const totalRemaining = requests.reduce((s, r) => s + r.remainingAmount, 0);
+
+  const titleRows: (string | number)[][] = [
+    ['PACT Command Center - Down-Payment Requests Report'],
+    [`Tab: ${tabLabel} | Generated: ${format(new Date(), 'MMMM d, yyyy h:mm a')} | Total Requests: ${requests.length}`],
+    [`Total Requested: ${formatCurrency(totalRequested)} | Total Approved: ${formatCurrency(totalApproved)} | Total Paid: ${formatCurrency(totalPaid)} | Remaining: ${formatCurrency(totalRemaining)}`],
+    [],
+  ];
+
+  const headers = [
+    '#', 'Request ID', 'MMP', 'Requester Name', 'Site Name', 'State', 'Locality', 'Hub',
+    'Activity Type', 'CP Name', 'Requested At', 'Transportation Budget (SDG)',
+    'Requested Amount (SDG)', 'Approval Type', 'Approval %', 'Approved Amount (SDG)',
+    'Paid Amount (SDG)', 'Remaining (SDG)', 'Status', 'Payment Type',
+    'Supervisor Status', 'Supervisor Approved By', 'Supervisor Approved At',
+    'Supervisor Notes', 'Admin Status', 'Admin Processed By', 'Admin Processed At',
+    'Admin Notes', 'Justification',
+  ];
+
+  const dataRows = requests.map((req, idx) => [
+    idx + 1,
+    req.id,
+    req.mmpName || 'N/A',
+    req.requestedByName || 'Unknown',
+    req.siteName,
+    req.stateName || 'N/A',
+    req.localityName || 'N/A',
+    req.hubName || 'N/A',
+    req.activityType || 'N/A',
+    req.projectName || 'N/A',
+    format(new Date(req.requestedAt), 'yyyy-MM-dd HH:mm'),
+    req.totalTransportationBudget,
+    req.requestedAmount,
+    req.approvalType ? getApprovalTypeLabel(req.approvalType) : 'Pending',
+    req.approvalPercentage ? `${req.approvalPercentage}%` : (req.approvalType === 'full' ? '100%' : 'N/A'),
+    req.approvedAmount || 0,
+    req.totalPaidAmount,
+    req.remainingAmount,
+    getStatusLabel(req.status),
+    req.paymentType === 'full_advance' ? 'Full Advance' : 'Installments',
+    req.supervisorStatus ? getStatusLabel(req.supervisorStatus) : 'Pending',
+    req.supervisorApprovedByName || req.supervisorApprovedBy || 'N/A',
+    req.supervisorApprovedAt ? format(new Date(req.supervisorApprovedAt), 'yyyy-MM-dd HH:mm') : 'N/A',
+    req.supervisorNotes || '',
+    req.adminStatus ? getStatusLabel(req.adminStatus) : 'Pending',
+    req.adminProcessedByName || req.adminProcessedBy || 'N/A',
+    req.adminProcessedAt ? format(new Date(req.adminProcessedAt), 'yyyy-MM-dd HH:mm') : 'N/A',
+    req.adminNotes || '',
+    req.justification || '',
+  ]);
+
+  const totalBudget = requests.reduce((s, r) => s + r.totalTransportationBudget, 0);
+  const emptyRow: string[] = Array(headers.length).fill('');
+  const totalsRow = [...emptyRow];
+  totalsRow[9] = 'TOTALS:';
+  totalsRow[11] = totalBudget as any;
+  totalsRow[12] = totalRequested as any;
+  totalsRow[15] = totalApproved as any;
+  totalsRow[16] = totalPaid as any;
+  totalsRow[17] = totalRemaining as any;
+
+  const allRows = [...titleRows, headers, ...dataRows, emptyRow, totalsRow];
+  const ws = XLSX.utils.aoa_to_sheet(allRows);
+
+  const numCols = headers.length;
+
+  ws['!merges'] = [
+    { s: { r: 0, c: 0 }, e: { r: 0, c: numCols - 1 } },
+    { s: { r: 1, c: 0 }, e: { r: 1, c: numCols - 1 } },
+    { s: { r: 2, c: 0 }, e: { r: 2, c: numCols - 1 } },
+  ];
+
+  const colWidthMap: Record<number, number> = {
+    0: 5, 1: 14, 2: 24, 3: 22, 4: 28, 5: 16, 6: 16, 7: 16,
+    8: 16, 9: 16, 10: 18, 11: 20, 12: 20, 13: 18, 14: 10, 15: 20,
+    16: 16, 17: 16, 18: 20, 19: 15, 20: 18, 21: 22, 22: 18,
+    23: 22, 24: 18, 25: 22, 26: 18, 27: 22, 28: 28,
+  };
+  ws['!cols'] = Array.from({ length: numCols }, (_, i) => ({ wch: colWidthMap[i] || 16 }));
+
   XLSX.utils.book_append_sheet(wb, ws, 'Down Payments');
 
-  const colWidths = Object.keys(data[0] || {}).map(() => ({ wch: 18 }));
-  ws['!cols'] = colWidths;
+  const summaryData = [
+    ['Summary Statistics'],
+    [],
+    ['Category', 'Count', 'Amount (SDG)'],
+    ['Total Requests', requests.length, totalRequested],
+    ['Pending Supervisor', requests.filter(r => r.status === 'pending_supervisor').length, requests.filter(r => r.status === 'pending_supervisor').reduce((s, r) => s + r.requestedAmount, 0)],
+    ['Pending Admin', requests.filter(r => r.status === 'pending_admin').length, requests.filter(r => r.status === 'pending_admin').reduce((s, r) => s + r.requestedAmount, 0)],
+    ['Approved', requests.filter(r => r.status === 'approved').length, requests.filter(r => r.status === 'approved').reduce((s, r) => s + (r.approvedAmount || r.requestedAmount), 0)],
+    ['Partially Paid', requests.filter(r => r.status === 'partially_paid').length, requests.filter(r => r.status === 'partially_paid').reduce((s, r) => s + r.totalPaidAmount, 0)],
+    ['Fully Paid', requests.filter(r => r.status === 'fully_paid').length, requests.filter(r => r.status === 'fully_paid').reduce((s, r) => s + r.totalPaidAmount, 0)],
+    ['Rejected', requests.filter(r => r.status === 'rejected').length, ''],
+    ['Cancelled', requests.filter(r => r.status === 'cancelled').length, ''],
+    [],
+    ['', 'Total Approved', totalApproved],
+    ['', 'Total Paid', totalPaid],
+    ['', 'Remaining', totalRemaining],
+  ];
+
+  const summaryWs = XLSX.utils.aoa_to_sheet(summaryData);
+  summaryWs['!cols'] = [{ wch: 20 }, { wch: 18 }, { wch: 22 }];
+  summaryWs['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 2 } }];
+  XLSX.utils.book_append_sheet(wb, summaryWs, 'Summary');
+
+  const hubGroups = new Map<string, { count: number; requested: number; approved: number; paid: number }>();
+  requests.forEach(r => {
+    const hub = r.hubName || 'Unknown';
+    const existing = hubGroups.get(hub) || { count: 0, requested: 0, approved: 0, paid: 0 };
+    existing.count++;
+    existing.requested += r.requestedAmount;
+    existing.approved += r.approvedAmount || 0;
+    existing.paid += r.totalPaidAmount;
+    hubGroups.set(hub, existing);
+  });
+  const hubData: (string | number)[][] = [
+    ['Breakdown by Hub'],
+    [],
+    ['Hub', 'Requests', 'Requested (SDG)', 'Approved (SDG)', 'Paid (SDG)'],
+  ];
+  hubGroups.forEach((v, k) => {
+    hubData.push([k, v.count, v.requested, v.approved, v.paid]);
+  });
+  const hubWs = XLSX.utils.aoa_to_sheet(hubData);
+  hubWs['!cols'] = [{ wch: 22 }, { wch: 12 }, { wch: 20 }, { wch: 20 }, { wch: 20 }];
+  hubWs['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 4 } }];
+  XLSX.utils.book_append_sheet(wb, hubWs, 'By Hub');
 
   XLSX.writeFile(wb, `${filename}_${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
 }
@@ -240,7 +334,9 @@ export function exportToPDF(
 
   const tableData = requests.map(req => [
     req.siteName.substring(0, 25) + (req.siteName.length > 25 ? '...' : ''),
+    req.mmpName ? (req.mmpName.substring(0, 20) + (req.mmpName.length > 20 ? '...' : '')) : '-',
     req.hubName || '-',
+    req.stateName || '-',
     formatCurrency(req.requestedAmount),
     formatCurrency(req.approvedAmount || req.requestedAmount),
     formatCurrency(req.totalPaidAmount),
@@ -249,20 +345,22 @@ export function exportToPDF(
   ]);
 
   autoTable(doc, {
-    head: [['Site', 'Hub', 'Requested', 'Approved', 'Paid', 'Status', 'Date']],
+    head: [['Site', 'MMP', 'Hub', 'State', 'Requested', 'Approved', 'Paid', 'Status', 'Date']],
     body: tableData,
     startY: summaryY + 12,
-    styles: { fontSize: 8, cellPadding: 2 },
+    styles: { fontSize: 7, cellPadding: 2 },
     headStyles: { fillColor: [59, 130, 246], textColor: [255, 255, 255], fontStyle: 'bold' },
     alternateRowStyles: { fillColor: [245, 247, 250] },
     columnStyles: {
-      0: { cellWidth: 50 },
-      1: { cellWidth: 30 },
-      2: { cellWidth: 32, halign: 'right' },
-      3: { cellWidth: 32, halign: 'right' },
-      4: { cellWidth: 32, halign: 'right' },
-      5: { cellWidth: 35 },
-      6: { cellWidth: 28 },
+      0: { cellWidth: 42 },
+      1: { cellWidth: 35 },
+      2: { cellWidth: 25 },
+      3: { cellWidth: 25 },
+      4: { cellWidth: 28, halign: 'right' },
+      5: { cellWidth: 28, halign: 'right' },
+      6: { cellWidth: 28, halign: 'right' },
+      7: { cellWidth: 30 },
+      8: { cellWidth: 24 },
     },
   });
 

@@ -481,18 +481,33 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
     setFilters({});
   };
 
+  const getActiveTabData = (): { data: DownPaymentRequest[]; tabLabel: string } => {
+    switch (activeTab) {
+      case 'pending':
+        return { data: pendingRequests, tabLabel: 'Pending' };
+      case 'processing':
+        return { data: processingRequests, tabLabel: 'Processing' };
+      case 'completed':
+        return { data: completedRequests, tabLabel: 'Completed' };
+      case 'all':
+      default:
+        return { data: filteredRequests, tabLabel: 'All' };
+    }
+  };
+
   const handleExport = (type: 'csv' | 'excel' | 'pdf') => {
-    const data = filteredRequests;
+    const { data, tabLabel } = getActiveTabData();
+    const suffix = `down-payments-${tabLabel.toLowerCase()}`;
     if (type === 'csv') {
-      exportToCSV(data, 'down-payments');
+      exportToCSV(data, suffix);
     } else if (type === 'excel') {
-      exportToExcel(data, 'down-payments');
+      exportToExcel(data, suffix, tabLabel);
     } else {
       exportToPDF(data, {
         filters,
         includeAuditLog: true,
         includeSignature: false,
-        reportTitle: 'Down-Payment Requests Report',
+        reportTitle: `Down-Payment Requests Report - ${tabLabel}`,
       });
     }
   };
@@ -539,7 +554,7 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
   };
 
   const handleStatementExport = async (exportFormat: 'pdf' | 'excel') => {
-    const dataToExport = filteredRequests;
+    const { data: dataToExport } = getActiveTabData();
     if (dataToExport.length === 0) {
       toast({ title: 'No Data', description: 'No requests match the current filters.', variant: 'destructive' });
       return;
