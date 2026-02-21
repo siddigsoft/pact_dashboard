@@ -902,11 +902,13 @@ const CoordinatorSites: React.FC = () => {
           totalSites: 0,
           hasStatePermit: false,
           statePermitUploadedAt: null,
-          statePermitVerified: false
+          statePermitVerified: false,
+          mmpNames: new Set<string>()
         });
       }
       
       const stateData = statesMap.get(stateKey);
+      if (site.mmp_name) stateData.mmpNames.add(site.mmp_name);
       const localityKey = site.locality;
       
       if (!stateData.localities.has(localityKey)) {
@@ -955,7 +957,8 @@ const CoordinatorSites: React.FC = () => {
         hasStatePermit: hasStatePermitForTab,
         statePermitUploadedAt: null,
         statePermitVerified: false,
-        statePermitRequiredCount: sitesNeedingStatePermitInState.length
+        statePermitRequiredCount: sitesNeedingStatePermitInState.length,
+        mmpNames: Array.from(stateData.mmpNames || [])
       };
     });
 
@@ -2768,6 +2771,11 @@ const CoordinatorSites: React.FC = () => {
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                 <div className="flex-1">
                   <h3 className="font-semibold text-lg">{stateData.state}</h3>
+                  {stateData.mmpNames?.length > 0 && (
+                    <p className="text-[11px] text-blue-600 dark:text-blue-400 font-medium truncate">
+                      {stateData.mmpNames.join(' · ')}
+                    </p>
+                  )}
                   <p className="text-sm text-muted-foreground">{stateData.localities.length} localit{stateData.localities.length !== 1 ? 'ies' : 'y'}</p>
                   <p className="text-sm text-muted-foreground">
                     {stateData.hasStatePermit
