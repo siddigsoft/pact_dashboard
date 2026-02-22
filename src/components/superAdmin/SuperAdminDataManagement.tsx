@@ -257,6 +257,7 @@ export function SuperAdminDataManagement() {
   const [selectedDispatchedSite, setSelectedDispatchedSite] = useState<DispatchedSiteData | null>(null);
   const [showReclaimSiteDialog, setShowReclaimSiteDialog] = useState(false);
   const [showReturnToApprovedDialog, setShowReturnToApprovedDialog] = useState(false);
+  const [showReturnToFOMDialog, setShowReturnToFOMDialog] = useState(false);
   const [selectedWallet, setSelectedWallet] = useState<WalletData | null>(null);
   const [selectedTransaction, setSelectedTransaction] = useState<TransactionData | null>(null);
   const [selectedMMP, setSelectedMMP] = useState<MMPData | null>(null);
@@ -639,6 +640,54 @@ export function SuperAdminDataManagement() {
       loadDispatchedSites();
     } catch (error) {
       console.error('Failed to return site to approved:', error);
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  const handleReturnToFOM = async () => {
+    if (!selectedDispatchedSite || !currentUser || !reason.trim()) return;
+
+    setProcessing(true);
+    try {
+      const { error } = await supabase
+        .from('mmp_site_entries')
+        .update({
+          status: 'returned_to_fom',
+          dispatched_by: null,
+          dispatched_at: null,
+          cost: null,
+          enumerator_fee: null,
+          transport_fee: null,
+          accepted_by: null,
+          accepted_at: null,
+        })
+        .eq('id', selectedDispatchedSite.id);
+
+      if (error) throw error;
+
+      await supabase.from('super_admin_audit_logs').insert({
+        action_type: 'return_to_fom',
+        entity_type: 'mmp_site_entry',
+        entity_id: selectedDispatchedSite.id,
+        performed_by: currentUser.id,
+        performed_by_name: currentUser.name || currentUser.email || 'Super Admin',
+        performed_by_role: currentUser.role || 'superadmin',
+        reason: reason.trim(),
+        details: {
+          site_name: selectedDispatchedSite.site_name,
+          site_code: selectedDispatchedSite.site_code,
+          previous_status: 'dispatched',
+          new_status: 'returned_to_fom',
+        },
+      });
+
+      setShowReturnToFOMDialog(false);
+      setSelectedDispatchedSite(null);
+      setReason('');
+      loadDispatchedSites();
+    } catch (error) {
+      console.error('Failed to return site to FOM:', error);
     } finally {
       setProcessing(false);
     }
@@ -1759,19 +1808,34 @@ export function SuperAdminDataManagement() {
                             {site.dispatched_at ? format(new Date(site.dispatched_at), 'MMM d, yyyy h:mm a') : 'N/A'}
                           </TableCell>
                           <TableCell className="text-right">
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="gap-1.5"
-                              onClick={() => {
-                                setSelectedDispatchedSite(site);
-                                setShowReturnToApprovedDialog(true);
-                              }}
-                              data-testid={`button-return-to-approved-${site.id}`}
-                            >
-                              <Undo2 className="h-3.5 w-3.5" />
-                              Return to New Sites
-                            </Button>
+                            <div className="flex items-center justify-end gap-2">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="gap-1.5"
+                                onClick={() => {
+                                  setSelectedDispatchedSite(site);
+                                  setShowReturnToApprovedDialog(true);
+                                }}
+                                data-testid={`button-return-to-approved-${site.id}`}
+                              >
+                                <Undo2 className="h-3.5 w-3.5" />
+                                Return to New Sites
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="gap-1.5 text-orange-600 border-orange-300 hover:bg-orange-50 dark:text-orange-400 dark:border-orange-700 dark:hover:bg-orange-950"
+                                onClick={() => {
+                                  setSelectedDispatchedSite(site);
+                                  setShowReturnToFOMDialog(true);
+                                }}
+                                data-testid={`button-return-to-fom-${site.id}`}
+                              >
+                                <Undo2 className="h-3.5 w-3.5" />
+                                Return to FOM
+                              </Button>
+                            </div>
                           </TableCell>
                         </TableRow>
                       ))}
@@ -2035,6 +2099,57 @@ export function SuperAdminDataManagement() {
             >
               {processing ? <RefreshCw className="h-4 w-4 mr-2 animate-spin" /> : <Undo2 className="h-4 w-4 mr-2" />}
               {processing ? 'Returning...' : 'Return to New Sites'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showReturnToFOMDialog} onOpenChange={setShowReturnToFOMDialog}>
+        <DialogContent className="max-w-md" data-testid="dialog-return-to-fom">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Undo2 className="h-5 w-5 text-orange-600" />
+              Return Site to FOM
+            </DialogTitle>
+            <DialogDescription>
+              This will return the site to the Field Operations Manager. The site status will be set to "returned_to_fom" and all dispatch/cost fields will be cleared.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-2">
+            <div className="rounded-lg bg-muted/50 p-3 space-y-1">
+              <p className="font-semibold">{selectedDispatchedSite?.site_name}</p>
+              <p className="text-sm text-muted-foreground">{selectedDispatchedSite?.site_code}</p>
+              <p className="text-sm">
+                <span className="text-muted-foreground">Location:</span> {selectedDispatchedSite?.state}, {selectedDispatchedSite?.locality}
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Reason for returning to FOM <span className="text-red-500">*</span></label>
+              <textarea
+                className="w-full min-h-[80px] rounded-md border border-input bg-background px-3 py-2 text-sm"
+                placeholder="Enter reason..."
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                data-testid="textarea-return-to-fom-reason"
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowReturnToFOMDialog(false)}>
+              Cancel
+            </Button>
+            <Button
+              variant="default"
+              className="bg-orange-600 hover:bg-orange-700"
+              onClick={handleReturnToFOM}
+              disabled={processing || !reason.trim()}
+              data-testid="button-confirm-return-to-fom"
+            >
+              {processing ? <RefreshCw className="h-4 w-4 mr-2 animate-spin" /> : <Undo2 className="h-4 w-4 mr-2" />}
+              {processing ? 'Returning...' : 'Return to FOM'}
             </Button>
           </DialogFooter>
         </DialogContent>
