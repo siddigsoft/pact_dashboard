@@ -3176,21 +3176,6 @@ const CoordinatorSites: React.FC = () => {
     const firstSite = firstLocality?.sites?.[0];
 
     const handleStateCardClick = () => {
-      // Check if state permits are uploaded by FOM
-      if (!stateData.hasStatePermit) {
-        // Open permit verification questions for state
-        if (firstSite) {
-          setStateForPermitVerification({
-            state: stateData.state,
-            locality: firstSite.locality || firstLocality?.locality || '',
-            mmpFileId: firstSite.mmp_file_id || ''
-          });
-          setPermitVerificationDialogOpen(true);
-        }
-        return;
-      }
-      
-      // If state permits exist, expand to show localities
       setExpandedStates(prev => {
         const newSet = new Set(prev);
         if (newSet.has(stateData.state)) {
@@ -3213,7 +3198,10 @@ const CoordinatorSites: React.FC = () => {
             <div className="flex-1">
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                 <div className="flex-1">
-                  <h3 className="font-semibold text-lg">{stateData.state}</h3>
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-semibold text-lg">{stateData.state}</h3>
+                    {isExpanded ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
+                  </div>
                   {stateData.mmpNames?.length > 0 && (
                     <div className="flex flex-wrap gap-1 mt-0.5">
                       {stateData.mmpNames.map((name: string) => (
@@ -3288,42 +3276,85 @@ const CoordinatorSites: React.FC = () => {
                 </div>
               </div>
               
-              {/* Show localities when state is expanded */}
-              {isExpanded && stateData.hasStatePermit && (
+              {/* Show localities and sites when state is expanded */}
+              {isExpanded && (
                 <div className="mt-4">
                   <div className="text-sm text-muted-foreground mb-2">
                     Localities in this state:
                   </div>
-                  <div className="space-y-2">
-                    {stateData.localities.map((locality: any) => (
-                      <div 
-                        key={`${locality.state}-${locality.locality}`}
-                        className="flex flex-col sm:flex-row sm:items-center sm:justify-between p-3 bg-gray-50 rounded cursor-pointer hover:bg-gray-100 min-h-[44px]"
-                        onClick={(e) => {
-                          e.stopPropagation(); // Prevent state card click
-                          setSelectedLocalityForWorkflow(locality);
-                          setPermitQuestionDialogOpen(true);
-                        }}
-                      >
-                        <div className="flex-1 mb-2 sm:mb-0">
-                          <span className="font-medium">{locality.locality}</span>
-                          <span className="text-muted-foreground ml-2">({locality.sites.length} sites)</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          {locality.hasPermit ? (
-                            <Badge variant="default" className="bg-green-600 text-xs">
-                              <CheckCircle className="h-2 w-2 mr-1" />
-                              Local Permit
-                            </Badge>
-                          ) : (
-                            <Badge variant="destructive" className="text-xs">
-                              <AlertTriangle className="h-2 w-2 mr-1" />
-                              Local Permit Required
-                            </Badge>
+                  <div className="space-y-3">
+                    {stateData.localities.map((locality: any) => {
+                      const localityKey = `state-${stateData.state}-${locality.locality}`;
+                      const isLocalityExpanded = expandedLocalities.has(localityKey);
+                      return (
+                        <div key={`${locality.state}-${locality.locality}`} className="border rounded-lg overflow-hidden">
+                          <div 
+                            className="flex flex-col sm:flex-row sm:items-center sm:justify-between p-3 bg-gray-50 dark:bg-gray-800/50 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 min-h-[44px]"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setExpandedLocalities(prev => {
+                                const newSet = new Set(prev);
+                                if (newSet.has(localityKey)) newSet.delete(localityKey);
+                                else newSet.add(localityKey);
+                                return newSet;
+                              });
+                            }}
+                          >
+                            <div className="flex items-center gap-2 flex-1 mb-2 sm:mb-0">
+                              {isLocalityExpanded ? <ChevronUp className="h-3 w-3 text-muted-foreground" /> : <ChevronDown className="h-3 w-3 text-muted-foreground" />}
+                              <span className="font-medium">{locality.locality}</span>
+                              <span className="text-muted-foreground text-sm">({locality.sites.length} site{locality.sites.length !== 1 ? 's' : ''})</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              {locality.hasPermit ? (
+                                <Badge variant="default" className="bg-green-600 text-xs">
+                                  <CheckCircle className="h-2 w-2 mr-1" />
+                                  Local Permit
+                                </Badge>
+                              ) : (
+                                <Badge variant="destructive" className="text-xs">
+                                  <AlertTriangle className="h-2 w-2 mr-1" />
+                                  Local Permit Required
+                                </Badge>
+                              )}
+                            </div>
+                          </div>
+                          {isLocalityExpanded && locality.sites.length > 0 && (
+                            <div className="p-2 space-y-1 bg-white dark:bg-gray-900">
+                              {locality.sites.map((site: SiteVisit) => (
+                                <div key={site.id} className="flex flex-col sm:flex-row sm:items-center sm:justify-between p-2.5 rounded bg-gray-50 dark:bg-gray-800/40 hover:bg-gray-100 dark:hover:bg-gray-800 text-sm">
+                                  <div className="flex-1 mb-1 sm:mb-0">
+                                    <span className="font-medium">{site.site_name}</span>
+                                    <span className="text-muted-foreground ml-1.5 text-xs">({site.site_code})</span>
+                                    {site.hub_office && <span className="text-muted-foreground ml-1.5 text-xs">• {site.hub_office}</span>}
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <Badge variant="secondary" className="text-xs capitalize">
+                                      {(site.status || 'pending').replace(/_/g, ' ')}
+                                    </Badge>
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      className="text-xs h-7 text-orange-600 hover:text-orange-700 hover:bg-orange-50 dark:text-orange-400 dark:hover:bg-orange-950"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setReturnSiteTargetId(site.id);
+                                        setReturnSiteReason('');
+                                        setReturnSiteDialogOpen(true);
+                                      }}
+                                      data-testid={`button-return-to-fom-state-site-${site.id}`}
+                                    >
+                                      <ArrowLeft className="h-3 w-3 mr-1" />
+                                      Return
+                                    </Button>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
                           )}
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
               )}
