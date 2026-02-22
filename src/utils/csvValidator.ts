@@ -90,15 +90,22 @@ export const validateCSV = async (
       const requiredSet = new Set(REQUIRED_HEADERS.map(h => norm(h)));
 
       const scoreSheet = (ws: XLSX.WorkSheet): number => {
-        const hdr = (XLSX.utils.sheet_to_json(ws, { header: 1, range: 'A1:ZZ1' })[0] as any[] | undefined) || [];
-        const normalized = hdr.map(h => norm(String(h)));
-        // score by number of required headers present
-        return normalized.reduce((acc, h) => acc + (requiredSet.has(h) ? 1 : 0), 0);
+        const wsRange = XLSX.utils.decode_range(ws['!ref'] || 'A1');
+        let maxScore = 0;
+        const scanRows = Math.min(wsRange.e.r, 20);
+        for (let r = 0; r <= scanRows; r++) {
+          const hdr = (XLSX.utils.sheet_to_json(ws, { header: 1, range: `A${r + 1}:ZZ${r + 1}` })[0] as any[] | undefined) || [];
+          const normalized = hdr.map(h => norm(String(h)));
+          const s = normalized.reduce((acc, h) => acc + (requiredSet.has(h) ? 1 : 0), 0);
+          if (s > maxScore) maxScore = s;
+        }
+        return maxScore;
       };
 
-      let bestSheetName = wb.SheetNames[0];
+      let bestSheetName = wb.SheetNames[wb.SheetNames.length - 1];
       let bestScore = -1;
-      for (const name of wb.SheetNames) {
+      for (let si = wb.SheetNames.length - 1; si >= 0; si--) {
+        const name = wb.SheetNames[si];
         const wsCandidate = wb.Sheets[name];
         const s = scoreSheet(wsCandidate);
         if (s > bestScore) {
