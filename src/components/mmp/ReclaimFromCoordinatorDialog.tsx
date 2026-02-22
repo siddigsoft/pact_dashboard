@@ -244,35 +244,31 @@ export const ReclaimFromCoordinatorDialog: React.FC<ReclaimFromCoordinatorDialog
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="sm:max-w-[520px] max-h-[90vh] flex flex-col" data-testid="dialog-reclaim-coordinator">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <RotateCcw className="h-5 w-5 text-orange-500" />
+      <DialogContent className="sm:max-w-[500px] p-0 gap-0" data-testid="dialog-reclaim-coordinator">
+        <DialogHeader className="px-5 pt-4 pb-2">
+          <DialogTitle className="flex items-center gap-2 text-base">
+            <RotateCcw className="h-4 w-4 text-orange-500" />
             Reclaim MMP from Coordinators
           </DialogTitle>
-          <DialogDescription>
-            Return sites back to FOM management. You can reclaim from a specific coordinator or all at once.
+          <DialogDescription className="text-xs">
+            Return sites back to FOM management.
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-3 py-1 overflow-y-auto flex-1 pr-1">
-          <div className="flex items-center gap-2 p-3 rounded-md bg-muted/50">
+        <div className="space-y-3 px-5 py-2 overflow-y-auto" style={{ maxHeight: 'calc(80vh - 120px)' }}>
+          <div className="flex items-center gap-2 p-2 rounded-md bg-muted/50">
             <FileText className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-            <div className="min-w-0">
-              <p className="text-sm font-medium truncate">{mmpName}</p>
-              <div className="flex items-center gap-2 mt-1 flex-wrap">
-                <Badge variant="secondary">
-                  <MapPin className="h-3 w-3 mr-1" />
-                  {affectedSiteCount} site(s) affected
-                </Badge>
-              </div>
-            </div>
+            <p className="text-sm font-medium truncate">{mmpName}</p>
+            <Badge variant="secondary" className="ml-auto text-xs flex-shrink-0">
+              <MapPin className="h-3 w-3 mr-1" />
+              {affectedSiteCount} sites
+            </Badge>
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="reclaim-coordinator">Reclaim From <span className="text-destructive">*</span></Label>
+          <div className="space-y-1">
+            <Label htmlFor="reclaim-coordinator" className="text-xs">Reclaim From <span className="text-destructive">*</span></Label>
             <Select value={selectedCoordinator} onValueChange={(v) => { setSelectedCoordinator(v); setConfirmed(false); }}>
-              <SelectTrigger id="reclaim-coordinator" data-testid="select-reclaim-coordinator">
+              <SelectTrigger id="reclaim-coordinator" className="h-9" data-testid="select-reclaim-coordinator">
                 <SelectValue placeholder="Select coordinator..." />
               </SelectTrigger>
               <SelectContent>
@@ -286,7 +282,7 @@ export const ReclaimFromCoordinatorDialog: React.FC<ReclaimFromCoordinatorDialog
                   <SelectItem value="_loading" disabled>
                     <span className="flex items-center gap-2">
                       <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                      Loading coordinators...
+                      Loading...
                     </span>
                   </SelectItem>
                 ) : (
@@ -303,70 +299,72 @@ export const ReclaimFromCoordinatorDialog: React.FC<ReclaimFromCoordinatorDialog
             </Select>
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="reclaim-reason">Reason for Reclaim <span className="text-destructive">*</span></Label>
+          <div className="space-y-1">
+            <Label htmlFor="reclaim-reason" className="text-xs">Reason for Reclaim <span className="text-destructive">*</span></Label>
             <Select value={selectedReason} onValueChange={setSelectedReason}>
-              <SelectTrigger id="reclaim-reason" data-testid="select-reclaim-reason">
+              <SelectTrigger id="reclaim-reason" className="h-9" data-testid="select-reclaim-reason">
                 <SelectValue placeholder="Select a reason..." />
               </SelectTrigger>
               <SelectContent>
                 {RECLAIM_REASONS.map((reason) => (
                   <SelectItem key={reason.value} value={reason.value} data-testid={`option-reason-${reason.value}`}>
                     <span>{reason.labelEn}</span>
-                    <span className="text-muted-foreground ml-2 text-xs">({reason.labelAr})</span>
+                    <span className="text-muted-foreground ml-1 text-xs">({reason.labelAr})</span>
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="additional-notes">Additional Notes (Optional)</Label>
+          <div className="space-y-1">
+            <Label htmlFor="additional-notes" className="text-xs">Additional Notes (Optional)</Label>
             <Textarea
               id="additional-notes"
-              placeholder="Add any additional details about why this MMP is being reclaimed..."
+              placeholder="Additional details..."
               value={additionalNotes}
               onChange={(e) => setAdditionalNotes(e.target.value)}
-              className="resize-none"
+              className="resize-none text-sm"
               rows={2}
               data-testid="textarea-reclaim-notes"
             />
           </div>
 
-          <Alert variant="destructive" className="border-orange-200 bg-orange-50 dark:bg-orange-950/30 dark:border-orange-800">
-            <AlertTriangle className="h-4 w-4 text-orange-500" />
-            <AlertDescription className="text-orange-800 dark:text-orange-200">
-              This action will:
-              <ul className="list-disc ml-4 mt-1 space-y-0.5 text-sm">
-                {isReclaimAll ? (
-                  <>
-                    <li>Return the MMP status back to "Forwarded to FOM"</li>
-                    <li>Reset all coordinator site assignments to "Verified"</li>
-                    <li>Notify all relevant coordinators and FOMs</li>
-                  </>
-                ) : (
-                  <>
-                    <li>Reset {selectedCoordInfo?.name}'s {selectedCoordInfo?.siteCount || 0} site assignment(s) to "Verified"</li>
-                    <li>Other coordinators' assignments will remain unchanged</li>
-                    <li>Notify the affected coordinator and FOMs</li>
-                  </>
-                )}
-                <li>Record this action in the audit log</li>
-              </ul>
-            </AlertDescription>
-          </Alert>
+          <div className="rounded-md border border-orange-200 bg-orange-50 dark:bg-orange-950/30 dark:border-orange-800 p-2.5 text-xs text-orange-800 dark:text-orange-200">
+            <div className="flex gap-2">
+              <AlertTriangle className="h-3.5 w-3.5 text-orange-500 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="font-medium mb-1">This action will:</p>
+                <ul className="list-disc ml-3 space-y-0">
+                  {isReclaimAll ? (
+                    <>
+                      <li>Return MMP status to "Forwarded to FOM"</li>
+                      <li>Reset all coordinator assignments to "Verified"</li>
+                      <li>Notify coordinators and FOMs</li>
+                    </>
+                  ) : (
+                    <>
+                      <li>Reset {selectedCoordInfo?.name}'s {selectedCoordInfo?.siteCount || 0} assignment(s) to "Verified"</li>
+                      <li>Other coordinators unchanged</li>
+                      <li>Notify affected coordinator and FOMs</li>
+                    </>
+                  )}
+                  <li>Record in audit log</li>
+                </ul>
+              </div>
+            </div>
+          </div>
 
           {selectedReason && (
-            <div className="flex items-center gap-2">
+            <div className="flex items-start gap-2">
               <input
                 type="checkbox"
                 id="confirm-reclaim"
                 checked={confirmed}
                 onChange={(e) => setConfirmed(e.target.checked)}
-                className="h-4 w-4 rounded border-gray-300"
+                className="h-4 w-4 rounded border-gray-300 mt-0.5"
                 data-testid="checkbox-confirm-reclaim"
               />
-              <Label htmlFor="confirm-reclaim" className="text-sm cursor-pointer">
+              <Label htmlFor="confirm-reclaim" className="text-xs cursor-pointer leading-tight">
                 {isReclaimAll
                   ? 'I confirm I want to reclaim this MMP from all coordinators'
                   : `I confirm I want to reclaim sites from ${selectedCoordInfo?.name || 'this coordinator'}`
@@ -376,11 +374,12 @@ export const ReclaimFromCoordinatorDialog: React.FC<ReclaimFromCoordinatorDialog
           )}
         </div>
 
-        <DialogFooter className="gap-2 flex-shrink-0">
-          <Button variant="outline" onClick={handleClose} disabled={loading} data-testid="button-cancel-reclaim">
+        <DialogFooter className="gap-2 px-5 py-3 border-t">
+          <Button variant="outline" size="sm" onClick={handleClose} disabled={loading} data-testid="button-cancel-reclaim">
             Cancel
           </Button>
           <Button
+            size="sm"
             onClick={handleReclaim}
             disabled={!selectedReason || !confirmed || loading}
             className="bg-orange-500 hover:bg-orange-600 text-white"
@@ -388,13 +387,13 @@ export const ReclaimFromCoordinatorDialog: React.FC<ReclaimFromCoordinatorDialog
           >
             {loading ? (
               <>
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                <Loader2 className="h-4 w-4 mr-1 animate-spin" />
                 Reclaiming...
               </>
             ) : (
               <>
-                <RotateCcw className="h-4 w-4 mr-2" />
-                {isReclaimAll ? 'Reclaim All' : 'Reclaim from Coordinator'}
+                <RotateCcw className="h-4 w-4 mr-1" />
+                {isReclaimAll ? 'Reclaim All' : 'Reclaim'}
               </>
             )}
           </Button>
