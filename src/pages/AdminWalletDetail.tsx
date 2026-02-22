@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -10,7 +10,7 @@ import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import type { Wallet, WalletTransaction } from '@/types/wallet';
-import { MapPin, TrendingUp, DollarSign, Briefcase, Calendar, CheckCircle, Clock, XCircle, Pencil, Check, X, Loader2 } from 'lucide-react';
+import { ArrowLeft, MapPin, TrendingUp, DollarSign, Briefcase, Calendar, CheckCircle, Clock, XCircle, Pencil, Check, X, Loader2 } from 'lucide-react';
 
 const currencyFmt = (amount: number, currency: string) => 
   new Intl.NumberFormat(undefined, { 
@@ -21,6 +21,7 @@ const currencyFmt = (amount: number, currency: string) =>
 
 const AdminWalletDetail = () => {
   const params = useParams();
+  const navigate = useNavigate();
   const userId = params.userId as string;
   const { toast } = useToast();
   const [wallet, setWallet] = useState<Wallet | null>(null);
@@ -533,6 +534,17 @@ const AdminWalletDetail = () => {
       </div>
       
       <div className="relative space-y-4 md:space-y-6 p-3 md:p-6" data-testid="page-admin-wallet-detail">
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => navigate(-1)}
+          className="text-blue-300 hover:text-blue-100 hover:bg-blue-900/40 gap-1.5"
+          data-testid="button-back"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          Back
+        </Button>
+
         {/* User Header */}
         {userProfile && (
           <Card className="bg-gradient-to-br from-slate-900/80 to-blue-900/80 border-blue-500/30 backdrop-blur-xl">
