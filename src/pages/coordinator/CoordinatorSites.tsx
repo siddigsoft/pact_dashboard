@@ -1085,14 +1085,31 @@ const CoordinatorSites: React.FC = () => {
           return { ...(origLocality || {}), locality: locName, sites, hasPermit: origLocality?.hasPermit || false };
         });
         const totalSites = localitiesArray.reduce((sum: number, l: any) => sum + l.sites.length, 0);
+        const prePipelineStatusesForCount = ['pending', 'inprogress', 'in_progress', 'forwarded', 'forwarded_to_coordinator', 'forwarded_to_coordinators', 'new'];
+        const pendingSitesInGroup = localitiesArray.reduce((sum: number, l: any) => {
+          return sum + (l.sites || []).filter((s: any) => {
+            const st = (s?.status || '').toLowerCase().trim().replace(/\s+/g, '_');
+            if (prePipelineStatusesForCount.includes(st)) return true;
+            if (['dispatched', 'assigned', 'accepted', 'permits_attached', 'cp_verified', 'cp_verification', 'verified', 'approved', 'costed', 'approved_and_costed', 'completed', 'rejected'].includes(st)) return false;
+            return true;
+          }).length;
+        }, 0);
+        const pendingNeedingStatePermit = localitiesArray.reduce((sum: number, l: any) => {
+          return sum + (l.sites || []).filter((s: any) => {
+            const st = (s?.status || '').toLowerCase().trim().replace(/\s+/g, '_');
+            const isPendingSite = prePipelineStatusesForCount.includes(st) || !['dispatched', 'assigned', 'accepted', 'permits_attached', 'cp_verified', 'cp_verification', 'verified', 'approved', 'costed', 'approved_and_costed', 'completed', 'rejected'].includes(st);
+            return isPendingSite && siteNeedsStatePermit(s);
+          }).length;
+        }, 0);
         mmpMap.get(mmpId)!.states.push({
           state: stateData.state,
           localities: localitiesArray,
           totalSites,
+          pendingSitesCount: pendingSitesInGroup,
           hasStatePermit: stateData.hasStatePermit,
           statePermitVerified: stateData.statePermitVerified,
           statePermitUploadedAt: stateData.statePermitUploadedAt,
-          statePermitRequiredCount: totalSites,
+          statePermitRequiredCount: pendingNeedingStatePermit,
           mmpNames: [mmpName]
         });
       });
@@ -3078,8 +3095,8 @@ const CoordinatorSites: React.FC = () => {
                   <p className="text-sm text-muted-foreground">{stateData.localities.length} localit{stateData.localities.length !== 1 ? 'ies' : 'y'}</p>
                   <p className="text-sm text-muted-foreground">
                     {stateData.hasStatePermit
-                      ? `${stateData.totalSites} site${stateData.totalSites !== 1 ? 's' : ''} assigned`
-                      : `${stateData.statePermitRequiredCount ?? stateData.totalSites} site${(stateData.statePermitRequiredCount ?? stateData.totalSites) !== 1 ? 's' : ''} require state permit`
+                      ? `${stateData.pendingSitesCount ?? stateData.totalSites} site${(stateData.pendingSitesCount ?? stateData.totalSites) !== 1 ? 's' : ''} assigned`
+                      : `${stateData.statePermitRequiredCount ?? stateData.pendingSitesCount ?? stateData.totalSites} site${(stateData.statePermitRequiredCount ?? stateData.pendingSitesCount ?? stateData.totalSites) !== 1 ? 's' : ''} require state permit`
                     }
                   </p>
                 </div>
@@ -3581,7 +3598,7 @@ const CoordinatorSites: React.FC = () => {
                           <div className="flex items-center gap-2">
                             <FileCheck2 className="h-4 w-4 text-blue-600" />
                             <CardTitle className="text-base text-blue-700 dark:text-blue-400">{mmpGroup.mmpName}</CardTitle>
-                            <Badge variant="secondary" className="text-xs">{mmpGroup.filteredStates.reduce((sum: number, s: any) => sum + s.totalSites, 0)} sites</Badge>
+                            <Badge variant="secondary" className="text-xs">{mmpGroup.filteredStates.reduce((sum: number, s: any) => sum + (s.pendingSitesCount ?? s.totalSites), 0)} sites</Badge>
                           </div>
                         </CardHeader>
                         <CardContent className="px-4 pb-3 space-y-3">
