@@ -3505,6 +3505,21 @@ const CoordinatorSites: React.FC = () => {
                           <span className="text-muted-foreground ml-2">({site.site_code})</span>
                         </div>
                         <div className="flex items-center gap-2">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-xs h-7 text-orange-600 hover:text-orange-700 hover:bg-orange-50 dark:text-orange-400 dark:hover:bg-orange-950"
+                            data-testid={`button-return-to-fom-cp-${site.id}`}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedSiteId(site.id);
+                              setReturnSiteReason('');
+                              setReturnSiteDialogOpen(true);
+                            }}
+                          >
+                            <ArrowLeft className="h-3 w-3 mr-1" />
+                            Return to FOM
+                          </Button>
                           <Badge variant="secondary" className="text-xs">
                             Ready for Verification
                           </Badge>
@@ -3784,7 +3799,7 @@ const CoordinatorSites: React.FC = () => {
                             <Badge variant="secondary" className="text-xs">{mmpGroup.localities.reduce((sum: number, l: any) => sum + l.sites.length, 0)} sites</Badge>
                           </div>
                         </CardHeader>
-                        <CardContent className="px-4 pb-3">
+                        <CardContent className="px-4 pb-3 space-y-3">
                           <LocalityPermitManager
                             localities={mmpGroup.localities}
                             onPermitUploaded={() => {
@@ -3796,6 +3811,50 @@ const CoordinatorSites: React.FC = () => {
                             }}
                             isLoading={isPermitsSectionLoading}
                           />
+                          {mmpGroup.localities.length > 0 && (() => {
+                            const allPendingSites = mmpGroup.localities.flatMap((loc: any) =>
+                              (loc.sites || []).filter((s: any) => {
+                                const status = (s.status || '').toLowerCase().replace(/\s+/g, '_');
+                                return ['pending', 'dispatched', 'assigned', 'inprogress', 'in_progress', 'new', 'forwarded', 'forwarded_to_coordinator'].includes(status);
+                              }).map((s: any) => ({ ...s, _locality: loc.locality, _state: loc.state }))
+                            );
+                            if (allPendingSites.length === 0) return null;
+                            return (
+                              <div className="border-t pt-3 mt-3">
+                                <div className="text-xs text-muted-foreground mb-2">Return individual sites back to FOM:</div>
+                                <div className="space-y-1.5">
+                                  {allPendingSites.map((site: any) => (
+                                    <div key={site.id} className="flex items-center justify-between p-2 bg-muted/30 rounded-md">
+                                      <div className="flex-1 min-w-0">
+                                        <div className="flex items-center gap-2 flex-wrap">
+                                          <span className="font-medium text-sm">{site.site_name || site.site_code || 'Unknown Site'}</span>
+                                          {site.site_code && <span className="text-xs text-muted-foreground">({site.site_code})</span>}
+                                        </div>
+                                        <div className="text-xs text-muted-foreground mt-0.5">
+                                          {site._locality && <span>{site._locality}</span>}
+                                          {site._state && <span> - {site._state}</span>}
+                                        </div>
+                                      </div>
+                                      <Button
+                                        size="sm"
+                                        variant="ghost"
+                                        className="text-xs h-7 text-orange-600 hover:text-orange-700 hover:bg-orange-50 dark:text-orange-400 dark:hover:bg-orange-950"
+                                        data-testid={`button-return-to-fom-locality-${site.id}`}
+                                        onClick={() => {
+                                          setSelectedSiteId(site.id);
+                                          setReturnSiteReason('');
+                                          setReturnSiteDialogOpen(true);
+                                        }}
+                                      >
+                                        <ArrowLeft className="h-3 w-3 mr-1" />
+                                        Return to FOM
+                                      </Button>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            );
+                          })()}
                         </CardContent>
                       </Card>
                     ))}
@@ -3874,16 +3933,32 @@ const CoordinatorSites: React.FC = () => {
                                     {mmpName && <span>• {mmpName}</span>}
                                   </div>
                                 </div>
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  className="text-xs h-7 text-orange-600 hover:text-orange-700 hover:bg-orange-50 dark:text-orange-400 dark:hover:bg-orange-950"
-                                  data-testid={`button-return-site-${site.id}`}
-                                  onClick={() => returnSitesToState([site.id])}
-                                >
-                                  <RotateCcw className="h-3 w-3 mr-1" />
-                                  Return to State
-                                </Button>
+                                <div className="flex items-center gap-1">
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    className="text-xs h-7 text-orange-600 hover:text-orange-700 hover:bg-orange-50 dark:text-orange-400 dark:hover:bg-orange-950"
+                                    data-testid={`button-return-to-fom-ready-${site.id}`}
+                                    onClick={() => {
+                                      setSelectedSiteId(site.id);
+                                      setReturnSiteReason('');
+                                      setReturnSiteDialogOpen(true);
+                                    }}
+                                  >
+                                    <ArrowLeft className="h-3 w-3 mr-1" />
+                                    Return to FOM
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    className="text-xs h-7 text-orange-600 hover:text-orange-700 hover:bg-orange-50 dark:text-orange-400 dark:hover:bg-orange-950"
+                                    data-testid={`button-return-site-${site.id}`}
+                                    onClick={() => returnSitesToState([site.id])}
+                                  >
+                                    <RotateCcw className="h-3 w-3 mr-1" />
+                                    Return to State
+                                  </Button>
+                                </div>
                               </div>
                             );
                           })}
