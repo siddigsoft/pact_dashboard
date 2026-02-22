@@ -625,7 +625,7 @@ function getRegistrySiteId(
 }
 
 // Parse file through validateCSV and map rows to MMPSiteEntry while preserving unmapped columns
-async function parseAndCountEntries(file: File): Promise<{ entries: MMPSiteEntry[]; count: number; errors: string[]; warnings: string[]; rawErrors: CSVValidationError[]; rawWarnings: CSVValidationError[] }> {
+export async function parseAndCountEntries(file: File): Promise<{ entries: MMPSiteEntry[]; count: number; errors: string[]; warnings: string[]; rawErrors: CSVValidationError[]; rawWarnings: CSVValidationError[] }> {
   const issues: string[] = [];
   const warns: string[] = [];
   const entries: MMPSiteEntry[] = [];
