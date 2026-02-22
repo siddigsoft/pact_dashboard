@@ -1,0 +1,83 @@
+-- ============================================================
+-- RESTORE SCRIPT FOR GEDARIF SITES
+-- Run this in your Supabase SQL Editor
+-- ============================================================
+-- STEP 1: First, run this SELECT to see what status each site should be restored to
+-- This uses site_visits and other data to determine the correct original status
+-- ============================================================
+
+-- Check which sites have completed site visits
+SELECT 
+  mse.id,
+  mse.site_name,
+  mse.status as current_status,
+  sv.status as visit_status,
+  sv.claimed_by,
+  sv.dispatched_at,
+  sv.completed_at,
+  CASE
+    WHEN sv.completed_at IS NOT NULL AND sv.status = 'completed' THEN 'completed'
+    WHEN sv.status = 'approved' THEN 'approved'
+    WHEN sv.status = 'verified' THEN 'verified'
+    WHEN sv.claimed_by IS NOT NULL AND sv.status IN ('claimed', 'accepted', 'in_progress') THEN sv.status
+    WHEN sv.dispatched_at IS NOT NULL THEN 'dispatched'
+    WHEN sv.status IS NOT NULL THEN sv.status
+    ELSE 'forwarded_to_coordinator'
+  END as restored_status
+FROM mmp_site_entries mse
+LEFT JOIN site_visits sv ON sv.site_entry_id = mse.id
+WHERE mse.id IN (
+'b3fa6ec6-4100-40db-a63a-661892cff2a3','cba7d0f1-c706-4920-b022-8b38aa478c5a','a9371792-8bb4-43f5-a366-f66212379938','e5d2aefc-6cb6-4e3d-9941-5776d4fc107a','26c998ca-58a3-44d0-b15d-4f22513b108a','065184f5-8179-4362-af1a-fd94cd5f4b06','54decf26-998a-4f85-9807-c3d8c91430ee','71018bb0-d8eb-4cae-b4da-50cb3e35bd7b','17067166-c723-4d88-bb89-94d762c7997e','9668fe3c-645e-4b8a-a775-9e2e83131bf7','b2c3430d-2e07-47e9-9225-ec66f5bb15a3','49fd8343-5a89-4a8c-b061-1ecce95b3489','9cd09bc5-88f5-4b12-a1b7-1e3d07084db3','6070a54c-e674-4afe-8f93-d57d9745ebef','5dbf2cb6-2f99-4a59-ad9b-bd788895d076','222aef8a-b399-4cc8-8320-a00ebd80f4c2','0feb37bc-a404-409d-b004-4b509f91dbe7','fca6327e-cd2b-4b5b-a3b3-0f70ec1968a0','d2d9cea9-87c8-433c-8218-04cbb7556e46','b74946a2-5ea1-4301-947c-d458cb9a818a','39db51c4-7f51-485c-8abc-bc0c882df19e','2dccb6b7-7f6d-46b0-b9b2-8cbe6ce7d698','95cab8c5-854c-4097-be2e-09e09d93db42','e2087ff9-1068-497a-9c11-13a284aecebc','4bc91dbb-b569-4a20-b185-0a76f9668401','99e1482f-c3ff-471a-bd07-f2f13edb516a','f7cd4f5b-2c9d-4529-978a-e2aad479488c','d5d052ee-7c50-4df7-bba0-e89728e2ea62','28dc1759-6add-40cf-b135-0eb004511441','db49586f-9830-4941-8a86-5cc128988ce3','ccf3596e-cbe2-4b8a-80de-3bc9d81dedf3','fb77d3e5-2869-4cb6-924d-f5dc0a562b3d','c31f8074-4f14-4f30-b19d-546be17188d2','15e38182-9701-427b-a562-155b0a474383','db20ec13-aa8b-41b4-b425-23d3909650d3','ae2a7790-f58d-440b-bdba-1a05c8088243','85c00c75-4f56-4315-a994-f2c806fcbe20','a4fbc5fa-1d75-4b0b-b5c5-e26dc8052abf','25b6fdd7-19d5-4836-8cac-43b3b8e22496','ac612001-c537-41db-bdcf-f2402536445b','1db28a1a-bf44-409a-ba4d-098295a609cb','500cfc4c-b66b-419f-8359-4cfba561fa7f','6b3110d1-8136-4174-b397-e0b7061a8b47','b2cb2ed7-e730-4587-992b-cfb76c93c8dc','7734e345-ee0f-40a4-84fd-383ee8954a9b','ae87dc36-3192-4e66-9e0f-585ee2bd1977','9923be75-806e-4300-8322-bd006cfbf4ba','e6421981-7d74-46f3-8de5-899ceb3823c0','c922bfe9-e82f-433a-bf70-78ea2b8f0ce8','9e7f026d-13f3-4ecf-9fcf-72be765abc97','76ac50be-1778-4d50-9915-d92cb698a8c6','d395af00-6630-45ca-8424-b24d84ead0f4','b4b40a6c-8a22-4b0b-a9d2-a3b70f376ce4','3064e110-7efa-4ff5-ac28-697549bd6e7a','13f7416d-05c8-4e0a-9030-3193c4db4cd4','4df3771e-12e6-4226-bcc5-62f1f367c56a','b720b6d4-12cb-4f37-8ff6-2c77b050b678','427e2712-678b-4cf9-8bd1-363acfea4dd8','2a310874-36cb-4208-97b0-a94b1399c4d9','64d73137-7862-4c29-bbfa-2b9f93d900ba','4399e381-5ea6-428b-adca-ea0535fda4a4','672b51e4-c801-4fb4-a5f2-147aeeb6507a','05a7d493-b363-49be-85f8-8b24bc83870b','0c26a2fc-7f50-4c37-a0cc-369cb36c813d','ab7fd10c-c27e-4588-b2d1-e254c666b860','f06e60cd-a96c-450e-b7e3-8a0f2f0b9363','787d988d-630a-4c6b-bdca-f2de04f23c55','732fd039-0c3e-4869-85d9-018b0046ff3f','af671e7b-f226-4789-9ea1-d3c146c34b52','96fb09ee-41de-406e-a6e4-a06ae4aa5e34','18f96084-d1f9-443a-9409-0e586e10cc05','53fe7553-a327-4074-9705-18dfa8d8e8e0','eb07d783-c23d-419c-bf1c-ac6801108d76','e975b03c-6f34-4407-86c7-72d0583294d6','a45dc161-a990-4354-b68b-eeb83b49dafd','3fa4cb76-5f7a-419f-a916-0336ea77c717','e7b945ca-fafb-4ea9-ad27-2fa06ec77f6b','5375e1a9-edd4-49c2-bdb1-fda2b40ca9e1','b4539278-cd44-4242-aebc-8d1c571e5e13','e0f8f046-abb8-4ecb-b5aa-39ed5875eb57','c0ce2712-aa64-416a-ac5b-70a7b2de2157','e6b0f99b-4185-4a03-b653-88e233a9a828','52072202-4065-4a21-b2e6-842a0dc03975','7381af22-54c6-4c93-b3d5-d12346b433ce','0c146c26-d49c-4d04-b127-a486f940e5bc','60009a6e-53ec-4426-9375-ebf2366217f8','032f4d97-0579-4c4f-9092-2bb21f10796f'
+)
+AND mse.status = 'returned_to_fom'
+ORDER BY mse.site_name;
+
+-- ============================================================
+-- STEP 2: Run this UPDATE to restore sites based on site_visits data
+-- This intelligently determines the correct status from site_visits
+-- ============================================================
+
+UPDATE mmp_site_entries mse
+SET status = CASE
+    WHEN sv.completed_at IS NOT NULL AND sv.status = 'completed' THEN 'completed'
+    WHEN sv.status = 'approved' THEN 'approved'
+    WHEN sv.status = 'verified' THEN 'verified'
+    WHEN sv.status = 'cp_verified' THEN 'cp_verified'
+    WHEN sv.status = 'cp_verification' THEN 'cp_verification'
+    WHEN sv.claimed_by IS NOT NULL AND sv.status IN ('claimed', 'accepted', 'in_progress') THEN sv.status
+    WHEN sv.dispatched_at IS NOT NULL THEN 'dispatched'
+    WHEN sv.status IS NOT NULL THEN sv.status
+    ELSE 'forwarded_to_coordinator'
+  END,
+  verification_notes = NULL
+FROM site_visits sv
+WHERE sv.site_entry_id = mse.id
+AND mse.id IN (
+'b3fa6ec6-4100-40db-a63a-661892cff2a3','cba7d0f1-c706-4920-b022-8b38aa478c5a','a9371792-8bb4-43f5-a366-f66212379938','e5d2aefc-6cb6-4e3d-9941-5776d4fc107a','26c998ca-58a3-44d0-b15d-4f22513b108a','065184f5-8179-4362-af1a-fd94cd5f4b06','54decf26-998a-4f85-9807-c3d8c91430ee','71018bb0-d8eb-4cae-b4da-50cb3e35bd7b','17067166-c723-4d88-bb89-94d762c7997e','9668fe3c-645e-4b8a-a775-9e2e83131bf7','b2c3430d-2e07-47e9-9225-ec66f5bb15a3','49fd8343-5a89-4a8c-b061-1ecce95b3489','9cd09bc5-88f5-4b12-a1b7-1e3d07084db3','6070a54c-e674-4afe-8f93-d57d9745ebef','5dbf2cb6-2f99-4a59-ad9b-bd788895d076','222aef8a-b399-4cc8-8320-a00ebd80f4c2','0feb37bc-a404-409d-b004-4b509f91dbe7','fca6327e-cd2b-4b5b-a3b3-0f70ec1968a0','d2d9cea9-87c8-433c-8218-04cbb7556e46','b74946a2-5ea1-4301-947c-d458cb9a818a','39db51c4-7f51-485c-8abc-bc0c882df19e','2dccb6b7-7f6d-46b0-b9b2-8cbe6ce7d698','95cab8c5-854c-4097-be2e-09e09d93db42','e2087ff9-1068-497a-9c11-13a284aecebc','4bc91dbb-b569-4a20-b185-0a76f9668401','99e1482f-c3ff-471a-bd07-f2f13edb516a','f7cd4f5b-2c9d-4529-978a-e2aad479488c','d5d052ee-7c50-4df7-bba0-e89728e2ea62','28dc1759-6add-40cf-b135-0eb004511441','db49586f-9830-4941-8a86-5cc128988ce3','ccf3596e-cbe2-4b8a-80de-3bc9d81dedf3','fb77d3e5-2869-4cb6-924d-f5dc0a562b3d','c31f8074-4f14-4f30-b19d-546be17188d2','15e38182-9701-427b-a562-155b0a474383','db20ec13-aa8b-41b4-b425-23d3909650d3','ae2a7790-f58d-440b-bdba-1a05c8088243','85c00c75-4f56-4315-a994-f2c806fcbe20','a4fbc5fa-1d75-4b0b-b5c5-e26dc8052abf','25b6fdd7-19d5-4836-8cac-43b3b8e22496','ac612001-c537-41db-bdcf-f2402536445b','1db28a1a-bf44-409a-ba4d-098295a609cb','500cfc4c-b66b-419f-8359-4cfba561fa7f','6b3110d1-8136-4174-b397-e0b7061a8b47','b2cb2ed7-e730-4587-992b-cfb76c93c8dc','7734e345-ee0f-40a4-84fd-383ee8954a9b','ae87dc36-3192-4e66-9e0f-585ee2bd1977','9923be75-806e-4300-8322-bd006cfbf4ba','e6421981-7d74-46f3-8de5-899ceb3823c0','c922bfe9-e82f-433a-bf70-78ea2b8f0ce8','9e7f026d-13f3-4ecf-9fcf-72be765abc97','76ac50be-1778-4d50-9915-d92cb698a8c6','d395af00-6630-45ca-8424-b24d84ead0f4','b4b40a6c-8a22-4b0b-a9d2-a3b70f376ce4','3064e110-7efa-4ff5-ac28-697549bd6e7a','13f7416d-05c8-4e0a-9030-3193c4db4cd4','4df3771e-12e6-4226-bcc5-62f1f367c56a','b720b6d4-12cb-4f37-8ff6-2c77b050b678','427e2712-678b-4cf9-8bd1-363acfea4dd8','2a310874-36cb-4208-97b0-a94b1399c4d9','64d73137-7862-4c29-bbfa-2b9f93d900ba','4399e381-5ea6-428b-adca-ea0535fda4a4','672b51e4-c801-4fb4-a5f2-147aeeb6507a','05a7d493-b363-49be-85f8-8b24bc83870b','0c26a2fc-7f50-4c37-a0cc-369cb36c813d','ab7fd10c-c27e-4588-b2d1-e254c666b860','f06e60cd-a96c-450e-b7e3-8a0f2f0b9363','787d988d-630a-4c6b-bdca-f2de04f23c55','732fd039-0c3e-4869-85d9-018b0046ff3f','af671e7b-f226-4789-9ea1-d3c146c34b52','96fb09ee-41de-406e-a6e4-a06ae4aa5e34','18f96084-d1f9-443a-9409-0e586e10cc05','53fe7553-a327-4074-9705-18dfa8d8e8e0','eb07d783-c23d-419c-bf1c-ac6801108d76','e975b03c-6f34-4407-86c7-72d0583294d6','a45dc161-a990-4354-b68b-eeb83b49dafd','3fa4cb76-5f7a-419f-a916-0336ea77c717','e7b945ca-fafb-4ea9-ad27-2fa06ec77f6b','5375e1a9-edd4-49c2-bdb1-fda2b40ca9e1','b4539278-cd44-4242-aebc-8d1c571e5e13','e0f8f046-abb8-4ecb-b5aa-39ed5875eb57','c0ce2712-aa64-416a-ac5b-70a7b2de2157','e6b0f99b-4185-4a03-b653-88e233a9a828','52072202-4065-4a21-b2e6-842a0dc03975','7381af22-54c6-4c93-b3d5-d12346b433ce','0c146c26-d49c-4d04-b127-a486f940e5bc','60009a6e-53ec-4426-9375-ebf2366217f8','032f4d97-0579-4c4f-9092-2bb21f10796f'
+)
+AND mse.status = 'returned_to_fom';
+
+-- ============================================================
+-- STEP 3: For sites that have NO site_visit record (were still pending/forwarded),
+-- restore them to 'forwarded_to_coordinator' status
+-- ============================================================
+
+UPDATE mmp_site_entries mse
+SET status = 'forwarded_to_coordinator',
+    verification_notes = NULL
+WHERE mse.id IN (
+'b3fa6ec6-4100-40db-a63a-661892cff2a3','cba7d0f1-c706-4920-b022-8b38aa478c5a','a9371792-8bb4-43f5-a366-f66212379938','e5d2aefc-6cb6-4e3d-9941-5776d4fc107a','26c998ca-58a3-44d0-b15d-4f22513b108a','065184f5-8179-4362-af1a-fd94cd5f4b06','54decf26-998a-4f85-9807-c3d8c91430ee','71018bb0-d8eb-4cae-b4da-50cb3e35bd7b','17067166-c723-4d88-bb89-94d762c7997e','9668fe3c-645e-4b8a-a775-9e2e83131bf7','b2c3430d-2e07-47e9-9225-ec66f5bb15a3','49fd8343-5a89-4a8c-b061-1ecce95b3489','9cd09bc5-88f5-4b12-a1b7-1e3d07084db3','6070a54c-e674-4afe-8f93-d57d9745ebef','5dbf2cb6-2f99-4a59-ad9b-bd788895d076','222aef8a-b399-4cc8-8320-a00ebd80f4c2','0feb37bc-a404-409d-b004-4b509f91dbe7','fca6327e-cd2b-4b5b-a3b3-0f70ec1968a0','d2d9cea9-87c8-433c-8218-04cbb7556e46','b74946a2-5ea1-4301-947c-d458cb9a818a','39db51c4-7f51-485c-8abc-bc0c882df19e','2dccb6b7-7f6d-46b0-b9b2-8cbe6ce7d698','95cab8c5-854c-4097-be2e-09e09d93db42','e2087ff9-1068-497a-9c11-13a284aecebc','4bc91dbb-b569-4a20-b185-0a76f9668401','99e1482f-c3ff-471a-bd07-f2f13edb516a','f7cd4f5b-2c9d-4529-978a-e2aad479488c','d5d052ee-7c50-4df7-bba0-e89728e2ea62','28dc1759-6add-40cf-b135-0eb004511441','db49586f-9830-4941-8a86-5cc128988ce3','ccf3596e-cbe2-4b8a-80de-3bc9d81dedf3','fb77d3e5-2869-4cb6-924d-f5dc0a562b3d','c31f8074-4f14-4f30-b19d-546be17188d2','15e38182-9701-427b-a562-155b0a474383','db20ec13-aa8b-41b4-b425-23d3909650d3','ae2a7790-f58d-440b-bdba-1a05c8088243','85c00c75-4f56-4315-a994-f2c806fcbe20','a4fbc5fa-1d75-4b0b-b5c5-e26dc8052abf','25b6fdd7-19d5-4836-8cac-43b3b8e22496','ac612001-c537-41db-bdcf-f2402536445b','1db28a1a-bf44-409a-ba4d-098295a609cb','500cfc4c-b66b-419f-8359-4cfba561fa7f','6b3110d1-8136-4174-b397-e0b7061a8b47','b2cb2ed7-e730-4587-992b-cfb76c93c8dc','7734e345-ee0f-40a4-84fd-383ee8954a9b','ae87dc36-3192-4e66-9e0f-585ee2bd1977','9923be75-806e-4300-8322-bd006cfbf4ba','e6421981-7d74-46f3-8de5-899ceb3823c0','c922bfe9-e82f-433a-bf70-78ea2b8f0ce8','9e7f026d-13f3-4ecf-9fcf-72be765abc97','76ac50be-1778-4d50-9915-d92cb698a8c6','d395af00-6630-45ca-8424-b24d84ead0f4','b4b40a6c-8a22-4b0b-a9d2-a3b70f376ce4','3064e110-7efa-4ff5-ac28-697549bd6e7a','13f7416d-05c8-4e0a-9030-3193c4db4cd4','4df3771e-12e6-4226-bcc5-62f1f367c56a','b720b6d4-12cb-4f37-8ff6-2c77b050b678','427e2712-678b-4cf9-8bd1-363acfea4dd8','2a310874-36cb-4208-97b0-a94b1399c4d9','64d73137-7862-4c29-bbfa-2b9f93d900ba','4399e381-5ea6-428b-adca-ea0535fda4a4','672b51e4-c801-4fb4-a5f2-147aeeb6507a','05a7d493-b363-49be-85f8-8b24bc83870b','0c26a2fc-7f50-4c37-a0cc-369cb36c813d','ab7fd10c-c27e-4588-b2d1-e254c666b860','f06e60cd-a96c-450e-b7e3-8a0f2f0b9363','787d988d-630a-4c6b-bdca-f2de04f23c55','732fd039-0c3e-4869-85d9-018b0046ff3f','af671e7b-f226-4789-9ea1-d3c146c34b52','96fb09ee-41de-406e-a6e4-a06ae4aa5e34','18f96084-d1f9-443a-9409-0e586e10cc05','53fe7553-a327-4074-9705-18dfa8d8e8e0','eb07d783-c23d-419c-bf1c-ac6801108d76','e975b03c-6f34-4407-86c7-72d0583294d6','a45dc161-a990-4354-b68b-eeb83b49dafd','3fa4cb76-5f7a-419f-a916-0336ea77c717','e7b945ca-fafb-4ea9-ad27-2fa06ec77f6b','5375e1a9-edd4-49c2-bdb1-fda2b40ca9e1','b4539278-cd44-4242-aebc-8d1c571e5e13','e0f8f046-abb8-4ecb-b5aa-39ed5875eb57','c0ce2712-aa64-416a-ac5b-70a7b2de2157','e6b0f99b-4185-4a03-b653-88e233a9a828','52072202-4065-4a21-b2e6-842a0dc03975','7381af22-54c6-4c93-b3d5-d12346b433ce','0c146c26-d49c-4d04-b127-a486f940e5bc','60009a6e-53ec-4426-9375-ebf2366217f8','032f4d97-0579-4c4f-9092-2bb21f10796f'
+)
+AND mse.status = 'returned_to_fom'
+AND NOT EXISTS (SELECT 1 FROM site_visits sv WHERE sv.site_entry_id = mse.id);
+
+-- ============================================================
+-- STEP 4: Verify the restore - check no sites remain as returned_to_fom
+-- ============================================================
+
+SELECT id, site_name, status
+FROM mmp_site_entries
+WHERE id IN (
+'b3fa6ec6-4100-40db-a63a-661892cff2a3','cba7d0f1-c706-4920-b022-8b38aa478c5a','a9371792-8bb4-43f5-a366-f66212379938','e5d2aefc-6cb6-4e3d-9941-5776d4fc107a','26c998ca-58a3-44d0-b15d-4f22513b108a','065184f5-8179-4362-af1a-fd94cd5f4b06','54decf26-998a-4f85-9807-c3d8c91430ee','71018bb0-d8eb-4cae-b4da-50cb3e35bd7b','17067166-c723-4d88-bb89-94d762c7997e','9668fe3c-645e-4b8a-a775-9e2e83131bf7','b2c3430d-2e07-47e9-9225-ec66f5bb15a3','49fd8343-5a89-4a8c-b061-1ecce95b3489','9cd09bc5-88f5-4b12-a1b7-1e3d07084db3','6070a54c-e674-4afe-8f93-d57d9745ebef','5dbf2cb6-2f99-4a59-ad9b-bd788895d076','222aef8a-b399-4cc8-8320-a00ebd80f4c2','0feb37bc-a404-409d-b004-4b509f91dbe7','fca6327e-cd2b-4b5b-a3b3-0f70ec1968a0','d2d9cea9-87c8-433c-8218-04cbb7556e46','b74946a2-5ea1-4301-947c-d458cb9a818a','39db51c4-7f51-485c-8abc-bc0c882df19e','2dccb6b7-7f6d-46b0-b9b2-8cbe6ce7d698','95cab8c5-854c-4097-be2e-09e09d93db42','e2087ff9-1068-497a-9c11-13a284aecebc','4bc91dbb-b569-4a20-b185-0a76f9668401','99e1482f-c3ff-471a-bd07-f2f13edb516a','f7cd4f5b-2c9d-4529-978a-e2aad479488c','d5d052ee-7c50-4df7-bba0-e89728e2ea62','28dc1759-6add-40cf-b135-0eb004511441','db49586f-9830-4941-8a86-5cc128988ce3','ccf3596e-cbe2-4b8a-80de-3bc9d81dedf3','fb77d3e5-2869-4cb6-924d-f5dc0a562b3d','c31f8074-4f14-4f30-b19d-546be17188d2','15e38182-9701-427b-a562-155b0a474383','db20ec13-aa8b-41b4-b425-23d3909650d3','ae2a7790-f58d-440b-bdba-1a05c8088243','85c00c75-4f56-4315-a994-f2c806fcbe20','a4fbc5fa-1d75-4b0b-b5c5-e26dc8052abf','25b6fdd7-19d5-4836-8cac-43b3b8e22496','ac612001-c537-41db-bdcf-f2402536445b','1db28a1a-bf44-409a-ba4d-098295a609cb','500cfc4c-b66b-419f-8359-4cfba561fa7f','6b3110d1-8136-4174-b397-e0b7061a8b47','b2cb2ed7-e730-4587-992b-cfb76c93c8dc','7734e345-ee0f-40a4-84fd-383ee8954a9b','ae87dc36-3192-4e66-9e0f-585ee2bd1977','9923be75-806e-4300-8322-bd006cfbf4ba','e6421981-7d74-46f3-8de5-899ceb3823c0','c922bfe9-e82f-433a-bf70-78ea2b8f0ce8','9e7f026d-13f3-4ecf-9fcf-72be765abc97','76ac50be-1778-4d50-9915-d92cb698a8c6','d395af00-6630-45ca-8424-b24d84ead0f4','b4b40a6c-8a22-4b0b-a9d2-a3b70f376ce4','3064e110-7efa-4ff5-ac28-697549bd6e7a','13f7416d-05c8-4e0a-9030-3193c4db4cd4','4df3771e-12e6-4226-bcc5-62f1f367c56a','b720b6d4-12cb-4f37-8ff6-2c77b050b678','427e2712-678b-4cf9-8bd1-363acfea4dd8','2a310874-36cb-4208-97b0-a94b1399c4d9','64d73137-7862-4c29-bbfa-2b9f93d900ba','4399e381-5ea6-428b-adca-ea0535fda4a4','672b51e4-c801-4fb4-a5f2-147aeeb6507a','05a7d493-b363-49be-85f8-8b24bc83870b','0c26a2fc-7f50-4c37-a0cc-369cb36c813d','ab7fd10c-c27e-4588-b2d1-e254c666b860','f06e60cd-a96c-450e-b7e3-8a0f2f0b9363','787d988d-630a-4c6b-bdca-f2de04f23c55','732fd039-0c3e-4869-85d9-018b0046ff3f','af671e7b-f226-4789-9ea1-d3c146c34b52','96fb09ee-41de-406e-a6e4-a06ae4aa5e34','18f96084-d1f9-443a-9409-0e586e10cc05','53fe7553-a327-4074-9705-18dfa8d8e8e0','eb07d783-c23d-419c-bf1c-ac6801108d76','e975b03c-6f34-4407-86c7-72d0583294d6','a45dc161-a990-4354-b68b-eeb83b49dafd','3fa4cb76-5f7a-419f-a916-0336ea77c717','e7b945ca-fafb-4ea9-ad27-2fa06ec77f6b','5375e1a9-edd4-49c2-bdb1-fda2b40ca9e1','b4539278-cd44-4242-aebc-8d1c571e5e13','e0f8f046-abb8-4ecb-b5aa-39ed5875eb57','c0ce2712-aa64-416a-ac5b-70a7b2de2157','e6b0f99b-4185-4a03-b653-88e233a9a828','52072202-4065-4a21-b2e6-842a0dc03975','7381af22-54c6-4c93-b3d5-d12346b433ce','0c146c26-d49c-4d04-b127-a486f940e5bc','60009a6e-53ec-4426-9375-ebf2366217f8','032f4d97-0579-4c4f-9092-2bb21f10796f'
+)
+ORDER BY status, site_name;

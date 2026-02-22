@@ -1,0 +1,611 @@
+[
+  {
+    "id": "b3fa6ec6-4100-40db-a63a-661892cff2a3",
+    "site_name": "MADINA 1",
+    "status": "returned_to_fom",
+    "verification_notes": "لايوجد تصريح لشهر يناير",
+    "verified_at": null
+  },
+  {
+    "id": "cba7d0f1-c706-4920-b022-8b38aa478c5a",
+    "site_name": "Alsysabana",
+    "status": "returned_to_fom",
+    "verification_notes": "لايوجد تصريح لشهر يناير ",
+    "verified_at": "2026-02-22 15:02:16.753+00"
+  },
+  {
+    "id": "a9371792-8bb4-43f5-a366-f66212379938",
+    "site_name": "BARBAR ALFOGARA",
+    "status": "returned_to_fom",
+    "verification_notes": "لايوجد تصريح لشهر يناير ",
+    "verified_at": "2026-02-22 15:02:16.753+00"
+  },
+  {
+    "id": "e5d2aefc-6cb6-4e3d-9941-5776d4fc107a",
+    "site_name": "Aladid Alhomer",
+    "status": "returned_to_fom",
+    "verification_notes": "لايوجد تصريح لشهر يناير ",
+    "verified_at": "2026-02-22 15:02:16.753+00"
+  },
+  {
+    "id": "26c998ca-58a3-44d0-b15d-4f22513b108a",
+    "site_name": "Alhomor",
+    "status": "returned_to_fom",
+    "verification_notes": "لايوجد تصريح لشهر يناير ",
+    "verified_at": "2026-02-22 15:02:16.753+00"
+  },
+  {
+    "id": "065184f5-8179-4362-af1a-fd94cd5f4b06",
+    "site_name": "MADINA 8",
+    "status": "returned_to_fom",
+    "verification_notes": "لايوجد تصريح لشهر يناير ",
+    "verified_at": "2026-02-22 15:02:16.753+00"
+  },
+  {
+    "id": "54decf26-998a-4f85-9807-c3d8c91430ee",
+    "site_name": "AL ASIRRA",
+    "status": "returned_to_fom",
+    "verification_notes": "لايوجد تصريح لشهر يناير ",
+    "verified_at": "2026-02-22 15:02:16.753+00"
+  },
+  {
+    "id": "71018bb0-d8eb-4cae-b4da-50cb3e35bd7b",
+    "site_name": "Shihait",
+    "status": "returned_to_fom",
+    "verification_notes": "لايوجد تصريح لشهر يناير ",
+    "verified_at": "2026-02-22 15:02:16.753+00"
+  },
+  {
+    "id": "17067166-c723-4d88-bb89-94d762c7997e",
+    "site_name": "UM-GARGOR",
+    "status": "returned_to_fom",
+    "verification_notes": "لايوجد تصريح لشهر يناير ",
+    "verified_at": "2026-02-22 15:02:16.753+00"
+  },
+  {
+    "id": "9668fe3c-645e-4b8a-a775-9e2e83131bf7",
+    "site_name": "Al Hoshiab",
+    "status": "returned_to_fom",
+    "verification_notes": "لايوجد تصريح لشهر يناير ",
+    "verified_at": "2026-02-22 15:02:16.753+00"
+  },
+  {
+    "id": "b2c3430d-2e07-47e9-9225-ec66f5bb15a3",
+    "site_name": "Galaa Alnahal",
+    "status": "returned_to_fom",
+    "verification_notes": "لايوجد تصريح لشهر يناير ",
+    "verified_at": "2026-02-22 15:02:16.753+00"
+  },
+  {
+    "id": "49fd8343-5a89-4a8c-b061-1ecce95b3489",
+    "site_name": "Baloos",
+    "status": "returned_to_fom",
+    "verification_notes": "لايوجد تصريح لشهر يناير ",
+    "verified_at": "2026-02-22 15:02:16.753+00"
+  },
+  {
+    "id": "9cd09bc5-88f5-4b12-a1b7-1e3d07084db3",
+    "site_name": "Al Guraisha Hospital",
+    "status": "returned_to_fom",
+    "verification_notes": "لايوجد تصريح لشهر يناير ",
+    "verified_at": "2026-02-22 15:02:16.753+00"
+  },
+  {
+    "id": "6070a54c-e674-4afe-8f93-d57d9745ebef",
+    "site_name": "Barbar Alfogara",
+    "status": "returned_to_fom",
+    "verification_notes": "لايوجد تصريح لشهر يناير ",
+    "verified_at": "2026-02-22 15:02:16.753+00"
+  },
+  {
+    "id": "5dbf2cb6-2f99-4a59-ad9b-bd788895d076",
+    "site_name": "Koor Zaraf",
+    "status": "returned_to_fom",
+    "verification_notes": "لايوجد تصريح لشهر يناير ",
+    "verified_at": "2026-02-22 15:02:16.753+00"
+  },
+  {
+    "id": "222aef8a-b399-4cc8-8320-a00ebd80f4c2",
+    "site_name": "Al Amara",
+    "status": "returned_to_fom",
+    "verification_notes": "لايوجد تصريح لشهر يناير ",
+    "verified_at": "2026-02-22 15:02:16.753+00"
+  },
+  {
+    "id": "0feb37bc-a404-409d-b004-4b509f91dbe7",
+    "site_name": "MADINA 3",
+    "status": "returned_to_fom",
+    "verification_notes": "لايوجد تصريح لشهر يناير ",
+    "verified_at": "2026-02-22 15:02:16.753+00"
+  },
+  {
+    "id": "fca6327e-cd2b-4b5b-a3b3-0f70ec1968a0",
+    "site_name": "Tebarkallah",
+    "status": "returned_to_fom",
+    "verification_notes": "لايوجد تصريح لشهر يناير ",
+    "verified_at": "2026-02-22 15:02:16.753+00"
+  },
+  {
+    "id": "d2d9cea9-87c8-433c-8218-04cbb7556e46",
+    "site_name": "Wad Kowli",
+    "status": "returned_to_fom",
+    "verification_notes": "لايوجد تصريح لشهر يناير ",
+    "verified_at": "2026-02-22 15:02:16.753+00"
+  },
+  {
+    "id": "b74946a2-5ea1-4301-947c-d458cb9a818a",
+    "site_name": "Beia",
+    "status": "returned_to_fom",
+    "verification_notes": "لايوجد تصريح لشهر يناير ",
+    "verified_at": "2026-02-22 15:02:16.753+00"
+  },
+  {
+    "id": "39db51c4-7f51-485c-8abc-bc0c882df19e",
+    "site_name": "Al Gedaref Hospital",
+    "status": "returned_to_fom",
+    "verification_notes": "لايوجد تصريح لشهر يناير ",
+    "verified_at": "2026-02-22 15:02:16.753+00"
+  },
+  {
+    "id": "2dccb6b7-7f6d-46b0-b9b2-8cbe6ce7d698",
+    "site_name": "Village 15",
+    "status": "returned_to_fom",
+    "verification_notes": "لايوجد تصريح لشهر يناير ",
+    "verified_at": "2026-02-22 15:02:16.753+00"
+  },
+  {
+    "id": "95cab8c5-854c-4097-be2e-09e09d93db42",
+    "site_name": "Village 13",
+    "status": "returned_to_fom",
+    "verification_notes": "لايوجد تصريح لشهر يناير ",
+    "verified_at": "2026-02-22 15:02:16.753+00"
+  },
+  {
+    "id": "e2087ff9-1068-497a-9c11-13a284aecebc",
+    "site_name": "Bazora",
+    "status": "returned_to_fom",
+    "verification_notes": "لايوجد تصريح لشهر يناير ",
+    "verified_at": "2026-02-22 15:02:16.753+00"
+  },
+  {
+    "id": "4bc91dbb-b569-4a20-b185-0a76f9668401",
+    "site_name": "Village 3",
+    "status": "returned_to_fom",
+    "verification_notes": "لايوجد تصريح لشهر يناير ",
+    "verified_at": "2026-02-22 15:02:16.753+00"
+  },
+  {
+    "id": "99e1482f-c3ff-471a-bd07-f2f13edb516a",
+    "site_name": "Village 18",
+    "status": "returned_to_fom",
+    "verification_notes": "لايوجد تصريح لشهر يناير ",
+    "verified_at": "2026-02-22 15:02:16.753+00"
+  },
+  {
+    "id": "f7cd4f5b-2c9d-4529-978a-e2aad479488c",
+    "site_name": "Um Barosh",
+    "status": "returned_to_fom",
+    "verification_notes": "لايوجد تصريح لشهر يناير ",
+    "verified_at": "2026-02-22 15:02:16.753+00"
+  },
+  {
+    "id": "d5d052ee-7c50-4df7-bba0-e89728e2ea62",
+    "site_name": "Kartot",
+    "status": "returned_to_fom",
+    "verification_notes": "لايوجد تصريح لشهر يناير ",
+    "verified_at": "2026-02-22 15:02:16.753+00"
+  },
+  {
+    "id": "28dc1759-6add-40cf-b135-0eb004511441",
+    "site_name": "Village 10",
+    "status": "returned_to_fom",
+    "verification_notes": "لايوجد تصريح لشهر يناير ",
+    "verified_at": "2026-02-22 15:02:16.753+00"
+  },
+  {
+    "id": "db49586f-9830-4941-8a86-5cc128988ce3",
+    "site_name": "Alhawata hospital",
+    "status": "returned_to_fom",
+    "verification_notes": "لايوجد تصريح لشهر يناير ",
+    "verified_at": "2026-02-22 15:02:16.753+00"
+  },
+  {
+    "id": "ccf3596e-cbe2-4b8a-80de-3bc9d81dedf3",
+    "site_name": "Um Sagata",
+    "status": "returned_to_fom",
+    "verification_notes": "لايوجد تصريح لشهر يناير ",
+    "verified_at": "2026-02-22 15:02:16.753+00"
+  },
+  {
+    "id": "fb77d3e5-2869-4cb6-924d-f5dc0a562b3d",
+    "site_name": "UM GAZAZ",
+    "status": "returned_to_fom",
+    "verification_notes": "لايوجد تصريح لشهر يناير ",
+    "verified_at": "2026-02-22 15:02:16.753+00"
+  },
+  {
+    "id": "c31f8074-4f14-4f30-b19d-546be17188d2",
+    "site_name": "KOOR ZARAF",
+    "status": "returned_to_fom",
+    "verification_notes": "لايوجد تصريح لشهر يناير ",
+    "verified_at": "2026-02-22 15:02:16.753+00"
+  },
+  {
+    "id": "15e38182-9701-427b-a562-155b0a474383",
+    "site_name": "AL SOBAG",
+    "status": "returned_to_fom",
+    "verification_notes": "لايوجد تصريح لشهر يناير ",
+    "verified_at": "2026-02-22 15:02:16.753+00"
+  },
+  {
+    "id": "db20ec13-aa8b-41b4-b425-23d3909650d3",
+    "site_name": "AL HOSHIAB",
+    "status": "returned_to_fom",
+    "verification_notes": "لايوجد تصريح لشهر يناير ",
+    "verified_at": "2026-02-22 15:02:16.753+00"
+  },
+  {
+    "id": "ae2a7790-f58d-440b-bdba-1a05c8088243",
+    "site_name": "Abu Sharan",
+    "status": "returned_to_fom",
+    "verification_notes": "لايوجد تصريح لشهر يناير ",
+    "verified_at": "2026-02-22 15:02:16.753+00"
+  },
+  {
+    "id": "85c00c75-4f56-4315-a994-f2c806fcbe20",
+    "site_name": "ALADID ALHOMER",
+    "status": "returned_to_fom",
+    "verification_notes": "لايوجد تصريح لشهر يناير ",
+    "verified_at": "2026-02-22 15:02:16.753+00"
+  },
+  {
+    "id": "a4fbc5fa-1d75-4b0b-b5c5-e26dc8052abf",
+    "site_name": "TEBARKALLAH",
+    "status": "returned_to_fom",
+    "verification_notes": "لايوجد تصريح لشهر يناير ",
+    "verified_at": "2026-02-22 15:02:16.753+00"
+  },
+  {
+    "id": "25b6fdd7-19d5-4836-8cac-43b3b8e22496",
+    "site_name": "Wadi Alnaeem",
+    "status": "returned_to_fom",
+    "verification_notes": "لايوجد تصريح لشهر يناير ",
+    "verified_at": "2026-02-22 15:02:16.753+00"
+  },
+  {
+    "id": "ac612001-c537-41db-bdcf-f2402536445b",
+    "site_name": "AL GURAISHA HOSPITAL",
+    "status": "returned_to_fom",
+    "verification_notes": "لايوجد تصريح لشهر يناير ",
+    "verified_at": "2026-02-22 15:02:16.753+00"
+  },
+  {
+    "id": "1db28a1a-bf44-409a-ba4d-098295a609cb",
+    "site_name": "MADINA 7",
+    "status": "returned_to_fom",
+    "verification_notes": "لايوجد تصريح لشهر يناير ",
+    "verified_at": "2026-02-22 15:02:16.753+00"
+  },
+  {
+    "id": "500cfc4c-b66b-419f-8359-4cfba561fa7f",
+    "site_name": "Um alkhabeer",
+    "status": "returned_to_fom",
+    "verification_notes": "لايوجد تصريح لشهر يناير ",
+    "verified_at": "2026-02-22 15:02:16.753+00"
+  },
+  {
+    "id": "6b3110d1-8136-4174-b397-e0b7061a8b47",
+    "site_name": "WAD KOWLI",
+    "status": "returned_to_fom",
+    "verification_notes": "لايوجد تصريح لشهر يناير ",
+    "verified_at": "2026-02-22 15:02:16.753+00"
+  },
+  {
+    "id": "b2cb2ed7-e730-4587-992b-cfb76c93c8dc",
+    "site_name": "SIFAWA HOSPITAL",
+    "status": "returned_to_fom",
+    "verification_notes": "لايوجد تصريح لشهر يناير ",
+    "verified_at": "2026-02-22 15:02:16.753+00"
+  },
+  {
+    "id": "7734e345-ee0f-40a4-84fd-383ee8954a9b",
+    "site_name": "AL SHARBOUB",
+    "status": "returned_to_fom",
+    "verification_notes": "لايوجد تصريح لشهر يناير ",
+    "verified_at": "2026-02-22 15:02:16.753+00"
+  },
+  {
+    "id": "ae87dc36-3192-4e66-9e0f-585ee2bd1977",
+    "site_name": "MADINA 5",
+    "status": "returned_to_fom",
+    "verification_notes": "لايوجد تصريح لشهر يناير ",
+    "verified_at": "2026-02-22 15:02:16.753+00"
+  },
+  {
+    "id": "9923be75-806e-4300-8322-bd006cfbf4ba",
+    "site_name": "Salmeen",
+    "status": "returned_to_fom",
+    "verification_notes": "لايوجد تصريح لشهر يناير ",
+    "verified_at": "2026-02-22 15:02:16.753+00"
+  },
+  {
+    "id": "e6421981-7d74-46f3-8de5-899ceb3823c0",
+    "site_name": "AL SHOWAK HOSPITAL",
+    "status": "returned_to_fom",
+    "verification_notes": "لايوجد تصريح لشهر يناير ",
+    "verified_at": "2026-02-22 15:02:16.753+00"
+  },
+  {
+    "id": "c922bfe9-e82f-433a-bf70-78ea2b8f0ce8",
+    "site_name": "Alshheed Seif Aldin",
+    "status": "returned_to_fom",
+    "verification_notes": "لايوجد تصريح لشهر يناير ",
+    "verified_at": "2026-02-22 15:02:16.753+00"
+  },
+  {
+    "id": "9e7f026d-13f3-4ecf-9fcf-72be765abc97",
+    "site_name": "MADINA 2",
+    "status": "returned_to_fom",
+    "verification_notes": "لايوجد تصريح لشهر يناير ",
+    "verified_at": "2026-02-22 15:02:16.753+00"
+  },
+  {
+    "id": "76ac50be-1778-4d50-9915-d92cb698a8c6",
+    "site_name": "Mohmaed Wedseed",
+    "status": "returned_to_fom",
+    "verification_notes": "لايوجد تصريح لشهر يناير ",
+    "verified_at": "2026-02-22 15:02:16.753+00"
+  },
+  {
+    "id": "d395af00-6630-45ca-8424-b24d84ead0f4",
+    "site_name": "VILLAGE 8 (ETHIOPIAN REFUGEES)",
+    "status": "returned_to_fom",
+    "verification_notes": "لايوجد تصريح لشهر يناير ",
+    "verified_at": "2026-02-22 15:02:16.753+00"
+  },
+  {
+    "id": "b4b40a6c-8a22-4b0b-a9d2-a3b70f376ce4",
+    "site_name": "Alban Gaded",
+    "status": "returned_to_fom",
+    "verification_notes": "لايوجد تصريح لشهر يناير ",
+    "verified_at": "2026-02-22 15:02:16.753+00"
+  },
+  {
+    "id": "3064e110-7efa-4ff5-ac28-697549bd6e7a",
+    "site_name": "Deen Alnoor",
+    "status": "returned_to_fom",
+    "verification_notes": "لايوجد تصريح لشهر يناير ",
+    "verified_at": "2026-02-22 15:02:16.753+00"
+  },
+  {
+    "id": "13f7416d-05c8-4e0a-9030-3193c4db4cd4",
+    "site_name": "VILLAGE 3",
+    "status": "returned_to_fom",
+    "verification_notes": "لايوجد تصريح لشهر يناير ",
+    "verified_at": "2026-02-22 15:02:16.753+00"
+  },
+  {
+    "id": "4df3771e-12e6-4226-bcc5-62f1f367c56a",
+    "site_name": "Al Slam",
+    "status": "returned_to_fom",
+    "verification_notes": "لايوجد تصريح لشهر يناير ",
+    "verified_at": "2026-02-22 15:02:16.753+00"
+  },
+  {
+    "id": "b720b6d4-12cb-4f37-8ff6-2c77b050b678",
+    "site_name": "Um Broosh",
+    "status": "returned_to_fom",
+    "verification_notes": "لايوجد تصريح لشهر يناير ",
+    "verified_at": "2026-02-22 15:02:16.753+00"
+  },
+  {
+    "id": "427e2712-678b-4cf9-8bd1-363acfea4dd8",
+    "site_name": "Alsobag",
+    "status": "returned_to_fom",
+    "verification_notes": "لايوجد تصريح لشهر يناير ",
+    "verified_at": "2026-02-22 15:02:16.753+00"
+  },
+  {
+    "id": "2a310874-36cb-4208-97b0-a94b1399c4d9",
+    "site_name": "Abo Gmbil",
+    "status": "returned_to_fom",
+    "verification_notes": "لايوجد تصريح لشهر يناير ",
+    "verified_at": "2026-02-22 15:02:16.753+00"
+  },
+  {
+    "id": "64d73137-7862-4c29-bbfa-2b9f93d900ba",
+    "site_name": "Miger 5",
+    "status": "returned_to_fom",
+    "verification_notes": "لايوجد تصريح لشهر يناير ",
+    "verified_at": "2026-02-22 15:02:16.753+00"
+  },
+  {
+    "id": "4399e381-5ea6-428b-adca-ea0535fda4a4",
+    "site_name": "Samsm",
+    "status": "returned_to_fom",
+    "verification_notes": "لايوجد تصريح لشهر يناير ",
+    "verified_at": "2026-02-22 15:02:16.753+00"
+  },
+  {
+    "id": "672b51e4-c801-4fb4-a5f2-147aeeb6507a",
+    "site_name": "Abiow Shamail",
+    "status": "returned_to_fom",
+    "verification_notes": "لايوجد تصريح لشهر يناير ",
+    "verified_at": "2026-02-22 15:02:16.753+00"
+  },
+  {
+    "id": "05a7d493-b363-49be-85f8-8b24bc83870b",
+    "site_name": "October",
+    "status": "returned_to_fom",
+    "verification_notes": "لايوجد تصريح لشهر يناير ",
+    "verified_at": "2026-02-22 15:02:16.753+00"
+  },
+  {
+    "id": "0c26a2fc-7f50-4c37-a0cc-369cb36c813d",
+    "site_name": "Al Thaora",
+    "status": "returned_to_fom",
+    "verification_notes": "لايوجد تصريح لشهر يناير ",
+    "verified_at": "2026-02-22 15:02:16.753+00"
+  },
+  {
+    "id": "ab7fd10c-c27e-4588-b2d1-e254c666b860",
+    "site_name": "Alshorta",
+    "status": "returned_to_fom",
+    "verification_notes": "لايوجد تصريح لشهر يناير ",
+    "verified_at": "2026-02-22 15:02:16.753+00"
+  },
+  {
+    "id": "f06e60cd-a96c-450e-b7e3-8a0f2f0b9363",
+    "site_name": "Alwahida",
+    "status": "returned_to_fom",
+    "verification_notes": "لايوجد تصريح لشهر يناير ",
+    "verified_at": "2026-02-22 15:02:16.753+00"
+  },
+  {
+    "id": "787d988d-630a-4c6b-bdca-f2de04f23c55",
+    "site_name": "Al Asirra",
+    "status": "returned_to_fom",
+    "verification_notes": "لايوجد تصريح لشهر يناير ",
+    "verified_at": "2026-02-22 15:02:16.753+00"
+  },
+  {
+    "id": "732fd039-0c3e-4869-85d9-018b0046ff3f",
+    "site_name": "Aledad",
+    "status": "returned_to_fom",
+    "verification_notes": "لايوجد تصريح لشهر يناير ",
+    "verified_at": "2026-02-22 15:02:16.753+00"
+  },
+  {
+    "id": "af671e7b-f226-4789-9ea1-d3c146c34b52",
+    "site_name": "Um Alkhair",
+    "status": "returned_to_fom",
+    "verification_notes": "لايوجد تصريح لشهر يناير ",
+    "verified_at": "2026-02-22 15:02:16.753+00"
+  },
+  {
+    "id": "96fb09ee-41de-406e-a6e4-a06ae4aa5e34",
+    "site_name": "Village 20",
+    "status": "returned_to_fom",
+    "verification_notes": "لايوجد تصريح لشهر يناير ",
+    "verified_at": "2026-02-22 15:02:16.753+00"
+  },
+  {
+    "id": "18f96084-d1f9-443a-9409-0e586e10cc05",
+    "site_name": "Village 7",
+    "status": "returned_to_fom",
+    "verification_notes": "لايوجد تصريح لشهر يناير ",
+    "verified_at": "2026-02-22 15:02:16.753+00"
+  },
+  {
+    "id": "53fe7553-a327-4074-9705-18dfa8d8e8e0",
+    "site_name": "Al Faw hospital",
+    "status": "returned_to_fom",
+    "verification_notes": "لايوجد تصريح لشهر يناير ",
+    "verified_at": "2026-02-22 15:02:16.753+00"
+  },
+  {
+    "id": "eb07d783-c23d-419c-bf1c-ac6801108d76",
+    "site_name": "Bluse",
+    "status": "returned_to_fom",
+    "verification_notes": "لايوجد تصريح لشهر يناير ",
+    "verified_at": "2026-02-22 15:02:16.753+00"
+  },
+  {
+    "id": "e975b03c-6f34-4407-86c7-72d0583294d6",
+    "site_name": "Al Shaet",
+    "status": "returned_to_fom",
+    "verification_notes": "لايوجد تصريح لشهر يناير ",
+    "verified_at": "2026-02-22 15:02:16.753+00"
+  },
+  {
+    "id": "a45dc161-a990-4354-b68b-eeb83b49dafd",
+    "site_name": "Grane",
+    "status": "returned_to_fom",
+    "verification_notes": "لايوجد تصريح لشهر يناير ",
+    "verified_at": "2026-02-22 15:02:16.753+00"
+  },
+  {
+    "id": "3fa4cb76-5f7a-419f-a916-0336ea77c717",
+    "site_name": "Al Dehama",
+    "status": "returned_to_fom",
+    "verification_notes": "لايوجد تصريح لشهر يناير ",
+    "verified_at": "2026-02-22 15:02:16.753+00"
+  },
+  {
+    "id": "e7b945ca-fafb-4ea9-ad27-2fa06ec77f6b",
+    "site_name": "Ban",
+    "status": "returned_to_fom",
+    "verification_notes": "لايوجد تصريح لشهر يناير ",
+    "verified_at": "2026-02-22 15:02:16.753+00"
+  },
+  {
+    "id": "5375e1a9-edd4-49c2-bdb1-fda2b40ca9e1",
+    "site_name": "Altadamon",
+    "status": "returned_to_fom",
+    "verification_notes": "لايوجد تصريح لشهر يناير ",
+    "verified_at": "2026-02-22 15:02:16.753+00"
+  },
+  {
+    "id": "b4539278-cd44-4242-aebc-8d1c571e5e13",
+    "site_name": "Um Gazaz",
+    "status": "returned_to_fom",
+    "verification_notes": "لايوجد تصريح لشهر يناير ",
+    "verified_at": "2026-02-22 15:02:16.753+00"
+  },
+  {
+    "id": "e0f8f046-abb8-4ecb-b5aa-39ed5875eb57",
+    "site_name": "Alriad",
+    "status": "returned_to_fom",
+    "verification_notes": "لايوجد تصريح لشهر يناير ",
+    "verified_at": "2026-02-22 15:02:16.753+00"
+  },
+  {
+    "id": "c0ce2712-aa64-416a-ac5b-70a7b2de2157",
+    "site_name": "Almassiat",
+    "status": "returned_to_fom",
+    "verification_notes": "لايوجد تصريح لشهر يناير ",
+    "verified_at": "2026-02-22 15:02:16.753+00"
+  },
+  {
+    "id": "e6b0f99b-4185-4a03-b653-88e233a9a828",
+    "site_name": "Almatar",
+    "status": "returned_to_fom",
+    "verification_notes": "لايوجد تصريح لشهر يناير ",
+    "verified_at": "2026-02-22 15:02:16.753+00"
+  },
+  {
+    "id": "52072202-4065-4a21-b2e6-842a0dc03975",
+    "site_name": "Algamhoria Shamil",
+    "status": "returned_to_fom",
+    "verification_notes": "لايوجد تصريح لشهر يناير ",
+    "verified_at": "2026-02-22 15:02:16.753+00"
+  },
+  {
+    "id": "7381af22-54c6-4c93-b3d5-d12346b433ce",
+    "site_name": "Village 16",
+    "status": "returned_to_fom",
+    "verification_notes": "لايوجد تصريح لشهر يناير ",
+    "verified_at": "2026-02-22 15:02:16.753+00"
+  },
+  {
+    "id": "0c146c26-d49c-4d04-b127-a486f940e5bc",
+    "site_name": "MADINA 6",
+    "status": "returned_to_fom",
+    "verification_notes": "لايوجد تصريح لشهر يناير ",
+    "verified_at": "2026-02-22 15:02:16.753+00"
+  },
+  {
+    "id": "60009a6e-53ec-4426-9375-ebf2366217f8",
+    "site_name": "Village 36",
+    "status": "returned_to_fom",
+    "verification_notes": "لايوجد تصريح لشهر يناير ",
+    "verified_at": "2026-02-22 15:02:16.753+00"
+  },
+  {
+    "id": "032f4d97-0579-4c4f-9092-2bb21f10796f",
+    "site_name": "ABO GMBIL",
+    "status": "returned_to_fom",
+    "verification_notes": "لايوجد تصريح لشهر يناير ",
+    "verified_at": "2026-02-22 15:02:16.753+00"
+  }
+]
