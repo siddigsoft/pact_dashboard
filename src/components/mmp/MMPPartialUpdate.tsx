@@ -41,9 +41,10 @@ const MMPPartialUpdate: React.FC<MMPPartialUpdateProps> = ({ mmpFile, onComplete
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [selectedHub, setSelectedHub] = useState<string>('');
-  const [selectedState, setSelectedState] = useState<string>('');
+  const [selectedStates, setSelectedStates] = useState<string[]>([]);
   const [selectedLocality, setSelectedLocality] = useState<string>('');
   const [action, setAction] = useState<UpdateAction>('replace');
+  const [stateDropdownOpen, setStateDropdownOpen] = useState(false);
   const [parsedEntries, setParsedEntries] = useState<any[]>([]);
   const [parseErrors, setParseErrors] = useState<string[]>([]);
   const [parseWarnings, setParseWarnings] = useState<string[]>([]);
@@ -103,33 +104,59 @@ const MMPPartialUpdate: React.FC<MMPPartialUpdateProps> = ({ mmpFile, onComplete
       .sort();
   }, [states]);
 
-  const isNewState = useMemo(() => {
-    return selectedState ? !stateGroups[selectedState] : false;
-  }, [selectedState, stateGroups]);
+  const hasNewStates = useMemo(() => {
+    return selectedStates.some(s => !stateGroups[s]);
+  }, [selectedStates, stateGroups]);
 
   const localities = useMemo(() => {
-    if (!selectedState || !stateGroups[selectedState]) return [];
-    return Object.keys(stateGroups[selectedState].localities).sort();
-  }, [selectedState, stateGroups]);
+    if (selectedStates.length === 0) return [];
+    const allLocalities: Record<string, number> = {};
+    selectedStates.forEach(st => {
+      if (stateGroups[st]) {
+        Object.entries(stateGroups[st].localities).forEach(([loc, count]) => {
+          allLocalities[loc] = (allLocalities[loc] || 0) + count;
+        });
+      }
+    });
+    return Object.keys(allLocalities).sort();
+  }, [selectedStates, stateGroups]);
+
+  const localityCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    selectedStates.forEach(st => {
+      if (stateGroups[st]) {
+        Object.entries(stateGroups[st].localities).forEach(([loc, count]) => {
+          counts[loc] = (counts[loc] || 0) + count;
+        });
+      }
+    });
+    return counts;
+  }, [selectedStates, stateGroups]);
 
   const newLocalities = useMemo(() => {
-    if (!selectedState) return [];
-    const sudanState = sudanStates.find(s => s.name.toLowerCase() === selectedState.toLowerCase());
-    if (!sudanState) return [];
+    if (selectedStates.length === 0) return [];
+    const allNew: string[] = [];
     const existingSet = new Set(localities.map(l => l.toLowerCase()));
-    return sudanState.localities
-      .filter(l => !existingSet.has(l.name.toLowerCase()))
-      .map(l => l.name)
-      .sort();
-  }, [selectedState, localities]);
+    selectedStates.forEach(st => {
+      const sudanState = sudanStates.find(s => s.name.toLowerCase() === st.toLowerCase());
+      if (sudanState) {
+        sudanState.localities.forEach(l => {
+          if (!existingSet.has(l.name.toLowerCase()) && !allNew.includes(l.name)) {
+            allNew.push(l.name);
+          }
+        });
+      }
+    });
+    return allNew.sort();
+  }, [selectedStates, localities]);
 
   const affectedCount = useMemo(() => {
-    if (!selectedState) return 0;
+    if (selectedStates.length === 0) return 0;
     if (selectedLocality) {
-      return stateGroups[selectedState]?.localities[selectedLocality] || 0;
+      return selectedStates.reduce((sum, st) => sum + (stateGroups[st]?.localities[selectedLocality] || 0), 0);
     }
-    return stateGroups[selectedState]?.count || 0;
-  }, [selectedState, selectedLocality, stateGroups]);
+    return selectedStates.reduce((sum, st) => sum + (stateGroups[st]?.count || 0), 0);
+  }, [selectedStates, selectedLocality, stateGroups]);
 
   const affectedEntries = useMemo(() => {
     return siteEntries.filter((e: any) => {
@@ -139,11 +166,18 @@ const MMPPartialUpdate: React.FC<MMPPartialUpdateProps> = ({ mmpFile, onComplete
       }
       const state = e.state || e.additionalData?.State || 'Unknown';
       const locality = e.locality || e.additionalData?.Locality || 'Unknown';
-      if (selectedState && state !== selectedState) return false;
+      if (selectedStates.length > 0 && !selectedStates.includes(state)) return false;
       if (selectedLocality && locality !== selectedLocality) return false;
       return true;
     });
-  }, [siteEntries, selectedHub, selectedState, selectedLocality]);
+  }, [siteEntries, selectedHub, selectedStates, selectedLocality]);
+
+  const statesLabel = useMemo(() => {
+    if (selectedStates.length === 0) return '';
+    if (selectedStates.length === 1) return selectedStates[0];
+    if (selectedStates.length <= 3) return selectedStates.join(', ');
+    return `${selectedStates.slice(0, 2).join(', ')} +${selectedStates.length - 2} more`;
+  }, [selectedStates]);
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -227,7 +261,7 @@ const MMPPartialUpdate: React.FC<MMPPartialUpdateProps> = ({ mmpFile, onComplete
 
       const mismatchedEntries = allEntries.filter((e: any) => {
         const entryState = (e.state || '').trim();
-        if (entryState && entryState !== selectedState) return true;
+        if (entryState && selectedStates.length > 0 && !selectedStates.includes(entryState)) return true;
         if (selectedLocality) {
           const entryLocality = (e.locality || '').trim();
           if (entryLocality && entryLocality !== selectedLocality) return true;
@@ -237,13 +271,14 @@ const MMPPartialUpdate: React.FC<MMPPartialUpdateProps> = ({ mmpFile, onComplete
 
       if (mismatchedEntries.length > 0) {
         scopeWarnings.push(
-          `${mismatchedEntries.length} entries have a different state/locality than selected (${selectedState}${selectedLocality ? '/' + selectedLocality : ''}). Their state/locality will be set to match your selection.`
+          `${mismatchedEntries.length} entries have a different state/locality than selected (${statesLabel}${selectedLocality ? '/' + selectedLocality : ''}). Their state/locality will be set to match your selection.`
         );
       }
 
+      const defaultState = selectedStates.length === 1 ? selectedStates[0] : '';
       const normalizedEntries = allEntries.map((e: any) => ({
         ...e,
-        state: e.state || selectedState,
+        state: e.state || defaultState,
         locality: e.locality || selectedLocality || e.locality,
       }));
 
@@ -274,34 +309,38 @@ const MMPPartialUpdate: React.FC<MMPPartialUpdateProps> = ({ mmpFile, onComplete
         setProgressStage('Counting existing sites for selected area...');
         setProgress(5);
 
-        let countQuery = supabase
-          .from('mmp_site_entries')
-          .select('id', { count: 'exact', head: true })
-          .eq('mmp_file_id', mmpId);
-        if (selectedHub) countQuery = countQuery.eq('hub_office', selectedHub);
-        if (selectedState) countQuery = countQuery.eq('state', selectedState);
-        if (selectedLocality) countQuery = countQuery.eq('locality', selectedLocality);
-
-        const { count: preDeleteCount } = await countQuery;
+        let totalPreDelete = 0;
+        for (const st of selectedStates) {
+          let countQuery = supabase
+            .from('mmp_site_entries')
+            .select('id', { count: 'exact', head: true })
+            .eq('mmp_file_id', mmpId)
+            .eq('state', st);
+          if (selectedHub) countQuery = countQuery.eq('hub_office', selectedHub);
+          if (selectedLocality) countQuery = countQuery.eq('locality', selectedLocality);
+          const { count } = await countQuery;
+          totalPreDelete += count ?? 0;
+        }
 
         setProgressStage('Removing existing sites for selected area...');
         setProgress(10);
 
-        let deleteQuery = supabase
-          .from('mmp_site_entries')
-          .delete()
-          .eq('mmp_file_id', mmpId);
-        if (selectedHub) deleteQuery = deleteQuery.eq('hub_office', selectedHub);
-        if (selectedState) deleteQuery = deleteQuery.eq('state', selectedState);
-        if (selectedLocality) deleteQuery = deleteQuery.eq('locality', selectedLocality);
+        for (const st of selectedStates) {
+          let deleteQuery = supabase
+            .from('mmp_site_entries')
+            .delete()
+            .eq('mmp_file_id', mmpId)
+            .eq('state', st);
+          if (selectedHub) deleteQuery = deleteQuery.eq('hub_office', selectedHub);
+          if (selectedLocality) deleteQuery = deleteQuery.eq('locality', selectedLocality);
 
-        const { error: delError } = await deleteQuery;
-
-        if (delError) {
-          throw new Error(`Failed to delete entries: ${delError.message}`);
+          const { error: delError } = await deleteQuery;
+          if (delError) {
+            throw new Error(`Failed to delete entries for ${st}: ${delError.message}`);
+          }
         }
 
-        deletedCount = preDeleteCount ?? affectedCount;
+        deletedCount = totalPreDelete || affectedCount;
         setProgress(40);
       }
 
@@ -316,11 +355,12 @@ const MMPPartialUpdate: React.FC<MMPPartialUpdateProps> = ({ mmpFile, onComplete
             return s === 'yes' || s === 'true' || s === '1';
           };
 
+          const defaultState = selectedStates.length === 1 ? selectedStates[0] : null;
           const rows = parsedEntries.map((e: any) => ({
             mmp_file_id: mmpId,
             site_code: e.siteCode || null,
             hub_office: e.hubOffice || null,
-            state: e.state || selectedState || null,
+            state: e.state || defaultState || null,
             locality: e.locality || selectedLocality || null,
             site_name: e.siteName || null,
             cp_name: e.cpName || null,
@@ -366,7 +406,7 @@ const MMPPartialUpdate: React.FC<MMPPartialUpdateProps> = ({ mmpFile, onComplete
       const historyEntry = {
         action: action === 'delete' ? 'partial_delete' : action === 'replace' ? 'partial_replace' : 'partial_add',
         hub: selectedHub || 'All hubs',
-        state: selectedState,
+        states: selectedStates,
         locality: selectedLocality || 'All localities',
         deletedCount,
         addedCount,
@@ -388,7 +428,7 @@ const MMPPartialUpdate: React.FC<MMPPartialUpdateProps> = ({ mmpFile, onComplete
       setProgressStage('Complete!');
 
       const actionLabel = action === 'delete' ? 'Deleted' : action === 'replace' ? 'Replaced' : 'Added';
-      const scopeParts = [selectedLocality, selectedState, selectedHub ? `(${selectedHub})` : ''].filter(Boolean);
+      const scopeParts = [selectedLocality, statesLabel, selectedHub ? `(${selectedHub})` : ''].filter(Boolean);
       const scopeLabel = scopeParts.join(', ');
 
       setResult({
@@ -420,12 +460,12 @@ const MMPPartialUpdate: React.FC<MMPPartialUpdateProps> = ({ mmpFile, onComplete
     setParsedEntries([]);
     setShowPreview(false);
     setSelectedHub('');
-    setSelectedState('');
+    setSelectedStates([]);
     setSelectedLocality('');
     onComplete();
   };
 
-  const canProceed = selectedState && (action === 'delete' || parsedEntries.length > 0);
+  const canProceed = selectedStates.length > 0 && (action === 'delete' || parsedEntries.length > 0);
 
   return (
     <div className="space-y-6">
@@ -489,7 +529,7 @@ const MMPPartialUpdate: React.FC<MMPPartialUpdateProps> = ({ mmpFile, onComplete
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
                   <label className="text-sm font-medium mb-1.5 block">Hub / المحور</label>
-                  <Select value={selectedHub} onValueChange={(v) => { setSelectedHub(v === '__all__' ? '' : v); setSelectedState(''); setSelectedLocality(''); setParsedEntries([]); setShowPreview(false); }}>
+                  <Select value={selectedHub} onValueChange={(v) => { setSelectedHub(v === '__all__' ? '' : v); setSelectedStates([]); setSelectedLocality(''); setParsedEntries([]); setShowPreview(false); }}>
                     <SelectTrigger data-testid="select-hub">
                       <SelectValue placeholder="All hubs..." />
                     </SelectTrigger>
@@ -508,56 +548,120 @@ const MMPPartialUpdate: React.FC<MMPPartialUpdateProps> = ({ mmpFile, onComplete
                 </div>
 
                 <div>
-                  <label className="text-sm font-medium mb-1.5 block">State / الولاية *</label>
-                  <Select value={selectedState} onValueChange={(v) => { setSelectedState(v); setSelectedLocality(''); setParsedEntries([]); setShowPreview(false); if (!stateGroups[v]) setAction('add'); }}>
-                    <SelectTrigger data-testid="select-state">
-                      <SelectValue placeholder="Select a state..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {states.length > 0 && (
-                        <>
+                  <label className="text-sm font-medium mb-1.5 block">State(s) / الولاية *</label>
+                  <div className="relative" data-testid="select-state">
+                    <button
+                      type="button"
+                      onClick={() => setStateDropdownOpen(!stateDropdownOpen)}
+                      className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+                    >
+                      <span className={selectedStates.length === 0 ? 'text-muted-foreground' : 'truncate'}>
+                        {selectedStates.length === 0 ? 'Select state(s)...' : statesLabel}
+                      </span>
+                      <span className="flex items-center gap-1">
+                        {selectedStates.length > 0 && (
+                          <Badge variant="secondary" className="text-xs h-5 px-1.5">{selectedStates.length}</Badge>
+                        )}
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="opacity-50"><path d="m6 9 6 6 6-6"/></svg>
+                      </span>
+                    </button>
+                    {stateDropdownOpen && (
+                      <div className="absolute z-50 mt-1 w-full rounded-md border bg-popover shadow-lg max-h-60 overflow-y-auto">
+                        <div className="p-1">
+                          {states.length > 1 && (
+                            <button
+                              type="button"
+                              className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-sm hover:bg-accent cursor-pointer"
+                              onClick={() => {
+                                if (selectedStates.length === states.length) {
+                                  setSelectedStates([]);
+                                } else {
+                                  setSelectedStates([...states]);
+                                }
+                                setSelectedLocality('');
+                                setParsedEntries([]);
+                                setShowPreview(false);
+                              }}
+                            >
+                              <Checkbox checked={selectedStates.length === states.length && states.length > 0} />
+                              <span className="font-medium">Select All / اختر الكل</span>
+                              <Badge variant="secondary" className="ml-auto text-xs">{states.reduce((s, st) => s + (stateGroups[st]?.count || 0), 0)}</Badge>
+                            </button>
+                          )}
+                          <Separator className="my-1" />
                           {states.map(state => (
-                            <SelectItem key={state} value={state}>
-                              <div className="flex items-center justify-between w-full gap-2">
-                                <span>{state}</span>
-                                <Badge variant="secondary" className="text-xs">{stateGroups[state].count} sites</Badge>
-                              </div>
-                            </SelectItem>
+                            <button
+                              key={state}
+                              type="button"
+                              className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-sm hover:bg-accent cursor-pointer"
+                              onClick={() => {
+                                const next = selectedStates.includes(state)
+                                  ? selectedStates.filter(s => s !== state)
+                                  : [...selectedStates, state];
+                                setSelectedStates(next);
+                                setSelectedLocality('');
+                                setParsedEntries([]);
+                                setShowPreview(false);
+                                if (next.length > 0 && next.every(s => !stateGroups[s])) setAction('add');
+                              }}
+                            >
+                              <Checkbox checked={selectedStates.includes(state)} />
+                              <span>{state}</span>
+                              <Badge variant="secondary" className="ml-auto text-xs">{stateGroups[state].count} sites</Badge>
+                            </button>
                           ))}
-                        </>
-                      )}
-                      {newStates.length > 0 && (
-                        <>
-                          <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground border-t mt-1 pt-2">
-                            Add New State / إضافة ولاية جديدة
-                          </div>
-                          {newStates.map(state => (
-                            <SelectItem key={`new-${state}`} value={state}>
-                              <div className="flex items-center justify-between w-full gap-2">
-                                <span>{state}</span>
-                                <Badge variant="outline" className="text-xs text-green-600 border-green-300">New</Badge>
+                          {newStates.length > 0 && (
+                            <>
+                              <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground border-t mt-1 pt-2">
+                                Add New State / إضافة ولاية جديدة
                               </div>
-                            </SelectItem>
-                          ))}
-                        </>
-                      )}
-                    </SelectContent>
-                  </Select>
+                              {newStates.map(state => (
+                                <button
+                                  key={`new-${state}`}
+                                  type="button"
+                                  className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-sm hover:bg-accent cursor-pointer"
+                                  onClick={() => {
+                                    const next = selectedStates.includes(state)
+                                      ? selectedStates.filter(s => s !== state)
+                                      : [...selectedStates, state];
+                                    setSelectedStates(next);
+                                    setSelectedLocality('');
+                                    setParsedEntries([]);
+                                    setShowPreview(false);
+                                    setAction('add');
+                                  }}
+                                >
+                                  <Checkbox checked={selectedStates.includes(state)} />
+                                  <span>{state}</span>
+                                  <Badge variant="outline" className="ml-auto text-xs text-green-600 border-green-300">New</Badge>
+                                </button>
+                              ))}
+                            </>
+                          )}
+                        </div>
+                        <div className="border-t p-1.5 flex justify-end">
+                          <Button size="sm" variant="ghost" onClick={() => setStateDropdownOpen(false)} className="h-7 text-xs">
+                            Done
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 <div>
                   <label className="text-sm font-medium mb-1.5 block">Locality / المحلية (Optional)</label>
-                  <Select value={selectedLocality} onValueChange={(v) => setSelectedLocality(v === '__all__' ? '' : v)} disabled={!selectedState}>
+                  <Select value={selectedLocality} onValueChange={(v) => setSelectedLocality(v === '__all__' ? '' : v)} disabled={selectedStates.length === 0}>
                     <SelectTrigger data-testid="select-locality">
-                      <SelectValue placeholder={selectedState ? "All localities" : "Select state first..."} />
+                      <SelectValue placeholder={selectedStates.length > 0 ? "All localities" : "Select state first..."} />
                     </SelectTrigger>
                     <SelectContent>
-                      {!isNewState && <SelectItem value="__all__">All Localities / كل المحليات</SelectItem>}
+                      {!hasNewStates && <SelectItem value="__all__">All Localities / كل المحليات</SelectItem>}
                       {localities.map(loc => (
                         <SelectItem key={loc} value={loc}>
                           <div className="flex items-center justify-between w-full gap-2">
                             <span>{loc}</span>
-                            <Badge variant="secondary" className="text-xs">{stateGroups[selectedState]?.localities[loc] || 0}</Badge>
+                            <Badge variant="secondary" className="text-xs">{localityCounts[loc] || 0}</Badge>
                           </div>
                         </SelectItem>
                       ))}
@@ -581,12 +685,12 @@ const MMPPartialUpdate: React.FC<MMPPartialUpdateProps> = ({ mmpFile, onComplete
                 </div>
               </div>
 
-              {selectedState && !isNewState && (
+              {selectedStates.length > 0 && !hasNewStates && (
                 <Alert variant="default" className="border-blue-200 bg-blue-50 dark:bg-blue-950 dark:border-blue-800">
                   <MapPin className="h-4 w-4 text-blue-600" />
                   <AlertDescription>
                     <strong>{affectedCount} site(s)</strong> currently exist for{' '}
-                    <strong>{selectedLocality && selectedLocality.trim() ? `${selectedLocality}, ` : ''}{selectedState}{selectedHub ? ` (${selectedHub})` : ''}</strong> in this MMP.
+                    <strong>{selectedLocality && selectedLocality.trim() ? `${selectedLocality}, ` : ''}{statesLabel}{selectedHub ? ` (${selectedHub})` : ''}</strong> in this MMP.
                     <span className="text-xs text-muted-foreground block mt-1">
                       {affectedCount} موقع(مواقع) موجودة حاليًا في هذه الخطة لهذه المنطقة.
                     </span>
@@ -594,13 +698,13 @@ const MMPPartialUpdate: React.FC<MMPPartialUpdateProps> = ({ mmpFile, onComplete
                 </Alert>
               )}
 
-              {selectedState && isNewState && (
+              {selectedStates.length > 0 && hasNewStates && (
                 <Alert variant="default" className="border-green-200 bg-green-50 dark:bg-green-950 dark:border-green-800">
                   <MapPin className="h-4 w-4 text-green-600" />
                   <AlertDescription>
-                    <strong>{selectedState}</strong> is a new state not yet in this MMP. Upload a CSV file to add sites for this state.
+                    <strong>{statesLabel}</strong> includes new state(s) not yet in this MMP. Upload a CSV file to add sites.
                     <span className="text-xs text-muted-foreground block mt-1">
-                      {selectedState} ولاية جديدة غير موجودة في هذه الخطة. ارفع ملف CSV لإضافة مواقع لهذه الولاية.
+                      يتضمن ولاية جديدة غير موجودة في هذه الخطة. ارفع ملف CSV لإضافة مواقع.
                     </span>
                   </AlertDescription>
                 </Alert>
@@ -608,7 +712,7 @@ const MMPPartialUpdate: React.FC<MMPPartialUpdateProps> = ({ mmpFile, onComplete
             </CardContent>
           </Card>
 
-          {selectedState && (
+          {selectedStates.length > 0 && (
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-base">
@@ -622,7 +726,7 @@ const MMPPartialUpdate: React.FC<MMPPartialUpdateProps> = ({ mmpFile, onComplete
                     variant={action === 'replace' ? 'default' : 'outline'}
                     onClick={() => { setAction('replace'); setParsedEntries([]); setShowPreview(false); }}
                     className="flex flex-col items-start h-auto p-4 gap-1"
-                    disabled={isNewState}
+                    disabled={hasNewStates}
                     data-testid="button-action-replace"
                   >
                     <div className="flex items-center gap-2 font-semibold">
@@ -637,7 +741,7 @@ const MMPPartialUpdate: React.FC<MMPPartialUpdateProps> = ({ mmpFile, onComplete
                     variant={action === 'delete' ? 'destructive' : 'outline'}
                     onClick={() => { setAction('delete'); setParsedEntries([]); setShowPreview(false); }}
                     className="flex flex-col items-start h-auto p-4 gap-1"
-                    disabled={isNewState}
+                    disabled={hasNewStates}
                     data-testid="button-action-delete"
                   >
                     <div className="flex items-center gap-2 font-semibold">
@@ -666,7 +770,7 @@ const MMPPartialUpdate: React.FC<MMPPartialUpdateProps> = ({ mmpFile, onComplete
             </Card>
           )}
 
-          {selectedState && action !== 'delete' && (
+          {selectedStates.length > 0 && action !== 'delete' && (
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-base">
@@ -864,7 +968,7 @@ const MMPPartialUpdate: React.FC<MMPPartialUpdateProps> = ({ mmpFile, onComplete
                           <TableCell className="text-xs font-medium">{entry.siteName || 'N/A'}</TableCell>
                           <TableCell className="text-xs">{entry.siteCode || '-'}</TableCell>
                           <TableCell className="text-xs">{entry.hubOffice || selectedHub || '-'}</TableCell>
-                          <TableCell className="text-xs">{entry.state || selectedState}</TableCell>
+                          <TableCell className="text-xs">{entry.state || (selectedStates.length === 1 ? selectedStates[0] : '-')}</TableCell>
                           <TableCell className="text-xs">{entry.locality || selectedLocality || '-'}</TableCell>
                           <TableCell className="text-xs">{entry.cpName || '-'}</TableCell>
                           <TableCell className="text-xs">{entry.visitDate || '-'}</TableCell>
@@ -882,7 +986,7 @@ const MMPPartialUpdate: React.FC<MMPPartialUpdateProps> = ({ mmpFile, onComplete
             </Card>
           )}
 
-          {selectedState && affectedCount > 0 && action === 'delete' && (
+          {selectedStates.length > 0 && affectedCount > 0 && action === 'delete' && (
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-base">
@@ -934,13 +1038,13 @@ const MMPPartialUpdate: React.FC<MMPPartialUpdateProps> = ({ mmpFile, onComplete
 
           <div className="flex items-center justify-between gap-4">
             <div className="text-sm text-muted-foreground">
-              {action === 'delete' && selectedState && (
+              {action === 'delete' && selectedStates.length > 0 && (
                 <span className="text-red-600 dark:text-red-400 font-medium">
                   <Trash2 className="h-3 w-3 inline mr-1" />
-                  Will delete {affectedCount} site(s) from {selectedLocality && selectedLocality.trim() ? `${selectedLocality}, ` : ''}{selectedState}{selectedHub ? ` (${selectedHub})` : ''}
+                  Will delete {affectedCount} site(s) from {selectedLocality && selectedLocality.trim() ? `${selectedLocality}, ` : ''}{statesLabel}{selectedHub ? ` (${selectedHub})` : ''}
                 </span>
               )}
-              {action === 'replace' && selectedState && parsedEntries.length > 0 && (
+              {action === 'replace' && selectedStates.length > 0 && parsedEntries.length > 0 && (
                 <span className="text-blue-600 dark:text-blue-400 font-medium">
                   <RefreshCw className="h-3 w-3 inline mr-1" />
                   Will replace {affectedCount} site(s) with {parsedEntries.length} new entries
@@ -990,7 +1094,7 @@ const MMPPartialUpdate: React.FC<MMPPartialUpdateProps> = ({ mmpFile, onComplete
                 <strong className={action === 'delete' ? 'text-red-600' : 'text-blue-600'}>
                   {action === 'delete' ? 'delete' : action === 'replace' ? 'replace' : 'add to'}
                 </strong>{' '}
-                sites for <strong>{selectedLocality && selectedLocality.trim() ? `${selectedLocality}, ` : ''}{selectedState}{selectedHub ? ` (${selectedHub})` : ''}</strong> in MMP <strong>{mmpFile.name}</strong>.
+                sites for <strong>{selectedLocality && selectedLocality.trim() ? `${selectedLocality}, ` : ''}{statesLabel}{selectedHub ? ` (${selectedHub})` : ''}</strong> in MMP <strong>{mmpFile.name}</strong>.
               </p>
 
               <div className="bg-muted/50 rounded-md p-3 space-y-1 text-sm">
