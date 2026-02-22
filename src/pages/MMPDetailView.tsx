@@ -732,17 +732,15 @@ const MMPDetailView = () => {
               <Users className="mr-2 h-4 w-4" />
               Review & Assign Coordinators
             </Button>
-            {(mmpFile as any)?.workflow?.currentStage === 'forwarded_to_coordinator' && (
-              <Button
-                variant="outline"
-                onClick={() => setReclaimDialogOpen(true)}
-                className="border-orange-300 text-orange-600 hover:bg-orange-50 dark:border-orange-700 dark:text-orange-400 dark:hover:bg-orange-950"
-                data-testid="button-reclaim-mmp"
-              >
-                <RotateCcw className="mr-2 h-4 w-4" />
-                Reclaim from Coordinators
-              </Button>
-            )}
+            <Button
+              variant="outline"
+              onClick={() => setReclaimDialogOpen(true)}
+              className="border-orange-300 text-orange-600 hover:bg-orange-50 dark:border-orange-700 dark:text-orange-400 dark:hover:bg-orange-950"
+              data-testid="button-reclaim-mmp"
+            >
+              <RotateCcw className="mr-2 h-4 w-4" />
+              Reclaim from Coordinators
+            </Button>
           </>
         )}
 
