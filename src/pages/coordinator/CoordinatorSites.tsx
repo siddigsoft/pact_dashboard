@@ -1112,6 +1112,55 @@ const CoordinatorSites: React.FC = () => {
     return Array.from(groups.values()).sort((a, b) => a.mmpName.localeCompare(b.mmpName));
   };
 
+  const returnSitesToState = async (siteIds: string[]) => {
+    try {
+      let updated = 0;
+      for (const siteId of siteIds) {
+        const { data: entry } = await supabase
+          .from('mmp_site_entries')
+          .select('additional_data, status')
+          .eq('id', siteId)
+          .single();
+
+        if (entry) {
+          const ad = typeof entry.additional_data === 'string'
+            ? JSON.parse(entry.additional_data || '{}')
+            : (entry.additional_data || {});
+          delete ad.state_permit_attached;
+          delete ad.state_permit_state_id;
+          delete ad.state_permit_attached_at;
+          delete ad.locality_permit_attached;
+          delete ad.locality_permit_attached_at;
+          delete ad.state_permit_not_required;
+
+          const updateData: any = { additional_data: ad };
+          const status = (entry.status || '').toLowerCase().trim();
+          if (['permits_attached', 'cp_verified', 'cp_verification', 'verified'].includes(status)) {
+            updateData.status = 'forwarded_to_coordinator';
+          }
+
+          await supabase
+            .from('mmp_site_entries')
+            .update(updateData)
+            .eq('id', siteId);
+          updated++;
+        }
+      }
+
+      toast({
+        title: 'Returned to State Permit',
+        description: `${updated} site${updated !== 1 ? 's' : ''} moved back to State Permit tab for verification.`,
+      });
+      await refreshSites();
+    } catch (error: any) {
+      toast({
+        title: 'Error',
+        description: error?.message || 'Failed to return sites',
+        variant: 'destructive',
+      });
+    }
+  };
+
   const handleVerifySite = async (siteId: string, notes?: string) => {
     // Detect if running in Capacitor
     const isCapacitor = typeof (window as any).Capacitor !== 'undefined';
@@ -3509,49 +3558,6 @@ const CoordinatorSites: React.FC = () => {
                   groupedByState[key].push(site);
                 });
 
-                const returnSitesToState = async (siteIds: string[]) => {
-                  try {
-                    let updated = 0;
-                    for (const siteId of siteIds) {
-                      const { data: entry } = await supabase
-                        .from('mmp_site_entries')
-                        .select('additional_data')
-                        .eq('id', siteId)
-                        .single();
-
-                      if (entry) {
-                        const ad = typeof entry.additional_data === 'string'
-                          ? JSON.parse(entry.additional_data || '{}')
-                          : (entry.additional_data || {});
-                        delete ad.state_permit_attached;
-                        delete ad.state_permit_state_id;
-                        delete ad.state_permit_attached_at;
-                        delete ad.locality_permit_attached;
-                        delete ad.locality_permit_attached_at;
-                        delete ad.state_permit_not_required;
-
-                        await supabase
-                          .from('mmp_site_entries')
-                          .update({ additional_data: ad })
-                          .eq('id', siteId);
-                        updated++;
-                      }
-                    }
-
-                    toast({
-                      title: 'Returned to State Permit',
-                      description: `${updated} site${updated !== 1 ? 's' : ''} moved back to State Permit tab for verification.`,
-                    });
-                    await refreshSites();
-                  } catch (error: any) {
-                    toast({
-                      title: 'Error',
-                      description: error?.message || 'Failed to return sites',
-                      variant: 'destructive',
-                    });
-                  }
-                };
-
                 return readySitesList.length === 0 ? (
                   <div className="text-center py-8 text-muted-foreground">
                     <CheckCircle className="h-12 w-12 mx-auto mb-4 opacity-20" />
@@ -3628,15 +3634,29 @@ const CoordinatorSites: React.FC = () => {
             <CardHeader>
               <div className="flex items-center justify-between">
                 <CardTitle>Sites with Permits Attached</CardTitle>
-                <div className="relative w-full sm:w-auto max-w-sm">
-                  <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    type="search"
-                    placeholder="Search localities or sites..."
-                    className="pl-8 w-full sm:w-[300px]"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                  />
+                <div className="flex items-center gap-2">
+                  {isAdminOrSuperUser && Object.values(sitesGroupedByLocality).flat().length > 0 && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="text-xs h-8 text-orange-600 border-orange-300 hover:bg-orange-50 dark:text-orange-400 dark:border-orange-700 dark:hover:bg-orange-950"
+                      data-testid="button-return-all-cp-to-state"
+                      onClick={() => returnSitesToState(Object.values(sitesGroupedByLocality).flat().map((s: any) => s.id))}
+                    >
+                      <RotateCcw className="h-3 w-3 mr-1" />
+                      Return All to State
+                    </Button>
+                  )}
+                  <div className="relative w-full sm:w-auto max-w-sm">
+                    <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      type="search"
+                      placeholder="Search localities or sites..."
+                      className="pl-8 w-full sm:w-[300px]"
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                    />
+                  </div>
                 </div>
               </div>
               <div className="text-sm text-muted-foreground">
@@ -3661,15 +3681,29 @@ const CoordinatorSites: React.FC = () => {
             <CardHeader>
               <div className="flex items-center justify-between">
                 <CardTitle>Verified Sites</CardTitle>
-                <div className="relative w-full sm:w-auto max-w-sm">
-                  <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    type="search"
-                    placeholder="Search sites..."
-                    className="pl-8 w-full sm:w-[300px]"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                  />
+                <div className="flex items-center gap-2">
+                  {isAdminOrSuperUser && sitesByTab.length > 0 && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="text-xs h-8 text-orange-600 border-orange-300 hover:bg-orange-50 dark:text-orange-400 dark:border-orange-700 dark:hover:bg-orange-950"
+                      data-testid="button-return-all-verified-to-state"
+                      onClick={() => returnSitesToState(sitesByTab.map((s: any) => s.id))}
+                    >
+                      <RotateCcw className="h-3 w-3 mr-1" />
+                      Return All to State
+                    </Button>
+                  )}
+                  <div className="relative w-full sm:w-auto max-w-sm">
+                    <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      type="search"
+                      placeholder="Search sites..."
+                      className="pl-8 w-full sm:w-[300px]"
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                    />
+                  </div>
                 </div>
               </div>
               <div className="flex flex-wrap items-center gap-4 mt-4">
