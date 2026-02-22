@@ -3662,6 +3662,73 @@ const CoordinatorSites: React.FC = () => {
               <div className="text-sm text-muted-foreground">
                 Click on a locality to view and verify sites. You can verify all sites in a locality at once or verify them individually.
               </div>
+              <div className="flex flex-wrap items-center gap-4 mt-4">
+                {mmpFilterOptions.length > 1 && (
+                  <div className="flex items-center gap-2">
+                    <Label className="text-sm font-medium">MMP:</Label>
+                    <Select value={mmpFilter} onValueChange={setMmpFilter}>
+                      <SelectTrigger className="w-[160px]">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All MMPs</SelectItem>
+                        {mmpFilterOptions.map((mmp) => (
+                          <SelectItem key={mmp.id} value={mmp.id}>{mmp.name} ({mmp.count})</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+                <div className="flex items-center gap-2">
+                  <Label className="text-sm font-medium">State:</Label>
+                  <Select value={stateFilter} onValueChange={(value) => {
+                    setStateFilter(value);
+                    setLocalityFilter('all');
+                  }}>
+                    <SelectTrigger className="w-[140px]">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All States</SelectItem>
+                      {[...new Set(sitesByTab.map((s: any) => s.state).filter(Boolean))].sort().map((state: string) => (
+                        <SelectItem key={state} value={state}>{state}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Label className="text-sm font-medium">Locality:</Label>
+                  <Select value={localityFilter} onValueChange={setLocalityFilter}>
+                    <SelectTrigger className="w-[140px]">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Localities</SelectItem>
+                      {[...new Set(sitesByTab
+                        .filter((s: any) => stateFilter === 'all' || s.state === stateFilter)
+                        .map((s: any) => s.locality)
+                        .filter(Boolean)
+                      )].sort().map((loc: string) => (
+                        <SelectItem key={loc} value={loc}>{loc}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Label className="text-sm font-medium">Activity:</Label>
+                  <Select value={activityFilter} onValueChange={setActivityFilter}>
+                    <SelectTrigger className="w-[140px]">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Activities</SelectItem>
+                      {[...new Set(sitesByTab.map((s: any) => s.main_activity || s.activity).filter(Boolean))].sort().map((act: string) => (
+                        <SelectItem key={act} value={act}>{act}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
             </CardHeader>
             <CardContent>
               {Object.keys(sitesGroupedByLocality).length === 0 ? (
