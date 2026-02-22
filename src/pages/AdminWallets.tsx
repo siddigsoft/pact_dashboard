@@ -10,7 +10,7 @@ import { Badge } from '@/components/ui/badge';
 import { WalletCard } from '@/components/wallet/WalletCard';
 import { supabase } from '@/integrations/supabase/client';
 import { adminListWallets } from '@/context/wallet/supabase';
-import { Search, RefreshCw, Wallet as WalletIcon, Zap, TrendingUp, Activity, DollarSign, Grid3x3, Table2, ChevronDown, ChevronRight, MapPin, Calendar, Settings, Download, FileSpreadsheet } from 'lucide-react';
+import { Search, RefreshCw, Wallet as WalletIcon, Zap, TrendingUp, Activity, DollarSign, Grid3x3, Table2, ChevronDown, ChevronRight, MapPin, Calendar, Settings, Download, FileSpreadsheet, Loader2 } from 'lucide-react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { format } from 'date-fns';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
@@ -34,8 +34,147 @@ const AdminWallets: React.FC = () => {
     userName: string;
     currentBalance: number;
   }>({ open: false, userId: '', userName: '', currentBalance: 0 });
+  const [syncingAll, setSyncingAll] = useState(false);
+  const [syncProgress, setSyncProgress] = useState({ current: 0, total: 0 });
   const navigate = useNavigate();
   const { toast } = useToast();
+
+  const syncAndRecalculateAll = async () => {
+    setSyncingAll(true);
+    const walletsToSync = rows.filter(r => {
+      const balance = r.balances?.[currency] || 0;
+      const earned = Number(r.totalEarned || 0);
+      return balance > 0 || earned > 0;
+    });
+    const total = walletsToSync.length;
+    setSyncProgress({ current: 0, total });
+
+    let successCount = 0;
+    let errorCount = 0;
+    let correctedTxCount = 0;
+
+    for (let i = 0; i < walletsToSync.length; i++) {
+      const w = walletsToSync[i];
+      setSyncProgress({ current: i + 1, total });
+
+      try {
+        const userId = w.user_id;
+        const walletId = w.id;
+
+        const { data: allTransactions, error: txError } = await supabase
+          .from('wallet_transactions')
+          .select('id, amount, type, currency, site_visit_id, related_site_visit_id, description')
+          .eq('user_id', userId);
+
+        if (txError) throw txError;
+
+        const earningTxs = (allTransactions || []).filter((tx: any) =>
+          (tx.type === 'earning' || tx.type === 'site_visit_fee') &&
+          (tx.site_visit_id || tx.related_site_visit_id)
+        );
+
+        if (earningTxs.length > 0) {
+          const siteEntryIds = earningTxs
+            .map((tx: any) => tx.site_visit_id || tx.related_site_visit_id)
+            .filter(Boolean) as string[];
+
+          const { data: entries } = await supabase
+            .from('mmp_site_entries')
+            .select('id, site_name, site_code, enumerator_fee, transport_fee, cost')
+            .in('id', siteEntryIds);
+
+          const entryDataMap = new Map(
+            (entries || []).map((e: any) => {
+              const enumFee = Number(e.enumerator_fee || 0);
+              const transportFee = Number(e.transport_fee || 0);
+              const storedCost = Number(e.cost || 0);
+              const calculatedTotal = enumFee + transportFee;
+              const totalFee = calculatedTotal > 0 ? calculatedTotal : (storedCost > 0 ? storedCost : 0);
+              return [e.id, { totalFee, siteName: e.site_name || '' }];
+            })
+          );
+
+          for (const tx of earningTxs) {
+            const entryId = tx.site_visit_id || tx.related_site_visit_id;
+            if (!entryId) continue;
+            const entryData = entryDataMap.get(entryId);
+            if (!entryData || entryData.totalFee <= 0) continue;
+
+            let needsUpdate = false;
+            const updatePayload: Record<string, any> = {};
+
+            if (Math.abs(Number(tx.amount) - entryData.totalFee) >= 0.01) {
+              updatePayload.amount = entryData.totalFee;
+              needsUpdate = true;
+            }
+
+            if (entryData.siteName) {
+              const correctDesc = `Site visit completed: ${entryData.siteName}`;
+              if (tx.description !== correctDesc) {
+                updatePayload.description = correctDesc;
+                needsUpdate = true;
+              }
+            }
+
+            if (needsUpdate) {
+              await supabase
+                .from('wallet_transactions')
+                .update(updatePayload)
+                .eq('id', tx.id);
+              correctedTxCount++;
+            }
+          }
+        }
+
+        const { data: refreshedTxs } = await supabase
+          .from('wallet_transactions')
+          .select('amount, type, currency')
+          .eq('user_id', userId);
+
+        let newTotalEarned = 0;
+        let newTotalWithdrawn = 0;
+        const balancesByCurrency: Record<string, number> = {};
+
+        for (const tx of (refreshedTxs || [])) {
+          const amt = Number(tx.amount || 0);
+          const txCurrency = tx.currency || currency;
+          if (!balancesByCurrency[txCurrency]) balancesByCurrency[txCurrency] = 0;
+
+          if (['earning', 'site_visit_fee', 'adjustment', 'bonus'].includes(tx.type)) {
+            newTotalEarned += amt;
+            balancesByCurrency[txCurrency] += amt;
+          } else if (['withdrawal', 'penalty', 'debit'].includes(tx.type)) {
+            newTotalWithdrawn += Math.abs(amt);
+            balancesByCurrency[txCurrency] -= Math.abs(amt);
+          }
+        }
+
+        await supabase
+          .from('wallets')
+          .update({
+            total_earned: newTotalEarned,
+            total_withdrawn: newTotalWithdrawn,
+            balances: balancesByCurrency,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', walletId);
+
+        successCount++;
+      } catch (err) {
+        errorCount++;
+      }
+    }
+
+    toast({
+      title: 'Bulk Sync Complete',
+      description: `${successCount} wallets synced${correctedTxCount > 0 ? `, ${correctedTxCount} transactions corrected` : ''}${errorCount > 0 ? `, ${errorCount} errors` : ''}`,
+      variant: errorCount > 0 ? 'destructive' : 'default',
+    });
+
+    await load();
+    setSyncingAll(false);
+    setSyncProgress({ current: 0, total: 0 });
+  };
 
   const load = async () => {
     const data = await adminListWallets();
@@ -260,6 +399,26 @@ const AdminWallets: React.FC = () => {
           >
             <Activity className="h-4 w-4 mr-2" />
             Budget
+          </Button>
+          <Button
+            variant="default"
+            size="sm"
+            onClick={syncAndRecalculateAll}
+            disabled={syncingAll || rows.length === 0}
+            className="bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white"
+            data-testid="button-sync-all-wallets"
+          >
+            {syncingAll ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                Syncing {syncProgress.current}/{syncProgress.total}...
+              </>
+            ) : (
+              <>
+                <Zap className="h-4 w-4 mr-2" />
+                Sync & Recalculate All
+              </>
+            )}
           </Button>
           <DataFreshnessBadge />
         </div>
