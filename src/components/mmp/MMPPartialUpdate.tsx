@@ -21,9 +21,13 @@ import {
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { parseAndCountEntries } from '@/utils/mmpFileUpload';
+import { getExcelSheetInfo, ExcelSheetInfo } from '@/utils/csvValidator';
 import { sudanStates } from '@/data/sudanStates';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Label } from '@/components/ui/label';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 
 interface MMPPartialUpdateProps {
   mmpFile: any;
@@ -42,6 +46,10 @@ const MMPPartialUpdate: React.FC<MMPPartialUpdateProps> = ({ mmpFile, onComplete
   const [parsedEntries, setParsedEntries] = useState<any[]>([]);
   const [parseErrors, setParseErrors] = useState<string[]>([]);
   const [parseWarnings, setParseWarnings] = useState<string[]>([]);
+  const [uploadedFile, setUploadedFile] = useState<File | null>(null);
+  const [sheetInfoList, setSheetInfoList] = useState<ExcelSheetInfo[]>([]);
+  const [selectedSheets, setSelectedSheets] = useState<string[]>([]);
+  const [showSheetSelector, setShowSheetSelector] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const [processing, setProcessing] = useState(false);
@@ -115,25 +123,83 @@ const MMPPartialUpdate: React.FC<MMPPartialUpdateProps> = ({ mmpFile, onComplete
     const file = e.target.files?.[0];
     if (!file) return;
 
+    setUploadedFile(file);
+    setParsedEntries([]);
+    setParseErrors([]);
+    setParseWarnings([]);
+    setShowPreview(false);
+
+    const ext = file.name.split('.').pop()?.toLowerCase();
+    if (ext === 'xlsx' || ext === 'xls') {
+      try {
+        setProcessing(true);
+        setProgressStage('Reading Excel file sheets...');
+        setProgress(10);
+
+        const sheets = await getExcelSheetInfo(file);
+        setSheetInfoList(sheets);
+
+        if (sheets.length > 1) {
+          setSelectedSheets([sheets[sheets.length - 1].name]);
+          setShowSheetSelector(true);
+          setProcessing(false);
+          setProgress(0);
+          return;
+        } else if (sheets.length === 1) {
+          setSelectedSheets([sheets[0].name]);
+          await parseSelectedSheets(file, [sheets[0].name]);
+        }
+      } catch (err) {
+        toast({ title: 'File Error', description: err instanceof Error ? err.message : 'Failed to read Excel file', variant: 'destructive' });
+        setProcessing(false);
+      }
+    } else {
+      await parseSelectedSheets(file, []);
+    }
+
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  const parseSelectedSheets = async (file: File, sheets: string[]) => {
     try {
       setProcessing(true);
+      setShowSheetSelector(false);
       setProgress(20);
-      setProgressStage('Parsing CSV file...');
+      setProgressStage('Parsing file...');
 
-      const result = await parseAndCountEntries(file);
+      let allEntries: any[] = [];
+      let allErrors: string[] = [];
+      let allWarnings: string[] = [];
+
+      if (sheets.length <= 1) {
+        const result = await parseAndCountEntries(file, sheets[0] || undefined);
+        allEntries = result.entries;
+        allErrors = result.errors;
+        allWarnings = result.warnings;
+      } else {
+        for (let i = 0; i < sheets.length; i++) {
+          setProgressStage(`Parsing sheet "${sheets[i]}" (${i + 1}/${sheets.length})...`);
+          setProgress(20 + Math.round((i / sheets.length) * 50));
+
+          const result = await parseAndCountEntries(file, sheets[i]);
+          allEntries.push(...result.entries);
+          if (result.errors.length > 0) {
+            allErrors.push(...result.errors.map(e => `[${sheets[i]}] ${e}`));
+          }
+          if (result.warnings.length > 0) {
+            allWarnings.push(...result.warnings.map(w => `[${sheets[i]}] ${w}`));
+          }
+        }
+      }
 
       setProgress(80);
       setProgressStage('Validating entries...');
 
-      if (result.errors.length > 0) {
-        setParseErrors(result.errors);
-      } else {
-        setParseErrors([]);
-      }
+      setParseErrors(allErrors);
 
-      const scopeWarnings = [...(result.warnings.length > 0 ? result.warnings : [])];
+      const scopeWarnings = [...allWarnings];
 
-      const mismatchedEntries = result.entries.filter((e: any) => {
+      const mismatchedEntries = allEntries.filter((e: any) => {
         const entryState = (e.state || '').trim();
         if (entryState && entryState !== selectedState) return true;
         if (selectedLocality) {
@@ -149,7 +215,7 @@ const MMPPartialUpdate: React.FC<MMPPartialUpdateProps> = ({ mmpFile, onComplete
         );
       }
 
-      const normalizedEntries = result.entries.map((e: any) => ({
+      const normalizedEntries = allEntries.map((e: any) => ({
         ...e,
         state: e.state || selectedState,
         locality: e.locality || selectedLocality || e.locality,
@@ -159,16 +225,11 @@ const MMPPartialUpdate: React.FC<MMPPartialUpdateProps> = ({ mmpFile, onComplete
       setParsedEntries(normalizedEntries);
       setShowPreview(true);
       setProgress(100);
-      setProgressStage('Ready for review');
+      setProgressStage(`Ready for review - ${normalizedEntries.length} entries from ${sheets.length || 1} sheet(s)`);
     } catch (err) {
-      toast({
-        title: 'File Error',
-        description: err instanceof Error ? err.message : 'Failed to parse the file',
-        variant: 'destructive'
-      });
+      toast({ title: 'File Error', description: err instanceof Error ? err.message : 'Failed to parse the file', variant: 'destructive' });
     } finally {
       setProcessing(false);
-      if (fileInputRef.current) fileInputRef.current.value = '';
     }
   };
 
@@ -595,6 +656,96 @@ const MMPPartialUpdate: React.FC<MMPPartialUpdateProps> = ({ mmpFile, onComplete
                     Choose File / اختر ملف
                   </Button>
                 </div>
+
+                {showSheetSelector && sheetInfoList.length > 1 && (
+                  <Card className="border-blue-200 bg-blue-50/50 dark:bg-blue-950/30 dark:border-blue-800">
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-sm flex items-center gap-2">
+                        <FileText className="h-4 w-4 text-blue-600" />
+                        Select Sheet(s) / اختر الأوراق
+                      </CardTitle>
+                      <CardDescription className="text-xs">
+                        This Excel file has {sheetInfoList.length} sheets. Choose which to import.
+                        <span className="block text-muted-foreground">هذا الملف يحتوي على {sheetInfoList.length} أوراق. اختر أيها للاستيراد.</span>
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-3">
+                      <div className="space-y-2">
+                        {sheetInfoList.map((sheet) => (
+                          <div
+                            key={sheet.name}
+                            className={`flex items-center gap-3 p-3 rounded-md border transition-colors cursor-pointer ${
+                              selectedSheets.includes(sheet.name)
+                                ? 'border-blue-400 bg-blue-100/50 dark:bg-blue-900/30'
+                                : 'border-gray-200 dark:border-gray-700 hover:border-gray-300'
+                            }`}
+                            onClick={() => {
+                              setSelectedSheets(prev =>
+                                prev.includes(sheet.name)
+                                  ? prev.filter(s => s !== sheet.name)
+                                  : [...prev, sheet.name]
+                              );
+                            }}
+                            data-testid={`sheet-option-${sheet.name}`}
+                          >
+                            <Checkbox
+                              checked={selectedSheets.includes(sheet.name)}
+                              onCheckedChange={(checked) => {
+                                setSelectedSheets(prev =>
+                                  checked
+                                    ? [...prev, sheet.name]
+                                    : prev.filter(s => s !== sheet.name)
+                                );
+                              }}
+                            />
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium truncate">{sheet.name}</p>
+                              <p className="text-xs text-muted-foreground">
+                                ~{sheet.rowCount} rows
+                              </p>
+                            </div>
+                            <Badge variant={sheet.headerScore >= 5 ? 'default' : 'secondary'} className="text-xs">
+                              {sheet.headerScore >= 5 ? 'Good match' : `${sheet.headerScore} headers`}
+                            </Badge>
+                          </div>
+                        ))}
+                      </div>
+
+                      <div className="flex items-center justify-between pt-2 border-t">
+                        <div className="flex gap-2">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setSelectedSheets(sheetInfoList.map(s => s.name))}
+                            data-testid="button-select-all-sheets"
+                          >
+                            Select All / اختر الكل
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setSelectedSheets([])}
+                          >
+                            Clear
+                          </Button>
+                        </div>
+                        <Button
+                          onClick={() => {
+                            if (uploadedFile && selectedSheets.length > 0) {
+                              parseSelectedSheets(uploadedFile, selectedSheets);
+                            }
+                          }}
+                          disabled={selectedSheets.length === 0 || processing}
+                          size="sm"
+                          data-testid="button-parse-sheets"
+                        >
+                          <ArrowRight className="h-4 w-4 mr-1" />
+                          Load {selectedSheets.length} Sheet{selectedSheets.length !== 1 ? 's' : ''} / تحميل
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
 
                 {processing && (
                   <div className="space-y-2">

@@ -49,9 +49,42 @@ const DATE_PATTERNS = [
   /^\d{2}-\d{2}-\d{4}$/  // DD-MM-YYYY
 ];
 
+export interface ExcelSheetInfo {
+  name: string;
+  rowCount: number;
+  headerScore: number;
+}
+
+export async function getExcelSheetInfo(file: File): Promise<ExcelSheetInfo[]> {
+  const ext = file.name.split('.').pop()?.toLowerCase();
+  if (ext !== 'xlsx' && ext !== 'xls') return [];
+
+  const buffer = await file.arrayBuffer();
+  const wb = XLSX.read(buffer, { type: 'array', cellDates: true, dense: false });
+  const norm = (s: string) => String(s || '').toLowerCase().trim();
+  const requiredSet = new Set(REQUIRED_HEADERS.map(h => norm(h)));
+
+  return wb.SheetNames.map(name => {
+    const ws = wb.Sheets[name];
+    const wsRange = XLSX.utils.decode_range(ws['!ref'] || 'A1');
+    let maxScore = 0;
+    let bestHeaderRow = 0;
+    const scanRows = Math.min(wsRange.e.r, 20);
+    for (let r = 0; r <= scanRows; r++) {
+      const hdr = (XLSX.utils.sheet_to_json(ws, { header: 1, range: `A${r + 1}:ZZ${r + 1}` })[0] as any[] | undefined) || [];
+      const normalized = hdr.map(h => norm(String(h)));
+      const s = normalized.reduce((acc, h) => acc + (requiredSet.has(h) ? 1 : 0), 0);
+      if (s > maxScore) { maxScore = s; bestHeaderRow = r; }
+    }
+    const dataRows = wsRange.e.r - bestHeaderRow;
+    return { name, rowCount: Math.max(0, dataRows), headerScore: maxScore };
+  });
+}
+
 export const validateCSV = async (
   file: File,
-  onProgress?: (progress: { current: number; total: number; stage: string }) => void
+  onProgress?: (progress: { current: number; total: number; stage: string }) => void,
+  sheetName?: string
 ): Promise<CSVParseResult> => {
   const errors: CSVValidationError[] = [];
   const warnings: CSVValidationError[] = [];
@@ -102,15 +135,20 @@ export const validateCSV = async (
         return maxScore;
       };
 
-      let bestSheetName = wb.SheetNames[wb.SheetNames.length - 1];
-      let bestScore = -1;
-      for (let si = wb.SheetNames.length - 1; si >= 0; si--) {
-        const name = wb.SheetNames[si];
-        const wsCandidate = wb.Sheets[name];
-        const s = scoreSheet(wsCandidate);
-        if (s > bestScore) {
-          bestScore = s;
-          bestSheetName = name;
+      let bestSheetName: string;
+      if (sheetName && wb.SheetNames.includes(sheetName)) {
+        bestSheetName = sheetName;
+      } else {
+        bestSheetName = wb.SheetNames[wb.SheetNames.length - 1];
+        let bestScore = -1;
+        for (let si = wb.SheetNames.length - 1; si >= 0; si--) {
+          const name = wb.SheetNames[si];
+          const wsCandidate = wb.Sheets[name];
+          const s = scoreSheet(wsCandidate);
+          if (s > bestScore) {
+            bestScore = s;
+            bestSheetName = name;
+          }
         }
       }
 
