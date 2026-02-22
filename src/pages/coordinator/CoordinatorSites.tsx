@@ -3507,6 +3507,49 @@ const CoordinatorSites: React.FC = () => {
                   groupedByState[key].push(site);
                 });
 
+                const returnSitesToState = async (siteIds: string[]) => {
+                  try {
+                    let updated = 0;
+                    for (const siteId of siteIds) {
+                      const { data: entry } = await supabase
+                        .from('mmp_site_entries')
+                        .select('additional_data')
+                        .eq('id', siteId)
+                        .single();
+
+                      if (entry) {
+                        const ad = typeof entry.additional_data === 'string'
+                          ? JSON.parse(entry.additional_data || '{}')
+                          : (entry.additional_data || {});
+                        delete ad.state_permit_attached;
+                        delete ad.state_permit_state_id;
+                        delete ad.state_permit_attached_at;
+                        delete ad.locality_permit_attached;
+                        delete ad.locality_permit_attached_at;
+                        delete ad.state_permit_not_required;
+
+                        await supabase
+                          .from('mmp_site_entries')
+                          .update({ additional_data: ad })
+                          .eq('id', siteId);
+                        updated++;
+                      }
+                    }
+
+                    toast({
+                      title: 'Returned to State Permit',
+                      description: `${updated} site${updated !== 1 ? 's' : ''} moved back to State Permit tab for verification.`,
+                    });
+                    await refreshSites();
+                  } catch (error: any) {
+                    toast({
+                      title: 'Error',
+                      description: error?.message || 'Failed to return sites',
+                      variant: 'destructive',
+                    });
+                  }
+                };
+
                 return readySitesList.length === 0 ? (
                   <div className="text-center py-8 text-muted-foreground">
                     <CheckCircle className="h-12 w-12 mx-auto mb-4 opacity-20" />
@@ -3515,15 +3558,27 @@ const CoordinatorSites: React.FC = () => {
                 ) : (
                   <div className="space-y-4">
                     <div className="text-sm text-muted-foreground">
-                      These sites have all permits and are ready to proceed.
+                      These sites have all permits marked as done. Use "Return to State" to move them back for verification.
                     </div>
                     {Object.entries(groupedByState).map(([stateName, sites]) => (
                       <Card key={stateName}>
                         <CardHeader className="pb-2 pt-3 px-4">
-                          <div className="flex items-center gap-2">
-                            <CheckCircle className="h-4 w-4 text-green-600" />
-                            <CardTitle className="text-base">{stateName}</CardTitle>
-                            <Badge variant="secondary" className="text-xs">{sites.length} site{sites.length !== 1 ? 's' : ''}</Badge>
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <CheckCircle className="h-4 w-4 text-green-600" />
+                              <CardTitle className="text-base">{stateName}</CardTitle>
+                              <Badge variant="secondary" className="text-xs">{sites.length} site{sites.length !== 1 ? 's' : ''}</Badge>
+                            </div>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="text-xs h-7 text-orange-600 border-orange-300 hover:bg-orange-50 dark:text-orange-400 dark:border-orange-700 dark:hover:bg-orange-950"
+                              data-testid={`button-return-all-state-${stateName}`}
+                              onClick={() => returnSitesToState(sites.map((s: any) => s.id))}
+                            >
+                              <RotateCcw className="h-3 w-3 mr-1" />
+                              Return All to State
+                            </Button>
                           </div>
                         </CardHeader>
                         <CardContent className="px-4 pb-3 space-y-2">
@@ -3543,9 +3598,16 @@ const CoordinatorSites: React.FC = () => {
                                     {mmpName && <span>• {mmpName}</span>}
                                   </div>
                                 </div>
-                                <Badge className="bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300 text-xs">
-                                  Ready
-                                </Badge>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="text-xs h-7 text-orange-600 hover:text-orange-700 hover:bg-orange-50 dark:text-orange-400 dark:hover:bg-orange-950"
+                                  data-testid={`button-return-site-${site.id}`}
+                                  onClick={() => returnSitesToState([site.id])}
+                                >
+                                  <RotateCcw className="h-3 w-3 mr-1" />
+                                  Return to State
+                                </Button>
                               </div>
                             );
                           })}
