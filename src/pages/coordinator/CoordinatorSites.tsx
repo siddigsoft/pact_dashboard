@@ -13,7 +13,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAppContext } from '@/context/AppContext';
 import { useMMP } from '@/context/mmp/MMPContext';
 import { useUserProjects } from '@/hooks/useUserProjects';
-import { CheckCircle, Clock, FileCheck, XCircle, ArrowLeft, Eye, Edit, Search, ChevronLeft, ChevronRight, Calendar, CheckSquare, MapPin, AlertTriangle, ChevronUp, ChevronDown, Play, Upload, RotateCcw } from 'lucide-react';
+import { CheckCircle, Clock, FileCheck, XCircle, ArrowLeft, Eye, Edit, Search, ChevronLeft, ChevronRight, Calendar, CheckSquare, MapPin, AlertTriangle, ChevronUp, ChevronDown, Play, Upload, RotateCcw, RefreshCw } from 'lucide-react';
 import { useSiteVisitContext } from '@/context/siteVisit/SiteVisitContext';
 import { format } from 'date-fns';
 import { DatePicker } from '@/components/ui/date-picker';
@@ -463,6 +463,10 @@ const CoordinatorSites: React.FC = () => {
   const [returnSiteDialogOpen, setReturnSiteDialogOpen] = useState(false);
   const [returnSiteReason, setReturnSiteReason] = useState('');
   const [selectedSiteId, setSelectedSiteId] = useState<string | null>(null);
+  const [returnStateToFOMDialogOpen, setReturnStateToFOMDialogOpen] = useState(false);
+  const [returnStateToFOMReason, setReturnStateToFOMReason] = useState('');
+  const [selectedStateForReturn, setSelectedStateForReturn] = useState<any>(null);
+  const [returnStateProcessing, setReturnStateProcessing] = useState(false);
   const [verificationNotes, setVerificationNotes] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('');
@@ -1560,6 +1564,97 @@ const CoordinatorSites: React.FC = () => {
     } catch (error) {
       console.error('Error returning site:', error);
       toast({ title: 'Error', description: 'Failed to return site. Please try again.', variant: 'destructive' });
+    }
+  };
+
+  const handleReturnStateToFOM = async () => {
+    if (!selectedStateForReturn || !returnStateToFOMReason.trim()) return;
+    setReturnStateProcessing(true);
+    try {
+      const sitesToReturn = coordinatorSites.filter(site =>
+        site.state === selectedStateForReturn.state
+      );
+      if (sitesToReturn.length === 0) {
+        toast({ title: 'Error', description: `No sites found for ${selectedStateForReturn.state}.`, variant: 'destructive' });
+        return;
+      }
+      const siteIds = sitesToReturn.map(s => s.id);
+      const { error } = await supabase
+        .from('mmp_site_entries')
+        .update({
+          status: 'returned_to_fom',
+          verification_notes: returnStateToFOMReason,
+          verified_at: new Date().toISOString(),
+          verified_by: currentUser?.username || currentUser?.fullName || currentUser?.email || 'System',
+        })
+        .in('id', siteIds);
+      if (error) throw error;
+
+      const uniqueMmpIds = [...new Set(sitesToReturn.map(s => s.mmp_file_id))];
+      for (const mmpFileId of uniqueMmpIds) {
+        try {
+          const { data: mmpData } = await supabase
+            .from('mmp_files')
+            .select('uploaded_by')
+            .eq('id', mmpFileId)
+            .single();
+          if (mmpData?.uploaded_by) {
+            await supabase.from('notifications').insert({
+              recipient_id: mmpData.uploaded_by,
+              title_en: 'Sites Returned by Coordinator',
+              title_ar: 'تم إرجاع المواقع من المنسق',
+              message_en: `${sitesToReturn.length} sites in ${selectedStateForReturn.state} have been returned to FOM. Reason: ${returnStateToFOMReason}`,
+              message_ar: `تم إرجاع ${sitesToReturn.length} مواقع في ${selectedStateForReturn.state} إلى مدير العمليات الميدانية. السبب: ${returnStateToFOMReason}`,
+              event_type: 'approvals',
+              status: 'pending',
+              priority: 'high'
+            });
+          }
+        } catch (notifErr) {
+          console.warn('Failed to send notification to FOM:', notifErr);
+        }
+      }
+
+      const hubsNotified = new Set<string>();
+      for (const site of sitesToReturn) {
+        if (site.hub_office && !hubsNotified.has(site.hub_office)) {
+          try {
+            const { data: hubData } = await supabase.from('hubs').select('id').eq('name', site.hub_office).single();
+            if (hubData?.id) {
+              const sitesInHub = sitesToReturn.filter(s => s.hub_office === site.hub_office);
+              await NotificationTriggerService.siteReturnedToFOM(
+                hubData.id,
+                selectedStateForReturn.state,
+                sitesInHub.length,
+                returnStateToFOMReason,
+                currentUser?.fullName || currentUser?.username || 'Coordinator'
+              );
+            }
+          } catch {}
+          hubsNotified.add(site.hub_office);
+        }
+      }
+
+      await supabase.from('audit_logs').insert({
+        action: 'return_state_sites_to_fom',
+        details: `Returned ${sitesToReturn.length} sites in state "${selectedStateForReturn.state}" to FOM. Reason: ${returnStateToFOMReason}`,
+        performed_by: currentUser?.id || '',
+        username: currentUser?.username || currentUser?.fullName || 'System',
+      });
+
+      toast({
+        title: 'Sites Returned to FOM',
+        description: `${sitesToReturn.length} sites in ${selectedStateForReturn.state} have been returned to FOM.`,
+      });
+      await refreshAll();
+      setReturnStateToFOMDialogOpen(false);
+      setReturnStateToFOMReason('');
+      setSelectedStateForReturn(null);
+    } catch (error) {
+      console.error('Error returning state sites to FOM:', error);
+      toast({ title: 'Error', description: 'Failed to return sites. Please try again.', variant: 'destructive' });
+    } finally {
+      setReturnStateProcessing(false);
     }
   };
 
@@ -3165,6 +3260,21 @@ const CoordinatorSites: React.FC = () => {
                         <Upload className="h-3 w-3 mr-1" />
                         Upload Permits
                       </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedStateForReturn(stateData);
+                          setReturnStateToFOMReason('');
+                          setReturnStateToFOMDialogOpen(true);
+                        }}
+                        data-testid={`button-return-state-to-fom-${stateData.state}`}
+                        className="w-full sm:w-auto min-h-[44px] text-orange-600 border-orange-200 hover:bg-orange-50 dark:text-orange-400 dark:border-orange-800 dark:hover:bg-orange-950"
+                      >
+                        <ArrowLeft className="h-3 w-3 mr-1" />
+                        Return to FOM
+                      </Button>
                     </>
                   )}
                 </div>
@@ -4339,6 +4449,66 @@ const CoordinatorSites: React.FC = () => {
             >
               <ArrowLeft className="h-4 w-4 mr-2" />
               Confirm Return
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Return State Sites to FOM Dialog */}
+      <Dialog open={returnStateToFOMDialogOpen} onOpenChange={setReturnStateToFOMDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <ArrowLeft className="h-5 w-5 text-orange-600" />
+              Return State Sites to FOM
+            </DialogTitle>
+            <DialogDescription>
+              This will return all sites in <strong>{selectedStateForReturn?.state}</strong> back to the Field Operations Manager.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="rounded-lg bg-muted/50 p-3 space-y-1">
+              <p className="font-semibold">{selectedStateForReturn?.state}</p>
+              <p className="text-sm text-muted-foreground">
+                {selectedStateForReturn?.pendingSitesCount ?? selectedStateForReturn?.totalSites} sites will be returned
+              </p>
+              <p className="text-sm text-muted-foreground">
+                {selectedStateForReturn?.localities?.length} localit{selectedStateForReturn?.localities?.length !== 1 ? 'ies' : 'y'}
+              </p>
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">
+                Reason for returning to FOM <span className="text-red-500">*</span>
+              </label>
+              <Textarea
+                placeholder="Please explain why these sites need to be returned..."
+                value={returnStateToFOMReason}
+                onChange={(e) => setReturnStateToFOMReason(e.target.value)}
+                rows={4}
+                data-testid="textarea-return-state-to-fom-reason"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => {
+              setReturnStateToFOMDialogOpen(false);
+              setReturnStateToFOMReason('');
+              setSelectedStateForReturn(null);
+            }}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleReturnStateToFOM}
+              disabled={returnStateProcessing || !returnStateToFOMReason.trim()}
+              className="bg-orange-600 hover:bg-orange-700"
+              data-testid="button-confirm-return-state-to-fom"
+            >
+              {returnStateProcessing ? (
+                <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <ArrowLeft className="h-4 w-4 mr-2" />
+              )}
+              {returnStateProcessing ? 'Returning...' : 'Return to FOM'}
             </Button>
           </DialogFooter>
         </DialogContent>
