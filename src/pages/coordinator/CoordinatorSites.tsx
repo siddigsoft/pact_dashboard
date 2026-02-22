@@ -1043,18 +1043,11 @@ const CoordinatorSites: React.FC = () => {
       });
     }
 
-    const readySites = allPendingSites.filter((site: any) => !siteNeedsStatePermit(site) && !siteNeedsLocalityPermit(site));
-    const readyCount = readySites.length;
-
-    setStatePermitRequiredCount(statePermitRequired);
-    setLocalPermitRequiredCount(localPermitRequired);
-    setReadyPermitCount(readyCount);
-
     if (statePermitRequired > 0) {
       setNewSitesSubTab('state_required');
     } else if (localPermitRequired > 0) {
       setNewSitesSubTab('local_required');
-    } else if (readyCount > 0) {
+    } else {
       setNewSitesSubTab('ready');
     }
   }, [coordinatorSites, contextMmpFiles, hubStates, localities, permits, mmpFilter]);
@@ -1116,6 +1109,43 @@ const CoordinatorSites: React.FC = () => {
     });
     return Array.from(mmpMap.values()).sort((a, b) => a.mmpName.localeCompare(b.mmpName));
   }, [localitiesData]);
+
+  const derivedPermitCounts = useMemo(() => {
+    let stateCount = 0;
+    let localityCount = 0;
+    let readyCount = 0;
+    mmpGroupedStatesData.forEach(mmpGroup => {
+      mmpGroup.states.forEach((state: any) => {
+        if (!state.hasStatePermit) {
+          stateCount += state.pendingSitesCount ?? state.statePermitRequiredCount ?? state.totalSites;
+        } else {
+          state.localities.forEach((loc: any) => {
+            const pendingInLoc = (loc.sites || []).filter((s: any) => {
+              const st = (s?.status || '').toLowerCase().trim().replace(/\s+/g, '_');
+              const prePipeline = ['pending', 'inprogress', 'in_progress', 'forwarded', 'forwarded_to_coordinator', 'forwarded_to_coordinators', 'new'];
+              if (prePipeline.includes(st)) return true;
+              if (['dispatched', 'assigned', 'accepted', 'permits_attached', 'cp_verified', 'cp_verification', 'verified', 'approved', 'costed', 'approved_and_costed', 'completed', 'rejected'].includes(st)) return false;
+              return true;
+            });
+            pendingInLoc.forEach((site: any) => {
+              if (siteNeedsLocalityPermit(site)) {
+                localityCount++;
+              } else if (!siteNeedsStatePermit(site)) {
+                readyCount++;
+              }
+            });
+          });
+        }
+      });
+    });
+    return { stateCount, localityCount, readyCount };
+  }, [mmpGroupedStatesData]);
+
+  useEffect(() => {
+    setStatePermitRequiredCount(derivedPermitCounts.stateCount);
+    setLocalPermitRequiredCount(derivedPermitCounts.localityCount);
+    setReadyPermitCount(derivedPermitCounts.readyCount);
+  }, [derivedPermitCounts]);
 
   const groupSitesByMmp = (sites: SiteVisit[]) => {
     const groups = new Map<string, { mmpId: string; mmpName: string; sites: SiteVisit[] }>();
