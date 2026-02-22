@@ -491,24 +491,24 @@ class _SiteVerificationScreenState extends State<SiteVerificationScreen>
       // CATEGORIZE SITES INTO 6 TABS (matching web app CoordinatorSites.tsx)
       // ============================================================================
 
-      // Tab 1: NEW - Only show sites with Pending status
-      // Note: Dispatched sites and other statuses are excluded
+      // Tab 1: NEW - Show sites in pre-pipeline statuses (matching web app)
+      // Includes: pending, inprogress, in_progress, forwarded, forwarded_to_coordinator, forwarded_to_coordinators, new
+      final prePipelineStatuses = ['pending', 'inprogress', 'in_progress', 'forwarded', 'forwarded_to_coordinator', 'forwarded_to_coordinators', 'new'];
       _newSites = sites.where((s) {
         final rawStatus = s['status']?.toString() ?? '';
-        final lowerStatus = rawStatus.toLowerCase();
+        final normalizedStatus = rawStatus.toLowerCase().trim().replaceAll(RegExp(r'\s+'), '_');
 
-        // Only include sites with Pending status (case-insensitive)
-        return rawStatus == 'Pending' || lowerStatus == 'pending';
+        if (prePipelineStatuses.contains(normalizedStatus)) return true;
+        if (['dispatched', 'assigned', 'accepted', 'permits_attached', 'cp_verified', 'cp_verification', 'verified', 'approved', 'costed', 'approved_and_costed', 'completed', 'rejected', 'returned_to_fom'].contains(normalizedStatus)) return false;
+        return true;
       }).toList();
 
       debugPrint('New sites count: ${_newSites.length}');
 
-      // Tab 2: CP VERIFICATION - Sites with permits attached (status = permits_attached)
+      // Tab 2: CP VERIFICATION - Sites with permits attached (matching web app)
       _cpVerificationSites = sites.where((s) {
-        final status = s['status']?.toString().toLowerCase() ?? '';
-
-        // Match web app: permits_attached tab is purely status-based
-        return status == 'permits_attached';
+        final status = s['status']?.toString().toLowerCase().trim().replaceAll(RegExp(r'\s+'), '_') ?? '';
+        return status == 'permits_attached' || status == 'cp_verified' || status == 'cp_verification';
       }).toList();
 
       // Tab 3: VERIFIED - Sites verified by coordinator, waiting for approval
@@ -517,10 +517,10 @@ class _SiteVerificationScreenState extends State<SiteVerificationScreen>
         return status == 'verified';
       }).toList();
 
-      // Tab 4: APPROVED - Sites approved by hub supervisor
+      // Tab 4: APPROVED - Sites approved by hub supervisor (matching web app)
       _approvedSites = sites.where((s) {
-        final status = s['status']?.toString().toLowerCase() ?? '';
-        return status == 'approved';
+        final status = s['status']?.toString().toLowerCase().trim().replaceAll(RegExp(r'\s+'), '_') ?? '';
+        return status == 'approved' || status == 'costed' || status == 'approved_and_costed';
       }).toList();
 
       // Tab 5: COMPLETED - Sites with completed visits
