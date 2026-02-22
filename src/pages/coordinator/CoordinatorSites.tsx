@@ -13,7 +13,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAppContext } from '@/context/AppContext';
 import { useMMP } from '@/context/mmp/MMPContext';
 import { useUserProjects } from '@/hooks/useUserProjects';
-import { CheckCircle, Clock, FileCheck, XCircle, ArrowLeft, Eye, Edit, Search, ChevronLeft, ChevronRight, Calendar, CheckSquare, MapPin, AlertTriangle, ChevronUp, ChevronDown, Play, Upload, RotateCcw, RefreshCw } from 'lucide-react';
+import { CheckCircle, Clock, FileCheck, XCircle, ArrowLeft, Eye, Edit, Search, ChevronLeft, ChevronRight, Calendar, CheckSquare, MapPin, AlertTriangle, ChevronUp, ChevronDown, Play, Upload, RotateCcw, RefreshCw, Loader2 } from 'lucide-react';
 import { useSiteVisitContext } from '@/context/siteVisit/SiteVisitContext';
 import { format } from 'date-fns';
 import { DatePicker } from '@/components/ui/date-picker';
@@ -462,6 +462,8 @@ const CoordinatorSites: React.FC = () => {
   const [rejectDialogOpen, setRejectDialogOpen] = useState(false);
   const [returnSiteDialogOpen, setReturnSiteDialogOpen] = useState(false);
   const [returnSiteReason, setReturnSiteReason] = useState('');
+  const [returnSiteProcessing, setReturnSiteProcessing] = useState(false);
+  const [returnSiteTargetId, setReturnSiteTargetId] = useState<string | null>(null);
   const [selectedSiteId, setSelectedSiteId] = useState<string | null>(null);
   const [returnStateToFOMDialogOpen, setReturnStateToFOMDialogOpen] = useState(false);
   const [returnStateToFOMReason, setReturnStateToFOMReason] = useState('');
@@ -1524,10 +1526,12 @@ const CoordinatorSites: React.FC = () => {
 
   // Handle returning a single site back to FOM
   const handleReturnSingleSite = async (siteId: string, reason: string) => {
+    setReturnSiteProcessing(true);
     try {
       const site = coordinatorSites.find(s => s.id === siteId);
       if (!site) {
         toast({ title: 'Error', description: 'Site not found.', variant: 'destructive' });
+        setReturnSiteProcessing(false);
         return;
       }
 
@@ -1571,10 +1575,13 @@ const CoordinatorSites: React.FC = () => {
       await refreshAll();
       setReturnSiteDialogOpen(false);
       setReturnSiteReason('');
+      setReturnSiteTargetId(null);
       setSelectedSiteId(null);
     } catch (error) {
       console.error('Error returning site:', error);
       toast({ title: 'Error', description: 'Failed to return site. Please try again.', variant: 'destructive' });
+    } finally {
+      setReturnSiteProcessing(false);
     }
   };
 
@@ -2945,7 +2952,7 @@ const CoordinatorSites: React.FC = () => {
                     size="sm"
                     onClick={(e) => {
                       e.stopPropagation();
-                      setSelectedSiteId(site.id);
+                      setReturnSiteTargetId(site.id);
                       setReturnSiteReason('');
                       setReturnSiteDialogOpen(true);
                     }}
@@ -3521,7 +3528,7 @@ const CoordinatorSites: React.FC = () => {
                             data-testid={`button-return-to-fom-cp-${site.id}`}
                             onClick={(e) => {
                               e.stopPropagation();
-                              setSelectedSiteId(site.id);
+                              setReturnSiteTargetId(site.id);
                               setReturnSiteReason('');
                               setReturnSiteDialogOpen(true);
                             }}
@@ -3855,7 +3862,7 @@ const CoordinatorSites: React.FC = () => {
                                         className="text-xs h-7 text-orange-600 hover:text-orange-700 hover:bg-orange-50 dark:text-orange-400 dark:hover:bg-orange-950"
                                         data-testid={`button-return-to-fom-locality-${site.id}`}
                                         onClick={() => {
-                                          setSelectedSiteId(site.id);
+                                          setReturnSiteTargetId(site.id);
                                           setReturnSiteReason('');
                                           setReturnSiteDialogOpen(true);
                                         }}
@@ -3954,7 +3961,7 @@ const CoordinatorSites: React.FC = () => {
                                     className="text-xs h-7 text-orange-600 hover:text-orange-700 hover:bg-orange-50 dark:text-orange-400 dark:hover:bg-orange-950"
                                     data-testid={`button-return-to-fom-ready-${site.id}`}
                                     onClick={() => {
-                                      setSelectedSiteId(site.id);
+                                      setReturnSiteTargetId(site.id);
                                       setReturnSiteReason('');
                                       setReturnSiteDialogOpen(true);
                                     }}
@@ -4611,21 +4618,32 @@ const CoordinatorSites: React.FC = () => {
             <Button variant="outline" onClick={() => {
               setReturnSiteDialogOpen(false);
               setReturnSiteReason('');
-              setSelectedSiteId(null);
-            }}>
+              setReturnSiteTargetId(null);
+            }}
+            disabled={returnSiteProcessing}
+            >
               Cancel
             </Button>
             <Button
               onClick={() => {
-                if (selectedSiteId && returnSiteReason.trim()) {
-                  handleReturnSingleSite(selectedSiteId, returnSiteReason);
+                if (returnSiteTargetId && returnSiteReason.trim()) {
+                  handleReturnSingleSite(returnSiteTargetId, returnSiteReason);
                 }
               }}
-              disabled={!returnSiteReason.trim()}
+              disabled={!returnSiteTargetId || !returnSiteReason.trim() || returnSiteProcessing}
               className="bg-orange-600 hover:bg-orange-700"
             >
-              <ArrowLeft className="h-4 w-4 mr-2" />
-              Confirm Return
+              {returnSiteProcessing ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Processing...
+                </>
+              ) : (
+                <>
+                  <ArrowLeft className="h-4 w-4 mr-2" />
+                  Confirm Return
+                </>
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>
