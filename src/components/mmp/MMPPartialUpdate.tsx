@@ -567,22 +567,33 @@ const MMPPartialUpdate: React.FC<MMPPartialUpdateProps> = ({ mmpFile, onComplete
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".csv,.xlsx,.xls"
+                  onChange={handleFileUpload}
+                  className="hidden"
+                  data-testid="input-file-upload"
+                />
                 <div
                   className="border-2 border-dashed rounded-lg p-8 text-center cursor-pointer hover:border-primary transition-colors"
-                  onClick={() => fileInputRef.current?.click()}
+                  onClick={(e) => { e.preventDefault(); e.stopPropagation(); fileInputRef.current?.click(); }}
                   data-testid="dropzone-upload"
                 >
                   <Upload className="h-10 w-10 mx-auto text-muted-foreground mb-3" />
                   <p className="text-sm font-medium">Click to upload CSV file</p>
                   <p className="text-xs text-muted-foreground mt-1">Supports .csv and .xlsx files</p>
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept=".csv,.xlsx,.xls"
-                    onChange={handleFileUpload}
-                    className="hidden"
-                    data-testid="input-file-upload"
-                  />
+                </div>
+                <div className="flex justify-center">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={(e) => { e.preventDefault(); fileInputRef.current?.click(); }}
+                    data-testid="button-choose-file"
+                  >
+                    <Upload className="h-4 w-4 mr-2" />
+                    Choose File / اختر ملف
+                  </Button>
                 </div>
 
                 {processing && (
