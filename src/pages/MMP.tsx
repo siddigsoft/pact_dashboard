@@ -4484,6 +4484,7 @@ const MMP = () => {
                             sitesByLocality[loc].push(site);
                           });
                           const localityCount = Object.keys(sitesByLocality).length;
+                          const uniqueMmpNames = [...new Set(stateGroup.sites.map((s: any) => s.mmpName).filter(Boolean))];
                           
                           return (
                             <Card 
@@ -4507,6 +4508,11 @@ const MMP = () => {
                                     <div className="flex items-center justify-between">
                                       <div className="flex-1">
                                         <h3 className="font-semibold text-lg">{stateGroup.state}</h3>
+                                        {uniqueMmpNames.length > 0 && (
+                                          <p className="text-sm text-blue-600 dark:text-blue-400 font-medium">
+                                            {uniqueMmpNames.join(', ')}
+                                          </p>
+                                        )}
                                         <p className="text-sm text-muted-foreground">{localityCount} localit{localityCount !== 1 ? 'ies' : 'y'}</p>
                                         <p className="text-sm text-muted-foreground">{stateGroup.totalSites} site{stateGroup.totalSites !== 1 ? 's' : ''} assigned</p>
                                       </div>
