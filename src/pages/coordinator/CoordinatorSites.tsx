@@ -466,6 +466,8 @@ const CoordinatorSites: React.FC = () => {
   const [returnStateToFOMDialogOpen, setReturnStateToFOMDialogOpen] = useState(false);
   const [returnStateToFOMReason, setReturnStateToFOMReason] = useState('');
   const [selectedStateForReturn, setSelectedStateForReturn] = useState<any>(null);
+  const [selectedMmpIdForReturn, setSelectedMmpIdForReturn] = useState<string | null>(null);
+  const [selectedMmpNameForReturn, setSelectedMmpNameForReturn] = useState<string>('');
   const [returnStateProcessing, setReturnStateProcessing] = useState(false);
   const [verificationNotes, setVerificationNotes] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
@@ -1568,17 +1570,26 @@ const CoordinatorSites: React.FC = () => {
   };
 
   const handleReturnStateToFOM = async () => {
-    if (!selectedStateForReturn || !returnStateToFOMReason.trim()) return;
+    if (!selectedStateForReturn || !returnStateToFOMReason.trim() || !selectedMmpIdForReturn) return;
     setReturnStateProcessing(true);
     try {
-      const sitesToReturn = coordinatorSites.filter(site =>
-        site.state === selectedStateForReturn.state
-      );
-      if (sitesToReturn.length === 0) {
-        toast({ title: 'Error', description: `No sites found for ${selectedStateForReturn.state}.`, variant: 'destructive' });
+      const safePrePipelineStatuses = ['pending', 'inprogress', 'in_progress', 'forwarded', 'forwarded_to_coordinator', 'forwarded_to_coordinators', 'new'];
+      const eligibleSiteIds: string[] = [];
+      (selectedStateForReturn.localities || []).forEach((loc: any) => {
+        (loc.sites || []).forEach((site: any) => {
+          const st = (site?.status || '').toLowerCase().trim().replace(/\s+/g, '_');
+          if (safePrePipelineStatuses.includes(st) && site.mmp_file_id === selectedMmpIdForReturn) {
+            eligibleSiteIds.push(site.id);
+          }
+        });
+      });
+
+      if (eligibleSiteIds.length === 0) {
+        toast({ title: 'No Eligible Sites', description: `No pending sites found for ${selectedStateForReturn.state} in this MMP.`, variant: 'destructive' });
+        setReturnStateProcessing(false);
         return;
       }
-      const siteIds = sitesToReturn.map(s => s.id);
+
       const { error } = await supabase
         .from('mmp_site_entries')
         .update({
@@ -1587,69 +1598,48 @@ const CoordinatorSites: React.FC = () => {
           verified_at: new Date().toISOString(),
           verified_by: currentUser?.username || currentUser?.fullName || currentUser?.email || 'System',
         })
-        .in('id', siteIds);
+        .in('id', eligibleSiteIds);
       if (error) throw error;
 
-      const uniqueMmpIds = [...new Set(sitesToReturn.map(s => s.mmp_file_id))];
-      for (const mmpFileId of uniqueMmpIds) {
-        try {
-          const { data: mmpData } = await supabase
-            .from('mmp_files')
-            .select('uploaded_by')
-            .eq('id', mmpFileId)
-            .single();
-          if (mmpData?.uploaded_by) {
-            await supabase.from('notifications').insert({
-              recipient_id: mmpData.uploaded_by,
-              title_en: 'Sites Returned by Coordinator',
-              title_ar: 'تم إرجاع المواقع من المنسق',
-              message_en: `${sitesToReturn.length} sites in ${selectedStateForReturn.state} have been returned to FOM. Reason: ${returnStateToFOMReason}`,
-              message_ar: `تم إرجاع ${sitesToReturn.length} مواقع في ${selectedStateForReturn.state} إلى مدير العمليات الميدانية. السبب: ${returnStateToFOMReason}`,
-              event_type: 'approvals',
-              status: 'pending',
-              priority: 'high'
-            });
-          }
-        } catch (notifErr) {
-          console.warn('Failed to send notification to FOM:', notifErr);
+      try {
+        const { data: mmpData } = await supabase
+          .from('mmp_files')
+          .select('uploaded_by')
+          .eq('id', selectedMmpIdForReturn)
+          .single();
+        if (mmpData?.uploaded_by) {
+          await supabase.from('notifications').insert({
+            recipient_id: mmpData.uploaded_by,
+            title_en: 'Sites Returned by Coordinator',
+            title_ar: 'تم إرجاع المواقع من المنسق',
+            message_en: `${eligibleSiteIds.length} sites in ${selectedStateForReturn.state} (${selectedMmpNameForReturn}) have been returned to FOM. Reason: ${returnStateToFOMReason}`,
+            message_ar: `تم إرجاع ${eligibleSiteIds.length} مواقع في ${selectedStateForReturn.state} (${selectedMmpNameForReturn}) إلى مدير العمليات الميدانية. السبب: ${returnStateToFOMReason}`,
+            event_type: 'approvals',
+            status: 'pending',
+            priority: 'high'
+          });
         }
-      }
-
-      const hubsNotified = new Set<string>();
-      for (const site of sitesToReturn) {
-        if (site.hub_office && !hubsNotified.has(site.hub_office)) {
-          try {
-            const { data: hubData } = await supabase.from('hubs').select('id').eq('name', site.hub_office).single();
-            if (hubData?.id) {
-              const sitesInHub = sitesToReturn.filter(s => s.hub_office === site.hub_office);
-              await NotificationTriggerService.siteReturnedToFOM(
-                hubData.id,
-                selectedStateForReturn.state,
-                sitesInHub.length,
-                returnStateToFOMReason,
-                currentUser?.fullName || currentUser?.username || 'Coordinator'
-              );
-            }
-          } catch {}
-          hubsNotified.add(site.hub_office);
-        }
+      } catch (notifErr) {
+        console.warn('Failed to send notification to FOM:', notifErr);
       }
 
       await supabase.from('audit_logs').insert({
         action: 'return_state_sites_to_fom',
-        details: `Returned ${sitesToReturn.length} sites in state "${selectedStateForReturn.state}" to FOM. Reason: ${returnStateToFOMReason}`,
+        details: `Returned ${eligibleSiteIds.length} pending sites in state "${selectedStateForReturn.state}" (MMP: ${selectedMmpNameForReturn}) to FOM. Reason: ${returnStateToFOMReason}`,
         performed_by: currentUser?.id || '',
         username: currentUser?.username || currentUser?.fullName || 'System',
       });
 
       toast({
         title: 'Sites Returned to FOM',
-        description: `${sitesToReturn.length} sites in ${selectedStateForReturn.state} have been returned to FOM.`,
+        description: `${eligibleSiteIds.length} pending sites in ${selectedStateForReturn.state} (${selectedMmpNameForReturn}) have been returned to FOM.`,
       });
       await refreshAll();
       setReturnStateToFOMDialogOpen(false);
       setReturnStateToFOMReason('');
       setSelectedStateForReturn(null);
+      setSelectedMmpIdForReturn(null);
+      setSelectedMmpNameForReturn('');
     } catch (error) {
       console.error('Error returning state sites to FOM:', error);
       toast({ title: 'Error', description: 'Failed to return sites. Please try again.', variant: 'destructive' });
@@ -3162,7 +3152,7 @@ const CoordinatorSites: React.FC = () => {
     );
   };
 
-  const renderStateCard = (stateData: any) => {
+  const renderStateCard = (stateData: any, mmpId?: string, mmpName?: string) => {
     const isExpanded = expandedStates.has(stateData.state);
 
     // Get first site from first locality to get state, locality, and mmp_file_id
@@ -3266,6 +3256,8 @@ const CoordinatorSites: React.FC = () => {
                         onClick={(e) => {
                           e.stopPropagation();
                           setSelectedStateForReturn(stateData);
+                          setSelectedMmpIdForReturn(mmpId || firstSite?.mmp_file_id || null);
+                          setSelectedMmpNameForReturn(mmpName || firstSite?.mmp_name || 'Unknown MMP');
                           setReturnStateToFOMReason('');
                           setReturnStateToFOMDialogOpen(true);
                         }}
@@ -3742,7 +3734,7 @@ const CoordinatorSites: React.FC = () => {
                           </div>
                         </CardHeader>
                         <CardContent className="px-4 pb-3 space-y-3">
-                          {mmpGroup.filteredStates.map((state: any) => renderStateCard(state))}
+                          {mmpGroup.filteredStates.map((state: any) => renderStateCard(state, mmpGroup.mmpId, mmpGroup.mmpName))}
                         </CardContent>
                       </Card>
                     ))}
@@ -4463,17 +4455,15 @@ const CoordinatorSites: React.FC = () => {
               Return State Sites to FOM
             </DialogTitle>
             <DialogDescription>
-              This will return all sites in <strong>{selectedStateForReturn?.state}</strong> back to the Field Operations Manager.
+              This will return only the <strong>pending</strong> sites in <strong>{selectedStateForReturn?.state}</strong> for MMP <strong>{selectedMmpNameForReturn}</strong> back to the Field Operations Manager. Completed, claimed, dispatched, and other advanced-status sites will not be affected.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">
             <div className="rounded-lg bg-muted/50 p-3 space-y-1">
               <p className="font-semibold">{selectedStateForReturn?.state}</p>
+              <p className="text-sm text-blue-600 dark:text-blue-400 font-medium">{selectedMmpNameForReturn}</p>
               <p className="text-sm text-muted-foreground">
-                {selectedStateForReturn?.pendingSitesCount ?? selectedStateForReturn?.totalSites} sites will be returned
-              </p>
-              <p className="text-sm text-muted-foreground">
-                {selectedStateForReturn?.localities?.length} localit{selectedStateForReturn?.localities?.length !== 1 ? 'ies' : 'y'}
+                Only pending/forwarded sites will be returned (completed, claimed, dispatched sites are excluded)
               </p>
             </div>
             <div className="space-y-2">
@@ -4494,6 +4484,8 @@ const CoordinatorSites: React.FC = () => {
               setReturnStateToFOMDialogOpen(false);
               setReturnStateToFOMReason('');
               setSelectedStateForReturn(null);
+              setSelectedMmpIdForReturn(null);
+              setSelectedMmpNameForReturn('');
             }}>
               Cancel
             </Button>
