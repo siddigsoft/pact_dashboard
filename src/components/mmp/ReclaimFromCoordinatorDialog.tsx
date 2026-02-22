@@ -244,7 +244,7 @@ export const ReclaimFromCoordinatorDialog: React.FC<ReclaimFromCoordinatorDialog
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="sm:max-w-[520px]" data-testid="dialog-reclaim-coordinator">
+      <DialogContent className="sm:max-w-[520px] max-h-[90vh] flex flex-col" data-testid="dialog-reclaim-coordinator">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <RotateCcw className="h-5 w-5 text-orange-500" />
@@ -255,7 +255,7 @@ export const ReclaimFromCoordinatorDialog: React.FC<ReclaimFromCoordinatorDialog
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4 py-2">
+        <div className="space-y-3 py-1 overflow-y-auto flex-1 pr-1">
           <div className="flex items-center gap-2 p-3 rounded-md bg-muted/50">
             <FileText className="h-4 w-4 text-muted-foreground flex-shrink-0" />
             <div className="min-w-0">
@@ -328,7 +328,7 @@ export const ReclaimFromCoordinatorDialog: React.FC<ReclaimFromCoordinatorDialog
               value={additionalNotes}
               onChange={(e) => setAdditionalNotes(e.target.value)}
               className="resize-none"
-              rows={3}
+              rows={2}
               data-testid="textarea-reclaim-notes"
             />
           </div>
@@ -376,7 +376,7 @@ export const ReclaimFromCoordinatorDialog: React.FC<ReclaimFromCoordinatorDialog
           )}
         </div>
 
-        <DialogFooter className="gap-2">
+        <DialogFooter className="gap-2 flex-shrink-0">
           <Button variant="outline" onClick={handleClose} disabled={loading} data-testid="button-cancel-reclaim">
             Cancel
           </Button>
