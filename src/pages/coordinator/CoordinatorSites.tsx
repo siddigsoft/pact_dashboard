@@ -264,7 +264,7 @@ const SiteEditForm: React.FC<SiteEditFormProps> = ({ site, onSave, onCancel, hub
         );
       })()}
 
-      <DialogFooter>
+      <DialogFooter className="sticky bottom-0 bg-background pt-4 border-t mt-4">
         {site.status?.toLowerCase() === 'permits_attached' ? (
           // For sites with permits attached, only show Verify button
           <Button 
