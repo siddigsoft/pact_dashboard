@@ -10,6 +10,7 @@ export interface SiteEntryCounts {
   approved: number;
   completed: number;
   rejected: number;
+  returnedToFom: number;
 }
 
 export interface SiteVisit {
@@ -49,15 +50,16 @@ function computeCounts(sites: SiteVisit[]): SiteEntryCounts {
     verified: 0,
     approved: 0,
     completed: 0,
-    rejected: 0
+    rejected: 0,
+    returnedToFom: 0
   };
-  const prePipelineStatuses = ['pending', 'inprogress', 'in_progress', 'forwarded', 'forwarded_to_coordinator', 'forwarded_to_coordinators', 'new'];
+  const prePipelineStatuses = ['pending', 'inprogress', 'in_progress', 'forwarded', 'forwarded_to_coordinator', 'forwarded_to_coordinators', 'new', 'dispatched', 'assigned', 'accepted'];
   sites.forEach((entry) => {
     const status = (entry.status || '').toLowerCase().trim().replace(/\s+/g, '_');
-    if (prePipelineStatuses.includes(status)) {
+    if (status === 'returned_to_fom') {
+      counts.returnedToFom++;
+    } else if (prePipelineStatuses.includes(status)) {
       counts.new++;
-    } else if (status === 'dispatched' || status === 'assigned' || status === 'accepted') {
-      // Dispatched/assigned/accepted sites are already in the workflow pipeline - don't count as new
     } else if (status === 'permits_attached' || status === 'cp_verified' || status === 'cp_verification') {
       counts.permitsAttached++;
     } else if (status === 'verified') {
@@ -101,7 +103,7 @@ export const useCoordinatorSites = () => {
           if (!forwardedToMe && !assignedToMe && !acceptedByMe) return;
         }
 
-        if (entry.status === 'returned_to_fom') return;
+        // Keep returned_to_fom sites for the Returned to FOM tab
 
         const isUnverified = entry.status === 'Pending' || entry.status === 'Dispatched' ||
                             entry.status === 'assigned' || entry.status === 'inProgress' ||

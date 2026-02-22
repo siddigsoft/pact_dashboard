@@ -519,6 +519,7 @@ const CoordinatorSites: React.FC = () => {
   const [approvedSitesCount, setApprovedSitesCount] = useState(0);
   const [completedSitesCount, setCompletedSitesCount] = useState(0);
   const [rejectedSitesCount, setRejectedSitesCount] = useState(0);
+  const [returnedToFomCount, setReturnedToFomCount] = useState(0);
   
   // Subcategory counts for new sites tabs
   const [statePermitRequiredCount, setStatePermitRequiredCount] = useState(0);
@@ -706,36 +707,46 @@ const CoordinatorSites: React.FC = () => {
       ? coordinatorSites.filter((s: SiteVisit) => s.mmp_file_id === mmpFilter)
       : [...coordinatorSites];
     
-    // Filter by status based on active tab
+    // Filter by status based on active tab (use normalized lowercase comparison to match computeCounts logic)
     switch (activeTab) {
-      case 'new':
-        result = result.filter((e: any) => 
-          e.status === 'Pending' || e.status === 'Dispatched' || e.status === 'assigned' || e.status === 'inProgress' || e.status === 'in_progress'
-        );
+      case 'new': {
+        const prePipelineStatuses = ['pending', 'inprogress', 'in_progress', 'forwarded', 'forwarded_to_coordinator', 'forwarded_to_coordinators', 'new', 'dispatched', 'assigned', 'accepted'];
+        result = result.filter((e: any) => {
+          const status = (e.status || '').toLowerCase().trim().replace(/\s+/g, '_');
+          return prePipelineStatuses.includes(status);
+        });
         break;
+      }
       case 'permits_attached':
-        result = result.filter((e: any) => 
-          e.status?.toLowerCase() === 'permits_attached'
-        );
+        result = result.filter((e: any) => {
+          const status = (e.status || '').toLowerCase().trim().replace(/\s+/g, '_');
+          return status === 'permits_attached' || status === 'cp_verified' || status === 'cp_verification';
+        });
         break;
       case 'verified':
         result = result.filter((e: any) => 
-          e.status?.toLowerCase() === 'verified'
+          (e.status || '').toLowerCase().trim() === 'verified'
         );
         break;
       case 'approved':
-        result = result.filter((e: any) => 
-          e.status?.toLowerCase() === 'approved'
-        );
+        result = result.filter((e: any) => {
+          const status = (e.status || '').toLowerCase().trim().replace(/\s+/g, '_');
+          return status === 'approved' || status === 'costed' || status === 'approved_and_costed';
+        });
         break;
       case 'completed':
         result = result.filter((e: any) => 
-          e.status?.toLowerCase() === 'completed'
+          (e.status || '').toLowerCase().trim() === 'completed'
         );
         break;
       case 'rejected':
         result = result.filter((e: any) => 
-          e.status?.toLowerCase() === 'rejected'
+          (e.status || '').toLowerCase().trim() === 'rejected'
+        );
+        break;
+      case 'returned_to_fom':
+        result = result.filter((e: any) => 
+          (e.status || '').toLowerCase().trim().replace(/\s+/g, '_') === 'returned_to_fom'
         );
         break;
     }
@@ -825,26 +836,21 @@ const CoordinatorSites: React.FC = () => {
     const sitesForCounts = mmpFilter !== 'all'
       ? coordinatorSites.filter((s: SiteVisit) => s.mmp_file_id === mmpFilter)
       : coordinatorSites;
-    const prePipelineStatuses = ['pending', 'inprogress', 'in_progress', 'forwarded', 'forwarded_to_coordinator', 'forwarded_to_coordinators', 'new'];
-    const newCount = sitesForCounts.filter((e: any) => {
-      const status = (e.status || '').toLowerCase().trim().replace(/\s+/g, '_');
-      return prePipelineStatuses.includes(status);
+    const normalize = (s: string) => (s || '').toLowerCase().trim().replace(/\s+/g, '_');
+    const prePipelineStatuses = ['pending', 'inprogress', 'in_progress', 'forwarded', 'forwarded_to_coordinator', 'forwarded_to_coordinators', 'new', 'dispatched', 'assigned', 'accepted'];
+    const newCount = sitesForCounts.filter((e: any) => prePipelineStatuses.includes(normalize(e.status))).length;
+    const permitsAttachedCount = sitesForCounts.filter((e: any) => {
+      const s = normalize(e.status);
+      return s === 'permits_attached' || s === 'cp_verified' || s === 'cp_verification';
     }).length;
-    const permitsAttachedCount = sitesForCounts.filter((e: any) => 
-      e.status?.toLowerCase() === 'permits_attached'
-    ).length;
-    const verifiedCount = sitesForCounts.filter((e: any) => 
-      e.status?.toLowerCase() === 'verified'
-    ).length;
-    const approvedCount = sitesForCounts.filter((e: any) => 
-      e.status?.toLowerCase() === 'approved'
-    ).length;
-    const completedCount = sitesForCounts.filter((e: any) => 
-      e.status?.toLowerCase() === 'completed'
-    ).length;
-    const rejectedCount = sitesForCounts.filter((e: any) => 
-      e.status?.toLowerCase() === 'rejected'
-    ).length;
+    const verifiedCount = sitesForCounts.filter((e: any) => normalize(e.status) === 'verified').length;
+    const approvedCount = sitesForCounts.filter((e: any) => {
+      const s = normalize(e.status);
+      return s === 'approved' || s === 'costed' || s === 'approved_and_costed';
+    }).length;
+    const completedCount = sitesForCounts.filter((e: any) => normalize(e.status) === 'completed').length;
+    const rejectedCount = sitesForCounts.filter((e: any) => normalize(e.status) === 'rejected').length;
+    const returnedToFomCount = sitesForCounts.filter((e: any) => normalize(e.status) === 'returned_to_fom').length;
 
     return {
       new: newCount,
@@ -852,19 +858,22 @@ const CoordinatorSites: React.FC = () => {
       verified: verifiedCount,
       approved: approvedCount,
       completed: completedCount,
-      rejected: rejectedCount
+      rejected: rejectedCount,
+      returnedToFom: returnedToFomCount
     };
   }, [coordinatorSites, mmpFilter]);
 
-  // Sync badge counts to state from fast counts (loaded separately for speed)
+  // Sync badge counts to state - use MMP-filtered badgeCounts when MMP filter is active, otherwise use hook siteCounts
   useEffect(() => {
-    setNewSitesCount(siteCounts.new);
-    setPermitsAttachedCount(siteCounts.permitsAttached);
-    setVerifiedSitesCount(siteCounts.verified);
-    setApprovedSitesCount(siteCounts.approved);
-    setCompletedSitesCount(siteCounts.completed);
-    setRejectedSitesCount(siteCounts.rejected);
-  }, [siteCounts]);
+    const counts = mmpFilter !== 'all' ? badgeCounts : siteCounts;
+    setNewSitesCount(counts.new);
+    setPermitsAttachedCount(counts.permitsAttached);
+    setVerifiedSitesCount(counts.verified);
+    setApprovedSitesCount(counts.approved);
+    setCompletedSitesCount(counts.completed);
+    setRejectedSitesCount(counts.rejected);
+    setReturnedToFomCount(counts.returnedToFom);
+  }, [siteCounts, badgeCounts, mmpFilter]);
 
   // Reset search and pagination when tab changes
   useEffect(() => {
@@ -1204,7 +1213,7 @@ const CoordinatorSites: React.FC = () => {
         title: 'Returned to State Permit',
         description: `${updated} site${updated !== 1 ? 's' : ''} moved back to State Permit tab for verification.`,
       });
-      await refreshSites();
+      await refreshAll();
     } catch (error: any) {
       toast({
         title: 'Error',
@@ -3671,6 +3680,11 @@ const CoordinatorSites: React.FC = () => {
               <span>Rejected</span>
               <Badge className={`${rejectedSitesCount > 0 ? 'bg-red-400/50' : 'bg-red-400/30'} text-white border-0`}>{rejectedSitesCount}</Badge>
             </TabsTrigger>
+            <TabsTrigger value="returned_to_fom" className="flex items-center gap-2 data-[state=active]:bg-gradient-to-r data-[state=active]:from-orange-500 data-[state=active]:to-orange-600 data-[state=active]:text-white data-[state=active]:shadow-md min-h-[40px] text-xs sm:text-sm flex-shrink-0 whitespace-nowrap rounded-lg px-4 text-blue-100 hover:text-white transition-all">
+              <ArrowLeft className="h-4 w-4" />
+              <span>Returned to FOM</span>
+              <Badge className={`${returnedToFomCount > 0 ? 'bg-orange-400/50' : 'bg-orange-400/30'} text-white border-0`}>{returnedToFomCount}</Badge>
+            </TabsTrigger>
           </TabsList>
         </div>
 
@@ -4374,6 +4388,102 @@ const CoordinatorSites: React.FC = () => {
                         >
                           Next
                           <ChevronRight className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="returned_to_fom" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <CardTitle className="flex items-center gap-2">
+                  <ArrowLeft className="h-5 w-5 text-orange-600" />
+                  Returned to FOM
+                </CardTitle>
+                <div className="relative w-full sm:w-auto max-w-sm">
+                  <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    type="search"
+                    placeholder="Search sites..."
+                    className="pl-8 w-full sm:w-[300px]"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    data-testid="input-search-returned-to-fom"
+                  />
+                </div>
+              </div>
+              <div className="text-sm text-muted-foreground">
+                Sites that have been returned to the Field Operations Manager for further action. These sites were sent back from the verification pipeline.
+              </div>
+            </CardHeader>
+            <CardContent>
+              {sitesByTab.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  <ArrowLeft className="h-12 w-12 mx-auto mb-4 opacity-20" />
+                  <p>{searchQuery ? 'No sites match your search.' : 'No sites have been returned to FOM.'}</p>
+                </div>
+              ) : (
+                <>
+                  <div className="space-y-3">
+                    {paginatedSites.map((site: any) => {
+                      const siteName = site.site_name || site.siteName || site.site_code || 'Unknown Site';
+                      const siteCode = site.site_code || site.siteCode || '';
+                      const mmpName = site.mmp_name || site.mmpName || '';
+                      const returnReason = site.verification_notes || '';
+                      const returnedBy = site.verified_by || '';
+                      const returnedAt = site.verified_at;
+                      return (
+                        <Card key={site.id} className="border-l-4 border-l-orange-500">
+                          <CardContent className="pt-4 pb-3">
+                            <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className="font-semibold text-base">{siteName}</span>
+                                  {siteCode && <span className="text-xs text-muted-foreground">({siteCode})</span>}
+                                  <Badge variant="outline" className="text-orange-600 border-orange-300 bg-orange-50 dark:text-orange-400 dark:border-orange-800 dark:bg-orange-950/30">
+                                    Returned to FOM
+                                  </Badge>
+                                </div>
+                                <div className="flex items-center gap-3 text-sm text-muted-foreground mt-1 flex-wrap">
+                                  {site.state && <span>{site.state}</span>}
+                                  {site.locality && <span>• {site.locality}</span>}
+                                  {mmpName && <span>• {mmpName}</span>}
+                                </div>
+                                {returnReason && (
+                                  <div className="mt-2 p-2 bg-orange-50 dark:bg-orange-950/20 rounded-md border border-orange-200 dark:border-orange-800">
+                                    <p className="text-xs font-medium text-orange-700 dark:text-orange-400 mb-0.5">Reason for Return:</p>
+                                    <p className="text-sm text-orange-800 dark:text-orange-300">{returnReason}</p>
+                                  </div>
+                                )}
+                                <div className="flex items-center gap-3 text-xs text-muted-foreground mt-2 flex-wrap">
+                                  {returnedBy && <span>Returned by: <strong>{returnedBy}</strong></span>}
+                                  {returnedAt && <span>• {new Date(returnedAt).toLocaleDateString()}</span>}
+                                </div>
+                              </div>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      );
+                    })}
+                  </div>
+                  {totalPages > 1 && (
+                    <div className="flex items-center justify-between mt-4 pt-4 border-t">
+                      <div className="text-sm text-muted-foreground">
+                        Showing {((currentPage - 1) * itemsPerPage) + 1} - {Math.min(currentPage * itemsPerPage, sitesByTab.length)} of {sitesByTab.length}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Button variant="outline" size="sm" onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))} disabled={currentPage === 1}>
+                          <ChevronLeft className="h-4 w-4" /> Previous
+                        </Button>
+                        <div className="text-sm">Page {currentPage} of {totalPages}</div>
+                        <Button variant="outline" size="sm" onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))} disabled={currentPage === totalPages}>
+                          Next <ChevronRight className="h-4 w-4" />
                         </Button>
                       </div>
                     </div>
