@@ -85,6 +85,8 @@ export const useCoordinatorSites = () => {
   const { mmpFiles: contextMmpFiles, loading: contextLoading, refreshMMPFiles } = useMMP();
   const { userProjectIds, isAdminOrSuperUser } = useUserProjects();
 
+  const isSuperAdmin = currentUser?.role === 'super_admin';
+
   const coordinatorSites = useMemo(() => {
     if (!currentUser?.id || !contextMmpFiles || contextLoading) return [];
 
@@ -94,10 +96,12 @@ export const useCoordinatorSites = () => {
       if (!mmp.siteEntries || !Array.isArray(mmp.siteEntries)) return;
 
       mmp.siteEntries.forEach((entry: any) => {
-        const forwardedToMe = entry.forwardedToUserId === currentUser.id;
-        const assignedToMe = (entry.additionalData?.assigned_to || entry.additional_data?.assigned_to) === currentUser.id;
-        const acceptedByMe = entry.accepted_by === currentUser.id;
-        if (!forwardedToMe && !assignedToMe && !acceptedByMe) return;
+        if (!isSuperAdmin) {
+          const forwardedToMe = entry.forwardedToUserId === currentUser.id;
+          const assignedToMe = (entry.additionalData?.assigned_to || entry.additional_data?.assigned_to) === currentUser.id;
+          const acceptedByMe = entry.accepted_by === currentUser.id;
+          if (!forwardedToMe && !assignedToMe && !acceptedByMe) return;
+        }
 
         if (entry.status === 'returned_to_fom') return;
 
@@ -138,7 +142,7 @@ export const useCoordinatorSites = () => {
     });
 
     return allSites;
-  }, [contextMmpFiles, contextLoading, currentUser?.id]);
+  }, [contextMmpFiles, contextLoading, currentUser?.id, isSuperAdmin]);
 
   const siteCounts = useMemo(() => computeCounts(coordinatorSites), [coordinatorSites]);
 

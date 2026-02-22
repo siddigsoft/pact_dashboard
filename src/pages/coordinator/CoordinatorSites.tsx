@@ -3344,7 +3344,7 @@ const CoordinatorSites: React.FC = () => {
 
         <TabsContent value="new" className="space-y-3 sm:space-y-4"> {/* Adjusted spacing */}
           <Tabs value={newSitesSubTab} onValueChange={setNewSitesSubTab} className="space-y-4">
-            <TabsList className="grid w-full grid-cols-3">
+            <TabsList className={`grid w-full ${currentUser?.role === 'super_admin' ? 'grid-cols-3' : 'grid-cols-2'}`}>
               <TabsTrigger value="state_required" className="flex items-center justify-center gap-2 rounded-md py-2 px-3 bg-gray-100 hover:bg-gray-200 data-[state=active]:bg-blue-100 data-[state=active]:text-blue-800 data-[state=active]:shadow-sm">
                 <AlertTriangle className="h-4 w-4" />
                 <span className="hidden sm:inline">State</span>
@@ -3359,13 +3359,15 @@ const CoordinatorSites: React.FC = () => {
                   {localPermitRequiredCount}
                 </Badge>
               </TabsTrigger>
-              <TabsTrigger value="ready" className="flex items-center justify-center gap-2 rounded-md py-2 px-3 bg-gray-100 hover:bg-gray-200 data-[state=active]:bg-green-100 data-[state=active]:text-green-800 data-[state=active]:shadow-sm">
-                <CheckCircle className="h-4 w-4" />
-                <span className="hidden sm:inline">Ready</span>
-                <Badge variant="secondary" className="ml-1">
-                  {readyPermitCount}
-                </Badge>
-              </TabsTrigger>
+              {currentUser?.role === 'super_admin' && (
+                <TabsTrigger value="ready" className="flex items-center justify-center gap-2 rounded-md py-2 px-3 bg-gray-100 hover:bg-gray-200 data-[state=active]:bg-green-100 data-[state=active]:text-green-800 data-[state=active]:shadow-sm">
+                  <CheckCircle className="h-4 w-4" />
+                  <span className="hidden sm:inline">Ready</span>
+                  <Badge variant="secondary" className="ml-1">
+                    {readyPermitCount}
+                  </Badge>
+                </TabsTrigger>
+              )}
             </TabsList>
 
             <TabsContent value="state_required" className="space-y-4">
@@ -3485,7 +3487,7 @@ const CoordinatorSites: React.FC = () => {
               })()}
             </TabsContent>
 
-            <TabsContent value="ready" className="space-y-3 sm:space-y-4">
+            {currentUser?.role === 'super_admin' && <TabsContent value="ready" className="space-y-3 sm:space-y-4">
               {(() => {
                 const prePipelineStatuses = ['pending', 'inprogress', 'in_progress', 'forwarded', 'forwarded_to_coordinator', 'forwarded_to_coordinators', 'new', 'dispatched', 'assigned'];
                 const isPendingReady = (site: any) => {
@@ -3617,7 +3619,7 @@ const CoordinatorSites: React.FC = () => {
                   </div>
                 );
               })()}
-            </TabsContent>
+            </TabsContent>}
           </Tabs>
         </TabsContent>
 
