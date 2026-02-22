@@ -1135,7 +1135,7 @@ const CoordinatorSites: React.FC = () => {
 
           const updateData: any = { additional_data: ad };
           const status = (entry.status || '').toLowerCase().trim();
-          if (['permits_attached', 'cp_verified', 'cp_verification', 'verified'].includes(status)) {
+          if (['permits_attached', 'cp_verified', 'cp_verification', 'verified', 'approved', 'completed'].includes(status)) {
             updateData.status = 'forwarded_to_coordinator';
           }
 
