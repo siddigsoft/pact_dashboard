@@ -1,0 +1,437 @@
+[
+  {
+    "site_name": "Abiow Shamail",
+    "restored_status": "forwarded_to_coordinator",
+    "visit_status": null
+  },
+  {
+    "site_name": "Abo Gmbil",
+    "restored_status": "forwarded_to_coordinator",
+    "visit_status": null
+  },
+  {
+    "site_name": "ABO GMBIL",
+    "restored_status": "forwarded_to_coordinator",
+    "visit_status": null
+  },
+  {
+    "site_name": "Abu Sharan",
+    "restored_status": "forwarded_to_coordinator",
+    "visit_status": null
+  },
+  {
+    "site_name": "Al Amara",
+    "restored_status": "forwarded_to_coordinator",
+    "visit_status": null
+  },
+  {
+    "site_name": "Al Asirra",
+    "restored_status": "forwarded_to_coordinator",
+    "visit_status": null
+  },
+  {
+    "site_name": "AL ASIRRA",
+    "restored_status": "forwarded_to_coordinator",
+    "visit_status": null
+  },
+  {
+    "site_name": "Al Dehama",
+    "restored_status": "forwarded_to_coordinator",
+    "visit_status": null
+  },
+  {
+    "site_name": "Al Faw hospital",
+    "restored_status": "forwarded_to_coordinator",
+    "visit_status": null
+  },
+  {
+    "site_name": "Al Gedaref Hospital",
+    "restored_status": "forwarded_to_coordinator",
+    "visit_status": null
+  },
+  {
+    "site_name": "Al Guraisha Hospital",
+    "restored_status": "forwarded_to_coordinator",
+    "visit_status": null
+  },
+  {
+    "site_name": "AL GURAISHA HOSPITAL",
+    "restored_status": "forwarded_to_coordinator",
+    "visit_status": null
+  },
+  {
+    "site_name": "Al Hoshiab",
+    "restored_status": "forwarded_to_coordinator",
+    "visit_status": null
+  },
+  {
+    "site_name": "AL HOSHIAB",
+    "restored_status": "forwarded_to_coordinator",
+    "visit_status": null
+  },
+  {
+    "site_name": "Al Shaet",
+    "restored_status": "forwarded_to_coordinator",
+    "visit_status": null
+  },
+  {
+    "site_name": "AL SHARBOUB",
+    "restored_status": "forwarded_to_coordinator",
+    "visit_status": null
+  },
+  {
+    "site_name": "AL SHOWAK HOSPITAL",
+    "restored_status": "forwarded_to_coordinator",
+    "visit_status": null
+  },
+  {
+    "site_name": "Al Slam",
+    "restored_status": "forwarded_to_coordinator",
+    "visit_status": null
+  },
+  {
+    "site_name": "AL SOBAG",
+    "restored_status": "forwarded_to_coordinator",
+    "visit_status": null
+  },
+  {
+    "site_name": "Al Thaora",
+    "restored_status": "forwarded_to_coordinator",
+    "visit_status": null
+  },
+  {
+    "site_name": "Aladid Alhomer",
+    "restored_status": "forwarded_to_coordinator",
+    "visit_status": null
+  },
+  {
+    "site_name": "ALADID ALHOMER",
+    "restored_status": "forwarded_to_coordinator",
+    "visit_status": null
+  },
+  {
+    "site_name": "Alban Gaded",
+    "restored_status": "forwarded_to_coordinator",
+    "visit_status": null
+  },
+  {
+    "site_name": "Aledad",
+    "restored_status": "forwarded_to_coordinator",
+    "visit_status": null
+  },
+  {
+    "site_name": "Algamhoria Shamil",
+    "restored_status": "forwarded_to_coordinator",
+    "visit_status": null
+  },
+  {
+    "site_name": "Alhawata hospital",
+    "restored_status": "forwarded_to_coordinator",
+    "visit_status": null
+  },
+  {
+    "site_name": "Alhomor",
+    "restored_status": "forwarded_to_coordinator",
+    "visit_status": null
+  },
+  {
+    "site_name": "Almassiat",
+    "restored_status": "forwarded_to_coordinator",
+    "visit_status": null
+  },
+  {
+    "site_name": "Almatar",
+    "restored_status": "forwarded_to_coordinator",
+    "visit_status": null
+  },
+  {
+    "site_name": "Alriad",
+    "restored_status": "forwarded_to_coordinator",
+    "visit_status": null
+  },
+  {
+    "site_name": "Alshheed Seif Aldin",
+    "restored_status": "forwarded_to_coordinator",
+    "visit_status": null
+  },
+  {
+    "site_name": "Alshorta",
+    "restored_status": "forwarded_to_coordinator",
+    "visit_status": null
+  },
+  {
+    "site_name": "Alsobag",
+    "restored_status": "forwarded_to_coordinator",
+    "visit_status": null
+  },
+  {
+    "site_name": "Alsysabana",
+    "restored_status": "forwarded_to_coordinator",
+    "visit_status": null
+  },
+  {
+    "site_name": "Altadamon",
+    "restored_status": "forwarded_to_coordinator",
+    "visit_status": null
+  },
+  {
+    "site_name": "Alwahida",
+    "restored_status": "forwarded_to_coordinator",
+    "visit_status": null
+  },
+  {
+    "site_name": "Baloos",
+    "restored_status": "forwarded_to_coordinator",
+    "visit_status": null
+  },
+  {
+    "site_name": "Ban",
+    "restored_status": "forwarded_to_coordinator",
+    "visit_status": null
+  },
+  {
+    "site_name": "Barbar Alfogara",
+    "restored_status": "forwarded_to_coordinator",
+    "visit_status": null
+  },
+  {
+    "site_name": "BARBAR ALFOGARA",
+    "restored_status": "forwarded_to_coordinator",
+    "visit_status": null
+  },
+  {
+    "site_name": "Bazora",
+    "restored_status": "forwarded_to_coordinator",
+    "visit_status": null
+  },
+  {
+    "site_name": "Beia",
+    "restored_status": "forwarded_to_coordinator",
+    "visit_status": null
+  },
+  {
+    "site_name": "Bluse",
+    "restored_status": "forwarded_to_coordinator",
+    "visit_status": null
+  },
+  {
+    "site_name": "Deen Alnoor",
+    "restored_status": "forwarded_to_coordinator",
+    "visit_status": null
+  },
+  {
+    "site_name": "Galaa Alnahal",
+    "restored_status": "forwarded_to_coordinator",
+    "visit_status": null
+  },
+  {
+    "site_name": "Grane",
+    "restored_status": "forwarded_to_coordinator",
+    "visit_status": null
+  },
+  {
+    "site_name": "Kartot",
+    "restored_status": "forwarded_to_coordinator",
+    "visit_status": null
+  },
+  {
+    "site_name": "Koor Zaraf",
+    "restored_status": "forwarded_to_coordinator",
+    "visit_status": null
+  },
+  {
+    "site_name": "KOOR ZARAF",
+    "restored_status": "forwarded_to_coordinator",
+    "visit_status": null
+  },
+  {
+    "site_name": "MADINA 1",
+    "restored_status": "forwarded_to_coordinator",
+    "visit_status": null
+  },
+  {
+    "site_name": "MADINA 2",
+    "restored_status": "forwarded_to_coordinator",
+    "visit_status": null
+  },
+  {
+    "site_name": "MADINA 3",
+    "restored_status": "forwarded_to_coordinator",
+    "visit_status": null
+  },
+  {
+    "site_name": "MADINA 5",
+    "restored_status": "forwarded_to_coordinator",
+    "visit_status": null
+  },
+  {
+    "site_name": "MADINA 6",
+    "restored_status": "forwarded_to_coordinator",
+    "visit_status": null
+  },
+  {
+    "site_name": "MADINA 7",
+    "restored_status": "forwarded_to_coordinator",
+    "visit_status": null
+  },
+  {
+    "site_name": "MADINA 8",
+    "restored_status": "forwarded_to_coordinator",
+    "visit_status": null
+  },
+  {
+    "site_name": "Miger 5",
+    "restored_status": "forwarded_to_coordinator",
+    "visit_status": null
+  },
+  {
+    "site_name": "Mohmaed Wedseed",
+    "restored_status": "forwarded_to_coordinator",
+    "visit_status": null
+  },
+  {
+    "site_name": "October",
+    "restored_status": "forwarded_to_coordinator",
+    "visit_status": null
+  },
+  {
+    "site_name": "Salmeen",
+    "restored_status": "forwarded_to_coordinator",
+    "visit_status": null
+  },
+  {
+    "site_name": "Samsm",
+    "restored_status": "forwarded_to_coordinator",
+    "visit_status": null
+  },
+  {
+    "site_name": "Shihait",
+    "restored_status": "forwarded_to_coordinator",
+    "visit_status": null
+  },
+  {
+    "site_name": "SIFAWA HOSPITAL",
+    "restored_status": "forwarded_to_coordinator",
+    "visit_status": null
+  },
+  {
+    "site_name": "Tebarkallah",
+    "restored_status": "forwarded_to_coordinator",
+    "visit_status": null
+  },
+  {
+    "site_name": "TEBARKALLAH",
+    "restored_status": "forwarded_to_coordinator",
+    "visit_status": null
+  },
+  {
+    "site_name": "Um alkhabeer",
+    "restored_status": "forwarded_to_coordinator",
+    "visit_status": null
+  },
+  {
+    "site_name": "Um Alkhair",
+    "restored_status": "forwarded_to_coordinator",
+    "visit_status": null
+  },
+  {
+    "site_name": "Um Barosh",
+    "restored_status": "forwarded_to_coordinator",
+    "visit_status": null
+  },
+  {
+    "site_name": "Um Broosh",
+    "restored_status": "forwarded_to_coordinator",
+    "visit_status": null
+  },
+  {
+    "site_name": "Um Gazaz",
+    "restored_status": "forwarded_to_coordinator",
+    "visit_status": null
+  },
+  {
+    "site_name": "UM GAZAZ",
+    "restored_status": "forwarded_to_coordinator",
+    "visit_status": null
+  },
+  {
+    "site_name": "Um Sagata",
+    "restored_status": "forwarded_to_coordinator",
+    "visit_status": null
+  },
+  {
+    "site_name": "UM-GARGOR",
+    "restored_status": "forwarded_to_coordinator",
+    "visit_status": null
+  },
+  {
+    "site_name": "Village 10",
+    "restored_status": "forwarded_to_coordinator",
+    "visit_status": null
+  },
+  {
+    "site_name": "Village 13",
+    "restored_status": "forwarded_to_coordinator",
+    "visit_status": null
+  },
+  {
+    "site_name": "Village 15",
+    "restored_status": "forwarded_to_coordinator",
+    "visit_status": null
+  },
+  {
+    "site_name": "Village 16",
+    "restored_status": "forwarded_to_coordinator",
+    "visit_status": null
+  },
+  {
+    "site_name": "Village 18",
+    "restored_status": "forwarded_to_coordinator",
+    "visit_status": null
+  },
+  {
+    "site_name": "Village 20",
+    "restored_status": "forwarded_to_coordinator",
+    "visit_status": null
+  },
+  {
+    "site_name": "Village 3",
+    "restored_status": "forwarded_to_coordinator",
+    "visit_status": null
+  },
+  {
+    "site_name": "VILLAGE 3",
+    "restored_status": "forwarded_to_coordinator",
+    "visit_status": null
+  },
+  {
+    "site_name": "Village 36",
+    "restored_status": "forwarded_to_coordinator",
+    "visit_status": null
+  },
+  {
+    "site_name": "Village 7",
+    "restored_status": "forwarded_to_coordinator",
+    "visit_status": null
+  },
+  {
+    "site_name": "VILLAGE 8 (ETHIOPIAN REFUGEES)",
+    "restored_status": "forwarded_to_coordinator",
+    "visit_status": null
+  },
+  {
+    "site_name": "Wad Kowli",
+    "restored_status": "forwarded_to_coordinator",
+    "visit_status": null
+  },
+  {
+    "site_name": "WAD KOWLI",
+    "restored_status": "forwarded_to_coordinator",
+    "visit_status": null
+  },
+  {
+    "site_name": "Wadi Alnaeem",
+    "restored_status": "forwarded_to_coordinator",
+    "visit_status": null
+  }
+]
