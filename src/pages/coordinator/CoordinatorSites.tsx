@@ -517,6 +517,7 @@ const CoordinatorSites: React.FC = () => {
   // Subcategory counts for new sites tabs
   const [statePermitRequiredCount, setStatePermitRequiredCount] = useState(0);
   const [localPermitRequiredCount, setLocalPermitRequiredCount] = useState(0);
+  const [readyPermitCount, setReadyPermitCount] = useState(0);
 
   // Permit workflow state
   const [permitQuestionDialogOpen, setPermitQuestionDialogOpen] = useState(false);
@@ -561,7 +562,7 @@ const CoordinatorSites: React.FC = () => {
   const [selectedSiteForPreview, setSelectedSiteForPreview] = useState<SiteVisit | null>(null);
 
   // Sub-tab state for new sites categorization
-  const [newSitesSubTab, setNewSitesSubTab] = useState('state_required');
+  const [newSitesSubTab, setNewSitesSubTab] = useState('ready');
 
   // Locality permit requirement triage state
   const [localityTriageDialogOpen, setLocalityTriageDialogOpen] = useState(false);
@@ -1042,8 +1043,20 @@ const CoordinatorSites: React.FC = () => {
       });
     }
 
+    const readySites = allPendingSites.filter((site: any) => !siteNeedsStatePermit(site) && !siteNeedsLocalityPermit(site));
+    const readyCount = readySites.length;
+
     setStatePermitRequiredCount(statePermitRequired);
     setLocalPermitRequiredCount(localPermitRequired);
+    setReadyPermitCount(readyCount);
+
+    if (statePermitRequired > 0) {
+      setNewSitesSubTab('state_required');
+    } else if (localPermitRequired > 0) {
+      setNewSitesSubTab('local_required');
+    } else if (readyCount > 0) {
+      setNewSitesSubTab('ready');
+    }
   }, [coordinatorSites, contextMmpFiles, hubStates, localities, permits, mmpFilter]);
 
   const mmpGroupedStatesData = useMemo(() => {
@@ -3331,19 +3344,26 @@ const CoordinatorSites: React.FC = () => {
 
         <TabsContent value="new" className="space-y-3 sm:space-y-4"> {/* Adjusted spacing */}
           <Tabs value={newSitesSubTab} onValueChange={setNewSitesSubTab} className="space-y-4">
-            <TabsList className="grid w-full grid-cols-2">
+            <TabsList className="grid w-full grid-cols-3">
               <TabsTrigger value="state_required" className="flex items-center justify-center gap-2 rounded-md py-2 px-3 bg-gray-100 hover:bg-gray-200 data-[state=active]:bg-blue-100 data-[state=active]:text-blue-800 data-[state=active]:shadow-sm">
                 <AlertTriangle className="h-4 w-4" />
-                State Permit
-                <Badge variant="secondary" className="ml-2">
+                <span className="hidden sm:inline">State</span>
+                <Badge variant="secondary" className="ml-1">
                   {statePermitRequiredCount}
                 </Badge>
               </TabsTrigger>
               <TabsTrigger value="local_required" className="flex items-center justify-center gap-2 rounded-md py-2 px-3 bg-gray-100 hover:bg-gray-200 data-[state=active]:bg-blue-100 data-[state=active]:text-blue-800 data-[state=active]:shadow-sm">
                 <MapPin className="h-4 w-4" />
-                Locality Permit
-                <Badge variant="secondary" className="ml-2">
+                <span className="hidden sm:inline">Locality</span>
+                <Badge variant="secondary" className="ml-1">
                   {localPermitRequiredCount}
+                </Badge>
+              </TabsTrigger>
+              <TabsTrigger value="ready" className="flex items-center justify-center gap-2 rounded-md py-2 px-3 bg-gray-100 hover:bg-gray-200 data-[state=active]:bg-green-100 data-[state=active]:text-green-800 data-[state=active]:shadow-sm">
+                <CheckCircle className="h-4 w-4" />
+                <span className="hidden sm:inline">Ready</span>
+                <Badge variant="secondary" className="ml-1">
+                  {readyPermitCount}
                 </Badge>
               </TabsTrigger>
             </TabsList>
@@ -3457,6 +3477,78 @@ const CoordinatorSites: React.FC = () => {
                             }}
                             isLoading={isPermitsSectionLoading}
                           />
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                );
+              })()}
+            </TabsContent>
+
+            <TabsContent value="ready" className="space-y-3 sm:space-y-4">
+              {(() => {
+                const prePipelineStatuses = ['pending', 'inprogress', 'in_progress', 'forwarded', 'forwarded_to_coordinator', 'forwarded_to_coordinators', 'new', 'dispatched', 'assigned'];
+                const isPendingReady = (site: any) => {
+                  const status = (site?.status || '').toLowerCase().trim().replace(/\s+/g, '_');
+                  return prePipelineStatuses.includes(status);
+                };
+                const readySitesList = localitiesData.flatMap((stateData: any) =>
+                  stateData.localities.flatMap((loc: any) =>
+                    (loc.sites || []).filter((site: any) =>
+                      isPendingReady(site) && !siteNeedsStatePermit(site) && !siteNeedsLocalityPermit(site)
+                    ).map((site: any) => ({ ...site, _state: stateData.state, _locality: loc.locality }))
+                  )
+                );
+
+                const groupedByState: Record<string, any[]> = {};
+                readySitesList.forEach((site: any) => {
+                  const key = site._state || 'Unknown';
+                  if (!groupedByState[key]) groupedByState[key] = [];
+                  groupedByState[key].push(site);
+                });
+
+                return readySitesList.length === 0 ? (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <CheckCircle className="h-12 w-12 mx-auto mb-4 opacity-20" />
+                    <p>No sites are ready yet. Upload state and locality permits first.</p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    <div className="text-sm text-muted-foreground">
+                      These sites have all permits and are ready to proceed.
+                    </div>
+                    {Object.entries(groupedByState).map(([stateName, sites]) => (
+                      <Card key={stateName}>
+                        <CardHeader className="pb-2 pt-3 px-4">
+                          <div className="flex items-center gap-2">
+                            <CheckCircle className="h-4 w-4 text-green-600" />
+                            <CardTitle className="text-base">{stateName}</CardTitle>
+                            <Badge variant="secondary" className="text-xs">{sites.length} site{sites.length !== 1 ? 's' : ''}</Badge>
+                          </div>
+                        </CardHeader>
+                        <CardContent className="px-4 pb-3 space-y-2">
+                          {sites.map((site: any) => {
+                            const siteName = site.site_name || site.siteName || site.site_code || 'Unknown Site';
+                            const siteCode = site.site_code || site.siteCode || '';
+                            const mmpName = site.mmp_name || site.mmpName || '';
+                            return (
+                              <div key={site.id} className="flex items-center justify-between p-2 bg-muted/30 rounded-md">
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <span className="font-medium text-sm">{siteName}</span>
+                                    {siteCode && <span className="text-xs text-muted-foreground">({siteCode})</span>}
+                                  </div>
+                                  <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5">
+                                    {site._locality && <span>{site._locality}</span>}
+                                    {mmpName && <span>• {mmpName}</span>}
+                                  </div>
+                                </div>
+                                <Badge className="bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300 text-xs">
+                                  Ready
+                                </Badge>
+                              </div>
+                            );
+                          })}
                         </CardContent>
                       </Card>
                     ))}
