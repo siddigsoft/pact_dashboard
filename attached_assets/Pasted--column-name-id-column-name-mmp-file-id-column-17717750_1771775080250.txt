@@ -1,0 +1,149 @@
+[
+  {
+    "column_name": "id"
+  },
+  {
+    "column_name": "mmp_file_id"
+  },
+  {
+    "column_name": "site_code"
+  },
+  {
+    "column_name": "hub_office"
+  },
+  {
+    "column_name": "state"
+  },
+  {
+    "column_name": "locality"
+  },
+  {
+    "column_name": "site_name"
+  },
+  {
+    "column_name": "cp_name"
+  },
+  {
+    "column_name": "visit_type"
+  },
+  {
+    "column_name": "visit_date"
+  },
+  {
+    "column_name": "main_activity"
+  },
+  {
+    "column_name": "activity_at_site"
+  },
+  {
+    "column_name": "monitoring_by"
+  },
+  {
+    "column_name": "survey_tool"
+  },
+  {
+    "column_name": "use_market_diversion"
+  },
+  {
+    "column_name": "use_warehouse_monitoring"
+  },
+  {
+    "column_name": "comments"
+  },
+  {
+    "column_name": "additional_data"
+  },
+  {
+    "column_name": "status"
+  },
+  {
+    "column_name": "created_at"
+  },
+  {
+    "column_name": "cost"
+  },
+  {
+    "column_name": "verification_notes"
+  },
+  {
+    "column_name": "verified_by"
+  },
+  {
+    "column_name": "verified_at"
+  },
+  {
+    "column_name": "dispatched_by"
+  },
+  {
+    "column_name": "dispatched_at"
+  },
+  {
+    "column_name": "updated_at"
+  },
+  {
+    "column_name": "enumerator_fee"
+  },
+  {
+    "column_name": "transport_fee"
+  },
+  {
+    "column_name": "accepted_by"
+  },
+  {
+    "column_name": "accepted_at"
+  },
+  {
+    "column_name": "verified_by_user_id"
+  },
+  {
+    "column_name": "completed_by_user_id"
+  },
+  {
+    "column_name": "forwarded_by_user_id"
+  },
+  {
+    "column_name": "forwarded_to_user_id"
+  },
+  {
+    "column_name": "forwarded_at"
+  },
+  {
+    "column_name": "cost_acknowledged"
+  },
+  {
+    "column_name": "cost_acknowledged_at"
+  },
+  {
+    "column_name": "cost_acknowledged_by"
+  },
+  {
+    "column_name": "rejection_comments"
+  },
+  {
+    "column_name": "rejected_by"
+  },
+  {
+    "column_name": "rejected_at"
+  },
+  {
+    "column_name": "claimed_at"
+  },
+  {
+    "column_name": "claimed_by"
+  },
+  {
+    "column_name": "registry_site_id"
+  },
+  {
+    "column_name": "visit_started_at"
+  },
+  {
+    "column_name": "visit_started_by"
+  },
+  {
+    "column_name": "visit_completed_at"
+  },
+  {
+    "column_name": "visit_completed_by"
+  }
+]
