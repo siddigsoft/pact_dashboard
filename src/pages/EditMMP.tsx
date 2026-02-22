@@ -11,6 +11,7 @@ import MMPOverallInformation from '@/components/MMPOverallInformation';
 import MMPVersionHistory from '@/components/MMPVersionHistory';
 import MMPSiteInformation from '@/components/MMPSiteInformation';
 import MMPSiteEntriesTable from '@/components/mmp/MMPSiteEntriesTable';
+import MMPPartialUpdate from '@/components/mmp/MMPPartialUpdate';
 import { ActivityManager } from '@/components/project/activity/ActivityManager';
 import { useToast } from '@/hooks/use-toast';
 import FieldTeamMapPermissions from '@/components/map/FieldTeamMapPermissions';
@@ -215,6 +216,7 @@ const EditMMP: React.FC = () => {
               <TabsList>
                 <TabsTrigger value="details">MMP Details</TabsTrigger>
                 <TabsTrigger value="sites">Sites</TabsTrigger>
+                <TabsTrigger value="partial-update">Partial Update</TabsTrigger>
                 <TabsTrigger value="activities">Activities</TabsTrigger>
                 <TabsTrigger value="history">Version History</TabsTrigger>
               </TabsList>
@@ -237,6 +239,17 @@ const EditMMP: React.FC = () => {
                   siteEntries={mmpFile?.siteEntries || []}
                   editable={true}
                   onUpdateSites={handleUpdateSites}
+                />
+              </TabsContent>
+
+              <TabsContent value="partial-update" className="space-y-4">
+                <MMPPartialUpdate
+                  mmpFile={mmpFile}
+                  onComplete={async () => {
+                    await refreshMMPFiles();
+                    const updated = getMmpById(id!);
+                    if (updated) setMmpFile(updated);
+                  }}
                 />
               </TabsContent>
 
