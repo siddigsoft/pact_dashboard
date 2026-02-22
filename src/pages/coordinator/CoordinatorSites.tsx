@@ -3635,18 +3635,6 @@ const CoordinatorSites: React.FC = () => {
               <div className="flex items-center justify-between">
                 <CardTitle>Sites with Permits Attached</CardTitle>
                 <div className="flex items-center gap-2">
-                  {isAdminOrSuperUser && Object.values(sitesGroupedByLocality).flat().length > 0 && (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="text-xs h-8 text-orange-600 border-orange-300 hover:bg-orange-50 dark:text-orange-400 dark:border-orange-700 dark:hover:bg-orange-950"
-                      data-testid="button-return-all-cp-to-state"
-                      onClick={() => returnSitesToState(Object.values(sitesGroupedByLocality).flat().map((s: any) => s.id))}
-                    >
-                      <RotateCcw className="h-3 w-3 mr-1" />
-                      Return All to State
-                    </Button>
-                  )}
                   <div className="relative w-full sm:w-auto max-w-sm">
                     <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                     <Input
@@ -3729,6 +3717,34 @@ const CoordinatorSites: React.FC = () => {
                   </Select>
                 </div>
               </div>
+              {isAdminOrSuperUser && selectedSites.size > 0 && (
+                <div className="flex items-center gap-3 mt-4 p-3 bg-orange-50 dark:bg-orange-950/30 rounded-lg border border-orange-200 dark:border-orange-800">
+                  <span className="text-sm font-medium text-orange-700 dark:text-orange-300">
+                    {selectedSites.size} site{selectedSites.size !== 1 ? 's' : ''} selected
+                  </span>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="text-xs h-7 text-orange-600 border-orange-300 hover:bg-orange-100 dark:text-orange-400 dark:border-orange-700 dark:hover:bg-orange-900"
+                    data-testid="button-return-selected-cp-to-state"
+                    onClick={() => {
+                      returnSitesToState(Array.from(selectedSites));
+                      setSelectedSites(new Set());
+                    }}
+                  >
+                    <RotateCcw className="h-3 w-3 mr-1" />
+                    Return Selected to State
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="text-xs h-7"
+                    onClick={() => setSelectedSites(new Set())}
+                  >
+                    Clear Selection
+                  </Button>
+                </div>
+              )}
             </CardHeader>
             <CardContent>
               {Object.keys(sitesGroupedByLocality).length === 0 ? (
@@ -3737,7 +3753,143 @@ const CoordinatorSites: React.FC = () => {
                   <p>{searchQuery ? 'No localities match your search.' : 'No sites with permits attached yet.'}</p>
                 </div>
               ) : (
-                renderMmpGroupedLocalities(sitesGroupedByLocality)
+                <>
+                  {renderMmpGroupedLocalities(sitesGroupedByLocality)}
+                  {isAdminOrSuperUser && (() => {
+                    const allCpSites = Object.values(sitesGroupedByLocality).flat();
+                    const groupedByState: Record<string, { sites: any[]; localities: Record<string, any[]> }> = {};
+                    allCpSites.forEach((site: any) => {
+                      const st = site.state || 'Unknown';
+                      if (!groupedByState[st]) groupedByState[st] = { sites: [], localities: {} };
+                      groupedByState[st].sites.push(site);
+                      const loc = site.locality || 'Unknown';
+                      if (!groupedByState[st].localities[loc]) groupedByState[st].localities[loc] = [];
+                      groupedByState[st].localities[loc].push(site);
+                    });
+
+                    return (
+                      <div className="mt-6 border-t pt-4">
+                        <div className="flex items-center justify-between mb-3">
+                          <h4 className="text-sm font-semibold text-orange-700 dark:text-orange-400">Select Sites to Return to State Permit</h4>
+                          <div className="flex items-center gap-2">
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="text-xs h-7"
+                              data-testid="button-select-all-cp"
+                              onClick={() => setSelectedSites(new Set(allCpSites.map((s: any) => s.id)))}
+                            >
+                              Select All ({allCpSites.length})
+                            </Button>
+                            {selectedSites.size > 0 && (
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="text-xs h-7"
+                                onClick={() => setSelectedSites(new Set())}
+                              >
+                                Clear
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                        <div className="space-y-3">
+                          {Object.entries(groupedByState).sort(([a], [b]) => a.localeCompare(b)).map(([stateName, stateGroup]) => {
+                            const allStateIds = stateGroup.sites.map((s: any) => s.id);
+                            const allSelected = allStateIds.every((id: string) => selectedSites.has(id));
+                            const someSelected = allStateIds.some((id: string) => selectedSites.has(id));
+                            return (
+                              <Card key={stateName} className="border">
+                                <CardContent className="pt-3 pb-3 px-4">
+                                  <div className="flex items-center gap-2 mb-2">
+                                    <input
+                                      type="checkbox"
+                                      checked={allSelected}
+                                      ref={(el) => { if (el) el.indeterminate = someSelected && !allSelected; }}
+                                      onChange={() => {
+                                        setSelectedSites(prev => {
+                                          const next = new Set(prev);
+                                          if (allSelected) {
+                                            allStateIds.forEach((id: string) => next.delete(id));
+                                          } else {
+                                            allStateIds.forEach((id: string) => next.add(id));
+                                          }
+                                          return next;
+                                        });
+                                      }}
+                                      className="h-4 w-4 text-orange-600 rounded border-gray-300"
+                                      data-testid={`checkbox-state-${stateName}`}
+                                    />
+                                    <span className="font-semibold text-sm">{stateName}</span>
+                                    <Badge variant="secondary" className="text-xs">{stateGroup.sites.length} site{stateGroup.sites.length !== 1 ? 's' : ''}</Badge>
+                                  </div>
+                                  <div className="ml-6 space-y-2">
+                                    {Object.entries(stateGroup.localities).sort(([a], [b]) => a.localeCompare(b)).map(([locName, locSites]) => {
+                                      const locIds = locSites.map((s: any) => s.id);
+                                      const locAllSelected = locIds.every((id: string) => selectedSites.has(id));
+                                      const locSomeSelected = locIds.some((id: string) => selectedSites.has(id));
+                                      return (
+                                        <div key={locName} className="space-y-1">
+                                          <div className="flex items-center gap-2">
+                                            <input
+                                              type="checkbox"
+                                              checked={locAllSelected}
+                                              ref={(el) => { if (el) el.indeterminate = locSomeSelected && !locAllSelected; }}
+                                              onChange={() => {
+                                                setSelectedSites(prev => {
+                                                  const next = new Set(prev);
+                                                  if (locAllSelected) {
+                                                    locIds.forEach((id: string) => next.delete(id));
+                                                  } else {
+                                                    locIds.forEach((id: string) => next.add(id));
+                                                  }
+                                                  return next;
+                                                });
+                                              }}
+                                              className="h-3.5 w-3.5 text-orange-600 rounded border-gray-300"
+                                              data-testid={`checkbox-locality-${locName}`}
+                                            />
+                                            <MapPin className="h-3 w-3 text-muted-foreground" />
+                                            <span className="text-sm font-medium">{locName}</span>
+                                            <span className="text-xs text-muted-foreground">({locSites.length})</span>
+                                          </div>
+                                          <div className="ml-6 space-y-0.5">
+                                            {locSites.map((site: any) => (
+                                              <div key={site.id} className="flex items-center gap-2 py-0.5">
+                                                <input
+                                                  type="checkbox"
+                                                  checked={selectedSites.has(site.id)}
+                                                  onChange={() => {
+                                                    setSelectedSites(prev => {
+                                                      const next = new Set(prev);
+                                                      if (next.has(site.id)) next.delete(site.id);
+                                                      else next.add(site.id);
+                                                      return next;
+                                                    });
+                                                  }}
+                                                  className="h-3 w-3 text-orange-600 rounded border-gray-300"
+                                                  data-testid={`checkbox-site-${site.id}`}
+                                                />
+                                                <span className="text-xs">{site.site_name || site.site_code}</span>
+                                                {site.site_code && site.site_name && (
+                                                  <span className="text-xs text-muted-foreground">({site.site_code})</span>
+                                                )}
+                                              </div>
+                                            ))}
+                                          </div>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                </CardContent>
+                              </Card>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </>
               )}
             </CardContent>
           </Card>
