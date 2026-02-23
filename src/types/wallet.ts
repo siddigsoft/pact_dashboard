@@ -64,6 +64,11 @@ export interface WithdrawalRequest {
   // Payment details
   paymentMethod?: string;
   paymentDetails?: Record<string, any>;
+  // Fund receipt confirmation
+  fundReceiptConfirmed?: boolean;
+  fundReceiptConfirmedAt?: string;
+  fundReceiptSignatureUrl?: string;
+  fundReceiptNotes?: string;
   createdAt: string;
   updatedAt: string;
 }

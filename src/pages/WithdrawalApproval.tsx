@@ -484,6 +484,30 @@ export default function WithdrawalApproval() {
               </p>
             </div>
           )}
+          {request.status === 'approved' && (
+            <div className="mt-3 pt-3 border-t">
+              {(request as any).fundReceiptConfirmed ? (
+                <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-400">
+                  <CheckCheck className="w-4 h-4" />
+                  <span className="text-xs font-medium">
+                    تم تأكيد الاستلام / Receipt Confirmed
+                    {(request as any).fundReceiptConfirmedAt && (
+                      <span className="text-muted-foreground ml-1">
+                        ({format(new Date((request as any).fundReceiptConfirmedAt), 'MMM dd, yyyy HH:mm')})
+                      </span>
+                    )}
+                  </span>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2 text-amber-600 dark:text-amber-400">
+                  <AlertTriangle className="w-4 h-4" />
+                  <span className="text-xs font-medium">
+                    في انتظار تأكيد الاستلام / Awaiting Receipt Confirmation
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
         </CardContent>
       </Card>
     );

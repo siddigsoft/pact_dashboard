@@ -47,6 +47,7 @@ interface WalletContextType {
   adminListWithdrawalRequests: () => Promise<AdminWithdrawalRequest[]>;
   listSupervisedWithdrawalRequests: () => Promise<SupervisedWithdrawalRequest[]>;
   reconcileSiteVisitFee: (siteVisitId: string) => Promise<{ success: boolean; message: string }>;
+  confirmFundReceipt: (requestId: string, notes?: string, signatureUrl?: string) => Promise<void>;
 }
 
 const WalletContext = createContext<WalletContextType | undefined>(undefined);
@@ -116,6 +117,10 @@ function transformWithdrawalRequestFromDB(data: any): WithdrawalRequest {
     adminNotes: data.admin_notes,
     paymentMethod: data.payment_method,
     paymentDetails: data.payment_details,
+    fundReceiptConfirmed: data.fund_receipt_confirmed || false,
+    fundReceiptConfirmedAt: data.fund_receipt_confirmed_at,
+    fundReceiptSignatureUrl: data.fund_receipt_signature_url,
+    fundReceiptNotes: data.fund_receipt_notes,
     createdAt: data.created_at,
     updatedAt: data.updated_at,
   };
@@ -670,6 +675,57 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       toast({
         title: 'Error',
         description: 'Failed to reject withdrawal request',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const confirmFundReceipt = async (requestId: string, notes?: string, signatureUrl?: string) => {
+    if (!currentUser?.id) return;
+
+    try {
+      const request = withdrawalRequests.find(r => r.id === requestId);
+      if (!request) throw new Error('Withdrawal request not found');
+
+      if (request.status !== 'approved') {
+        throw new Error('Only approved withdrawals can be confirmed');
+      }
+
+      if (request.fundReceiptConfirmed) {
+        throw new Error('Fund receipt already confirmed');
+      }
+
+      const { error } = await supabase
+        .from('withdrawal_requests')
+        .update({
+          fund_receipt_confirmed: true,
+          fund_receipt_confirmed_at: new Date().toISOString(),
+          fund_receipt_signature_url: signatureUrl || null,
+          fund_receipt_notes: notes || null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', requestId)
+        .eq('user_id', currentUser.id);
+
+      if (error) throw error;
+
+      toast({
+        title: 'تم تأكيد الاستلام / Fund Receipt Confirmed',
+        description: 'You have confirmed receiving the funds successfully.',
+      });
+
+      NotificationTriggerService.withdrawalStatusChanged(
+        request.userId,
+        'approved',
+        request.amount
+      );
+
+      await refreshWithdrawalRequests();
+    } catch (error: any) {
+      console.error('Failed to confirm fund receipt:', error);
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to confirm fund receipt',
         variant: 'destructive',
       });
     }
@@ -1595,6 +1651,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         adminListWithdrawalRequests,
         listSupervisedWithdrawalRequests,
         reconcileSiteVisitFee,
+        confirmFundReceipt,
       }}
     >
       {children}

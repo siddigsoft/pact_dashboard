@@ -71,6 +71,7 @@ const WalletPage = () => {
     loading, 
     createWithdrawalRequest,
     cancelWithdrawalRequest,
+    confirmFundReceipt,
     getBalance,
     refreshWallet,
     refreshTransactions,
@@ -107,6 +108,11 @@ const WalletPage = () => {
   const [withdrawalMethod, setWithdrawalMethod] = useState('');
   const [paymentMethods, setPaymentMethods] = useState<any[]>([]);
   
+  const [fundReceiptDialogOpen, setFundReceiptDialogOpen] = useState(false);
+  const [fundReceiptRequestId, setFundReceiptRequestId] = useState<string | null>(null);
+  const [fundReceiptNotes, setFundReceiptNotes] = useState('');
+  const [fundReceiptProcessing, setFundReceiptProcessing] = useState(false);
+
   const [transactionTypeFilter, setTransactionTypeFilter] = useState<string>('all');
   const [dateRangeFilter, setDateRangeFilter] = useState<string>('all');
   const [withdrawalStatusFilter, setWithdrawalStatusFilter] = useState<'all' | 'pending' | 'approved' | 'rejected'>('all');
@@ -162,11 +168,27 @@ const WalletPage = () => {
     }
   };
 
-  const getWithdrawalStatusBadge = (status: string) => {
+  const handleConfirmFundReceipt = async () => {
+    if (!fundReceiptRequestId) return;
+    setFundReceiptProcessing(true);
+    try {
+      await confirmFundReceipt(fundReceiptRequestId, fundReceiptNotes || undefined);
+      setFundReceiptDialogOpen(false);
+      setFundReceiptRequestId(null);
+      setFundReceiptNotes('');
+    } finally {
+      setFundReceiptProcessing(false);
+    }
+  };
+
+  const getWithdrawalStatusBadge = (status: string, request?: any) => {
     switch (status) {
       case 'pending':
         return <Badge variant="outline" className="gap-1"><Clock className="w-3 h-3" />Pending</Badge>;
       case 'approved':
+        if (request?.fundReceiptConfirmed) {
+          return <Badge variant="default" className="gap-1 bg-emerald-600"><CheckCircle2 className="w-3 h-3" />Received</Badge>;
+        }
         return <Badge variant="default" className="gap-1 bg-green-600"><Check className="w-3 h-3" />Approved</Badge>;
       case 'rejected':
         return <Badge variant="destructive" className="gap-1"><X className="w-3 h-3" />Rejected</Badge>;
@@ -1240,7 +1262,7 @@ const WalletPage = () => {
                       <div key={request.id} className="bg-slate-800/50 rounded-lg p-4 border border-slate-700/50">
                         <div className="flex items-start justify-between mb-3">
                           <div className="flex items-center gap-2 flex-wrap">
-                            {getWithdrawalStatusBadge(request.status)}
+                            {getWithdrawalStatusBadge(request.status, request)}
                             {currentUser && (request.status === 'pending' || request.status === 'supervisor_approved') && (
                               <WalletSignatureIntegration
                                 transaction={{
@@ -1292,19 +1314,44 @@ const WalletPage = () => {
                               <p className="text-sm text-slate-300">{request.supervisorNotes}</p>
                             </div>
                           )}
+
+                          {request.fundReceiptConfirmed && request.fundReceiptConfirmedAt && (
+                            <div>
+                              <p className="text-xs font-medium text-emerald-400 mb-1">✓ تم تأكيد الاستلام / Receipt Confirmed</p>
+                              <p className="text-xs text-slate-400">{format(new Date(request.fundReceiptConfirmedAt), 'MMM dd, yyyy HH:mm')}</p>
+                              {request.fundReceiptNotes && <p className="text-xs text-slate-400 mt-1">{request.fundReceiptNotes}</p>}
+                            </div>
+                          )}
                         </div>
                         
-                        {request.status === 'pending' && (
-                          <button
-                            type="button"
-                            onClick={() => cancelWithdrawalRequest(request.id)}
-                            className="w-full px-3 py-2 text-sm rounded-md bg-red-900/20 hover:bg-red-900/30 text-red-300 border border-red-500/30 transition inline-flex items-center justify-center focus:outline-none focus:ring-2 focus:ring-red-400/70 focus:ring-offset-2 focus:ring-offset-slate-950 min-h-[44px]"
-                            data-testid={`button-cancel-${request.id}`}
-                          >
-                            <X className="w-3 h-3 mr-1" />
-                            Cancel Request
-                          </button>
-                        )}
+                        <div className="space-y-2">
+                          {request.status === 'pending' && (
+                            <button
+                              type="button"
+                              onClick={() => cancelWithdrawalRequest(request.id)}
+                              className="w-full px-3 py-2 text-sm rounded-md bg-red-900/20 hover:bg-red-900/30 text-red-300 border border-red-500/30 transition inline-flex items-center justify-center focus:outline-none focus:ring-2 focus:ring-red-400/70 focus:ring-offset-2 focus:ring-offset-slate-950 min-h-[44px]"
+                              data-testid={`button-cancel-${request.id}`}
+                            >
+                              <X className="w-3 h-3 mr-1" />
+                              Cancel Request
+                            </button>
+                          )}
+                          
+                          {request.status === 'approved' && !request.fundReceiptConfirmed && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setFundReceiptRequestId(request.id);
+                                setFundReceiptDialogOpen(true);
+                              }}
+                              className="w-full px-3 py-2 text-sm rounded-md bg-emerald-900/30 hover:bg-emerald-900/50 text-emerald-300 border border-emerald-500/30 transition inline-flex items-center justify-center focus:outline-none focus:ring-2 focus:ring-emerald-400/70 focus:ring-offset-2 focus:ring-offset-slate-950 min-h-[44px]"
+                              data-testid={`button-confirm-receipt-${request.id}`}
+                            >
+                              <CheckCircle2 className="w-4 h-4 mr-2" />
+                              تأكيد الاستلام / Confirm Received
+                            </button>
+                          )}
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -1328,7 +1375,7 @@ const WalletPage = () => {
                           <TableRow key={request.id} data-testid={`row-withdrawal-${request.id}`}>
                             <TableCell>
                               <div className="flex items-center gap-2">
-                                {getWithdrawalStatusBadge(request.status)}
+                                {getWithdrawalStatusBadge(request.status, request)}
                                 {currentUser && (request.status === 'pending' || request.status === 'supervisor_approved') && (
                                   <WalletSignatureIntegration
                                     transaction={{
@@ -1364,19 +1411,40 @@ const WalletPage = () => {
                             </TableCell>
                             <TableCell className="max-w-xs truncate">
                               {request.supervisorNotes || '-'}
+                              {request.fundReceiptConfirmed && request.fundReceiptConfirmedAt && (
+                                <div className="mt-1">
+                                  <span className="text-xs text-emerald-400">✓ Received {format(new Date(request.fundReceiptConfirmedAt), 'MMM dd')}</span>
+                                </div>
+                              )}
                             </TableCell>
                             <TableCell>
-                              {request.status === 'pending' && (
-                                <button
-                                  type="button"
-                                  onClick={() => cancelWithdrawalRequest(request.id)}
-                                  className="px-3 py-1.5 text-sm rounded-md bg-red-900/20 hover:bg-red-900/30 text-red-300 border border-red-500/30 transition inline-flex items-center focus:outline-none focus:ring-2 focus:ring-red-400/70 focus:ring-offset-2 focus:ring-offset-slate-950 min-h-[44px]"
-                                  data-testid={`button-cancel-${request.id}`}
-                                >
-                                  <X className="w-3 h-3 mr-1" />
-                                  Cancel
-                                </button>
-                              )}
+                              <div className="flex gap-2">
+                                {request.status === 'pending' && (
+                                  <button
+                                    type="button"
+                                    onClick={() => cancelWithdrawalRequest(request.id)}
+                                    className="px-3 py-1.5 text-sm rounded-md bg-red-900/20 hover:bg-red-900/30 text-red-300 border border-red-500/30 transition inline-flex items-center focus:outline-none focus:ring-2 focus:ring-red-400/70 focus:ring-offset-2 focus:ring-offset-slate-950 min-h-[44px]"
+                                    data-testid={`button-cancel-${request.id}`}
+                                  >
+                                    <X className="w-3 h-3 mr-1" />
+                                    Cancel
+                                  </button>
+                                )}
+                                {request.status === 'approved' && !request.fundReceiptConfirmed && (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setFundReceiptRequestId(request.id);
+                                      setFundReceiptDialogOpen(true);
+                                    }}
+                                    className="px-3 py-1.5 text-sm rounded-md bg-emerald-900/30 hover:bg-emerald-900/50 text-emerald-300 border border-emerald-500/30 transition inline-flex items-center focus:outline-none focus:ring-2 focus:ring-emerald-400/70 focus:ring-offset-2 focus:ring-offset-slate-950 min-h-[44px]"
+                                    data-testid={`button-confirm-receipt-desktop-${request.id}`}
+                                  >
+                                    <CheckCircle2 className="w-3 h-3 mr-1" />
+                                    Confirm Received
+                                  </button>
+                                )}
+                              </div>
                             </TableCell>
                           </TableRow>
                         ))}
@@ -1779,6 +1847,82 @@ const WalletPage = () => {
       </Tabs>
         </CardContent>
       </Card>
+
+      <Dialog open={fundReceiptDialogOpen} onOpenChange={(open) => {
+        setFundReceiptDialogOpen(open);
+        if (!open) {
+          setFundReceiptRequestId(null);
+          setFundReceiptNotes('');
+        }
+      }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-center">
+              <div className="text-lg">تأكيد استلام الأموال</div>
+              <div className="text-base font-normal text-muted-foreground mt-1">Confirm Fund Receipt</div>
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="bg-emerald-900/20 border border-emerald-500/30 rounded-lg p-4 text-center">
+              <CheckCircle2 className="w-10 h-10 text-emerald-400 mx-auto mb-2" />
+              <p className="text-sm text-emerald-300">
+                بالضغط على "تأكيد"، أنت تؤكد أنك استلمت المبلغ بالكامل
+              </p>
+              <p className="text-sm text-emerald-300/80 mt-1">
+                By clicking "Confirm", you acknowledge that you have received the full amount
+              </p>
+              {fundReceiptRequestId && (() => {
+                const req = withdrawalRequests.find(r => r.id === fundReceiptRequestId);
+                return req ? (
+                  <p className="text-lg font-bold text-emerald-200 mt-3">
+                    {formatCurrency(req.amount, req.currency)}
+                  </p>
+                ) : null;
+              })()}
+            </div>
+            
+            <div className="space-y-2">
+              <Label htmlFor="fund-receipt-notes">ملاحظات (اختياري) / Notes (Optional)</Label>
+              <Textarea
+                id="fund-receipt-notes"
+                value={fundReceiptNotes}
+                onChange={(e) => setFundReceiptNotes(e.target.value)}
+                placeholder="Add any notes about receiving the funds..."
+                className="min-h-[60px]"
+                data-testid="input-fund-receipt-notes"
+              />
+            </div>
+          </div>
+          <div className="flex gap-3">
+            <button
+              type="button"
+              onClick={() => {
+                setFundReceiptDialogOpen(false);
+                setFundReceiptRequestId(null);
+                setFundReceiptNotes('');
+              }}
+              className="flex-1 px-4 py-2.5 text-sm rounded-md border border-slate-600 text-slate-300 hover:bg-slate-800 transition min-h-[44px]"
+              data-testid="button-cancel-receipt"
+            >
+              إلغاء / Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handleConfirmFundReceipt}
+              disabled={fundReceiptProcessing}
+              className="flex-1 px-4 py-2.5 text-sm rounded-md bg-emerald-600 hover:bg-emerald-700 text-white transition inline-flex items-center justify-center disabled:opacity-50 min-h-[44px]"
+              data-testid="button-submit-receipt"
+            >
+              {fundReceiptProcessing ? (
+                <RefreshCw className="w-4 h-4 animate-spin mr-2" />
+              ) : (
+                <CheckCircle2 className="w-4 h-4 mr-2" />
+              )}
+              تأكيد الاستلام / Confirm Receipt
+            </button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
