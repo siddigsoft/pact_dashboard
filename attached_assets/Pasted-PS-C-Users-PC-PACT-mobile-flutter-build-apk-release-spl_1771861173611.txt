@@ -1,0 +1,46 @@
+PS C:\Users\PC\PACT_mobile> flutter build apk --release --split-per-abi                                                        
+[!] Your app is using an unsupported Gradle project. To fix this problem, create a new project by running `flutter create -t app
+<app-directory>` and then move the dart code, assets and pubspec.yaml to the new project.
+PS C:\Users\PC\PACT_mobile> Copy-Item "android\app\google-services.json" ".\google-services-backup.json"
+>> Copy-Item "android\app\upload-keystore.jks" ".\upload-keystore-backup.jks"
+>> Copy-Item "android\key.properties" ".\key-properties-backup.txt"
+>> Copy-Item "android\app\src\main\AndroidManifest.xml" ".\AndroidManifest-backup.xml"
+PS C:\Users\PC\PACT_mobile> Remove-Item -Recurse -Force "android"
+>> flutter create --platforms android .
+Recreating project ....s [4.4 MB of 12.4 MB (6.6 MB/s)                                                               ]
+  android\app\build.gradle.kts (created)
+  android\app\src\main\kotlin\com\example\pact_mobile\MainActivity.kt (created)
+  android\build.gradle.kts (created)
+  android\pact_mobile_android.iml (created)
+  android\.gitignore (created)
+  android\app\src\debug\AndroidManifest.xml (created)
+  android\app\src\main\AndroidManifest.xml (created)
+  android\app\src\main\res\drawable\launch_background.xml (created)
+  android\app\src\main\res\drawable-v21\launch_background.xml (created)
+  android\app\src\main\res\mipmap-hdpi\ic_launcher.png (created)
+  android\app\src\main\res\mipmap-mdpi\ic_launcher.png (created)
+  android\app\src\main\res\mipmap-xhdpi\ic_launcher.png (created)
+  android\app\src\main\res\mipmap-xxhdpi\ic_launcher.png (created)
+  android\app\src\main\res\mipmap-xxxhdpi\ic_launcher.png (created)
+  android\app\src\main\res\values\styles.xml (created)
+  android\app\src\main\res\values-night\styles.xml (created)
+  android\app\src\profile\AndroidManifest.xml (created)
+  android\gradle\wrapper\gradle-wrapper.properties (created)
+  android\gradle.properties (created)
+  android\settings.gradle.kts (created)
+Resolving dependencies... (2.5s)
+Downloading packages...
+Got dependencies.
+Wrote 23 files.
+
+All done!
+You can find general documentation for Flutter at: https://docs.flutter.dev/
+PS C:\Users\PC\PACT_mobile> 
+If you prefer video documentation, consider: https://www.youtube.com/c/flutterdev
+
+In order to run your application, type:
+
+  $ cd .
+  $ flutter run
+
+Your application code is in .\lib\main.dart.
