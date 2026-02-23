@@ -4,9 +4,10 @@ import 'package:geolocator/geolocator.dart';
 class VisitReportData {
   final String activities;
   final String notes;
-  final List<String> photos; // Local file paths for photos (will be uploaded)
+  final List<String> photos;
   final int durationMinutes;
   final Position? coordinates;
+  final String? activityType;
 
   VisitReportData({
     required this.activities,
@@ -14,6 +15,7 @@ class VisitReportData {
     required this.photos,
     required this.durationMinutes,
     this.coordinates,
+    this.activityType,
   });
 }
 
