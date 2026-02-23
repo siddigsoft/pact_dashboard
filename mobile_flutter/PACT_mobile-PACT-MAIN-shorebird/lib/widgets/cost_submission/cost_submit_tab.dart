@@ -473,7 +473,7 @@ class _CostSubmitTabState extends State<CostSubmitTab> {
 
   Widget _buildExpenseCategoryDropdown() {
     return DropdownButtonFormField<ExpenseCategory>(
-      initialValue: _expenseCategory,
+      value: _expenseCategory,
       decoration: InputDecoration(
         prefixIcon: const Icon(Icons.category),
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
@@ -499,7 +499,7 @@ class _CostSubmitTabState extends State<CostSubmitTab> {
 
   Widget _buildProjectDropdown() {
     return DropdownButtonFormField<String>(
-      initialValue: _projectId,
+      value: _projectId,
       decoration: InputDecoration(
         prefixIcon: const Icon(Icons.folder),
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
@@ -523,7 +523,7 @@ class _CostSubmitTabState extends State<CostSubmitTab> {
 
   Widget _buildHubDropdown() {
     return DropdownButtonFormField<String>(
-      initialValue: _hubId,
+      value: _hubId,
       decoration: InputDecoration(
         prefixIcon: const Icon(Icons.hub),
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),

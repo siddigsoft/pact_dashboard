@@ -176,7 +176,7 @@ class _TransactionSearchWidgetState
               const SizedBox(height: 16),
               // Type filter
               DropdownButtonFormField<String>(
-                initialValue: _selectedType,
+                value: _selectedType,
                 hint: const Text('Transaction Type'),
                 decoration: InputDecoration(
                   prefixIcon: const Icon(Icons.category),

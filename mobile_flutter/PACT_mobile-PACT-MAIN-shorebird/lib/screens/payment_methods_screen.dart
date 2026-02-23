@@ -371,7 +371,7 @@ class _AddPaymentMethodDialogState extends State<AddPaymentMethodDialog> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               DropdownButtonFormField<PaymentType>(
-                initialValue: _selectedType,
+                value: _selectedType,
                 decoration: const InputDecoration(
                   labelText: 'Payment Type',
                   border: OutlineInputBorder(),

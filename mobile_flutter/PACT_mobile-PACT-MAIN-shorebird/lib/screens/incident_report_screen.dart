@@ -70,7 +70,7 @@ class _IncidentReportScreenState extends State<IncidentReportScreen> {
             mainAxisSize: MainAxisSize.min,
             children: [
               DropdownButtonFormField<String>(
-                initialValue: selectedType,
+                value: selectedType,
                 items:
                     [
                           'harassment',

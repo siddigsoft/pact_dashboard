@@ -69,7 +69,7 @@ class _DownPaymentRequestDialogState
                 }
 
                 return DropdownButtonFormField<SiteVisit>(
-                  initialValue: _selectedSiteVisit,
+                  value: _selectedSiteVisit,
                   isExpanded: true,
                   decoration: const InputDecoration(
                     labelText: 'Select Site Visit',
@@ -119,7 +119,7 @@ class _DownPaymentRequestDialogState
 
             // Payment type
             DropdownButtonFormField<String>(
-              initialValue: _paymentType,
+              value: _paymentType,
               decoration: const InputDecoration(
                 labelText: 'Payment Type',
                 border: OutlineInputBorder(),

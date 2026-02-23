@@ -231,7 +231,7 @@ class _CostReconciliationTabState extends State<CostReconciliationTab> {
 
   Widget _buildAdvanceSelector() {
     return DropdownButtonFormField<OperationalCostSubmission>(
-      initialValue: _selectedSubmission,
+      value: _selectedSubmission,
       decoration: InputDecoration(
         prefixIcon: const Icon(Icons.receipt),
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),

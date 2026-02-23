@@ -549,7 +549,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       value: value,
       onChanged: onChanged,
       secondary: icon != null ? Icon(icon, color: AppColors.primaryBlue) : null,
-      activeThumbColor: AppColors.primaryBlue,
+      thumbColor: WidgetStateProperty.resolveWith((states) =>
+        states.contains(WidgetState.selected) ? AppColors.primaryBlue : null),
     );
   }
 

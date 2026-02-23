@@ -97,7 +97,7 @@ class _EquipmentScreenState extends State<EquipmentScreen> {
               ),
               const SizedBox(height: 16),
               DropdownButtonFormField<String>(
-                initialValue: selectedStatus,
+                value: selectedStatus,
                 items: ['OK', 'Needs Service']
                     .map(
                       (status) =>
@@ -598,7 +598,7 @@ class _EquipmentScreenState extends State<EquipmentScreen> {
           Switch(
             value: isCheckedIn,
             onChanged: onCheckedChanged,
-            activeThumbColor: AppColors.primaryOrange,
+            thumbColor: WidgetStateProperty.resolveWith((states) => states.contains(WidgetState.selected) ? AppColors.primaryOrange : null),
           ),
         ],
       ),

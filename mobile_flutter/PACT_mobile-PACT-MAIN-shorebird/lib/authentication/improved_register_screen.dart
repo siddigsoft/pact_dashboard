@@ -899,7 +899,7 @@ class _ImprovedRegisterScreenState extends State<ImprovedRegisterScreen>
             ],
           ),
           child: DropdownButtonFormField<String>(
-            initialValue: value,
+            value: value,
             onChanged: onChanged,
             validator: validator,
             decoration: InputDecoration(

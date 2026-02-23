@@ -528,7 +528,7 @@ class _DocumentShareDialogState extends State<DocumentShareDialog> {
             ),
             const SizedBox(height: 8),
             DropdownButtonFormField<String>(
-              initialValue: _permission,
+              value: _permission,
               decoration: InputDecoration(
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(8),

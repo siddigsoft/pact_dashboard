@@ -840,7 +840,7 @@ class _WalletScreenState extends State<WalletScreen> {
             // Payment Method
             if (_paymentMethods.isNotEmpty) ...[
               DropdownButtonFormField<String>(
-                initialValue: _selectedPaymentMethod.isEmpty
+                value: _selectedPaymentMethod.isEmpty
                     ? null
                     : _selectedPaymentMethod,
                 decoration: InputDecoration(

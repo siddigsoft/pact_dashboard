@@ -1,0 +1,90 @@
+PS C:\Users\PC\PACT_mobile> flutter build apk --release --split-per-abi
+Warning: The plugin background_fetch requires Android SDK version 36 or higher.
+For more information about build configuration, see https://flutter.dev/to/review-gradle-config.
+Warning: The plugin flutter_email_sender requires Android SDK version 36 or higher.
+For more information about build configuration, see https://flutter.dev/to/review-gradle-config.
+Warning: The plugin flutter_secure_storage requires Android SDK version 36 or higher.
+For more information about build configuration, see https://flutter.dev/to/review-gradle-config.
+Warning: The plugin flutter_webrtc requires Android SDK version 36 or higher.
+For more information about build configuration, see https://flutter.dev/to/review-gradle-config.
+Warning: The plugin proximity_sensor requires Android SDK version 36 or higher.
+For more information about build configuration, see https://flutter.dev/to/review-gradle-config.
+Your project is configured to compile against Android SDK 35, but the following plugin(s) require to be compiled against a higher Android SDK version:
+- background_fetch compiles against Android SDK 36
+- flutter_email_sender compiles against Android SDK 36
+- flutter_secure_storage compiles against Android SDK 36
+- flutter_webrtc compiles against Android SDK 36
+- proximity_sensor compiles against Android SDK 36
+Fix this issue by compiling against the highest Android SDK version (they are backward compatible).
+Add the following to C:\Users\PC\PACT_mobile\android\app\build.gradle.kts:
+
+    android {
+        compileSdk = 36
+        ...
+    }
+warning: [options] source value 8 is obsolete and will be removed in a future release
+warning: [options] target value 8 is obsolete and will be removed in a future release
+warning: [options] To suppress warnings about obsolete options, use -Xlint:-options.
+3 warnings
+warning: [options] source value 8 is obsolete and will be removed in a future release
+warning: [options] target value 8 is obsolete and will be removed in a future release
+warning: [options] To suppress warnings about obsolete options, use -Xlint:-options.
+3 warnings
+lib/authentication/improved_register_screen.dart:902:13: Error: No named parameter with the name 'initialValue'.
+            initialValue: value,
+            ^^^^^^^^^^^^
+../flutter320/flutter/packages/flutter/lib/src/material/dropdown.dart:1708:3: Context: Found this candidate, but the arguments don't match.
+  DropdownButtonFormField({
+  ^^^^^^^^^^^^^^^^^^^^^^^
+lib/screens/wallet_screen.dart:842:17: Error: No named parameter with the name 'initialValue'.
+                initialValue: _selectedPaymentMethod.isEmpty
+                ^^^^^^^^^^^^
+../flutter320/flutter/packages/flutter/lib/src/material/dropdown.dart:1708:3: Context: Found this candidate, but the arguments don't match.
+  DropdownButtonFormField({
+  ^^^^^^^^^^^^^^^^^^^^^^^
+lib/screens/call_screen.dart:531:19: Error: No named parameter with the name 'activeThumbColor'.
+                  activeThumbColor: AppColors.primaryBlue,
+                  ^^^^^^^^^^^^^^^^
+../flutter320/flutter/packages/flutter/lib/src/material/switch.dart:106:9: Context: Found this candidate, but the arguments don't match.
+  const Switch({
+        ^^^^^^
+lib/screens/settings_screen.dart:552:7: Error: No named parameter with the name 'activeThumbColor'.
+      activeThumbColor: AppColors.primaryBlue,
+      ^^^^^^^^^^^^^^^^
+../flutter320/flutter/packages/flutter/lib/src/material/switch_list_tile.dart:174:9: Context: Found this candidate, but the arguments don't match.
+  const SwitchListTile({
+        ^^^^^^^^^^^^^^
+lib/screens/cost_submission_screen.dart:943:9: Error: No named parameter with the name 'initialValue'.
+        initialValue: _selectedProjectId,
+        ^^^^^^^^^^^^
+../flutter320/flutter/packages/flutter/lib/src/material/dropdown.dart:1708:3: Context: Found this candidate, but the arguments don't match.
+  DropdownButtonFormField({
+  ^^^^^^^^^^^^^^^^^^^^^^^
+lib/screens/cost_submission_screen.dart:1547:25: Error: No named parameter with the name 'initialValue'.
+                        initialValue: widget.currency,
+                        ^^^^^^^^^^^^
+../flutter320/flutter/packages/flutter/lib/src/material/dropdown.dart:1708:3: Context: Found this candidate, but the arguments don't match.
+  DropdownButtonFormField({
+  ^^^^^^^^^^^^^^^^^^^^^^^
+Target kernel_snapshot_program failed: Exception
+
+
+FAILURE: Build failed with an exception.
+
+* What went wrong:
+Execution failed for task ':app:compileFlutterBuildRelease'.
+> Process 'command 'C:\Users\PC\flutter320\flutter\bin\flutter.bat'' finished with non-zero exit value 1
+
+* Try:
+> Run with --stacktrace option to get the stack trace.
+> Run with --info or --debug option to get more log output.
+> Run with --scan to get full insights.
+> Get more help at https://help.gradle.org.
+
+BUILD FAILED in 56m 7s
+Running Gradle task 'assembleRelease'...                         3369.0s
+Gradle task assembleRelease failed with exit code 1
+PS C:\Users\PC\PACT_mobile> 
+PS C:\Users\PC\PACT_mobile> 
+PS C:\Users\PC\PACT_mobile> 
+PS C:\Users\PC\PACT_mobile> 

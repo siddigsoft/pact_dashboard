@@ -528,7 +528,8 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
                     _callService.toggleSpeaker();
                     Navigator.pop(context);
                   },
-                  activeThumbColor: AppColors.primaryBlue,
+                  thumbColor: WidgetStateProperty.resolveWith((states) =>
+                    states.contains(WidgetState.selected) ? AppColors.primaryBlue : null),
                 ),
               ),
               _buildSettingsOption(

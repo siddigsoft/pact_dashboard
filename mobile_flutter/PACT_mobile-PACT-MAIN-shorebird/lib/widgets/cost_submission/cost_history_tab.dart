@@ -109,7 +109,7 @@ class _CostHistoryTabState extends State<CostHistoryTab> {
           ),
           const SizedBox(width: 12),
           PopupMenuButton<String>(
-            initialValue: _statusFilter,
+            value: _statusFilter,
             onSelected: (value) => setState(() => _statusFilter = value),
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),

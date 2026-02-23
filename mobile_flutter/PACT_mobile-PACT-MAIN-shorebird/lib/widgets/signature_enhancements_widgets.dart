@@ -228,7 +228,7 @@ class _InitialsSignatureWidgetState extends State<InitialsSignatureWidget> {
             Switch(
               value: _isCircular,
               onChanged: (value) => setState(() => _isCircular = value),
-              activeThumbColor: AppColors.primaryBlue,
+              thumbColor: WidgetStateProperty.resolveWith((states) => states.contains(WidgetState.selected) ? AppColors.primaryBlue : null),
             ),
           ],
         ),

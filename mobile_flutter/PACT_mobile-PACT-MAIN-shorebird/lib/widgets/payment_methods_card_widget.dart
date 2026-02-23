@@ -581,7 +581,7 @@ class _PaymentMethodsCardWidgetState
                   ),
                   const SizedBox(height: 8),
                   DropdownButtonFormField<String>(
-                    initialValue: _providerNameController.text.isEmpty
+                    value: _providerNameController.text.isEmpty
                         ? null
                         : _providerNameController.text,
                     items: const [
