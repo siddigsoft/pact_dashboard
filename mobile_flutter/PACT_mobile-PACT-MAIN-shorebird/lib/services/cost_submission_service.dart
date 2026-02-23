@@ -13,7 +13,8 @@ import '../models/cost_submission.dart';
 class CostSubmissionService {
   final SupabaseClient _supabase;
 
-  CostSubmissionService(this._supabase);
+  CostSubmissionService([SupabaseClient? client])
+      : _supabase = client ?? Supabase.instance.client;
 
   // Get current user ID
   String? get currentUserId => _supabase.auth.currentUser?.id;
