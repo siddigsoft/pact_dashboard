@@ -5021,14 +5021,20 @@ const MMP = () => {
                         onClick={async () => {
                           try {
                             let verifiedEntries: any[] = filteredVerifiedCategorySiteRows;
-                            if (tableFilteredCount > 0 && tableFilteredEntries.length > 0) {
-                              verifiedEntries = tableFilteredEntries;
-                            } else if (tableFilteredCount > 0 && tableFilteredSiteIds.size > 0) {
-                              const matched = filteredVerifiedCategorySiteRows.filter(row => tableFilteredSiteIds.has(row.id));
-                              if (matched.length > 0) {
-                                verifiedEntries = matched;
+
+                            if (tableFilteredCount > 0) {
+                              if (tableFilteredEntries.length > 0) {
+                                verifiedEntries = tableFilteredEntries;
+                              } else if (tableFilteredSiteIds.size > 0) {
+                                const matched = filteredVerifiedCategorySiteRows.filter(row => tableFilteredSiteIds.has(row.id));
+                                if (matched.length > 0) {
+                                  verifiedEntries = matched;
+                                }
                               }
                             }
+
+                            const confirmMsg = `Are you sure you want to approve and cost ${verifiedEntries.length} site(s)?${tableFilteredCount > 0 ? ` (filtered from ${filteredVerifiedCategorySiteRows.length} total)` : ''}`;
+                            if (!window.confirm(confirmMsg)) return;
 
                             if (!verifiedEntries || verifiedEntries.length === 0) {
                               toast({
