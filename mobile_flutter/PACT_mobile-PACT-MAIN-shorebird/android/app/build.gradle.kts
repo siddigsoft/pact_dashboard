@@ -52,7 +52,12 @@ android {
 
     buildTypes {
         release {
-            // Use release keystore only when key.properties exists and has storeFile
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
             signingConfig = if (keystorePropertiesFile.exists() &&
                 keystoreProperties.getProperty("storeFile")?.let { rootProject.file(it).exists() } == true) {
                 signingConfigs.getByName("release")
