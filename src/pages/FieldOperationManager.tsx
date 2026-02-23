@@ -647,6 +647,8 @@ const FieldOperationManagerPage = () => {
     }
   }, [contextMmpFiles.length, contextLoading, refreshMMPFiles]);
 
+  const isAdmin = hasAnyRole(['admin', 'Admin', 'super_admin', 'Super Admin']);
+
   // Filter forwarded files from context data
   useEffect(() => {
     if (!currentUser?.id) {
@@ -658,12 +660,14 @@ const FieldOperationManagerPage = () => {
     const forwarded = mmpFiles.filter((mmp: any) => {
       const workflow = mmp.workflow || {};
       const forwardedIds = workflow.forwardedToFomIds || [];
-      return Array.isArray(forwardedIds) && forwardedIds.includes(currentUser.id);
+      if (!Array.isArray(forwardedIds) || forwardedIds.length === 0) return false;
+      if (isAdmin) return true;
+      return forwardedIds.includes(currentUser.id);
     });
     
     setForwardedMmpFiles(forwarded);
     setForwardedLoading(false);
-  }, [mmpFiles, currentUser?.id]);
+  }, [mmpFiles, currentUser?.id, isAdmin]);
 
   const StatCard = ({ icon: Icon, label, value, subtext }: { icon: any; label: string; value: number | string; subtext?: string }) => (
     <motion.div
