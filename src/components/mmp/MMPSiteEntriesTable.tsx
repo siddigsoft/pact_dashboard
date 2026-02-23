@@ -37,7 +37,7 @@ interface MMPSiteEntriesTableProps {
   showDateChangeButton?: boolean;
   onApproveForCosting?: (site: any) => Promise<void>;
   showApproveButton?: boolean;
-  onFilteredSiteIdsChange?: (filteredSiteIds: Set<string>) => void;
+  onFilteredSiteIdsChange?: (filteredSiteIds: Set<string>, filteredCount: number, hasActiveFilter: boolean, filteredEntries: any[]) => void;
 }
 
 const MMPSiteEntriesTable = ({ 
@@ -382,12 +382,8 @@ const MMPSiteEntriesTable = ({
   useEffect(() => {
     if (onFilteredSiteIdsChange) {
       const hasActiveFilter = hubFilter !== 'all' || stateFilter !== 'all' || localityFilter !== 'all' || enumeratorFilter !== 'all' || activityTypeFilter !== 'all' || debouncedSearchQuery.trim() !== '';
-      if (hasActiveFilter) {
-        const ids = new Set(filteredSites.map((s: any) => s.id).filter(Boolean));
-        onFilteredSiteIdsChange(ids);
-      } else {
-        onFilteredSiteIdsChange(new Set());
-      }
+      const ids = new Set(filteredSites.map((s: any) => s.id).filter(Boolean));
+      onFilteredSiteIdsChange(ids, filteredSites.length, hasActiveFilter, hasActiveFilter ? filteredSites : []);
     }
   }, [filteredSites, onFilteredSiteIdsChange, hubFilter, stateFilter, localityFilter, enumeratorFilter, activityTypeFilter, debouncedSearchQuery]);
 

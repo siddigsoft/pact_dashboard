@@ -214,7 +214,7 @@ interface VerifiedSitesDisplayProps {
   verifiedSites: SiteVisitRow[];
   onApproveForCosting?: (site: any) => Promise<void>;
   showApproveButton?: boolean;
-  onFilteredSiteIdsChange?: (filteredSiteIds: Set<string>) => void;
+  onFilteredSiteIdsChange?: (filteredSiteIds: Set<string>, filteredCount: number, hasActiveFilter: boolean, filteredEntries: any[]) => void;
 }
 
 const VerifiedSitesDisplay = React.memo(function VerifiedSitesDisplay({ verifiedSites, onApproveForCosting, showApproveButton = false, onFilteredSiteIdsChange }: VerifiedSitesDisplayProps) {
@@ -402,6 +402,8 @@ const MMP = () => {
   // Subcategory state for Verified Sites (Admin/ICT only)
   const [verifiedSubTab, setVerifiedSubTab] = useState<'newSites' | 'approvedCosted' | 'dispatched' | 'smartAssigned' | 'accepted' | 'ongoing' | 'completed' | 'rejected'>('newSites');
   const [tableFilteredSiteIds, setTableFilteredSiteIds] = useState<Set<string>>(new Set());
+  const [tableFilteredCount, setTableFilteredCount] = useState<number>(0);
+  const [tableFilteredEntries, setTableFilteredEntries] = useState<any[]>([]);
   // Subcategory state for Enumerator dashboard
   const [enumeratorSubTab, setEnumeratorSubTab] = useState<'availableSites' | 'smartAssigned' | 'mySites'>('availableSites');
   // Sub-subcategory state for My Sites (Data Collector)
@@ -5037,9 +5039,15 @@ const MMP = () => {
                         size="lg"
                         onClick={async () => {
                           try {
-                            const verifiedEntries = tableFilteredSiteIds.size > 0
-                              ? filteredVerifiedCategorySiteRows.filter(row => tableFilteredSiteIds.has(row.id))
-                              : filteredVerifiedCategorySiteRows;
+                            let verifiedEntries: any[] = filteredVerifiedCategorySiteRows;
+                            if (tableFilteredCount > 0 && tableFilteredEntries.length > 0) {
+                              verifiedEntries = tableFilteredEntries;
+                            } else if (tableFilteredCount > 0 && tableFilteredSiteIds.size > 0) {
+                              const matched = filteredVerifiedCategorySiteRows.filter(row => tableFilteredSiteIds.has(row.id));
+                              if (matched.length > 0) {
+                                verifiedEntries = matched;
+                              }
+                            }
 
                             if (!verifiedEntries || verifiedEntries.length === 0) {
                               toast({
@@ -5165,14 +5173,18 @@ const MMP = () => {
                         }}
                         className="bg-green-600 hover:bg-green-700 text-white mb-4"
                       >
-                        Approve for Costing ({tableFilteredSiteIds.size > 0 ? `${tableFilteredSiteIds.size} filtered` : filteredVerifiedCategorySiteRows.length} sites)
+                        Approve for Costing ({tableFilteredCount > 0 ? `${tableFilteredCount} filtered` : filteredVerifiedCategorySiteRows.length} sites)
                       </Button>
                     </div>
                   )}
                   <VerifiedSitesDisplay 
                     verifiedSites={filteredVerifiedCategorySiteRows} 
                     showApproveButton={isAdmin || isICT || isFOM}
-                    onFilteredSiteIdsChange={setTableFilteredSiteIds}
+                    onFilteredSiteIdsChange={(ids, count, hasFilter, entries) => {
+                      setTableFilteredSiteIds(ids);
+                      setTableFilteredCount(hasFilter ? count : 0);
+                      setTableFilteredEntries(hasFilter ? entries : []);
+                    }}
                     onApproveForCosting={async (site) => {
                       try {
                         const currentCost = site.cost;
