@@ -23,6 +23,8 @@ class _VisitAssignmentSheetState extends State<VisitAssignmentSheet> {
   String _searchQuery = '';
   List<SiteVisit> _filteredVisits = [];
 
+  bool get _isArabic => Localizations.localeOf(context).languageCode == 'ar';
+
   @override
   void initState() {
     super.initState();
@@ -63,7 +65,6 @@ class _VisitAssignmentSheetState extends State<VisitAssignmentSheet> {
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          // Handle and header
           Center(
             child: Container(
               margin: const EdgeInsets.only(top: 12),
@@ -75,11 +76,11 @@ class _VisitAssignmentSheetState extends State<VisitAssignmentSheet> {
               ),
             ),
           ),
-          const Padding(
-            padding: EdgeInsets.fromLTRB(24, 16, 24, 0),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
             child: Text(
-              'Available Visits',
-              style: TextStyle(
+              _isArabic ? 'الزيارات المتاحة' : 'Available Visits',
+              style: const TextStyle(
                 fontSize: 22,
                 fontWeight: FontWeight.bold,
                 color: AppColors.textDark,
@@ -87,13 +88,12 @@ class _VisitAssignmentSheetState extends State<VisitAssignmentSheet> {
             ),
           ),
 
-          // Search box
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
             child: TextField(
               onChanged: _filterVisits,
               decoration: InputDecoration(
-                hintText: 'Search by title or address',
+                hintText: _isArabic ? 'البحث بالعنوان أو الموقع' : 'Search by title or address',
                 prefixIcon: const Icon(Icons.search),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
@@ -105,14 +105,13 @@ class _VisitAssignmentSheetState extends State<VisitAssignmentSheet> {
             ),
           ),
 
-          // Visit list
           Expanded(
             child: _filteredVisits.isEmpty
                 ? Center(
                     child: Text(
                       _searchQuery.isEmpty
-                          ? 'No available visits'
-                          : 'No visits matching "$_searchQuery"',
+                          ? (_isArabic ? 'لا توجد زيارات متاحة' : 'No available visits')
+                          : (_isArabic ? 'لا توجد زيارات مطابقة "$_searchQuery"' : 'No visits matching "$_searchQuery"'),
                       style: TextStyle(
                         color: Colors.grey.shade600,
                         fontSize: 16,
@@ -140,7 +139,6 @@ class _VisitAssignmentSheetState extends State<VisitAssignmentSheet> {
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
       ),
-      // Made non-clickable (offline-friendly viewing only)
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -168,7 +166,7 @@ class _VisitAssignmentSheetState extends State<VisitAssignmentSheet> {
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: Text(
-                    'Priority: ${visit.priority ?? 'Normal'}',
+                    '${_isArabic ? 'الأولوية' : 'Priority'}: ${visit.priority ?? (_isArabic ? 'عادي' : 'Normal')}',
                     style: TextStyle(
                       color: Colors.blue.shade700,
                       fontWeight: FontWeight.w500,
@@ -184,7 +182,7 @@ class _VisitAssignmentSheetState extends State<VisitAssignmentSheet> {
             ),
             const SizedBox(height: 12),
             Text(
-              'Due: ${visit.dueDate?.toLocal().toString().split('.')[0] ?? 'Flexible'}',
+              '${_isArabic ? 'الموعد' : 'Due'}: ${visit.dueDate?.toLocal().toString().split('.')[0] ?? (_isArabic ? 'مرن' : 'Flexible')}',
               style: TextStyle(fontSize: 14, color: Colors.grey.shade700),
             ),
             const SizedBox(height: 12),
@@ -197,7 +195,7 @@ class _VisitAssignmentSheetState extends State<VisitAssignmentSheet> {
                 ),
                 const SizedBox(width: 4),
                 Text(
-                  '${_calculateDistance(visit)} km away',
+                  '${_calculateDistance(visit)} ${_isArabic ? 'كم' : 'km away'}',
                   style: const TextStyle(
                     fontSize: 14,
                     color: Colors.black87,
@@ -214,9 +212,9 @@ class _VisitAssignmentSheetState extends State<VisitAssignmentSheet> {
                     color: Colors.grey.shade200,
                     borderRadius: BorderRadius.circular(12),
                   ),
-                  child: const Text(
-                    'View Only',
-                    style: TextStyle(
+                  child: Text(
+                    _isArabic ? 'عرض فقط' : 'View Only',
+                    style: const TextStyle(
                       fontSize: 12,
                       color: Colors.black54,
                       fontWeight: FontWeight.w600,
@@ -236,13 +234,11 @@ class _VisitAssignmentSheetState extends State<VisitAssignmentSheet> {
         );
   }
 
-  // Dummy method to calculate distance - in a real app, this would use actual coordinates
   String _calculateDistance(SiteVisit visit) {
     if (visit.latitude == null || visit.longitude == null) {
-      return 'Unknown';
+      return _isArabic ? 'غير معروف' : 'Unknown';
     }
 
-    // Placeholder for real distance calculation
     return (5 + visit.id.hashCode % 15).toStringAsFixed(1);
   }
 }

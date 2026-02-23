@@ -35,6 +35,32 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
   DateTime? _visitStartTime;
   StreamSubscription<Position>? _positionStream;
 
+  String? _selectedActivityType;
+
+  static const List<String> _dmActivities = ['GFA', 'CBT', 'EBSFP'];
+
+  static const Map<String, String> _activityTypesEn = {
+    'PDM': 'Post-Distribution Monitoring',
+    'DM': 'Distribution Monitoring',
+    'Assessment': 'Assessment',
+    'Monitoring': 'Monitoring',
+    'Supervision': 'Supervision',
+    'Verification': 'Verification',
+    'Other': 'Other',
+  };
+
+  static const Map<String, String> _activityTypesAr = {
+    'PDM': 'رصد ما بعد التوزيع',
+    'DM': 'رصد التوزيع',
+    'Assessment': 'تقييم',
+    'Monitoring': 'مراقبة',
+    'Supervision': 'إشراف',
+    'Verification': 'تحقق',
+    'Other': 'أخرى',
+  };
+
+  bool get _isArabic => Localizations.localeOf(context).languageCode == 'ar';
+
   @override
   void initState() {
     super.initState();
@@ -51,7 +77,6 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
     super.dispose();
   }
 
-  /// Safely parse additional_data (may be JSON string or Map from cache/API).
   static Map<String, dynamic>? _safeAdditionalData(dynamic data) {
     if (data == null) return null;
     if (data is String) {
@@ -77,11 +102,11 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
       _activitiesController.text = additionalData['draft_activities'] ?? '';
       _notesController.text = additionalData['draft_notes'] ?? '';
       _durationMinutes = additionalData['draft_visit_duration'] ?? 0;
+      _selectedActivityType = additionalData['draft_activity_type'];
 
       final rawCoords = additionalData['draft_coordinates'];
       if (rawCoords != null && rawCoords is Map) {
         final coords = Map<String, dynamic>.from(rawCoords as Map);
-        // JSON/DB may return numbers as int; Position requires double
         final lat = (coords['latitude'] as num?)?.toDouble() ?? 0.0;
         final lng = (coords['longitude'] as num?)?.toDouble() ?? 0.0;
         final acc = (coords['accuracy'] as num?)?.toDouble() ?? 0.0;
@@ -101,7 +126,14 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
       }
     }
 
-    // Load local draft (activities, notes, photos, duration, coordinates) so user can resume
+    final siteActivityType = widget.site['activity_type'] ?? widget.site['main_activity'];
+    if (_selectedActivityType == null && siteActivityType != null) {
+      final act = siteActivityType.toString().toUpperCase();
+      if (_dmActivities.contains(act)) {
+        _selectedActivityType = 'DM';
+      }
+    }
+
     final siteId = widget.site['id']?.toString() ?? '';
     if (siteId.isNotEmpty) {
       try {
@@ -122,6 +154,9 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
           if (draft['draft_visit_duration'] != null) {
             _durationMinutes =
                 (draft['draft_visit_duration'] as num?)?.toInt() ?? 0;
+          }
+          if (draft['draft_activity_type'] != null) {
+            _selectedActivityType = draft['draft_activity_type'] as String?;
           }
           final rawCoords = draft['draft_coordinates'];
           if (rawCoords != null && rawCoords is Map) {
@@ -157,7 +192,6 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
       }
     }
 
-    // Get visit start time from site
     final visitStartedAt = widget.site['visit_started_at'] as String?;
     if (visitStartedAt != null) {
       _visitStartTime = DateTime.tryParse(visitStartedAt);
@@ -167,7 +201,6 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
   }
 
   void _startVisitTimer() {
-    // Calculate duration from visit start time
     if (_visitStartTime != null) {
       final now = DateTime.now();
       final duration = now.difference(_visitStartTime!);
@@ -175,7 +208,6 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
         _durationMinutes = duration.inMinutes;
       });
 
-      // Update duration every minute
       Future.delayed(const Duration(minutes: 1), () {
         if (mounted) {
           _startVisitTimer();
@@ -189,17 +221,15 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
       setState(() => _isGettingLocation = true);
       _locationError = null;
 
-      // Request location permission
       final hasPermission = await LocationService.checkPermissions();
       if (!hasPermission) {
         setState(() {
           _isGettingLocation = false;
-          _locationError = 'Location permission denied';
+          _locationError = _isArabic ? 'تم رفض إذن الموقع' : 'Location permission denied';
         });
         return;
       }
 
-      // Get initial location
       final position = await LocationService.getCurrentLocation();
       if (position != null) {
         setState(() {
@@ -209,11 +239,10 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
         });
       }
 
-      // Start location stream for continuous updates
       _positionStream = Geolocator.getPositionStream(
         locationSettings: const LocationSettings(
           accuracy: LocationAccuracy.high,
-          distanceFilter: 10, // Update every 10 meters
+          distanceFilter: 10,
         ),
       ).listen((position) {
         setState(() {
@@ -242,7 +271,7 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
       } else {
         setState(() {
           _isGettingLocation = false;
-          _locationError = 'Could not get location';
+          _locationError = _isArabic ? 'تعذر الحصول على الموقع' : 'Could not get location';
         });
       }
     } catch (e) {
@@ -256,7 +285,6 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
   Future<void> _addPhoto() async {
     final ImagePicker picker = ImagePicker();
 
-    // Show options
     final source = await showModalBottomSheet<ImageSource>(
       context: context,
       builder: (context) => SafeArea(
@@ -265,12 +293,12 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
           children: [
             ListTile(
               leading: const Icon(Icons.camera_alt),
-              title: const Text('Take Photo'),
+              title: Text(_isArabic ? 'التقاط صورة' : 'Take Photo'),
               onTap: () => Navigator.pop(context, ImageSource.camera),
             ),
             ListTile(
               leading: const Icon(Icons.photo_library),
-              title: const Text('Choose from Gallery'),
+              title: Text(_isArabic ? 'اختيار من المعرض' : 'Choose from Gallery'),
               onTap: () => Navigator.pop(context, ImageSource.gallery),
             ),
           ],
@@ -296,7 +324,7 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error picking image: $e'),
+            content: Text(_isArabic ? 'خطأ في اختيار الصورة: $e' : 'Error picking image: $e'),
             backgroundColor: Colors.red,
           ),
         );
@@ -314,9 +342,9 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
     final hours = minutes ~/ 60;
     final mins = minutes % 60;
     if (hours > 0) {
-      return '${hours}h ${mins}m';
+      return _isArabic ? '${hours}س ${mins}د' : '${hours}h ${mins}m';
     }
-    return '${mins}m';
+    return _isArabic ? '${mins}د' : '${mins}m';
   }
 
   Future<void> _submit() async {
@@ -324,9 +352,9 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
 
     if (!_locationEnabled || _coordinates == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
+        SnackBar(
           content: Text(
-            'Location access is required to complete the site visit.',
+            _isArabic ? 'الوصول إلى الموقع مطلوب لإكمال زيارة الموقع.' : 'Location access is required to complete the site visit.',
           ),
           backgroundColor: Colors.red,
         ),
@@ -336,9 +364,9 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
 
     if (_activitiesController.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
+        SnackBar(
           content: Text(
-            'Please describe the activities performed during the visit.',
+            _isArabic ? 'يرجى وصف الأنشطة التي تمت خلال الزيارة.' : 'Please describe the activities performed during the visit.',
           ),
           backgroundColor: Colors.red,
         ),
@@ -348,9 +376,9 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
 
     if (_photoPaths.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
+        SnackBar(
           content: Text(
-            'At least one photo is required to complete the site visit.',
+            _isArabic ? 'مطلوب صورة واحدة على الأقل لإكمال زيارة الموقع.' : 'At least one photo is required to complete the site visit.',
           ),
           backgroundColor: Colors.red,
         ),
@@ -367,6 +395,7 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
         photos: _photoPaths,
         durationMinutes: _durationMinutes,
         coordinates: _coordinates,
+        activityType: _selectedActivityType,
       );
 
       if (mounted) {
@@ -378,7 +407,7 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
         setState(() => _isSubmitting = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error: ${e.toString()}'),
+            content: Text('${_isArabic ? 'خطأ' : 'Error'}: ${e.toString()}'),
             backgroundColor: Colors.red,
           ),
         );
@@ -386,8 +415,6 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
     }
   }
 
-  /// Save current form state as draft (activities, notes, photos, duration, coordinates).
-  /// Stored locally so when the user reopens the dialog the data is restored.
   Future<void> _saveDraft() async {
     final siteId = widget.site['id']?.toString() ?? '';
     if (siteId.isEmpty) return;
@@ -398,6 +425,7 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
         'draft_notes': _notesController.text.trim(),
         'draft_visit_duration': _durationMinutes,
         'draft_photo_paths': List<String>.from(_photoPaths),
+        'draft_activity_type': _selectedActivityType,
       };
       if (_coordinates != null) {
         draft['draft_coordinates'] = {
@@ -417,8 +445,8 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Draft saved. You can continue later.'),
+          SnackBar(
+            content: Text(_isArabic ? 'تم حفظ المسودة. يمكنك المتابعة لاحقاً.' : 'Draft saved. You can continue later.'),
             backgroundColor: Colors.green,
           ),
         );
@@ -429,7 +457,7 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Could not save draft: ${e.toString()}'),
+            content: Text('${_isArabic ? 'تعذر حفظ المسودة' : 'Could not save draft'}: ${e.toString()}'),
             backgroundColor: Colors.red,
           ),
         );
@@ -440,7 +468,7 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
   @override
   Widget build(BuildContext context) {
     final siteName =
-        widget.site['site_name'] ?? widget.site['siteName'] ?? 'Unknown Site';
+        widget.site['site_name'] ?? widget.site['siteName'] ?? (_isArabic ? 'موقع غير معروف' : 'Unknown Site');
     final siteCode = widget.site['site_code'] ??
         widget.site['siteCode'] ??
         widget.site['id']?.toString().substring(0, 8) ??
@@ -458,7 +486,6 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Header
             Container(
               padding: const EdgeInsets.all(24),
               decoration: const BoxDecoration(
@@ -489,7 +516,7 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'Complete Site Visit',
+                          _isArabic ? 'إكمال زيارة الموقع' : 'Complete Site Visit',
                           style: GoogleFonts.poppins(
                             fontSize: 18,
                             fontWeight: FontWeight.bold,
@@ -510,7 +537,6 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
               ),
             ),
 
-            // Content
             Expanded(
               child: Form(
                 key: _formKey,
@@ -519,27 +545,26 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Location Status Card
                       _buildLocationStatusCard(),
 
                       const SizedBox(height: 20),
 
-                      // Site Information Card
                       _buildSiteInfoCard(siteCode, locality, state),
 
                       const SizedBox(height: 20),
 
-                      // Activities Field
+                      _buildActivityTypeSelector(),
+
+                      const SizedBox(height: 20),
+
                       _buildActivitiesField(),
 
                       const SizedBox(height: 20),
 
-                      // Notes Field
                       _buildNotesField(),
 
                       const SizedBox(height: 20),
 
-                      // Photos Section
                       _buildPhotosSection(),
                     ],
                   ),
@@ -547,7 +572,6 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
               ),
             ),
 
-            // Footer
             Container(
               padding: const EdgeInsets.all(24),
               decoration: const BoxDecoration(
@@ -568,15 +592,14 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
                           borderRadius: BorderRadius.circular(24),
                         ),
                       ),
-                      child: const Text('Cancel'),
+                      child: Text(_isArabic ? 'إلغاء' : 'Cancel'),
                     ),
                   ),
                   const SizedBox(width: 8),
                   Expanded(
                     child: OutlinedButton.icon(
                       onPressed: _isSubmitting ? null : _saveDraft,
-                      //icon: const Icon(Icons.save_outlined, size: 18),
-                      label: const Text('Draft'),
+                      label: Text(_isArabic ? 'مسودة' : 'Draft'),
                       style: OutlinedButton.styleFrom(
                         foregroundColor: Colors.orange.shade800,
                         side: BorderSide(color: Colors.orange.shade700),
@@ -617,10 +640,9 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
                                 mainAxisSize: MainAxisSize.min,
                                 mainAxisAlignment: MainAxisAlignment.center,
                                 children: [
-                                 // const Icon(Icons.check, size: 20),
                                   const SizedBox(width: 8),
                                   Text(
-                                    'Complete Visit',
+                                    _isArabic ? 'إكمال الزيارة' : 'Complete Visit',
                                     style: GoogleFonts.poppins(
                                       fontSize: 14,
                                       fontWeight: FontWeight.bold,
@@ -636,6 +658,98 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildActivityTypeSelector() {
+    final activityTypes = _isArabic ? _activityTypesAr : _activityTypesEn;
+
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: AppColors.backgroundGray,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Text(
+                _isArabic ? 'نوع النشاط' : 'ACTIVITY TYPE',
+                style: GoogleFonts.poppins(
+                  fontSize: 10,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.textLight,
+                  letterSpacing: 1.2,
+                ),
+              ),
+              const SizedBox(width: 4),
+              Text(
+                _isArabic ? '(PDM/DM)' : '(PDM/DM)',
+                style: GoogleFonts.poppins(
+                  fontSize: 10,
+                  color: AppColors.textLight,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: activityTypes.entries.map((entry) {
+              final isSelected = _selectedActivityType == entry.key;
+              final isPdmDm = entry.key == 'PDM' || entry.key == 'DM';
+              final selectedColor = isPdmDm
+                  ? (entry.key == 'DM' ? Colors.blue.shade700 : Colors.orange.shade700)
+                  : Colors.black;
+              return GestureDetector(
+                onTap: () => setState(() => _selectedActivityType = entry.key),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: isSelected ? selectedColor : Colors.white,
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(
+                      color: isSelected ? selectedColor : Colors.grey.shade300,
+                      width: isSelected ? 2 : 1,
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (isPdmDm) ...[
+                        Icon(
+                          entry.key == 'PDM' ? Icons.fact_check : Icons.local_shipping,
+                          size: 14,
+                          color: isSelected ? Colors.white : (entry.key == 'DM' ? Colors.blue.shade600 : Colors.orange.shade600),
+                        ),
+                        const SizedBox(width: 4),
+                      ],
+                      Text(
+                        '${entry.key} - ${entry.value}',
+                        style: GoogleFonts.poppins(
+                          fontSize: 12,
+                          fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                          color: isSelected ? Colors.white : AppColors.textDark,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
+        ],
       ),
     );
   }
@@ -685,108 +799,91 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Location Status',
+                        _isArabic ? 'حالة الموقع' : 'Location Status',
                         style: GoogleFonts.poppins(
                           fontSize: 14,
                           fontWeight: FontWeight.bold,
+                          color: AppColors.textDark,
                         ),
                       ),
-                      Text(
-                        _coordinates == null
-                            ? 'Acquiring location...'
-                            : _coordinates!.accuracy <= 10
-                                ? 'Excellent accuracy'
-                                : 'Improving accuracy...',
-                        style: GoogleFonts.poppins(
-                          fontSize: 12,
-                          color: AppColors.textLight,
+                      if (_coordinates != null) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          _isArabic
+                              ? 'الدقة: ${_coordinates!.accuracy.toStringAsFixed(1)}م'
+                              : 'Accuracy: ${_coordinates!.accuracy.toStringAsFixed(1)}m',
+                          style: GoogleFonts.poppins(
+                            fontSize: 12,
+                            color: _coordinates!.accuracy <= 10
+                                ? Colors.green
+                                : Colors.orange,
+                          ),
                         ),
-                      ),
-                      if (_locationError != null)
+                      ] else if (_locationError != null)
                         Text(
                           _locationError!,
                           style: GoogleFonts.poppins(
-                            fontSize: 11,
+                            fontSize: 12,
                             color: Colors.red,
+                          ),
+                        )
+                      else if (_isGettingLocation)
+                        Text(
+                          _isArabic ? 'جاري الحصول على الموقع...' : 'Getting location...',
+                          style: GoogleFonts.poppins(
+                            fontSize: 12,
+                            color: AppColors.textLight,
                           ),
                         ),
                     ],
                   ),
                 ],
               ),
-              if (_coordinates != null)
-                Padding(
-                  padding: const EdgeInsets.only(top: 8.0),
-                  child: TextButton.icon(
-                    onPressed: _isGettingLocation ? null : _refreshLocation,
-                    icon: const Icon(Icons.refresh, size: 18),
-                    label: Text(
-                      _isGettingLocation ? 'Refreshing...' : 'Refresh',
-                    ),
-                  ),
-                ),
             ],
           ),
-          if (_isGettingLocation && _coordinates == null)
-            const Padding(
-              padding: EdgeInsets.only(top: 16),
-              child: LinearProgressIndicator(),
-            ),
-          if (_coordinates != null) ...[
-            const SizedBox(height: 16),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Accuracy',
-                        style: GoogleFonts.poppins(
-                          fontSize: 12,
-                          color: AppColors.textLight,
-                        ),
-                      ),
-                      Text(
-                        '±${_coordinates!.accuracy.toStringAsFixed(1)}m',
-                        style: GoogleFonts.poppins(
-                          fontSize: 14,
-                          fontWeight: FontWeight.bold,
-                          fontFeatures: [const FontFeature.tabularFigures()],
-                        ),
-                      ),
-                    ],
+          if (_coordinates == null && !_isGettingLocation) ...[
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: _refreshLocation,
+                icon: const Icon(Icons.refresh, size: 18),
+                label: Text(_isArabic ? 'إعادة المحاولة' : 'Retry'),
+                style: OutlinedButton.styleFrom(
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
                   ),
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      Text(
-                        'Coordinates',
-                        style: GoogleFonts.poppins(
-                          fontSize: 12,
-                          color: AppColors.textLight,
-                        ),
-                      ),
-                      Text(
-                        '${_coordinates!.latitude.toStringAsFixed(6)}, ${_coordinates!.longitude.toStringAsFixed(6)}',
-                        textAlign: TextAlign.right,
-                        softWrap: true,
-                        style: GoogleFonts.poppins(
-                          fontSize: 11,
-                          fontFeatures: [const FontFeature.tabularFigures()],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
+              ),
             ),
           ],
+          const SizedBox(height: 12),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  const Icon(Icons.timer, size: 18, color: Colors.black54),
+                  const SizedBox(width: 8),
+                  Text(
+                    _isArabic ? 'مدة الزيارة' : 'Visit Duration',
+                    style: GoogleFonts.poppins(
+                      fontSize: 12,
+                      color: AppColors.textLight,
+                    ),
+                  ),
+                ],
+              ),
+              Text(
+                _formatDuration(_durationMinutes),
+                style: GoogleFonts.poppins(
+                  fontSize: 14,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.textDark,
+                ),
+              ),
+            ],
+          ),
         ],
       ),
     );
@@ -803,71 +900,13 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'SITE INFORMATION',
+            _isArabic ? 'معلومات الموقع' : 'SITE INFORMATION',
             style: GoogleFonts.poppins(
               fontSize: 10,
               fontWeight: FontWeight.bold,
               color: AppColors.textLight,
               letterSpacing: 1.2,
             ),
-          ),
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'LOCATION',
-                      style: GoogleFonts.poppins(
-                        fontSize: 10,
-                        color: AppColors.textLight,
-                      ),
-                    ),
-                    Text(
-                      locality.isNotEmpty ? '$locality, $state' : state,
-                      style: GoogleFonts.poppins(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'SITE ID',
-                      style: GoogleFonts.poppins(
-                        fontSize: 10,
-                        color: AppColors.textLight,
-                      ),
-                    ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 4,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.black,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Text(
-                        siteCode,
-                        style: GoogleFonts.poppins(
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
           ),
           const SizedBox(height: 12),
           Row(
@@ -877,17 +916,17 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'ACTIVITY',
+                      _isArabic ? 'رمز الموقع' : 'Site Code',
                       style: GoogleFonts.poppins(
                         fontSize: 10,
                         color: AppColors.textLight,
                       ),
                     ),
                     Text(
-                      widget.site['site_activity'] ?? 'N/A',
+                      siteCode,
                       style: GoogleFonts.poppins(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
                       ),
                     ),
                   ],
@@ -898,34 +937,17 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'DURATION',
+                      _isArabic ? 'المحلية' : 'Locality',
                       style: GoogleFonts.poppins(
                         fontSize: 10,
                         color: AppColors.textLight,
                       ),
                     ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 4,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.black.withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(Icons.access_time, size: 14),
-                          const SizedBox(width: 4),
-                          Text(
-                            _formatDuration(_durationMinutes),
-                            style: GoogleFonts.poppins(
-                              fontSize: 11,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ],
+                    Text(
+                      locality.isNotEmpty ? locality : (state.isNotEmpty ? state : 'N/A'),
+                      style: GoogleFonts.poppins(
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
                       ),
                     ),
                   ],
@@ -945,7 +967,7 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
         Row(
           children: [
             Text(
-              'ACTIVITIES PERFORMED',
+              _isArabic ? 'الأنشطة المنفذة' : 'ACTIVITIES PERFORMED',
               style: GoogleFonts.poppins(
                 fontSize: 10,
                 fontWeight: FontWeight.bold,
@@ -954,16 +976,26 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
               ),
             ),
             const SizedBox(width: 4),
-            const Text('*', style: TextStyle(color: Colors.red, fontSize: 14)),
+            const Text(
+              '*',
+              style: TextStyle(color: Colors.red, fontSize: 14),
+            ),
           ],
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 8),
         TextFormField(
           controller: _activitiesController,
           maxLines: 4,
+          validator: (value) {
+            if (value == null || value.trim().isEmpty) {
+              return _isArabic ? 'يرجى وصف الأنشطة المنفذة' : 'Please describe the activities performed';
+            }
+            return null;
+          },
           decoration: InputDecoration(
-            hintText:
-                'Describe the activities performed during the site visit...',
+            hintText: _isArabic
+                ? 'وصف الأنشطة التي تمت خلال الزيارة...'
+                : 'Describe the activities performed during the visit...',
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
               borderSide: BorderSide.none,
@@ -971,12 +1003,6 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
             filled: true,
             fillColor: AppColors.backgroundGray,
           ),
-          validator: (value) {
-            if (value == null || value.trim().isEmpty) {
-              return 'Activities are required';
-            }
-            return null;
-          },
         ),
       ],
     );
@@ -987,7 +1013,7 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'ADDITIONAL NOTES',
+          _isArabic ? 'ملاحظات إضافية' : 'ADDITIONAL NOTES',
           style: GoogleFonts.poppins(
             fontSize: 10,
             fontWeight: FontWeight.bold,
@@ -995,13 +1021,14 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
             letterSpacing: 1.2,
           ),
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 8),
         TextFormField(
           controller: _notesController,
           maxLines: 3,
           decoration: InputDecoration(
-            hintText:
-                'Any additional observations, issues, or recommendations...',
+            hintText: _isArabic
+                ? 'أي ملاحظات أو مشكلات أو توصيات إضافية...'
+                : 'Any additional observations, issues, or recommendations...',
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
               borderSide: BorderSide.none,
@@ -1030,7 +1057,7 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
               Row(
                 children: [
                   Text(
-                    'SITE PHOTOS',
+                    _isArabic ? 'صور الموقع' : 'SITE PHOTOS',
                     style: GoogleFonts.poppins(
                       fontSize: 10,
                       fontWeight: FontWeight.bold,
@@ -1047,7 +1074,7 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
               ),
               const SizedBox(height: 4),
               Text(
-                'At least one photo required',
+                _isArabic ? 'مطلوب صورة واحدة على الأقل' : 'At least one photo required',
                 style: GoogleFonts.poppins(
                   fontSize: 11,
                   color: AppColors.textLight,
@@ -1059,7 +1086,7 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
                 child: ElevatedButton.icon(
                   onPressed: _addPhoto,
                   icon: const Icon(Icons.camera_alt, size: 18),
-                  label: const Text('Add Photo'),
+                  label: Text(_isArabic ? 'إضافة صورة' : 'Add Photo'),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.black,
                     foregroundColor: Colors.white,
@@ -1086,13 +1113,11 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
               itemBuilder: (context, index) {
                 final photoPath = _photoPaths[index];
 
-                // Skip if path is a URL (not a local file path)
                 if (photoPath.startsWith('http://') ||
                     photoPath.startsWith('https://')) {
                   return const SizedBox.shrink();
                 }
 
-                // On web, dart:io File is not supported. Show a simple placeholder
                 if (kIsWeb) {
                   return Container(
                     decoration: BoxDecoration(
@@ -1175,7 +1200,9 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
                 const Icon(Icons.check_circle, size: 16, color: Colors.black),
                 const SizedBox(width: 8),
                 Text(
-                  '${_photoPaths.length} photo${_photoPaths.length != 1 ? 's' : ''} added',
+                  _isArabic
+                      ? '${_photoPaths.length} ${_photoPaths.length != 1 ? 'صور' : 'صورة'} مضافة'
+                      : '${_photoPaths.length} photo${_photoPaths.length != 1 ? 's' : ''} added',
                   style: GoogleFonts.poppins(
                     fontSize: 13,
                     fontWeight: FontWeight.w600,

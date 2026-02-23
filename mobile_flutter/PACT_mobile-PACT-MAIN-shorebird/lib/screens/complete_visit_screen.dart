@@ -45,6 +45,20 @@ class _CompleteVisitScreenState extends ConsumerState<CompleteVisitScreen> {
   String? _locationError;
   bool _isOnline = true;
   late Stream<List<ConnectivityResult>> _connectivityStream;
+  String? _selectedActivityType;
+
+  bool get _isArabic => Localizations.localeOf(context).languageCode == 'ar';
+
+  static const List<String> _dmActivities = ['GFA', 'CBT', 'EBSFP'];
+
+  void _initActivityType() {
+    final act = widget.visit.mainActivity.toUpperCase();
+    if (_dmActivities.contains(act)) {
+      _selectedActivityType = 'DM';
+    } else if (act.isNotEmpty) {
+      _selectedActivityType = 'PDM';
+    }
+  }
 
   // Storage bucket configured in Supabase migrations:
   // supabase/migrations/20250127_add_site_visit_photos_bucket.sql
@@ -53,6 +67,7 @@ class _CompleteVisitScreenState extends ConsumerState<CompleteVisitScreen> {
   @override
   void initState() {
     super.initState();
+    _initActivityType();
     _getCurrentLocation();
     _checkConnectivity();
     _loadDraftData();
@@ -118,8 +133,9 @@ class _CompleteVisitScreenState extends ConsumerState<CompleteVisitScreen> {
           setState(() {});
           AppSnackBar.show(
             context,
-            message:
-                'Draft loaded with ${_photos.length} photos. Continue where you left off!',
+            message: _isArabic
+                ? 'تم تحميل المسودة مع ${_photos.length} صور. أكمل من حيث توقفت!'
+                : 'Draft loaded with ${_photos.length} photos. Continue where you left off!',
             type: SnackBarType.info,
           );
         }
@@ -352,21 +368,21 @@ class _CompleteVisitScreenState extends ConsumerState<CompleteVisitScreen> {
     if (_notesController.text.trim().isEmpty) {
       AppSnackBar.show(
         context,
-        message: 'Please add notes about your visit',
+        message: _isArabic ? 'يرجى إضافة ملاحظات حول زيارتك' : 'Please add notes about your visit',
         type: SnackBarType.warning,
       );
       return;
     }
 
-    // Ensure we have a final location before submitting.
     if (_currentLocation == null) {
       await _getCurrentLocation();
     }
     if (_currentLocation == null) {
       AppSnackBar.show(
         context,
-        message:
-            'Final location is required. Please tap Retry to capture location.',
+        message: _isArabic
+            ? 'الموقع النهائي مطلوب. يرجى الضغط على إعادة المحاولة لالتقاط الموقع.'
+            : 'Final location is required. Please tap Retry to capture location.',
         type: SnackBarType.warning,
       );
       return;
@@ -423,6 +439,7 @@ class _CompleteVisitScreenState extends ConsumerState<CompleteVisitScreen> {
             'activities': _activitiesController.text.trim().isEmpty
                 ? null
                 : _activitiesController.text.trim(),
+            'activity_type': _selectedActivityType,
             'duration_minutes': durationMinutes,
             'coordinates': coordinates,
             'submitted_by': userId,
@@ -528,7 +545,7 @@ class _CompleteVisitScreenState extends ConsumerState<CompleteVisitScreen> {
       if (mounted) {
         AppSnackBar.show(
           context,
-          message: 'Visit completed and report submitted successfully!',
+          message: _isArabic ? 'تم إكمال الزيارة وإرسال التقرير بنجاح!' : 'Visit completed and report submitted successfully!',
           type: SnackBarType.success,
         );
         Navigator.of(context).pop(true);
@@ -538,7 +555,7 @@ class _CompleteVisitScreenState extends ConsumerState<CompleteVisitScreen> {
       if (mounted) {
         AppSnackBar.show(
           context,
-          message: 'Failed to submit report: $e',
+          message: _isArabic ? 'فشل إرسال التقرير: $e' : 'Failed to submit report: $e',
           type: SnackBarType.error,
         );
       }
@@ -629,6 +646,7 @@ class _CompleteVisitScreenState extends ConsumerState<CompleteVisitScreen> {
           'activities': _activitiesController.text.trim().isEmpty
               ? null
               : _activitiesController.text.trim(),
+          'activity_type': _selectedActivityType,
           'duration_minutes': durationMinutes,
           'coordinates': _currentLocation != null
               ? {
@@ -657,7 +675,9 @@ class _CompleteVisitScreenState extends ConsumerState<CompleteVisitScreen> {
       if (mounted) {
         AppSnackBar.show(
           context,
-          message: 'Visit saved offline! Will upload when you have internet.',
+          message: _isArabic
+              ? 'تم حفظ الزيارة بدون اتصال! ستُرفع عند توفر الإنترنت.'
+              : 'Visit saved offline! Will upload when you have internet.',
           type: SnackBarType.success,
           duration: const Duration(seconds: 4),
         );
@@ -668,7 +688,7 @@ class _CompleteVisitScreenState extends ConsumerState<CompleteVisitScreen> {
       if (mounted) {
         AppSnackBar.show(
           context,
-          message: 'Failed to save offline: $e',
+          message: _isArabic ? 'فشل الحفظ بدون اتصال: $e' : 'Failed to save offline: $e',
           type: SnackBarType.error,
         );
       }
@@ -780,18 +800,18 @@ class _CompleteVisitScreenState extends ConsumerState<CompleteVisitScreen> {
       if (mounted) {
         AppSnackBar.show(
           context,
-          message: 'Draft saved! You can continue later.',
+          message: _isArabic ? 'تم حفظ المسودة! يمكنك المتابعة لاحقاً.' : 'Draft saved! You can continue later.',
           type: SnackBarType.success,
           duration: const Duration(seconds: 3),
         );
-        Navigator.of(context).pop(false); // false = not completed, just drafted
+        Navigator.of(context).pop(false);
       }
     } catch (e) {
       debugPrint('Error saving draft: $e');
       if (mounted) {
         AppSnackBar.show(
           context,
-          message: 'Failed to save draft: $e',
+          message: _isArabic ? 'فشل حفظ المسودة: $e' : 'Failed to save draft: $e',
           type: SnackBarType.error,
         );
       }
@@ -806,9 +826,12 @@ class _CompleteVisitScreenState extends ConsumerState<CompleteVisitScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final activityType = widget.visit.mainActivity;
+    final isDM = _dmActivities.contains(activityType.toUpperCase());
+
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Complete Visit'),
+        title: Text(_isArabic ? 'إكمال الزيارة' : 'Complete Visit'),
         backgroundColor: AppColors.primaryOrange,
         foregroundColor: Colors.white,
       ),
@@ -817,7 +840,6 @@ class _CompleteVisitScreenState extends ConsumerState<CompleteVisitScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Site info card
             Card(
               child: Padding(
                 padding: const EdgeInsets.all(16),
@@ -838,9 +860,43 @@ class _CompleteVisitScreenState extends ConsumerState<CompleteVisitScreen> {
                     if (widget.visit.siteCode.isNotEmpty) ...[
                       const SizedBox(height: 4),
                       Text(
-                        'Code: ${widget.visit.siteCode}',
+                        '${_isArabic ? 'الرمز' : 'Code'}: ${widget.visit.siteCode}',
                         style: AppTextStyles.bodySmall.copyWith(
                           color: AppColors.textSecondary,
+                        ),
+                      ),
+                    ],
+                    if (activityType.isNotEmpty) ...[
+                      const SizedBox(height: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: isDM ? Colors.blue.shade50 : Colors.orange.shade50,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: isDM ? Colors.blue.shade300 : Colors.orange.shade300,
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              isDM ? Icons.local_shipping : Icons.fact_check,
+                              size: 14,
+                              color: isDM ? Colors.blue.shade700 : Colors.orange.shade700,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              isDM
+                                  ? (_isArabic ? 'رصد التوزيع (DM) - $activityType' : 'Distribution Monitoring (DM) - $activityType')
+                                  : (_isArabic ? 'رصد ما بعد التوزيع (PDM) - $activityType' : 'Post-Distribution Monitoring (PDM) - $activityType'),
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: isDM ? Colors.blue.shade700 : Colors.orange.shade700,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ],
@@ -851,19 +907,22 @@ class _CompleteVisitScreenState extends ConsumerState<CompleteVisitScreen> {
 
             const SizedBox(height: 24),
 
-            // Location status
             _buildLocationStatus(),
 
             const SizedBox(height: 24),
 
-            // Notes field
-            Text('Visit Notes *', style: AppTextStyles.titleMedium),
+            _buildActivityTypeSelector(),
+
+            const SizedBox(height: 16),
+
+            Text(_isArabic ? 'ملاحظات الزيارة *' : 'Visit Notes *', style: AppTextStyles.titleMedium),
             const SizedBox(height: 8),
             TextField(
               controller: _notesController,
               decoration: InputDecoration(
-                hintText:
-                    'Describe what you observed and did during the visit...',
+                hintText: _isArabic
+                    ? 'صف ما لاحظته وما قمت به أثناء الزيارة...'
+                    : 'Describe what you observed and did during the visit...',
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
                 ),
@@ -876,16 +935,15 @@ class _CompleteVisitScreenState extends ConsumerState<CompleteVisitScreen> {
 
             const SizedBox(height: 16),
 
-            // Activities field
             Text(
-              'Activities Performed (optional)',
+              _isArabic ? 'الأنشطة المنفذة (اختياري)' : 'Activities Performed (optional)',
               style: AppTextStyles.titleMedium,
             ),
             const SizedBox(height: 8),
             TextField(
               controller: _activitiesController,
               decoration: InputDecoration(
-                hintText: 'List the activities you performed...',
+                hintText: _isArabic ? 'اذكر الأنشطة التي قمت بها...' : 'List the activities you performed...',
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
                 ),
@@ -898,12 +956,11 @@ class _CompleteVisitScreenState extends ConsumerState<CompleteVisitScreen> {
 
             const SizedBox(height: 24),
 
-            // Photos section
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
-                  'Photos (${_photos.length})',
+                  '${_isArabic ? 'الصور' : 'Photos'} (${_photos.length})',
                   style: AppTextStyles.titleMedium,
                 ),
                 Row(
@@ -912,13 +969,13 @@ class _CompleteVisitScreenState extends ConsumerState<CompleteVisitScreen> {
                       IconButton(
                         onPressed: _takePhoto,
                         icon: const Icon(Icons.camera_alt),
-                        tooltip: 'Take Photo',
+                        tooltip: _isArabic ? 'التقاط صورة' : 'Take Photo',
                         color: AppColors.primaryOrange,
                       ),
                     IconButton(
                       onPressed: _pickPhotos,
                       icon: const Icon(Icons.photo_library),
-                      tooltip: 'Pick from Gallery',
+                      tooltip: _isArabic ? 'اختيار من المعرض' : 'Pick from Gallery',
                       color: AppColors.primaryOrange,
                     ),
                   ],
@@ -952,7 +1009,7 @@ class _CompleteVisitScreenState extends ConsumerState<CompleteVisitScreen> {
                       ),
                       const SizedBox(height: 8),
                       Text(
-                        'Tap to add photos',
+                        _isArabic ? 'اضغط لإضافة صور' : 'Tap to add photos',
                         style: TextStyle(color: Colors.grey.shade600),
                       ),
                     ],
@@ -967,7 +1024,6 @@ class _CompleteVisitScreenState extends ConsumerState<CompleteVisitScreen> {
                   itemCount: _photos.length + 1,
                   itemBuilder: (context, index) {
                     if (index == _photos.length) {
-                      // Add more button
                       return Container(
                         width: 100,
                         margin: const EdgeInsets.only(right: 8),
@@ -987,7 +1043,7 @@ class _CompleteVisitScreenState extends ConsumerState<CompleteVisitScreen> {
                                 color: Colors.grey.shade400,
                               ),
                               Text(
-                                'Add more',
+                                _isArabic ? 'إضافة المزيد' : 'Add more',
                                 style: TextStyle(
                                   color: Colors.grey.shade600,
                                   fontSize: 12,
@@ -1042,7 +1098,6 @@ class _CompleteVisitScreenState extends ConsumerState<CompleteVisitScreen> {
 
             const SizedBox(height: 32),
 
-            // Offline indicator
             if (!_isOnline) ...[
               Container(
                 padding: const EdgeInsets.all(12),
@@ -1058,7 +1113,9 @@ class _CompleteVisitScreenState extends ConsumerState<CompleteVisitScreen> {
                     const SizedBox(width: 12),
                     Expanded(
                       child: Text(
-                        'You are offline. Save as Draft to continue later, or Complete to sync when back online.',
+                        _isArabic
+                            ? 'أنت غير متصل بالإنترنت. احفظ كمسودة للمتابعة لاحقاً، أو أكمل للمزامنة عند الاتصال.'
+                            : 'You are offline. Save as Draft to continue later, or Complete to sync when back online.',
                         style: TextStyle(
                           color: Colors.orange.shade800,
                           fontSize: 13,
@@ -1070,7 +1127,6 @@ class _CompleteVisitScreenState extends ConsumerState<CompleteVisitScreen> {
               ),
             ],
 
-            // Draft button (only shown when offline)
             if (!_isOnline) ...[
               SizedBox(
                 width: double.infinity,
@@ -1086,7 +1142,9 @@ class _CompleteVisitScreenState extends ConsumerState<CompleteVisitScreen> {
                         )
                       : const Icon(Icons.save_outlined),
                   label: Text(
-                    _isSavingDraft ? 'Saving Draft...' : 'Save as Draft',
+                    _isSavingDraft
+                        ? (_isArabic ? 'جاري حفظ المسودة...' : 'Saving Draft...')
+                        : (_isArabic ? 'حفظ كمسودة' : 'Save as Draft'),
                   ),
                   style: OutlinedButton.styleFrom(
                     foregroundColor: AppColors.primaryBlue,
@@ -1101,7 +1159,6 @@ class _CompleteVisitScreenState extends ConsumerState<CompleteVisitScreen> {
               const SizedBox(height: 12),
             ],
 
-            // Submit/Complete button
             SizedBox(
               width: double.infinity,
               height: 50,
@@ -1122,8 +1179,10 @@ class _CompleteVisitScreenState extends ConsumerState<CompleteVisitScreen> {
                     : const Icon(Icons.check_circle),
                 label: Text(
                   _isSubmitting
-                      ? 'Submitting...'
-                      : (_isOnline ? 'Submit Report' : 'Complete (Sync Later)'),
+                      ? (_isArabic ? 'جاري الإرسال...' : 'Submitting...')
+                      : (_isOnline
+                          ? (_isArabic ? 'إرسال التقرير' : 'Submit Report')
+                          : (_isArabic ? 'إكمال (مزامنة لاحقاً)' : 'Complete (Sync Later)')),
                 ),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.success,
@@ -1139,6 +1198,85 @@ class _CompleteVisitScreenState extends ConsumerState<CompleteVisitScreen> {
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildActivityTypeSelector() {
+    final activityTypes = _isArabic
+        ? {
+            'PDM': 'رصد ما بعد التوزيع',
+            'DM': 'رصد التوزيع',
+            'Assessment': 'تقييم',
+            'Monitoring': 'مراقبة',
+            'Supervision': 'إشراف',
+            'Verification': 'تحقق',
+            'Other': 'أخرى',
+          }
+        : {
+            'PDM': 'Post-Distribution Monitoring',
+            'DM': 'Distribution Monitoring',
+            'Assessment': 'Assessment',
+            'Monitoring': 'Monitoring',
+            'Supervision': 'Supervision',
+            'Verification': 'Verification',
+            'Other': 'Other',
+          };
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          _isArabic ? 'نوع النشاط (PDM/DM)' : 'Activity Type (PDM/DM)',
+          style: AppTextStyles.titleMedium,
+        ),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: activityTypes.entries.map((entry) {
+            final isSelected = _selectedActivityType == entry.key;
+            final isPdmDm = entry.key == 'PDM' || entry.key == 'DM';
+            final selectedColor = isPdmDm
+                ? (entry.key == 'DM' ? Colors.blue.shade700 : Colors.orange.shade700)
+                : Colors.black;
+            return GestureDetector(
+              onTap: () => setState(() => _selectedActivityType = entry.key),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                decoration: BoxDecoration(
+                  color: isSelected ? selectedColor : Colors.white,
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                    color: isSelected ? selectedColor : Colors.grey.shade300,
+                    width: isSelected ? 2 : 1,
+                  ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (isPdmDm) ...[
+                      Icon(
+                        entry.key == 'PDM' ? Icons.fact_check : Icons.local_shipping,
+                        size: 14,
+                        color: isSelected ? Colors.white : (entry.key == 'DM' ? Colors.blue.shade600 : Colors.orange.shade600),
+                      ),
+                      const SizedBox(width: 4),
+                    ],
+                    Text(
+                      '${entry.key} - ${entry.value}',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                        color: isSelected ? Colors.white : Colors.black87,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          }).toList(),
+        ),
+      ],
     );
   }
 
@@ -1165,12 +1303,14 @@ class _CompleteVisitScreenState extends ConsumerState<CompleteVisitScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Final Location', style: AppTextStyles.titleSmall),
+                  Text(_isArabic ? 'الموقع النهائي' : 'Final Location', style: AppTextStyles.titleSmall),
                   const SizedBox(height: 2),
                   Text(
                     _currentLocation != null
-                        ? 'Lat: ${_currentLocation!.latitude.toStringAsFixed(6)}, Lon: ${_currentLocation!.longitude.toStringAsFixed(6)}'
-                        : _locationError ?? 'Getting location...',
+                        ? (_isArabic
+                            ? 'خط العرض: ${_currentLocation!.latitude.toStringAsFixed(6)}، خط الطول: ${_currentLocation!.longitude.toStringAsFixed(6)}'
+                            : 'Lat: ${_currentLocation!.latitude.toStringAsFixed(6)}, Lon: ${_currentLocation!.longitude.toStringAsFixed(6)}')
+                        : _locationError ?? (_isArabic ? 'جاري الحصول على الموقع...' : 'Getting location...'),
                     style: AppTextStyles.bodySmall.copyWith(
                       color: _locationError != null
                           ? Colors.red
@@ -1179,7 +1319,7 @@ class _CompleteVisitScreenState extends ConsumerState<CompleteVisitScreen> {
                   ),
                   if (_currentLocation != null)
                     Text(
-                      'Accuracy: ${_currentLocation!.accuracy.toStringAsFixed(0)}m',
+                      '${_isArabic ? 'الدقة' : 'Accuracy'}: ${_currentLocation!.accuracy.toStringAsFixed(0)}${_isArabic ? 'م' : 'm'}',
                       style: AppTextStyles.bodySmall.copyWith(
                         color: AppColors.textSecondary,
                       ),
@@ -1191,7 +1331,7 @@ class _CompleteVisitScreenState extends ConsumerState<CompleteVisitScreen> {
               IconButton(
                 onPressed: _getCurrentLocation,
                 icon: const Icon(Icons.refresh),
-                tooltip: 'Retry',
+                tooltip: _isArabic ? 'إعادة المحاولة' : 'Retry',
               ),
           ],
         ),

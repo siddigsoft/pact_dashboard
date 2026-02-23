@@ -20,14 +20,12 @@ class VisitDetailsSheet extends StatefulWidget {
   final SiteVisit visit;
   final PACTUserProfile? userProfile;
   final Future<void> Function(String) onStatusChanged;
-  final Future<void> Function(String)? onReject; // New callback for rejection
+  final Future<void> Function(String)? onReject;
   final bool isTrackingJourney;
   final bool isNearDestination;
   final VoidCallback? onArrived;
   final VoidCallback? onGetDirections;
-  // New: whether the visit's report has already been submitted
   final bool reportSubmitted;
-  // Callback to request opening the report submission form
   final VoidCallback? onSubmitReportRequested;
 
   const VisitDetailsSheet({
@@ -55,11 +53,12 @@ class _VisitDetailsSheetState extends State<VisitDetailsSheet> {
   bool _hasReport = false;
   bool _checkedReport = false;
 
+  bool get _isArabic => Localizations.localeOf(context).languageCode == 'ar';
+
   @override
   void initState() {
     super.initState();
     _visit = widget.visit;
-    // If already completed and we didn't get an explicit flag, probe for report existence
     if (_visit.status.toLowerCase() == 'completed' && !widget.reportSubmitted) {
       _probeReportExists();
     }
@@ -68,7 +67,6 @@ class _VisitDetailsSheetState extends State<VisitDetailsSheet> {
   Future<void> _probeReportExists() async {
     try {
       final supabase = Supabase.instance.client;
-      // Try online first
       try {
         final res = await supabase
             .from('reports')
@@ -84,7 +82,6 @@ class _VisitDetailsSheetState extends State<VisitDetailsSheet> {
         return;
       } catch (_) {}
 
-      // Fallback to offline cache
       final offlineDb = OfflineDb();
       final cachedItem = offlineDb.getCachedItem(
         OfflineDb.reportsCacheBox,
@@ -112,21 +109,19 @@ class _VisitDetailsSheetState extends State<VisitDetailsSheet> {
     if (_isEndingVisit) return;
     setState(() => _isEndingVisit = true);
 
-    // Show small progress dialog
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (_) => const _ProgressDialog(
-        title: 'Ending visit',
-        message: 'Capturing site location and stopping tracking...',
+      builder: (_) => _ProgressDialog(
+        title: _isArabic ? 'إنهاء الزيارة' : 'Ending visit',
+        message: _isArabic ? 'جاري التقاط موقع الموقع وإيقاف التتبع...' : 'Capturing site location and stopping tracking...',
       ),
     );
 
     try {
-      // 1) Get precise current location
       final hasService = await Geolocator.isLocationServiceEnabled();
       if (!hasService) {
-        throw Exception('Location services are disabled');
+        throw Exception(_isArabic ? 'خدمات الموقع معطلة' : 'Location services are disabled');
       }
       var permission = await Geolocator.checkPermission();
       if (permission == LocationPermission.denied) {
@@ -134,15 +129,12 @@ class _VisitDetailsSheetState extends State<VisitDetailsSheet> {
       }
       if (permission == LocationPermission.denied ||
           permission == LocationPermission.deniedForever) {
-        throw Exception('Location permission not granted');
+        throw Exception(_isArabic ? 'إذن الموقع غير ممنوح' : 'Location permission not granted');
       }
       final position = await Geolocator.getCurrentPosition(
         desiredAccuracy: LocationAccuracy.best,
       );
 
-      // 2) Persist actual site coordinates in dedicated table
-      // Reuse StaffTrackingService API which writes to `site_locations`
-      // Acquire Supabase client explicitly (web build needs direct import) and record site location
       final staffService = StaffTrackingService(Supabase.instance.client);
       final ok = await staffService.recordSiteLocation(
         siteId: _visit.id,
@@ -151,10 +143,9 @@ class _VisitDetailsSheetState extends State<VisitDetailsSheet> {
       );
 
       if (!ok) {
-        throw Exception('Failed to save site location');
+        throw Exception(_isArabic ? 'فشل حفظ موقع الموقع' : 'Failed to save site location');
       }
 
-      // Optional: verify row exists (depends on RLS policies)
       try {
         final row = await Supabase.instance.client
             .from('site_locations')
@@ -168,24 +159,23 @@ class _VisitDetailsSheetState extends State<VisitDetailsSheet> {
         debugPrint('⚠️ Verification read failed (may be blocked by RLS): $e');
       }
 
-      // 3) Stop ongoing user location tracking
       await LocationTrackingService().stopJourneyTracking();
 
       if (mounted) {
-        Navigator.of(context).pop(); // Close progress dialog
+        Navigator.of(context).pop();
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Site location saved and tracking stopped.'),
+          SnackBar(
+            content: Text(_isArabic ? 'تم حفظ موقع الموقع وإيقاف التتبع.' : 'Site location saved and tracking stopped.'),
             backgroundColor: Colors.green,
           ),
         );
       }
     } catch (e) {
       if (mounted) {
-        Navigator.of(context).pop(); // Close dialog
+        Navigator.of(context).pop();
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Failed to end visit: $e'),
+            content: Text('${_isArabic ? 'فشل إنهاء الزيارة' : 'Failed to end visit'}: $e'),
             backgroundColor: Colors.red,
           ),
         );
@@ -196,58 +186,52 @@ class _VisitDetailsSheetState extends State<VisitDetailsSheet> {
   }
 
   void _updateVisitStatus(String newStatus) async {
-    if (_isUpdating) return; // Guard against re-entry
+    if (_isUpdating) return;
     setState(() => _isUpdating = true);
-    // Show a small progress dialog while updating
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (_) => const _ProgressDialog(
-        title: 'Please wait',
-        message: 'Updating visit status...',
+      builder: (_) => _ProgressDialog(
+        title: _isArabic ? 'يرجى الانتظار' : 'Please wait',
+        message: _isArabic ? 'جاري تحديث حالة الزيارة...' : 'Updating visit status...',
       ),
     );
 
     try {
       bool shouldCloseSheet = false;
-      // Ensure we don't hang forever if backend is slow
       await widget
           .onStatusChanged(newStatus)
           .timeout(const Duration(seconds: 20));
 
-      // Update local state to reflect the change immediately
       if (mounted) {
         setState(() {
           _visit = _visit.copyWith(status: newStatus);
         });
       }
 
-      // If we successfully marked as completed, close this bottom sheet so the parent can show the report form cleanly
       if (newStatus.toLowerCase() == 'completed') {
         shouldCloseSheet = true;
       }
     } on TimeoutException {
-      // Inform and proceed to close the dialog anyway
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
+          SnackBar(
             content: Text(
-              'Updating took too long. Please check network and try again.',
+              _isArabic ? 'استغرق التحديث وقتاً طويلاً. يرجى التحقق من الشبكة والمحاولة مرة أخرى.' : 'Updating took too long. Please check network and try again.',
             ),
             backgroundColor: Colors.orange,
           ),
         );
       }
     } catch (e) {
-      // Surface error
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
+          SnackBar(
             content: Row(
               children: [
-                Icon(Icons.error, color: Colors.white),
-                SizedBox(width: 8),
-                Expanded(child: Text('Failed to update visit status')),
+                const Icon(Icons.error, color: Colors.white),
+                const SizedBox(width: 8),
+                Expanded(child: Text(_isArabic ? 'فشل تحديث حالة الزيارة' : 'Failed to update visit status')),
               ],
             ),
             backgroundColor: Colors.red,
@@ -255,16 +239,11 @@ class _VisitDetailsSheetState extends State<VisitDetailsSheet> {
         );
       }
     } finally {
-      // Always close the progress dialog if it's still open
       if (mounted) {
         try {
           Navigator.of(context, rootNavigator: true).pop();
-        } catch (_) {
-          // ignore if already closed
-        }
-        // If we marked completed, also close this sheet so the parent can present the report form without flicker
+        } catch (_) {}
         try {
-          // Using maybePop prevents exceptions if already closed
           Navigator.of(context).maybePop();
         } catch (_) {}
       }
@@ -273,45 +252,33 @@ class _VisitDetailsSheetState extends State<VisitDetailsSheet> {
   }
 
   Future<void> _updateVisitStatusAndShowReport() async {
-    // 1. Update status to Completed
-    // We can't easily await _updateVisitStatus because it returns void.
-    // But we can replicate its logic or just call it and hope for the best,
-    // OR better, we can use the widget.onStatusChanged directly which returns Future<void>.
-
     if (_isUpdating) return;
     setState(() => _isUpdating = true);
 
-    // Show progress
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (_) => const _ProgressDialog(
-        title: 'Updating',
-        message: 'Completing visit...',
+      builder: (_) => _ProgressDialog(
+        title: _isArabic ? 'جاري التحديث' : 'Updating',
+        message: _isArabic ? 'جاري إكمال الزيارة...' : 'Completing visit...',
       ),
     );
 
     try {
-      // Call the parent callback directly to await it
       await widget.onStatusChanged('Completed');
 
-      // Also stop tracking if needed (logic usually in parent, but let's be safe)
-      // The parent _handleVisitStatusChanged handles stopTracking for 'Completed'.
-
       if (mounted) {
-        Navigator.pop(context); // Close progress dialog
+        Navigator.pop(context);
         setState(() => _isUpdating = false);
-
-        // 2. Show Report Form immediately
         _showReportForm();
       }
     } catch (e) {
       if (mounted) {
-        Navigator.pop(context); // Close progress dialog
+        Navigator.pop(context);
         setState(() => _isUpdating = false);
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text('Error completing visit: $e')));
+        ).showSnackBar(SnackBar(content: Text('${_isArabic ? 'خطأ في إكمال الزيارة' : 'Error completing visit'}: $e')));
       }
     }
   }
@@ -327,7 +294,6 @@ class _VisitDetailsSheetState extends State<VisitDetailsSheet> {
           setState(() {
             _hasReport = true;
           });
-          // Optionally close the details sheet too, or just let user see "View Report"
         },
       ),
     );
@@ -337,27 +303,25 @@ class _VisitDetailsSheetState extends State<VisitDetailsSheet> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Submit Visit Report'),
-        content: const Text(
-          'Would you like to submit a report for this visit now?',
+        title: Text(_isArabic ? 'إرسال تقرير الزيارة' : 'Submit Visit Report'),
+        content: Text(
+          _isArabic ? 'هل ترغب في إرسال تقرير لهذه الزيارة الآن؟' : 'Would you like to submit a report for this visit now?',
         ),
         actions: [
           TextButton(
             onPressed: () {
               Navigator.of(context).pop();
             },
-            child: const Text('Later'),
+            child: Text(_isArabic ? 'لاحقاً' : 'Later'),
           ),
           ElevatedButton(
             onPressed: () {
               Navigator.of(context).pop();
-              // Navigate to report submission screen
-              // TODO: Implement navigation to report screen
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.primaryBlue,
             ),
-            child: const Text('Submit Report'),
+            child: Text(_isArabic ? 'إرسال التقرير' : 'Submit Report'),
           ),
         ],
       ),
@@ -378,7 +342,6 @@ class _VisitDetailsSheetState extends State<VisitDetailsSheet> {
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          // Handle and header
           Center(
             child: Container(
               margin: const EdgeInsets.only(top: 12),
@@ -391,7 +354,6 @@ class _VisitDetailsSheetState extends State<VisitDetailsSheet> {
             ),
           ),
 
-          // Visit title and status badge
           Padding(
             padding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
             child: Row(
@@ -410,34 +372,30 @@ class _VisitDetailsSheetState extends State<VisitDetailsSheet> {
             ),
           ),
 
-          // Visit details
           Flexible(
             child: SingleChildScrollView(
               padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Site Code & Location
                   _buildInfoSection(
                     icon: Icons.qr_code,
                     iconColor: Colors.purple.shade400,
-                    title: 'Site Code',
+                    title: _isArabic ? 'رمز الموقع' : 'Site Code',
                     content:
-                        _visit.siteCode.isNotEmpty ? _visit.siteCode : 'N/A',
+                        _visit.siteCode.isNotEmpty ? _visit.siteCode : (_isArabic ? 'غير متوفر' : 'N/A'),
                   ),
                   const Divider(),
 
-                  // Address section
                   _buildInfoSection(
                     icon: Icons.location_on,
                     iconColor: Colors.red.shade400,
-                    title: 'Location',
+                    title: _isArabic ? 'الموقع' : 'Location',
                     content: _visit.locationString.isNotEmpty
                         ? _visit.locationString
                         : '${_visit.locality}, ${_visit.state}',
                   ),
 
-                  // GPS Coordinates (if available)
                   if (_visit.latitude != null && _visit.longitude != null)
                     Padding(
                       padding: const EdgeInsets.only(
@@ -466,85 +424,77 @@ class _VisitDetailsSheetState extends State<VisitDetailsSheet> {
                     ),
                   const Divider(),
 
-                  // Hub Office
                   if (_visit.additionalData?['hub_office'] != null) ...[
                     _buildInfoSection(
                       icon: Icons.business,
                       iconColor: Colors.teal.shade400,
-                      title: 'Hub Office',
+                      title: _isArabic ? 'مكتب المحور' : 'Hub Office',
                       content: _visit.additionalData!['hub_office'].toString(),
                     ),
                     const Divider(),
                   ],
 
-                  // Main Activity
                   if (_visit.mainActivity.isNotEmpty) ...[
                     _buildInfoSection(
                       icon: Icons.work,
                       iconColor: Colors.orange.shade400,
-                      title: 'Main Activity',
+                      title: _isArabic ? 'النشاط الرئيسي' : 'Main Activity',
                       content: _visit.mainActivity,
                     ),
                     const Divider(),
                   ],
 
-                  // Activity at Site
                   if (_visit.activity.isNotEmpty) ...[
                     _buildInfoSection(
                       icon: Icons.task_alt,
                       iconColor: Colors.green.shade400,
-                      title: 'Activity at Site',
+                      title: _isArabic ? 'النشاط في الموقع' : 'Activity at Site',
                       content: _visit.activity,
                     ),
                     const Divider(),
                   ],
 
-                  // Date/time section
                   _buildInfoSection(
                     icon: Icons.calendar_today,
                     iconColor: Colors.blue.shade400,
-                    title: 'Scheduled Date',
+                    title: _isArabic ? 'التاريخ المجدول' : 'Scheduled Date',
                     content: _visit.dueDate != null
                         ? '${_visit.dueDate!.day}/${_visit.dueDate!.month}/${_visit.dueDate!.year}'
-                        : 'Flexible Timing',
+                        : (_isArabic ? 'توقيت مرن' : 'Flexible Timing'),
                   ),
                   const Divider(),
 
-                  // Monitoring Information
                   if (_visit.additionalData?['monitoring_by'] != null) ...[
                     _buildInfoSection(
                       icon: Icons.visibility,
                       iconColor: Colors.indigo.shade400,
-                      title: 'Monitoring By',
+                      title: _isArabic ? 'المراقبة بواسطة' : 'Monitoring By',
                       content:
                           _visit.additionalData!['monitoring_by'].toString(),
                     ),
                     const Divider(),
                   ],
 
-                  // Survey Tool
                   if (_visit.additionalData?['survey_tool'] != null) ...[
                     _buildInfoSection(
                       icon: Icons.analytics,
                       iconColor: Colors.cyan.shade400,
-                      title: 'Survey Tool',
+                      title: _isArabic ? 'أداة المسح' : 'Survey Tool',
                       content: _visit.additionalData!['survey_tool'].toString(),
                     ),
                     const Divider(),
                   ],
 
-                  // CP Name (Cooperation Partner)
                   if (_visit.additionalData?['cp_name'] != null) ...[
                     _buildInfoSection(
                       icon: Icons.person_outline,
                       iconColor: Colors.brown.shade400,
-                      title: 'Cooperation Partner',
+                      title: _isArabic ? 'شريك التعاون' : 'Cooperation Partner',
                       content: _visit.additionalData!['cp_name'].toString(),
                     ),
                     const Divider(),
                   ],
 
-                  // Fee Breakdown
                   if (_visit.enumeratorFee != null ||
                       _visit.transportFee != null) ...[
                     Container(
@@ -566,7 +516,7 @@ class _VisitDetailsSheetState extends State<VisitDetailsSheet> {
                               ),
                               const SizedBox(width: 8),
                               Text(
-                                'Fee Breakdown',
+                                _isArabic ? 'تفصيل الرسوم' : 'Fee Breakdown',
                                 style: TextStyle(
                                   fontSize: 16,
                                   fontWeight: FontWeight.bold,
@@ -577,7 +527,7 @@ class _VisitDetailsSheetState extends State<VisitDetailsSheet> {
                           ),
                           const SizedBox(height: 8),
                           _buildFeeRow(
-                            'Total Payment',
+                            _isArabic ? 'إجمالي المبلغ' : 'Total Payment',
                             (_visit.enumeratorFee ?? 0) +
                                 (_visit.transportFee ?? 0),
                             isBold: true,
@@ -588,18 +538,16 @@ class _VisitDetailsSheetState extends State<VisitDetailsSheet> {
                     const SizedBox(height: 12),
                   ],
 
-                  // Notes section
                   if (_visit.notes.isNotEmpty) ...[
                     _buildInfoSection(
                       icon: Icons.notes,
                       iconColor: Colors.amber.shade700,
-                      title: 'Notes',
+                      title: _isArabic ? 'ملاحظات' : 'Notes',
                       content: _visit.notes,
                     ),
                     const Divider(),
                   ],
 
-                  // Action buttons based on current status
                   _buildActionButtons(),
                 ],
               ),
@@ -617,40 +565,40 @@ class _VisitDetailsSheetState extends State<VisitDetailsSheet> {
     switch (status.toLowerCase()) {
       case 'pending':
         badgeColor = Colors.grey.shade500;
-        statusText = 'Pending';
+        statusText = _isArabic ? 'معلق' : 'Pending';
         break;
       case 'available':
-      case 'dispatched': // New status
+      case 'dispatched':
         badgeColor = Colors.blue.shade400;
-        statusText = 'Dispatched';
+        statusText = _isArabic ? 'مرسل' : 'Dispatched';
         break;
       case 'assigned':
-      case 'accept': // New status
+      case 'accept':
       case 'accepted':
         badgeColor = Colors.blue.shade400;
-        statusText = 'Accepted';
+        statusText = _isArabic ? 'مقبول' : 'Accepted';
         break;
       case 'claimed':
         badgeColor = Colors.orange.shade400;
-        statusText = 'Claimed - Awaiting Acceptance';
+        statusText = _isArabic ? 'محجوز - في انتظار القبول' : 'Claimed - Awaiting Acceptance';
         break;
       case 'in_progress':
-      case 'ongoing': // New status
+      case 'ongoing':
         badgeColor = Colors.amber.shade700;
-        statusText = 'Ongoing';
+        statusText = _isArabic ? 'جارية' : 'Ongoing';
         break;
       case 'completed':
-      case 'complete': // New status
+      case 'complete':
         badgeColor = Colors.green.shade500;
-        statusText = 'Completed';
+        statusText = _isArabic ? 'مكتملة' : 'Completed';
         break;
       case 'cancelled':
         badgeColor = Colors.red.shade400;
-        statusText = 'Cancelled';
+        statusText = _isArabic ? 'ملغاة' : 'Cancelled';
         break;
       case 'rejected':
         badgeColor = Colors.red.shade700;
-        statusText = 'Rejected';
+        statusText = _isArabic ? 'مرفوضة' : 'Rejected';
         break;
       default:
         badgeColor = Colors.grey.shade500;
@@ -666,7 +614,11 @@ class _VisitDetailsSheetState extends State<VisitDetailsSheet> {
       ),
       child: Text(
         statusText,
-        style: TextStyle(color: badgeColor, fontWeight: FontWeight.bold),
+        style: TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
+          color: badgeColor,
+        ),
       ),
     );
   }
@@ -678,19 +630,20 @@ class _VisitDetailsSheetState extends State<VisitDetailsSheet> {
     required String content,
   }) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 12),
+      padding: const EdgeInsets.symmetric(vertical: 8),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Container(
-            padding: const EdgeInsets.all(8),
+            width: 36,
+            height: 36,
             decoration: BoxDecoration(
               color: iconColor.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(8),
+              shape: BoxShape.circle,
             ),
-            child: Icon(icon, color: iconColor, size: 20),
+            child: Icon(icon, color: iconColor, size: 18),
           ),
-          const SizedBox(width: 16),
+          const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -698,16 +651,15 @@ class _VisitDetailsSheetState extends State<VisitDetailsSheet> {
                 Text(
                   title,
                   style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500,
+                    fontSize: 12,
                     color: Colors.grey.shade600,
                   ),
                 ),
-                const SizedBox(height: 4),
+                const SizedBox(height: 2),
                 Text(
                   content,
                   style: const TextStyle(
-                    fontSize: 16,
+                    fontSize: 15,
                     fontWeight: FontWeight.w500,
                   ),
                 ),
@@ -720,57 +672,26 @@ class _VisitDetailsSheetState extends State<VisitDetailsSheet> {
   }
 
   Widget _buildFeeRow(String label, double amount, {bool isBold = false}) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: isBold ? 16 : 14,
-              fontWeight: isBold ? FontWeight.bold : FontWeight.normal,
-              color: Colors.grey.shade700,
-            ),
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: isBold ? FontWeight.bold : FontWeight.normal,
           ),
-          Text(
-            amount.toStringAsFixed(2),
-            style: TextStyle(
-              fontSize: isBold ? 16 : 14,
-              fontWeight: isBold ? FontWeight.bold : FontWeight.w500,
-              color: isBold ? Colors.blue.shade700 : Colors.grey.shade800,
-            ),
+        ),
+        Text(
+          '\$${amount.toStringAsFixed(2)}',
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: isBold ? FontWeight.bold : FontWeight.normal,
+            color: Colors.blue.shade700,
           ),
-        ],
-      ),
+        ),
+      ],
     );
-  }
-
-  String _getTimeRemainingText(DateTime claimedAt) {
-    final deadline = claimedAt.add(const Duration(days: 2));
-    final now = DateTime.now();
-    final remaining = deadline.difference(now);
-
-    if (remaining.isNegative) {
-      return 'Deadline passed - site may be auto-released';
-    }
-
-    if (remaining.inHours < 24) {
-      return 'Confirm within ${remaining.inHours} hours or site will be released';
-    }
-
-    final days = remaining.inDays;
-    final hours = remaining.inHours % 24;
-    return 'Confirm within $days day(s) $hours hour(s) to keep this assignment';
-  }
-
-  String _formatDateTime(DateTime dateTime) {
-    final day = dateTime.day.toString().padLeft(2, '0');
-    final month = dateTime.month.toString().padLeft(2, '0');
-    final year = dateTime.year;
-    final hour = dateTime.hour.toString().padLeft(2, '0');
-    final minute = dateTime.minute.toString().padLeft(2, '0');
-    return '$day/$month/$year at $hour:$minute';
   }
 
   Widget _buildButton({
@@ -780,239 +701,83 @@ class _VisitDetailsSheetState extends State<VisitDetailsSheet> {
     required VoidCallback onPressed,
     bool filled = true,
   }) {
+    if (filled) {
+      return SizedBox(
+        width: double.infinity,
+        height: 48,
+        child: ElevatedButton.icon(
+          onPressed: onPressed,
+          icon: Icon(icon, size: 20),
+          label: Text(label),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: color,
+            foregroundColor: Colors.white,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+          ),
+        ),
+      );
+    }
     return SizedBox(
       width: double.infinity,
-      height: 50,
-      child: filled
-          ? ElevatedButton.icon(
-              onPressed: onPressed,
-              icon: Icon(icon),
-              label: Text(label),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: color,
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
-            )
-          : OutlinedButton.icon(
-              onPressed: onPressed,
-              icon: Icon(icon, color: color),
-              label: Text(label, style: TextStyle(color: color)),
-              style: OutlinedButton.styleFrom(
-                side: BorderSide(color: color),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
-            ),
+      height: 48,
+      child: OutlinedButton.icon(
+        onPressed: onPressed,
+        icon: Icon(icon, size: 20, color: color),
+        label: Text(label, style: TextStyle(color: color)),
+        style: OutlinedButton.styleFrom(
+          side: BorderSide(color: color),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+        ),
+      ),
     );
   }
 
+  String _getTimeRemainingText(DateTime claimedAt) {
+    final elapsed = DateTime.now().difference(claimedAt);
+    final remaining = const Duration(hours: 24) - elapsed;
+    if (remaining.isNegative) {
+      return _isArabic ? 'انتهت مهلة التأكيد' : 'Confirmation time expired';
+    }
+    final hours = remaining.inHours;
+    final minutes = remaining.inMinutes % 60;
+    return _isArabic
+        ? 'متبقي $hours ساعة و $minutes دقيقة للتأكيد'
+        : '$hours hours and $minutes minutes remaining to confirm';
+  }
+
   Widget _buildActionButtons() {
-    // IMPORTANT: Journey tracking must not hide the workflow buttons.
-    // We show tracking-related UI as a prefix, then always show status actions.
-    final prefixWidgets = <Widget>[];
-
-    if (widget.isTrackingJourney) {
-      if (widget.isNearDestination && widget.onArrived != null) {
-        prefixWidgets.addAll([
-          _buildButton(
-            label: 'Arrived at Destination',
-            icon: Icons.location_on,
-            color: AppColors.primaryOrange,
-            onPressed: widget.onArrived!,
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'You are within 50 meters of the destination',
-            style: TextStyle(
-              fontSize: 12,
-              color: Colors.grey.shade600,
-              fontStyle: FontStyle.italic,
-            ),
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 16),
-        ]);
-      } else {
-        prefixWidgets.addAll([
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: AppColors.primaryOrange.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: AppColors.primaryOrange.withOpacity(0.3),
-              ),
-            ),
-            child: Row(
-              children: [
-                const Icon(Icons.navigation, color: AppColors.primaryOrange),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Journey in Progress',
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.bold,
-                          color: AppColors.textDark,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        'Your route is being tracked. Keep going and complete the workflow below.',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.grey.shade600,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 16),
-        ]);
-      }
-    }
-
-    // Default button if status doesn't match any case
-    final defaultButton = _buildButton(
-      label: 'View Details',
-      icon: Icons.info_outline,
-      color: Colors.grey,
-      onPressed: () {},
-      filled: false,
-    );
-
-    // Different buttons based on current status
-    final visitStatus = (_visit.status ?? '').toString().trim().toLowerCase();
     final currentUserId = Supabase.instance.client.auth.currentUser?.id;
-    final isAccepted =
-        _visit.acceptedBy != null && _visit.acceptedBy == currentUserId;
-    final isCompleted = visitStatus == 'completed';
-    final isInProgress = visitStatus == 'in_progress';
+    final status = _visit.status.toLowerCase();
 
-    debugPrint(
-      '🔍 Visit Details - Status: $visitStatus, claimedBy: ${_visit.claimedBy}, acceptedBy: ${_visit.acceptedBy}, isAccepted: $isAccepted, isCompleted: $isCompleted, currentUser: $currentUserId',
+    final List<Widget> prefixWidgets = [];
+    final List<Widget> actionWidgets = [];
+
+    final defaultButton = _buildButton(
+      label: _isArabic ? 'تحديث الحالة' : 'Update Status',
+      icon: Icons.update,
+      color: AppColors.primaryBlue,
+      onPressed: () {
+        _updateVisitStatus('in_progress');
+      },
     );
 
-    final actionWidgets = <Widget>[];
-
-    // If completed, show completed state - no action buttons needed
-    if (isCompleted) {
-      debugPrint('✅ Visit is completed - showing completion message');
-      actionWidgets.add(
-        Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: AppColors.success.withOpacity(0.1),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: AppColors.success.withOpacity(0.3)),
-          ),
-          child: Row(
-            children: [
-              const Icon(Icons.check_circle,
-                  color: AppColors.success, size: 28),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Visit Completed',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.success,
-                      ),
-                    ),
-                    if (_visit.visitCompletedAt != null)
-                      Text(
-                        'Completed on ${_formatDateTime(_visit.visitCompletedAt!)}',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.grey.shade600,
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
-    // If in progress, show the timer overlay message (actual timer is in ActiveVisitOverlay)
-    else if (isInProgress) {
-      debugPrint('✅ Visit is in progress - showing in-progress message');
-      actionWidgets.add(
-        Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: AppColors.primaryOrange.withOpacity(0.1),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: AppColors.primaryOrange.withOpacity(0.3)),
-          ),
-          child: const Row(
-            children: [
-              Icon(Icons.timer, color: AppColors.primaryOrange, size: 28),
-              SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  'Visit in progress - use the timer overlay to complete',
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: AppColors.primaryOrange,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
-    // If accepted but not started or completed, show Start Visit button
-    else if (isAccepted) {
-      debugPrint('✅ Showing Start Visit button (already accepted)');
-      actionWidgets.add(
-        StartVisitButton(
-          visit: _visit,
-          onStartSuccess: () {
-            setState(() {
-              _visit = _visit.copyWith(status: 'in_progress');
-            });
-            widget.onStatusChanged('in_progress');
-          },
-          onStartError: () {
-            // Error handling is done in the button
-          },
-        ),
-      );
-    } else {
-      switch (visitStatus) {
+    if (currentUserId != null) {
+      switch (status) {
         case 'dispatched':
         case 'available':
-        case 'pending': // Add more status variants
+        case 'pending':
           final isClaimedByCurrentUser =
               _visit.claimedBy == currentUserId && currentUserId != null;
 
-          // If already claimed by current user, show Accept button
-          // Otherwise show Claim button
           if (isClaimedByCurrentUser) {
-            // PHASE 2: Accept assignment with cost acknowledgment
             debugPrint(
               '✅ Showing Accept button (site already claimed by user)',
             );
             actionWidgets.addAll([
-              // Time limit warning for claimed sites
               if (_visit.claimedAt != null)
                 Container(
                   padding: const EdgeInsets.all(12),
@@ -1035,7 +800,7 @@ class _VisitDetailsSheetState extends State<VisitDetailsSheet> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              'Confirmation Required',
+                              _isArabic ? 'مطلوب التأكيد' : 'Confirmation Required',
                               style: TextStyle(
                                 fontWeight: FontWeight.bold,
                                 color: Colors.orange.shade900,
@@ -1072,13 +837,11 @@ class _VisitDetailsSheetState extends State<VisitDetailsSheet> {
                   await Future.delayed(const Duration(milliseconds: 300));
                   await widget.onStatusChanged('Accepted');
                 },
-                onAcceptError: () {
-                  // Error handling is done in the button
-                },
+                onAcceptError: () {},
               ),
               const SizedBox(height: 12),
               _buildButton(
-                label: 'Reject',
+                label: _isArabic ? 'رفض' : 'Reject',
                 icon: Icons.close,
                 color: Colors.red,
                 onPressed: _showRejectionDialog,
@@ -1086,10 +849,8 @@ class _VisitDetailsSheetState extends State<VisitDetailsSheet> {
               ),
             ]);
           } else {
-            // PHASE 1: Claim the site first (or Accept directly if no claim required)
             debugPrint('✅ Showing Claim/Accept buttons');
             actionWidgets.addAll([
-              // For now, show BOTH Claim and Accept buttons to ensure user can proceed
               ClaimSiteButton(
                 siteEntryId: _visit.id,
                 siteName: _visit.siteName,
@@ -1105,12 +866,9 @@ class _VisitDetailsSheetState extends State<VisitDetailsSheet> {
                   });
                   widget.onStatusChanged('Assigned');
                 },
-                onClaimError: () {
-                  // Error handling is done in the button
-                },
+                onClaimError: () {},
               ),
               const SizedBox(height: 8),
-              // Also show Accept button as backup
               AcceptAssignmentButton(
                 siteEntryId: _visit.id,
                 siteName: _visit.siteName,
@@ -1124,17 +882,14 @@ class _VisitDetailsSheetState extends State<VisitDetailsSheet> {
                       status: 'Accepted',
                     );
                   });
-                  // Trigger reload and close sheet after short delay
                   await Future.delayed(const Duration(milliseconds: 300));
                   await widget.onStatusChanged('Accepted');
                 },
-                onAcceptError: () {
-                  // Error handling is done in the button
-                },
+                onAcceptError: () {},
               ),
               const SizedBox(height: 12),
               _buildButton(
-                label: 'Reject',
+                label: _isArabic ? 'رفض' : 'Reject',
                 icon: Icons.close,
                 color: Colors.red,
                 onPressed: _showRejectionDialog,
@@ -1145,10 +900,7 @@ class _VisitDetailsSheetState extends State<VisitDetailsSheet> {
           break;
         case 'assigned':
         case 'claimed':
-          // PHASE 2: Accept assignment with cost acknowledgment
-          // Site has been claimed, now show Accept Assignment button
           actionWidgets.addAll([
-            // Time limit warning for claimed sites
             if (_visit.claimedAt != null)
               Container(
                 padding: const EdgeInsets.all(12),
@@ -1171,7 +923,7 @@ class _VisitDetailsSheetState extends State<VisitDetailsSheet> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'Confirmation Required',
+                            _isArabic ? 'مطلوب التأكيد' : 'Confirmation Required',
                             style: TextStyle(
                               fontWeight: FontWeight.bold,
                               color: Colors.orange.shade900,
@@ -1208,17 +960,13 @@ class _VisitDetailsSheetState extends State<VisitDetailsSheet> {
                 await Future.delayed(const Duration(milliseconds: 300));
                 await widget.onStatusChanged('Accepted');
               },
-              onAcceptError: () {
-                // Error handling is done in the button
-              },
+              onAcceptError: () {},
             ),
           ]);
           break;
 
         case 'accept':
         case 'accepted':
-          // PHASE 3: Start the visit
-          // Assignment accepted, show Start Visit button
           actionWidgets.addAll([
             StartVisitButton(
               visit: _visit,
@@ -1228,9 +976,7 @@ class _VisitDetailsSheetState extends State<VisitDetailsSheet> {
                 });
                 widget.onStatusChanged('in_progress');
               },
-              onStartError: () {
-                // Error handling is done in the button
-              },
+              onStartError: () {},
             ),
           ]);
           break;
@@ -1245,9 +991,7 @@ class _VisitDetailsSheetState extends State<VisitDetailsSheet> {
                 });
                 widget.onStatusChanged('completed');
               },
-              onCompleteError: () {
-                // Error handling is done in the button
-              },
+              onCompleteError: () {},
             ),
           ]);
           break;
@@ -1255,14 +999,15 @@ class _VisitDetailsSheetState extends State<VisitDetailsSheet> {
         case 'complete':
           actionWidgets.add(
             _buildButton(
-              label: _hasReport ? 'View Report' : 'Submit Report',
+              label: _hasReport
+                  ? (_isArabic ? 'عرض التقرير' : 'View Report')
+                  : (_isArabic ? 'إرسال التقرير' : 'Submit Report'),
               icon: _hasReport ? Icons.description : Icons.assignment,
               color: _hasReport ? Colors.grey : Colors.green,
               onPressed: () {
                 if (_hasReport) {
-                  // View report logic (maybe open PDF or details)
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Report already submitted')),
+                    SnackBar(content: Text(_isArabic ? 'تم إرسال التقرير بالفعل' : 'Report already submitted')),
                   );
                 } else {
                   _showReportForm();
@@ -1278,14 +1023,13 @@ class _VisitDetailsSheetState extends State<VisitDetailsSheet> {
       }
     }
 
-    // Always append Get Directions at the bottom (if provided)
     if (widget.onGetDirections != null) {
       if (actionWidgets.isNotEmpty) {
         actionWidgets.add(const SizedBox(height: 16));
       }
       actionWidgets.add(
         _buildButton(
-          label: 'Get Directions',
+          label: _isArabic ? 'الحصول على الاتجاهات' : 'Get Directions',
           icon: Icons.directions,
           color: Colors.blue,
           onPressed: widget.onGetDirections!,
@@ -1302,17 +1046,17 @@ class _VisitDetailsSheetState extends State<VisitDetailsSheet> {
     final reason = await showDialog<String>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Reject Visit'),
+        title: Text(_isArabic ? 'رفض الزيارة' : 'Reject Visit'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Text('Please provide a reason for rejecting this visit:'),
+            Text(_isArabic ? 'يرجى تقديم سبب لرفض هذه الزيارة:' : 'Please provide a reason for rejecting this visit:'),
             const SizedBox(height: 16),
             TextField(
               controller: reasonController,
-              decoration: const InputDecoration(
-                hintText: 'Reason for rejection',
-                border: OutlineInputBorder(),
+              decoration: InputDecoration(
+                hintText: _isArabic ? 'سبب الرفض' : 'Reason for rejection',
+                border: const OutlineInputBorder(),
               ),
               maxLines: 3,
             ),
@@ -1321,7 +1065,7 @@ class _VisitDetailsSheetState extends State<VisitDetailsSheet> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
+            child: Text(_isArabic ? 'إلغاء' : 'Cancel'),
           ),
           ElevatedButton(
             onPressed: () {
@@ -1329,7 +1073,7 @@ class _VisitDetailsSheetState extends State<VisitDetailsSheet> {
                 Navigator.pop(context, reasonController.text);
               }
             },
-            child: const Text('Reject'),
+            child: Text(_isArabic ? 'رفض' : 'Reject'),
           ),
         ],
       ),
@@ -1344,7 +1088,7 @@ class _VisitDetailsSheetState extends State<VisitDetailsSheet> {
         if (mounted) {
           ScaffoldMessenger.of(
             context,
-          ).showSnackBar(SnackBar(content: Text('Error rejecting visit: $e')));
+          ).showSnackBar(SnackBar(content: Text('${_isArabic ? 'خطأ في رفض الزيارة' : 'Error rejecting visit'}: $e')));
         }
       } finally {
         if (mounted) setState(() => _isUpdating = false);

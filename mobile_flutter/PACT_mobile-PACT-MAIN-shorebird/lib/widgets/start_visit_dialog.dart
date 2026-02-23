@@ -11,23 +11,25 @@ class StartVisitDialog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final siteName = site['site_name'] ?? site['siteName'] ?? 'Unknown Site';
+    final isArabic = Localizations.localeOf(context).languageCode == 'ar';
+    final siteName = site['site_name'] ?? site['siteName'] ?? (isArabic ? 'موقع غير معروف' : 'Unknown Site');
     final siteCode = site['site_code'] ??
         site['siteCode'] ??
         site['id']?.toString().substring(0, 8) ??
         '';
     final state = site['state'] ?? '';
     final locality = site['locality'] ?? '';
-    final status = site['status'] ?? 'Pending';
+    final status = site['status'] ?? (isArabic ? 'معلق' : 'Pending');
+    final activityType = site['activity_type'] ?? site['main_activity'] ?? '';
+    final isDM = ['GFA', 'CBT', 'EBSFP'].contains(activityType.toString().toUpperCase());
 
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
       child: Container(
-        constraints: const BoxConstraints(maxHeight: 600),
+        constraints: const BoxConstraints(maxHeight: 650),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Header - Black background
             Container(
               padding: const EdgeInsets.all(24),
               decoration: const BoxDecoration(
@@ -51,27 +53,49 @@ class StartVisitDialog extends StatelessWidget {
                   ),
                   const SizedBox(width: 12),
                   Expanded(
-                    child: Text(
-                      'Start Site Visit',
-                      style: GoogleFonts.poppins(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                      ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          isArabic ? 'بدء زيارة الموقع' : 'Start Site Visit',
+                          style: GoogleFonts.poppins(
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
+                        ),
+                        if (activityType.toString().isNotEmpty)
+                          Container(
+                            margin: const EdgeInsets.only(top: 4),
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: isDM ? Colors.blue.withOpacity(0.3) : Colors.orange.withOpacity(0.3),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Text(
+                              isDM
+                                  ? (isArabic ? 'رصد التوزيع (DM)' : 'Distribution Monitoring (DM)')
+                                  : (isArabic ? 'رصد ما بعد التوزيع (PDM)' : 'Post-Distribution Monitoring (PDM)'),
+                              style: GoogleFonts.poppins(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ),
+                      ],
                     ),
                   ),
                 ],
               ),
             ),
 
-            // Content
             Expanded(
               child: SingleChildScrollView(
                 padding: const EdgeInsets.all(24),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Site Details Card
                     Container(
                       padding: const EdgeInsets.all(20),
                       decoration: BoxDecoration(
@@ -89,7 +113,7 @@ class StartVisitDialog extends StatelessWidget {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'SITE DETAILS',
+                            isArabic ? 'تفاصيل الموقع' : 'SITE DETAILS',
                             style: GoogleFonts.poppins(
                               fontSize: 10,
                               fontWeight: FontWeight.bold,
@@ -100,25 +124,33 @@ class StartVisitDialog extends StatelessWidget {
                           const SizedBox(height: 16),
                           _buildInfoRow(
                             icon: Icons.location_on,
-                            label: 'Location',
+                            label: isArabic ? 'الموقع' : 'Location',
                             value: locality.isNotEmpty
                                 ? '$locality, $state'
                                 : state.isNotEmpty
                                     ? state
-                                    : 'N/A',
+                                    : (isArabic ? 'غير متوفر' : 'N/A'),
                           ),
                           const SizedBox(height: 16),
                           _buildInfoRow(
                             icon: Icons.navigation,
-                            label: 'Site Name',
+                            label: isArabic ? 'اسم الموقع' : 'Site Name',
                             value: siteName,
                           ),
+                          if (activityType.toString().isNotEmpty) ...[
+                            const SizedBox(height: 16),
+                            _buildInfoRow(
+                              icon: Icons.work_outline,
+                              label: isArabic ? 'نوع النشاط' : 'Activity Type',
+                              value: activityType.toString(),
+                            ),
+                          ],
                           const SizedBox(height: 16),
                           Row(
                             children: [
                               Expanded(
                                 child: _buildInfoChip(
-                                  label: 'Site ID',
+                                  label: isArabic ? 'رمز الموقع' : 'Site ID',
                                   value: siteCode,
                                   isHighlighted: true,
                                 ),
@@ -126,7 +158,7 @@ class StartVisitDialog extends StatelessWidget {
                               const SizedBox(width: 12),
                               Expanded(
                                 child: _buildInfoChip(
-                                  label: 'Status',
+                                  label: isArabic ? 'الحالة' : 'Status',
                                   value: status.toUpperCase(),
                                   isHighlighted: false,
                                 ),
@@ -139,7 +171,6 @@ class StartVisitDialog extends StatelessWidget {
 
                     const SizedBox(height: 20),
 
-                    // What Happens Next Card
                     Container(
                       padding: const EdgeInsets.all(20),
                       decoration: BoxDecoration(
@@ -157,7 +188,7 @@ class StartVisitDialog extends StatelessWidget {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'WHAT HAPPENS NEXT?',
+                            isArabic ? 'ماذا سيحدث بعد ذلك؟' : 'WHAT HAPPENS NEXT?',
                             style: GoogleFonts.poppins(
                               fontSize: 10,
                               fontWeight: FontWeight.bold,
@@ -167,16 +198,16 @@ class StartVisitDialog extends StatelessWidget {
                           ),
                           const SizedBox(height: 16),
                           _buildNextStepItem(
-                              'Visit duration will start counting automatically'),
+                              isArabic ? 'سيبدأ احتساب مدة الزيارة تلقائياً' : 'Visit duration will start counting automatically'),
                           const SizedBox(height: 12),
                           _buildNextStepItem(
-                              'Location monitoring will begin for accuracy tracking'),
+                              isArabic ? 'ستبدأ مراقبة الموقع لتتبع الدقة' : 'Location monitoring will begin for accuracy tracking'),
                           const SizedBox(height: 12),
                           _buildNextStepItem(
-                              'You can add photos and observations during the visit'),
+                              isArabic ? 'يمكنك إضافة صور وملاحظات أثناء الزيارة' : 'You can add photos and observations during the visit'),
                           const SizedBox(height: 12),
                           _buildNextStepItem(
-                              'Complete the detailed visit report when finished'),
+                              isArabic ? 'أكمل تقرير الزيارة التفصيلي عند الانتهاء' : 'Complete the detailed visit report when finished'),
                         ],
                       ),
                     ),
@@ -185,7 +216,6 @@ class StartVisitDialog extends StatelessWidget {
               ),
             ),
 
-            // Footer - Action Buttons
             Container(
               padding: const EdgeInsets.all(24),
               decoration: const BoxDecoration(
@@ -206,7 +236,7 @@ class StartVisitDialog extends StatelessWidget {
                         side: BorderSide(color: Colors.black.withOpacity(0.2)),
                       ),
                       child: Text(
-                        'Cancel',
+                        isArabic ? 'إلغاء' : 'Cancel',
                         style: GoogleFonts.poppins(
                           fontSize: 14,
                           fontWeight: FontWeight.w600,
@@ -234,7 +264,7 @@ class StartVisitDialog extends StatelessWidget {
                           const Icon(Icons.play_arrow, size: 20),
                           const SizedBox(width: 8),
                           Text(
-                            'Start Visit',
+                            isArabic ? 'بدء الزيارة' : 'Start Visit',
                             style: GoogleFonts.poppins(
                               fontSize: 14,
                               fontWeight: FontWeight.bold,
