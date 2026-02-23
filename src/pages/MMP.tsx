@@ -214,10 +214,10 @@ interface VerifiedSitesDisplayProps {
   verifiedSites: SiteVisitRow[];
   onApproveForCosting?: (site: any) => Promise<void>;
   showApproveButton?: boolean;
-  onFilteredSitesChange?: (filteredSites: any[]) => void;
+  onFilteredSiteIdsChange?: (filteredSiteIds: Set<string>) => void;
 }
 
-const VerifiedSitesDisplay = React.memo(function VerifiedSitesDisplay({ verifiedSites, onApproveForCosting, showApproveButton = false, onFilteredSitesChange }: VerifiedSitesDisplayProps) {
+const VerifiedSitesDisplay = React.memo(function VerifiedSitesDisplay({ verifiedSites, onApproveForCosting, showApproveButton = false, onFilteredSiteIdsChange }: VerifiedSitesDisplayProps) {
   const { mmpFiles, loading: mmpLoading, refreshMMPFiles } = useMMP();
 
   // Derive site entries from context using the passed verifiedSites (already filtered by caller)
@@ -319,7 +319,7 @@ const VerifiedSitesDisplay = React.memo(function VerifiedSitesDisplay({ verified
         editable={true}
         showApproveButton={showApproveButton}
         onApproveForCosting={onApproveForCosting}
-        onFilteredSitesChange={onFilteredSitesChange}
+        onFilteredSiteIdsChange={onFilteredSiteIdsChange}
         onUpdateSites={async (sites) => {
           // Update mmp_site_entries in database
           try {
@@ -401,7 +401,7 @@ const MMP = () => {
   const [forwardedSubTab, setForwardedSubTab] = useState<'pending' | 'verified'>('pending');
   // Subcategory state for Verified Sites (Admin/ICT only)
   const [verifiedSubTab, setVerifiedSubTab] = useState<'newSites' | 'approvedCosted' | 'dispatched' | 'smartAssigned' | 'accepted' | 'ongoing' | 'completed' | 'rejected'>('newSites');
-  const [tableFilteredVerifiedSites, setTableFilteredVerifiedSites] = useState<any[]>([]);
+  const [tableFilteredSiteIds, setTableFilteredSiteIds] = useState<Set<string>>(new Set());
   // Subcategory state for Enumerator dashboard
   const [enumeratorSubTab, setEnumeratorSubTab] = useState<'availableSites' | 'smartAssigned' | 'mySites'>('availableSites');
   // Sub-subcategory state for My Sites (Data Collector)
@@ -5037,7 +5037,9 @@ const MMP = () => {
                         size="lg"
                         onClick={async () => {
                           try {
-                            const verifiedEntries = tableFilteredVerifiedSites.length > 0 ? tableFilteredVerifiedSites : filteredVerifiedCategorySiteRows;
+                            const verifiedEntries = tableFilteredSiteIds.size > 0
+                              ? filteredVerifiedCategorySiteRows.filter(row => tableFilteredSiteIds.has(row.id))
+                              : filteredVerifiedCategorySiteRows;
 
                             if (!verifiedEntries || verifiedEntries.length === 0) {
                               toast({
@@ -5163,14 +5165,14 @@ const MMP = () => {
                         }}
                         className="bg-green-600 hover:bg-green-700 text-white mb-4"
                       >
-                        Approve for Costing ({tableFilteredVerifiedSites.length > 0 && tableFilteredVerifiedSites.length !== filteredVerifiedCategorySiteRows.length ? `${tableFilteredVerifiedSites.length} filtered` : filteredVerifiedCategorySiteRows.length} sites)
+                        Approve for Costing ({tableFilteredSiteIds.size > 0 ? `${tableFilteredSiteIds.size} filtered` : filteredVerifiedCategorySiteRows.length} sites)
                       </Button>
                     </div>
                   )}
                   <VerifiedSitesDisplay 
                     verifiedSites={filteredVerifiedCategorySiteRows} 
                     showApproveButton={isAdmin || isICT || isFOM}
-                    onFilteredSitesChange={setTableFilteredVerifiedSites}
+                    onFilteredSiteIdsChange={setTableFilteredSiteIds}
                     onApproveForCosting={async (site) => {
                       try {
                         const currentCost = site.cost;

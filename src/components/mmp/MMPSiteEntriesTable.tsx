@@ -37,7 +37,7 @@ interface MMPSiteEntriesTableProps {
   showDateChangeButton?: boolean;
   onApproveForCosting?: (site: any) => Promise<void>;
   showApproveButton?: boolean;
-  onFilteredSitesChange?: (filteredSites: any[]) => void;
+  onFilteredSiteIdsChange?: (filteredSiteIds: Set<string>) => void;
 }
 
 const MMPSiteEntriesTable = ({ 
@@ -61,7 +61,7 @@ const MMPSiteEntriesTable = ({
   showDateChangeButton = true,
   onApproveForCosting,
   showApproveButton = false,
-  onFilteredSitesChange
+  onFilteredSiteIdsChange
 }: MMPSiteEntriesTableProps) => {
   const { currentUser, users } = useUser();
   const navigate = useNavigate();
@@ -380,10 +380,16 @@ const MMPSiteEntriesTable = ({
   }, [normalizedEntries, debouncedSearchQuery, hubFilter, stateFilter, localityFilter, enumeratorFilter, activityTypeFilter]);
 
   useEffect(() => {
-    if (onFilteredSitesChange) {
-      onFilteredSitesChange(filteredSites);
+    if (onFilteredSiteIdsChange) {
+      const hasActiveFilter = hubFilter !== 'all' || stateFilter !== 'all' || localityFilter !== 'all' || enumeratorFilter !== 'all' || activityTypeFilter !== 'all' || debouncedSearchQuery.trim() !== '';
+      if (hasActiveFilter) {
+        const ids = new Set(filteredSites.map((s: any) => s.id).filter(Boolean));
+        onFilteredSiteIdsChange(ids);
+      } else {
+        onFilteredSiteIdsChange(new Set());
+      }
     }
-  }, [filteredSites, onFilteredSitesChange]);
+  }, [filteredSites, onFilteredSiteIdsChange, hubFilter, stateFilter, localityFilter, enumeratorFilter, activityTypeFilter, debouncedSearchQuery]);
 
   // Paginate filtered results
   const paginatedSites = useMemo(() => {
