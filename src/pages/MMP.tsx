@@ -5034,17 +5034,7 @@ const MMP = () => {
                         size="lg"
                         onClick={async () => {
                           try {
-                            // Get all verified/approved site entries (excluding already costed ones)
-                            // The UI shows sites with: verified, cp_verified, permits_verified, locality_permit_verified, 
-                            // or approved (without 'costed' in status)
-                            const { data: verifiedEntries, error: fetchError } = await supabase
-                              .from('mmp_site_entries')
-                              .select('*')
-                              .or('status.ilike.verified,status.ilike.cp_verified,status.ilike.permits_verified,status.ilike.locality_permit_verified,status.ilike.approved')
-                              .not('status', 'ilike', '%costed%')
-                              .limit(10000);
-
-                            if (fetchError) throw fetchError;
+                            const verifiedEntries = filteredVerifiedCategorySiteRows;
 
                             if (!verifiedEntries || verifiedEntries.length === 0) {
                               toast({
@@ -5055,16 +5045,14 @@ const MMP = () => {
                               return;
                             }
 
-                            // Update all verified sites to 'Approved and Costed' status
-                            // Build updates without defaulting fees; only use existing column values
-                            const updates = verifiedEntries.map(entry => {
+                            const updates = verifiedEntries.map((entry: any) => {
                               const currentCost = entry.cost;
-                              const enumFee = entry.enumerator_fee;
-                              const transFee = entry.transport_fee;
+                              const enumFee = entry.enumerator_fee ?? entry.enumeratorFee;
+                              const transFee = entry.transport_fee ?? entry.transportFee;
                               const bothFeesPresent = (enumFee !== undefined && enumFee !== null) && (transFee !== undefined && transFee !== null);
                               const finalCost = bothFeesPresent ? Number(enumFee) + Number(transFee) : currentCost;
 
-                              const cleanedAdditionalData = { ...(entry.additional_data || {}) };
+                              const cleanedAdditionalData = { ...(entry.additional_data || entry.additionalData || {}) };
                               delete cleanedAdditionalData.claimed_by;
                               delete cleanedAdditionalData.claimed_at;
                               delete cleanedAdditionalData.assigned_to;
@@ -5172,7 +5160,7 @@ const MMP = () => {
                         }}
                         className="bg-green-600 hover:bg-green-700 text-white mb-4"
                       >
-                        Approve for Costing ({filteredVerifiedCategorySiteRows.length} sites)
+                        Approve for Costing ({filteredVerifiedCategorySiteRows.length} {hasActiveGlobalFilters ? 'filtered' : ''} sites)
                       </Button>
                     </div>
                   )}
