@@ -1,17 +1,8 @@
-def localProperties = new Properties()
-def localPropertiesFile = rootProject.file("local.properties")
-if (localPropertiesFile.exists()) {
-    localPropertiesFile.withReader("UTF-8") { reader ->
-        localProperties.load(reader)
-    }
+plugins {
+    id "com.android.application"
+    id "kotlin-android"
+    id "dev.flutter.flutter-gradle-plugin"
 }
-
-def flutterSdkPath = localProperties.getProperty("flutter.sdk")
-assert flutterSdkPath != null, "flutter.sdk not set in local.properties"
-
-apply plugin: "com.android.application"
-apply plugin: "kotlin-android"
-apply from: "${flutterSdkPath}/packages/flutter_tools/gradle/flutter.gradle"
 
 def keystorePropertiesFile = rootProject.file("key.properties")
 def keystoreProperties = new Properties()
@@ -38,8 +29,8 @@ android {
         applicationId = "com.example.pact_mobile"
         minSdk = 23
         targetSdk = 35
-        versionCode = localProperties.getProperty("flutter.versionCode")?.toInteger() ?: 1
-        versionName = localProperties.getProperty("flutter.versionName") ?: "1.0.0"
+        versionCode = flutter.versionCode
+        versionName = flutter.versionName
     }
 
     signingConfigs {
