@@ -214,9 +214,10 @@ interface VerifiedSitesDisplayProps {
   verifiedSites: SiteVisitRow[];
   onApproveForCosting?: (site: any) => Promise<void>;
   showApproveButton?: boolean;
+  onFilteredSitesChange?: (filteredSites: any[]) => void;
 }
 
-const VerifiedSitesDisplay = React.memo(function VerifiedSitesDisplay({ verifiedSites, onApproveForCosting, showApproveButton = false }: VerifiedSitesDisplayProps) {
+const VerifiedSitesDisplay = React.memo(function VerifiedSitesDisplay({ verifiedSites, onApproveForCosting, showApproveButton = false, onFilteredSitesChange }: VerifiedSitesDisplayProps) {
   const { mmpFiles, loading: mmpLoading, refreshMMPFiles } = useMMP();
 
   // Derive site entries from context using the passed verifiedSites (already filtered by caller)
@@ -318,6 +319,7 @@ const VerifiedSitesDisplay = React.memo(function VerifiedSitesDisplay({ verified
         editable={true}
         showApproveButton={showApproveButton}
         onApproveForCosting={onApproveForCosting}
+        onFilteredSitesChange={onFilteredSitesChange}
         onUpdateSites={async (sites) => {
           // Update mmp_site_entries in database
           try {
@@ -399,6 +401,7 @@ const MMP = () => {
   const [forwardedSubTab, setForwardedSubTab] = useState<'pending' | 'verified'>('pending');
   // Subcategory state for Verified Sites (Admin/ICT only)
   const [verifiedSubTab, setVerifiedSubTab] = useState<'newSites' | 'approvedCosted' | 'dispatched' | 'smartAssigned' | 'accepted' | 'ongoing' | 'completed' | 'rejected'>('newSites');
+  const [tableFilteredVerifiedSites, setTableFilteredVerifiedSites] = useState<any[]>([]);
   // Subcategory state for Enumerator dashboard
   const [enumeratorSubTab, setEnumeratorSubTab] = useState<'availableSites' | 'smartAssigned' | 'mySites'>('availableSites');
   // Sub-subcategory state for My Sites (Data Collector)
@@ -5034,7 +5037,7 @@ const MMP = () => {
                         size="lg"
                         onClick={async () => {
                           try {
-                            const verifiedEntries = filteredVerifiedCategorySiteRows;
+                            const verifiedEntries = tableFilteredVerifiedSites.length > 0 ? tableFilteredVerifiedSites : filteredVerifiedCategorySiteRows;
 
                             if (!verifiedEntries || verifiedEntries.length === 0) {
                               toast({
@@ -5160,13 +5163,14 @@ const MMP = () => {
                         }}
                         className="bg-green-600 hover:bg-green-700 text-white mb-4"
                       >
-                        Approve for Costing ({filteredVerifiedCategorySiteRows.length} {hasActiveGlobalFilters ? 'filtered' : ''} sites)
+                        Approve for Costing ({tableFilteredVerifiedSites.length > 0 && tableFilteredVerifiedSites.length !== filteredVerifiedCategorySiteRows.length ? `${tableFilteredVerifiedSites.length} filtered` : filteredVerifiedCategorySiteRows.length} sites)
                       </Button>
                     </div>
                   )}
                   <VerifiedSitesDisplay 
                     verifiedSites={filteredVerifiedCategorySiteRows} 
                     showApproveButton={isAdmin || isICT || isFOM}
+                    onFilteredSitesChange={setTableFilteredVerifiedSites}
                     onApproveForCosting={async (site) => {
                       try {
                         const currentCost = site.cost;

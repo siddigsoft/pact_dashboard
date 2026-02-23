@@ -37,6 +37,7 @@ interface MMPSiteEntriesTableProps {
   showDateChangeButton?: boolean;
   onApproveForCosting?: (site: any) => Promise<void>;
   showApproveButton?: boolean;
+  onFilteredSitesChange?: (filteredSites: any[]) => void;
 }
 
 const MMPSiteEntriesTable = ({ 
@@ -59,7 +60,8 @@ const MMPSiteEntriesTable = ({
   onDirectDateChange,
   showDateChangeButton = true,
   onApproveForCosting,
-  showApproveButton = false
+  showApproveButton = false,
+  onFilteredSitesChange
 }: MMPSiteEntriesTableProps) => {
   const { currentUser, users } = useUser();
   const navigate = useNavigate();
@@ -376,6 +378,12 @@ const MMPSiteEntriesTable = ({
 
     return results.map(({ raw }) => raw);
   }, [normalizedEntries, debouncedSearchQuery, hubFilter, stateFilter, localityFilter, enumeratorFilter, activityTypeFilter]);
+
+  useEffect(() => {
+    if (onFilteredSitesChange) {
+      onFilteredSitesChange(filteredSites);
+    }
+  }, [filteredSites, onFilteredSitesChange]);
 
   // Paginate filtered results
   const paginatedSites = useMemo(() => {
