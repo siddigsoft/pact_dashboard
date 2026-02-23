@@ -3302,7 +3302,6 @@ const MMP = () => {
   }, [verifiedSubTab, verifiedSiteEntries, formatSiteEntry]);
 
   // Load approved and costed site entries directly from database for fresh data
-  // This ensures dispatched/claimed sites are immediately excluded
   useEffect(() => {
       if (verifiedSubTab !== 'approvedCosted') {
         setApprovedCostedSiteEntries([]);
@@ -3323,32 +3322,33 @@ const MMP = () => {
           }
 
           const selectColumns = 'id, site_code, hub_office, state, locality, site_name, cp_name, visit_type, visit_date, main_activity, activity_at_site, monitoring_by, survey_tool, use_market_diversion, use_warehouse_monitoring, comments, cost, enumerator_fee, transport_fee, dispatched_by, dispatched_at, accepted_by, accepted_at, additional_data, status, mmp_file_id, created_at, verified_by, verified_at, updated_at';
-          const batchSize = 50;
-          let allEntries: any[] = [];
+          const batchSize = 100;
 
+          const batchPromises = [];
           for (let i = 0; i < verifiedMmpIds.length; i += batchSize) {
-            if (cancelled) return;
             const batch = verifiedMmpIds.slice(i, i + batchSize);
-            const { data: dbEntries, error } = await supabase
-              .from('mmp_site_entries')
-              .select(selectColumns)
-              .in('mmp_file_id', batch)
-              .or('status.ilike.%approved and costed%,status.ilike.%costed%')
-              .not('status', 'ilike', '%dispatched%')
-              .not('status', 'ilike', '%claimed%')
-              .not('status', 'ilike', '%completed%')
-              .not('status', 'ilike', '%rejected%')
-              .order('created_at', { ascending: false })
-              .limit(2000);
-
-            if (error) {
-              console.error('[ApprovedCosted] DB query error:', error);
-              continue;
-            }
-            if (dbEntries) allEntries = allEntries.concat(dbEntries);
+            batchPromises.push(
+              supabase
+                .from('mmp_site_entries')
+                .select(selectColumns)
+                .in('mmp_file_id', batch)
+                .in('status', ['costed', 'Costed', 'approved and costed', 'Approved and Costed', 'Approved And Costed'])
+                .order('created_at', { ascending: false })
+                .limit(2000)
+            );
           }
 
+          const results = await Promise.all(batchPromises);
           if (cancelled) return;
+
+          let allEntries: any[] = [];
+          for (const result of results) {
+            if (result.error) {
+              console.error('[ApprovedCosted] DB query error:', result.error);
+              continue;
+            }
+            if (result.data) allEntries = allEntries.concat(result.data);
+          }
 
           const mmpLookup = new Map(mmpFiles.map(m => [m.id, m.name || '']));
           const formattedEntries = allEntries.map(entry => {
@@ -3399,27 +3399,35 @@ const MMP = () => {
           return;
         }
 
-        const batchSize = 50;
-        let allEntries: any[] = [];
+        const selectColumns = 'id, site_code, hub_office, state, locality, site_name, cp_name, visit_type, visit_date, main_activity, activity_at_site, monitoring_by, survey_tool, use_market_diversion, use_warehouse_monitoring, comments, cost, enumerator_fee, transport_fee, dispatched_by, dispatched_at, accepted_by, accepted_at, additional_data, status, mmp_file_id, created_at, verified_by, verified_at, updated_at';
+        const batchSize = 100;
+
+        const batchPromises = [];
         for (let i = 0; i < verifiedMmpIds.length; i += batchSize) {
           const batch = verifiedMmpIds.slice(i, i + batchSize);
-          const { data: dbEntries, error } = await supabase
-            .from('mmp_site_entries')
-            .select('id, site_code, hub_office, state, locality, site_name, cp_name, visit_type, visit_date, main_activity, activity_at_site, monitoring_by, survey_tool, use_market_diversion, use_warehouse_monitoring, comments, cost, enumerator_fee, transport_fee, dispatched_by, dispatched_at, accepted_by, accepted_at, additional_data, status, mmp_file_id, created_at, verified_by, verified_at, updated_at')
-            .in('mmp_file_id', batch)
-            .ilike('status', 'dispatched')
-            .is('accepted_by', null)
-            .order('dispatched_at', { ascending: false })
-            .limit(2000);
-
-          if (error) {
-            console.error('[Dispatched] DB query error:', error);
-            continue;
-          }
-          if (dbEntries) allEntries = allEntries.concat(dbEntries);
+          batchPromises.push(
+            supabase
+              .from('mmp_site_entries')
+              .select(selectColumns)
+              .in('mmp_file_id', batch)
+              .in('status', ['dispatched', 'Dispatched'])
+              .is('accepted_by', null)
+              .order('dispatched_at', { ascending: false })
+              .limit(2000)
+          );
         }
 
+        const results = await Promise.all(batchPromises);
         if (cancelled) return;
+
+        let allEntries: any[] = [];
+        for (const result of results) {
+          if (result.error) {
+            console.error('[Dispatched] DB query error:', result.error);
+            continue;
+          }
+          if (result.data) allEntries = allEntries.concat(result.data);
+        }
 
         const mmpLookup = new Map(mmpFiles.map(m => [m.id, m.name || '']));
         const formattedEntries = allEntries.map(entry => {
@@ -3456,7 +3464,7 @@ const MMP = () => {
       }
 
       let cancelled = false;
-      const excludedStatuses = ['approved and costed', 'Approved and Costed', 'costed', 'Costed', 'approved', 'Approved', 'new', 'New', 'verified', 'Verified', 'completed', 'Completed', 'rejected', 'Rejected', 'declined', 'Declined'];
+      const acceptedStatuses = ['accepted', 'Accepted', 'claimed', 'Claimed', 'dispatched', 'Dispatched', 'ongoing', 'Ongoing', 'in progress', 'In Progress', 'in_progress', 'assigned', 'Assigned'];
       const selectColumns = 'id, site_code, hub_office, state, locality, site_name, cp_name, visit_type, visit_date, main_activity, activity_at_site, monitoring_by, survey_tool, use_market_diversion, use_warehouse_monitoring, comments, cost, enumerator_fee, transport_fee, dispatched_by, dispatched_at, accepted_by, accepted_at, additional_data, status, mmp_file_id, created_at, verified_by, verified_at, updated_at';
 
       const loadAcceptedFromDB = async () => {
@@ -3470,40 +3478,45 @@ const MMP = () => {
             return;
           }
 
-          const batchSize = 50;
-          let allDbEntries: any[] = [];
-
+          const batchSize = 100;
+          const batchPromises = [];
           for (let i = 0; i < verifiedMmpIds.length; i += batchSize) {
-            if (cancelled) return;
             const batch = verifiedMmpIds.slice(i, i + batchSize);
-            const { data: dbEntries, error } = await supabase
-              .from('mmp_site_entries')
-              .select(selectColumns)
-              .in('mmp_file_id', batch)
-              .not('accepted_by', 'is', null)
-              .not('status', 'in', `(${excludedStatuses.join(',')})`)
-              .order('accepted_at', { ascending: false })
-              .limit(2000);
+            batchPromises.push(
+              supabase
+                .from('mmp_site_entries')
+                .select(selectColumns)
+                .in('mmp_file_id', batch)
+                .not('accepted_by', 'is', null)
+                .in('status', acceptedStatuses)
+                .order('accepted_at', { ascending: false })
+                .limit(2000)
+            );
+          }
 
-            if (error) {
-              console.error('[Accepted] DB query error:', error);
+          const [batchResults, dpResult] = await Promise.all([
+            Promise.all(batchPromises),
+            supabase
+              .from('down_payment_requests')
+              .select('mmp_site_entry_id, requested_by, site_name, requested_amount, total_transportation_budget')
+              .in('status', ['approved', 'partially_paid', 'fully_paid', 'pending_admin', 'pending_supervisor'])
+          ]);
+
+          if (cancelled) return;
+
+          let allDbEntries: any[] = [];
+          for (const result of batchResults) {
+            if (result.error) {
+              console.error('[Accepted] DB query error:', result.error);
               continue;
             }
-            if (dbEntries) allDbEntries = allDbEntries.concat(dbEntries);
+            if (result.data) allDbEntries = allDbEntries.concat(result.data);
           }
 
-          if (cancelled) return;
-
-          const { data: dpRequests, error: dpError } = await supabase
-            .from('down_payment_requests')
-            .select('mmp_site_entry_id, requested_by, site_name, requested_amount, total_transportation_budget')
-            .in('status', ['approved', 'partially_paid', 'fully_paid', 'pending_admin', 'pending_supervisor']);
-
-          if (dpError) {
-            console.error('[Accepted] Down payment query error:', dpError);
+          const dpRequests = dpResult.data;
+          if (dpResult.error) {
+            console.error('[Accepted] Down payment query error:', dpResult.error);
           }
-
-          if (cancelled) return;
 
           const acceptedIds = new Set(allDbEntries.map(e => e.id));
           let dpSiteEntries: any[] = [];
@@ -3519,7 +3532,7 @@ const MMP = () => {
                 .select(selectColumns)
                 .in('id', uniqueDpIds)
                 .in('mmp_file_id', verifiedMmpIds)
-                .not('status', 'in', `(${excludedStatuses.join(',')})`)
+                .in('status', acceptedStatuses)
                 .limit(2000);
 
               if (dpEntries) {
@@ -3559,7 +3572,7 @@ const MMP = () => {
                   .select(selectColumns)
                   .in('mmp_file_id', verifiedMmpIds)
                   .in('site_name', batch)
-                  .not('status', 'in', `(${excludedStatuses.join(',')})`)
+                  .in('status', acceptedStatuses)
                   .limit(500);
 
                 if (nameMatches) {
