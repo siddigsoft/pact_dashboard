@@ -1,0 +1,62 @@
+PS C:\Useflutter build apk --release --split-per-abi
+Upgrading build.gradle.kts
+
+FAILURE: Build failed with an exception.
+
+* What went wrong:
+A problem occurred configuring project ':shared_preferences_android'.
+> Could not resolve all artifacts for configuration 'classpath'.
+   > Could not resolve org.jetbrains.kotlin:kotlin-gradle-plugin:2.3.0.
+     Required by:
+         project :shared_preferences_android
+      > Could not resolve org.jetbrains.kotlin:kotlin-gradle-plugin:2.3.0.
+         > Could not get resource 'https://repo.maven.apache.org/maven2/org/jetbrains/kotlin/kotlin-gradle-plugin/2.3.0/kotlin-gradle-plugin-2.3.0.pom'.
+            > Could not GET 'https://repo.maven.apache.org/maven2/org/jetbrains/kotlin/kotlin-gradle-plugin/2.3.0/kotlin-gradle-plugin-2.3.0.pom'.
+               > No such host is known (repo.maven.apache.org)
+> Failed to notify project evaluation listener.
+   > java.lang.NullPointerException (no error message)
+   > java.lang.NullPointerException (no error message)
+
+* Try:
+> Run with --stacktrace option to get the stack trace.
+> Run with --info or --debug option to get more log output.
+> Run with --scan to get full insights.
+> Get more help at https://help.gradle.org.
+
+BUILD FAILED in 5m 6s
+Running Gradle task 'assembleRelease'...                          307.7s
+[!] Gradle threw an error while downloading artifacts from the network.
+Retrying Gradle Build: #1, wait time: 100ms
+warning: [options] source value 8 is obsolete and will be removed in a future release
+warning: [options] target value 8 is obsolete and will be removed in a future release
+warning: [options] To suppress warnings about obsolete options, use -Xlint:-options.
+3 warnings
+warning: [options] source value 8 is obsolete and will be removed in a future release
+warning: [options] target value 8 is obsolete and will be removed in a future release
+warning: [options] To suppress warnings about obsolete options, use -Xlint:-options.
+3 warnings
+
+FAILURE: Build failed with an exception.
+
+* What went wrong:
+Execution failed for task ':iris_method_channel:generateReleaseLintModel'.
+> Could not resolve all files for configuration ':iris_method_channel:releaseRuntimeClasspath'.
+   > Could not resolve io.flutter:flutter_embedding_release:1.0.0-3452d735bd38224ef2db85ca763d862d6326b17f.
+     Required by:
+         project :iris_method_channel
+      > Could not resolve io.flutter:flutter_embedding_release:1.0.0-3452d735bd38224ef2db85ca763d862d6326b17f.
+         > Could not get resource 'https://storage.googleapis.com/download.flutter.io/io/flutter/flutter_embedding_release/1.0.0-3452d735bd38224ef2db85ca763d862d6326b17f/flutter_embedding_release-1.0.0-3452d735bd38224ef2db85ca763d862d6326b17f.pom'.
+            > Could not GET 'https://storage.googleapis.com/download.flutter.io/io/flutter/flutter_embedding_release/1.0.0-3452d735bd38224ef2db85ca763d862d6326b17f/flutter_embedding_release-1.0.0-3452d735bd38224ef2db85ca763d862d6326b17f.pom'.    
+               > No such host is known (storage.googleapis.com)
+
+* Try:
+> Run with --stacktrace option to get the stack trace.
+> Run with --info or --debug option to get more log output.
+> Run with --scan to get full insights.
+> Get more help at https://help.gradle.org.
+
+BUILD FAILED in 8m 57s
+Running Gradle task 'assembleRelease'...                          539.1s
+[!] Gradle threw an error while downloading artifacts from the network.
+Gradle task assembleRelease failed with exit code 1
+PS C:\Users\PC\PACT_mobile> 
