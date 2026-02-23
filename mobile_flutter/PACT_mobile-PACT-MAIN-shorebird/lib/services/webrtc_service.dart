@@ -128,6 +128,9 @@ class WebRTCService {
   bool get isInitialized => _userId != null && _signalingChannel != null;
   bool get isFullyReady => isInitialized && _signalingChannelReady;
 
+  RTCPeerConnection? get peerConnection => _peerConnection;
+  bool get isScreenSharing => _callState.isScreenSharing;
+
   /// Initialize the service with user information
   Future<void> initialize(
     String userId,
@@ -1740,6 +1743,44 @@ class WebRTCService {
 
     _callState = CallState();
     _callStateController.add(_callState);
+  }
+
+  Future<bool> toggleScreenShare() async {
+    try {
+      if (_peerConnection == null || _localStream == null) return false;
+
+      if (_callState.isScreenSharing) {
+        final videoTrack = _localStream!.getVideoTracks().firstOrNull;
+        if (videoTrack != null) {
+          videoTrack.enabled = true;
+        }
+        _callState.isScreenSharing = false;
+      } else {
+        _callState.isScreenSharing = true;
+      }
+      _callStateController.add(_callState);
+      return true;
+    } catch (e) {
+      debugPrint('[WebRTC] Error toggling screen share: $e');
+      return false;
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> getMissedCalls() async {
+    try {
+      final response = await _supabase
+          .from('call_history')
+          .select()
+          .eq('target_user_id', _userId ?? '')
+          .eq('is_missed', true)
+          .filter('cleared_at', 'is', 'null')
+          .order('created_at', ascending: false)
+          .limit(50);
+      return List<Map<String, dynamic>>.from(response as List);
+    } catch (e) {
+      debugPrint('[WebRTC] Error fetching missed calls: $e');
+      return [];
+    }
   }
 
   /// Dispose the service

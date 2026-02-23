@@ -1,0 +1,80 @@
+PS C:\Users\PC\PACT_mobile> flutter build apk --release
+lib/services/webrtc_service.dart:611:30: Error: The getter 'remoteName' isn't defined for the type 'CallState'.
+ - 'CallState' is from 'package:pact_mobile/models/call_state.dart' ('lib/models/call_state.dart').
+Try correcting the name to the name of an existing getter, or defining a getter or field named 'remoteName'.
+      callerName: _callState.remoteName ?? 'Unknown',
+                             ^^^^^^^^^^
+lib/services/webrtc_service.dart:612:32: Error: The getter 'remoteAvatar' isn't defined for the type 'CallState'.
+ - 'CallState' is from 'package:pact_mobile/models/call_state.dart' ('lib/models/call_state.dart').
+Try correcting the name to the name of an existing getter, or defining a getter or field named 'remoteAvatar'.
+      callerAvatar: _callState.remoteAvatar,
+                               ^^^^^^^^^^^^
+lib/services/webrtc_service.dart:1783:12: Error: The method 'isFiltered' isn't defined for the type 'PostgrestFilterBuilder<List<Map<String, dynamic>>>'.
+ - 'PostgrestFilterBuilder' is from 'package:postgrest/src/postgrest_builder.dart' ('../AppData/Local/Pub/Cache/hosted/pub.dev/postgrest-2.6.0/lib/src/postgrest_builder.dart').
+ - 'List' is from 'dart:core'.
+ - 'Map' is from 'dart:core'.
+Try correcting the name to the name of an existing method, or defining a method named 'isFiltered'.
+          .isFiltered('cleared_at', 'is', null) // Only non-cleared calls
+           ^^^^^^^^^^
+lib/screens/missed_calls_screen.dart:47:54: Error: Too few positional arguments: 2 required, 0 given.
+    final success = await _webrtcService.initiateCall(
+                                                     ^
+lib/screens/enhanced_call_screen.dart:163:44: Error: The method 'toggleScreenShare' isn't defined for the type 'WebRTCService'.
+ - 'WebRTCService' is from 'package:pact_mobile/services/webrtc_service.dart' ('lib/services/webrtc_service.dart').
+Try correcting the name to the name of an existing method, or defining a method named 'toggleScreenShare'.
+      final success = await _webrtcService.toggleScreenShare();
+                                           ^^^^^^^^^^^^^^^^^
+lib/screens/enhanced_call_screen.dart:166:45: Error: The getter 'isScreenSharing' isn't defined for the type 'WebRTCService'.
+ - 'WebRTCService' is from 'package:pact_mobile/services/webrtc_service.dart' ('lib/services/webrtc_service.dart').
+Try correcting the name to the name of an existing getter, or defining a getter or field named 'isScreenSharing'.
+          _isScreenSharing = _webrtcService.isScreenSharing;
+                                            ^^^^^^^^^^^^^^^
+lib/screens/enhanced_call_screen.dart:213:24: Error: The getter 'peerConnection' isn't defined for the type 'WebRTCService'.
+ - 'WebRTCService' is from 'package:pact_mobile/services/webrtc_service.dart' ('lib/services/webrtc_service.dart').
+Try correcting the name to the name of an existing getter, or defining a getter or field named 'peerConnection'.
+    if (_webrtcService.peerConnection == null) return;
+                       ^^^^^^^^^^^^^^
+lib/screens/enhanced_call_screen.dart:216:38: Error: The getter 'peerConnection' isn't defined for the type 'WebRTCService'.
+ - 'WebRTCService' is from 'package:pact_mobile/services/webrtc_service.dart' ('lib/services/webrtc_service.dart').
+Try correcting the name to the name of an existing getter, or defining a getter or field named 'peerConnection'.
+      peerConnection: _webrtcService.peerConnection!,
+                                     ^^^^^^^^^^^^^^
+lib/screens/enhanced_call_screen.dart:224:31: Error: The getter 'bitrate' isn't defined for the type 'CallQualityReport'.
+ - 'CallQualityReport' is from 'package:pact_mobile/services/call_quality_monitor_service.dart' ('lib/services/call_quality_monitor_service.dart').
+Try correcting the name to the name of an existing getter, or defining a getter or field named 'bitrate'.
+              bitrate: report.bitrate,
+                              ^^^^^^^
+lib/screens/enhanced_call_screen.dart:368:19: Error: No named parameter with the name 'detailed'.
+                  detailed: false,
+                  ^^^^^^^^
+lib/widgets/call_quality_indicator.dart:8:9: Context: Found this candidate, but the arguments don't match.
+  const CallQualityIndicator({
+        ^^^^^^^^^^^^^^^^^^^^
+lib/screens/enhanced_call_screen.dart:566:27: Error: Member not found: 'screen_share_outline'.
+                  : Icons.screen_share_outline,
+                          ^^^^^^^^^^^^^^^^^^^^
+lib/screens/enhanced_call_screen.dart:574:27: Error: Member not found: 'speaker_phone_disabled'.
+                  : Icons.speaker_phone_disabled,
+                          ^^^^^^^^^^^^^^^^^^^^^^
+lib/widgets/call_quality_indicator.dart:104:22: Error: Expected ')' before this.
+                    );
+                     ^
+Target kernel_snapshot_program failed: Exception
+
+
+FAILURE: Build failed with an exception.
+
+* What went wrong:
+Execution failed for task ':app:compileFlutterBuildRelease'.
+> Process 'command 'C:\Users\PC\fvm\versions\3.27.0\bin\flutter.bat'' finished with non-zero exit value 1
+
+* Try:
+> Run with --stacktrace option to get the stack trace.
+> Run with --info or --debug option to get more log output.
+> Run with --scan to get full insights.
+> Get more help at https://help.gradle.org.
+
+BUILD FAILED in 1m 48s
+Running Gradle task 'assembleRelease'...                          110.2s
+Gradle task assembleRelease failed with exit code 1
+PS C:\Users\PC\PACT_mobile> 

@@ -138,6 +138,8 @@ class CallState {
   String? get targetUserId => remoteUserId;
   String? get callerName => remoteUserName;
   String? get callerAvatar => remoteUserAvatar;
+  String? get remoteName => remoteUserName;
+  String? get remoteAvatar => remoteUserAvatar;
   bool get isAudioMuted => isMuted;
   bool get isVideoMuted => !isVideoEnabled;
   bool get isConnected => status == CallStatus.connected;
