@@ -1292,7 +1292,6 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
         role: updatedUser.role,
         avatar_url: updatedUser.avatar,
         hub_id: updatedUser.hubId,
-        secondary_hub_id: updatedUser.secondaryHubId || null,
         state_id: updatedUser.stateId,
         locality_id: updatedUser.localityId,
         employee_id: updatedUser.employeeId,
