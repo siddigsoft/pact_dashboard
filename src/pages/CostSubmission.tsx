@@ -271,17 +271,22 @@ const CostSubmission = () => {
 
       if (shouldFetchAll) {
         const rpcResult = await supabase.rpc('get_all_operational_cost_submissions');
-        if (!rpcResult.error) {
+        if (!rpcResult.error && rpcResult.data && (rpcResult.data as any[]).length > 0) {
           data = rpcResult.data as OperationalCostSubmission[];
           console.log(`[CostSubmission] RPC fetched ${(data || []).length} operational costs (role: ${currentUser.role})`);
         } else {
-          console.warn('[CostSubmission] RPC not available, falling back to direct query:', rpcResult.error.message);
+          if (rpcResult.error) {
+            console.warn('[CostSubmission] RPC error, falling back:', rpcResult.error.message);
+          } else {
+            console.warn('[CostSubmission] RPC returned empty, trying direct query (role:', currentUser.role, ')');
+          }
           const directResult = await supabase
             .from('operational_cost_submissions')
             .select('*')
             .order('created_at', { ascending: false });
           data = directResult.data as OperationalCostSubmission[];
           error = directResult.error;
+          console.log(`[CostSubmission] Direct query fetched ${(data || []).length} records, error:`, error?.message || 'none');
         }
       } else {
         const result = await supabase
@@ -380,8 +385,9 @@ const CostSubmission = () => {
         filtered = filtered.filter(o => {
           if (o.submitted_by === currentUser?.id) return true;
           if (teamMemberIds.length > 0 && teamMemberIds.includes(o.submitted_by)) return true;
+          if (o.tier1_status === 'pending') return true;
           const submitterRole = (o.submitter_role || '').toLowerCase();
-          if (o.tier1_status === 'pending' && (submitterRole.includes('coordinator'))) return true;
+          if (submitterRole.includes('coordinator') || submitterRole.includes('enumerator') || submitterRole.includes('datacollector')) return true;
           return false;
         });
       } else if (!canViewTeamSubmissions) {
