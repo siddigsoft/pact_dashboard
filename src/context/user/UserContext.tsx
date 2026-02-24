@@ -226,7 +226,7 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
             roles: allUserRoles[profile.id] || [],
             stateId: profile.state_id || existingUser.stateId,
             hubId: profile.hub_id || existingUser.hubId,
-            secondaryHubId: profile.secondary_hub_id || existingUser.secondaryHubId,
+            secondaryHubId: profile.secondary_hub_id || profile.location?.secondary_hub_id || existingUser.secondaryHubId,
             localityId: profile.locality_id || existingUser.localityId,
             avatar: profile.avatar_url || existingUser.avatar,
             username: profile.username || existingUser.username,
@@ -521,7 +521,7 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
         roles: userRolesList.length > 0 ? userRolesList : undefined,
         stateId: (userProfile as any).state_id,
         hubId: (userProfile as any).hub_id,
-        secondaryHubId: (userProfile as any).secondary_hub_id,
+        secondaryHubId: (userProfile as any).secondary_hub_id || (userProfile as any).location?.secondary_hub_id,
         localityId: (userProfile as any).locality_id,
         avatar: (userProfile as any).avatar_url,
         username: (userProfile as any).username,
@@ -846,7 +846,7 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
           roles: userRolesList.length > 0 ? userRolesList : undefined,
           stateId: userProfile.state_id,
           hubId: userProfile.hub_id,
-          secondaryHubId: userProfile.secondary_hub_id,
+          secondaryHubId: (userProfile as any).secondary_hub_id || (userProfile as any).location?.secondary_hub_id,
           localityId: userProfile.locality_id,
           avatar: userProfile.avatar_url,
           username: userProfile.username,
@@ -1344,7 +1344,7 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       }
 
-      // Update secondary_hub_id separately (not handled by admin_update_profile RPC)
+      // Save secondary_hub_id: try direct column first, fall back to location JSONB
       const secHubValue = updatedUser.secondaryHubId !== undefined ? (updatedUser.secondaryHubId || null) : undefined;
       if (secHubValue !== undefined) {
         try {
@@ -1353,9 +1353,26 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
             .update({ secondary_hub_id: secHubValue })
             .eq('id', updatedUser.id);
           if (secErr) {
-            console.warn("Direct secondary hub update blocked by RLS, trying raw update:", secErr.message);
+            // Column likely doesn't exist yet — store in location JSONB as fallback
+            console.info("secondary_hub_id column not available, storing in location JSONB:", secErr.message);
+            const { data: profRow } = await supabase
+              .from('profiles')
+              .select('location')
+              .eq('id', updatedUser.id)
+              .single();
+            const currentLocation = (profRow as any)?.location || {};
+            const newLocation = { ...currentLocation, secondary_hub_id: secHubValue };
+            const { error: locErr } = await supabase
+              .from('profiles')
+              .update({ location: newLocation })
+              .eq('id', updatedUser.id);
+            if (locErr) {
+              console.warn("Location JSONB fallback also failed:", locErr.message);
+            } else {
+              console.log("Secondary hub stored in location JSONB:", secHubValue);
+            }
           } else {
-            console.log("Secondary hub updated successfully to:", secHubValue);
+            console.log("Secondary hub updated via column:", secHubValue);
           }
         } catch (secHubErr) {
           console.warn("Secondary hub update error:", secHubErr);

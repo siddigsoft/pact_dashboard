@@ -396,7 +396,7 @@ const UserDetail: React.FC = () => {
             roles: updatedUser.roles,
             stateId: profile.state_id || updatedUser.stateId,
             hubId: profile.hub_id || updatedUser.hubId,
-            secondaryHubId: (profile as any).secondary_hub_id || updatedUser.secondaryHubId || undefined,
+            secondaryHubId: (profile as any).secondary_hub_id || (profile as any).location?.secondary_hub_id || updatedUser.secondaryHubId || undefined,
             localityId: profile.locality_id || updatedUser.localityId,
             avatar: profile.avatar_url || updatedUser.avatar,
             username: profile.username || updatedUser.username,

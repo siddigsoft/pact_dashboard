@@ -52,6 +52,7 @@ import { EmailCCInput } from '@/components/EmailCCInput';
 import { generateFinancialStatementPdf, type StatementRow, type StatementConfig } from '@/utils/financialStatementPdf';
 import { generateFinancialStatementExcel } from '@/utils/financialStatementExcel';
 import { getStatesInHub, normalizeHubId } from '@/data/sudanStates';
+import { getHubAccessInfo, isStateInAnyHub } from '@/utils/hubAccessControl';
 
 const EXPENSE_CATEGORY_MAP: Record<string, { label: string; icon: any }> = {
   permits: { label: 'Permits & Licenses', icon: Ticket },
@@ -329,19 +330,26 @@ const CostSubmission = () => {
   const getTeamMemberIds = (): string[] => {
     if (isAdmin) return []; // Admins see all, no filtering needed
     if (isSupervisor && currentUser) {
-      // Hub supervisors see submissions from their hub's team members (including secondary hub)
-      const userHubIds = [currentUser.hubId, (currentUser as any).secondaryHubId].filter(Boolean) as string[];
-      const stateId = currentUser.stateId;
-      
-      if (userHubIds.length > 0) {
-        // Filter team members by primary or secondary hub_id
+      const hubAccessInfo = getHubAccessInfo(currentUser as any);
+      if (hubAccessInfo.isHubSupervisor && hubAccessInfo.hubIds.length > 0) {
+        const normalizedHubIds = hubAccessInfo.hubIds;
         return users
-          .filter(u => userHubIds.includes(u.hubId) && u.id !== currentUser.id)
+          .filter(u => {
+            if (u.id === currentUser.id) return false;
+            // Match by hub_id (normalized)
+            const uHubNorm = normalizeHubId(u.hubId);
+            if (uHubNorm && normalizedHubIds.includes(uHubNorm)) return true;
+            // Match by state (state-based is reliable when hub_id not set/normalised)
+            const uState = u.stateId || (u as any).state;
+            if (uState && isStateInAnyHub(uState, normalizedHubIds)) return true;
+            return false;
+          })
           .map(u => u.id);
-      } else if (stateId) {
-        // Fallback: Filter by state
+      }
+      // Fallback: match by state only
+      if (currentUser.stateId) {
         return users
-          .filter(u => u.stateId === stateId && u.id !== currentUser.id)
+          .filter(u => u.stateId === currentUser.stateId && u.id !== currentUser.id)
           .map(u => u.id);
       }
     }
