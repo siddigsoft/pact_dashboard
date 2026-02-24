@@ -82,15 +82,23 @@ const CalendarPage = () => {
     }
 
     if (isSupervisor && currentUser.hubId) {
-      const hubFiltered = filterByHubAccess(
-        siteVisits.map(v => ({ ...v, state_id: v.state, stateName: v.state })),
-        hubAccessInfo
+      const primaryHub = currentUser.hubId || '';
+      const secondaryHub = (currentUser as any).secondaryHubId || '';
+      const userHubs = [primaryHub, secondaryHub].filter(Boolean);
+
+      const isCountryOffice = userHubs.some(h => 
+        normalizeRole(h).includes('countryoffice') || normalizeRole(h) === 'country_office'
       );
-      if (hubFiltered.length > 0) return hubFiltered;
+      if (isCountryOffice) {
+        return siteVisits;
+      }
+
       return siteVisits.filter(visit => {
-        if (visit.state && isStateNameInHub(visit.state, currentUser.hubId || null)) return true;
-        const hubOffice = (visit as any).hubOffice || visit.hub || '';
-        if (hubOffice && hubAccessInfo.hubId && normalizeRole(hubOffice).includes(normalizeRole(hubAccessInfo.hubId))) return true;
+        for (const hubId of userHubs) {
+          if (visit.state && isStateNameInHub(visit.state, hubId)) return true;
+          const hubOffice = (visit as any).hubOffice || visit.hub || '';
+          if (hubOffice && normalizeRole(hubOffice).includes(normalizeRole(hubId))) return true;
+        }
         return false;
       });
     }
@@ -156,7 +164,17 @@ const CalendarPage = () => {
 
   const accessLevelLabel = useMemo(() => {
     if (isGlobalAdmin) return 'All Hubs & Teams';
-    if (isSupervisor) return `Hub: ${currentUser?.hubId || 'Your Hub'}`;
+    if (isSupervisor) {
+      const primaryHub = currentUser?.hubId || '';
+      const secondaryHub = (currentUser as any)?.secondaryHubId || '';
+      const hubs = [primaryHub, secondaryHub].filter(Boolean);
+      const isCountryOffice = hubs.some(h => 
+        normalizeRole(h).includes('countryoffice') || normalizeRole(h) === 'country_office'
+      );
+      if (isCountryOffice) return 'All Hubs (Country Office)';
+      if (hubs.length > 1) return `Hubs: ${hubs.join(' & ')}`;
+      return `Hub: ${hubs[0] || 'Your Hub'}`;
+    }
     if (isDataTeam) return `State: ${currentUser?.stateId || 'Your State'}`;
     if (isCoordinator) return 'Your Coordinated Visits';
     if (isDataCollector) return 'Your Assigned Visits';
