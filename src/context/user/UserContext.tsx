@@ -1284,70 +1284,65 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
         availability: user.availability || 'offline'
       };
       
-      // Try RPC function first (bypasses RLS), fall back to direct update
-      let updateSuccess = false;
-      let updateError: any = null;
+      // Build the update payload used for both direct update and as fallback
+      const updatePayload: Record<string, any> = {
+        full_name: updatedUser.fullName || updatedUser.name,
+        username: updatedUser.username,
+        email: updatedUser.email,
+        role: updatedUser.role,
+        avatar_url: updatedUser.avatar,
+        hub_id: updatedUser.hubId,
+        secondary_hub_id: updatedUser.secondaryHubId || null,
+        state_id: updatedUser.stateId,
+        locality_id: updatedUser.localityId,
+        employee_id: updatedUser.employeeId,
+        phone: updatedUser.phone,
+        bank_account: (updatedUser as any).bankAccount || null,
+        updated_at: new Date().toISOString(),
+      };
 
-      try {
-        const { data: rpcData, error: rpcError } = await supabase.rpc('admin_update_profile', {
-          target_id: updatedUser.id,
-          new_full_name: updatedUser.fullName || updatedUser.name || null,
-          new_username: updatedUser.username || null,
-          new_email: updatedUser.email || null,
-          new_role: updatedUser.role || null,
-          new_avatar_url: updatedUser.avatar || null,
-          new_hub_id: updatedUser.hubId || null,
-          new_state_id: updatedUser.stateId || null,
-          new_locality_id: updatedUser.localityId || null,
-          new_employee_id: updatedUser.employeeId || null,
-          new_phone: updatedUser.phone || null,
-          new_bank_account: (updatedUser as any).bankAccount || null,
-        });
+      // Try direct update first — no row-count check (RLS may block RETURNING without blocking UPDATE)
+      const { error: directError } = await supabase
+        .from('profiles')
+        .update(updatePayload)
+        .eq('id', updatedUser.id);
 
-        if (!rpcError && rpcData !== false) {
-          updateSuccess = true;
-        } else {
-          console.warn("RPC update failed, trying direct update:", rpcError);
-          updateError = rpcError;
-        }
-      } catch (rpcErr) {
-        console.warn("RPC function not available, trying direct update:", rpcErr);
-      }
-
-      // Fallback: direct table update if RPC failed
-      if (!updateSuccess) {
-        const updatePayload: Record<string, any> = {
-          full_name: updatedUser.fullName || updatedUser.name,
-          username: updatedUser.username,
-          email: updatedUser.email,
-          role: updatedUser.role,
-          avatar_url: updatedUser.avatar,
-          hub_id: updatedUser.hubId,
-          secondary_hub_id: updatedUser.secondaryHubId || null,
-          state_id: updatedUser.stateId,
-          locality_id: updatedUser.localityId,
-          employee_id: updatedUser.employeeId,
-          phone: updatedUser.phone,
-          bank_account: (updatedUser as any).bankAccount || null,
-          updated_at: new Date().toISOString(),
-        };
-
-        const { data: directData, error: directError } = await supabase
-          .from('profiles')
-          .update(updatePayload)
-          .eq('id', updatedUser.id)
-          .select('id');
-
-        if (directError || !directData || directData.length === 0) {
-          console.error("Both RPC and direct update failed:", { rpcError: updateError, directError });
+      if (directError) {
+        console.warn("Direct update failed, trying RPC:", directError.message);
+        // Fallback: RPC bypasses RLS but may have the COALESCE jsonb bug on location column
+        try {
+          const { data: rpcData, error: rpcError } = await supabase.rpc('admin_update_profile', {
+            target_id: updatedUser.id,
+            new_full_name: updatedUser.fullName || updatedUser.name || null,
+            new_username: updatedUser.username || null,
+            new_email: updatedUser.email || null,
+            new_role: updatedUser.role || null,
+            new_avatar_url: updatedUser.avatar || null,
+            new_hub_id: updatedUser.hubId || null,
+            new_state_id: updatedUser.stateId || null,
+            new_locality_id: updatedUser.localityId || null,
+            new_employee_id: updatedUser.employeeId || null,
+            new_phone: updatedUser.phone || null,
+            new_bank_account: (updatedUser as any).bankAccount || null,
+          });
+          if (rpcError) {
+            console.error("RPC also failed:", rpcError.message);
+            toast({
+              title: "Update failed",
+              description: "Could not save profile changes. Please try again or contact support.",
+              variant: "destructive",
+            });
+            return false;
+          }
+        } catch (rpcErr) {
+          console.error("RPC threw exception:", rpcErr);
           toast({
-            title: "Update blocked",
-            description: updateError?.message || directError?.message || "No profile was updated. You may not have permission to edit this user.",
+            title: "Update failed",
+            description: "Could not save profile changes. Please try again.",
             variant: "destructive",
           });
           return false;
         }
-        updateSuccess = true;
       }
 
       // Update secondary_hub_id separately (not handled by admin_update_profile RPC)

@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
+import { getHubAccessInfo, isStateInAnyHub } from '@/utils/hubAccessControl';
 import { useNavigate } from 'react-router-dom';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -235,27 +236,30 @@ export const OperationsZone: React.FC = () => {
     console.log(`📊 OperationsZone: isSupervisor=${isSupervisor}, isCoordinator=${isCoordinator}, allSiteVisits=${allSiteVisits.length}`);
     console.log(`📊 OperationsZone: supervisorHubName=${supervisorHubName}, coordinatorStateName=${coordinatorStateName}`);
     
-    // Supervisor: filter by hub (supports primary and secondary hubs)
+    // Supervisor: filter by hub states (state-based is reliable even when hub field is empty)
     if (isSupervisor) {
-      if (!supervisorHubName) {
+      const hubAccessInfo = getHubAccessInfo(currentUser as any);
+      if (!hubAccessInfo.isHubSupervisor || hubAccessInfo.hubIds.length === 0) {
         console.warn('⚠️ OperationsZone: Supervisor has no hub assigned - showing no sites');
         return [];
       }
-      
-      // Extract hub names and create lower-case versions for comparison
-      const hubNames = supervisorHubName.split(' & ').map(h => h.toLowerCase().trim());
+      const hubNames = supervisorHubName
+        ? supervisorHubName.split(' & ').map(h => h.toLowerCase().trim())
+        : [];
       const filtered = allSiteVisits.filter(visit => {
+        // Primary: state-based matching
+        const visitState = (visit.state || visit.stateName || (visit as any).state_name || '');
+        if (visitState && isStateInAnyHub(visitState, hubAccessInfo.hubIds)) return true;
+        // Secondary: hub name matching (for visits with hub field)
         const visitHub = (visit.hub || '').toLowerCase().trim();
-        if (!visitHub) return false;
-        // Check if visit hub matches any of the supervisor's hubs
-        return hubNames.some(hubName => 
-          visitHub === hubName || 
-          visitHub.includes(hubName) ||
-          (visitHub.length > 0 && hubName.includes(visitHub))
-        );
+        if (visitHub && hubNames.length > 0) {
+          return hubNames.some(hubName =>
+            visitHub === hubName || visitHub.includes(hubName) || hubName.includes(visitHub)
+          );
+        }
+        return false;
       });
-      
-      console.log(`📊 OperationsZone: Filtered to ${filtered.length} sites for hubs "${supervisorHubName}"`);
+      console.log(`📊 OperationsZone: Filtered to ${filtered.length} sites for hubs "${hubAccessInfo.hubIds.join(', ')}"`);
       return filtered;
     }
     

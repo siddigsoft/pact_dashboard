@@ -34,6 +34,7 @@ import { RequestDownPaymentButton } from "@/components/site-visit/RequestDownPay
 import { useMMP } from "@/context/mmp/MMPContext";
 import LeafletMapContainer from '@/components/map/LeafletMapContainer';
 import { sudanStates, getStateName, getLocalityName, normalizeHubId } from '@/data/sudanStates';
+import { getHubAccessInfo, isStateInAnyHub } from '@/utils/hubAccessControl';
 import { supabase } from '@/integrations/supabase/client';
 import { useUserProjects } from '@/hooks/useUserProjects';
 import { useSuperAdmin } from '@/context/superAdmin/SuperAdminContext';
@@ -403,23 +404,29 @@ const SiteVisits = () => {
         }
       }
     } else if (isSupervisor) {
-      // For supervisors, filter by their assigned hub
-      if (supervisorHubName) {
-        const hubName = supervisorHubName.toLowerCase().trim();
-        filtered = siteVisits.filter(visit => {
-          const visitHub = (visit.hub || '').toLowerCase().trim();
-          // Skip sites with no hub assignment - supervisors should only see sites from their hub
-          if (!visitHub) return false;
-          // Match by hub name (exact match or contains for variations like "Dongola" vs "Dongola Hub")
-          return visitHub === hubName || 
-                 visitHub.includes(hubName) ||
-                 (visitHub.length > 0 && hubName.includes(visitHub));
-        });
-        console.log(`📊 Supervisor hub filter: showing ${filtered.length} sites from hub "${supervisorHubName}"`);
-      } else {
-        // Supervisor without hub assignment - show no sites until assigned
+      // For supervisors, filter by hub states (state-based is reliable even when hub field is empty)
+      const hubAccessInfo = getHubAccessInfo(currentUser as any);
+      if (!hubAccessInfo.isHubSupervisor || hubAccessInfo.hubIds.length === 0) {
         console.warn('⚠️ Supervisor has no hub assigned - cannot show sites');
         filtered = [];
+      } else {
+        const hubNames = supervisorHubName
+          ? supervisorHubName.toLowerCase().split(' & ').map(h => h.trim())
+          : [];
+        filtered = siteVisits.filter(visit => {
+          // Primary: state-based matching (works even when hub field is empty)
+          const visitState = (visit.state || visit.stateName || (visit as any).state_name || '');
+          if (visitState && isStateInAnyHub(visitState, hubAccessInfo.hubIds)) return true;
+          // Secondary: hub name matching (for visits that have hub field populated)
+          const visitHub = (visit.hub || '').toLowerCase().trim();
+          if (visitHub && hubNames.length > 0) {
+            return hubNames.some(hn =>
+              visitHub === hn || visitHub.includes(hn) || hn.includes(visitHub)
+            );
+          }
+          return false;
+        });
+        console.log(`📊 Supervisor hub filter: showing ${filtered.length} sites for hubs "${hubAccessInfo.hubIds.join(', ')}"`);
       }
     } else {
       // For non-data collectors (admin, FOM, etc.), use existing logic

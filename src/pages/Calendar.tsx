@@ -82,12 +82,11 @@ const CalendarPage = () => {
     }
 
     if (isSupervisor && currentUser.hubId) {
-      if (hubAccessInfo.isCountryOffice) {
-        return siteVisits;
-      }
-
       return siteVisits.filter(visit => {
-        if (visit.state && hubAccessInfo.hubIds.some(hId => isStateNameInHub(visit.state, hId))) return true;
+        // Primary: state-based matching (works even when hub field is empty)
+        const visitState = visit.state || (visit as any).stateName || (visit as any).state_name || '';
+        if (visitState && hubAccessInfo.hubIds.some(hId => isStateNameInHub(visitState, hId))) return true;
+        // Secondary: hub name/office matching
         const hubOffice = (visit as any).hubOffice || visit.hub || '';
         if (hubOffice) {
           const normalizedHubOffice = normalizeRole(hubOffice);
