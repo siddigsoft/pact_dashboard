@@ -8,9 +8,10 @@ channel = "stable-25_05"
 packages = ["imagemagick", "unzip", "flutter329", "jdk17"]
 
 [deployment]
-deploymentTarget = "autoscale"
+deploymentTarget = "static"
 run = ["npm"]
 build = ["npm", "run", "build"]
+publicDir = "dist"
 
 [workflows]
 runButton = "Project"
