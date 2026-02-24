@@ -1297,12 +1297,10 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
           new_role: updatedUser.role || null,
           new_avatar_url: updatedUser.avatar || null,
           new_hub_id: updatedUser.hubId || null,
-          new_secondary_hub_id: updatedUser.secondaryHubId || null,
           new_state_id: updatedUser.stateId || null,
           new_locality_id: updatedUser.localityId || null,
           new_employee_id: updatedUser.employeeId || null,
           new_phone: updatedUser.phone || null,
-          new_bank_account: (updatedUser as any).bankAccount || null,
         });
 
         if (!rpcError && rpcData !== false) {
@@ -1317,23 +1315,25 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       // Fallback: direct table update if RPC failed
       if (!updateSuccess) {
+        const updatePayload: Record<string, any> = {
+          full_name: updatedUser.fullName || updatedUser.name,
+          username: updatedUser.username,
+          email: updatedUser.email,
+          role: updatedUser.role,
+          avatar_url: updatedUser.avatar,
+          hub_id: updatedUser.hubId,
+          state_id: updatedUser.stateId,
+          locality_id: updatedUser.localityId,
+          employee_id: updatedUser.employeeId,
+          phone: updatedUser.phone,
+          updated_at: new Date().toISOString(),
+        };
+        if (updatedUser.secondaryHubId !== undefined) updatePayload.secondary_hub_id = updatedUser.secondaryHubId;
+        if ((updatedUser as any).bankAccount !== undefined) updatePayload.bank_account = (updatedUser as any).bankAccount;
+
         const { data: directData, error: directError } = await supabase
           .from('profiles')
-          .update({
-            full_name: updatedUser.fullName || updatedUser.name,
-            username: updatedUser.username,
-            email: updatedUser.email,
-            role: updatedUser.role,
-            avatar_url: updatedUser.avatar,
-            hub_id: updatedUser.hubId,
-            secondary_hub_id: updatedUser.secondaryHubId,
-            state_id: updatedUser.stateId,
-            locality_id: updatedUser.localityId,
-            employee_id: updatedUser.employeeId,
-            phone: updatedUser.phone,
-            bank_account: (updatedUser as any).bankAccount,
-            updated_at: new Date().toISOString(),
-          })
+          .update(updatePayload)
           .eq('id', updatedUser.id)
           .select('id');
 
