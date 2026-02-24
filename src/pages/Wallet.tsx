@@ -50,6 +50,7 @@ import { format, startOfMonth, endOfMonth, subMonths, isWithinInterval } from 'd
 import { DEFAULT_CURRENCY } from '@/types/wallet';
 import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
 import { WalletSignatureIntegration } from '@/components/wallet/WalletSignatureIntegration';
+import { SignatureConfirmationModal } from '@/components/signatures/SignatureConfirmationModal';
 
 const formatCurrency = (amount: number, currency: string = DEFAULT_CURRENCY) => {
   return new Intl.NumberFormat('en-SD', {
@@ -108,10 +109,7 @@ const WalletPage = () => {
   const [withdrawalMethod, setWithdrawalMethod] = useState('');
   const [paymentMethods, setPaymentMethods] = useState<any[]>([]);
   
-  const [fundReceiptDialogOpen, setFundReceiptDialogOpen] = useState(false);
-  const [fundReceiptRequestId, setFundReceiptRequestId] = useState<string | null>(null);
-  const [fundReceiptNotes, setFundReceiptNotes] = useState('');
-  const [fundReceiptProcessing, setFundReceiptProcessing] = useState(false);
+  const [signatureWithdrawalRequest, setSignatureWithdrawalRequest] = useState<typeof withdrawalRequests[0] | null>(null);
 
   const [transactionTypeFilter, setTransactionTypeFilter] = useState<string>('all');
   const [dateRangeFilter, setDateRangeFilter] = useState<string>('all');
@@ -168,18 +166,6 @@ const WalletPage = () => {
     }
   };
 
-  const handleConfirmFundReceipt = async () => {
-    if (!fundReceiptRequestId) return;
-    setFundReceiptProcessing(true);
-    try {
-      await confirmFundReceipt(fundReceiptRequestId, fundReceiptNotes || undefined);
-      setFundReceiptDialogOpen(false);
-      setFundReceiptRequestId(null);
-      setFundReceiptNotes('');
-    } finally {
-      setFundReceiptProcessing(false);
-    }
-  };
 
   const getWithdrawalStatusBadge = (status: string, request?: any) => {
     switch (status) {
@@ -1340,10 +1326,7 @@ const WalletPage = () => {
                           {request.status === 'approved' && !request.fundReceiptConfirmed && (
                             <button
                               type="button"
-                              onClick={() => {
-                                setFundReceiptRequestId(request.id);
-                                setFundReceiptDialogOpen(true);
-                              }}
+                              onClick={() => setSignatureWithdrawalRequest(request)}
                               className="w-full px-3 py-2 text-sm rounded-md bg-emerald-900/30 hover:bg-emerald-900/50 text-emerald-300 border border-emerald-500/30 transition inline-flex items-center justify-center focus:outline-none focus:ring-2 focus:ring-emerald-400/70 focus:ring-offset-2 focus:ring-offset-slate-950 min-h-[44px]"
                               data-testid={`button-confirm-receipt-${request.id}`}
                             >
@@ -1433,10 +1416,7 @@ const WalletPage = () => {
                                 {request.status === 'approved' && !request.fundReceiptConfirmed && (
                                   <button
                                     type="button"
-                                    onClick={() => {
-                                      setFundReceiptRequestId(request.id);
-                                      setFundReceiptDialogOpen(true);
-                                    }}
+                                    onClick={() => setSignatureWithdrawalRequest(request)}
                                     className="px-3 py-1.5 text-sm rounded-md bg-emerald-900/30 hover:bg-emerald-900/50 text-emerald-300 border border-emerald-500/30 transition inline-flex items-center focus:outline-none focus:ring-2 focus:ring-emerald-400/70 focus:ring-offset-2 focus:ring-offset-slate-950 min-h-[44px]"
                                     data-testid={`button-confirm-receipt-desktop-${request.id}`}
                                   >
@@ -1848,81 +1828,38 @@ const WalletPage = () => {
         </CardContent>
       </Card>
 
-      <Dialog open={fundReceiptDialogOpen} onOpenChange={(open) => {
-        setFundReceiptDialogOpen(open);
-        if (!open) {
-          setFundReceiptRequestId(null);
-          setFundReceiptNotes('');
-        }
-      }}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="text-center">
-              <div className="text-lg">تأكيد استلام الأموال</div>
-              <div className="text-base font-normal text-muted-foreground mt-1">Confirm Fund Receipt</div>
-            </DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="bg-emerald-900/20 border border-emerald-500/30 rounded-lg p-4 text-center">
-              <CheckCircle2 className="w-10 h-10 text-emerald-400 mx-auto mb-2" />
-              <p className="text-sm text-emerald-300">
-                بالضغط على "تأكيد"، أنت تؤكد أنك استلمت المبلغ بالكامل
-              </p>
-              <p className="text-sm text-emerald-300/80 mt-1">
-                By clicking "Confirm", you acknowledge that you have received the full amount
-              </p>
-              {fundReceiptRequestId && (() => {
-                const req = withdrawalRequests.find(r => r.id === fundReceiptRequestId);
-                return req ? (
-                  <p className="text-lg font-bold text-emerald-200 mt-3">
-                    {formatCurrency(req.amount, req.currency)}
-                  </p>
-                ) : null;
-              })()}
-            </div>
-            
-            <div className="space-y-2">
-              <Label htmlFor="fund-receipt-notes">ملاحظات (اختياري) / Notes (Optional)</Label>
-              <Textarea
-                id="fund-receipt-notes"
-                value={fundReceiptNotes}
-                onChange={(e) => setFundReceiptNotes(e.target.value)}
-                placeholder="Add any notes about receiving the funds..."
-                className="min-h-[60px]"
-                data-testid="input-fund-receipt-notes"
-              />
-            </div>
-          </div>
-          <div className="flex gap-3">
-            <button
-              type="button"
-              onClick={() => {
-                setFundReceiptDialogOpen(false);
-                setFundReceiptRequestId(null);
-                setFundReceiptNotes('');
-              }}
-              className="flex-1 px-4 py-2.5 text-sm rounded-md border border-slate-600 text-slate-300 hover:bg-slate-800 transition min-h-[44px]"
-              data-testid="button-cancel-receipt"
-            >
-              إلغاء / Cancel
-            </button>
-            <button
-              type="button"
-              onClick={handleConfirmFundReceipt}
-              disabled={fundReceiptProcessing}
-              className="flex-1 px-4 py-2.5 text-sm rounded-md bg-emerald-600 hover:bg-emerald-700 text-white transition inline-flex items-center justify-center disabled:opacity-50 min-h-[44px]"
-              data-testid="button-submit-receipt"
-            >
-              {fundReceiptProcessing ? (
-                <RefreshCw className="w-4 h-4 animate-spin mr-2" />
-              ) : (
-                <CheckCircle2 className="w-4 h-4 mr-2" />
-              )}
-              تأكيد الاستلام / Confirm Receipt
-            </button>
-          </div>
-        </DialogContent>
-      </Dialog>
+      {signatureWithdrawalRequest && currentUser && (
+        <SignatureConfirmationModal
+          open={!!signatureWithdrawalRequest}
+          onOpenChange={(open) => { if (!open) setSignatureWithdrawalRequest(null); }}
+          transaction={{
+            id: signatureWithdrawalRequest.id,
+            type: 'withdrawal',
+            title: 'تأكيد استلام الأموال / Confirm Fund Receipt',
+            description: `أؤكد أنني استلمت كامل المبلغ المسحوب. / I confirm that I have received the full withdrawal amount.`,
+            amount: signatureWithdrawalRequest.amount,
+            currency: signatureWithdrawalRequest.currency || DEFAULT_CURRENCY,
+            counterparty: 'Finance / المالية',
+            date: new Date().toISOString(),
+            reference: signatureWithdrawalRequest.id,
+          }}
+          userId={currentUser.id}
+          userName={currentUser.fullName || currentUser.email || ''}
+          userEmail={currentUser.email}
+          userRole={currentUser.role}
+          allowedMethods={['handwriting', 'uuid']}
+          onSignatureComplete={async (signature) => {
+            await confirmFundReceipt(signatureWithdrawalRequest.id, {
+              signatureId: signature.signatureId,
+              signatureHash: signature.signatureHash,
+              signatureMethod: signature.method,
+              signedAt: signature.signedAt,
+            });
+            setSignatureWithdrawalRequest(null);
+          }}
+          onCancel={() => setSignatureWithdrawalRequest(null)}
+        />
+      )}
     </div>
   );
 };

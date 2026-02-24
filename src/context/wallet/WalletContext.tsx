@@ -47,7 +47,7 @@ interface WalletContextType {
   adminListWithdrawalRequests: () => Promise<AdminWithdrawalRequest[]>;
   listSupervisedWithdrawalRequests: () => Promise<SupervisedWithdrawalRequest[]>;
   reconcileSiteVisitFee: (siteVisitId: string) => Promise<{ success: boolean; message: string }>;
-  confirmFundReceipt: (requestId: string, notes?: string, signatureUrl?: string) => Promise<void>;
+  confirmFundReceipt: (requestId: string, signatureData: { signatureId: string; signatureHash: string; signatureMethod: string; signedAt: string; notes?: string }) => Promise<void>;
 }
 
 const WalletContext = createContext<WalletContextType | undefined>(undefined);
@@ -680,7 +680,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const confirmFundReceipt = async (requestId: string, notes?: string, signatureUrl?: string) => {
+  const confirmFundReceipt = async (requestId: string, signatureData: { signatureId: string; signatureHash: string; signatureMethod: string; signedAt: string; notes?: string }) => {
     if (!currentUser?.id) return;
 
     try {
@@ -692,16 +692,25 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       }
 
       if (request.fundReceiptConfirmed) {
-        throw new Error('Fund receipt already confirmed');
+        throw new Error('Fund receipt already confirmed / تم تأكيد الاستلام مسبقاً');
       }
+
+      const signatureRecord = JSON.stringify({
+        signatureId: signatureData.signatureId,
+        signatureHash: signatureData.signatureHash,
+        signatureMethod: signatureData.signatureMethod,
+        signedAt: signatureData.signedAt,
+        confirmedBy: currentUser.id,
+        confirmedByName: currentUser.fullName || currentUser.email,
+      });
 
       const { error } = await supabase
         .from('withdrawal_requests')
         .update({
           fund_receipt_confirmed: true,
-          fund_receipt_confirmed_at: new Date().toISOString(),
-          fund_receipt_signature_url: signatureUrl || null,
-          fund_receipt_notes: notes || null,
+          fund_receipt_confirmed_at: signatureData.signedAt,
+          fund_receipt_signature_url: signatureRecord,
+          fund_receipt_notes: signatureData.notes || null,
           updated_at: new Date().toISOString(),
         })
         .eq('id', requestId)
@@ -711,7 +720,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
       toast({
         title: 'تم تأكيد الاستلام / Fund Receipt Confirmed',
-        description: 'You have confirmed receiving the funds successfully.',
+        description: 'You have confirmed receiving the funds with your digital signature.',
       });
 
       NotificationTriggerService.withdrawalStatusChanged(
