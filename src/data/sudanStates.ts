@@ -404,8 +404,14 @@ export const hubs: Hub[] = [
   {
     id: 'country-office',
     name: 'Country Office (Khartoum)',
-    states: ['khartoum', 'red-sea'],
+    states: ['khartoum'],
     coordinates: { latitude: 15.5007, longitude: 32.5599 }
+  },
+  {
+    id: 'port-sudan-hub',
+    name: 'Port Sudan Hub',
+    states: ['red-sea'],
+    coordinates: { latitude: 19.6158, longitude: 37.2164 }
   },
   {
     id: 'dongola-hub',
@@ -541,8 +547,15 @@ const hubAliases: Record<string, string> = {
   'co': 'country-office',
   'khartoum': 'country-office',
   'khartoum hub': 'country-office',
-  'red sea': 'country-office',
-  'port sudan': 'country-office',
+
+  // Port Sudan Hub / Red Sea variations (separate sub-office from Khartoum)
+  'port sudan': 'port-sudan-hub',
+  'port sudan hub': 'port-sudan-hub',
+  'port-sudan-hub': 'port-sudan-hub',
+  'port-sudan': 'port-sudan-hub',
+  'red sea': 'port-sudan-hub',
+  'red-sea': 'port-sudan-hub',
+  'red sea hub': 'port-sudan-hub',
   
   // Dongola Hub variations
   'dongola': 'dongola-hub',
