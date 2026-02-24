@@ -94,14 +94,14 @@ export const ReclaimFromCoordinatorDialog: React.FC<ReclaimFromCoordinatorDialog
     try {
       const { data: entries, error } = await supabase
         .from('mmp_site_entries')
-        .select('forwarded_to_user_id, accepted_by, additional_data')
+        .select('forwarded_to_user_id, accepted_by')
         .eq('mmp_file_id', mmpId);
 
       if (error) throw error;
 
       const coordMap = new Map<string, number>();
       (entries || []).forEach((entry: any) => {
-        const coordId = entry.forwarded_to_user_id || entry.accepted_by || entry.additional_data?.assigned_to;
+        const coordId = entry.forwarded_to_user_id || entry.accepted_by;
         if (coordId) {
           coordMap.set(coordId, (coordMap.get(coordId) || 0) + 1);
         }
