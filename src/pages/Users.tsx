@@ -460,47 +460,47 @@ const Users = () => {
     const isOnline = activeStatus === 'Online';
 
     return (
-      <TableRow className="group" data-testid={`row-user-${user.id}`}>
-        <TableCell>
+      <TableRow className="group hover:bg-muted/40 transition-colors" data-testid={`row-user-${user.id}`}>
+        <TableCell className="py-3">
           <div className="flex items-center gap-3">
             <div className="relative">
-              <Avatar className="h-9 w-9">
+              <Avatar className="h-10 w-10 ring-2 ring-background shadow-sm">
                 <AvatarImage src={user.avatar} />
-                <AvatarFallback className="bg-primary/10 text-primary text-sm font-medium">
+                <AvatarFallback className="bg-gradient-to-br from-primary/20 to-primary/5 text-primary text-sm font-semibold">
                   {getInitials(user.name)}
                 </AvatarFallback>
               </Avatar>
               {isOnline && (
-                <span className="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full bg-green-500 border-2 border-background" />
+                <span className="absolute bottom-0 right-0 h-3 w-3 rounded-full bg-green-500 border-2 border-background ring-1 ring-green-400/30" />
               )}
             </div>
             <div className="min-w-0">
-              <p className="font-medium text-sm truncate">{user.name || 'Unnamed User'}</p>
-              <p className="text-xs text-muted-foreground truncate">{user.email}</p>
+              <p className="font-semibold text-sm truncate leading-tight">{user.name || 'Unnamed User'}</p>
+              <p className="text-xs text-muted-foreground truncate mt-0.5">{user.email}</p>
             </div>
           </div>
         </TableCell>
-        <TableCell>
+        <TableCell className="py-3">
           <div className="flex items-center gap-1.5">
             <RoleBadge role={getPrimaryRoleLabel(user)} size="sm" />
             <UserClassificationBadge userId={user.id} compact />
           </div>
         </TableCell>
-        <TableCell className="hidden md:table-cell">
+        <TableCell className="hidden md:table-cell py-3">
           {user.isApproved ? (
-            <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-800">
+            <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-800 font-medium">
               <CheckCircle className="h-3 w-3 mr-1" />
               Active
             </Badge>
           ) : (
-            <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-900/20 dark:text-amber-400 dark:border-amber-800">
+            <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-900/20 dark:text-amber-400 dark:border-amber-800 font-medium">
               <Clock className="h-3 w-3 mr-1" />
               Pending
             </Badge>
           )}
         </TableCell>
-        <TableCell className="hidden lg:table-cell">
-          <span className="text-xs text-muted-foreground">{activeStatus}</span>
+        <TableCell className="hidden lg:table-cell py-3">
+          <span className={`text-xs font-medium ${isOnline ? 'text-green-600 dark:text-green-400' : 'text-muted-foreground'}`}>{activeStatus}</span>
         </TableCell>
         <TableCell>
           <div className="flex items-center justify-end gap-1">
@@ -602,15 +602,21 @@ const Users = () => {
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
-      <div className="flex items-center justify-between gap-4 p-4 border-b bg-background sticky top-0 z-10">
+      <div className="flex items-center justify-between gap-4 px-4 sm:px-6 py-4 border-b bg-gradient-to-r from-background to-muted/30 sticky top-0 z-10">
         <div className="flex items-center gap-3">
-          <UsersIcon className="h-5 w-5 text-primary" />
-          <h1 className="text-lg font-semibold">User Management</h1>
+          <div className="p-2 rounded-lg bg-primary/10">
+            <UsersIcon className="h-5 w-5 text-primary" />
+          </div>
+          <div>
+            <h1 className="text-lg sm:text-xl font-bold tracking-tight">User Management</h1>
+            <p className="text-xs text-muted-foreground hidden sm:block">Manage team members, roles and permissions</p>
+          </div>
         </div>
         <div className="flex items-center gap-2">
           <Button 
-            variant="ghost" 
+            variant="outline" 
             size="icon"
+            className="h-9 w-9 rounded-lg"
             onClick={handleRefreshUsers}
             disabled={isRefreshing}
             data-testid="button-refresh"
@@ -618,9 +624,9 @@ const Users = () => {
             <RefreshCw className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
           </Button>
           {isAdminOrICT && (
-            <Button size="sm" asChild data-testid="button-add-user">
+            <Button size="sm" className="h-9 px-4 shadow-sm" asChild data-testid="button-add-user">
               <Link to="/register">
-                <UserPlus className="h-4 w-4 mr-1" />
+                <UserPlus className="h-4 w-4 mr-1.5" />
                 Add User
               </Link>
             </Button>
@@ -629,55 +635,71 @@ const Users = () => {
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 p-4">
-        <Card className="p-3">
-          <div className="flex items-center gap-2">
-            <UsersIcon className="h-4 w-4 text-muted-foreground" />
-            <span className="text-sm text-muted-foreground">Total Users</span>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 px-4 sm:px-6 py-4">
+        <Card className="p-4 border-l-4 border-l-slate-400 dark:border-l-slate-600 hover:shadow-md transition-shadow">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Total Users</p>
+              <p className="text-2xl font-bold mt-1">{stats.total}</p>
+            </div>
+            <div className="p-2.5 rounded-full bg-slate-100 dark:bg-slate-800">
+              <UsersIcon className="h-4 w-4 text-slate-600 dark:text-slate-400" />
+            </div>
           </div>
-          <p className="text-2xl font-bold mt-1">{stats.total}</p>
         </Card>
-        <Card className="p-3">
-          <div className="flex items-center gap-2">
-            <CheckCircle className="h-4 w-4 text-green-600" />
-            <span className="text-sm text-muted-foreground">Active</span>
+        <Card className="p-4 border-l-4 border-l-green-500 hover:shadow-md transition-shadow">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Active</p>
+              <p className="text-2xl font-bold mt-1 text-green-600 dark:text-green-400">{stats.approved}</p>
+            </div>
+            <div className="p-2.5 rounded-full bg-green-100 dark:bg-green-900/30">
+              <CheckCircle className="h-4 w-4 text-green-600 dark:text-green-400" />
+            </div>
           </div>
-          <p className="text-2xl font-bold mt-1 text-green-600">{stats.approved}</p>
         </Card>
-        <Card className="p-3">
-          <div className="flex items-center gap-2">
-            <Clock className="h-4 w-4 text-amber-600" />
-            <span className="text-sm text-muted-foreground">Pending</span>
+        <Card className="p-4 border-l-4 border-l-amber-500 hover:shadow-md transition-shadow">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Pending</p>
+              <p className="text-2xl font-bold mt-1 text-amber-600 dark:text-amber-400">{stats.pending}</p>
+            </div>
+            <div className="p-2.5 rounded-full bg-amber-100 dark:bg-amber-900/30">
+              <Clock className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+            </div>
           </div>
-          <p className="text-2xl font-bold mt-1 text-amber-600">{stats.pending}</p>
         </Card>
-        <Card className="p-3">
-          <div className="flex items-center gap-2">
-            <Shield className="h-4 w-4 text-primary" />
-            <span className="text-sm text-muted-foreground">Admins</span>
+        <Card className="p-4 border-l-4 border-l-primary hover:shadow-md transition-shadow">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Admins</p>
+              <p className="text-2xl font-bold mt-1">{stats.admins}</p>
+            </div>
+            <div className="p-2.5 rounded-full bg-primary/10">
+              <Shield className="h-4 w-4 text-primary" />
+            </div>
           </div>
-          <p className="text-2xl font-bold mt-1">{stats.admins}</p>
         </Card>
       </div>
 
       {/* Tabs Navigation */}
-      <div className="px-4">
+      <div className="px-4 sm:px-6">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 mb-4">
-            <TabsList className="h-9">
-              <TabsTrigger value="all" className="text-xs px-3" data-testid="tab-all">
+            <TabsList className="h-10 p-1 bg-muted/60 rounded-lg">
+              <TabsTrigger value="all" className="text-xs sm:text-sm px-3 sm:px-4 rounded-md data-[state=active]:shadow-sm" data-testid="tab-all">
                 All Users
               </TabsTrigger>
-              <TabsTrigger value="approved" className="text-xs px-3" data-testid="tab-approved">
+              <TabsTrigger value="approved" className="text-xs sm:text-sm px-3 sm:px-4 rounded-md data-[state=active]:shadow-sm" data-testid="tab-approved">
                 Active
               </TabsTrigger>
-              <TabsTrigger value="pending" className="text-xs px-3" data-testid="tab-pending">
+              <TabsTrigger value="pending" className="text-xs sm:text-sm px-3 sm:px-4 rounded-md data-[state=active]:shadow-sm" data-testid="tab-pending">
                 Pending
                 {stats.pending > 0 && (
-                  <Badge variant="destructive" className="ml-1.5 h-4 px-1 text-[10px]">{stats.pending}</Badge>
+                  <Badge variant="destructive" className="ml-1.5 h-5 min-w-[20px] px-1.5 text-[10px] rounded-full">{stats.pending}</Badge>
                 )}
               </TabsTrigger>
-              <TabsTrigger value="admins" className="text-xs px-3" data-testid="tab-admins">
+              <TabsTrigger value="admins" className="text-xs sm:text-sm px-3 sm:px-4 rounded-md data-[state=active]:shadow-sm" data-testid="tab-admins">
                 Admins
               </TabsTrigger>
             </TabsList>
@@ -685,18 +707,18 @@ const Users = () => {
             {/* Search and Filters */}
             <div className="flex items-center gap-2 flex-wrap">
               <div className="relative flex-1 min-w-[180px] max-w-[280px]">
-                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
                   type="search"
                   placeholder="Search users..."
-                  className="pl-8 h-9"
+                  className="pl-9 h-9 rounded-lg border-muted-foreground/20 focus-visible:ring-primary/30"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   data-testid="input-search"
                 />
               </div>
               <Select value={roleFilter} onValueChange={setRoleFilter}>
-                <SelectTrigger className="h-9 w-[130px]" data-testid="select-role">
+                <SelectTrigger className="h-9 w-[140px] rounded-lg" data-testid="select-role">
                   <SelectValue placeholder="All Roles" />
                 </SelectTrigger>
                 <SelectContent>
@@ -709,11 +731,12 @@ const Users = () => {
               {(searchQuery || roleFilter !== 'all') && (
                 <Button 
                   variant="ghost" 
-                  size="sm" 
+                  size="sm"
+                  className="h-9 px-3 text-muted-foreground hover:text-foreground"
                   onClick={() => { setSearchQuery(''); setRoleFilter('all'); }}
                   data-testid="button-clear-filters"
                 >
-                  <X className="h-3 w-3 mr-1" />
+                  <X className="h-3.5 w-3.5 mr-1" />
                   Clear
                 </Button>
               )}
@@ -749,15 +772,15 @@ const Users = () => {
                 </div>
               </Card>
             ) : (
-              <div className="border rounded-lg overflow-hidden">
+              <div className="border rounded-xl overflow-hidden shadow-sm">
                 <Table>
                   <TableHeader>
-                    <TableRow className="bg-muted/50">
-                      <TableHead className="font-medium">User</TableHead>
-                      <TableHead className="font-medium">Role</TableHead>
-                      <TableHead className="font-medium hidden md:table-cell">Status</TableHead>
-                      <TableHead className="font-medium hidden lg:table-cell">Last Active</TableHead>
-                      <TableHead className="font-medium text-right">Actions</TableHead>
+                    <TableRow className="bg-muted/40 border-b-2">
+                      <TableHead className="font-semibold text-xs uppercase tracking-wider text-muted-foreground">User</TableHead>
+                      <TableHead className="font-semibold text-xs uppercase tracking-wider text-muted-foreground">Role</TableHead>
+                      <TableHead className="font-semibold text-xs uppercase tracking-wider text-muted-foreground hidden md:table-cell">Status</TableHead>
+                      <TableHead className="font-semibold text-xs uppercase tracking-wider text-muted-foreground hidden lg:table-cell">Last Active</TableHead>
+                      <TableHead className="font-semibold text-xs uppercase tracking-wider text-muted-foreground text-right">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -774,18 +797,18 @@ const Users = () => {
 
       {/* Quick Links */}
       {isAdminOrICT && (
-        <div className="p-4 mt-auto border-t">
+        <div className="px-4 sm:px-6 py-3 mt-auto border-t bg-muted/20">
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-sm text-muted-foreground mr-2">Quick Links:</span>
-            <Button variant="outline" size="sm" asChild data-testid="link-role-management">
+            <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide mr-1">Quick Links:</span>
+            <Button variant="outline" size="sm" className="h-8 rounded-lg text-xs" asChild data-testid="link-role-management">
               <Link to="/role-management">
-                <Shield className="h-3.5 w-3.5 mr-1" />
+                <Shield className="h-3.5 w-3.5 mr-1.5" />
                 Role Management
               </Link>
             </Button>
-            <Button variant="outline" size="sm" asChild data-testid="link-audit-logs">
+            <Button variant="outline" size="sm" className="h-8 rounded-lg text-xs" asChild data-testid="link-audit-logs">
               <Link to="/audit-logs">
-                <Settings className="h-3.5 w-3.5 mr-1" />
+                <Settings className="h-3.5 w-3.5 mr-1.5" />
                 Audit Logs
               </Link>
             </Button>
