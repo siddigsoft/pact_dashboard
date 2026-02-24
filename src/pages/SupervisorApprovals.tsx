@@ -84,9 +84,11 @@ export default function SupervisorApprovals() {
   const isFOM = userRole === 'fom' || userRole === 'field operation manager';
 
   const supervisorHubId = currentUser?.hubId;
+  const supervisorSecondaryHubId = (currentUser as any)?.secondaryHubId || null;
+  const supervisorHubIds = [supervisorHubId, supervisorSecondaryHubId].filter(Boolean) as string[];
 
   useEffect(() => {
-    if (!supervisorHubId) {
+    if (supervisorHubIds.length === 0) {
       setHubName(null);
       return;
     }
@@ -94,12 +96,14 @@ export default function SupervisorApprovals() {
       const { data } = await supabase
         .from('hubs')
         .select('name')
-        .eq('id', supervisorHubId)
-        .maybeSingle();
-      if (data) setHubName(data.name);
+        .in('id', supervisorHubIds);
+      if (data && data.length > 0) {
+        const names = data.map(h => h.name).join(' / ');
+        setHubName(names);
+      }
     };
     fetchHubName();
-  }, [supervisorHubId]);
+  }, [supervisorHubIds]);
 
   useEffect(() => {
     refreshSupervisedWithdrawalRequests();
@@ -179,13 +183,13 @@ export default function SupervisorApprovals() {
   };
 
   const filteredRequests = useMemo(() => {
-    if (isSupervisor && supervisorHubId) {
+    if (isSupervisor && supervisorHubIds.length > 0) {
       return (supervisedWithdrawalRequests as SupervisedRequest[]).filter(r => 
-        r.requesterHub && r.requesterHub === supervisorHubId
+        r.requesterHub && supervisorHubIds.includes(r.requesterHub)
       );
     }
     return supervisedWithdrawalRequests as SupervisedRequest[];
-  }, [supervisedWithdrawalRequests, isSupervisor, supervisorHubId]);
+  }, [supervisedWithdrawalRequests, isSupervisor, supervisorHubIds]);
 
   const pendingRequests = filteredRequests.filter(r => r.status === 'pending');
   const forwardedRequests = filteredRequests.filter(r => r.status === 'supervisor_approved' || r.status === 'processing');

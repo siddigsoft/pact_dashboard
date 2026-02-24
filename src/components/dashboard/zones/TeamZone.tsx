@@ -44,29 +44,34 @@ export const TeamZone: React.FC = () => {
     return normalizedRoles.includes('supervisor') && !isAdmin;
   }, [roles]);
 
-  // Get supervisor's hub ID for filtering
+  // Get supervisor's hub IDs for filtering (primary and secondary)
   const supervisorHubId = currentUser?.hubId;
+  const supervisorSecondaryHubId = (currentUser as any)?.secondaryHubId || null;
+  const supervisorHubIds = [supervisorHubId, supervisorSecondaryHubId].filter(Boolean) as string[];
 
-  // Fetch hub name for supervisor
+  // Fetch hub names for supervisor
   useEffect(() => {
-    if (!isSupervisor || !supervisorHubId) {
+    if (!isSupervisor || supervisorHubIds.length === 0) {
       setHubName(null);
       return;
     }
     const fetchHubName = async () => {
       try {
         const hubs = await fetchHubs();
-        const hub = hubs.find(h => h.id === supervisorHubId);
-        if (hub) setHubName(hub.name);
+        const matchingHubs = hubs.filter(h => supervisorHubIds.includes(h.id));
+        if (matchingHubs.length > 0) {
+          const names = matchingHubs.map(h => h.name).join(' & ');
+          setHubName(names);
+        }
       } catch (error) {
         console.error('Error fetching hub name:', error);
       }
     };
     fetchHubName();
-  }, [isSupervisor, supervisorHubId]);
+  }, [isSupervisor, supervisorHubIds]);
 
   // Filter and sort team members who can be assigned to site visits (coordinators and data collectors only)
-  // For supervisors: only show team members in their hub
+  // For supervisors: only show team members in their hubs (primary and secondary)
   // Sort: Online first, then by last login (most recent first)
   const assignableTeamMembers = useMemo(() => {
     if (!users) return [];
@@ -78,9 +83,9 @@ export const TeamZone: React.FC = () => {
       })
     );
 
-    // If supervisor, filter to only show team members in their hub
-    if (isSupervisor && supervisorHubId) {
-      filtered = filtered.filter(user => user.hubId === supervisorHubId);
+    // If supervisor, filter to only show team members in their hubs (primary and secondary)
+    if (isSupervisor && supervisorHubIds.length > 0) {
+      filtered = filtered.filter(user => supervisorHubIds.includes(user.hubId));
     }
     
     // Sort by online status first, then by last login
@@ -98,7 +103,7 @@ export const TeamZone: React.FC = () => {
       
       return bLastLogin - aLastLogin;
     });
-  }, [users, isSupervisor, supervisorHubId]);
+  }, [users, isSupervisor, supervisorHubIds]);
 
   const activeFieldTeam = assignableTeamMembers.length;
 

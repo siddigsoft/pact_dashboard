@@ -71,6 +71,7 @@ export function SupervisorCommunication({ hubId, className }: SupervisorCommunic
   const [selectedMembers, setSelectedMembers] = useState<Set<string>>(new Set());
 
   const supervisorHubId = hubId || currentUser?.hubId;
+  const supervisorHubIds = [supervisorHubId, (currentUser as any)?.secondaryHubId].filter(Boolean) as string[];
 
   useEffect(() => {
     if (isOpen) {
@@ -79,14 +80,14 @@ export function SupervisorCommunication({ hubId, className }: SupervisorCommunic
   }, [isOpen, supervisorHubId]);
 
   const loadTeamMembers = async () => {
-    if (!supervisorHubId) return;
+    if (supervisorHubIds.length === 0) return;
     
     setLoading(true);
     try {
       const { data, error } = await supabase
         .from('profiles')
         .select('id, full_name, role, hub_id, email, availability')
-        .eq('hub_id', supervisorHubId)
+        .in('hub_id', supervisorHubIds)
         .neq('id', currentUser?.id || '');
 
       if (error) throw error;

@@ -125,7 +125,7 @@ export const OperationsZone: React.FC = () => {
     fetchCycleData();
   }, [hasAnyRole]);
 
-  // Fetch supervisor's hub name
+  // Fetch supervisor's hub name (supports primary and secondary hubs)
   useEffect(() => {
     if (!isSupervisor || !currentUser?.hubId) {
       setSupervisorHubName(null);
@@ -134,17 +134,24 @@ export const OperationsZone: React.FC = () => {
     const fetchHubName = async () => {
       try {
         const hubs = await fetchHubs();
-        const hub = hubs.find(h => h.id === currentUser.hubId);
-        if (hub) {
-          setSupervisorHubName(hub.name);
-          console.log(`📊 OperationsZone: Supervisor hub loaded: ${hub.name}`);
+        const primaryHub = hubs.find(h => h.id === currentUser.hubId);
+        const secondaryHub = (currentUser as any)?.secondaryHubId 
+          ? hubs.find(h => h.id === (currentUser as any).secondaryHubId)
+          : null;
+        
+        if (primaryHub) {
+          const hubName = secondaryHub 
+            ? `${primaryHub.name} & ${secondaryHub.name}`
+            : primaryHub.name;
+          setSupervisorHubName(hubName);
+          console.log(`📊 OperationsZone: Supervisor hub loaded: ${hubName}`);
         }
       } catch (error) {
         console.error('Error fetching hub name:', error);
       }
     };
     fetchHubName();
-  }, [isSupervisor, currentUser?.hubId]);
+  }, [isSupervisor, currentUser?.hubId, (currentUser as any)?.secondaryHubId]);
 
   // Get coordinator's state name from local data
   useEffect(() => {
@@ -227,23 +234,27 @@ export const OperationsZone: React.FC = () => {
     console.log(`📊 OperationsZone: isSupervisor=${isSupervisor}, isCoordinator=${isCoordinator}, allSiteVisits=${allSiteVisits.length}`);
     console.log(`📊 OperationsZone: supervisorHubName=${supervisorHubName}, coordinatorStateName=${coordinatorStateName}`);
     
-    // Supervisor: filter by hub
+    // Supervisor: filter by hub (supports primary and secondary hubs)
     if (isSupervisor) {
       if (!supervisorHubName) {
         console.warn('⚠️ OperationsZone: Supervisor has no hub assigned - showing no sites');
         return [];
       }
       
-      const hubName = supervisorHubName.toLowerCase().trim();
+      // Extract hub names and create lower-case versions for comparison
+      const hubNames = supervisorHubName.split(' & ').map(h => h.toLowerCase().trim());
       const filtered = allSiteVisits.filter(visit => {
         const visitHub = (visit.hub || '').toLowerCase().trim();
         if (!visitHub) return false;
-        return visitHub === hubName || 
-               visitHub.includes(hubName) ||
-               (visitHub.length > 0 && hubName.includes(visitHub));
+        // Check if visit hub matches any of the supervisor's hubs
+        return hubNames.some(hubName => 
+          visitHub === hubName || 
+          visitHub.includes(hubName) ||
+          (visitHub.length > 0 && hubName.includes(visitHub))
+        );
       });
       
-      console.log(`📊 OperationsZone: Filtered to ${filtered.length} sites for hub "${supervisorHubName}"`);
+      console.log(`📊 OperationsZone: Filtered to ${filtered.length} sites for hubs "${supervisorHubName}"`);
       return filtered;
     }
     

@@ -25,7 +25,7 @@ import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { motion } from "framer-motion";
 import { useUser } from "@/context/user/UserContext";
-import { getHubAccessInfo, filterByHubAccess, isStateNameInHub, normalizeStateName, normalizeStateId } from "@/utils/hubAccessControl";
+import { getHubAccessInfo, isStateNameInHub, normalizeStateName, normalizeStateId } from "@/utils/hubAccessControl";
 
 function normalizeRole(role: string): string {
   return role.toLowerCase().replace(/[\s_-]+/g, '');
@@ -82,22 +82,16 @@ const CalendarPage = () => {
     }
 
     if (isSupervisor && currentUser.hubId) {
-      const primaryHub = currentUser.hubId || '';
-      const secondaryHub = (currentUser as any).secondaryHubId || '';
-      const userHubs = [primaryHub, secondaryHub].filter(Boolean);
-
-      const isCountryOffice = userHubs.some(h => 
-        normalizeRole(h).includes('countryoffice') || normalizeRole(h) === 'country_office'
-      );
-      if (isCountryOffice) {
+      if (hubAccessInfo.isCountryOffice) {
         return siteVisits;
       }
 
       return siteVisits.filter(visit => {
-        for (const hubId of userHubs) {
-          if (visit.state && isStateNameInHub(visit.state, hubId)) return true;
-          const hubOffice = (visit as any).hubOffice || visit.hub || '';
-          if (hubOffice && normalizeRole(hubOffice).includes(normalizeRole(hubId))) return true;
+        if (visit.state && hubAccessInfo.hubIds.some(hId => isStateNameInHub(visit.state, hId))) return true;
+        const hubOffice = (visit as any).hubOffice || visit.hub || '';
+        if (hubOffice) {
+          const normalizedHubOffice = normalizeRole(hubOffice);
+          if (hubAccessInfo.hubIds.some(hId => normalizedHubOffice.includes(normalizeRole(hId)))) return true;
         }
         return false;
       });
@@ -165,21 +159,16 @@ const CalendarPage = () => {
   const accessLevelLabel = useMemo(() => {
     if (isGlobalAdmin) return 'All Hubs & Teams';
     if (isSupervisor) {
-      const primaryHub = currentUser?.hubId || '';
-      const secondaryHub = (currentUser as any)?.secondaryHubId || '';
-      const hubs = [primaryHub, secondaryHub].filter(Boolean);
-      const isCountryOffice = hubs.some(h => 
-        normalizeRole(h).includes('countryoffice') || normalizeRole(h) === 'country_office'
-      );
-      if (isCountryOffice) return 'All Hubs (Country Office)';
-      if (hubs.length > 1) return `Hubs: ${hubs.join(' & ')}`;
-      return `Hub: ${hubs[0] || 'Your Hub'}`;
+      if (hubAccessInfo.isCountryOffice) return 'All Hubs (Country Office)';
+      const userHubs = [currentUser?.hubId, (currentUser as any)?.secondaryHubId].filter(Boolean);
+      if (userHubs.length > 1) return `Hubs: ${userHubs.join(' & ')}`;
+      return `Hub: ${userHubs[0] || 'Your Hub'}`;
     }
     if (isDataTeam) return `State: ${currentUser?.stateId || 'Your State'}`;
     if (isCoordinator) return 'Your Coordinated Visits';
     if (isDataCollector) return 'Your Assigned Visits';
     return 'Your Visits';
-  }, [isGlobalAdmin, isSupervisor, isDataTeam, isCoordinator, isDataCollector, currentUser]);
+  }, [isGlobalAdmin, isSupervisor, isDataTeam, isCoordinator, isDataCollector, currentUser, hubAccessInfo]);
 
   const resolveUserName = (id?: string) => {
     if (!id) return undefined;

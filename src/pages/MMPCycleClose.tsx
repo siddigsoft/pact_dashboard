@@ -209,15 +209,22 @@ const MMPCycleClose = () => {
 
   useEffect(() => {
     if (isSupervisor && currentUser?.hubId) {
-      supabase.from('hubs').select('name').eq('id', currentUser.hubId).single()
+      const hubIds = [currentUser.hubId];
+      if ((currentUser as any)?.secondaryHubId) {
+        hubIds.push((currentUser as any).secondaryHubId);
+      }
+
+      supabase.from('hubs').select('name').in('id', hubIds)
         .then(({ data }) => {
-          if (data?.name) {
-            setUserHubName(data.name);
-            setFilterHub(data.name);
+          if (data && data.length > 0) {
+            const names = data.map((h: any) => h.name).filter(Boolean);
+            const displayName = names.join(' & ');
+            setUserHubName(displayName);
+            setFilterHub(displayName);
           }
         });
     }
-  }, [isSupervisor, currentUser?.hubId]);
+  }, [isSupervisor, currentUser?.hubId, (currentUser as any)?.secondaryHubId]);
 
   const activeMmps = useMemo(() => {
     return (mmpFiles || []).filter(m => {
@@ -632,7 +639,10 @@ const MMPCycleClose = () => {
           return false;
         }
       }
-      if (filterHub !== 'all' && site.hub !== filterHub) return false;
+      if (filterHub !== 'all') {
+        const filterHubs = filterHub.split(' & ');
+        if (!filterHubs.includes(site.hub || '')) return false;
+      }
       if (filterReason === 'pending' && site.not_covered_reason) return false;
       if (filterReason === 'assigned' && !site.not_covered_reason) return false;
       if (filterReason !== 'all' && filterReason !== 'pending' && filterReason !== 'assigned' && site.not_covered_reason !== filterReason) return false;

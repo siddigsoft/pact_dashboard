@@ -243,24 +243,24 @@ export default function CostPredictions() {
   
   // Auto-set hub filter for supervisors to their hub only
   useEffect(() => {
-    if (isSupervisor && hubAccessInfo.hubId && selectedHub === 'all') {
-      setSelectedHub(hubAccessInfo.hubId);
+    if (isSupervisor && hubAccessInfo.hubIds.length > 0 && selectedHub === 'all') {
+      setSelectedHub(hubAccessInfo.hubIds[0]);
     }
-  }, [isSupervisor, hubAccessInfo.hubId, selectedHub]);
+  }, [isSupervisor, hubAccessInfo.hubIds, selectedHub]);
   
   // Filter hub options for supervisors - they can only see their hub
   const availableHubs = useMemo(() => {
-    if (isSupervisor && hubAccessInfo.hubId) {
-      return hubs.filter(h => h.id === hubAccessInfo.hubId);
+    if (isSupervisor && hubAccessInfo.hubIds.length > 0) {
+      return hubs.filter(h => hubAccessInfo.hubIds.includes(h.id));
     }
     return hubs;
-  }, [isSupervisor, hubAccessInfo.hubId]);
+  }, [isSupervisor, hubAccessInfo.hubIds]);
 
   const fetchAccuracyMetrics = async () => {
     try {
       setLoadingAccuracy(true);
       
-      const hubFilter = isSupervisor && hubAccessInfo.hubId ? hubAccessInfo.hubId : (selectedHub !== 'all' ? selectedHub : undefined);
+      const hubFilter = isSupervisor && hubAccessInfo.hubIds.length > 0 ? hubAccessInfo.hubIds[0] : (selectedHub !== 'all' ? selectedHub : undefined);
       const metrics = await CostPredictionService.calculateAccuracyMetrics(undefined, undefined, hubFilter);
       setAccuracyMetrics(metrics);
     } catch (err) {
@@ -310,8 +310,8 @@ export default function CostPredictions() {
         .select('id, site_code, site_name, state_name, locality_name, hub_id, gps_latitude, gps_longitude');
       
       // Apply hub filter for supervisors
-      if (isSupervisor && hubAccessInfo.hubId) {
-        query = query.eq('hub_id', hubAccessInfo.hubId);
+      if (isSupervisor && hubAccessInfo.hubIds.length > 0) {
+        query = query.in('hub_id', hubAccessInfo.hubIds);
       } else if (selectedHub !== 'all') {
         query = query.eq('hub_id', selectedHub);
       }
@@ -408,8 +408,8 @@ export default function CostPredictions() {
           .order('created_at', { ascending: false })
           .limit(100);
         
-        if (isSupervisor && hubAccessInfo.hubId) {
-          visitsQuery = visitsQuery.eq('hub_id', hubAccessInfo.hubId);
+        if (isSupervisor && hubAccessInfo.hubIds.length > 0) {
+          visitsQuery = visitsQuery.in('hub_id', hubAccessInfo.hubIds);
         } else if (selectedHub !== 'all') {
           visitsQuery = visitsQuery.eq('hub_id', selectedHub);
         }
@@ -492,8 +492,8 @@ export default function CostPredictions() {
         .select('id, hub_id, state, status')
         .gte('created_at', startDate);
       
-      if (isSupervisor && hubAccessInfo.hubId) {
-        visitsQuery = visitsQuery.eq('hub_id', hubAccessInfo.hubId);
+      if (isSupervisor && hubAccessInfo.hubIds.length > 0) {
+        visitsQuery = visitsQuery.in('hub_id', hubAccessInfo.hubIds);
       } else if (selectedHub !== 'all') {
         visitsQuery = visitsQuery.eq('hub_id', selectedHub);
       }
@@ -833,8 +833,8 @@ export default function CostPredictions() {
           .from('sites_registry')
           .select('*');
         
-        if (isSupervisor && hubAccessInfo.hubId) {
-          query = query.eq('hub_id', hubAccessInfo.hubId);
+        if (isSupervisor && hubAccessInfo.hubIds.length > 0) {
+          query = query.in('hub_id', hubAccessInfo.hubIds);
         } else if (selectedHub !== 'all') {
           query = query.eq('hub_id', selectedHub);
         }
@@ -976,8 +976,8 @@ export default function CostPredictions() {
         .from('historical_site_costs')
         .select('site_id, site_name, state_id, locality_id, visit_date, hub_id');
       
-      if (isSupervisor && hubAccessInfo.hubId) {
-        histQuery = histQuery.eq('hub_id', hubAccessInfo.hubId);
+      if (isSupervisor && hubAccessInfo.hubIds.length > 0) {
+        histQuery = histQuery.in('hub_id', hubAccessInfo.hubIds);
       } else if (selectedHub !== 'all') {
         histQuery = histQuery.eq('hub_id', selectedHub);
       }
@@ -1831,8 +1831,8 @@ export default function CostPredictions() {
         .select('id, site_id, site_name, state_id, visit_date, created_at, hub_id')
         .order('created_at', { ascending: true });
       
-      if (isSupervisor && hubAccessInfo.hubId) {
-        query = query.eq('hub_id', hubAccessInfo.hubId);
+      if (isSupervisor && hubAccessInfo.hubIds.length > 0) {
+        query = query.in('hub_id', hubAccessInfo.hubIds);
       } else if (selectedHub !== 'all') {
         query = query.eq('hub_id', selectedHub);
       }

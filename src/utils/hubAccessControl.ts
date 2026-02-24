@@ -5,36 +5,79 @@ import type { AppRole } from '@/types/roles';
 export interface HubAccessInfo {
   isHubSupervisor: boolean;
   hubId: string | null;
+  secondaryHubId: string | null;
+  hubIds: string[];
+  rawHubIds: string[];
   hubStates: string[];
   hubStateNames: string[];
+  isCountryOffice: boolean;
+}
+
+function collectHubStates(hubIds: string[]): { states: string[], stateNames: string[] } {
+  const stateSet = new Set<string>();
+  const stateNameSet = new Set<string>();
+
+  for (const hubId of hubIds) {
+    const normalized = normalizeHubId(hubId);
+    if (!normalized) continue;
+    const hubStatesData = getStatesInHub(normalized);
+    for (const s of hubStatesData) {
+      stateSet.add(s.id);
+      stateNameSet.add(s.name);
+    }
+  }
+
+  return { states: Array.from(stateSet), stateNames: Array.from(stateNameSet) };
+}
+
+function isCountryOfficeHub(hubId: string | null | undefined): boolean {
+  if (!hubId) return false;
+  const normalized = normalizeHubId(hubId);
+  return normalized === 'country-office';
 }
 
 export function getHubAccessInfo(user: User | null): HubAccessInfo {
-  if (!user) {
-    return { isHubSupervisor: false, hubId: null, hubStates: [], hubStateNames: [] };
-  }
+  const empty: HubAccessInfo = {
+    isHubSupervisor: false,
+    hubId: null,
+    secondaryHubId: null,
+    hubIds: [],
+    rawHubIds: [],
+    hubStates: [],
+    hubStateNames: [],
+    isCountryOffice: false,
+  };
+
+  if (!user) return empty;
 
   const userRole = (user.role || '').toLowerCase();
   const isSupervisor = userRole === 'supervisor' || userRole === 'hubsupervisor' || userRole === 'hub_supervisor';
-  
-  if (!isSupervisor || !user.hubId) {
-    return { isHubSupervisor: false, hubId: null, hubStates: [], hubStateNames: [] };
-  }
 
-  const normalizedHubId = normalizeHubId(user.hubId);
-  if (!normalizedHubId) {
-    return { isHubSupervisor: false, hubId: null, hubStates: [], hubStateNames: [] };
-  }
+  if (!isSupervisor || !user.hubId) return empty;
 
-  const hubStatesData = getStatesInHub(normalizedHubId);
-  const hubStates = hubStatesData.map(s => s.id);
-  const hubStateNames = hubStatesData.map(s => s.name);
+  const primaryHubId = user.hubId;
+  const secondaryHubId = (user as any).secondaryHubId || null;
+
+  const rawIds = [primaryHubId, secondaryHubId].filter(Boolean) as string[];
+  const normalizedHubIds = rawIds
+    .map(h => normalizeHubId(h))
+    .filter(Boolean) as string[];
+
+  if (normalizedHubIds.length === 0) return empty;
+
+  const hasCountryOffice = rawIds.some(h => isCountryOfficeHub(h));
+
+  const { states, stateNames } = collectHubStates(normalizedHubIds);
 
   return {
     isHubSupervisor: true,
-    hubId: normalizedHubId,
-    hubStates,
-    hubStateNames
+    hubId: normalizedHubIds[0],
+    secondaryHubId: normalizedHubIds.length > 1 ? normalizedHubIds[1] : null,
+    hubIds: normalizedHubIds,
+    rawHubIds: rawIds,
+    hubStates: states,
+    hubStateNames: stateNames,
+    isCountryOffice: hasCountryOffice,
   };
 }
 
@@ -51,8 +94,8 @@ export function isStateInHub(stateId: string | null | undefined, hubId: string |
   const hub = hubs.find(h => h.id === normalizedHubId);
   if (!hub) return false;
 
-  const normalizedStateId = normalizeStateId(stateId);
-  return hub.states.some(s => normalizeStateId(s) === normalizedStateId);
+  const normalizedSId = normalizeStateId(stateId);
+  return hub.states.some(s => normalizeStateId(s) === normalizedSId);
 }
 
 export function normalizeStateName(stateName: string): string {
@@ -66,13 +109,18 @@ export function isStateNameInHub(stateName: string | null | undefined, hubId: st
   if (!normalizedHubId) return false;
 
   const hubStatesData = getStatesInHub(normalizedHubId);
-  const normalizedStateName = normalizeStateName(stateName);
+  const normalizedSN = normalizeStateName(stateName);
   const stateIdFromName = normalizeStateId(stateName);
   
   return hubStatesData.some(s => 
-    normalizeStateName(s.name) === normalizedStateName ||
+    normalizeStateName(s.name) === normalizedSN ||
     normalizeStateId(s.id) === stateIdFromName
   );
+}
+
+export function isStateInAnyHub(stateName: string | null | undefined, hubIds: string[]): boolean {
+  if (!stateName || hubIds.length === 0) return false;
+  return hubIds.some(hubId => isStateNameInHub(stateName, hubId));
 }
 
 export function filterByHubAccess<T extends { state?: string; stateName?: string; state_name?: string; stateId?: string; state_id?: string; hub_id?: string }>(
@@ -87,8 +135,11 @@ export function filterByHubAccess<T extends { state?: string; stateName?: string
   const normalizedHubStateNames = hubAccessInfo.hubStateNames.map(s => normalizeStateName(s));
 
   return items.filter(item => {
-    if ((item as any).hub_id && (item as any).hub_id === hubAccessInfo.hubId) {
-      return true;
+    if ((item as any).hub_id) {
+      const itemHubNormalized = normalizeHubId((item as any).hub_id);
+      if (itemHubNormalized && hubAccessInfo.hubIds.includes(itemHubNormalized)) {
+        return true;
+      }
     }
     
     const stateId = item.state_id || item.stateId || item.state;
@@ -142,4 +193,20 @@ export function getHubFilterQuery(hubId: string | null): { states: string[] } | 
 
   const hubStatesData = getStatesInHub(normalizedHubId);
   return { states: hubStatesData.map(s => s.id) };
+}
+
+export function getMultiHubFilterQuery(user: User | null): { states: string[] } | null {
+  if (!user?.hubId) return null;
+
+  const hubIds = [user.hubId, (user as any).secondaryHubId].filter(Boolean) as string[];
+  const allStates = new Set<string>();
+
+  for (const hubId of hubIds) {
+    const result = getHubFilterQuery(hubId);
+    if (result) {
+      result.states.forEach(s => allStates.add(s));
+    }
+  }
+
+  return allStates.size > 0 ? { states: Array.from(allStates) } : null;
 }

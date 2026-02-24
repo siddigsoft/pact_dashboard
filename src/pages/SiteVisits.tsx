@@ -187,28 +187,31 @@ const SiteVisits = () => {
     return (hasAnyRole(['supervisor', 'Supervisor']) || role === 'supervisor') && !isAdmin;
   }, [currentUser]);
 
-  // Get supervisor's hub ID for filtering
   const supervisorHubId = currentUser?.hubId;
+  const supervisorSecondaryHubId = (currentUser as any)?.secondaryHubId || null;
+  const supervisorHubIds = useMemo(() => 
+    [supervisorHubId, supervisorSecondaryHubId].filter(Boolean) as string[],
+    [supervisorHubId, supervisorSecondaryHubId]
+  );
   
-  // State for supervisor's hub name (fetched from database)
   const [supervisorHubName, setSupervisorHubName] = useState<string | null>(null);
 
-  // Fetch hub name for supervisor
   useEffect(() => {
-    if (!isSupervisor || !supervisorHubId) {
+    if (!isSupervisor || supervisorHubIds.length === 0) {
       setSupervisorHubName(null);
       return;
     }
-    const fetchHubName = async () => {
+    const fetchHubNames = async () => {
       const { data } = await supabase
         .from('hubs')
         .select('name')
-        .eq('id', supervisorHubId)
-        .maybeSingle();
-      if (data) setSupervisorHubName(data.name);
+        .in('id', supervisorHubIds);
+      if (data && data.length > 0) {
+        setSupervisorHubName(data.map(d => d.name).join(' & '));
+      }
     };
-    fetchHubName();
-  }, [isSupervisor, supervisorHubId]);
+    fetchHubNames();
+  }, [isSupervisor, supervisorHubIds]);
 
   // Get user's project team memberships from projects table (team.members, team.teamComposition)
   const { userProjectIds, isAdminOrSuperUser } = useUserProjects();

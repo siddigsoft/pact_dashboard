@@ -51,6 +51,7 @@ import { EmailNotificationService } from '@/services/email-notification.service'
 import { EmailCCInput } from '@/components/EmailCCInput';
 import { generateFinancialStatementPdf, type StatementRow, type StatementConfig } from '@/utils/financialStatementPdf';
 import { generateFinancialStatementExcel } from '@/utils/financialStatementExcel';
+import { getStatesInHub, normalizeHubId } from '@/data/sudanStates';
 
 const EXPENSE_CATEGORY_MAP: Record<string, { label: string; icon: any }> = {
   permits: { label: 'Permits & Licenses', icon: Ticket },
@@ -328,14 +329,14 @@ const CostSubmission = () => {
   const getTeamMemberIds = (): string[] => {
     if (isAdmin) return []; // Admins see all, no filtering needed
     if (isSupervisor && currentUser) {
-      // Hub supervisors see submissions from their hub's team members
-      const hubId = currentUser.hubId;
+      // Hub supervisors see submissions from their hub's team members (including secondary hub)
+      const userHubIds = [currentUser.hubId, (currentUser as any).secondaryHubId].filter(Boolean) as string[];
       const stateId = currentUser.stateId;
       
-      if (hubId) {
-        // Filter team members by hub_id
+      if (userHubIds.length > 0) {
+        // Filter team members by primary or secondary hub_id
         return users
-          .filter(u => u.hubId === hubId && u.id !== currentUser.id)
+          .filter(u => userHubIds.includes(u.hubId) && u.id !== currentUser.id)
           .map(u => u.id);
       } else if (stateId) {
         // Fallback: Filter by state
