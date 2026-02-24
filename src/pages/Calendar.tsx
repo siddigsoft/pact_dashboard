@@ -1,5 +1,5 @@
 
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Calendar } from "@/components/ui/calendar";
 import { DatePickerWithRange } from "@/components/ui/date-range-picker";
@@ -18,48 +18,150 @@ import {
   MapPin,
   Clock,
   CalendarX,
+  Shield,
+  Eye,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { motion } from "framer-motion";
 import { useUser } from "@/context/user/UserContext";
+import { getHubAccessInfo, filterByHubAccess, isStateNameInHub, normalizeStateName, normalizeStateId } from "@/utils/hubAccessControl";
+
+function normalizeRole(role: string): string {
+  return role.toLowerCase().replace(/[\s_-]+/g, '');
+}
+
+function hasRoleIn(role: string, targets: string[]): boolean {
+  const normalized = normalizeRole(role);
+  return targets.some(t => normalizeRole(t) === normalized);
+}
+
+const GLOBAL_ADMIN_ROLES = [
+  'admin', 'superAdmin', 'super_admin', 'Super Admin',
+  'ict', 'ICT', 'ICT admin',
+  'fom', 'fieldOpManager', 'Field Operation Manager (FOM)', 'Field Operation Manager',
+  'countryDirector', 'country_director', 'Country Director',
+  'financialAdmin', 'financial_admin', 'Financial Admin',
+  'projectManager', 'project_manager', 'Project Manager',
+  'seniorOperationsLead', 'senior_operations_lead', 'Senior Operations Lead',
+];
+
+const SUPERVISOR_ROLES = ['supervisor', 'Supervisor', 'hubSupervisor', 'hub_supervisor'];
+const DATA_TEAM_ROLES = ['dataTeam', 'data_team', 'Data Team', 'DataTeam'];
+const COORDINATOR_ROLES = ['coordinator', 'Coordinator'];
+const DATA_COLLECTOR_ROLES = ['dataCollector', 'data_collector', 'Data Collector', 'DataCollector', 'datacollector'];
 
 const CalendarPage = () => {
   const { siteVisits } = useSiteVisitContext();
   const navigate = useNavigate();
-  const { users } = useUser();
+  const { currentUser, users } = useUser();
 
-  // State for the date / date range
   const [date, setDate] = useState<Date>(new Date());
   const [dateRange, setDateRange] = useState<DateRange | undefined>({
     from: new Date(),
     to: addMonths(new Date(), 1),
   });
 
-  // State for the view mode
   const [viewMode, setViewMode] = useState<"daily" | "range">("daily");
 
-  // Filter site visits based on selected date/range
-  const filteredVisits = React.useMemo(() => {
+  const userRole = currentUser?.role || '';
+
+  const isGlobalAdmin = hasRoleIn(userRole, GLOBAL_ADMIN_ROLES);
+  const isSupervisor = hasRoleIn(userRole, SUPERVISOR_ROLES);
+  const isDataTeam = hasRoleIn(userRole, DATA_TEAM_ROLES);
+  const isCoordinator = hasRoleIn(userRole, COORDINATOR_ROLES);
+  const isDataCollector = hasRoleIn(userRole, DATA_COLLECTOR_ROLES);
+
+  const hubAccessInfo = useMemo(() => getHubAccessInfo(currentUser), [currentUser]);
+
+  const roleFilteredVisits = useMemo(() => {
+    if (!currentUser) return [];
+
+    if (isGlobalAdmin) {
+      return siteVisits;
+    }
+
+    if (isSupervisor && currentUser.hubId) {
+      const hubFiltered = filterByHubAccess(
+        siteVisits.map(v => ({ ...v, state_id: v.state, stateName: v.state })),
+        hubAccessInfo
+      );
+      if (hubFiltered.length > 0) return hubFiltered;
+      return siteVisits.filter(visit => {
+        if (visit.state && isStateNameInHub(visit.state, currentUser.hubId || null)) return true;
+        const hubOffice = (visit as any).hubOffice || visit.hub || '';
+        if (hubOffice && hubAccessInfo.hubId && normalizeRole(hubOffice).includes(normalizeRole(hubAccessInfo.hubId))) return true;
+        return false;
+      });
+    }
+
+    if (isDataTeam && currentUser.stateId) {
+      return siteVisits.filter(visit => {
+        const visitState = visit.state || '';
+        const userState = currentUser.stateId || '';
+        if (normalizeStateName(visitState) === normalizeStateName(userState)) return true;
+        if (normalizeStateId(visitState) === normalizeStateId(userState)) return true;
+        return false;
+      });
+    }
+
+    if (isCoordinator) {
+      return siteVisits.filter(visit => {
+        if (visit.assignedTo === currentUser.id) return true;
+        if ((visit as any).team?.coordinator === currentUser.id) return true;
+        if (visit.assignedBy === currentUser.id) return true;
+        if ((visit as any).dispatched_by === currentUser.id) return true;
+        if ((visit as any).forwarded_to_user_id === currentUser.id) return true;
+        if ((visit as any).accepted_by === currentUser.id) return true;
+        return false;
+      });
+    }
+
+    if (isDataCollector) {
+      return siteVisits.filter(visit => {
+        if (visit.assignedTo === currentUser.id) return true;
+        if ((visit as any).accepted_by === currentUser.id) return true;
+        if ((visit as any).forwarded_to_user_id === currentUser.id) return true;
+        if ((visit as any).team?.fieldOfficer === currentUser.id) return true;
+        return false;
+      });
+    }
+
+    return siteVisits.filter(visit => {
+      return visit.assignedTo === currentUser.id ||
+             (visit as any).accepted_by === currentUser.id;
+    });
+  }, [siteVisits, currentUser, isGlobalAdmin, isSupervisor, isDataTeam, isCoordinator, isDataCollector, hubAccessInfo]);
+
+  const filteredVisits = useMemo(() => {
     if (viewMode === "daily" && date) {
-      return siteVisits.filter((visit) => {
+      return roleFilteredVisits.filter((visit) => {
         const visitDate = new Date(visit.dueDate);
         return isSameDay(visitDate, date);
       });
     } else if (viewMode === "range" && dateRange?.from) {
-      return siteVisits.filter((visit) => {
+      return roleFilteredVisits.filter((visit) => {
         const visitDate = new Date(visit.dueDate);
         if (dateRange.to) {
           return (
-            visitDate >= dateRange.from && visitDate <= dateRange.to
+            visitDate >= dateRange.from! && visitDate <= dateRange.to
           );
         } else {
-          return isSameDay(visitDate, dateRange.from);
+          return isSameDay(visitDate, dateRange.from!);
         }
       });
     }
     return [];
-  }, [siteVisits, date, dateRange, viewMode]);
+  }, [roleFilteredVisits, date, dateRange, viewMode]);
+
+  const accessLevelLabel = useMemo(() => {
+    if (isGlobalAdmin) return 'All Hubs & Teams';
+    if (isSupervisor) return `Hub: ${currentUser?.hubId || 'Your Hub'}`;
+    if (isDataTeam) return `State: ${currentUser?.stateId || 'Your State'}`;
+    if (isCoordinator) return 'Your Coordinated Visits';
+    if (isDataCollector) return 'Your Assigned Visits';
+    return 'Your Visits';
+  }, [isGlobalAdmin, isSupervisor, isDataTeam, isCoordinator, isDataCollector, currentUser]);
 
   const resolveUserName = (id?: string) => {
     if (!id) return undefined;
@@ -72,9 +174,8 @@ const CalendarPage = () => {
     navigate(`/site-visits/${visitId}`);
   };
 
-  // Check if a day has visits scheduled
   const isDayWithVisits = (day: Date) => {
-    return siteVisits.some((visit) => {
+    return roleFilteredVisits.some((visit) => {
       const visitDate = new Date(visit.dueDate);
       return isSameDay(visitDate, day);
     });
@@ -83,10 +184,21 @@ const CalendarPage = () => {
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center space-y-2 sm:space-y-0">
-        <h1 className="text-2xl font-bold flex items-center">
-          <CalendarDays className="mr-2 h-6 w-6" />
-          Schedule & Planning
-        </h1>
+        <div>
+          <h1 className="text-2xl font-bold flex items-center">
+            <CalendarDays className="mr-2 h-6 w-6" />
+            Schedule & Planning
+          </h1>
+          <div className="flex items-center gap-1.5 mt-1.5 text-xs text-muted-foreground" data-testid="text-access-level">
+            <Eye className="h-3.5 w-3.5" />
+            <span>Viewing: <span className="font-medium text-foreground/80">{accessLevelLabel}</span></span>
+            {!isGlobalAdmin && (
+              <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 ml-1">
+                Filtered
+              </Badge>
+            )}
+          </div>
+        </div>
         <Tabs
           value={viewMode}
           onValueChange={(v) => setViewMode(v as "daily" | "range")}
