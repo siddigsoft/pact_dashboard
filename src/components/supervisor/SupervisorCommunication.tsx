@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { normalizeHubId } from '@/data/sudanStates';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -71,7 +72,10 @@ export function SupervisorCommunication({ hubId, className }: SupervisorCommunic
   const [selectedMembers, setSelectedMembers] = useState<Set<string>>(new Set());
 
   const supervisorHubId = hubId || currentUser?.hubId;
-  const supervisorHubIds = [supervisorHubId, (currentUser as any)?.secondaryHubId].filter(Boolean) as string[];
+  const supervisorHubIds = [supervisorHubId, (currentUser as any)?.secondaryHubId]
+    .filter(Boolean)
+    .map(h => normalizeHubId(h!) || h!)
+    .filter((v, i, a) => a.indexOf(v) === i);
 
   useEffect(() => {
     if (isOpen) {

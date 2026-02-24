@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { normalizeHubId } from '@/data/sudanStates';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -161,7 +162,10 @@ export default function WithdrawalApproval() {
 
   const supervisorHubId = currentUser?.hubId;
   const supervisorSecondaryHubId = (currentUser as any)?.secondaryHubId || null;
-  const supervisorHubIds = [supervisorHubId, supervisorSecondaryHubId].filter(Boolean) as string[];
+  const supervisorHubIds = [supervisorHubId, supervisorSecondaryHubId]
+    .filter(Boolean)
+    .map(h => normalizeHubId(h!) || h!)
+    .filter((v, i, a) => a.indexOf(v) === i);
 
   useEffect(() => {
     if (!isSupervisor || supervisorHubIds.length === 0) {

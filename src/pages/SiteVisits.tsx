@@ -33,7 +33,7 @@ import FloatingMessenger from "@/components/communication/FloatingMessenger";
 import { RequestDownPaymentButton } from "@/components/site-visit/RequestDownPaymentButton";
 import { useMMP } from "@/context/mmp/MMPContext";
 import LeafletMapContainer from '@/components/map/LeafletMapContainer';
-import { sudanStates, getStateName, getLocalityName } from '@/data/sudanStates';
+import { sudanStates, getStateName, getLocalityName, normalizeHubId } from '@/data/sudanStates';
 import { supabase } from '@/integrations/supabase/client';
 import { useUserProjects } from '@/hooks/useUserProjects';
 import { useSuperAdmin } from '@/context/superAdmin/SuperAdminContext';
@@ -190,7 +190,10 @@ const SiteVisits = () => {
   const supervisorHubId = currentUser?.hubId;
   const supervisorSecondaryHubId = (currentUser as any)?.secondaryHubId || null;
   const supervisorHubIds = useMemo(() => 
-    [supervisorHubId, supervisorSecondaryHubId].filter(Boolean) as string[],
+    [supervisorHubId, supervisorSecondaryHubId]
+      .filter(Boolean)
+      .map(h => normalizeHubId(h!) || h!)
+      .filter((v, i, a) => a.indexOf(v) === i),
     [supervisorHubId, supervisorSecondaryHubId]
   );
   

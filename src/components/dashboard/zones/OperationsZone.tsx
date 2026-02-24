@@ -134,9 +134,10 @@ export const OperationsZone: React.FC = () => {
     const fetchHubName = async () => {
       try {
         const hubs = await fetchHubs();
-        const primaryHub = hubs.find(h => h.id === currentUser.hubId);
-        const secondaryHub = (currentUser as any)?.secondaryHubId 
-          ? hubs.find(h => h.id === (currentUser as any).secondaryHubId)
+        const primaryHub = hubs.find(h => h.id === currentUser.hubId || h.name === currentUser.hubId);
+        const secId = (currentUser as any)?.secondaryHubId;
+        const secondaryHub = secId 
+          ? hubs.find(h => h.id === secId || h.name === secId || h.id === secId.toLowerCase().replace(/\s+/g, '-'))
           : null;
         
         if (primaryHub) {

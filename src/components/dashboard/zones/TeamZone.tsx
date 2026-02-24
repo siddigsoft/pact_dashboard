@@ -15,6 +15,7 @@ import { TeamMemberTable } from '../TeamMemberTable';
 import { User } from '@/types/user';
 import { useAppContext } from '@/context/AppContext';
 import { fetchHubs } from '@/services/mmpActions';
+import { normalizeHubId } from '@/data/sudanStates';
 import { useCall } from '@/context/communications/CallContext';
 import { useCommunication } from '@/context/communications/CommunicationContext';
 import { useZoneMmpAnalytics } from '@/hooks/use-zone-mmp-analytics';
@@ -47,7 +48,10 @@ export const TeamZone: React.FC = () => {
   // Get supervisor's hub IDs for filtering (primary and secondary)
   const supervisorHubId = currentUser?.hubId;
   const supervisorSecondaryHubId = (currentUser as any)?.secondaryHubId || null;
-  const supervisorHubIds = [supervisorHubId, supervisorSecondaryHubId].filter(Boolean) as string[];
+  const supervisorHubIds = [supervisorHubId, supervisorSecondaryHubId]
+    .filter(Boolean)
+    .map(h => normalizeHubId(h!) || h!)
+    .filter((v, i, a) => a.indexOf(v) === i);
 
   // Fetch hub names for supervisor
   useEffect(() => {
@@ -58,7 +62,11 @@ export const TeamZone: React.FC = () => {
     const fetchHubName = async () => {
       try {
         const hubs = await fetchHubs();
-        const matchingHubs = hubs.filter(h => supervisorHubIds.includes(h.id));
+        const matchingHubs = hubs.filter(h => 
+          supervisorHubIds.some(sid => 
+            sid === h.id || sid === h.name || h.id === sid?.toLowerCase().replace(/\s+/g, '-')
+          )
+        );
         if (matchingHubs.length > 0) {
           const names = matchingHubs.map(h => h.name).join(' & ');
           setHubName(names);
