@@ -1284,31 +1284,69 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
         availability: user.availability || 'offline'
       };
       
-      // Use RPC function to bypass RLS for admin profile updates
-      const { data, error } = await supabase.rpc('admin_update_profile', {
-        target_id: updatedUser.id,
-        new_full_name: updatedUser.fullName || updatedUser.name || null,
-        new_username: updatedUser.username || null,
-        new_email: updatedUser.email || null,
-        new_role: updatedUser.role || null,
-        new_avatar_url: updatedUser.avatar || null,
-        new_hub_id: updatedUser.hubId || null,
-        new_secondary_hub_id: updatedUser.secondaryHubId || null,
-        new_state_id: updatedUser.stateId || null,
-        new_locality_id: updatedUser.localityId || null,
-        new_employee_id: updatedUser.employeeId || null,
-        new_phone: updatedUser.phone || null,
-        new_bank_account: (updatedUser as any).bankAccount || null,
-      });
+      // Try RPC function first (bypasses RLS), fall back to direct update
+      let updateSuccess = false;
+      let updateError: any = null;
 
-      if (error || data === false) {
-        console.error("Supabase update error or no row updated:", error || 'No data returned');
-        toast({
-          title: "Update blocked",
-          description: error?.message || "No profile was updated. You may not have permission to edit this user.",
-          variant: "destructive",
+      try {
+        const { data: rpcData, error: rpcError } = await supabase.rpc('admin_update_profile', {
+          target_id: updatedUser.id,
+          new_full_name: updatedUser.fullName || updatedUser.name || null,
+          new_username: updatedUser.username || null,
+          new_email: updatedUser.email || null,
+          new_role: updatedUser.role || null,
+          new_avatar_url: updatedUser.avatar || null,
+          new_hub_id: updatedUser.hubId || null,
+          new_secondary_hub_id: updatedUser.secondaryHubId || null,
+          new_state_id: updatedUser.stateId || null,
+          new_locality_id: updatedUser.localityId || null,
+          new_employee_id: updatedUser.employeeId || null,
+          new_phone: updatedUser.phone || null,
+          new_bank_account: (updatedUser as any).bankAccount || null,
         });
-        return false;
+
+        if (!rpcError && rpcData !== false) {
+          updateSuccess = true;
+        } else {
+          console.warn("RPC update failed, trying direct update:", rpcError);
+          updateError = rpcError;
+        }
+      } catch (rpcErr) {
+        console.warn("RPC function not available, trying direct update:", rpcErr);
+      }
+
+      // Fallback: direct table update if RPC failed
+      if (!updateSuccess) {
+        const { data: directData, error: directError } = await supabase
+          .from('profiles')
+          .update({
+            full_name: updatedUser.fullName || updatedUser.name,
+            username: updatedUser.username,
+            email: updatedUser.email,
+            role: updatedUser.role,
+            avatar_url: updatedUser.avatar,
+            hub_id: updatedUser.hubId,
+            secondary_hub_id: updatedUser.secondaryHubId,
+            state_id: updatedUser.stateId,
+            locality_id: updatedUser.localityId,
+            employee_id: updatedUser.employeeId,
+            phone: updatedUser.phone,
+            bank_account: (updatedUser as any).bankAccount,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', updatedUser.id)
+          .select('id');
+
+        if (directError || !directData || directData.length === 0) {
+          console.error("Both RPC and direct update failed:", { rpcError: updateError, directError });
+          toast({
+            title: "Update blocked",
+            description: updateError?.message || directError?.message || "No profile was updated. You may not have permission to edit this user.",
+            variant: "destructive",
+          });
+          return false;
+        }
+        updateSuccess = true;
       }
 
       // Update local caches only after confirmed DB success
