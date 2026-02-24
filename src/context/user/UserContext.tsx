@@ -1301,6 +1301,7 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
           new_locality_id: updatedUser.localityId || null,
           new_employee_id: updatedUser.employeeId || null,
           new_phone: updatedUser.phone || null,
+          new_bank_account: (updatedUser as any).bankAccount || null,
         });
 
         if (!rpcError && rpcData !== false) {
@@ -1326,10 +1327,9 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
           locality_id: updatedUser.localityId,
           employee_id: updatedUser.employeeId,
           phone: updatedUser.phone,
+          bank_account: (updatedUser as any).bankAccount || null,
           updated_at: new Date().toISOString(),
         };
-        if (updatedUser.secondaryHubId !== undefined) updatePayload.secondary_hub_id = updatedUser.secondaryHubId;
-        if ((updatedUser as any).bankAccount !== undefined) updatePayload.bank_account = (updatedUser as any).bankAccount;
 
         const { data: directData, error: directError } = await supabase
           .from('profiles')
