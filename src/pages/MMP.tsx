@@ -401,6 +401,7 @@ const MMP = () => {
   const [forwardedSubTab, setForwardedSubTab] = useState<'pending' | 'verified'>('pending');
   // Subcategory state for Verified Sites (Admin/ICT only)
   const [verifiedSubTab, setVerifiedSubTab] = useState<'newSites' | 'approvedCosted' | 'dispatched' | 'smartAssigned' | 'accepted' | 'ongoing' | 'completed' | 'rejected'>('newSites');
+  const [isBulkApproving, setIsBulkApproving] = useState(false);
   const [tableFilteredSiteIds, setTableFilteredSiteIds] = useState<Set<string>>(new Set());
   const [tableFilteredCount, setTableFilteredCount] = useState<number>(0);
   const [tableFilteredEntries, setTableFilteredEntries] = useState<any[]>([]);
@@ -5031,6 +5032,7 @@ const MMP = () => {
                       <Button
                         variant="default"
                         size="lg"
+                        disabled={isBulkApproving}
                         onClick={async () => {
                           try {
                             let verifiedEntries: any[] = filteredVerifiedCategorySiteRows;
@@ -5058,6 +5060,11 @@ const MMP = () => {
                               return;
                             }
 
+                            setIsBulkApproving(true);
+
+                            const approvedAt = new Date().toISOString();
+                            const approvedBy = currentUser?.username || currentUser?.fullName || currentUser?.email || 'System';
+
                             const updates = verifiedEntries.map((entry: any) => {
                               const currentCost = entry.cost;
                               const enumFee = entry.enumerator_fee ?? entry.enumeratorFee;
@@ -5078,8 +5085,8 @@ const MMP = () => {
                                 ...(enumFee !== undefined ? { enumerator_fee: enumFee } : {}),
                                 ...(transFee !== undefined ? { transport_fee: transFee } : {}),
                                 ...(finalCost !== undefined ? { cost: finalCost } : {}),
-                                approved_and_costed_at: new Date().toISOString(),
-                                approved_and_costed_by: currentUser?.username || currentUser?.fullName || currentUser?.email || 'System'
+                                approved_and_costed_at: approvedAt,
+                                approved_and_costed_by: approvedBy
                               };
 
                               return {
@@ -5092,11 +5099,10 @@ const MMP = () => {
                               } as any;
                             });
 
-                            // Update in batches to avoid timeout
-                            const batchSize = 100;
+                            const batchSize = 25;
                             for (let i = 0; i < updates.length; i += batchSize) {
                               const batch = updates.slice(i, i + batchSize);
-                              const updatePromises = batch.map(update => {
+                              await Promise.all(batch.map(update => {
                                 const payload: any = { 
                                   status: update.status, 
                                   additional_data: update.additional_data,
@@ -5112,41 +5118,44 @@ const MMP = () => {
                                   .from('mmp_site_entries')
                                   .update(payload)
                                   .eq('id', update.id);
-                              });
-                              await Promise.all(updatePromises);
+                              }));
                             }
 
-                            // Cancel any linked down_payment_requests for these re-approved sites
                             const reApprovedIds = updates.map((u: any) => u.id);
                             if (reApprovedIds.length > 0) {
                               try {
-                                const { data: linkedDpRequests } = await supabase
-                                  .from('down_payment_requests')
-                                  .select('id, mmp_site_entry_id, status')
-                                  .in('mmp_site_entry_id', reApprovedIds)
-                                  .in('status', ['approved', 'pending_admin', 'pending_supervisor', 'pending']);
+                                const batchIdSize = 50;
+                                const allLinkedDpRequests: any[] = [];
+                                for (let i = 0; i < reApprovedIds.length; i += batchIdSize) {
+                                  const idBatch = reApprovedIds.slice(i, i + batchIdSize);
+                                  const { data } = await supabase
+                                    .from('down_payment_requests')
+                                    .select('id, mmp_site_entry_id, status, metadata')
+                                    .in('mmp_site_entry_id', idBatch)
+                                    .in('status', ['approved', 'pending_admin', 'pending_supervisor', 'pending']);
+                                  if (data) allLinkedDpRequests.push(...data);
+                                }
                                 
-                                if (linkedDpRequests && linkedDpRequests.length > 0) {
-                                  for (const dpReq of linkedDpRequests) {
-                                    const { data: dpRow } = await supabase
-                                      .from('down_payment_requests')
-                                      .select('metadata')
-                                      .eq('id', dpReq.id)
-                                      .single();
-                                    const existingMeta = (dpRow?.metadata as Record<string, any>) || {};
-                                    await supabase
-                                      .from('down_payment_requests')
-                                      .update({
-                                        status: 'cancelled',
-                                        updated_at: new Date().toISOString(),
-                                        metadata: {
-                                          ...existingMeta,
-                                          cancelled_reason: 'Site re-approved and costed - advance request voided',
-                                          cancelled_at: new Date().toISOString(),
-                                          cancelled_by: currentUser?.username || currentUser?.fullName || 'System',
-                                        }
-                                      })
-                                      .eq('id', dpReq.id);
+                                if (allLinkedDpRequests.length > 0) {
+                                  const dpBatchSize = 10;
+                                  for (let i = 0; i < allLinkedDpRequests.length; i += dpBatchSize) {
+                                    const dpBatch = allLinkedDpRequests.slice(i, i + dpBatchSize);
+                                    await Promise.all(dpBatch.map(dpReq => {
+                                      const existingMeta = (dpReq.metadata as Record<string, any>) || {};
+                                      return supabase
+                                        .from('down_payment_requests')
+                                        .update({
+                                          status: 'cancelled',
+                                          updated_at: approvedAt,
+                                          metadata: {
+                                            ...existingMeta,
+                                            cancelled_reason: 'Site re-approved and costed - advance request voided',
+                                            cancelled_at: approvedAt,
+                                            cancelled_by: approvedBy,
+                                          }
+                                        })
+                                        .eq('id', dpReq.id);
+                                    }));
                                   }
                                 }
                               } catch (dpClearError) {
@@ -5154,15 +5163,16 @@ const MMP = () => {
                               }
                             }
 
+                            setIsBulkApproving(false);
                             toast({
                               title: 'Bulk Cost Successful',
                               description: `Successfully approved and costed ${updates.length} site(s).`,
                               variant: 'default'
                             });
 
-                            // Reload the page data
                             window.location.reload();
                           } catch (error: any) {
+                            setIsBulkApproving(false);
                             console.error('Error in bulk cost:', error);
                             toast({
                               title: 'Bulk Cost Failed',
@@ -5173,7 +5183,14 @@ const MMP = () => {
                         }}
                         className="bg-green-600 hover:bg-green-700 text-white mb-4"
                       >
-                        Approve for Costing ({tableFilteredCount > 0 ? `${tableFilteredCount} filtered` : filteredVerifiedCategorySiteRows.length} sites)
+                        {isBulkApproving ? (
+                          <span className="flex items-center gap-2">
+                            <span className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent" />
+                            Processing...
+                          </span>
+                        ) : (
+                          <>Approve for Costing ({tableFilteredCount > 0 ? `${tableFilteredCount} filtered` : filteredVerifiedCategorySiteRows.length} sites)</>
+                        )}
                       </Button>
                     </div>
                   )}
