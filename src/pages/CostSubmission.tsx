@@ -376,8 +376,14 @@ const CostSubmission = () => {
   const filteredOperationalCosts = useMemo(() => {
     let filtered = operationalCosts;
     if (!isAdminOrSuperUser && !isSuperAdmin) {
-      if (isSupervisor && teamMemberIds.length > 0) {
-        filtered = filtered.filter(o => teamMemberIds.includes(o.submitted_by) || o.submitted_by === currentUser?.id);
+      if (isSupervisor) {
+        filtered = filtered.filter(o => {
+          if (o.submitted_by === currentUser?.id) return true;
+          if (teamMemberIds.length > 0 && teamMemberIds.includes(o.submitted_by)) return true;
+          const submitterRole = (o.submitter_role || '').toLowerCase();
+          if (o.tier1_status === 'pending' && (submitterRole.includes('coordinator'))) return true;
+          return false;
+        });
       } else if (!canViewTeamSubmissions) {
         filtered = filtered.filter(o => o.submitted_by === currentUser?.id);
       }
