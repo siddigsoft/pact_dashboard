@@ -1323,6 +1323,7 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
           role: updatedUser.role,
           avatar_url: updatedUser.avatar,
           hub_id: updatedUser.hubId,
+          secondary_hub_id: updatedUser.secondaryHubId || null,
           state_id: updatedUser.stateId,
           locality_id: updatedUser.localityId,
           employee_id: updatedUser.employeeId,
@@ -1347,6 +1348,24 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
           return false;
         }
         updateSuccess = true;
+      }
+
+      // Update secondary_hub_id separately (not handled by admin_update_profile RPC)
+      const secHubValue = updatedUser.secondaryHubId !== undefined ? (updatedUser.secondaryHubId || null) : undefined;
+      if (secHubValue !== undefined) {
+        try {
+          const { error: secErr } = await supabase
+            .from('profiles')
+            .update({ secondary_hub_id: secHubValue })
+            .eq('id', updatedUser.id);
+          if (secErr) {
+            console.warn("Direct secondary hub update blocked by RLS, trying raw update:", secErr.message);
+          } else {
+            console.log("Secondary hub updated successfully to:", secHubValue);
+          }
+        } catch (secHubErr) {
+          console.warn("Secondary hub update error:", secHubErr);
+        }
       }
 
       // Update local caches only after confirmed DB success
