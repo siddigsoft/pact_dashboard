@@ -230,6 +230,7 @@ export function SuperAdminDataManagement() {
   const [txTypeFilter, setTxTypeFilter] = useState('all');
   const [txAmountFilter, setTxAmountFilter] = useState('all');
   const [txUserFilter, setTxUserFilter] = useState('all');
+  const [txWalletFilter, setTxWalletFilter] = useState('all');
   const [txDateFrom, setTxDateFrom] = useState('');
   const [txDateTo, setTxDateTo] = useState('');
 
@@ -954,13 +955,15 @@ export function SuperAdminDataManagement() {
 
       const matchesUser = txUserFilter === 'all' || t.user_id === txUserFilter;
 
+      const matchesWallet = txWalletFilter === 'all' || t.wallet_id === txWalletFilter;
+
       const txDate = new Date(t.created_at);
       const matchesDateFrom = !txDateFrom || txDate >= new Date(txDateFrom);
       const matchesDateTo = !txDateTo || txDate <= new Date(txDateTo + 'T23:59:59');
 
-      return matchesSearch && matchesType && matchesAmount && matchesUser && matchesDateFrom && matchesDateTo;
+      return matchesSearch && matchesType && matchesAmount && matchesUser && matchesWallet && matchesDateFrom && matchesDateTo;
     });
-  }, [transactions, debouncedTxSearch, txTypeFilter, txAmountFilter, txUserFilter, txDateFrom, txDateTo]);
+  }, [transactions, debouncedTxSearch, txTypeFilter, txAmountFilter, txUserFilter, txWalletFilter, txDateFrom, txDateTo]);
 
   const txUniqueTypes = useMemo(() => {
     return [...new Set(transactions.map(t => t.type).filter(Boolean))].sort();
@@ -972,9 +975,20 @@ export function SuperAdminDataManagement() {
     return [...seen.entries()].sort((a, b) => a[1].localeCompare(b[1]));
   }, [transactions]);
 
+  const txUniqueWallets = useMemo(() => {
+    const seen = new Map<string, string>();
+    transactions.forEach(t => {
+      if (t.wallet_id && !seen.has(t.wallet_id)) {
+        seen.set(t.wallet_id, t.user_name ? `${t.user_name} (wallet)` : t.wallet_id.substring(0, 8).toUpperCase());
+      }
+    });
+    return [...seen.entries()].sort((a, b) => a[1].localeCompare(b[1]));
+  }, [transactions]);
+
   const txActiveFilterCount = [
     txSearch, txTypeFilter !== 'all' ? txTypeFilter : '', txAmountFilter !== 'all' ? txAmountFilter : '',
-    txUserFilter !== 'all' ? txUserFilter : '', txDateFrom, txDateTo,
+    txUserFilter !== 'all' ? txUserFilter : '', txWalletFilter !== 'all' ? txWalletFilter : '',
+    txDateFrom, txDateTo,
   ].filter(Boolean).length;
 
   const filteredClaimedSites = useMemo(() => {
@@ -1578,6 +1592,19 @@ export function SuperAdminDataManagement() {
                   </SelectContent>
                 </Select>
 
+                {/* Wallet */}
+                <Select value={txWalletFilter} onValueChange={setTxWalletFilter}>
+                  <SelectTrigger className="h-8 text-xs w-[160px]" data-testid="select-tx-wallet">
+                    <SelectValue placeholder="All wallets" />
+                  </SelectTrigger>
+                  <SelectContent className="max-h-56">
+                    <SelectItem value="all">All wallets</SelectItem>
+                    {txUniqueWallets.map(([wid, wname]) => (
+                      <SelectItem key={wid} value={wid}>{wname}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+
                 {/* Date from */}
                 <div className="relative">
                   <Calendar className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
@@ -1613,6 +1640,7 @@ export function SuperAdminDataManagement() {
                       setTxTypeFilter('all');
                       setTxAmountFilter('all');
                       setTxUserFilter('all');
+                      setTxWalletFilter('all');
                       setTxDateFrom('');
                       setTxDateTo('');
                     }}
