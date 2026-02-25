@@ -954,7 +954,7 @@ class _WalletPageEnhancedState extends ConsumerState<WalletPageEnhanced>
                     r.statusLabel,
                     style: TextStyle(
                       fontSize: 12,
-                      color: _getStatusColor(r.status),
+                      color: _getStatusColor(r.statusString),
                       fontWeight: FontWeight.w600,
                     ),
                   ),
