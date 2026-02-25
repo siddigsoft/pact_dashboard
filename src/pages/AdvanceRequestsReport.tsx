@@ -59,6 +59,7 @@ import { exportOverviewToFormattedExcel, exportAgingToFormattedExcel, exportGrou
 import { useToast } from '@/hooks/use-toast';
 import type { DownPaymentRequest } from '@/types/down-payment';
 import { EmailNotificationService } from '@/services/email-notification.service';
+import { notificationDigestService } from '@/services/notification-digest.service';
 import { EmailCCInput } from '@/components/EmailCCInput';
 import { generateFinancialStatementPdf, type StatementRow, type StatementConfig } from '@/utils/financialStatementPdf';
 import { generateFinancialStatementExcel } from '@/utils/financialStatementExcel';
@@ -86,6 +87,10 @@ function AdvanceRequestsReportContent() {
   const [mmpFilter, setMmpFilter] = useState<string>('all');
   const location = useLocation();
   const [activeTab, setActiveTab] = useState(() => new URLSearchParams(location.search).get('tab') || 'overview');
+  useEffect(() => {
+    const tab = new URLSearchParams(location.search).get('tab');
+    if (tab) setActiveTab(tab);
+  }, [location.search]);
   const [currentPage, setCurrentPage] = useState(1);
   const [expandedMember, setExpandedMember] = useState<string | null>(null);
   const [expandedRequestRow, setExpandedRequestRow] = useState<string | null>(null);
@@ -525,6 +530,22 @@ function AdvanceRequestsReportContent() {
 
   const [reclaimSelectedIds, setReclaimSelectedIds] = useState<Set<string>>(new Set());
   const [bulkResolveProcessing, setBulkResolveProcessing] = useState(false);
+  const [digestSending, setDigestSending] = useState(false);
+  const handleSendReclaimDigest = async () => {
+    setDigestSending(true);
+    try {
+      const result = await notificationDigestService.sendReclaimReconciliationDigest();
+      if (result.success) {
+        toast({ title: 'Digest Sent', description: `Reconciliation digest emailed to ${result.sent} financial admin(s).` });
+      } else {
+        toast({ title: 'Digest Failed', description: result.error || 'Could not send digest email.', variant: 'destructive' });
+      }
+    } catch (err) {
+      toast({ title: 'Error', description: 'Failed to send digest.', variant: 'destructive' });
+    } finally {
+      setDigestSending(false);
+    }
+  };
   const [writeOffDialog, setWriteOffDialog] = useState<{ open: boolean; req: DownPaymentRequest | null; reason: string; notes: string; processing: boolean }>({
     open: false, req: null, reason: '', notes: '', processing: false,
   });
@@ -641,6 +662,19 @@ function AdvanceRequestsReportContent() {
   };
 
   const getStatusBadge = (status: string, metadata?: any) => {
+    // Special case: written off via write-off workflow (check first — takes precedence over auto-cancel)
+    if (status === 'cancelled' && metadata?.written_off === true) {
+      return (
+        <div className="flex flex-col gap-1">
+          <Badge variant="secondary" className="bg-gray-100 text-gray-700 border border-gray-400 text-[10px] whitespace-nowrap">
+            Written Off / مشطوب
+          </Badge>
+          {metadata?.write_off_reason && (
+            <span className="text-[9px] text-muted-foreground truncate max-w-[140px]">{metadata.write_off_reason}</span>
+          )}
+        </div>
+      );
+    }
     // Special case: cancelled because site was reclaimed
     if (status === 'cancelled' && metadata?.auto_cancelled_on_reclaim) {
       return (
@@ -711,9 +745,11 @@ function AdvanceRequestsReportContent() {
           (req.metadata as any)?.isReconciled === true || 
           req.status === 'fully_paid';
         const needsManual = (req.metadata as any)?.manual_reconciliation_required === true;
+        const isWrittenOff = (req.metadata as any)?.written_off === true;
         if (reconciledFilter === 'reconciled' && !isReconciled) return false;
         if (reconciledFilter === 'not_reconciled' && isReconciled) return false;
         if (reconciledFilter === 'needs_manual' && !needsManual) return false;
+        if (reconciledFilter === 'written_off' && !isWrittenOff) return false;
       }
       return true;
     });
@@ -1818,6 +1854,7 @@ function AdvanceRequestsReportContent() {
             <SelectItem value="reconciled">Reconciled</SelectItem>
             <SelectItem value="not_reconciled">Not Reconciled</SelectItem>
             <SelectItem value="needs_manual">⚠ Needs Manual Reconciliation</SelectItem>
+            <SelectItem value="written_off">Written Off</SelectItem>
           </SelectContent>
         </Select>
       </div>
@@ -3600,6 +3637,19 @@ function AdvanceRequestsReportContent() {
                         Resolve Selected ({reclaimSelectedIds.size})
                       </Button>
                     )}
+                    {isAdmin && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handleSendReclaimDigest}
+                        disabled={digestSending}
+                        data-testid="button-send-reclaim-digest"
+                        className="gap-1 border-blue-400 text-blue-700 hover:bg-blue-50 dark:hover:bg-blue-950"
+                      >
+                        <Mail className="h-3.5 w-3.5" />
+                        {digestSending ? 'Sending…' : 'Send Digest Email'}
+                      </Button>
+                    )}
                     <Button variant="outline" size="sm" onClick={exportReclaimImpactPdf} disabled={allReclaimedAdvances.length === 0} data-testid="button-reclaim-impact-pdf">
                       <FileText className="h-4 w-4 mr-1" />
                       Export PDF
@@ -3746,11 +3796,33 @@ function AdvanceRequestsReportContent() {
                                   <TableCell className="text-sm">{meta?.reclaimed_by_name || 'N/A'}</TableCell>
                                   <TableCell className="text-sm">{meta?.reclaimed_at ? format(parseISO(meta.reclaimed_at), 'MMM dd, yyyy') : 'N/A'}</TableCell>
                                   <TableCell>
-                                    {needsRecon && <Badge className="bg-red-100 text-red-800 border-red-300 text-xs">⚠ Pending</Badge>}
-                                    {resolved && <Badge className="bg-green-100 text-green-800 border-green-300 text-xs">✓ Resolved</Badge>}
-                                    {writtenOff && <Badge className="bg-gray-100 text-gray-700 border-gray-300 text-xs">Written Off</Badge>}
-                                    {autoCancelled && !needsRecon && !resolved && !writtenOff && <Badge className="bg-orange-100 text-orange-800 border-orange-300 text-xs">Auto-Cancelled</Badge>}
-                                    {!needsRecon && !resolved && !autoCancelled && !writtenOff && <Badge variant="outline" className="text-xs">Reclaimed</Badge>}
+                                    <div className="flex flex-col gap-0.5">
+                                      {needsRecon && <Badge className="bg-red-100 text-red-800 border-red-300 text-xs">⚠ Pending</Badge>}
+                                      {resolved && (
+                                        <>
+                                          <Badge className="bg-green-100 text-green-800 border-green-300 text-xs">✓ Resolved</Badge>
+                                          {meta?.reconciliation_resolved_by && (
+                                            <span className="text-[9px] text-muted-foreground">
+                                              by {getProfileName(meta.reconciliation_resolved_by)}
+                                              {meta.reconciliation_resolved_at ? ` · ${format(parseISO(meta.reconciliation_resolved_at), 'MMM dd')}` : ''}
+                                            </span>
+                                          )}
+                                        </>
+                                      )}
+                                      {writtenOff && (
+                                        <>
+                                          <Badge className="bg-gray-100 text-gray-700 border-gray-300 text-xs">Written Off</Badge>
+                                          {meta?.write_off_by && (
+                                            <span className="text-[9px] text-muted-foreground">
+                                              by {getProfileName(meta.write_off_by)}
+                                              {meta.write_off_at ? ` · ${format(parseISO(meta.write_off_at), 'MMM dd')}` : ''}
+                                            </span>
+                                          )}
+                                        </>
+                                      )}
+                                      {autoCancelled && !needsRecon && !resolved && !writtenOff && <Badge className="bg-orange-100 text-orange-800 border-orange-300 text-xs">Auto-Cancelled</Badge>}
+                                      {!needsRecon && !resolved && !autoCancelled && !writtenOff && <Badge variant="outline" className="text-xs">Reclaimed</Badge>}
+                                    </div>
                                   </TableCell>
                                   {isAdmin && (
                                     <TableCell className="text-center">
