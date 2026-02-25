@@ -271,6 +271,9 @@ export function SuperAdminDataManagement() {
   const [selectedDispatchedSite, setSelectedDispatchedSite] = useState<DispatchedSiteData | null>(null);
   const [showReclaimSiteDialog, setShowReclaimSiteDialog] = useState(false);
   const [showReturnToApprovedDialog, setShowReturnToApprovedDialog] = useState(false);
+  const [reclaimAdvanceInfo, setReclaimAdvanceInfo] = useState<{ pending: any[]; disbursed: any[] } | null>(null);
+  const [reclaimAdvanceLoading, setReclaimAdvanceLoading] = useState(false);
+  const [cancelPendingAdvances, setCancelPendingAdvances] = useState(true);
   const [showReturnToFOMDialog, setShowReturnToFOMDialog] = useState(false);
   const [selectedWallet, setSelectedWallet] = useState<WalletData | null>(null);
   const [selectedTransaction, setSelectedTransaction] = useState<TransactionData | null>(null);
@@ -595,6 +598,7 @@ export function SuperAdminDataManagement() {
       reclaimedBy: currentUser.id,
       reclaimedByName: currentUser.name || currentUser.email || 'Super Admin',
       reclaimedByRole: currentUser.role || 'superadmin',
+      cancelPendingAdvances,
     });
 
     setProcessing(false);
@@ -748,10 +752,31 @@ export function SuperAdminDataManagement() {
     setShowDeleteTransactionDialog(true);
   };
 
-  const openReclaimSiteDialog = (site: ClaimedSiteData) => {
+  const openReclaimSiteDialog = async (site: ClaimedSiteData) => {
     setSelectedClaimedSite(site);
     setReason('');
+    setReclaimAdvanceInfo(null);
+    setCancelPendingAdvances(true);
     setShowReclaimSiteDialog(true);
+
+    // Fetch linked advance requests to warn admin
+    setReclaimAdvanceLoading(true);
+    try {
+      const { data } = await supabase
+        .from('down_payment_requests')
+        .select('id, requested_amount, currency, status, created_at')
+        .eq('mmp_site_entry_id', site.id);
+
+      if (data) {
+        const pending = data.filter(r => r.status === 'pending_supervisor' || r.status === 'pending_admin');
+        const disbursed = data.filter(r => r.status === 'approved');
+        setReclaimAdvanceInfo({ pending, disbursed });
+      }
+    } catch {
+      // Non-critical — warnings just won't show
+    } finally {
+      setReclaimAdvanceLoading(false);
+    }
   };
 
   const openArchiveMMPDialog = (mmp: MMPData) => {
@@ -2127,6 +2152,7 @@ export function SuperAdminDataManagement() {
           </DialogHeader>
 
           <div className="space-y-4">
+            {/* Site info */}
             <div className="bg-destructive/5 border border-destructive/20 p-4 rounded-lg">
               <p className="font-semibold">{selectedClaimedSite?.site_name}</p>
               <p className="text-sm text-muted-foreground">{selectedClaimedSite?.site_code}</p>
@@ -2141,6 +2167,84 @@ export function SuperAdminDataManagement() {
                 )}
               </div>
             </div>
+
+            {/* Advance request warnings */}
+            {reclaimAdvanceLoading && (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground py-1">
+                <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                Checking linked advance requests…
+              </div>
+            )}
+
+            {!reclaimAdvanceLoading && reclaimAdvanceInfo && (reclaimAdvanceInfo.pending.length > 0 || reclaimAdvanceInfo.disbursed.length > 0) && (
+              <div className="space-y-2">
+                {/* Pending advances — can be auto-cancelled */}
+                {reclaimAdvanceInfo.pending.length > 0 && (
+                  <div className="bg-yellow-500/10 border border-yellow-500/30 p-3 rounded-lg space-y-2">
+                    <div className="flex items-start gap-2">
+                      <AlertTriangle className="h-4 w-4 text-yellow-600 mt-0.5 shrink-0" />
+                      <div>
+                        <p className="text-sm font-medium text-yellow-800 dark:text-yellow-300">
+                          {reclaimAdvanceInfo.pending.length} pending advance request{reclaimAdvanceInfo.pending.length > 1 ? 's' : ''} found
+                        </p>
+                        <p className="text-xs text-yellow-700 dark:text-yellow-400 mt-0.5">
+                          Total: {reclaimAdvanceInfo.pending.reduce((s, r) => s + Number(r.requested_amount), 0).toLocaleString()} {reclaimAdvanceInfo.pending[0]?.currency || 'SDG'} — not yet disbursed
+                        </p>
+                      </div>
+                    </div>
+                    <label className="flex items-center gap-2 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={cancelPendingAdvances}
+                        onChange={e => setCancelPendingAdvances(e.target.checked)}
+                        className="rounded"
+                        data-testid="checkbox-cancel-pending-advances"
+                      />
+                      <span className="text-xs font-medium text-yellow-800 dark:text-yellow-300">
+                        Automatically cancel these pending requests
+                      </span>
+                    </label>
+                    {!cancelPendingAdvances && (
+                      <p className="text-xs text-yellow-700 dark:text-yellow-400 pl-5">
+                        Warning: leaving these open may allow approval and disbursement after the site is reclaimed.
+                      </p>
+                    )}
+                  </div>
+                )}
+
+                {/* Already disbursed advances — cannot be auto-cancelled */}
+                {reclaimAdvanceInfo.disbursed.length > 0 && (
+                  <div className="bg-red-500/10 border border-red-500/30 p-3 rounded-lg">
+                    <div className="flex items-start gap-2">
+                      <AlertTriangle className="h-4 w-4 text-red-600 mt-0.5 shrink-0" />
+                      <div>
+                        <p className="text-sm font-medium text-red-700 dark:text-red-400">
+                          {reclaimAdvanceInfo.disbursed.length} already-disbursed advance{reclaimAdvanceInfo.disbursed.length > 1 ? 's' : ''}
+                        </p>
+                        <p className="text-xs text-red-600 dark:text-red-400 mt-0.5">
+                          Total paid: {reclaimAdvanceInfo.disbursed.reduce((s, r) => s + Number(r.requested_amount), 0).toLocaleString()} {reclaimAdvanceInfo.disbursed[0]?.currency || 'SDG'} — cannot be automatically reversed. Manual reconciliation required.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Completed site warning */}
+            {selectedClaimedSite?.status === 'completed' && (
+              <div className="bg-orange-500/10 border border-orange-500/30 p-3 rounded-lg">
+                <div className="flex items-start gap-2">
+                  <AlertTriangle className="h-4 w-4 text-orange-600 mt-0.5 shrink-0" />
+                  <div>
+                    <p className="text-sm font-medium text-orange-700 dark:text-orange-400">Site is marked as completed</p>
+                    <p className="text-xs text-orange-600 dark:text-orange-400 mt-0.5">
+                      Wallet earnings already credited for this site will NOT be reversed. The site will be reverted to "Ongoing" status.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
 
             <div className="space-y-2">
               <Label htmlFor="reclaim-reason">Reason for Reclaim <span className="text-destructive">*</span></Label>
@@ -2160,6 +2264,9 @@ export function SuperAdminDataManagement() {
                 <li className="flex items-center gap-2"><CheckCircle className="h-3 w-3 text-green-500" /> Release site to dispatch pool</li>
                 <li className="flex items-center gap-2"><CheckCircle className="h-3 w-3 text-green-500" /> Notify the former assignee</li>
                 <li className="flex items-center gap-2"><CheckCircle className="h-3 w-3 text-green-500" /> Log action for audit</li>
+                {cancelPendingAdvances && reclaimAdvanceInfo && reclaimAdvanceInfo.pending.length > 0 && (
+                  <li className="flex items-center gap-2"><CheckCircle className="h-3 w-3 text-green-500" /> Cancel {reclaimAdvanceInfo.pending.length} pending advance request{reclaimAdvanceInfo.pending.length > 1 ? 's' : ''}</li>
+                )}
               </ul>
             </div>
           </div>

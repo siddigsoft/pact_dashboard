@@ -45,6 +45,7 @@ export interface ReclaimSiteParams {
   reclaimedBy: string;
   reclaimedByName: string;
   reclaimedByRole: string;
+  cancelPendingAdvances?: boolean;
 }
 
 interface SuperAdminContextType {
@@ -1010,6 +1011,35 @@ export function SuperAdminProvider({ children }: { children: React.ReactNode }) 
 
       if (updateError) {
         throw new Error(`Failed to reclaim site: ${updateError.message}`);
+      }
+
+      // 3a. Cancel pending advance requests linked to this site entry (if requested)
+      if (cancelPendingAdvances) {
+        const { data: pendingAdvances } = await supabase
+          .from('down_payment_requests')
+          .select('id, requested_amount, currency')
+          .eq('mmp_site_entry_id', siteEntryId)
+          .in('status', ['pending_supervisor', 'pending_admin']);
+
+        if (pendingAdvances && pendingAdvances.length > 0) {
+          const cancelledAt = new Date().toISOString();
+          await supabase
+            .from('down_payment_requests')
+            .update({
+              status: 'cancelled',
+              metadata: {
+                cancelled_reason: `Site reclaimed by ${reclaimedByName}: ${reason}`,
+                cancelled_by: reclaimedBy,
+                cancelled_at: cancelledAt,
+                auto_cancelled_on_reclaim: true,
+              },
+              updated_at: cancelledAt,
+            })
+            .eq('mmp_site_entry_id', siteEntryId)
+            .in('status', ['pending_supervisor', 'pending_admin']);
+
+          console.log(`[Reclaim] Auto-cancelled ${pendingAdvances.length} pending advance request(s) for site ${siteEntryId}`);
+        }
       }
 
       // 3. Log the reclaim action for audit trail
