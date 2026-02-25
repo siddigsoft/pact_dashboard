@@ -520,6 +520,31 @@ function AdvanceRequestsReportContent() {
     }
   };
 
+  const [markResolvedProcessing, setMarkResolvedProcessing] = useState(false);
+  const handleMarkResolved = async (req: DownPaymentRequest) => {
+    if (!currentUser?.id) return;
+    setMarkResolvedProcessing(true);
+    try {
+      const updatedMeta = {
+        ...(req.metadata as any || {}),
+        manual_reconciliation_required: false,
+        reconciliation_resolved_by: currentUser.id,
+        reconciliation_resolved_at: new Date().toISOString(),
+      };
+      const { error } = await supabase
+        .from('down_payment_requests')
+        .update({ metadata: updatedMeta })
+        .eq('id', req.id);
+      if (error) throw error;
+      toast({ title: 'Marked as Resolved', description: `Advance ${req.id.substring(0, 8).toUpperCase()} reconciliation flag cleared.` });
+      refreshRequests();
+    } catch (err: any) {
+      toast({ title: 'Error', description: err.message || 'Failed to mark resolved', variant: 'destructive' });
+    } finally {
+      setMarkResolvedProcessing(false);
+    }
+  };
+
   const handleMarkAsPaid = async (req: DownPaymentRequest) => {
     if (!currentUser?.id) return;
     setMarkPaidProcessing(true);
@@ -1876,6 +1901,15 @@ function AdvanceRequestsReportContent() {
             <Clock className="h-4 w-4" />
             Aging
           </TabsTrigger>
+          <TabsTrigger value="reclaimImpact" className="gap-1 relative" data-testid="tab-reclaim-impact">
+            <AlertTriangle className="h-4 w-4 text-orange-500" />
+            Reclaim Impact
+            {reconciliationNeeded.length > 0 && (
+              <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] rounded-full min-w-[16px] h-4 flex items-center justify-center px-1">
+                {reconciliationNeeded.length}
+              </span>
+            )}
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview" className="space-y-4">
@@ -2130,6 +2164,19 @@ function AdvanceRequestsReportContent() {
                                     Mark Paid
                                   </Button>
                                 )}
+                                {isAdmin && (req.metadata as any)?.manual_reconciliation_required === true && (
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="h-7 text-xs gap-1 border-green-500 text-green-700 hover:bg-green-50 dark:hover:bg-green-950"
+                                    onClick={() => handleMarkResolved(req)}
+                                    disabled={markResolvedProcessing}
+                                    data-testid={`button-mark-resolved-${req.id}`}
+                                  >
+                                    <CheckCircle2 className="h-3 w-3" />
+                                    Mark Resolved
+                                  </Button>
+                                )}
                                 <Button
                                   size="icon"
                                   variant="ghost"
@@ -2198,6 +2245,35 @@ function AdvanceRequestsReportContent() {
                                   {req.status === 'rejected' && (req.adminRejectionReason || req.supervisorRejectionReason) && (
                                     <div className="bg-destructive/10 border border-destructive/20 rounded-md p-2 text-xs text-destructive">
                                       <span className="font-medium">Rejection Reason:</span> {req.adminRejectionReason || req.supervisorRejectionReason}
+                                    </div>
+                                  )}
+
+                                  {((req.metadata as any)?.site_reclaimed || (req.metadata as any)?.manual_reconciliation_required) && (
+                                    <div className={`border rounded-md p-2 text-xs space-y-1 ${
+                                      (req.metadata as any)?.manual_reconciliation_required
+                                        ? 'bg-red-50 border-red-300 text-red-800 dark:bg-red-950/30 dark:border-red-800 dark:text-red-300'
+                                        : 'bg-orange-50 border-orange-300 text-orange-800 dark:bg-orange-950/30 dark:border-orange-800 dark:text-orange-300'
+                                    }`}>
+                                      <div className="flex items-center gap-1.5 font-medium">
+                                        <AlertTriangle className="h-3.5 w-3.5" />
+                                        {(req.metadata as any)?.manual_reconciliation_required
+                                          ? 'Manual Reconciliation Required / مطلوب مراجعة يدوية'
+                                          : 'Site Reclaimed / تم استرداد الموقع'}
+                                      </div>
+                                      {(req.metadata as any)?.reclaim_reason && (
+                                        <div><span className="font-medium">Reclaim Reason:</span> {(req.metadata as any).reclaim_reason}</div>
+                                      )}
+                                      {(req.metadata as any)?.reclaimed_by_name && (
+                                        <div><span className="font-medium">Reclaimed by:</span> {(req.metadata as any).reclaimed_by_name}</div>
+                                      )}
+                                      {(req.metadata as any)?.reclaimed_at && (
+                                        <div><span className="font-medium">Reclaimed at:</span> {format(parseISO((req.metadata as any).reclaimed_at), 'MMM d, yyyy h:mm a')}</div>
+                                      )}
+                                      {(req.metadata as any)?.reconciliation_resolved_by && (
+                                        <div className="text-green-700 dark:text-green-400 font-medium mt-1">
+                                          ✓ Resolved at {(req.metadata as any).reconciliation_resolved_at ? format(parseISO((req.metadata as any).reconciliation_resolved_at), 'MMM d, yyyy') : 'N/A'}
+                                        </div>
+                                      )}
                                     </div>
                                   )}
 
@@ -3336,6 +3412,229 @@ function AdvanceRequestsReportContent() {
               )}
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="reclaimImpact" className="space-y-4">
+          {(() => {
+            const allReclaimedAdvances = requests.filter(r => (r.metadata as any)?.site_reclaimed === true);
+            const needsReconciliationRows = allReclaimedAdvances.filter(r => (r.metadata as any)?.manual_reconciliation_required === true);
+            const resolvedRows = allReclaimedAdvances.filter(r => (r.metadata as any)?.manual_reconciliation_required === false && (r.metadata as any)?.reconciliation_resolved_by);
+            const autoCancelledRows = allReclaimedAdvances.filter(r => (r.metadata as any)?.auto_cancelled_on_reclaim === true);
+            const totalExposed = needsReconciliationRows.reduce((s, r) => s + r.requestedAmount, 0);
+
+            const exportReclaimImpactPdf = () => {
+              const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+              doc.setFontSize(16);
+              doc.setFont('helvetica', 'bold');
+              doc.text('Reclaim Impact Report', 148.5, 15, { align: 'center' });
+              doc.setFontSize(10);
+              doc.setFont('helvetica', 'normal');
+              doc.text(`Generated: ${format(new Date(), 'MMM dd, yyyy HH:mm')}`, 148.5, 22, { align: 'center' });
+
+              const summaryRows = [
+                ['Total Reclaimed Advances', allReclaimedAdvances.length.toString()],
+                ['Needs Reconciliation', needsReconciliationRows.length.toString()],
+                ['Resolved', resolvedRows.length.toString()],
+                ['Auto-Cancelled (Pending)', autoCancelledRows.length.toString()],
+                ['Total Exposed (SDG)', totalExposed.toLocaleString()],
+              ];
+              autoTable(doc, {
+                head: [['Metric', 'Value']],
+                body: summaryRows,
+                startY: 28,
+                styles: { fontSize: 9 },
+                headStyles: { fillColor: [220, 100, 30], textColor: 255 },
+                margin: { left: 15, right: 15 },
+                tableWidth: 80,
+              });
+
+              const dataRows = allReclaimedAdvances.map(r => [
+                r.id.substring(0, 8).toUpperCase(),
+                r.siteName || 'N/A',
+                format(parseISO(r.requestedAt), 'MMM dd, yyyy'),
+                getProfileName(r.requestedBy),
+                r.requestedAmount.toLocaleString(),
+                r.status.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
+                (r.metadata as any)?.reclaim_reason || 'N/A',
+                (r.metadata as any)?.reclaimed_by_name || 'N/A',
+                (r.metadata as any)?.reclaimed_at ? format(parseISO((r.metadata as any).reclaimed_at), 'MMM dd, yyyy') : 'N/A',
+                (r.metadata as any)?.manual_reconciliation_required === true ? 'Pending' :
+                (r.metadata as any)?.reconciliation_resolved_by ? 'Resolved' :
+                (r.metadata as any)?.auto_cancelled_on_reclaim ? 'Auto-Cancelled' : 'N/A',
+              ]);
+
+              autoTable(doc, {
+                head: [['ID', 'Site', 'Date', 'Requester', 'Amount (SDG)', 'Status', 'Reclaim Reason', 'Reclaimed By', 'Reclaimed At', 'Reconciliation']],
+                body: dataRows,
+                startY: (doc as any).lastAutoTable.finalY + 8,
+                styles: { fontSize: 7.5, cellPadding: 1.5 },
+                headStyles: { fillColor: [220, 100, 30], textColor: 255 },
+                alternateRowStyles: { fillColor: [255, 248, 245] },
+                margin: { left: 15, right: 15 },
+              });
+
+              doc.save(`reclaim-impact-report-${format(new Date(), 'yyyy-MM-dd')}.pdf`);
+            };
+
+            const exportReclaimImpactExcel = async () => {
+              const { utils, writeFile } = await import('xlsx');
+              const summaryWsData = [
+                ['Reclaim Impact Report', '', `Generated: ${format(new Date(), 'MMM dd, yyyy HH:mm')}`],
+                [],
+                ['Total Reclaimed Advances', allReclaimedAdvances.length],
+                ['Needs Reconciliation', needsReconciliationRows.length],
+                ['Resolved', resolvedRows.length],
+                ['Auto-Cancelled (Pending)', autoCancelledRows.length],
+                ['Total Exposed (SDG)', totalExposed],
+              ];
+              const detailWsData = [
+                ['ID', 'Site', 'Hub', 'Date', 'Requester', 'Amount (SDG)', 'Status', 'Reclaim Reason', 'Reclaimed By', 'Reclaimed At', 'Reconciliation Status'],
+                ...allReclaimedAdvances.map(r => [
+                  r.id.substring(0, 8).toUpperCase(),
+                  r.siteName || 'N/A',
+                  r.hubName || 'N/A',
+                  format(parseISO(r.requestedAt), 'yyyy-MM-dd'),
+                  getProfileName(r.requestedBy),
+                  r.requestedAmount,
+                  r.status.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
+                  (r.metadata as any)?.reclaim_reason || 'N/A',
+                  (r.metadata as any)?.reclaimed_by_name || 'N/A',
+                  (r.metadata as any)?.reclaimed_at ? format(parseISO((r.metadata as any).reclaimed_at), 'yyyy-MM-dd') : 'N/A',
+                  (r.metadata as any)?.manual_reconciliation_required === true ? 'Pending Reconciliation' :
+                  (r.metadata as any)?.reconciliation_resolved_by ? 'Resolved' :
+                  (r.metadata as any)?.auto_cancelled_on_reclaim ? 'Auto-Cancelled' : 'N/A',
+                ]),
+              ];
+              const wb = utils.book_new();
+              utils.book_append_sheet(wb, utils.aoa_to_sheet(summaryWsData), 'Summary');
+              utils.book_append_sheet(wb, utils.aoa_to_sheet(detailWsData), 'Reclaim Details');
+              writeFile(wb, `reclaim-impact-report-${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
+            };
+
+            return (
+              <>
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <div>
+                    <h3 className="font-semibold text-lg">Reclaim Impact Report / تقرير تأثير الاسترداد</h3>
+                    <p className="text-sm text-muted-foreground">Advances affected by site reclaims — reconciliation tracking</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button variant="outline" size="sm" onClick={exportReclaimImpactPdf} disabled={allReclaimedAdvances.length === 0} data-testid="button-reclaim-impact-pdf">
+                      <FileText className="h-4 w-4 mr-1" />
+                      Export PDF
+                    </Button>
+                    <Button size="sm" onClick={exportReclaimImpactExcel} disabled={allReclaimedAdvances.length === 0} data-testid="button-reclaim-impact-excel">
+                      <Download className="h-4 w-4 mr-1" />
+                      Export Excel
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  {[
+                    { label: 'Total Reclaimed', value: allReclaimedAdvances.length, color: 'text-orange-600' },
+                    { label: 'Needs Reconciliation', value: needsReconciliationRows.length, color: 'text-red-600' },
+                    { label: 'Resolved', value: resolvedRows.length, color: 'text-green-600' },
+                    { label: 'Exposed Amount (SDG)', value: totalExposed.toLocaleString(), color: 'text-orange-600' },
+                  ].map(stat => (
+                    <Card key={stat.label}>
+                      <CardContent className="p-3">
+                        <div className={`text-xl font-bold ${stat.color}`}>{stat.value}</div>
+                        <div className="text-xs text-muted-foreground mt-0.5">{stat.label}</div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+
+                {allReclaimedAdvances.length === 0 ? (
+                  <Card>
+                    <CardContent className="p-12 text-center">
+                      <CheckCircle2 className="h-12 w-12 mx-auto text-green-500 opacity-70" />
+                      <p className="mt-4 text-muted-foreground">No reclaimed advances found — all clear</p>
+                    </CardContent>
+                  </Card>
+                ) : (
+                  <Card>
+                    <CardContent className="p-0">
+                      <div className="overflow-x-auto">
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>ID</TableHead>
+                              <TableHead>Site</TableHead>
+                              <TableHead>Requester</TableHead>
+                              <TableHead>Date</TableHead>
+                              <TableHead className="text-right">Amount (SDG)</TableHead>
+                              <TableHead>Advance Status</TableHead>
+                              <TableHead>Reclaim Reason</TableHead>
+                              <TableHead>Reclaimed By</TableHead>
+                              <TableHead>Reclaim Date</TableHead>
+                              <TableHead>Reconciliation</TableHead>
+                              {isAdmin && <TableHead className="text-center">Action</TableHead>}
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {allReclaimedAdvances.map(r => {
+                              const meta = r.metadata as any;
+                              const needsRecon = meta?.manual_reconciliation_required === true;
+                              const resolved = meta?.reconciliation_resolved_by && !needsRecon;
+                              const autoCancelled = meta?.auto_cancelled_on_reclaim === true;
+                              return (
+                                <TableRow key={r.id} data-testid={`row-reclaim-impact-${r.id}`} className={needsRecon ? 'bg-red-50/50 dark:bg-red-950/10' : resolved ? 'bg-green-50/50 dark:bg-green-950/10' : ''}>
+                                  <TableCell className="font-mono text-xs">{r.id.substring(0, 8).toUpperCase()}</TableCell>
+                                  <TableCell className="max-w-[150px] truncate text-sm">{r.siteName || 'N/A'}</TableCell>
+                                  <TableCell className="text-sm">{getProfileName(r.requestedBy)}</TableCell>
+                                  <TableCell className="text-sm">{format(parseISO(r.requestedAt), 'MMM dd, yyyy')}</TableCell>
+                                  <TableCell className="text-right font-mono">{r.requestedAmount.toLocaleString()}</TableCell>
+                                  <TableCell>{getStatusBadge(r.status, r.metadata)}</TableCell>
+                                  <TableCell className="max-w-[180px]">
+                                    <span className="text-xs text-muted-foreground">{meta?.reclaim_reason || 'N/A'}</span>
+                                  </TableCell>
+                                  <TableCell className="text-sm">{meta?.reclaimed_by_name || 'N/A'}</TableCell>
+                                  <TableCell className="text-sm">{meta?.reclaimed_at ? format(parseISO(meta.reclaimed_at), 'MMM dd, yyyy') : 'N/A'}</TableCell>
+                                  <TableCell>
+                                    {needsRecon && (
+                                      <Badge className="bg-red-100 text-red-800 border-red-300 text-xs">⚠ Pending</Badge>
+                                    )}
+                                    {resolved && (
+                                      <Badge className="bg-green-100 text-green-800 border-green-300 text-xs">✓ Resolved</Badge>
+                                    )}
+                                    {autoCancelled && !needsRecon && !resolved && (
+                                      <Badge className="bg-orange-100 text-orange-800 border-orange-300 text-xs">Auto-Cancelled</Badge>
+                                    )}
+                                    {!needsRecon && !resolved && !autoCancelled && (
+                                      <Badge variant="outline" className="text-xs">Reclaimed</Badge>
+                                    )}
+                                  </TableCell>
+                                  {isAdmin && (
+                                    <TableCell className="text-center">
+                                      {needsRecon && (
+                                        <Button
+                                          size="sm"
+                                          variant="outline"
+                                          className="h-7 text-xs gap-1 border-green-500 text-green-700 hover:bg-green-50 dark:hover:bg-green-950"
+                                          onClick={() => handleMarkResolved(r)}
+                                          disabled={markResolvedProcessing}
+                                          data-testid={`button-resolve-reclaim-${r.id}`}
+                                        >
+                                          <CheckCircle2 className="h-3 w-3" />
+                                          Resolve
+                                        </Button>
+                                      )}
+                                    </TableCell>
+                                  )}
+                                </TableRow>
+                              );
+                            })}
+                          </TableBody>
+                        </Table>
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+              </>
+            );
+          })()}
         </TabsContent>
       </Tabs>
 

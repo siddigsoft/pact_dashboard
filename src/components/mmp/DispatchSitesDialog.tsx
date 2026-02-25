@@ -728,6 +728,29 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
       return;
     }
 
+    // Check for prior advances on any of the selected sites (non-blocking warning)
+    try {
+      const selectedIds = selectedSiteObjects.map(s => s.id);
+      const { data: priorAdvances } = await supabase
+        .from('down_payment_requests')
+        .select('id, requested_amount, currency, status, mmp_site_entry_id')
+        .in('mmp_site_entry_id', selectedIds)
+        .in('status', ['approved', 'pending_supervisor', 'pending_admin']);
+
+      if (priorAdvances && priorAdvances.length > 0) {
+        const disbursedCount = priorAdvances.filter(a => a.status === 'approved').length;
+        const pendingCount = priorAdvances.filter(a => a.status !== 'approved').length;
+        const parts: string[] = [];
+        if (disbursedCount > 0) parts.push(`${disbursedCount} disbursed advance(s) — manual reconciliation required`);
+        if (pendingCount > 0) parts.push(`${pendingCount} pending advance(s) still open`);
+        toast({
+          title: '⚠ Prior Advances Detected',
+          description: `${selectedSiteObjects.length === 1 ? 'This site' : `${priorAdvances.length} of these sites`} ${parts.join(' and ')}. Please verify reconciliation before or after dispatch.`,
+          variant: 'default',
+        });
+      }
+    } catch { /* non-critical */ }
+
     setLoading(true);
     
     // Global timeout - dispatch must complete within 60 seconds

@@ -950,25 +950,29 @@ export function SuperAdminProvider({ children }: { children: React.ReactNode }) 
       let previousStatus: string;
       
       if (currentStatus === 'dispatched' || currentStatus === 'assigned') {
-        // Dispatched → stays Dispatched (clear assignee info, keep transportation costs so it can be claimed again)
+        // Dispatched → stays Dispatched, clear ALL costs so new enumerator goes through fresh costing
         previousStatus = 'dispatched';
         updateData = {
           accepted_by: null,
           accepted_at: null,
           status: 'dispatched',
-          // Keep dispatched_at, dispatched_by, cost, enumerator_fee, transport_fee
+          cost: null,
+          enumerator_fee: null,
+          transport_fee: null,
           cost_acknowledged: null,
           cost_acknowledged_at: null,
           updated_at: new Date().toISOString(),
         };
       } else if (currentStatus === 'accepted' || currentStatus === 'claimed') {
-        // Accepted → Dispatched (clear claim info, keep costs)
+        // Accepted → Dispatched (clear claim info AND costs — fresh costing required)
         previousStatus = 'dispatched';
         updateData = {
           accepted_by: null,
           accepted_at: null,
           status: 'dispatched',
-          // Keep transport_fee - costs remain the same
+          cost: null,
+          enumerator_fee: null,
+          transport_fee: null,
           cost_acknowledged: null,
           cost_acknowledged_at: null,
           updated_at: new Date().toISOString(),
@@ -1100,6 +1104,60 @@ export function SuperAdminProvider({ children }: { children: React.ReactNode }) 
           siteEntryId,
           'site_visit'
         );
+      }
+
+      // 5. Notify supervisors and financial admins about the reclaim + financial impact
+      try {
+        const { data: impactedAdvances } = await supabase
+          .from('down_payment_requests')
+          .select('id, requested_amount, currency, status')
+          .eq('mmp_site_entry_id', siteEntryId);
+
+        const cancelledCount = impactedAdvances?.filter(a => ['pending_supervisor', 'pending_admin'].includes(a.status)).length || 0;
+        const disbursedCount = impactedAdvances?.filter(a => a.status === 'approved').length || 0;
+        const disbursedTotal = impactedAdvances?.filter(a => a.status === 'approved').reduce((s, a) => s + Number(a.requested_amount), 0) || 0;
+
+        let financialNote = '';
+        if (cancelledCount > 0) financialNote += ` ${cancelledCount} pending advance(s) auto-cancelled.`;
+        if (disbursedCount > 0) financialNote += ` ${disbursedCount} disbursed advance(s) totalling ${disbursedTotal.toLocaleString()} SDG require manual reconciliation.`;
+
+        if (financialNote) {
+          // Notify supervisor on the site entry
+          const supervisorId = siteEntry.supervisor_id;
+          if (supervisorId && supervisorId !== reclaimedBy) {
+            await sendNotificationToUser(
+              supervisorId,
+              'Site Reclaimed — Advance Impact',
+              `Site "${siteName}" reclaimed by ${reclaimedByName}.${financialNote}`,
+              'warning',
+              siteEntryId,
+              'site_visit'
+            );
+          }
+
+          // Notify financial admins
+          const { data: financialUsers } = await supabase
+            .from('profiles')
+            .select('id')
+            .in('role', ['financial_auditor', 'admin', 'superadmin'])
+            .neq('id', reclaimedBy)
+            .limit(10);
+
+          if (financialUsers) {
+            for (const fu of financialUsers) {
+              await sendNotificationToUser(
+                fu.id,
+                'Advance Reconciliation Required',
+                `Site "${siteName}" was reclaimed.${financialNote} Action required in Transportation Advance Report.`,
+                'warning',
+                siteEntryId,
+                'financial'
+              );
+            }
+          }
+        }
+      } catch (notifErr) {
+        console.warn('[Reclaim] Failed to send financial notifications:', notifErr);
       }
 
       toast({
