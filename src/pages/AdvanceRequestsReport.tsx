@@ -1687,22 +1687,6 @@ function AdvanceRequestsReportContent() {
             <FileSpreadsheet className="h-4 w-4" />
             All Requests
           </TabsTrigger>
-          <TabsTrigger value="byTeam" className="gap-1" data-testid="tab-by-team">
-            <Users className="h-4 w-4" />
-            By Team Member
-          </TabsTrigger>
-          <TabsTrigger value="byHub" className="gap-1" data-testid="tab-by-hub">
-            <Building2 className="h-4 w-4" />
-            By Hub
-          </TabsTrigger>
-          <TabsTrigger value="byStatus" className="gap-1" data-testid="tab-by-status">
-            <Clock className="h-4 w-4" />
-            By Status
-          </TabsTrigger>
-          <TabsTrigger value="byState" className="gap-1" data-testid="tab-by-state">
-            <MapPin className="h-4 w-4" />
-            By State
-          </TabsTrigger>
           <TabsTrigger value="byProject" className="gap-1" data-testid="tab-by-project">
             <FolderKanban className="h-4 w-4" />
             By Project
@@ -1710,6 +1694,22 @@ function AdvanceRequestsReportContent() {
           <TabsTrigger value="byMMP" className="gap-1" data-testid="tab-by-mmp">
             <ClipboardList className="h-4 w-4" />
             By MMP
+          </TabsTrigger>
+          <TabsTrigger value="byHub" className="gap-1" data-testid="tab-by-hub">
+            <Building2 className="h-4 w-4" />
+            By Hub
+          </TabsTrigger>
+          <TabsTrigger value="byState" className="gap-1" data-testid="tab-by-state">
+            <MapPin className="h-4 w-4" />
+            By State
+          </TabsTrigger>
+          <TabsTrigger value="byTeam" className="gap-1" data-testid="tab-by-team">
+            <Users className="h-4 w-4" />
+            By Team Member
+          </TabsTrigger>
+          <TabsTrigger value="byStatus" className="gap-1" data-testid="tab-by-status">
+            <Clock className="h-4 w-4" />
+            By Status
           </TabsTrigger>
           <TabsTrigger value="aging" className="gap-1" data-testid="tab-aging">
             <Clock className="h-4 w-4" />
