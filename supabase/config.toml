@@ -7,3 +7,7 @@ jwt_expiry = 120
 
 [storage]
 # Remove bucket definitions here — define buckets via Supabase dashboard or CLI
+
+# Scheduled edge function: sends reconciliation digest every Monday at 08:00 UTC
+[functions.reclaim-digest]
+schedule = "0 8 * * 1"

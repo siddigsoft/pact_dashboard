@@ -55,6 +55,7 @@ import autoTable from 'jspdf-autotable';
 import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
 import { supabase } from '@/integrations/supabase/client';
 import { generateTransportAdvanceCertificatePdf, generateTransportAdvanceCertificateBase64, generateBulkPaymentPdfBase64 } from '@/utils/transportAdvanceCertificatePdf';
+import { generateWriteOffCertificatePdf } from '@/utils/writeOffCertificatePdf';
 import { exportOverviewToFormattedExcel, exportAgingToFormattedExcel, exportGroupedToFormattedExcel } from '@/utils/advanceReportExcelUtils';
 import { useToast } from '@/hooks/use-toast';
 import type { DownPaymentRequest } from '@/types/down-payment';
@@ -3856,6 +3857,35 @@ function AdvanceRequestsReportContent() {
                                               Write Off
                                             </Button>
                                           </>
+                                        )}
+                                        {writtenOff && (
+                                          <Button
+                                            size="sm"
+                                            variant="outline"
+                                            className="h-7 text-xs gap-1 border-gray-400 text-gray-700 hover:bg-gray-50 dark:hover:bg-gray-900"
+                                            onClick={() => {
+                                              try {
+                                                generateWriteOffCertificatePdf({
+                                                  advanceId: r.id,
+                                                  enumeratorName: r.full_name || r.user_id || 'N/A',
+                                                  siteName: r.site_name || (r as any).mmp_site_entry_id || 'N/A',
+                                                  amount: r.requested_amount || 0,
+                                                  reclaimReason: meta?.site_reclaim_reason || meta?.reclaim_reason || 'N/A',
+                                                  writeOffReason: meta?.write_off_reason || 'N/A',
+                                                  writeOffNotes: meta?.write_off_notes,
+                                                  writeOffBy: meta?.write_off_by ? getProfileName(meta.write_off_by) : 'N/A',
+                                                  writeOffAt: meta?.write_off_at || new Date().toISOString(),
+                                                  reclaimedAt: meta?.site_reclaimed_at,
+                                                });
+                                              } catch (e) {
+                                                toast({ title: 'Certificate error', description: String(e), variant: 'destructive' });
+                                              }
+                                            }}
+                                            data-testid={`button-download-write-off-cert-${r.id}`}
+                                          >
+                                            <FileText className="h-3 w-3" />
+                                            Certificate
+                                          </Button>
                                         )}
                                       </div>
                                     </TableCell>

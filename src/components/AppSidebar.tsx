@@ -80,7 +80,8 @@
   } from "@/components/ui/dropdown-menu";
   import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
   import { ChevronDown } from "lucide-react";
-  import { useState, useMemo, useCallback } from "react";
+  import { useState, useMemo, useCallback, useEffect } from "react";
+  import { supabase } from "@/integrations/supabase/client";
   import { MenuPreferences, DEFAULT_MENU_PREFERENCES } from "@/types/user-preferences";
   import { normalizeRole } from "@/utils/roleMapping";
   import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, DragEndEvent } from '@dnd-kit/core';
@@ -506,6 +507,26 @@
 
     const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
     const [isFavoritesCollapsed, setIsFavoritesCollapsed] = useState(false);
+    const [pendingReclaimCount, setPendingReclaimCount] = useState(0);
+
+    useEffect(() => {
+      const isFinancialRole = hasAnyRole(['admin', 'Admin', 'superadmin', 'super_admin', 'financial_auditor', 'financialadmin', 'fom', 'FOM']);
+      if (!isFinancialRole || !currentUser?.id) return;
+      supabase
+        .from('down_payment_requests')
+        .select('id, metadata')
+        .neq('status', 'cancelled')
+        .then(({ data }) => {
+          if (!data) return;
+          const count = data.filter((r: any) => {
+            try {
+              const meta = typeof r.metadata === 'string' ? JSON.parse(r.metadata) : (r.metadata || {});
+              return meta?.manual_reconciliation_required === true;
+            } catch { return false; }
+          }).length;
+          setPendingReclaimCount(count);
+        });
+    }, [currentUser?.id, hasAnyRole]);
 
     const menuPrefs: MenuPreferences = useMemo(() => {
       const savedPrefs = userSettings?.settings?.menuPreferences;
@@ -723,6 +744,11 @@
                               }`}
                             />
                             <span className="truncate flex-1">{item.title}</span>
+                            {item.id === 'advance-requests-report' && pendingReclaimCount > 0 && (
+                              <span className="ml-auto shrink-0 inline-flex items-center justify-center h-4 min-w-[16px] px-1 rounded-full bg-orange-500 text-white text-[9px] font-bold leading-none" data-testid="badge-reconciliation-count">
+                                {pendingReclaimCount > 99 ? '99+' : pendingReclaimCount}
+                              </span>
+                            )}
                           </Link>
                         </SidebarMenuButton>
                         <Tooltip>
