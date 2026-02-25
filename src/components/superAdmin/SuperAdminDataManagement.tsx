@@ -370,49 +370,82 @@ export function SuperAdminDataManagement() {
   const loadTransactions = async () => {
     setLoading(true);
     try {
-      // Use FK join (proven pattern in WalletReports/AdminWallets) to get site entry data in one query
+      // Base query — always works, returns transactions
       const { data, error } = await supabase
         .from('wallet_transactions')
-        .select('*, mmp_site_entries!wallet_transactions_site_visit_id_fkey(id, state, locality, hub_office, mmp_id)')
+        .select('*')
         .order('created_at', { ascending: false })
         .limit(300);
 
       if (error) throw error;
 
-      // Fetch MMP names for any mmp_ids found
-      const mmpIds = [...new Set((data || []).map((t: any) => t.mmp_site_entries?.mmp_id).filter(Boolean))];
-      let mmpNameMap: Record<string, string> = {};
-      if (mmpIds.length > 0) {
-        const { data: mmpFiles } = await supabase
-          .from('mmp_files')
-          .select('id, name')
-          .in('id', mmpIds);
-        (mmpFiles || []).forEach((m: any) => { mmpNameMap[m.id] = m.name; });
-      }
+      // Build base enriched list from transactions alone
+      const base = (data || []).map((t: any) => ({
+        id: t.id,
+        wallet_id: t.wallet_id,
+        user_id: t.user_id,
+        user_name: userMap.get(t.user_id)?.name || 'Unknown',
+        type: t.type,
+        amount: parseFloat(t.amount),
+        currency: t.currency,
+        description: t.description,
+        site_visit_id: t.site_visit_id,
+        hub_office: undefined as string | undefined,
+        state: undefined as string | undefined,
+        locality: undefined as string | undefined,
+        mmp_id: undefined as string | undefined,
+        mmp_name: undefined as string | undefined,
+        created_at: t.created_at,
+      }));
 
-      const enriched = (data || []).map((t: any) => {
-        const entry = t.mmp_site_entries;
-        return {
-          id: t.id,
-          wallet_id: t.wallet_id,
-          user_id: t.user_id,
-          user_name: userMap.get(t.user_id)?.name || 'Unknown',
-          type: t.type,
-          amount: parseFloat(t.amount),
-          currency: t.currency,
-          description: t.description,
-          site_visit_id: t.site_visit_id,
-          hub_office: entry?.hub_office || undefined,
-          state: entry?.state || undefined,
-          locality: entry?.locality || undefined,
-          mmp_id: entry?.mmp_id || undefined,
-          mmp_name: entry?.mmp_id ? mmpNameMap[entry.mmp_id] : undefined,
-          created_at: t.created_at,
-        };
-      });
-
-      setTransactions(enriched);
+      setTransactions(base);
       loadedTabsRef.current.add('transactions');
+
+      // Enrich with site entry data — uses both site_visit_id and related_site_visit_id
+      // (earning transactions may use either field, same pattern as AdminWallets.tsx)
+      const rawData = data || [];
+      const siteVisitIds = [...new Set(
+        rawData.map((t: any) => t.site_visit_id || t.related_site_visit_id).filter(Boolean)
+      )];
+
+      if (siteVisitIds.length > 0) {
+        try {
+          const { data: entries } = await supabase
+            .from('mmp_site_entries')
+            .select('id, state, locality, hub_office, mmp_id')
+            .in('id', siteVisitIds);
+
+          const entryMap: Record<string, any> = {};
+          (entries || []).forEach((e: any) => { entryMap[e.id] = e; });
+
+          const mmpIds = [...new Set((entries || []).map((e: any) => e.mmp_id).filter(Boolean))];
+          const mmpNameMap: Record<string, string> = {};
+          if (mmpIds.length > 0) {
+            const { data: mmpFiles } = await supabase
+              .from('mmp_files')
+              .select('id, name')
+              .in('id', mmpIds);
+            (mmpFiles || []).forEach((m: any) => { mmpNameMap[m.id] = m.name; });
+          }
+
+          const enriched = base.map((t, idx) => {
+            const raw = rawData[idx];
+            const entryId = raw?.site_visit_id || raw?.related_site_visit_id;
+            const e = entryId ? entryMap[entryId] : undefined;
+            return {
+              ...t,
+              hub_office: e?.hub_office || undefined,
+              state: e?.state || undefined,
+              locality: e?.locality || undefined,
+              mmp_id: e?.mmp_id || undefined,
+              mmp_name: e?.mmp_id ? mmpNameMap[e.mmp_id] : undefined,
+            };
+          });
+          setTransactions(enriched);
+        } catch (enrichErr) {
+          console.warn('[Transactions] Site entry enrichment failed, showing base data:', enrichErr);
+        }
+      }
     } catch (error) {
       console.error('Failed to load transactions:', error);
     } finally {
