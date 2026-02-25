@@ -577,7 +577,7 @@ export class NotificationDigestService {
             <td style="padding:6px 8px;font-family:monospace;font-size:12px;">${a.id.substring(0, 8).toUpperCase()}</td>
             <td style="padding:6px 8px;font-size:12px;">${entryMap[a.mmp_site_entry_id] || 'N/A'}</td>
             <td style="padding:6px 8px;font-size:12px;">${Number(a.requested_amount).toLocaleString()} SDG</td>
-            <td style="padding:6px 8px;font-size:12px;color:#ea580c;">${meta.reclaim_reason || 'N/A'}</td>
+            <td style="padding:6px 8px;font-size:12px;color:#ea580c;">${meta.site_reclaim_reason || meta.reclaim_reason || 'N/A'}</td>
             <td style="padding:6px 8px;font-size:12px;">${meta.reclaimed_at ? new Date(meta.reclaimed_at).toLocaleDateString() : 'N/A'}</td>
           </tr>`;
       }).join('');

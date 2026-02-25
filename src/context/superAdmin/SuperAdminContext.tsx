@@ -1021,26 +1021,42 @@ export function SuperAdminProvider({ children }: { children: React.ReactNode }) 
       if (cancelPendingAdvances) {
         const { data: pendingAdvances } = await supabase
           .from('down_payment_requests')
-          .select('id, requested_amount, currency')
+          .select('id, requested_amount, currency, metadata, requested_by')
           .eq('mmp_site_entry_id', siteEntryId)
           .in('status', ['pending_supervisor', 'pending_admin']);
 
         if (pendingAdvances && pendingAdvances.length > 0) {
           const cancelledAt = new Date().toISOString();
-          await supabase
-            .from('down_payment_requests')
-            .update({
-              status: 'cancelled',
-              metadata: {
-                cancelled_reason: `Site reclaimed by ${reclaimedByName}: ${reason}`,
-                cancelled_by: reclaimedBy,
-                cancelled_at: cancelledAt,
-                auto_cancelled_on_reclaim: true,
-              },
-              updated_at: cancelledAt,
-            })
-            .eq('mmp_site_entry_id', siteEntryId)
-            .in('status', ['pending_supervisor', 'pending_admin']);
+          for (const adv of pendingAdvances) {
+            const existingMeta = typeof adv.metadata === 'object' && adv.metadata ? adv.metadata : {};
+            await supabase
+              .from('down_payment_requests')
+              .update({
+                status: 'cancelled',
+                metadata: {
+                  ...existingMeta,
+                  cancelled_reason: `Site reclaimed by ${reclaimedByName}: ${reason}`,
+                  site_reclaim_reason: reason,
+                  cancelled_by: reclaimedBy,
+                  cancelled_at: cancelledAt,
+                  auto_cancelled_on_reclaim: true,
+                },
+                updated_at: cancelledAt,
+              })
+              .eq('id', adv.id);
+
+            // Notify the advance requester their request was auto-cancelled
+            if (adv.requested_by && adv.requested_by !== reclaimedBy) {
+              await sendNotificationToUser(
+                adv.requested_by,
+                'Advance Request Cancelled',
+                `Your advance request of ${Number(adv.requested_amount).toLocaleString()} ${adv.currency || 'SDG'} was automatically cancelled because the site was reclaimed. Reason: ${reason}`,
+                'warning',
+                adv.id,
+                'financial'
+              );
+            }
+          }
 
           console.log(`[Reclaim] Auto-cancelled ${pendingAdvances.length} pending advance request(s) for site ${siteEntryId}`);
         }

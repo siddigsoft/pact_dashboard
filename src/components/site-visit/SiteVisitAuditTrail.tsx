@@ -244,7 +244,7 @@ export function SiteVisitAuditTrail({
             color: 'text-orange-600 bg-orange-100 dark:bg-orange-900/30',
             status: 'completed' as const,
             details: {
-              reason: mmpEntry.metadata.reclaim_reason || 'N/A',
+              reason: mmpEntry.metadata.site_reclaim_reason || mmpEntry.metadata.reclaim_reason || 'N/A',
             }
           });
         }

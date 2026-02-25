@@ -2365,8 +2365,8 @@ function AdvanceRequestsReportContent() {
                                           ? 'Manual Reconciliation Required / مطلوب مراجعة يدوية'
                                           : 'Site Reclaimed / تم استرداد الموقع'}
                                       </div>
-                                      {(req.metadata as any)?.reclaim_reason && (
-                                        <div><span className="font-medium">Reclaim Reason:</span> {(req.metadata as any).reclaim_reason}</div>
+                                      {((req.metadata as any)?.site_reclaim_reason || (req.metadata as any)?.reclaim_reason) && (
+                                        <div><span className="font-medium">Reclaim Reason:</span> {(req.metadata as any).site_reclaim_reason || (req.metadata as any).reclaim_reason}</div>
                                       )}
                                       {(req.metadata as any)?.reclaimed_by_name && (
                                         <div><span className="font-medium">Reclaimed by:</span> {(req.metadata as any).reclaimed_by_name}</div>
@@ -3521,11 +3521,13 @@ function AdvanceRequestsReportContent() {
 
         <TabsContent value="reclaimImpact" className="space-y-4">
           {(() => {
-            const allReclaimedAdvances = requests.filter(r => (r.metadata as any)?.site_reclaimed === true);
+            const allReclaimedAdvances = requests.filter(r => (r.metadata as any)?.site_reclaimed === true || (r.metadata as any)?.auto_cancelled_on_reclaim === true);
             const needsReconciliationRows = allReclaimedAdvances.filter(r => (r.metadata as any)?.manual_reconciliation_required === true);
             const resolvedRows = allReclaimedAdvances.filter(r => (r.metadata as any)?.manual_reconciliation_required === false && (r.metadata as any)?.reconciliation_resolved_by);
             const autoCancelledRows = allReclaimedAdvances.filter(r => (r.metadata as any)?.auto_cancelled_on_reclaim === true);
+            const writtenOffRows = allReclaimedAdvances.filter(r => (r.metadata as any)?.written_off === true);
             const totalExposed = needsReconciliationRows.reduce((s, r) => s + r.requestedAmount, 0);
+            const totalWrittenOff = writtenOffRows.reduce((s, r) => s + r.requestedAmount, 0);
 
             const exportReclaimImpactPdf = () => {
               const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
@@ -3542,6 +3544,7 @@ function AdvanceRequestsReportContent() {
                 ['Resolved', resolvedRows.length.toString()],
                 ['Auto-Cancelled (Pending)', autoCancelledRows.length.toString()],
                 ['Total Exposed (SDG)', totalExposed.toLocaleString()],
+                ['Written Off (SDG)', totalWrittenOff.toLocaleString()],
               ];
               autoTable(doc, {
                 head: [['Metric', 'Value']],
@@ -3560,7 +3563,7 @@ function AdvanceRequestsReportContent() {
                 getProfileName(r.requestedBy),
                 r.requestedAmount.toLocaleString(),
                 r.status.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
-                (r.metadata as any)?.reclaim_reason || 'N/A',
+                (r.metadata as any)?.site_reclaim_reason || (r.metadata as any)?.reclaim_reason || 'N/A',
                 (r.metadata as any)?.reclaimed_by_name || 'N/A',
                 (r.metadata as any)?.reclaimed_at ? format(parseISO((r.metadata as any).reclaimed_at), 'MMM dd, yyyy') : 'N/A',
                 (r.metadata as any)?.manual_reconciliation_required === true ? 'Pending' :
@@ -3591,6 +3594,7 @@ function AdvanceRequestsReportContent() {
                 ['Resolved', resolvedRows.length],
                 ['Auto-Cancelled (Pending)', autoCancelledRows.length],
                 ['Total Exposed (SDG)', totalExposed],
+                ['Written Off (SDG)', totalWrittenOff],
               ];
               const detailWsData = [
                 ['ID', 'Site', 'Hub', 'Date', 'Requester', 'Amount (SDG)', 'Status', 'Reclaim Reason', 'Reclaimed By', 'Reclaimed At', 'Reconciliation Status'],
@@ -3602,7 +3606,7 @@ function AdvanceRequestsReportContent() {
                   getProfileName(r.requestedBy),
                   r.requestedAmount,
                   r.status.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
-                  (r.metadata as any)?.reclaim_reason || 'N/A',
+                  (r.metadata as any)?.site_reclaim_reason || (r.metadata as any)?.reclaim_reason || 'N/A',
                   (r.metadata as any)?.reclaimed_by_name || 'N/A',
                   (r.metadata as any)?.reclaimed_at ? format(parseISO((r.metadata as any).reclaimed_at), 'yyyy-MM-dd') : 'N/A',
                   (r.metadata as any)?.manual_reconciliation_required === true ? 'Pending Reconciliation' :
@@ -3661,12 +3665,13 @@ function AdvanceRequestsReportContent() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
                   {[
                     { label: 'Total Reclaimed', value: allReclaimedAdvances.length, color: 'text-orange-600' },
                     { label: 'Needs Reconciliation', value: needsReconciliationRows.length, color: 'text-red-600' },
                     { label: 'Resolved', value: resolvedRows.length, color: 'text-green-600' },
                     { label: 'Exposed Amount (SDG)', value: totalExposed.toLocaleString(), color: 'text-orange-600' },
+                    { label: 'Written Off (SDG)', value: totalWrittenOff > 0 ? totalWrittenOff.toLocaleString() : '—', color: 'text-gray-500' },
                   ].map(stat => (
                     <Card key={stat.label}>
                       <CardContent className="p-3">
@@ -3680,7 +3685,7 @@ function AdvanceRequestsReportContent() {
                 {(() => {
                   const reasonCounts: Record<string, number> = {};
                   allReclaimedAdvances.forEach(r => {
-                    const reason = (r.metadata as any)?.reclaim_reason || 'Unspecified';
+                    const reason = (r.metadata as any)?.site_reclaim_reason || (r.metadata as any)?.reclaim_reason || 'Unspecified';
                     reasonCounts[reason] = (reasonCounts[reason] || 0) + 1;
                   });
                   const chartData = Object.entries(reasonCounts).map(([reason, count]) => ({
@@ -3791,7 +3796,7 @@ function AdvanceRequestsReportContent() {
                                   <TableCell className="text-right font-mono">{r.requestedAmount.toLocaleString()}</TableCell>
                                   <TableCell>{getStatusBadge(r.status, r.metadata)}</TableCell>
                                   <TableCell className="max-w-[180px]">
-                                    <span className="text-xs text-muted-foreground">{meta?.reclaim_reason || 'N/A'}</span>
+                                    <span className="text-xs text-muted-foreground">{meta?.site_reclaim_reason || meta?.reclaim_reason || 'N/A'}</span>
                                   </TableCell>
                                   <TableCell className="text-sm">{meta?.reclaimed_by_name || 'N/A'}</TableCell>
                                   <TableCell className="text-sm">{meta?.reclaimed_at ? format(parseISO(meta.reclaimed_at), 'MMM dd, yyyy') : 'N/A'}</TableCell>
