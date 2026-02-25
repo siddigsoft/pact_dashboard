@@ -733,33 +733,42 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
       const selectedIds = selectedSiteObjects.map(s => s.id);
       const { data: priorAdvances } = await supabase
         .from('down_payment_requests')
-        .select('id, requested_amount, currency, status, mmp_site_entry_id')
+        .select('id, requested_amount, currency, status, mmp_site_entry_id, metadata')
         .in('mmp_site_entry_id', selectedIds)
         .in('status', ['approved', 'pending_supervisor', 'pending_admin']);
 
       if (priorAdvances && priorAdvances.length > 0) {
-        const disbursedCount = priorAdvances.filter(a => a.status === 'approved').length;
+        // Only hard-block on disbursed (approved) advances that are STILL unresolved
+        const unresolvedDisbursed = priorAdvances.filter(a =>
+          a.status === 'approved' &&
+          (a.metadata as any)?.manual_reconciliation_required === true &&
+          !(a.metadata as any)?.written_off
+        );
+        const resolvedDisbursed = priorAdvances.filter(a =>
+          a.status === 'approved' &&
+          ((a.metadata as any)?.manual_reconciliation_required !== true || (a.metadata as any)?.reconciliation_resolved_by)
+        );
         const pendingCount = priorAdvances.filter(a => a.status !== 'approved').length;
         const parts: string[] = [];
-        if (disbursedCount > 0) parts.push(`${disbursedCount} disbursed advance(s) flagged for reconciliation`);
-        if (pendingCount > 0) parts.push(`${pendingCount} pending advance(s) still open`);
+        if (unresolvedDisbursed.length > 0) parts.push(`${unresolvedDisbursed.length} unresolved disbursed advance(s)`);
+        if (resolvedDisbursed.length > 0) parts.push(`${resolvedDisbursed.length} resolved advance(s)`);
+        if (pendingCount > 0) parts.push(`${pendingCount} pending advance(s)`);
 
-        if (disbursedCount > 0) {
-          // Hard block for disbursed advances — require explicit confirmation
+        if (unresolvedDisbursed.length > 0) {
+          // Hard block only for unresolved disbursed advances
           const confirmed = window.confirm(
             `⚠ FINANCIAL ALERT\n\n` +
-            `This dispatch involves site(s) with ${parts.join(' and ')}.\n\n` +
+            `This dispatch involves site(s) with ${unresolvedDisbursed.length} unresolved disbursed advance(s) still requiring manual reconciliation.\n\n` +
             `Re-dispatching before reconciliation creates new financial exposure.\n\n` +
             `Do you want to proceed anyway? This will be logged.`
           );
-          if (!confirmed) return; // abort dispatch entirely
-          // Log the override — audit trail captured in dispatch metadata below
+          if (!confirmed) return;
           console.warn('[DISPATCH OVERRIDE] Admin bypassed financial lockout for sites:', selectedIds);
-        } else {
-          // Pending-only: non-blocking warning toast
+        } else if (parts.length > 0) {
+          // Non-blocking warning for resolved/pending-only
           toast({
             title: '⚠ Prior Advances Detected',
-            description: `${parts.join(' and ')}. Pending advances will be cancelled on claim by the new enumerator.`,
+            description: `${parts.join(', ')}. No unresolved disbursed advances — proceeding.`,
             variant: 'default',
           });
         }
