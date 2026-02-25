@@ -1,10 +1,9 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useCallback } from "react";
 import { useNavigate, useLocation, Outlet } from "react-router-dom";
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
 import AppSidebar from "@/components/AppSidebar";
 import Navbar from "@/components/Navbar";
 import MobileAppHeader from "@/components/MobileAppHeader";
-import TabletNavigation from '@/components/TabletNavigation';
 import { useAppContext } from "@/context/AppContext";
 import { useViewMode } from "@/context/ViewModeContext";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -16,6 +15,7 @@ import { MobileBottomNav } from "@/components/mobile/MobileBottomNav";
 import { useLiveDashboard } from "@/hooks/useLiveDashboard";
 import { RealtimeBanner } from "@/components/realtime";
 import { queryClient } from "@/lib/queryClient";
+import { isMobileApp } from "@/utils/platformDetection";
 
 interface MainLayoutContentProps {
   children?: React.ReactNode;
@@ -28,9 +28,11 @@ const MainLayoutContent: React.FC<MainLayoutContentProps> = ({ children }) => {
   const navigate = useNavigate();
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const { viewMode, isTransitioning } = useViewMode();
-  const isMobile = viewMode === 'mobile';
-  const isTablet = viewMode === 'tablet';
+  const { isTransitioning } = useViewMode();
+  // Only use native-app layout when actually running inside Capacitor/Cordova.
+  // Screen width changes on the web browser must never switch away from the
+  // sidebar layout — the sidebar handles its own collapsed state.
+  const isNativeMobile = isMobileApp();
   
   const getPageTitle = () => {
     const path = location.pathname;
@@ -84,31 +86,30 @@ const MainLayoutContent: React.FC<MainLayoutContentProps> = ({ children }) => {
       <NotificationInitializer />
       <SidebarProvider>
         <div className={`min-h-screen max-h-screen flex w-full ${isTransitioning ? 'transition-all duration-300 ease-in-out' : ''}`}>
-          {!isMobile && !isTablet && <AppSidebar />}
-          <SidebarInset className={`${isMobile ? 'bg-gray-50 dark:bg-gray-900' : ''} relative z-0 flex flex-col min-w-0 h-screen max-h-screen`}>
+          {/* Sidebar is always shown on web — never hidden due to window width */}
+          {!isNativeMobile && <AppSidebar />}
+          <SidebarInset className={`${isNativeMobile ? 'bg-gray-50 dark:bg-gray-900' : ''} relative z-0 flex flex-col min-w-0 h-screen max-h-screen`}>
             {/* Realtime Connection Banner - Shows when offline/reconnecting */}
             <RealtimeBanner 
               onRefresh={handleGlobalRefresh}
               dismissible={true}
               showOnlyWhenDisconnected={true}
             />
-            {isMobile ? (
+            {isNativeMobile ? (
               <MobileAppHeader
                 toggleSidebar={toggleSidebar}
                 title={getPageTitle()}
                 showNotification={true}
               />
-            ) : isTablet ? (
-              <TabletNavigation />
             ) : (
               <Navbar />
             )}
             {/* Global Refresh Bar - Available on all pages */}
             <GlobalRefreshBar />
-            <div className={`flex-1 flex flex-col ${isMobile ? 'px-1 pb-12 pt-0.5' : 'p-1 md:p-1.5 lg:p-2'} ${isMobile ? 'bg-gray-50 dark:bg-gray-900 overflow-y-auto overflow-x-hidden' : 'bg-slate-50/70 dark:bg-gray-900/70 overflow-y-auto overflow-x-hidden'} relative z-0 min-w-0 min-h-0 scroll-smooth`}>
+            <div className={`flex-1 flex flex-col ${isNativeMobile ? 'px-1 pb-12 pt-0.5' : 'p-1 md:p-1.5 lg:p-2'} ${isNativeMobile ? 'bg-gray-50 dark:bg-gray-900 overflow-y-auto overflow-x-hidden' : 'bg-slate-50/70 dark:bg-gray-900/70 overflow-y-auto overflow-x-hidden'} relative z-0 min-w-0 min-h-0 scroll-smooth`}>
               {children || <Outlet />}
             </div>
-            {isMobile && <MobileBottomNav />}
+            {isNativeMobile && <MobileBottomNav />}
             <OnlineOfflineToggle variant="floating" />
           </SidebarInset>
         </div>
