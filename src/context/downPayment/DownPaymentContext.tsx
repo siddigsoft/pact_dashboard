@@ -317,25 +317,46 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
         return true;
       });
       
-      const needsEnrichment = transformed.filter(r => (!r.stateName || !r.localityName) && r.mmpSiteEntryId);
+      const needsEnrichment = transformed.filter(r => (!r.stateName || !r.localityName || !r.mmpName) && r.mmpSiteEntryId);
       if (needsEnrichment.length > 0) {
         const entryIds = [...new Set(needsEnrichment.map(r => r.mmpSiteEntryId).filter(Boolean))];
         try {
           const { data: entries } = await supabase
             .from('mmp_site_entries')
-            .select('id, state, locality')
+            .select('id, state, locality, mmp_file_id')
             .in('id', entryIds as string[]);
           
           if (entries && entries.length > 0) {
             const entryMap = new Map(entries.map(e => [e.id, e]));
+
+            // Collect unique mmp_file_ids to fetch MMP names
+            const mmpFileIds = [...new Set(entries.map(e => (e as any).mmp_file_id).filter(Boolean))];
+            let mmpNameMap = new Map<string, string>();
+            if (mmpFileIds.length > 0) {
+              try {
+                const { data: mmpFiles } = await supabase
+                  .from('mmp_files')
+                  .select('id, name')
+                  .in('id', mmpFileIds);
+                if (mmpFiles) {
+                  mmpNameMap = new Map(mmpFiles.map(f => [f.id, f.name]));
+                }
+              } catch (mmpErr) {
+                console.warn('[DownPayment] MMP name lookup failed:', mmpErr);
+              }
+            }
+
             transformed.forEach(r => {
               if (r.mmpSiteEntryId && entryMap.has(r.mmpSiteEntryId)) {
                 const entry = entryMap.get(r.mmpSiteEntryId)!;
                 if (!r.stateName && entry.state) r.stateName = entry.state;
                 if (!r.localityName && entry.locality) r.localityName = entry.locality;
+                if (!r.mmpName && (entry as any).mmp_file_id) {
+                  r.mmpName = mmpNameMap.get((entry as any).mmp_file_id) || undefined;
+                }
               }
             });
-            console.log('[DownPayment] Enriched state/locality for', entries.length, 'entries');
+            console.log('[DownPayment] Enriched state/locality/MMP for', entries.length, 'entries');
           }
         } catch (enrichErr) {
           console.warn('[DownPayment] State/locality enrichment failed:', enrichErr);
