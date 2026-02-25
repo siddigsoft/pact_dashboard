@@ -510,7 +510,7 @@
     const [pendingReclaimCount, setPendingReclaimCount] = useState(0);
 
     useEffect(() => {
-      const isFinancialRole = hasAnyRole(['admin', 'Admin', 'superadmin', 'super_admin', 'financial_auditor', 'financialadmin', 'fom', 'FOM']);
+      const isFinancialRole = isSuperAdmin || hasAnyRole(['admin', 'Admin', 'superadmin', 'super_admin', 'financial_auditor', 'financialadmin', 'fom', 'FOM']);
       if (!isFinancialRole || !currentUser?.id) return;
       supabase
         .from('down_payment_requests')
