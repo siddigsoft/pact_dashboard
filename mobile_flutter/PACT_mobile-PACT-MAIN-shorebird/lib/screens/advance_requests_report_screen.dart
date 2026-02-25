@@ -24,18 +24,21 @@ class _AdvanceRequestsReportScreenState
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
   List<AdvanceRequestData> _requests = [];
+  List<AdvanceRequestData> _reclaimedAdvances = [];
   bool _isLoading = true;
   bool _hasError = false;
   String _errorMessage = '';
   String _filterPeriod = 'all';
   ReportStats _stats = ReportStats();
+  ReclaimStats _reclaimStats = ReclaimStats();
+  String _reclaimFilter = 'all';
   bool _hasAccess = false;
   String? _userRole;
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 6, vsync: this);
+    _tabController = TabController(length: 7, vsync: this);
     _checkAccessAndLoad();
   }
 
@@ -71,14 +74,24 @@ class _AdvanceRequestsReportScreenState
     });
 
     try {
-      final requests = await AdvanceReportService.fetchAllRequests();
+      final results = await Future.wait([
+        AdvanceReportService.fetchAllRequests(),
+        AdvanceReportService.fetchReclaimedAdvances(),
+      ]);
+
+      final requests = results[0];
+      final reclaimedAdvances = results[1];
       final filteredRequests = _applyPeriodFilter(requests);
       final stats = AdvanceReportService.calculateStats(filteredRequests);
+      final reclaimStats =
+          AdvanceReportService.calculateReclaimStats(reclaimedAdvances);
 
       if (mounted) {
         setState(() {
           _requests = filteredRequests;
+          _reclaimedAdvances = reclaimedAdvances;
           _stats = stats;
+          _reclaimStats = reclaimStats;
           _isLoading = false;
         });
       }
@@ -345,16 +358,52 @@ class _AdvanceRequestsReportScreenState
                 labelColor: const Color(0xFF1E40AF),
                 unselectedLabelColor: Colors.grey,
                 indicatorColor: const Color(0xFF1E40AF),
-                tabs: const [
-                  Tab(icon: Icon(Icons.list_alt, size: 18), text: 'All'),
-                  Tab(icon: Icon(Icons.people, size: 18), text: 'Team'),
-                  Tab(icon: Icon(Icons.business, size: 18), text: 'Hub'),
-                  Tab(
+                tabs: [
+                  const Tab(icon: Icon(Icons.list_alt, size: 18), text: 'All'),
+                  const Tab(icon: Icon(Icons.people, size: 18), text: 'Team'),
+                  const Tab(icon: Icon(Icons.business, size: 18), text: 'Hub'),
+                  const Tab(
                     icon: Icon(Icons.pending_actions, size: 18),
                     text: 'Status',
                   ),
-                  Tab(icon: Icon(Icons.location_on, size: 18), text: 'State'),
-                  Tab(icon: Icon(Icons.folder, size: 18), text: 'Project'),
+                  const Tab(icon: Icon(Icons.location_on, size: 18), text: 'State'),
+                  const Tab(icon: Icon(Icons.folder, size: 18), text: 'Project'),
+                  Tab(
+                    icon: Stack(
+                      clipBehavior: Clip.none,
+                      children: [
+                        const Icon(Icons.rotate_left, size: 18),
+                        if (_reclaimStats.needsReconciliationCount > 0)
+                          Positioned(
+                            top: -4,
+                            right: -6,
+                            child: Container(
+                              padding: const EdgeInsets.all(2),
+                              decoration: const BoxDecoration(
+                                color: Colors.orange,
+                                shape: BoxShape.circle,
+                              ),
+                              constraints: const BoxConstraints(
+                                minWidth: 14,
+                                minHeight: 14,
+                              ),
+                              child: Text(
+                                _reclaimStats.needsReconciliationCount > 99
+                                    ? '99+'
+                                    : '${_reclaimStats.needsReconciliationCount}',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 8,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                                textAlign: TextAlign.center,
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                    text: widget.isArabic ? 'الاسترداد' : 'Reclaim',
+                  ),
                 ],
               ),
             ),
@@ -393,9 +442,216 @@ class _AdvanceRequestsReportScreenState
                     AdvanceReportService.groupByProject(_requests),
                     'Project',
                   ),
+                  _buildReclaimImpactTab(),
                 ],
               ),
       ),
+    );
+  }
+
+  List<AdvanceRequestData> get _filteredReclaimedAdvances {
+    switch (_reclaimFilter) {
+      case 'needs_reconciliation':
+        return _reclaimedAdvances
+            .where((r) => r.needsManualReconciliation && !r.isWrittenOff && !r.isReconciliationResolved)
+            .toList();
+      case 'auto_cancelled':
+        return _reclaimedAdvances
+            .where((r) => r.isAutoCancelledOnReclaim && !r.needsManualReconciliation && !r.isWrittenOff)
+            .toList();
+      case 'resolved':
+        return _reclaimedAdvances.where((r) => r.isReconciliationResolved).toList();
+      case 'written_off':
+        return _reclaimedAdvances.where((r) => r.isWrittenOff).toList();
+      default:
+        return _reclaimedAdvances;
+    }
+  }
+
+  Widget _buildReclaimImpactTab() {
+    final isArabic = widget.isArabic;
+    final formatter = NumberFormat('#,###');
+    final displayed = _filteredReclaimedAdvances;
+
+    return Column(
+      children: [
+        // ── Stats strip ────────────────────────────────────────────────────
+        Container(
+          color: const Color(0xFFFFF7ED),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          child: Row(
+            children: [
+              _ReclaimStatChip(
+                label: isArabic ? 'الكل' : 'All',
+                count: _reclaimStats.totalReclaimedCount,
+                color: Colors.blueGrey,
+              ),
+              const SizedBox(width: 6),
+              _ReclaimStatChip(
+                label: isArabic ? 'للمطابقة' : 'Pending',
+                count: _reclaimStats.needsReconciliationCount,
+                color: Colors.orange,
+              ),
+              const SizedBox(width: 6),
+              _ReclaimStatChip(
+                label: isArabic ? 'تمت' : 'Resolved',
+                count: _reclaimStats.resolvedCount,
+                color: Colors.teal,
+              ),
+              const SizedBox(width: 6),
+              _ReclaimStatChip(
+                label: isArabic ? 'مشطوب' : 'Written Off',
+                count: _reclaimStats.writtenOffCount,
+                color: Colors.grey[600]!,
+              ),
+            ],
+          ),
+        ),
+
+        // ── Exposure amounts ───────────────────────────────────────────────
+        Container(
+          color: const Color(0xFFFEF2F2),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          child: Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      isArabic ? 'إجمالي المبلغ' : 'Total Exposure',
+                      style: TextStyle(fontSize: 11, color: Colors.grey[600]),
+                    ),
+                    Text(
+                      'SDG ${formatter.format(_reclaimStats.totalReclaimedAmount)}',
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFFDC2626),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      isArabic ? 'قيد المطابقة' : 'Pending Reconciliation',
+                      style: TextStyle(fontSize: 11, color: Colors.grey[600]),
+                    ),
+                    Text(
+                      'SDG ${formatter.format(_reclaimStats.pendingReconciliationAmount)}',
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFFD97706),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      isArabic ? 'المشطوب' : 'Written Off',
+                      style: TextStyle(fontSize: 11, color: Colors.grey[600]),
+                    ),
+                    Text(
+                      'SDG ${formatter.format(_reclaimStats.writtenOffAmount)}',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.grey[700],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+
+        // ── Filter chips ───────────────────────────────────────────────────
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          child: Row(
+            children: [
+              _FilterChipWidget(
+                label: isArabic ? 'الكل' : 'All',
+                selected: _reclaimFilter == 'all',
+                onSelected: (_) => setState(() => _reclaimFilter = 'all'),
+              ),
+              const SizedBox(width: 6),
+              _FilterChipWidget(
+                label: isArabic ? 'تحتاج مطابقة' : 'Needs Reconciliation',
+                selected: _reclaimFilter == 'needs_reconciliation',
+                onSelected: (_) => setState(() => _reclaimFilter = 'needs_reconciliation'),
+                color: Colors.orange,
+              ),
+              const SizedBox(width: 6),
+              _FilterChipWidget(
+                label: isArabic ? 'ملغى تلقائياً' : 'Auto-Cancelled',
+                selected: _reclaimFilter == 'auto_cancelled',
+                onSelected: (_) => setState(() => _reclaimFilter = 'auto_cancelled'),
+                color: Colors.deepOrange,
+              ),
+              const SizedBox(width: 6),
+              _FilterChipWidget(
+                label: isArabic ? 'تم الحل' : 'Resolved',
+                selected: _reclaimFilter == 'resolved',
+                onSelected: (_) => setState(() => _reclaimFilter = 'resolved'),
+                color: Colors.teal,
+              ),
+              const SizedBox(width: 6),
+              _FilterChipWidget(
+                label: isArabic ? 'مشطوب' : 'Written Off',
+                selected: _reclaimFilter == 'written_off',
+                onSelected: (_) => setState(() => _reclaimFilter = 'written_off'),
+                color: Colors.grey[600]!,
+              ),
+            ],
+          ),
+        ),
+
+        // ── List ───────────────────────────────────────────────────────────
+        Expanded(
+          child: displayed.isEmpty
+              ? Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        Icons.check_circle_outline,
+                        size: 64,
+                        color: Colors.green[300],
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        isArabic
+                            ? 'لا توجد سلف متأثرة بالاسترداد'
+                            : 'No reclaim-impacted advances',
+                        style: TextStyle(color: Colors.grey[600], fontSize: 16),
+                      ),
+                    ],
+                  ),
+                )
+              : ListView.builder(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                  itemCount: displayed.length,
+                  itemBuilder: (context, index) {
+                    return _ReclaimAdvanceCard(
+                      request: displayed[index],
+                      isArabic: isArabic,
+                    );
+                  },
+                ),
+        ),
+      ],
     );
   }
 
@@ -668,6 +924,290 @@ class _AdvanceRequestsReportScreenState
         ),
       ),
     );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Reclaim Impact Tab helper widgets
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _ReclaimStatChip extends StatelessWidget {
+  final String label;
+  final int count;
+  final Color color;
+
+  const _ReclaimStatChip({
+    required this.label,
+    required this.count,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.12),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: color.withOpacity(0.3)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            label,
+            style: TextStyle(fontSize: 11, color: color, fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(width: 4),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+            decoration: BoxDecoration(
+              color: color,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Text(
+              '$count',
+              style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _FilterChipWidget extends StatelessWidget {
+  final String label;
+  final bool selected;
+  final ValueChanged<bool> onSelected;
+  final Color? color;
+
+  const _FilterChipWidget({
+    required this.label,
+    required this.selected,
+    required this.onSelected,
+    this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final c = color ?? const Color(0xFF1E40AF);
+    return GestureDetector(
+      onTap: () => onSelected(!selected),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: selected ? c : Colors.transparent,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: selected ? c : Colors.grey[300]!),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 12,
+            color: selected ? Colors.white : Colors.grey[700],
+            fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ReclaimAdvanceCard extends StatelessWidget {
+  final AdvanceRequestData request;
+  final bool isArabic;
+
+  const _ReclaimAdvanceCard({required this.request, this.isArabic = false});
+
+  @override
+  Widget build(BuildContext context) {
+    final formatter = NumberFormat('#,###');
+
+    Color borderColor;
+    Color badgeColor;
+    String badgeLabel;
+    IconData badgeIcon;
+
+    if (request.isWrittenOff) {
+      borderColor = Colors.blueGrey.shade300;
+      badgeColor = Colors.blueGrey;
+      badgeLabel = isArabic ? 'مشطوب' : 'Written Off';
+      badgeIcon = Icons.do_not_disturb_alt;
+    } else if (request.isReconciliationResolved) {
+      borderColor = Colors.teal.shade300;
+      badgeColor = Colors.teal;
+      badgeLabel = isArabic ? 'تم الحل' : 'Resolved';
+      badgeIcon = Icons.check_circle_outline;
+    } else if (request.needsManualReconciliation) {
+      borderColor = Colors.orange.shade400;
+      badgeColor = Colors.orange;
+      badgeLabel = isArabic ? 'تحتاج مطابقة' : 'Needs Reconciliation';
+      badgeIcon = Icons.warning_amber_rounded;
+    } else if (request.isAutoCancelledOnReclaim) {
+      borderColor = Colors.deepOrange.shade300;
+      badgeColor = Colors.deepOrange;
+      badgeLabel = isArabic ? 'ملغى تلقائياً' : 'Auto-Cancelled';
+      badgeIcon = Icons.cancel_schedule_send;
+    } else {
+      borderColor = Colors.grey.shade300;
+      badgeColor = Colors.grey;
+      badgeLabel = isArabic ? 'مسترد' : 'Reclaimed';
+      badgeIcon = Icons.rotate_left;
+    }
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 10),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(10),
+        side: BorderSide(color: borderColor, width: 1.5),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Header row
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(
+                  child: Text(
+                    request.requesterName ?? 'Unknown',
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: badgeColor.withOpacity(0.12),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: badgeColor.withOpacity(0.4)),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(badgeIcon, size: 12, color: badgeColor),
+                      const SizedBox(width: 4),
+                      Text(
+                        badgeLabel,
+                        style: TextStyle(
+                          color: badgeColor,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+
+            // Site & amount
+            Row(
+              children: [
+                const Icon(Icons.location_on, size: 14, color: Colors.grey),
+                const SizedBox(width: 4),
+                Expanded(
+                  child: Text(
+                    request.siteName.isNotEmpty ? request.siteName : 'Unknown Site',
+                    style: TextStyle(fontSize: 13, color: Colors.grey[700]),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                Text(
+                  'SDG ${formatter.format(request.requestedAmount)}',
+                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Color(0xFF1E40AF)),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+
+            // Reclaim reason
+            if (request.siteReclaimReason != null) ...[
+              Row(
+                children: [
+                  Icon(Icons.rotate_left, size: 13, color: Colors.orange[700]),
+                  const SizedBox(width: 4),
+                  Expanded(
+                    child: Text(
+                      '${isArabic ? "سبب الاسترداد" : "Reclaim reason"}: ${request.siteReclaimReason}',
+                      style: TextStyle(fontSize: 12, color: Colors.orange[800]),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 4),
+            ],
+
+            // Write-off info
+            if (request.isWrittenOff && request.writeOffReason != null) ...[
+              Row(
+                children: [
+                  Icon(Icons.do_not_disturb_alt, size: 13, color: Colors.blueGrey[600]),
+                  const SizedBox(width: 4),
+                  Expanded(
+                    child: Text(
+                      '${isArabic ? "سبب الشطب" : "Write-off reason"}: ${request.writeOffReason}',
+                      style: TextStyle(fontSize: 12, color: Colors.blueGrey[700]),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+              if (request.writeOffAt != null) ...[
+                const SizedBox(height: 2),
+                Padding(
+                  padding: const EdgeInsets.only(left: 17),
+                  child: Text(
+                    '${isArabic ? "تاريخ الشطب" : "Written off"}: ${_formatDate(request.writeOffAt!)}',
+                    style: TextStyle(fontSize: 11, color: Colors.grey[500]),
+                  ),
+                ),
+              ],
+            ],
+
+            // Resolution info
+            if (request.isReconciliationResolved) ...[
+              const SizedBox(height: 4),
+              Row(
+                children: [
+                  Icon(Icons.check_circle_outline, size: 13, color: Colors.teal[600]),
+                  const SizedBox(width: 4),
+                  Text(
+                    '${isArabic ? "تم الحل" : "Resolved"}'
+                    '${request.reconciliationResolvedAt != null ? " · ${_formatDate(request.reconciliationResolvedAt!)}" : ""}',
+                    style: TextStyle(fontSize: 12, color: Colors.teal[700]),
+                  ),
+                ],
+              ),
+            ],
+
+            // Reclaimed date
+            if (request.reclaimedAt != null) ...[
+              const SizedBox(height: 4),
+              Text(
+                '${isArabic ? "تاريخ الاسترداد" : "Reclaimed"}: ${_formatDate(request.reclaimedAt!)}',
+                style: TextStyle(fontSize: 11, color: Colors.grey[500]),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _formatDate(String iso) {
+    try {
+      final dt = DateTime.parse(iso);
+      return DateFormat('dd MMM yyyy').format(dt);
+    } catch (_) {
+      return iso;
+    }
   }
 }
 

@@ -181,6 +181,53 @@ class DownPaymentRequest with _$DownPaymentRequest {
   bool get canConfirmReceipt {
     return (isPartiallyPaid || isFullyPaid) && !isReceiptConfirmed;
   }
+
+  // ── Reclaim Financial Gap computed properties ─────────────────────────────
+
+  /// True when the site associated with this advance was reclaimed
+  bool get isSiteReclaimed => metadata['site_reclaimed'] == true;
+
+  /// True when this advance was auto-cancelled because the site was reclaimed
+  /// while the advance was in pending state
+  bool get isAutoCancelledOnReclaim =>
+      metadata['auto_cancelled_on_reclaim'] == true;
+
+  /// True when this advance was disbursed/approved but the site was later
+  /// reclaimed — requires manual financial reconciliation by an admin
+  bool get needsManualReconciliation =>
+      metadata['manual_reconciliation_required'] == true;
+
+  /// True when an admin has written off this advance after site reclaim
+  bool get isWrittenOff => metadata['written_off'] == true;
+
+  /// True when an admin has manually resolved the reconciliation
+  bool get isReconciliationResolved =>
+      metadata['reconciliation_resolved'] == true;
+
+  /// The reason the site was reclaimed (from metadata)
+  String? get siteReclaimReason =>
+      metadata['site_reclaim_reason'] as String? ??
+      metadata['reclaim_reason'] as String?;
+
+  /// The reason this advance was written off
+  String? get writeOffReason => metadata['write_off_reason'] as String?;
+
+  /// Optional notes added during write-off
+  String? get writeOffNotes => metadata['write_off_notes'] as String?;
+
+  /// User ID who performed the write-off
+  String? get writeOffBy => metadata['write_off_by'] as String?;
+
+  /// ISO timestamp when the write-off was performed
+  String? get writeOffAt => metadata['write_off_at'] as String?;
+
+  /// ISO timestamp when the site was reclaimed
+  String? get reclaimedAt => metadata['site_reclaimed_at'] as String?;
+
+  /// Whether dispatch should be hard-blocked for this advance
+  /// (disbursed advance needing reconciliation, not yet written off)
+  bool get blocksRedispatch =>
+      needsManualReconciliation && !isWrittenOff && !isReconciliationResolved;
 }
 
 // ============================================================================

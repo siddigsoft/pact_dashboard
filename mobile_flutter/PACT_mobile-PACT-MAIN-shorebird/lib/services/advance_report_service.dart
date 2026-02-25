@@ -5,6 +5,98 @@ import '../models/advance_request_report.dart';
 class AdvanceReportService {
   static final _supabase = Supabase.instance.client;
 
+  /// Fetch all advances that are associated with a site reclaim event.
+  /// This includes auto-cancelled (pending at reclaim time) and disbursed
+  /// advances flagged with manual_reconciliation_required.
+  static Future<List<AdvanceRequestData>> fetchReclaimedAdvances() async {
+    try {
+      final response = await _supabase
+          .from('down_payment_requests')
+          .select('''
+            *,
+            profiles:requested_by(id, full_name, username, email),
+            mmp_site_entries:mmp_site_entry_id(id, state, cp_name)
+          ''')
+          .order('requested_at', ascending: false);
+
+      final all = (response as List)
+          .map((json) => AdvanceRequestData.fromJson(json))
+          .toList();
+
+      return all.where((r) {
+        return r.isSiteReclaimed ||
+            r.isAutoCancelledOnReclaim ||
+            r.needsManualReconciliation ||
+            r.isWrittenOff;
+      }).toList();
+    } catch (e) {
+      developer.log('Error fetching reclaimed advances: $e');
+      return [];
+    }
+  }
+
+  /// Count advances pending reconciliation (not resolved, not written off).
+  static Future<int> countPendingReconciliation() async {
+    try {
+      final response = await _supabase
+          .from('down_payment_requests')
+          .select('id, metadata')
+          .neq('status', 'cancelled');
+
+      final data = response as List;
+      return data.where((r) {
+        final meta = r['metadata'];
+        if (meta == null) return false;
+        final m = meta is Map ? meta : <String, dynamic>{};
+        return m['manual_reconciliation_required'] == true &&
+            m['written_off'] != true;
+      }).length;
+    } catch (e) {
+      developer.log('Error counting pending reconciliation: $e');
+      return 0;
+    }
+  }
+
+  /// Compute reclaim-specific stats from a list of advances.
+  static ReclaimStats calculateReclaimStats(
+    List<AdvanceRequestData> reclaimedAdvances,
+  ) {
+    int autoCancelledCount = 0;
+    int needsReconciliationCount = 0;
+    int resolvedCount = 0;
+    int writtenOffCount = 0;
+    double totalReclaimedAmount = 0;
+    double writtenOffAmount = 0;
+    double pendingReconciliationAmount = 0;
+
+    for (final r in reclaimedAdvances) {
+      totalReclaimedAmount += r.requestedAmount;
+
+      if (r.isWrittenOff) {
+        writtenOffCount++;
+        writtenOffAmount += r.requestedAmount;
+      } else if (r.isReconciliationResolved) {
+        resolvedCount++;
+      } else if (r.needsManualReconciliation) {
+        needsReconciliationCount++;
+        pendingReconciliationAmount += r.requestedAmount;
+      } else if (r.isAutoCancelledOnReclaim) {
+        autoCancelledCount++;
+      }
+    }
+
+    return ReclaimStats(
+      totalReclaimedCount: reclaimedAdvances.length,
+      autoCancelledCount: autoCancelledCount,
+      needsReconciliationCount: needsReconciliationCount,
+      resolvedCount: resolvedCount,
+      writtenOffCount: writtenOffCount,
+      totalReclaimedAmount: totalReclaimedAmount,
+      writtenOffAmount: writtenOffAmount,
+      pendingReconciliationAmount: pendingReconciliationAmount,
+    );
+  }
+
   static Future<List<AdvanceRequestData>> fetchAllRequests() async {
     try {
       final response = await _supabase

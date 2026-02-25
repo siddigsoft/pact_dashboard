@@ -644,6 +644,140 @@ class NotificationTriggerService {
     );
   }
 
+  // ==================== RECLAIM FINANCIAL GAP NOTIFICATIONS ====================
+
+  /// Notify an enumerator that their advance was auto-cancelled because the
+  /// site they were assigned to has been reclaimed.
+  Future<bool> sendAdvanceAutoCancelledOnReclaim({
+    required String enumeratorId,
+    required String siteName,
+    required double amount,
+    required String reclaimReason,
+  }) async {
+    try {
+      return await send(
+        NotificationTriggerOptions(
+          userId: enumeratorId,
+          title: 'Advance Cancelled — Site Reclaimed',
+          message:
+              'Your transportation advance of SDG ${amount.toStringAsFixed(0)} '
+              'for site "$siteName" has been automatically cancelled because '
+              'the site was reclaimed. Reason: $reclaimReason. '
+              'Please contact your supervisor for further information.',
+          type: NotificationType.warning,
+          category: NotificationCategory.financial,
+          priority: NotificationPriority.high,
+          link: '/advance-requests-report',
+          relatedEntityType: RelatedEntityType.downPaymentRequest,
+          sendEmail: false,
+        ),
+      );
+    } catch (e) {
+      debugPrint('[Notification] Error sending advance auto-cancel notification: $e');
+      return false;
+    }
+  }
+
+  /// Notify an enumerator that their advance was auto-cancelled due to site
+  /// reclaim — Arabic version.
+  Future<bool> sendAdvanceAutoCancelledOnReclaimArabic({
+    required String enumeratorId,
+    required String siteName,
+    required double amount,
+    required String reclaimReason,
+  }) async {
+    try {
+      return await send(
+        NotificationTriggerOptions(
+          userId: enumeratorId,
+          title: 'تم إلغاء السلفة — تم استرداد الموقع',
+          message:
+              'تم إلغاء سلفة النقل الخاصة بك البالغة ${amount.toStringAsFixed(0)} جنيه '
+              'لموقع "$siteName" تلقائياً بسبب استرداد الموقع. '
+              'السبب: $reclaimReason. '
+              'يرجى التواصل مع مشرفك للحصول على مزيد من المعلومات.',
+          type: NotificationType.warning,
+          category: NotificationCategory.financial,
+          priority: NotificationPriority.high,
+          link: '/advance-requests-report',
+          relatedEntityType: RelatedEntityType.downPaymentRequest,
+          sendEmail: false,
+        ),
+      );
+    } catch (e) {
+      debugPrint('[Notification] Error sending Arabic advance auto-cancel notification: $e');
+      return false;
+    }
+  }
+
+  /// Alert financial admins/supervisors that a disbursed advance now requires
+  /// manual reconciliation following a site reclaim.
+  Future<bool> sendReclaimReconciliationAlert({
+    required String recipientId,
+    required String enumeratorName,
+    required String siteName,
+    required double amount,
+    required String advanceId,
+  }) async {
+    try {
+      return await send(
+        NotificationTriggerOptions(
+          userId: recipientId,
+          title: 'Manual Reconciliation Required',
+          message:
+              'Advance of SDG ${amount.toStringAsFixed(0)} for $enumeratorName '
+              '(site: $siteName) requires manual financial reconciliation after '
+              'site reclaim. Please review in the Transportation Advance Report.',
+          type: NotificationType.alert,
+          category: NotificationCategory.financial,
+          priority: NotificationPriority.urgent,
+          link: '/advance-requests-report?tab=reclaimImpact',
+          relatedEntityId: advanceId,
+          relatedEntityType: RelatedEntityType.downPaymentRequest,
+          sendEmail: true,
+          emailActionUrl: '/advance-requests-report?tab=reclaimImpact',
+          emailActionLabel: 'View Reclaim Impact Report',
+        ),
+      );
+    } catch (e) {
+      debugPrint('[Notification] Error sending reconciliation alert: $e');
+      return false;
+    }
+  }
+
+  /// Alert financial admins that an advance has been written off.
+  Future<bool> sendAdvanceWrittenOffAlert({
+    required String recipientId,
+    required String enumeratorName,
+    required String siteName,
+    required double amount,
+    required String writeOffReason,
+    required String advanceId,
+  }) async {
+    try {
+      return await send(
+        NotificationTriggerOptions(
+          userId: recipientId,
+          title: 'Advance Written Off',
+          message:
+              'Advance of SDG ${amount.toStringAsFixed(0)} for $enumeratorName '
+              '(site: $siteName) has been written off. '
+              'Reason: $writeOffReason.',
+          type: NotificationType.info,
+          category: NotificationCategory.financial,
+          priority: NotificationPriority.normal,
+          link: '/advance-requests-report?tab=reclaimImpact',
+          relatedEntityId: advanceId,
+          relatedEntityType: RelatedEntityType.downPaymentRequest,
+          sendEmail: false,
+        ),
+      );
+    } catch (e) {
+      debugPrint('[Notification] Error sending write-off alert: $e');
+      return false;
+    }
+  }
+
   // ==================== HELPER METHODS ====================
 
   Future<void> _sendEmailNotification(

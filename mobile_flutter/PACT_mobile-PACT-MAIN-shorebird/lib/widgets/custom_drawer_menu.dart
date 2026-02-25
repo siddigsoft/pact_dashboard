@@ -34,6 +34,7 @@ import '../screens/documents_screen.dart';
 import '../screens/site_visit_detail_screen.dart';
 import '../screens/cost_submission_screen.dart';
 import '../screens/advance_requests_report_screen.dart';
+import '../services/advance_report_service.dart';
 
 class CustomDrawerMenu extends ConsumerStatefulWidget {
   final User? currentUser;
@@ -54,6 +55,7 @@ class _CustomDrawerMenuState extends ConsumerState<CustomDrawerMenu> {
   String _appVersion = '';
   String _buildNumber = '';
   int? _patchNumber;
+  int _pendingReclaimCount = 0;
 
   @override
   void initState() {
@@ -61,10 +63,28 @@ class _CustomDrawerMenuState extends ConsumerState<CustomDrawerMenu> {
     _userRole = widget.currentUser?.userMetadata?['role'] ?? 'User';
     _fetchUserRole();
     _fetchAppVersion();
+    _fetchPendingReclaimCount();
     // Load profile data
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(profileProvider.notifier).loadProfile();
     });
+  }
+
+  Future<void> _fetchPendingReclaimCount() async {
+    try {
+      final role = _userRole.toLowerCase();
+      final isFinancialRole = role == 'admin' ||
+          role == 'super_admin' ||
+          role == 'superadmin' ||
+          role == 'fom' ||
+          role == 'finance' ||
+          role == 'country_director';
+      if (!isFinancialRole) return;
+      final count = await AdvanceReportService.countPendingReconciliation();
+      if (mounted) setState(() => _pendingReclaimCount = count);
+    } catch (e) {
+      debugPrint('Error fetching reclaim count: $e');
+    }
   }
 
   Future<void> _fetchAppVersion() async {
@@ -533,6 +553,9 @@ class _CustomDrawerMenuState extends ConsumerState<CustomDrawerMenu> {
                           title: 'Advance Reports',
                           subtitle: 'Transportation cost analytics',
                           iconColor: const Color(0xFF1E40AF),
+                          badge: _pendingReclaimCount > 0
+                              ? _pendingReclaimCount.toString()
+                              : null,
                           onTap: () {
                             Navigator.push(
                               context,
@@ -1002,6 +1025,23 @@ class _CustomDrawerMenuState extends ConsumerState<CustomDrawerMenu> {
                     ],
                   ),
                 ),
+                if (item.badge != null)
+                  Container(
+                    margin: const EdgeInsets.only(right: 6),
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: Colors.orange,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Text(
+                      item.badge!,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
                 Icon(
                   Icons.chevron_right_rounded,
                   color: Colors.grey.shade400,
@@ -1022,6 +1062,7 @@ class _MenuItemData {
   final String? subtitle;
   final Color iconColor;
   final VoidCallback onTap;
+  final String? badge;
 
   _MenuItemData({
     required this.icon,
@@ -1029,5 +1070,6 @@ class _MenuItemData {
     this.subtitle,
     required this.iconColor,
     required this.onTap,
+    this.badge,
   });
 }

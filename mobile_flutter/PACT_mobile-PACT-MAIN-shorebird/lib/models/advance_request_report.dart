@@ -54,6 +54,41 @@ class AdvanceRequestData {
     return rc?['signatureMethod'] as String?;
   }
 
+  // ── Reclaim Financial Gap fields ──────────────────────────────────────────
+
+  bool get isSiteReclaimed => metadata?['site_reclaimed'] == true;
+
+  bool get isAutoCancelledOnReclaim =>
+      metadata?['auto_cancelled_on_reclaim'] == true;
+
+  bool get needsManualReconciliation =>
+      metadata?['manual_reconciliation_required'] == true;
+
+  bool get isWrittenOff => metadata?['written_off'] == true;
+
+  bool get isReconciliationResolved =>
+      metadata?['reconciliation_resolved'] == true;
+
+  String? get siteReclaimReason =>
+      metadata?['site_reclaim_reason'] as String? ??
+      metadata?['reclaim_reason'] as String?;
+
+  String? get writeOffReason => metadata?['write_off_reason'] as String?;
+
+  String? get writeOffNotes => metadata?['write_off_notes'] as String?;
+
+  String? get writeOffBy => metadata?['write_off_by'] as String?;
+
+  String? get writeOffAt => metadata?['write_off_at'] as String?;
+
+  String? get reclaimedAt => metadata?['site_reclaimed_at'] as String?;
+
+  String? get reconciliationResolvedBy =>
+      metadata?['reconciliation_resolved_by'] as String?;
+
+  String? get reconciliationResolvedAt =>
+      metadata?['reconciliation_resolved_at'] as String?;
+
   AdvanceRequestData({
     required this.id,
     required this.siteVisitId,
@@ -184,6 +219,28 @@ class ReportStats {
   });
 }
 
+class ReclaimStats {
+  final int totalReclaimedCount;
+  final int autoCancelledCount;
+  final int needsReconciliationCount;
+  final int resolvedCount;
+  final int writtenOffCount;
+  final double totalReclaimedAmount;
+  final double writtenOffAmount;
+  final double pendingReconciliationAmount;
+
+  ReclaimStats({
+    this.totalReclaimedCount = 0,
+    this.autoCancelledCount = 0,
+    this.needsReconciliationCount = 0,
+    this.resolvedCount = 0,
+    this.writtenOffCount = 0,
+    this.totalReclaimedAmount = 0,
+    this.writtenOffAmount = 0,
+    this.pendingReconciliationAmount = 0,
+  });
+}
+
 class StatusBadgeInfo {
   final String label;
   final Color color;
@@ -238,6 +295,30 @@ class StatusBadgeInfo {
           label: 'Cancelled',
           color: Colors.grey,
           icon: Icons.cancel,
+        );
+      case 'written_off':
+        return StatusBadgeInfo(
+          label: 'Written Off',
+          color: Colors.blueGrey,
+          icon: Icons.do_not_disturb_alt,
+        );
+      case 'auto_cancelled':
+        return StatusBadgeInfo(
+          label: 'Auto-Cancelled',
+          color: Colors.deepOrange,
+          icon: Icons.cancel_schedule_send,
+        );
+      case 'needs_reconciliation':
+        return StatusBadgeInfo(
+          label: 'Needs Reconciliation',
+          color: Colors.orange,
+          icon: Icons.warning_amber_rounded,
+        );
+      case 'reconciled':
+        return StatusBadgeInfo(
+          label: 'Reconciled',
+          color: Colors.teal,
+          icon: Icons.check_circle_outline,
         );
       default:
         return StatusBadgeInfo(
