@@ -35,6 +35,7 @@ import {
   FileText,
   MapPin,
   FolderKanban,
+  ClipboardList,
   Truck,
   Banknote,
   ChevronLeft,
@@ -80,6 +81,7 @@ function AdvanceRequestsReportContent() {
   const [dateFilter, setDateFilter] = useState<string>('all');
   const [paidFilter, setPaidFilter] = useState<string>('all');
   const [reconciledFilter, setReconciledFilter] = useState<string>('all');
+  const [mmpFilter, setMmpFilter] = useState<string>('all');
   const [activeTab, setActiveTab] = useState('overview');
   const [currentPage, setCurrentPage] = useState(1);
   const [expandedMember, setExpandedMember] = useState<string | null>(null);
@@ -575,6 +577,7 @@ function AdvanceRequestsReportContent() {
       }
       if (statusFilter !== 'all' && req.status !== statusFilter) return false;
       if (hubFilter !== 'all' && req.hubId !== hubFilter) return false;
+      if (mmpFilter !== 'all' && (req.mmpName || 'Unknown MMP') !== mmpFilter) return false;
       if (dateFilter !== 'all') {
         const reqDate = parseISO(req.requestedAt);
         const range = dateRanges[dateFilter as keyof typeof dateRanges];
@@ -594,7 +597,7 @@ function AdvanceRequestsReportContent() {
       }
       return true;
     });
-  }, [requests, debouncedSearchTerm, statusFilter, hubFilter, dateFilter, dateRanges, getProfileName, paidFilter, reconciledFilter]);
+  }, [requests, debouncedSearchTerm, statusFilter, hubFilter, mmpFilter, dateFilter, dateRanges, getProfileName, paidFilter, reconciledFilter]);
 
   const paginatedRequests = useMemo(() => {
     const startIndex = (currentPage - 1) * PAGE_SIZE;
@@ -728,6 +731,26 @@ function AdvanceRequestsReportContent() {
     return Object.values(grouped).sort((a, b) => b.totalRequested - a.totalRequested);
   }, [filteredRequests]);
 
+  const byMMP = useMemo(() => {
+    const grouped: Record<string, { id: string, name: string, requests: number, totalRequested: number, totalApproved: number, pending: number, items: typeof filteredRequests }> = {};
+    filteredRequests.forEach(req => {
+      const mmpKey = req.mmpName || 'Unknown MMP';
+      if (!grouped[mmpKey]) {
+        grouped[mmpKey] = { id: mmpKey, name: mmpKey, requests: 0, totalRequested: 0, totalApproved: 0, pending: 0, items: [] };
+      }
+      grouped[mmpKey].requests++;
+      grouped[mmpKey].totalRequested += req.requestedAmount;
+      grouped[mmpKey].items.push(req);
+      if (['approved', 'partially_paid', 'fully_paid'].includes(req.status)) {
+        grouped[mmpKey].totalApproved += req.requestedAmount;
+      }
+      if (['pending_supervisor', 'pending_admin'].includes(req.status)) {
+        grouped[mmpKey].pending++;
+      }
+    });
+    return Object.values(grouped).sort((a, b) => b.totalRequested - a.totalRequested);
+  }, [filteredRequests]);
+
   const agingData = useMemo(() => {
     const now = new Date();
     const outstanding = requests.filter(r => {
@@ -796,6 +819,14 @@ function AdvanceRequestsReportContent() {
       }
     });
     return Array.from(hubs.entries()).map(([id, name]) => ({ id, name }));
+  }, [requests]);
+
+  const uniqueMMPs = useMemo(() => {
+    const mmps = new Set<string>();
+    requests.forEach(req => {
+      if (req.mmpName) mmps.add(req.mmpName);
+    });
+    return Array.from(mmps).sort();
   }, [requests]);
 
   const exportToExcel = () => {
@@ -1184,6 +1215,62 @@ function AdvanceRequestsReportContent() {
     doc.save(`advance_by_project_${format(new Date(), 'yyyy-MM-dd')}.pdf`);
   };
 
+  // Export By MMP
+  const exportMMPToExcel = () => {
+    exportGroupedToFormattedExcel(
+      'MMP',
+      byMMP.map(m => ({ name: m.name, requests: m.requests, totalRequested: m.totalRequested, totalApproved: m.totalApproved, pending: m.pending })),
+      filteredRequests,
+      getProfileName,
+      `advance_by_mmp_${format(new Date(), 'yyyy-MM-dd')}.xlsx`,
+      (req) => req.mmpName || 'Unknown MMP'
+    ).catch(() => {});
+  };
+
+  const exportMMPToPDF = () => {
+    const doc = new jsPDF();
+    let yPos = addPdfHeader(doc, 'Advance Requests by MMP');
+    const mmpTotals = byMMP.reduce((acc, m) => ({
+      requests: acc.requests + m.requests,
+      totalRequested: acc.totalRequested + m.totalRequested,
+      totalApproved: acc.totalApproved + m.totalApproved,
+      pending: acc.pending + m.pending,
+    }), { requests: 0, totalRequested: 0, totalApproved: 0, pending: 0 });
+    autoTable(doc, {
+      startY: yPos,
+      head: [['MMP', 'Requests', 'Requested (SDG)', 'Approved (SDG)', 'Pending']],
+      body: byMMP.map(m => [m.name, m.requests, m.totalRequested.toLocaleString(), m.totalApproved.toLocaleString(), m.pending]),
+      foot: [['SUBTOTAL', mmpTotals.requests.toString(), mmpTotals.totalRequested.toLocaleString(), mmpTotals.totalApproved.toLocaleString(), mmpTotals.pending.toString()]],
+      theme: 'striped',
+      headStyles: { fillColor: [30, 64, 175], fontSize: 11, fontStyle: 'bold' },
+      bodyStyles: { fontSize: 10 },
+      footStyles: { fillColor: [230, 235, 245], textColor: [0, 0, 0], fontStyle: 'bold', fontSize: 11 },
+    });
+    yPos = (doc as any).lastAutoTable.finalY + 10;
+    doc.setFontSize(14);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Detailed Requests', 14, yPos);
+    yPos += 6;
+    autoTable(doc, {
+      startY: yPos,
+      head: [['Date', 'MMP', 'Team Member', 'Site', 'Hub', 'Amount', 'Status', 'Paid']],
+      body: filteredRequests.slice(0, 100).map(r => [
+        format(parseISO(r.requestedAt), 'MMM dd'),
+        (r.mmpName || 'Unknown MMP').substring(0, 20),
+        getProfileName(r.requestedBy).substring(0, 20),
+        r.siteName.substring(0, 20),
+        (r.hubName || 'N/A').substring(0, 10),
+        r.requestedAmount.toLocaleString(),
+        r.status.replace(/_/g, ' '),
+        (r.totalPaidAmount || 0).toLocaleString()
+      ]),
+      theme: 'striped',
+      headStyles: { fillColor: [30, 64, 175], fontSize: 9, fontStyle: 'bold' },
+      bodyStyles: { fontSize: 8 },
+    });
+    doc.save(`advance_by_mmp_${format(new Date(), 'yyyy-MM-dd')}.pdf`);
+  };
+
   const STATUS_AR_MAP: Record<string, string> = {
     pending_supervisor: 'بانتظار المشرف',
     pending_admin: 'بانتظار المدير',
@@ -1441,6 +1528,17 @@ function AdvanceRequestsReportContent() {
             ))}
           </SelectContent>
         </Select>
+        <Select value={mmpFilter} onValueChange={(v) => { setMmpFilter(v); setCurrentPage(1); }}>
+          <SelectTrigger className="w-[200px]" data-testid="select-mmp-filter">
+            <SelectValue placeholder="MMP" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All MMPs</SelectItem>
+            {uniqueMMPs.map(mmp => (
+              <SelectItem key={mmp} value={mmp}>{mmp}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
         <Select value={dateFilter} onValueChange={(v) => { setDateFilter(v); setCurrentPage(1); }}>
           <SelectTrigger className="w-[180px]" data-testid="select-date-filter">
             <SelectValue placeholder="Date Range" />
@@ -1608,6 +1706,10 @@ function AdvanceRequestsReportContent() {
           <TabsTrigger value="byProject" className="gap-1" data-testid="tab-by-project">
             <FolderKanban className="h-4 w-4" />
             By Project
+          </TabsTrigger>
+          <TabsTrigger value="byMMP" className="gap-1" data-testid="tab-by-mmp">
+            <ClipboardList className="h-4 w-4" />
+            By MMP
           </TabsTrigger>
           <TabsTrigger value="aging" className="gap-1" data-testid="tab-aging">
             <Clock className="h-4 w-4" />
@@ -2665,6 +2767,135 @@ function AdvanceRequestsReportContent() {
                           <TableCell className="font-medium">{req.projectName || 'Unknown'}</TableCell>
                           <TableCell>{getProfileName(req.requestedBy)}</TableCell>
                           <TableCell className="max-w-[180px] truncate">{req.siteName}</TableCell>
+                          <TableCell>{req.hubName || 'N/A'}</TableCell>
+                          <TableCell className="text-right font-mono">{req.requestedAmount.toLocaleString()}</TableCell>
+                          <TableCell>{getStatusBadge(req.status)}</TableCell>
+                          <TableCell className="text-right font-mono text-green-600">{(req.totalPaidAmount || 0).toLocaleString()}</TableCell>
+                          <TableCell className="text-right font-mono">{remaining > 0 ? <span className="text-amber-600">{remaining.toLocaleString()}</span> : '0'}</TableCell>
+                          <TableCell className="text-center">
+                            <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => navigate('/down-payment-approval')}>
+                              <ExternalLink className="h-3.5 w-3.5" />
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
+            </CardContent>
+          </Card>
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between gap-2 px-2">
+              <p className="text-sm text-muted-foreground">
+                Showing {((currentPage - 1) * PAGE_SIZE) + 1}-{Math.min(currentPage * PAGE_SIZE, filteredRequests.length)} of {filteredRequests.length}
+              </p>
+              <div className="flex items-center gap-1">
+                <Button size="icon" variant="outline" disabled={currentPage === 1} onClick={() => setCurrentPage(1)}><ChevronsLeft className="h-4 w-4" /></Button>
+                <Button size="icon" variant="outline" disabled={currentPage === 1} onClick={() => setCurrentPage(p => p - 1)}><ChevronLeft className="h-4 w-4" /></Button>
+                <span className="text-sm px-3 font-medium">Page {currentPage} / {totalPages}</span>
+                <Button size="icon" variant="outline" disabled={currentPage === totalPages} onClick={() => setCurrentPage(p => p + 1)}><ChevronRight className="h-4 w-4" /></Button>
+                <Button size="icon" variant="outline" disabled={currentPage === totalPages} onClick={() => setCurrentPage(totalPages)}><ChevronsRight className="h-4 w-4" /></Button>
+              </div>
+            </div>
+          )}
+        </TabsContent>
+
+        <TabsContent value="byMMP" className="space-y-4">
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" size="sm" onClick={exportMMPToPDF} data-testid="button-mmp-pdf">
+              <FileText className="h-4 w-4 mr-1" />
+              PDF
+            </Button>
+            <Button size="sm" onClick={exportMMPToExcel} data-testid="button-mmp-excel">
+              <Download className="h-4 w-4 mr-1" />
+              Excel
+            </Button>
+          </div>
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <ClipboardList className="h-5 w-5" />
+                Transportation Advance by MMP
+              </CardTitle>
+              <CardDescription>Breakdown of advance requests per Monthly Monitoring Plan</CardDescription>
+            </CardHeader>
+            <CardContent className="p-0">
+              {loading ? (
+                <div className="p-6 space-y-3">
+                  {[1,2,3].map(i => <Skeleton key={i} className="h-12 w-full" />)}
+                </div>
+              ) : byMMP.length === 0 ? (
+                <div className="p-12 text-center text-muted-foreground">No data available</div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>MMP</TableHead>
+                        <TableHead className="text-right">Requests</TableHead>
+                        <TableHead className="text-right">Total Requested (SDG)</TableHead>
+                        <TableHead className="text-right">Total Approved (SDG)</TableHead>
+                        <TableHead className="text-right">Pending</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {byMMP.map((mmp, idx) => (
+                        <TableRow key={idx} data-testid={`row-mmp-${idx}`}>
+                          <TableCell className="font-medium">{mmp.name}</TableCell>
+                          <TableCell className="text-right">{mmp.requests}</TableCell>
+                          <TableCell className="text-right font-mono">{mmp.totalRequested.toLocaleString()}</TableCell>
+                          <TableCell className="text-right font-mono text-green-600">{mmp.totalApproved.toLocaleString()}</TableCell>
+                          <TableCell className="text-right">
+                            {mmp.pending > 0 && <Badge variant="outline" className="border-amber-500 text-amber-600">{mmp.pending}</Badge>}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                    <tfoot>
+                      <TableRow className="bg-muted/50 font-bold border-t-2">
+                        <TableCell className="font-bold">Subtotal</TableCell>
+                        <TableCell className="text-right font-bold">{byMMP.reduce((sum, m) => sum + m.requests, 0)}</TableCell>
+                        <TableCell className="text-right font-mono font-bold">{byMMP.reduce((sum, m) => sum + m.totalRequested, 0).toLocaleString()}</TableCell>
+                        <TableCell className="text-right font-mono font-bold text-green-600">{byMMP.reduce((sum, m) => sum + m.totalApproved, 0).toLocaleString()}</TableCell>
+                        <TableCell className="text-right font-bold">{byMMP.reduce((sum, m) => sum + m.pending, 0)}</TableCell>
+                      </TableRow>
+                    </tfoot>
+                  </Table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">All Requests (Detailed)</CardTitle>
+            </CardHeader>
+            <CardContent className="p-0">
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Date</TableHead>
+                      <TableHead>MMP</TableHead>
+                      <TableHead>Team Member</TableHead>
+                      <TableHead>Site</TableHead>
+                      <TableHead>Hub</TableHead>
+                      <TableHead className="text-right">Amount (SDG)</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead className="text-right">Paid</TableHead>
+                      <TableHead className="text-right">Remaining</TableHead>
+                      <TableHead className="text-center">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {paginatedRequests.map(req => {
+                      const remaining = req.remainingAmount || (req.requestedAmount - (req.totalPaidAmount || 0));
+                      return (
+                        <TableRow key={req.id}>
+                          <TableCell className="text-sm">{format(parseISO(req.requestedAt), 'MMM dd, yyyy')}</TableCell>
+                          <TableCell className="font-medium max-w-[160px] truncate">{req.mmpName || 'Unknown MMP'}</TableCell>
+                          <TableCell>{getProfileName(req.requestedBy)}</TableCell>
+                          <TableCell className="max-w-[140px] truncate">{req.siteName}</TableCell>
                           <TableCell>{req.hubName || 'N/A'}</TableCell>
                           <TableCell className="text-right font-mono">{req.requestedAmount.toLocaleString()}</TableCell>
                           <TableCell>{getStatusBadge(req.status)}</TableCell>

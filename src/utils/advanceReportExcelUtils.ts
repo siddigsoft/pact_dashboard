@@ -132,6 +132,7 @@ interface AdvanceRequest {
   hubName?: string | null;
   stateName?: string | null;
   projectName?: string | null;
+  mmpName?: string | null;
   requestedAmount: number;
   status: string;
   totalPaidAmount?: number;
@@ -226,7 +227,7 @@ export async function exportOverviewToFormattedExcel(
 
   ws.addRow([]);
 
-  const headers = ['Request Date', 'Requested By', 'Site Name', 'Hub', 'Requested (SDG)', 'Status', 'Paid (SDG)', 'Remaining (SDG)', 'Payment Type', 'Justification'];
+  const headers = ['Request Date', 'Requested By', 'Site Name', 'MMP', 'Hub', 'Requested (SDG)', 'Status', 'Paid (SDG)', 'Remaining (SDG)', 'Payment Type', 'Justification'];
   addHeaderRow(ws, headers);
 
   filteredRequests.forEach((req, i) => {
@@ -234,6 +235,7 @@ export async function exportOverviewToFormattedExcel(
       format(parseISO(req.requestedAt), 'yyyy-MM-dd HH:mm'),
       getProfileName(req.requestedBy),
       req.siteName,
+      req.mmpName || 'N/A',
       req.hubName || 'N/A',
       req.requestedAmount.toLocaleString(),
       req.status.replace(/_/g, ' ').toUpperCase(),
@@ -241,11 +243,11 @@ export async function exportOverviewToFormattedExcel(
       (req.remainingAmount || 0).toLocaleString(),
       req.paymentType === 'full_advance' ? 'Full Advance' : 'Installments',
       req.justification || '',
-    ], i, 6);
+    ], i, 7);
   });
 
   addTotalRow(ws, [
-    '', '', '', 'TOTALS',
+    '', '', '', '', 'TOTALS',
     stats.totalRequested.toLocaleString(),
     '',
     stats.totalPaid.toLocaleString(),
@@ -349,10 +351,10 @@ export async function exportGroupedToFormattedExcel(
   autoFitColumns(ws);
 
   const ws2 = wb.addWorksheet('All Requests');
-  addTitle(ws2, 'All Requests - Details', 8);
+  addTitle(ws2, 'All Requests - Details', 10);
   ws2.addRow([]);
 
-  addHeaderRow(ws2, [groupName, 'Request Date', 'Requested By', 'Site', 'Hub', 'Amount (SDG)', 'Status', 'Paid (SDG)', 'Remaining (SDG)']);
+  addHeaderRow(ws2, [groupName, 'Request Date', 'Requested By', 'Site', 'MMP', 'Hub', 'Amount (SDG)', 'Status', 'Paid (SDG)', 'Remaining (SDG)']);
 
   filteredRequests.forEach((req, i) => {
     addDataRow(ws2, [
@@ -360,12 +362,13 @@ export async function exportGroupedToFormattedExcel(
       format(parseISO(req.requestedAt), 'yyyy-MM-dd'),
       getProfileName(req.requestedBy),
       req.siteName,
+      req.mmpName || 'N/A',
       req.hubName || 'N/A',
       req.requestedAmount.toLocaleString(),
       req.status.replace(/_/g, ' ').toUpperCase(),
       (req.totalPaidAmount || 0).toLocaleString(),
       (req.remainingAmount || 0).toLocaleString(),
-    ], i, 7);
+    ], i, 8);
   });
 
   autoFitColumns(ws2);
