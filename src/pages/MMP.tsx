@@ -2675,23 +2675,38 @@ const MMP = () => {
       const status = (mmp.status || '').toLowerCase();
       return status === 'approved' || status === 'verified';
     });
-    // Returned: Search ALL mmpFiles for any MMP that has sites with 'returned_to_fom' status
-    const returned = mmpFiles.filter(mmp => 
+    // Returned: Search mmpFiles for any MMP that has sites with 'returned_to_fom' status
+    // Apply hub filter for supervisors so they only see returned sites from their hubs
+    const allReturnedMMPs = mmpFiles.filter(mmp => 
       mmp.siteEntries?.some(site => {
         const siteStatus = (site.status || '').toLowerCase();
         return siteStatus === 'returned_to_fom';
       })
     );
+    const returned = (applyHubFilter && hubAccessInfo.isHubSupervisor && hubAccessInfo.hubStates.length > 0)
+      ? allReturnedMMPs.map(mmp => {
+          const hubFilteredEntries = filterByHubAccess(mmp.siteEntries || [], hubAccessInfo)
+            .filter(s => (s.status || '').toLowerCase() === 'returned_to_fom');
+          if (hubFilteredEntries.length === 0) return null;
+          return { ...mmp, siteEntries: hubFilteredEntries };
+        }).filter((mmp): mmp is NonNullable<typeof mmp> => mmp !== null)
+      : allReturnedMMPs;
     return { pending, verified, returned };
-  }, [isFOM, isSupervisor, isAdmin, isICT, isDataTeam, categorizedMMPs.new, mmpFiles]);
+  }, [isFOM, isSupervisor, isAdmin, isICT, isDataTeam, categorizedMMPs.new, mmpFiles, applyHubFilter, hubAccessInfo]);
 
-  // Returned sites grouped by state for FOM view
+  // Returned sites grouped by state for FOM/Supervisor view
+  // Hub supervisors only see returned sites from their assigned hub states
   const returnedSitesByState = useMemo(() => {
-    const allReturnedSites = mmpFiles.flatMap(mmp => 
-      (mmp.siteEntries || [])
-        .filter(site => site.status === 'returned_to_fom')
-        .map(site => ({ ...site, mmp_file_id: mmp.id, mmpName: mmp.name }))
-    );
+    const allReturnedSites = mmpFiles.flatMap(mmp => {
+      let siteEntries = mmp.siteEntries || [];
+      // Apply hub filter so supervisors only see sites in their hub(s)
+      if (applyHubFilter && hubAccessInfo.isHubSupervisor && hubAccessInfo.hubStates.length > 0) {
+        siteEntries = filterByHubAccess(siteEntries, hubAccessInfo);
+      }
+      return siteEntries
+        .filter(site => (site.status || '').toLowerCase() === 'returned_to_fom')
+        .map(site => ({ ...site, mmp_file_id: mmp.id, mmpName: mmp.name }));
+    });
     
     // Group by state
     const grouped: Record<string, { state: string; sites: any[]; totalSites: number }> = {};
@@ -2705,7 +2720,7 @@ const MMP = () => {
     });
     
     return Object.values(grouped);
-  }, [mmpFiles]);
+  }, [mmpFiles, applyHubFilter, hubAccessInfo]);
 
   // Load down-payment-linked site info once for use across all badge/count computations
   useEffect(() => {
