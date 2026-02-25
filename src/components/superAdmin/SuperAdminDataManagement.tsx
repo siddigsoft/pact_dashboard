@@ -370,41 +370,28 @@ export function SuperAdminDataManagement() {
   const loadTransactions = async () => {
     setLoading(true);
     try {
+      // Use FK join (proven pattern in WalletReports/AdminWallets) to get site entry data in one query
       const { data, error } = await supabase
         .from('wallet_transactions')
-        .select('*')
+        .select('*, mmp_site_entries!wallet_transactions_site_visit_id_fkey(id, state, locality, hub_office, mmp_id)')
         .order('created_at', { ascending: false })
         .limit(300);
 
       if (error) throw error;
 
-      // Enrich with hub/state/locality/mmp by joining through site_visit_id → mmp_site_entries
-      const siteEntryIds = [...new Set((data || []).map((t: any) => t.site_visit_id).filter(Boolean))];
-      let siteEntryMap: Record<string, { state?: string; locality?: string; hub_office?: string; mmp_id?: string }> = {};
+      // Fetch MMP names for any mmp_ids found
+      const mmpIds = [...new Set((data || []).map((t: any) => t.mmp_site_entries?.mmp_id).filter(Boolean))];
       let mmpNameMap: Record<string, string> = {};
-
-      if (siteEntryIds.length > 0) {
-        const { data: entries } = await supabase
-          .from('mmp_site_entries')
-          .select('id, state, locality, hub_office, mmp_id')
-          .in('id', siteEntryIds);
-
-        (entries || []).forEach((e: any) => {
-          siteEntryMap[e.id] = { state: e.state, locality: e.locality, hub_office: e.hub_office, mmp_id: e.mmp_id };
-        });
-
-        const mmpIds = [...new Set((entries || []).map((e: any) => e.mmp_id).filter(Boolean))];
-        if (mmpIds.length > 0) {
-          const { data: mmpFiles } = await supabase
-            .from('mmp_files')
-            .select('id, name')
-            .in('id', mmpIds);
-          (mmpFiles || []).forEach((m: any) => { mmpNameMap[m.id] = m.name; });
-        }
+      if (mmpIds.length > 0) {
+        const { data: mmpFiles } = await supabase
+          .from('mmp_files')
+          .select('id, name')
+          .in('id', mmpIds);
+        (mmpFiles || []).forEach((m: any) => { mmpNameMap[m.id] = m.name; });
       }
 
       const enriched = (data || []).map((t: any) => {
-        const entry = t.site_visit_id ? siteEntryMap[t.site_visit_id] : undefined;
+        const entry = t.mmp_site_entries;
         return {
           id: t.id,
           wallet_id: t.wallet_id,
@@ -415,10 +402,10 @@ export function SuperAdminDataManagement() {
           currency: t.currency,
           description: t.description,
           site_visit_id: t.site_visit_id,
-          hub_office: entry?.hub_office,
-          state: entry?.state,
-          locality: entry?.locality,
-          mmp_id: entry?.mmp_id,
+          hub_office: entry?.hub_office || undefined,
+          state: entry?.state || undefined,
+          locality: entry?.locality || undefined,
+          mmp_id: entry?.mmp_id || undefined,
           mmp_name: entry?.mmp_id ? mmpNameMap[entry.mmp_id] : undefined,
           created_at: t.created_at,
         };
