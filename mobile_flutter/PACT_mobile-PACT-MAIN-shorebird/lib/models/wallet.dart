@@ -186,6 +186,11 @@ class WithdrawalRequest {
   final Map<String, dynamic>? paymentDetails;
   final DateTime createdAt;
   final DateTime updatedAt;
+  // Fund receipt confirmation fields (added after DB migration)
+  final bool fundReceiptConfirmed;
+  final DateTime? fundReceiptConfirmedAt;
+  final String? fundReceiptNotes;
+  final String? fundReceiptSignatureUrl;
 
   WithdrawalRequest({
     required this.id,
@@ -205,12 +210,18 @@ class WithdrawalRequest {
     this.paymentDetails,
     required this.createdAt,
     required this.updatedAt,
+    this.fundReceiptConfirmed = false,
+    this.fundReceiptConfirmedAt,
+    this.fundReceiptNotes,
+    this.fundReceiptSignatureUrl,
   });
 
   bool get isPending => status == WithdrawalStatus.pending;
   bool get isApproved => status == WithdrawalStatus.approved;
   bool get isRejected => status == WithdrawalStatus.rejected;
   bool get canCancel => status == WithdrawalStatus.pending;
+  bool get needsReceiptConfirmation =>
+      isApproved && !fundReceiptConfirmed;
 
   factory WithdrawalRequest.fromJson(Map<String, dynamic> json) {
     return WithdrawalRequest(
@@ -238,6 +249,12 @@ class WithdrawalRequest {
       createdAt: json['created_at'] != null
           ? DateTime.parse(json['created_at'])
           : DateTime.now(),
+      fundReceiptConfirmed: json['fund_receipt_confirmed'] == true,
+      fundReceiptConfirmedAt: json['fund_receipt_confirmed_at'] != null
+          ? DateTime.tryParse(json['fund_receipt_confirmed_at'])
+          : null,
+      fundReceiptNotes: json['fund_receipt_notes']?.toString(),
+      fundReceiptSignatureUrl: json['fund_receipt_signature_url']?.toString(),
       updatedAt: json['updated_at'] != null
           ? DateTime.parse(json['updated_at'])
           : DateTime.now(),
@@ -262,6 +279,10 @@ class WithdrawalRequest {
     'payment_details': paymentDetails,
     'created_at': createdAt.toIso8601String(),
     'updated_at': updatedAt.toIso8601String(),
+    'fund_receipt_confirmed': fundReceiptConfirmed,
+    'fund_receipt_confirmed_at': fundReceiptConfirmedAt?.toIso8601String(),
+    'fund_receipt_notes': fundReceiptNotes,
+    'fund_receipt_signature_url': fundReceiptSignatureUrl,
   };
 }
 

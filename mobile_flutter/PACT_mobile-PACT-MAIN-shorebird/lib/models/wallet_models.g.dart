@@ -51,6 +51,12 @@ WithdrawalRequest _$WithdrawalRequestFromJson(Map<String, dynamic> json) =>
           json['payment_method_details'] as Map<String, dynamic>?,
       requesterName: json['requester_name'] as String?,
       referenceId: json['reference_id'] as String?,
+      fundReceiptConfirmed: json['fund_receipt_confirmed'] as bool? ?? false,
+      fundReceiptConfirmedAt: json['fund_receipt_confirmed_at'] == null
+          ? null
+          : DateTime.parse(json['fund_receipt_confirmed_at'] as String),
+      fundReceiptNotes: json['fund_receipt_notes'] as String?,
+      fundReceiptSignatureUrl: json['fund_receipt_signature_url'] as String?,
     );
 
 Map<String, dynamic> _$WithdrawalRequestToJson(
@@ -72,6 +78,10 @@ Map<String, dynamic> _$WithdrawalRequestToJson(
   'payment_method_details': instance.paymentMethodDetails,
   'requester_name': instance.requesterName,
   'reference_id': instance.referenceId,
+  'fund_receipt_confirmed': instance.fundReceiptConfirmed,
+  'fund_receipt_confirmed_at': instance.fundReceiptConfirmedAt?.toIso8601String(),
+  'fund_receipt_notes': instance.fundReceiptNotes,
+  'fund_receipt_signature_url': instance.fundReceiptSignatureUrl,
 };
 
 SiteVisitCost _$SiteVisitCostFromJson(Map<String, dynamic> json) =>

@@ -331,6 +331,14 @@ class WithdrawalRequest {
   final String? requesterName;
   @JsonKey(name: 'reference_id')
   final String? referenceId;
+  @JsonKey(name: 'fund_receipt_confirmed', defaultValue: false)
+  final bool fundReceiptConfirmed;
+  @JsonKey(name: 'fund_receipt_confirmed_at')
+  final DateTime? fundReceiptConfirmedAt;
+  @JsonKey(name: 'fund_receipt_notes')
+  final String? fundReceiptNotes;
+  @JsonKey(name: 'fund_receipt_signature_url')
+  final String? fundReceiptSignatureUrl;
 
   WithdrawalRequest({
     required this.id,
@@ -349,6 +357,10 @@ class WithdrawalRequest {
     this.paymentMethodDetails,
     this.requesterName,
     this.referenceId,
+    this.fundReceiptConfirmed = false,
+    this.fundReceiptConfirmedAt,
+    this.fundReceiptNotes,
+    this.fundReceiptSignatureUrl,
   });
 
   factory WithdrawalRequest.fromJson(
@@ -383,6 +395,12 @@ class WithdrawalRequest {
             ? (json['profiles'] as Map)['full_name'] as String?
             : null),
     referenceId: json['reference_id'] as String?,
+    fundReceiptConfirmed: json['fund_receipt_confirmed'] == true,
+    fundReceiptConfirmedAt: json['fund_receipt_confirmed_at'] is String
+        ? DateTime.tryParse(json['fund_receipt_confirmed_at'] as String)
+        : null,
+    fundReceiptNotes: json['fund_receipt_notes'] as String?,
+    fundReceiptSignatureUrl: json['fund_receipt_signature_url'] as String?,
   );
 
   Map<String, dynamic> toJson() => {
@@ -402,6 +420,10 @@ class WithdrawalRequest {
     'payment_method_details': paymentMethodDetails,
     'requester_name': requesterName,
     'reference_id': referenceId,
+    'fund_receipt_confirmed': fundReceiptConfirmed,
+    'fund_receipt_confirmed_at': fundReceiptConfirmedAt?.toIso8601String(),
+    'fund_receipt_notes': fundReceiptNotes,
+    'fund_receipt_signature_url': fundReceiptSignatureUrl,
   };
 
   WithdrawalStatus get status => WithdrawalStatus.fromString(statusString);
@@ -427,6 +449,8 @@ class WithdrawalRequest {
   bool get canCancel => statusString == 'pending';
   bool get isSettled =>
       ['approved', 'rejected', 'cancelled', 'processed'].contains(statusString);
+  bool get needsReceiptConfirmation =>
+      statusString == 'approved' && !fundReceiptConfirmed;
 
   String? get reason => requestReason;
 }

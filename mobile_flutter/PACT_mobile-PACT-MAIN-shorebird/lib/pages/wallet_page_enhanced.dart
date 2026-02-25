@@ -13,6 +13,7 @@ import '../widgets/payment_methods_card.dart';
 import '../providers/down_payment_provider.dart';
 import '../models/down_payment_request.dart';
 import '../widgets/down_payment_request_dialog.dart';
+import '../widgets/withdrawal_receipt_confirmation_dialog.dart';
 
 class WalletPageEnhanced extends ConsumerStatefulWidget {
   const WalletPageEnhanced({super.key});
@@ -1016,6 +1017,53 @@ class _WalletPageEnhancedState extends ConsumerState<WalletPageEnhanced>
                       }
                     }
                   }
+                },
+              )
+            else if (r.fundReceiptConfirmed)
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Colors.green.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.green.withOpacity(0.4)),
+                ),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.check_circle, color: Colors.green, size: 14),
+                    SizedBox(width: 4),
+                    Text(
+                      'Received',
+                      style: TextStyle(
+                        color: Colors.green,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              )
+            else if (r.needsReceiptConfirmation)
+              IconButton(
+                icon:
+                    const Icon(Icons.check_circle_outline, color: Colors.green),
+                tooltip: 'Confirm Received',
+                onPressed: () async {
+                  await showDialog(
+                    context: context,
+                    builder: (_) => WithdrawalReceiptConfirmationDialog(
+                      requestId: r.id,
+                      amount: r.amount,
+                      currency: r.currency,
+                      requestReason: r.requestReason,
+                      onConfirmed: () {
+                        ref
+                            .read(walletNotifierProvider.notifier)
+                            .refreshWithdrawalRequests();
+                      },
+                    ),
+                  );
                 },
               ),
           ],
