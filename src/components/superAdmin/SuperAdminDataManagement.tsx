@@ -124,6 +124,11 @@ interface TransactionData {
   currency: string;
   description?: string;
   site_visit_id?: string;
+  hub_office?: string;
+  state?: string;
+  locality?: string;
+  mmp_id?: string;
+  mmp_name?: string;
   created_at: string;
 }
 
@@ -231,6 +236,10 @@ export function SuperAdminDataManagement() {
   const [txAmountFilter, setTxAmountFilter] = useState('all');
   const [txUserFilter, setTxUserFilter] = useState('all');
   const [txWalletFilter, setTxWalletFilter] = useState('all');
+  const [txHubFilter, setTxHubFilter] = useState('all');
+  const [txStateFilter, setTxStateFilter] = useState('all');
+  const [txLocalityFilter, setTxLocalityFilter] = useState('all');
+  const [txMmpFilter, setTxMmpFilter] = useState('all');
   const [txDateFrom, setTxDateFrom] = useState('');
   const [txDateTo, setTxDateTo] = useState('');
 
@@ -369,18 +378,51 @@ export function SuperAdminDataManagement() {
 
       if (error) throw error;
 
-      const enriched = (data || []).map(t => ({
-        id: t.id,
-        wallet_id: t.wallet_id,
-        user_id: t.user_id,
-        user_name: userMap.get(t.user_id)?.name || 'Unknown',
-        type: t.type,
-        amount: parseFloat(t.amount),
-        currency: t.currency,
-        description: t.description,
-        site_visit_id: t.site_visit_id,
-        created_at: t.created_at,
-      }));
+      // Enrich with hub/state/locality/mmp by joining through site_visit_id → mmp_site_entries
+      const siteEntryIds = [...new Set((data || []).map((t: any) => t.site_visit_id).filter(Boolean))];
+      let siteEntryMap: Record<string, { state?: string; locality?: string; hub_office?: string; mmp_id?: string }> = {};
+      let mmpNameMap: Record<string, string> = {};
+
+      if (siteEntryIds.length > 0) {
+        const { data: entries } = await supabase
+          .from('mmp_site_entries')
+          .select('id, state, locality, hub_office, mmp_id')
+          .in('id', siteEntryIds);
+
+        (entries || []).forEach((e: any) => {
+          siteEntryMap[e.id] = { state: e.state, locality: e.locality, hub_office: e.hub_office, mmp_id: e.mmp_id };
+        });
+
+        const mmpIds = [...new Set((entries || []).map((e: any) => e.mmp_id).filter(Boolean))];
+        if (mmpIds.length > 0) {
+          const { data: mmpFiles } = await supabase
+            .from('mmp_files')
+            .select('id, name')
+            .in('id', mmpIds);
+          (mmpFiles || []).forEach((m: any) => { mmpNameMap[m.id] = m.name; });
+        }
+      }
+
+      const enriched = (data || []).map((t: any) => {
+        const entry = t.site_visit_id ? siteEntryMap[t.site_visit_id] : undefined;
+        return {
+          id: t.id,
+          wallet_id: t.wallet_id,
+          user_id: t.user_id,
+          user_name: userMap.get(t.user_id)?.name || 'Unknown',
+          type: t.type,
+          amount: parseFloat(t.amount),
+          currency: t.currency,
+          description: t.description,
+          site_visit_id: t.site_visit_id,
+          hub_office: entry?.hub_office,
+          state: entry?.state,
+          locality: entry?.locality,
+          mmp_id: entry?.mmp_id,
+          mmp_name: entry?.mmp_id ? mmpNameMap[entry.mmp_id] : undefined,
+          created_at: t.created_at,
+        };
+      });
 
       setTransactions(enriched);
       loadedTabsRef.current.add('transactions');
@@ -944,7 +986,11 @@ export function SuperAdminDataManagement() {
       const matchesSearch = !q ||
         t.user_name?.toLowerCase().includes(q) ||
         t.type?.toLowerCase().includes(q) ||
-        t.description?.toLowerCase().includes(q);
+        t.description?.toLowerCase().includes(q) ||
+        t.hub_office?.toLowerCase().includes(q) ||
+        t.state?.toLowerCase().includes(q) ||
+        t.locality?.toLowerCase().includes(q) ||
+        t.mmp_name?.toLowerCase().includes(q);
 
       const matchesType = txTypeFilter === 'all' || t.type === txTypeFilter;
 
@@ -954,16 +1000,22 @@ export function SuperAdminDataManagement() {
         (txAmountFilter === 'debit' && t.amount < 0);
 
       const matchesUser = txUserFilter === 'all' || t.user_id === txUserFilter;
-
       const matchesWallet = txWalletFilter === 'all' || t.wallet_id === txWalletFilter;
+      const matchesHub = txHubFilter === 'all' || t.hub_office === txHubFilter;
+      const matchesState = txStateFilter === 'all' || t.state === txStateFilter;
+      const matchesLocality = txLocalityFilter === 'all' || t.locality === txLocalityFilter;
+      const matchesMmp = txMmpFilter === 'all' || t.mmp_id === txMmpFilter;
 
       const txDate = new Date(t.created_at);
       const matchesDateFrom = !txDateFrom || txDate >= new Date(txDateFrom);
       const matchesDateTo = !txDateTo || txDate <= new Date(txDateTo + 'T23:59:59');
 
-      return matchesSearch && matchesType && matchesAmount && matchesUser && matchesWallet && matchesDateFrom && matchesDateTo;
+      return matchesSearch && matchesType && matchesAmount && matchesUser && matchesWallet &&
+        matchesHub && matchesState && matchesLocality && matchesMmp &&
+        matchesDateFrom && matchesDateTo;
     });
-  }, [transactions, debouncedTxSearch, txTypeFilter, txAmountFilter, txUserFilter, txWalletFilter, txDateFrom, txDateTo]);
+  }, [transactions, debouncedTxSearch, txTypeFilter, txAmountFilter, txUserFilter, txWalletFilter,
+      txHubFilter, txStateFilter, txLocalityFilter, txMmpFilter, txDateFrom, txDateTo]);
 
   const txUniqueTypes = useMemo(() => {
     return [...new Set(transactions.map(t => t.type).filter(Boolean))].sort();
@@ -985,9 +1037,34 @@ export function SuperAdminDataManagement() {
     return [...seen.entries()].sort((a, b) => a[1].localeCompare(b[1]));
   }, [transactions]);
 
+  const txUniqueHubs = useMemo(() =>
+    [...new Set(transactions.map(t => t.hub_office).filter(Boolean))].sort() as string[],
+  [transactions]);
+
+  const txUniqueStates = useMemo(() =>
+    [...new Set(transactions.map(t => t.state).filter(Boolean))].sort() as string[],
+  [transactions]);
+
+  const txUniqueLocalities = useMemo(() =>
+    [...new Set(transactions.map(t => t.locality).filter(Boolean))].sort() as string[],
+  [transactions]);
+
+  const txUniqueMmps = useMemo(() => {
+    const seen = new Map<string, string>();
+    transactions.forEach(t => { if (t.mmp_id && t.mmp_name) seen.set(t.mmp_id, t.mmp_name); });
+    return [...seen.entries()].sort((a, b) => a[1].localeCompare(b[1]));
+  }, [transactions]);
+
   const txActiveFilterCount = [
-    txSearch, txTypeFilter !== 'all' ? txTypeFilter : '', txAmountFilter !== 'all' ? txAmountFilter : '',
-    txUserFilter !== 'all' ? txUserFilter : '', txWalletFilter !== 'all' ? txWalletFilter : '',
+    txSearch,
+    txTypeFilter !== 'all' ? txTypeFilter : '',
+    txAmountFilter !== 'all' ? txAmountFilter : '',
+    txUserFilter !== 'all' ? txUserFilter : '',
+    txWalletFilter !== 'all' ? txWalletFilter : '',
+    txHubFilter !== 'all' ? txHubFilter : '',
+    txStateFilter !== 'all' ? txStateFilter : '',
+    txLocalityFilter !== 'all' ? txLocalityFilter : '',
+    txMmpFilter !== 'all' ? txMmpFilter : '',
     txDateFrom, txDateTo,
   ].filter(Boolean).length;
 
@@ -1605,6 +1682,58 @@ export function SuperAdminDataManagement() {
                   </SelectContent>
                 </Select>
 
+                {/* Hub */}
+                <Select value={txHubFilter} onValueChange={setTxHubFilter}>
+                  <SelectTrigger className="h-8 text-xs w-[140px]" data-testid="select-tx-hub">
+                    <SelectValue placeholder="All hubs" />
+                  </SelectTrigger>
+                  <SelectContent className="max-h-56">
+                    <SelectItem value="all">All hubs</SelectItem>
+                    {txUniqueHubs.map(hub => (
+                      <SelectItem key={hub} value={hub}>{hub}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+
+                {/* State */}
+                <Select value={txStateFilter} onValueChange={setTxStateFilter}>
+                  <SelectTrigger className="h-8 text-xs w-[140px]" data-testid="select-tx-state">
+                    <SelectValue placeholder="All states" />
+                  </SelectTrigger>
+                  <SelectContent className="max-h-56">
+                    <SelectItem value="all">All states</SelectItem>
+                    {txUniqueStates.map(state => (
+                      <SelectItem key={state} value={state}>{state}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+
+                {/* Locality */}
+                <Select value={txLocalityFilter} onValueChange={setTxLocalityFilter}>
+                  <SelectTrigger className="h-8 text-xs w-[150px]" data-testid="select-tx-locality">
+                    <SelectValue placeholder="All localities" />
+                  </SelectTrigger>
+                  <SelectContent className="max-h-56">
+                    <SelectItem value="all">All localities</SelectItem>
+                    {txUniqueLocalities.map(loc => (
+                      <SelectItem key={loc} value={loc}>{loc}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+
+                {/* MMP */}
+                <Select value={txMmpFilter} onValueChange={setTxMmpFilter}>
+                  <SelectTrigger className="h-8 text-xs w-[160px]" data-testid="select-tx-mmp">
+                    <SelectValue placeholder="All MMPs" />
+                  </SelectTrigger>
+                  <SelectContent className="max-h-56">
+                    <SelectItem value="all">All MMPs</SelectItem>
+                    {txUniqueMmps.map(([mid, mname]) => (
+                      <SelectItem key={mid} value={mid}>{mname}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+
                 {/* Date from */}
                 <div className="relative">
                   <Calendar className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
@@ -1641,6 +1770,10 @@ export function SuperAdminDataManagement() {
                       setTxAmountFilter('all');
                       setTxUserFilter('all');
                       setTxWalletFilter('all');
+                      setTxHubFilter('all');
+                      setTxStateFilter('all');
+                      setTxLocalityFilter('all');
+                      setTxMmpFilter('all');
                       setTxDateFrom('');
                       setTxDateTo('');
                     }}
