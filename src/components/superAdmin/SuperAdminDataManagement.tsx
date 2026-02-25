@@ -229,6 +229,10 @@ export function SuperAdminDataManagement() {
   const [claimedSiteSearch, setClaimedSiteSearch] = useState('');
   const [debouncedClaimedSiteSearch, setDebouncedClaimedSiteSearch] = useState('');
 
+  // Transaction-specific state
+  const [txLoading, setTxLoading] = useState(false);
+  const [txError, setTxError] = useState<string | null>(null);
+
   // Transaction-specific filters
   const [txSearch, setTxSearch] = useState('');
   const [debouncedTxSearch, setDebouncedTxSearch] = useState('');
@@ -368,9 +372,9 @@ export function SuperAdminDataManagement() {
   };
 
   const loadTransactions = async () => {
-    setLoading(true);
+    setTxLoading(true);
+    setTxError(null);
     try {
-      // Base query — always works, returns transactions
       const { data, error } = await supabase
         .from('wallet_transactions')
         .select('*')
@@ -379,34 +383,33 @@ export function SuperAdminDataManagement() {
 
       if (error) throw error;
 
-      // Build base enriched list from transactions alone
-      const base = (data || []).map((t: any) => ({
+      const rawData = data || [];
+
+      const base: TransactionData[] = rawData.map((t: any) => ({
         id: t.id,
         wallet_id: t.wallet_id,
         user_id: t.user_id,
         user_name: userMap.get(t.user_id)?.name || 'Unknown',
         type: t.type,
-        amount: parseFloat(t.amount),
+        amount: parseFloat(t.amount) || 0,
         currency: t.currency,
         description: t.description,
         site_visit_id: t.site_visit_id,
-        hub_office: undefined as string | undefined,
-        state: undefined as string | undefined,
-        locality: undefined as string | undefined,
-        mmp_id: undefined as string | undefined,
-        mmp_name: undefined as string | undefined,
+        hub_office: undefined,
+        state: undefined,
+        locality: undefined,
+        mmp_id: undefined,
+        mmp_name: undefined,
         created_at: t.created_at,
       }));
 
       setTransactions(base);
       loadedTabsRef.current.add('transactions');
 
-      // Enrich with site entry data — uses both site_visit_id and related_site_visit_id
-      // (earning transactions may use either field, same pattern as AdminWallets.tsx)
-      const rawData = data || [];
+      // Enrich with hub/state/locality/mmp using both site_visit_id and related_site_visit_id
       const siteVisitIds = [...new Set(
         rawData.map((t: any) => t.site_visit_id || t.related_site_visit_id).filter(Boolean)
-      )];
+      )] as string[];
 
       if (siteVisitIds.length > 0) {
         try {
@@ -418,38 +421,29 @@ export function SuperAdminDataManagement() {
           const entryMap: Record<string, any> = {};
           (entries || []).forEach((e: any) => { entryMap[e.id] = e; });
 
-          const mmpIds = [...new Set((entries || []).map((e: any) => e.mmp_id).filter(Boolean))];
+          const mmpIds = [...new Set((entries || []).map((e: any) => e.mmp_id).filter(Boolean))] as string[];
           const mmpNameMap: Record<string, string> = {};
           if (mmpIds.length > 0) {
             const { data: mmpFiles } = await supabase
-              .from('mmp_files')
-              .select('id, name')
-              .in('id', mmpIds);
+              .from('mmp_files').select('id, name').in('id', mmpIds);
             (mmpFiles || []).forEach((m: any) => { mmpNameMap[m.id] = m.name; });
           }
 
-          const enriched = base.map((t, idx) => {
+          setTransactions(base.map((t, idx) => {
             const raw = rawData[idx];
             const entryId = raw?.site_visit_id || raw?.related_site_visit_id;
             const e = entryId ? entryMap[entryId] : undefined;
-            return {
-              ...t,
-              hub_office: e?.hub_office || undefined,
-              state: e?.state || undefined,
-              locality: e?.locality || undefined,
-              mmp_id: e?.mmp_id || undefined,
-              mmp_name: e?.mmp_id ? mmpNameMap[e.mmp_id] : undefined,
-            };
-          });
-          setTransactions(enriched);
+            return { ...t, hub_office: e?.hub_office, state: e?.state, locality: e?.locality, mmp_id: e?.mmp_id, mmp_name: e?.mmp_id ? mmpNameMap[e.mmp_id] : undefined };
+          }));
         } catch (enrichErr) {
-          console.warn('[Transactions] Site entry enrichment failed, showing base data:', enrichErr);
+          console.warn('[Transactions] Enrichment failed, showing base data:', enrichErr);
         }
       }
-    } catch (error) {
-      console.error('Failed to load transactions:', error);
+    } catch (err: any) {
+      console.error('Failed to load transactions:', err);
+      setTxError(err?.message || 'Failed to load transactions. Please try again.');
     } finally {
-      setLoading(false);
+      setTxLoading(false);
     }
   };
 
@@ -569,7 +563,7 @@ export function SuperAdminDataManagement() {
     loadedTabsRef.current.delete(activeTab);
     if (activeTab === 'site-visits') loadSiteVisits();
     else if (activeTab === 'wallets') loadWallets();
-    else if (activeTab === 'transactions') loadTransactions();
+    else if (activeTab === 'transactions') { setTxError(null); loadTransactions(); }
     else if (activeTab === 'claimed-sites') loadClaimedSites();
     else if (activeTab === 'dispatched-sites') loadDispatchedSites();
     else if (activeTab === 'mmps') loadMMPs();
@@ -1243,7 +1237,7 @@ export function SuperAdminDataManagement() {
   const refreshCurrentTab = () => {
     if (activeTab === 'site-visits') loadSiteVisits();
     else if (activeTab === 'wallets') loadWallets();
-    else if (activeTab === 'transactions') loadTransactions();
+    else if (activeTab === 'transactions') { loadedTabsRef.current.delete('transactions'); setTxError(null); loadTransactions(); }
     else if (activeTab === 'claimed-sites') loadClaimedSites();
     else if (activeTab === 'dispatched-sites') loadDispatchedSites();
     else if (activeTab === 'mmps') loadMMPs();
@@ -1284,10 +1278,10 @@ export function SuperAdminDataManagement() {
           <Button
             variant="outline"
             onClick={refreshCurrentTab}
-            disabled={loading}
+            disabled={activeTab === 'transactions' ? txLoading : loading}
             data-testid="button-refresh"
           >
-            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+            <RefreshCw className={`h-4 w-4 ${(activeTab === 'transactions' ? txLoading : loading) ? 'animate-spin' : ''}`} />
             <span className="hidden sm:inline ml-2">Refresh</span>
           </Button>
           <Button variant="outline" data-testid="button-export">
@@ -1806,14 +1800,28 @@ export function SuperAdminDataManagement() {
               </div>
             </CardHeader>
             <CardContent className="p-0">
-              {loading ? (
+              {txLoading ? (
                 <div className="flex items-center justify-center py-16">
                   <RefreshCw className="h-8 w-8 animate-spin text-muted-foreground" />
+                </div>
+              ) : txError ? (
+                <div className="text-center py-16">
+                  <DollarSign className="h-12 w-12 text-destructive mx-auto mb-4" />
+                  <p className="text-destructive font-medium mb-2">Failed to load transactions</p>
+                  <p className="text-muted-foreground text-sm mb-4">{txError}</p>
+                  <button onClick={() => { loadedTabsRef.current.delete('transactions'); loadTransactions(); }} className="px-4 py-2 text-sm bg-primary text-primary-foreground rounded-md hover:bg-primary/90">
+                    Retry
+                  </button>
                 </div>
               ) : filteredTransactions.length === 0 ? (
                 <div className="text-center py-16">
                   <DollarSign className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
                   <p className="text-muted-foreground">No transactions found</p>
+                  {transactions.length === 0 && (
+                    <button onClick={() => { loadedTabsRef.current.delete('transactions'); loadTransactions(); }} className="mt-4 px-4 py-2 text-sm bg-primary text-primary-foreground rounded-md hover:bg-primary/90">
+                      Load Transactions
+                    </button>
+                  )}
                 </div>
               ) : (
                 <div className="overflow-x-auto">
