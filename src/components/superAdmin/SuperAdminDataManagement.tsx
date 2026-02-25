@@ -224,6 +224,15 @@ export function SuperAdminDataManagement() {
   const [claimedSiteSearch, setClaimedSiteSearch] = useState('');
   const [debouncedClaimedSiteSearch, setDebouncedClaimedSiteSearch] = useState('');
 
+  // Transaction-specific filters
+  const [txSearch, setTxSearch] = useState('');
+  const [debouncedTxSearch, setDebouncedTxSearch] = useState('');
+  const [txTypeFilter, setTxTypeFilter] = useState('all');
+  const [txAmountFilter, setTxAmountFilter] = useState('all');
+  const [txUserFilter, setTxUserFilter] = useState('all');
+  const [txDateFrom, setTxDateFrom] = useState('');
+  const [txDateTo, setTxDateTo] = useState('');
+
   // Cache for loaded tabs to avoid reloading
   const loadedTabsRef = useRef<Set<string>>(new Set());
 
@@ -244,6 +253,11 @@ export function SuperAdminDataManagement() {
     const timer = setTimeout(() => setDebouncedClaimedSiteSearch(claimedSiteSearch), 300);
     return () => clearTimeout(timer);
   }, [claimedSiteSearch]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedTxSearch(txSearch), 300);
+    return () => clearTimeout(timer);
+  }, [txSearch]);
 
   const [siteVisits, setSiteVisits] = useState<SiteVisitData[]>([]);
   const [wallets, setWallets] = useState<WalletData[]>([]);
@@ -837,16 +851,43 @@ export function SuperAdminDataManagement() {
 
   const filteredTransactions = useMemo(() => {
     return transactions.filter(t => {
-      const matchesSearch = 
-        t.user_name?.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
-        t.type?.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
-        t.description?.toLowerCase().includes(debouncedSearch.toLowerCase());
-      
-      const matchesType = statusFilter === 'all' || t.type === statusFilter;
-      
-      return matchesSearch && matchesType;
+      const q = debouncedTxSearch.toLowerCase();
+      const matchesSearch = !q ||
+        t.user_name?.toLowerCase().includes(q) ||
+        t.type?.toLowerCase().includes(q) ||
+        t.description?.toLowerCase().includes(q);
+
+      const matchesType = txTypeFilter === 'all' || t.type === txTypeFilter;
+
+      const matchesAmount =
+        txAmountFilter === 'all' ||
+        (txAmountFilter === 'credit' && t.amount > 0) ||
+        (txAmountFilter === 'debit' && t.amount < 0);
+
+      const matchesUser = txUserFilter === 'all' || t.user_id === txUserFilter;
+
+      const txDate = new Date(t.created_at);
+      const matchesDateFrom = !txDateFrom || txDate >= new Date(txDateFrom);
+      const matchesDateTo = !txDateTo || txDate <= new Date(txDateTo + 'T23:59:59');
+
+      return matchesSearch && matchesType && matchesAmount && matchesUser && matchesDateFrom && matchesDateTo;
     });
-  }, [transactions, debouncedSearch, statusFilter]);
+  }, [transactions, debouncedTxSearch, txTypeFilter, txAmountFilter, txUserFilter, txDateFrom, txDateTo]);
+
+  const txUniqueTypes = useMemo(() => {
+    return [...new Set(transactions.map(t => t.type).filter(Boolean))].sort();
+  }, [transactions]);
+
+  const txUniqueUsers = useMemo(() => {
+    const seen = new Map<string, string>();
+    transactions.forEach(t => { if (t.user_id && t.user_name) seen.set(t.user_id, t.user_name); });
+    return [...seen.entries()].sort((a, b) => a[1].localeCompare(b[1]));
+  }, [transactions]);
+
+  const txActiveFilterCount = [
+    txSearch, txTypeFilter !== 'all' ? txTypeFilter : '', txAmountFilter !== 'all' ? txAmountFilter : '',
+    txUserFilter !== 'all' ? txUserFilter : '', txDateFrom, txDateTo,
+  ].filter(Boolean).length;
 
   const filteredClaimedSites = useMemo(() => {
     return claimedSites.filter(site => {
@@ -1385,9 +1426,114 @@ export function SuperAdminDataManagement() {
                     </CardDescription>
                   </div>
                 </div>
-                <Badge variant="outline" className="text-sm px-2 py-0.5">
-                  {filteredTransactions.length}
-                </Badge>
+                <div className="flex items-center gap-2">
+                  {txActiveFilterCount > 0 && (
+                    <Badge variant="secondary" className="text-xs">
+                      {txActiveFilterCount} filter{txActiveFilterCount > 1 ? 's' : ''} active
+                    </Badge>
+                  )}
+                  <Badge variant="outline" className="text-sm px-2 py-0.5">
+                    {filteredTransactions.length}
+                  </Badge>
+                </div>
+              </div>
+
+              {/* Filter bar */}
+              <div className="mt-3 flex flex-wrap gap-2">
+                {/* Search */}
+                <div className="relative flex-1 min-w-[160px]">
+                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+                  <Input
+                    value={txSearch}
+                    onChange={e => setTxSearch(e.target.value)}
+                    placeholder="Search user, type, description…"
+                    className="pl-8 h-8 text-xs"
+                    data-testid="input-tx-search"
+                  />
+                </div>
+
+                {/* Type */}
+                <Select value={txTypeFilter} onValueChange={setTxTypeFilter}>
+                  <SelectTrigger className="h-8 text-xs w-[130px]" data-testid="select-tx-type">
+                    <SelectValue placeholder="All types" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All types</SelectItem>
+                    {txUniqueTypes.map(type => (
+                      <SelectItem key={type} value={type} className="capitalize">{type}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+
+                {/* Amount direction */}
+                <Select value={txAmountFilter} onValueChange={setTxAmountFilter}>
+                  <SelectTrigger className="h-8 text-xs w-[120px]" data-testid="select-tx-amount">
+                    <SelectValue placeholder="All amounts" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All amounts</SelectItem>
+                    <SelectItem value="credit">Credits (+)</SelectItem>
+                    <SelectItem value="debit">Debits (−)</SelectItem>
+                  </SelectContent>
+                </Select>
+
+                {/* User */}
+                <Select value={txUserFilter} onValueChange={setTxUserFilter}>
+                  <SelectTrigger className="h-8 text-xs w-[150px]" data-testid="select-tx-user">
+                    <SelectValue placeholder="All users" />
+                  </SelectTrigger>
+                  <SelectContent className="max-h-56">
+                    <SelectItem value="all">All users</SelectItem>
+                    {txUniqueUsers.map(([uid, uname]) => (
+                      <SelectItem key={uid} value={uid}>{uname}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+
+                {/* Date from */}
+                <div className="relative">
+                  <Calendar className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+                  <Input
+                    type="date"
+                    value={txDateFrom}
+                    onChange={e => setTxDateFrom(e.target.value)}
+                    className="pl-7 h-8 text-xs w-[140px]"
+                    data-testid="input-tx-date-from"
+                  />
+                </div>
+
+                {/* Date to */}
+                <div className="relative">
+                  <Calendar className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+                  <Input
+                    type="date"
+                    value={txDateTo}
+                    onChange={e => setTxDateTo(e.target.value)}
+                    className="pl-7 h-8 text-xs w-[140px]"
+                    data-testid="input-tx-date-to"
+                  />
+                </div>
+
+                {/* Clear filters */}
+                {txActiveFilterCount > 0 && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 px-2 text-xs text-muted-foreground"
+                    onClick={() => {
+                      setTxSearch('');
+                      setTxTypeFilter('all');
+                      setTxAmountFilter('all');
+                      setTxUserFilter('all');
+                      setTxDateFrom('');
+                      setTxDateTo('');
+                    }}
+                    data-testid="button-tx-clear-filters"
+                  >
+                    <XCircle className="h-3.5 w-3.5 mr-1" />
+                    Clear
+                  </Button>
+                )}
               </div>
             </CardHeader>
             <CardContent className="p-0">
