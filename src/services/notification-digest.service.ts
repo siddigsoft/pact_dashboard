@@ -522,6 +522,132 @@ export class NotificationDigestService {
       return { success: false, totalSent: 0, totalFailed: 0, errors: [] };
     }
   }
+  /**
+   * Send reclaim reconciliation digest to all financial admins/auditors
+   * Lists all advances with manual_reconciliation_required = true
+   */
+  async sendReclaimReconciliationDigest(): Promise<{ success: boolean; sent: number; error?: string }> {
+    console.log('[DIGEST] Sending reclaim reconciliation digest to financial admins');
+    try {
+      // Fetch all pending reconciliation advances
+      const { data: advances, error: advError } = await supabase
+        .from('down_payment_requests')
+        .select('id, requested_amount, status, metadata, created_at, mmp_site_entry_id')
+        .neq('status', 'cancelled');
+
+      if (advError) throw advError;
+
+      const pendingAdvances = (advances || []).filter((a: any) => {
+        const meta = typeof a.metadata === 'string' ? JSON.parse(a.metadata) : (a.metadata || {});
+        return meta?.manual_reconciliation_required === true;
+      });
+
+      if (pendingAdvances.length === 0) {
+        console.log('[DIGEST] No pending reconciliations — skipping reclaim digest');
+        return { success: true, sent: 0 };
+      }
+
+      // Fetch site names for the advances
+      const entryIds = [...new Set(pendingAdvances.map((a: any) => a.mmp_site_entry_id).filter(Boolean))];
+      const { data: entries } = await supabase
+        .from('mmp_site_entries')
+        .select('id, site_name, site_code')
+        .in('id', entryIds);
+      const entryMap: Record<string, string> = {};
+      (entries || []).forEach((e: any) => { entryMap[e.id] = e.site_name || e.site_code || e.id; });
+
+      // Fetch all financial admins
+      const { data: financialUsers, error: usersError } = await supabase
+        .from('profiles')
+        .select('id, email, full_name')
+        .in('role', ['financial_auditor', 'admin', 'superadmin'])
+        .not('email', 'is', null);
+
+      if (usersError || !financialUsers?.length) {
+        console.warn('[DIGEST] No financial admin users found');
+        return { success: true, sent: 0 };
+      }
+
+      const totalExposed = pendingAdvances.reduce((s: number, a: any) => s + Number(a.requested_amount), 0);
+
+      const advanceRows = pendingAdvances.slice(0, 20).map((a: any) => {
+        const meta = typeof a.metadata === 'string' ? JSON.parse(a.metadata) : (a.metadata || {});
+        return `
+          <tr style="border-bottom:1px solid #f3f4f6;">
+            <td style="padding:6px 8px;font-family:monospace;font-size:12px;">${a.id.substring(0, 8).toUpperCase()}</td>
+            <td style="padding:6px 8px;font-size:12px;">${entryMap[a.mmp_site_entry_id] || 'N/A'}</td>
+            <td style="padding:6px 8px;font-size:12px;">${Number(a.requested_amount).toLocaleString()} SDG</td>
+            <td style="padding:6px 8px;font-size:12px;color:#ea580c;">${meta.reclaim_reason || 'N/A'}</td>
+            <td style="padding:6px 8px;font-size:12px;">${meta.reclaimed_at ? new Date(meta.reclaimed_at).toLocaleDateString() : 'N/A'}</td>
+          </tr>`;
+      }).join('');
+
+      const html = `
+        <!DOCTYPE html><html><body style="font-family:Arial,sans-serif;background:#f9fafb;padding:24px;">
+          <div style="max-width:700px;margin:0 auto;background:white;border-radius:8px;overflow:hidden;border:1px solid #e5e7eb;">
+            <div style="background:#ea580c;color:white;padding:20px 24px;">
+              <h2 style="margin:0;font-size:18px;">⚠ Reconciliation Action Required | مطلوب مراجعة يدوية</h2>
+              <p style="margin:4px 0 0;font-size:13px;opacity:0.9;">PACT Command Center — Finance Alert</p>
+            </div>
+            <div style="padding:20px 24px;">
+              <p style="color:#374151;font-size:14px;">
+                <strong>${pendingAdvances.length}</strong> transport advance${pendingAdvances.length !== 1 ? 's' : ''} require manual reconciliation following site reclaims.
+                Total exposed amount: <strong style="color:#ea580c;">${totalExposed.toLocaleString()} SDG</strong>
+              </p>
+              <p style="color:#6b7280;font-size:13px;margin-top:4px;">
+                ${pendingAdvances.length > 20 ? `Showing 20 of ${pendingAdvances.length} advances.` : ''}
+              </p>
+              <table style="width:100%;border-collapse:collapse;margin-top:16px;font-size:13px;">
+                <thead>
+                  <tr style="background:#fff7ed;">
+                    <th style="padding:8px;text-align:left;font-size:12px;color:#92400e;">ID</th>
+                    <th style="padding:8px;text-align:left;font-size:12px;color:#92400e;">Site</th>
+                    <th style="padding:8px;text-align:left;font-size:12px;color:#92400e;">Amount</th>
+                    <th style="padding:8px;text-align:left;font-size:12px;color:#92400e;">Reclaim Reason</th>
+                    <th style="padding:8px;text-align:left;font-size:12px;color:#92400e;">Reclaimed Date</th>
+                  </tr>
+                </thead>
+                <tbody>${advanceRows}</tbody>
+              </table>
+              <div style="margin-top:20px;text-align:center;">
+                <a href="https://app.pactorg.com/down-payment-advance-report?tab=reclaimImpact"
+                   style="background:#ea580c;color:white;padding:10px 20px;border-radius:6px;text-decoration:none;font-weight:600;font-size:13px;">
+                  View Reclaim Impact Report
+                </a>
+              </div>
+            </div>
+            <div style="background:#f9fafb;padding:12px 24px;text-align:center;">
+              <p style="color:#9ca3af;font-size:11px;margin:0;">PACT Command Center • Finance Alert • ${new Date().toLocaleDateString()}</p>
+            </div>
+          </div>
+        </body></html>`;
+
+      let sent = 0;
+      for (const user of financialUsers) {
+        try {
+          const result = await EmailNotificationService.sendEmail({
+            to: user.email,
+            subject: `[Action Required] ${pendingAdvances.length} Advance${pendingAdvances.length !== 1 ? 's' : ''} Need Reconciliation | PACT Finance`,
+            recipientName: user.full_name || 'Finance Team',
+            html,
+            text: `${pendingAdvances.length} transport advance(s) require manual reconciliation. Total: ${totalExposed.toLocaleString()} SDG. Visit: https://app.pactorg.com/down-payment-advance-report?tab=reclaimImpact`,
+            priority: 'high',
+          });
+          if (result.success) sent++;
+          await new Promise(r => setTimeout(r, 300));
+        } catch (err) {
+          console.error('[DIGEST] Failed to send reclaim digest to', user.email, err);
+        }
+      }
+
+      console.log(`[DIGEST] Reclaim reconciliation digest sent to ${sent} financial admin(s)`);
+      return { success: true, sent };
+    } catch (error: any) {
+      const msg = `Exception in reclaim digest: ${error.message}`;
+      console.error('[DIGEST]', msg);
+      return { success: false, sent: 0, error: msg };
+    }
+  }
 }
 
 // Export singleton instance

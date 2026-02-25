@@ -15,13 +15,15 @@ import {
   CheckCircle2,
   Clock,
   AlertCircle,
+  AlertTriangle,
   TrendingUp,
   Users,
   Zap,
   Target,
   BarChart3,
   ExternalLink,
-  FileText
+  FileText,
+  RotateCcw
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { Button } from '@/components/ui/button';
@@ -90,6 +92,27 @@ export const OperationsZone: React.FC = () => {
   const [dispatchedSitesFromDB, setDispatchedSitesFromDB] = useState<any[]>([]);
   const [closingCycles, setClosingCycles] = useState<{ id: string; name: string; deadline: string | null; uncovered: number; reasoned: number }[]>([]);
   const [cycleSummary, setCycleSummary] = useState<{ active: number; closing: number; pending_approval: number; closed: number }>({ active: 0, closing: 0, pending_approval: 0, closed: 0 });
+  const [pendingReclaimCount, setPendingReclaimCount] = useState(0);
+
+  useEffect(() => {
+    const isFinancialUser = hasAnyRole(['admin', 'Admin', 'super_admin', 'Super Admin', 'financial_auditor', 'financialadmin', 'fom', 'FOM']);
+    if (!isFinancialUser) return;
+    const fetchPendingReclaims = async () => {
+      try {
+        const { data } = await supabase
+          .from('down_payment_requests')
+          .select('id, metadata')
+          .neq('status', 'cancelled');
+        if (!data) return;
+        const count = data.filter((r: any) => {
+          try { return JSON.parse(typeof r.metadata === 'string' ? r.metadata : JSON.stringify(r.metadata))?.manual_reconciliation_required === true; }
+          catch { return r.metadata?.manual_reconciliation_required === true; }
+        }).length;
+        setPendingReclaimCount(count);
+      } catch { /* non-critical */ }
+    };
+    fetchPendingReclaims();
+  }, [hasAnyRole]);
 
   useEffect(() => {
     const isAdminUser = hasAnyRole(['admin', 'Admin', 'super_admin', 'Super Admin', 'ict']);
@@ -503,6 +526,41 @@ export const OperationsZone: React.FC = () => {
           data-testid="card-metric-performance"
         />
       </div>
+
+      {pendingReclaimCount > 0 && (
+        <Card className="border-orange-300 dark:border-orange-700 bg-orange-50/50 dark:bg-orange-950/20" data-testid="card-pending-reconciliation">
+          <CardContent className="p-3">
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-lg bg-orange-100 dark:bg-orange-900/40">
+                  <RotateCcw className="h-5 w-5 text-orange-600 dark:text-orange-400" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold text-orange-800 dark:text-orange-300">
+                      {pendingReclaimCount} Advance{pendingReclaimCount !== 1 ? 's' : ''} Require Reconciliation
+                    </span>
+                    <Badge className="bg-orange-500 text-white text-[10px] px-1.5">Action Required</Badge>
+                  </div>
+                  <p className="text-xs text-orange-700 dark:text-orange-400 mt-0.5">
+                    Transport advances flagged for manual review following site reclaims
+                  </p>
+                </div>
+              </div>
+              <Button
+                size="sm"
+                variant="outline"
+                className="border-orange-400 text-orange-700 hover:bg-orange-100 dark:hover:bg-orange-900/30 shrink-0"
+                onClick={() => navigate('/down-payment-advance-report?tab=reclaimImpact')}
+                data-testid="button-view-pending-reconciliation"
+              >
+                <ExternalLink className="h-3 w-3 mr-1" />
+                View Report
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {(cycleSummary.active > 0 || cycleSummary.closing > 0 || cycleSummary.pending_approval > 0 || cycleSummary.closed > 0) && (
         <Card data-testid="card-cycle-summary">

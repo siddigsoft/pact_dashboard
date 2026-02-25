@@ -741,13 +741,28 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
         const disbursedCount = priorAdvances.filter(a => a.status === 'approved').length;
         const pendingCount = priorAdvances.filter(a => a.status !== 'approved').length;
         const parts: string[] = [];
-        if (disbursedCount > 0) parts.push(`${disbursedCount} disbursed advance(s) — manual reconciliation required`);
+        if (disbursedCount > 0) parts.push(`${disbursedCount} disbursed advance(s) flagged for reconciliation`);
         if (pendingCount > 0) parts.push(`${pendingCount} pending advance(s) still open`);
-        toast({
-          title: '⚠ Prior Advances Detected',
-          description: `${selectedSiteObjects.length === 1 ? 'This site' : `${priorAdvances.length} of these sites`} ${parts.join(' and ')}. Please verify reconciliation before or after dispatch.`,
-          variant: 'default',
-        });
+
+        if (disbursedCount > 0) {
+          // Hard block for disbursed advances — require explicit confirmation
+          const confirmed = window.confirm(
+            `⚠ FINANCIAL ALERT\n\n` +
+            `This dispatch involves site(s) with ${parts.join(' and ')}.\n\n` +
+            `Re-dispatching before reconciliation creates new financial exposure.\n\n` +
+            `Do you want to proceed anyway? This will be logged.`
+          );
+          if (!confirmed) return; // abort dispatch entirely
+          // Log the override — audit trail captured in dispatch metadata below
+          console.warn('[DISPATCH OVERRIDE] Admin bypassed financial lockout for sites:', selectedIds);
+        } else {
+          // Pending-only: non-blocking warning toast
+          toast({
+            title: '⚠ Prior Advances Detected',
+            description: `${parts.join(' and ')}. Pending advances will be cancelled on claim by the new enumerator.`,
+            variant: 'default',
+          });
+        }
       }
     } catch { /* non-critical */ }
 

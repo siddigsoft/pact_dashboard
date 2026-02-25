@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback, useRef, useEffect, Fragment } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { useUser } from '@/context/user/UserContext';
 import { useSuperAdmin } from '@/context/superAdmin/SuperAdminContext';
 import { useDownPayment } from '@/context/downPayment/DownPaymentContext';
@@ -66,7 +66,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Mail, Wallet as WalletIcon } from 'lucide-react';
+import { Textarea } from '@/components/ui/textarea';
+import { Mail, Wallet as WalletIcon, RotateCcw, Ban } from 'lucide-react';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, Cell, Legend } from 'recharts';
 
 function AdvanceRequestsReportContent() {
   const { requests, loading, refreshRequests } = useDownPayment();
@@ -82,7 +84,8 @@ function AdvanceRequestsReportContent() {
   const [paidFilter, setPaidFilter] = useState<string>('all');
   const [reconciledFilter, setReconciledFilter] = useState<string>('all');
   const [mmpFilter, setMmpFilter] = useState<string>('all');
-  const [activeTab, setActiveTab] = useState('overview');
+  const location = useLocation();
+  const [activeTab, setActiveTab] = useState(() => new URLSearchParams(location.search).get('tab') || 'overview');
   const [currentPage, setCurrentPage] = useState(1);
   const [expandedMember, setExpandedMember] = useState<string | null>(null);
   const [expandedRequestRow, setExpandedRequestRow] = useState<string | null>(null);
@@ -517,6 +520,71 @@ function AdvanceRequestsReportContent() {
       toast({ title: "Error / خطأ", description: "Failed to send payment request. / فشل في إرسال طلب الدفع.", variant: "destructive" });
     } finally {
       setPaymentRequestDialog({ open: false, request: null, isBulk: false, bulkRequests: [], bulkGroupBy: '', bulkGroupValue: '', availableRecipients: [], selectedRecipientIds: [], ccEmails: [], loading: false, sending: false });
+    }
+  };
+
+  const [reclaimSelectedIds, setReclaimSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkResolveProcessing, setBulkResolveProcessing] = useState(false);
+  const [writeOffDialog, setWriteOffDialog] = useState<{ open: boolean; req: DownPaymentRequest | null; reason: string; notes: string; processing: boolean }>({
+    open: false, req: null, reason: '', notes: '', processing: false,
+  });
+  const handleBulkResolve = async (ids: Set<string>, allReqs: DownPaymentRequest[]) => {
+    if (!currentUser?.id || ids.size === 0) return;
+    setBulkResolveProcessing(true);
+    let successCount = 0;
+    let failCount = 0;
+    for (const id of Array.from(ids)) {
+      const req = allReqs.find(r => r.id === id);
+      if (!req) continue;
+      try {
+        const updatedMeta = {
+          ...(req.metadata as any || {}),
+          manual_reconciliation_required: false,
+          reconciliation_resolved_by: currentUser.id,
+          reconciliation_resolved_at: new Date().toISOString(),
+          bulk_resolved: true,
+        };
+        const { error } = await supabase.from('down_payment_requests').update({ metadata: updatedMeta }).eq('id', id);
+        if (error) throw error;
+        successCount++;
+      } catch {
+        failCount++;
+      }
+    }
+    setBulkResolveProcessing(false);
+    setReclaimSelectedIds(new Set());
+    toast({
+      title: 'Bulk Resolve Complete',
+      description: `${successCount} advance(s) marked as resolved${failCount > 0 ? `, ${failCount} failed` : ''}.`,
+    });
+    refreshRequests();
+  };
+
+  const handleWriteOff = async () => {
+    const { req, reason, notes } = writeOffDialog;
+    if (!req || !reason || !currentUser?.id) return;
+    setWriteOffDialog(prev => ({ ...prev, processing: true }));
+    try {
+      const updatedMeta = {
+        ...(req.metadata as any || {}),
+        written_off: true,
+        write_off_reason: reason,
+        write_off_notes: notes,
+        write_off_by: currentUser.id,
+        write_off_at: new Date().toISOString(),
+        manual_reconciliation_required: false,
+      };
+      const { error } = await supabase
+        .from('down_payment_requests')
+        .update({ status: 'cancelled', metadata: updatedMeta })
+        .eq('id', req.id);
+      if (error) throw error;
+      toast({ title: 'Advance Written Off', description: `Advance ${req.id.substring(0, 8).toUpperCase()} has been written off and cancelled.` });
+      setWriteOffDialog({ open: false, req: null, reason: '', notes: '', processing: false });
+      refreshRequests();
+    } catch (err: any) {
+      toast({ title: 'Error', description: err.message || 'Failed to write off advance', variant: 'destructive' });
+      setWriteOffDialog(prev => ({ ...prev, processing: false }));
     }
   };
 
@@ -3518,7 +3586,20 @@ function AdvanceRequestsReportContent() {
                     <h3 className="font-semibold text-lg">Reclaim Impact Report / تقرير تأثير الاسترداد</h3>
                     <p className="text-sm text-muted-foreground">Advances affected by site reclaims — reconciliation tracking</p>
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {isAdmin && reclaimSelectedIds.size > 0 && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="gap-1 border-green-500 text-green-700"
+                        onClick={() => handleBulkResolve(reclaimSelectedIds, allReclaimedAdvances)}
+                        disabled={bulkResolveProcessing}
+                        data-testid="button-bulk-resolve"
+                      >
+                        <CheckCircle2 className="h-3.5 w-3.5" />
+                        Resolve Selected ({reclaimSelectedIds.size})
+                      </Button>
+                    )}
                     <Button variant="outline" size="sm" onClick={exportReclaimImpactPdf} disabled={allReclaimedAdvances.length === 0} data-testid="button-reclaim-impact-pdf">
                       <FileText className="h-4 w-4 mr-1" />
                       Export PDF
@@ -3546,6 +3627,49 @@ function AdvanceRequestsReportContent() {
                   ))}
                 </div>
 
+                {(() => {
+                  const reasonCounts: Record<string, number> = {};
+                  allReclaimedAdvances.forEach(r => {
+                    const reason = (r.metadata as any)?.reclaim_reason || 'Unspecified';
+                    reasonCounts[reason] = (reasonCounts[reason] || 0) + 1;
+                  });
+                  const chartData = Object.entries(reasonCounts).map(([reason, count]) => ({
+                    reason: reason.length > 20 ? reason.substring(0, 20) + '…' : reason,
+                    fullReason: reason,
+                    count,
+                  })).sort((a, b) => b.count - a.count);
+                  const COLORS = ['#ea580c', '#dc2626', '#d97706', '#7c3aed', '#2563eb', '#059669'];
+                  if (chartData.length === 0) return null;
+                  return (
+                    <Card>
+                      <CardHeader className="p-3 pb-2">
+                        <CardTitle className="text-sm flex items-center gap-1">
+                          <BarChart3 className="h-4 w-4 text-orange-500" />
+                          Reclaim Reason Distribution / توزيع أسباب الاسترداد
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent className="p-3 pt-0">
+                        <ResponsiveContainer width="100%" height={180}>
+                          <BarChart data={chartData} margin={{ top: 4, right: 16, bottom: 40, left: 0 }}>
+                            <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                            <XAxis dataKey="reason" tick={{ fontSize: 10 }} angle={-25} textAnchor="end" interval={0} />
+                            <YAxis tick={{ fontSize: 10 }} allowDecimals={false} />
+                            <RechartsTooltip
+                              formatter={(value, _name, props) => [value, props.payload?.fullReason || 'Count']}
+                              contentStyle={{ fontSize: 11 }}
+                            />
+                            <Bar dataKey="count" name="Advances" radius={[3, 3, 0, 0]}>
+                              {chartData.map((_entry, i) => (
+                                <Cell key={i} fill={COLORS[i % COLORS.length]} />
+                              ))}
+                            </Bar>
+                          </BarChart>
+                        </ResponsiveContainer>
+                      </CardContent>
+                    </Card>
+                  );
+                })()}
+
                 {allReclaimedAdvances.length === 0 ? (
                   <Card>
                     <CardContent className="p-12 text-center">
@@ -3560,6 +3684,18 @@ function AdvanceRequestsReportContent() {
                         <Table>
                           <TableHeader>
                             <TableRow>
+                              {isAdmin && (
+                                <TableHead className="w-[32px] p-2">
+                                  <Checkbox
+                                    checked={reclaimSelectedIds.size === needsReconciliationRows.length && needsReconciliationRows.length > 0}
+                                    onCheckedChange={(checked) => {
+                                      if (checked) setReclaimSelectedIds(new Set(needsReconciliationRows.map(r => r.id)));
+                                      else setReclaimSelectedIds(new Set());
+                                    }}
+                                    data-testid="checkbox-select-all-reclaim"
+                                  />
+                                </TableHead>
+                              )}
                               <TableHead>ID</TableHead>
                               <TableHead>Site</TableHead>
                               <TableHead>Requester</TableHead>
@@ -3570,7 +3706,7 @@ function AdvanceRequestsReportContent() {
                               <TableHead>Reclaimed By</TableHead>
                               <TableHead>Reclaim Date</TableHead>
                               <TableHead>Reconciliation</TableHead>
-                              {isAdmin && <TableHead className="text-center">Action</TableHead>}
+                              {isAdmin && <TableHead className="text-center">Actions</TableHead>}
                             </TableRow>
                           </TableHeader>
                           <TableBody>
@@ -3579,8 +3715,25 @@ function AdvanceRequestsReportContent() {
                               const needsRecon = meta?.manual_reconciliation_required === true;
                               const resolved = meta?.reconciliation_resolved_by && !needsRecon;
                               const autoCancelled = meta?.auto_cancelled_on_reclaim === true;
+                              const writtenOff = meta?.written_off === true;
+                              const isSelected = reclaimSelectedIds.has(r.id);
                               return (
                                 <TableRow key={r.id} data-testid={`row-reclaim-impact-${r.id}`} className={needsRecon ? 'bg-red-50/50 dark:bg-red-950/10' : resolved ? 'bg-green-50/50 dark:bg-green-950/10' : ''}>
+                                  {isAdmin && (
+                                    <TableCell className="p-2">
+                                      {needsRecon && (
+                                        <Checkbox
+                                          checked={isSelected}
+                                          onCheckedChange={(checked) => {
+                                            const next = new Set(reclaimSelectedIds);
+                                            if (checked) next.add(r.id); else next.delete(r.id);
+                                            setReclaimSelectedIds(next);
+                                          }}
+                                          data-testid={`checkbox-reclaim-${r.id}`}
+                                        />
+                                      )}
+                                    </TableCell>
+                                  )}
                                   <TableCell className="font-mono text-xs">{r.id.substring(0, 8).toUpperCase()}</TableCell>
                                   <TableCell className="max-w-[150px] truncate text-sm">{r.siteName || 'N/A'}</TableCell>
                                   <TableCell className="text-sm">{getProfileName(r.requestedBy)}</TableCell>
@@ -3593,34 +3746,41 @@ function AdvanceRequestsReportContent() {
                                   <TableCell className="text-sm">{meta?.reclaimed_by_name || 'N/A'}</TableCell>
                                   <TableCell className="text-sm">{meta?.reclaimed_at ? format(parseISO(meta.reclaimed_at), 'MMM dd, yyyy') : 'N/A'}</TableCell>
                                   <TableCell>
-                                    {needsRecon && (
-                                      <Badge className="bg-red-100 text-red-800 border-red-300 text-xs">⚠ Pending</Badge>
-                                    )}
-                                    {resolved && (
-                                      <Badge className="bg-green-100 text-green-800 border-green-300 text-xs">✓ Resolved</Badge>
-                                    )}
-                                    {autoCancelled && !needsRecon && !resolved && (
-                                      <Badge className="bg-orange-100 text-orange-800 border-orange-300 text-xs">Auto-Cancelled</Badge>
-                                    )}
-                                    {!needsRecon && !resolved && !autoCancelled && (
-                                      <Badge variant="outline" className="text-xs">Reclaimed</Badge>
-                                    )}
+                                    {needsRecon && <Badge className="bg-red-100 text-red-800 border-red-300 text-xs">⚠ Pending</Badge>}
+                                    {resolved && <Badge className="bg-green-100 text-green-800 border-green-300 text-xs">✓ Resolved</Badge>}
+                                    {writtenOff && <Badge className="bg-gray-100 text-gray-700 border-gray-300 text-xs">Written Off</Badge>}
+                                    {autoCancelled && !needsRecon && !resolved && !writtenOff && <Badge className="bg-orange-100 text-orange-800 border-orange-300 text-xs">Auto-Cancelled</Badge>}
+                                    {!needsRecon && !resolved && !autoCancelled && !writtenOff && <Badge variant="outline" className="text-xs">Reclaimed</Badge>}
                                   </TableCell>
                                   {isAdmin && (
                                     <TableCell className="text-center">
-                                      {needsRecon && (
-                                        <Button
-                                          size="sm"
-                                          variant="outline"
-                                          className="h-7 text-xs gap-1 border-green-500 text-green-700 hover:bg-green-50 dark:hover:bg-green-950"
-                                          onClick={() => handleMarkResolved(r)}
-                                          disabled={markResolvedProcessing}
-                                          data-testid={`button-resolve-reclaim-${r.id}`}
-                                        >
-                                          <CheckCircle2 className="h-3 w-3" />
-                                          Resolve
-                                        </Button>
-                                      )}
+                                      <div className="flex items-center justify-center gap-1">
+                                        {needsRecon && (
+                                          <>
+                                            <Button
+                                              size="sm"
+                                              variant="outline"
+                                              className="h-7 text-xs gap-1 border-green-500 text-green-700 hover:bg-green-50 dark:hover:bg-green-950"
+                                              onClick={() => handleMarkResolved(r)}
+                                              disabled={markResolvedProcessing}
+                                              data-testid={`button-resolve-reclaim-${r.id}`}
+                                            >
+                                              <CheckCircle2 className="h-3 w-3" />
+                                              Resolve
+                                            </Button>
+                                            <Button
+                                              size="sm"
+                                              variant="outline"
+                                              className="h-7 text-xs gap-1 border-red-400 text-red-700 hover:bg-red-50 dark:hover:bg-red-950"
+                                              onClick={() => setWriteOffDialog({ open: true, req: r, reason: '', notes: '', processing: false })}
+                                              data-testid={`button-write-off-${r.id}`}
+                                            >
+                                              <Ban className="h-3 w-3" />
+                                              Write Off
+                                            </Button>
+                                          </>
+                                        )}
+                                      </div>
                                     </TableCell>
                                   )}
                                 </TableRow>
@@ -3821,6 +3981,70 @@ function AdvanceRequestsReportContent() {
                 <><RefreshCw className="h-4 w-4 mr-1 animate-spin" /> Sending...</>
               ) : (
                 <><Mail className="h-4 w-4 mr-1" /> Send Request</>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={writeOffDialog.open} onOpenChange={(open) => { if (!open) setWriteOffDialog({ open: false, req: null, reason: '', notes: '', processing: false }); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Ban className="h-5 w-5 text-red-500" />
+              Write Off Advance / شطب السلفة
+            </DialogTitle>
+            <DialogDescription>
+              This will cancel the advance and mark it as written off. This action cannot be undone.
+              <br />
+              <span className="text-red-600 font-medium">
+                Amount: {writeOffDialog.req?.requestedAmount.toLocaleString()} SDG
+              </span>
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <Label>Write-Off Reason <span className="text-red-500">*</span></Label>
+              <Select value={writeOffDialog.reason} onValueChange={v => setWriteOffDialog(prev => ({ ...prev, reason: v }))}>
+                <SelectTrigger data-testid="select-write-off-reason">
+                  <SelectValue placeholder="Select a reason..." />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Enumerator Left Organisation">Enumerator Left Organisation</SelectItem>
+                  <SelectItem value="Security Situation – Non-Recoverable">Security Situation – Non-Recoverable</SelectItem>
+                  <SelectItem value="Funds Not Recoverable – Long Duration">Funds Not Recoverable – Long Duration</SelectItem>
+                  <SelectItem value="Site Visit Did Not Occur">Site Visit Did Not Occur</SelectItem>
+                  <SelectItem value="Double Disbursement – Already Reconciled">Double Disbursement – Already Reconciled</SelectItem>
+                  <SelectItem value="Management Decision">Management Decision</SelectItem>
+                  <SelectItem value="Other">Other</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Additional Notes</Label>
+              <Textarea
+                value={writeOffDialog.notes}
+                onChange={e => setWriteOffDialog(prev => ({ ...prev, notes: e.target.value }))}
+                placeholder="Provide any additional context or documentation reference..."
+                rows={3}
+                data-testid="textarea-write-off-notes"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setWriteOffDialog({ open: false, req: null, reason: '', notes: '', processing: false })}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleWriteOff}
+              disabled={!writeOffDialog.reason || writeOffDialog.processing}
+              data-testid="button-confirm-write-off"
+            >
+              {writeOffDialog.processing ? (
+                <><RefreshCw className="h-4 w-4 mr-1 animate-spin" /> Processing...</>
+              ) : (
+                <><Ban className="h-4 w-4 mr-1" /> Confirm Write-Off</>
               )}
             </Button>
           </DialogFooter>

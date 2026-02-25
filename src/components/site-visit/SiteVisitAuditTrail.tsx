@@ -14,7 +14,8 @@ import {
   MapPin,
   DollarSign,
   FileCheck,
-  XCircle
+  XCircle,
+  RotateCcw
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -208,6 +209,85 @@ export function SiteVisitAuditTrail({
             color: 'text-amber-600 bg-amber-100 dark:bg-amber-900/30',
             status: 'current'
           });
+        }
+
+        // Add reclaim events from mmpEntry metadata / additional_data
+        const reclaimHistory: any[] = mmpEntry?.additional_data?.reclaimHistory || mmpEntry?.workflow?.reclaimHistory || [];
+        reclaimHistory.forEach((event: any, idx: number) => {
+          steps.push({
+            id: `reclaim_${idx}`,
+            action: 'Site Reclaimed',
+            description: `Site was reclaimed back to dispatch pool`,
+            timestamp: event.reclaimedAt || event.reclaimed_at || '',
+            userId: event.reclaimedBy || event.reclaimed_by,
+            userName: event.reclaimedByName || resolveUserName(event.reclaimedBy || event.reclaimed_by),
+            icon: RotateCcw,
+            color: 'text-orange-600 bg-orange-100 dark:bg-orange-900/30',
+            status: 'completed' as const,
+            details: {
+              reason: event.reason || event.reclaimReason || event.reclaim_reason || 'N/A',
+              previousStatus: event.previousStage || event.previousStatus,
+            }
+          });
+        });
+
+        // Also check for site_reclaimed flag in mmpEntry metadata
+        if (mmpEntry?.metadata?.site_reclaimed && reclaimHistory.length === 0) {
+          steps.push({
+            id: 'reclaimed',
+            action: 'Site Reclaimed',
+            description: 'Site was reclaimed from enumerator',
+            timestamp: mmpEntry.metadata.reclaimed_at || mmpEntry.updated_at || '',
+            userId: mmpEntry.metadata.reclaimed_by,
+            userName: mmpEntry.metadata.reclaimed_by_name || resolveUserName(mmpEntry.metadata.reclaimed_by),
+            icon: RotateCcw,
+            color: 'text-orange-600 bg-orange-100 dark:bg-orange-900/30',
+            status: 'completed' as const,
+            details: {
+              reason: mmpEntry.metadata.reclaim_reason || 'N/A',
+            }
+          });
+        }
+
+        // Fetch linked advances with reclaim flags
+        const entryIdToCheck = mmpSiteEntryId || siteVisitId;
+        if (entryIdToCheck) {
+          const { data: linkedAdvances } = await supabase
+            .from('down_payment_requests')
+            .select('id, requested_amount, status, metadata, created_at')
+            .eq('mmp_site_entry_id', entryIdToCheck);
+          if (linkedAdvances) {
+            linkedAdvances.forEach((adv: any) => {
+              const meta = adv.metadata || {};
+              if (meta.auto_cancelled_on_reclaim) {
+                steps.push({
+                  id: `adv_cancel_${adv.id}`,
+                  action: 'Advance Auto-Cancelled',
+                  description: `Transport advance of ${Number(adv.requested_amount).toLocaleString()} SDG was cancelled on reclaim`,
+                  timestamp: meta.reclaimed_at || adv.created_at,
+                  icon: XCircle,
+                  color: 'text-orange-600 bg-orange-100 dark:bg-orange-900/30',
+                  status: 'completed' as const,
+                  details: { amount: adv.requested_amount, advanceId: adv.id.substring(0, 8).toUpperCase() }
+                });
+              } else if (meta.manual_reconciliation_required) {
+                steps.push({
+                  id: `adv_recon_${adv.id}`,
+                  action: meta.reconciliation_resolved_by ? 'Advance Reconciled' : '⚠ Advance Needs Reconciliation',
+                  description: meta.reconciliation_resolved_by
+                    ? `Advance of ${Number(adv.requested_amount).toLocaleString()} SDG was reconciled`
+                    : `Disbursed advance of ${Number(adv.requested_amount).toLocaleString()} SDG requires manual reconciliation`,
+                  timestamp: meta.reclaimed_at || adv.created_at,
+                  icon: DollarSign,
+                  color: meta.reconciliation_resolved_by
+                    ? 'text-green-600 bg-green-100 dark:bg-green-900/30'
+                    : 'text-red-600 bg-red-100 dark:bg-red-900/30',
+                  status: 'completed' as const,
+                  details: { amount: adv.requested_amount, advanceId: adv.id.substring(0, 8).toUpperCase() }
+                });
+              }
+            });
+          }
         }
 
         const currentStatus = mmpEntry?.status;
