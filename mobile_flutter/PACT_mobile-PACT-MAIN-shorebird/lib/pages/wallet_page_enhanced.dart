@@ -974,7 +974,7 @@ class _WalletPageEnhancedState extends ConsumerState<WalletPageEnhanced>
                 ],
               ),
             ),
-            if (r.status == WITHDRAWAL_STATUS_PENDING)
+            if (r.statusString == WITHDRAWAL_STATUS_PENDING)
               IconButton(
                 icon: const Icon(Icons.cancel_outlined, color: Colors.red),
                 onPressed: () async {
