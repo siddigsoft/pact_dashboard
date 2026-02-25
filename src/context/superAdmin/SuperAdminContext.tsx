@@ -1042,6 +1042,37 @@ export function SuperAdminProvider({ children }: { children: React.ReactNode }) 
         }
       }
 
+      // 3b. Flag disbursed advances so Finance can manually reconcile them
+      {
+        const flaggedAt = new Date().toISOString();
+        const { data: disbursedAdvances } = await supabase
+          .from('down_payment_requests')
+          .select('id, metadata')
+          .eq('mmp_site_entry_id', siteEntryId)
+          .eq('status', 'approved');
+
+        if (disbursedAdvances && disbursedAdvances.length > 0) {
+          for (const adv of disbursedAdvances) {
+            const existingMeta = typeof adv.metadata === 'object' && adv.metadata ? adv.metadata : {};
+            await supabase
+              .from('down_payment_requests')
+              .update({
+                metadata: {
+                  ...existingMeta,
+                  site_reclaimed: true,
+                  site_reclaimed_at: flaggedAt,
+                  site_reclaimed_by: reclaimedByName,
+                  site_reclaim_reason: reason,
+                  manual_reconciliation_required: true,
+                },
+                updated_at: flaggedAt,
+              })
+              .eq('id', adv.id);
+          }
+          console.log(`[Reclaim] Flagged ${disbursedAdvances.length} disbursed advance(s) as requiring manual reconciliation for site ${siteEntryId}`);
+        }
+      }
+
       // 3. Log the reclaim action for audit trail
       await logDeletion({
         tableName: 'mmp_site_entries',

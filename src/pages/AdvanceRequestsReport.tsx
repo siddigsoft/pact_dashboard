@@ -155,6 +155,10 @@ function AdvanceRequestsReportContent() {
       .sort((a, b) => b.daysSincePayment - a.daysSincePayment);
   }, [requests, getProfileName]);
 
+  const reconciliationNeeded = useMemo(() => {
+    return requests.filter(r => (r.metadata as any)?.manual_reconciliation_required === true);
+  }, [requests]);
+
   const handleSendLiquidationReminder = (item: { id: string; staffName: string; daysSincePayment: number }) => {
     toast({
       title: 'Reminder Queued / تم إدراج التذكير',
@@ -543,7 +547,28 @@ function AdvanceRequestsReportContent() {
     }
   };
 
-  const getStatusBadge = (status: string) => {
+  const getStatusBadge = (status: string, metadata?: any) => {
+    // Special case: cancelled because site was reclaimed
+    if (status === 'cancelled' && metadata?.auto_cancelled_on_reclaim) {
+      return (
+        <div className="flex flex-col gap-1">
+          <Badge variant="secondary" className="bg-orange-100 text-orange-700 border border-orange-300 text-[10px] whitespace-nowrap">
+            Cancelled – Site Reclaimed / ملغي – الموقع استُرجع
+          </Badge>
+        </div>
+      );
+    }
+    // Special case: approved but site was reclaimed after — manual reconciliation needed
+    if (status === 'approved' && metadata?.site_reclaimed) {
+      return (
+        <div className="flex flex-col gap-1">
+          <Badge variant="default" className="bg-green-500 text-[10px]">Approved / تمت الموافقة</Badge>
+          <Badge variant="outline" className="border-red-500 text-red-600 text-[10px] whitespace-nowrap">
+            ⚠ Site Reclaimed – Reconcile
+          </Badge>
+        </div>
+      );
+    }
     const statusConfig: Record<string, { variant: 'default' | 'secondary' | 'destructive' | 'outline', label: string, labelAr: string, className: string }> = {
       'pending_supervisor': { variant: 'outline', label: 'Pending Supervisor', labelAr: 'بانتظار المشرف', className: 'border-amber-500 text-amber-600' },
       'pending_admin': { variant: 'outline', label: 'Pending Admin', labelAr: 'بانتظار الإدارة', className: 'border-blue-500 text-blue-600' },
@@ -592,8 +617,10 @@ function AdvanceRequestsReportContent() {
         const isReconciled = (req as any).isReconciled === true || 
           (req.metadata as any)?.isReconciled === true || 
           req.status === 'fully_paid';
+        const needsManual = (req.metadata as any)?.manual_reconciliation_required === true;
         if (reconciledFilter === 'reconciled' && !isReconciled) return false;
         if (reconciledFilter === 'not_reconciled' && isReconciled) return false;
+        if (reconciledFilter === 'needs_manual' && !needsManual) return false;
       }
       return true;
     });
@@ -1568,6 +1595,58 @@ function AdvanceRequestsReportContent() {
         </Card>
       )}
 
+      {/* Manual Reconciliation Required Banner */}
+      {reconciliationNeeded.length > 0 && (
+        <Card className="border-orange-500/30 bg-orange-500/5" data-testid="section-reconciliation-needed">
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-full bg-orange-500/10">
+                  <AlertTriangle className="h-4 w-4 text-orange-600" />
+                </div>
+                <div>
+                  <p className="font-semibold text-orange-700 dark:text-orange-400" data-testid="text-reconciliation-count">
+                    {reconciliationNeeded.length} advance{reconciliationNeeded.length !== 1 ? 's' : ''} require manual reconciliation / {reconciliationNeeded.length} سلف{reconciliationNeeded.length !== 1 ? '' : 'ة'} تحتاج مراجعة يدوية
+                  </p>
+                  <p className="text-xs text-orange-600/80 dark:text-orange-400/80 mt-0.5">
+                    These advances were disbursed to enumerators whose sites were subsequently reclaimed. The money was paid but the work may not be completed.
+                  </p>
+                </div>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                className="border-orange-500 text-orange-600 hover:bg-orange-50 shrink-0"
+                onClick={() => { setReconciledFilter('needs_manual'); setStatusFilter('all'); }}
+                data-testid="button-view-reconciliation-needed"
+              >
+                <Filter className="h-3.5 w-3.5 mr-1.5" />
+                View These Advances
+              </Button>
+            </div>
+            <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+              {reconciliationNeeded.slice(0, 3).map(r => (
+                <div key={r.id} className="text-xs bg-white dark:bg-muted/50 border border-orange-200 rounded p-2 space-y-0.5">
+                  <p className="font-medium">{getProfileName(r.requestedBy)}</p>
+                  <p className="text-muted-foreground">{r.siteName || 'Unknown site'}</p>
+                  <p className="font-bold text-orange-700">{r.requestedAmount?.toLocaleString()} {r.currency || 'SDG'}</p>
+                  {(r.metadata as any)?.site_reclaimed_at && (
+                    <p className="text-muted-foreground">
+                      Reclaimed: {(() => { try { return format(new Date((r.metadata as any).site_reclaimed_at), 'dd MMM yyyy'); } catch { return '—'; } })()}
+                    </p>
+                  )}
+                </div>
+              ))}
+              {reconciliationNeeded.length > 3 && (
+                <div className="text-xs text-orange-600/70 flex items-center pl-1">
+                  +{reconciliationNeeded.length - 3} more — use the filter above to see all
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       <div className="flex flex-wrap gap-3">
         <div className="relative flex-1 min-w-[200px]">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -1638,13 +1717,14 @@ function AdvanceRequestsReportContent() {
           </SelectContent>
         </Select>
         <Select value={reconciledFilter} onValueChange={(v) => { setReconciledFilter(v); setCurrentPage(1); }}>
-          <SelectTrigger className="w-[150px]" data-testid="select-reconciled-filter">
+          <SelectTrigger className="w-[180px]" data-testid="select-reconciled-filter">
             <SelectValue placeholder="Reconciliation" />
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All</SelectItem>
             <SelectItem value="reconciled">Reconciled</SelectItem>
             <SelectItem value="not_reconciled">Not Reconciled</SelectItem>
+            <SelectItem value="needs_manual">⚠ Needs Manual Reconciliation</SelectItem>
           </SelectContent>
         </Select>
       </div>
@@ -1990,7 +2070,7 @@ function AdvanceRequestsReportContent() {
                             <TableCell className="max-w-[200px] truncate">{req.siteName}</TableCell>
                             <TableCell>{req.hubName || 'N/A'}</TableCell>
                             <TableCell className="text-right font-mono">{req.requestedAmount.toLocaleString()}</TableCell>
-                            <TableCell>{getStatusBadge(req.status)}</TableCell>
+                            <TableCell>{getStatusBadge(req.status, req.metadata)}</TableCell>
                             <TableCell className="text-right font-mono text-green-600">{(req.totalPaidAmount || 0).toLocaleString()}</TableCell>
                             <TableCell className="text-right font-mono">
                               {remaining > 0 ? (
@@ -2270,7 +2350,7 @@ function AdvanceRequestsReportContent() {
                                               <TableCell className="text-xs max-w-[150px] truncate">{req.siteName}</TableCell>
                                               <TableCell className="text-xs">{req.hubName}</TableCell>
                                               <TableCell className="text-xs text-right font-mono">{req.requestedAmount.toLocaleString()}</TableCell>
-                                              <TableCell className="text-xs">{getStatusBadge(req.status)}</TableCell>
+                                              <TableCell className="text-xs">{getStatusBadge(req.status, req.metadata)}</TableCell>
                                               <TableCell className="text-xs text-right font-mono">{(req.totalPaidAmount || 0).toLocaleString()}</TableCell>
                                               <TableCell className="text-xs text-right font-mono">{remaining > 0 ? remaining.toLocaleString() : '—'}</TableCell>
                                               <TableCell className="text-center">
@@ -2343,7 +2423,7 @@ function AdvanceRequestsReportContent() {
                           <TableCell className="max-w-[180px] truncate">{req.siteName}</TableCell>
                           <TableCell>{req.hubName || 'N/A'}</TableCell>
                           <TableCell className="text-right font-mono">{req.requestedAmount.toLocaleString()}</TableCell>
-                          <TableCell>{getStatusBadge(req.status)}</TableCell>
+                          <TableCell>{getStatusBadge(req.status, req.metadata)}</TableCell>
                           <TableCell className="text-right font-mono text-green-600">{(req.totalPaidAmount || 0).toLocaleString()}</TableCell>
                           <TableCell className="text-right font-mono">{remaining > 0 ? <span className="text-amber-600">{remaining.toLocaleString()}</span> : '0'}</TableCell>
                           <TableCell className="text-center">
@@ -2470,7 +2550,7 @@ function AdvanceRequestsReportContent() {
                           <TableCell>{getProfileName(req.requestedBy)}</TableCell>
                           <TableCell className="max-w-[180px] truncate">{req.siteName}</TableCell>
                           <TableCell className="text-right font-mono">{req.requestedAmount.toLocaleString()}</TableCell>
-                          <TableCell>{getStatusBadge(req.status)}</TableCell>
+                          <TableCell>{getStatusBadge(req.status, req.metadata)}</TableCell>
                           <TableCell className="text-right font-mono text-green-600">{(req.totalPaidAmount || 0).toLocaleString()}</TableCell>
                           <TableCell className="text-right font-mono">{remaining > 0 ? <span className="text-amber-600">{remaining.toLocaleString()}</span> : '0'}</TableCell>
                           <TableCell className="text-center">
@@ -2588,7 +2668,7 @@ function AdvanceRequestsReportContent() {
                       return (
                         <TableRow key={req.id}>
                           <TableCell className="text-sm">{format(parseISO(req.requestedAt), 'MMM dd, yyyy')}</TableCell>
-                          <TableCell>{getStatusBadge(req.status)}</TableCell>
+                          <TableCell>{getStatusBadge(req.status, req.metadata)}</TableCell>
                           <TableCell className="font-medium">{getProfileName(req.requestedBy)}</TableCell>
                           <TableCell className="max-w-[180px] truncate">{req.siteName}</TableCell>
                           <TableCell>{req.hubName || 'N/A'}</TableCell>
@@ -2721,7 +2801,7 @@ function AdvanceRequestsReportContent() {
                           <TableCell className="max-w-[180px] truncate">{req.siteName}</TableCell>
                           <TableCell>{req.hubName || 'N/A'}</TableCell>
                           <TableCell className="text-right font-mono">{req.requestedAmount.toLocaleString()}</TableCell>
-                          <TableCell>{getStatusBadge(req.status)}</TableCell>
+                          <TableCell>{getStatusBadge(req.status, req.metadata)}</TableCell>
                           <TableCell className="text-right font-mono text-green-600">{(req.totalPaidAmount || 0).toLocaleString()}</TableCell>
                           <TableCell className="text-right font-mono">{remaining > 0 ? <span className="text-amber-600">{remaining.toLocaleString()}</span> : '0'}</TableCell>
                           <TableCell className="text-center">
@@ -2852,7 +2932,7 @@ function AdvanceRequestsReportContent() {
                           <TableCell className="max-w-[140px] truncate">{req.siteName}</TableCell>
                           <TableCell>{req.hubName || 'N/A'}</TableCell>
                           <TableCell className="text-right font-mono">{req.requestedAmount.toLocaleString()}</TableCell>
-                          <TableCell>{getStatusBadge(req.status)}</TableCell>
+                          <TableCell>{getStatusBadge(req.status, req.metadata)}</TableCell>
                           <TableCell className="text-right font-mono text-green-600">{(req.totalPaidAmount || 0).toLocaleString()}</TableCell>
                           <TableCell className="text-right font-mono">{remaining > 0 ? <span className="text-amber-600">{remaining.toLocaleString()}</span> : '0'}</TableCell>
                           <TableCell className="text-center">
@@ -2981,7 +3061,7 @@ function AdvanceRequestsReportContent() {
                           <TableCell className="max-w-[180px] truncate">{req.siteName}</TableCell>
                           <TableCell>{req.hubName || 'N/A'}</TableCell>
                           <TableCell className="text-right font-mono">{req.requestedAmount.toLocaleString()}</TableCell>
-                          <TableCell>{getStatusBadge(req.status)}</TableCell>
+                          <TableCell>{getStatusBadge(req.status, req.metadata)}</TableCell>
                           <TableCell className="text-right font-mono text-green-600">{(req.totalPaidAmount || 0).toLocaleString()}</TableCell>
                           <TableCell className="text-right font-mono">{remaining > 0 ? <span className="text-amber-600">{remaining.toLocaleString()}</span> : '0'}</TableCell>
                           <TableCell className="text-center">
@@ -3110,7 +3190,7 @@ function AdvanceRequestsReportContent() {
                           <TableCell className="max-w-[140px] truncate">{req.siteName}</TableCell>
                           <TableCell>{req.hubName || 'N/A'}</TableCell>
                           <TableCell className="text-right font-mono">{req.requestedAmount.toLocaleString()}</TableCell>
-                          <TableCell>{getStatusBadge(req.status)}</TableCell>
+                          <TableCell>{getStatusBadge(req.status, req.metadata)}</TableCell>
                           <TableCell className="text-right font-mono text-green-600">{(req.totalPaidAmount || 0).toLocaleString()}</TableCell>
                           <TableCell className="text-right font-mono">{remaining > 0 ? <span className="text-amber-600">{remaining.toLocaleString()}</span> : '0'}</TableCell>
                           <TableCell className="text-center">
@@ -3234,7 +3314,7 @@ function AdvanceRequestsReportContent() {
                               {item.daysOutstanding}d
                             </Badge>
                           </TableCell>
-                          <TableCell>{getStatusBadge(item.status)}</TableCell>
+                          <TableCell>{getStatusBadge(item.status, (item as any).metadata)}</TableCell>
                           <TableCell className="text-center">
                             <Button variant="outline" size="sm" onClick={() => navigate(`/down-payment-approval`)} data-testid={`button-aging-view-${idx}`}>
                               <ExternalLink className="h-3 w-3 mr-1" />

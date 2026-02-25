@@ -282,6 +282,10 @@ export function SuperAdminDataManagement() {
   const [showResetSiteVisitDialog, setShowResetSiteVisitDialog] = useState(false);
   const [showResetWalletDialog, setShowResetWalletDialog] = useState(false);
   const [showDeleteTransactionDialog, setShowDeleteTransactionDialog] = useState(false);
+  const [showReverseEarningDialog, setShowReverseEarningDialog] = useState(false);
+  const [selectedEarningTx, setSelectedEarningTx] = useState<TransactionData | null>(null);
+  const [reverseReason, setReverseReason] = useState('');
+  const [reverseProcessing, setReverseProcessing] = useState(false);
   const [showArchiveMMPDialog, setShowArchiveMMPDialog] = useState(false);
 
   const [reason, setReason] = useState('');
@@ -750,6 +754,65 @@ export function SuperAdminDataManagement() {
     setSelectedTransaction(t);
     setReason('');
     setShowDeleteTransactionDialog(true);
+  };
+
+  const openReverseEarningDialog = (t: TransactionData) => {
+    setSelectedEarningTx(t);
+    setReverseReason('');
+    setShowReverseEarningDialog(true);
+  };
+
+  const handleReverseEarning = async () => {
+    if (!selectedEarningTx || !currentUser || !reverseReason.trim()) return;
+    setReverseProcessing(true);
+    try {
+      const reversalAmount = -Math.abs(selectedEarningTx.amount);
+      const now = new Date().toISOString();
+
+      // Insert counterpart negative adjustment transaction
+      const { error: insertError } = await supabase
+        .from('wallet_transactions')
+        .insert({
+          wallet_id: selectedEarningTx.wallet_id,
+          user_id: selectedEarningTx.user_id,
+          type: 'adjustment',
+          amount: reversalAmount,
+          currency: selectedEarningTx.currency,
+          description: `Reversal of earning: ${reverseReason.trim()} (original tx: ${selectedEarningTx.id.slice(0, 8)})`,
+          created_at: now,
+        });
+
+      if (insertError) throw new Error(`Failed to insert reversal: ${insertError.message}`);
+
+      // Update wallet balance
+      const { data: wallet } = await supabase
+        .from('wallets')
+        .select('balances, total_earned')
+        .eq('id', selectedEarningTx.wallet_id)
+        .single();
+
+      if (wallet) {
+        const cur = selectedEarningTx.currency;
+        const newBal = Math.max(0, (wallet.balances?.[cur] || 0) + reversalAmount);
+        await supabase
+          .from('wallets')
+          .update({
+            balances: { ...wallet.balances, [cur]: newBal },
+            total_earned: Math.max(0, (parseFloat(wallet.total_earned) || 0) - Math.abs(selectedEarningTx.amount)),
+            updated_at: now,
+          })
+          .eq('id', selectedEarningTx.wallet_id);
+      }
+
+      toast({ title: 'Earning Reversed', description: `A reversal adjustment of ${reversalAmount.toLocaleString()} ${selectedEarningTx.currency} has been applied to ${selectedEarningTx.user_name}'s wallet.` });
+      setShowReverseEarningDialog(false);
+      setSelectedEarningTx(null);
+      loadTransactions();
+    } catch (error: any) {
+      toast({ title: 'Error', description: error.message || 'Failed to reverse earning', variant: 'destructive' });
+    } finally {
+      setReverseProcessing(false);
+    }
   };
 
   const openReclaimSiteDialog = async (site: ClaimedSiteData) => {
@@ -1608,15 +1671,29 @@ export function SuperAdminDataManagement() {
                           </TableCell>
                           <TableCell>{format(new Date(t.created_at), 'MMM d, yyyy HH:mm')}</TableCell>
                           <TableCell className="text-right">
-                            <Button
-                              variant="destructive"
-                              size="sm"
-                              onClick={() => openDeleteTransactionDialog(t)}
-                              data-testid={`button-delete-transaction-${t.id}`}
-                            >
-                              <Trash2 className="h-4 w-4 mr-1" />
-                              Delete
-                            </Button>
+                            <div className="flex items-center justify-end gap-1.5">
+                              {t.amount > 0 && (t.type === 'earning' || t.type === 'site_visit_fee' || t.type === 'adjustment') && (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => openReverseEarningDialog(t)}
+                                  className="border-orange-500 text-orange-600 hover:bg-orange-50"
+                                  data-testid={`button-reverse-earning-${t.id}`}
+                                >
+                                  <RotateCcw className="h-3.5 w-3.5 mr-1" />
+                                  Reverse
+                                </Button>
+                              )}
+                              <Button
+                                variant="destructive"
+                                size="sm"
+                                onClick={() => openDeleteTransactionDialog(t)}
+                                data-testid={`button-delete-transaction-${t.id}`}
+                              >
+                                <Trash2 className="h-4 w-4 mr-1" />
+                                Delete
+                              </Button>
+                            </div>
                           </TableCell>
                         </TableRow>
                       ))}
@@ -2614,6 +2691,72 @@ export function SuperAdminDataManagement() {
             >
               {processing ? <RefreshCw className="h-4 w-4 mr-2 animate-spin" /> : <Trash2 className="h-4 w-4 mr-2" />}
               {processing ? 'Deleting...' : 'Delete Transaction'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Reverse Earning Dialog */}
+      <Dialog open={showReverseEarningDialog} onOpenChange={setShowReverseEarningDialog}>
+        <DialogContent className="max-w-md" data-testid="dialog-reverse-earning">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <RotateCcw className="h-5 w-5 text-orange-600" />
+              Reverse Earning
+            </DialogTitle>
+            <DialogDescription>
+              Creates a negative adjustment transaction to offset this earning.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="bg-orange-500/5 border border-orange-500/20 p-4 rounded-lg space-y-1">
+              <p className="text-sm font-semibold">{selectedEarningTx?.user_name}</p>
+              <p className="text-sm text-muted-foreground capitalize">{selectedEarningTx?.type?.replace(/_/g, ' ')}</p>
+              <p className="text-sm font-bold text-green-600">
+                +{selectedEarningTx?.amount?.toLocaleString()} {selectedEarningTx?.currency}
+              </p>
+              {selectedEarningTx?.description && (
+                <p className="text-xs text-muted-foreground">{selectedEarningTx.description}</p>
+              )}
+              <p className="text-xs text-muted-foreground">
+                {selectedEarningTx?.created_at && format(new Date(selectedEarningTx.created_at), 'MMM d, yyyy HH:mm')}
+              </p>
+            </div>
+
+            <div className="bg-muted/50 p-3 rounded-lg">
+              <p className="text-sm font-medium mb-1">Effect of reversal:</p>
+              <p className="text-sm text-red-600 font-bold">
+                −{selectedEarningTx?.amount?.toLocaleString()} {selectedEarningTx?.currency} adjustment
+              </p>
+              <p className="text-xs text-muted-foreground mt-1">
+                A new "adjustment" transaction will be inserted. The original earning is kept for audit purposes.
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="reverse-reason">Reason for Reversal <span className="text-destructive">*</span></Label>
+              <Textarea
+                id="reverse-reason"
+                value={reverseReason}
+                onChange={e => setReverseReason(e.target.value)}
+                placeholder="e.g. Site was reclaimed before work was completed..."
+                rows={3}
+                data-testid="textarea-reverse-reason"
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowReverseEarningDialog(false)}>Cancel</Button>
+            <Button
+              onClick={handleReverseEarning}
+              disabled={reverseProcessing || !reverseReason.trim()}
+              className="bg-orange-600 hover:bg-orange-700 text-white"
+              data-testid="button-confirm-reverse-earning"
+            >
+              {reverseProcessing ? <RefreshCw className="h-4 w-4 mr-2 animate-spin" /> : <RotateCcw className="h-4 w-4 mr-2" />}
+              {reverseProcessing ? 'Reversing…' : 'Confirm Reversal'}
             </Button>
           </DialogFooter>
         </DialogContent>
