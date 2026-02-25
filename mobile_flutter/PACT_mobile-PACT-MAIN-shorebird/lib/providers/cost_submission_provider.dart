@@ -164,13 +164,13 @@ final filteredCostSubmissionsProvider =
       final submissions = await ref.watch(userCostSubmissionsProvider.future);
       final statusFilter = ref.watch(selectedStatusFilterProvider);
       final searchQuery = ref.watch(costSubmissionSearchQueryProvider);
-      final service = ref.watch(costSubmissionServiceProvider);
 
       var filtered = submissions;
 
       // Apply status filter
       if (statusFilter != null) {
-        filtered = service.filterByStatus(filtered, statusFilter);
+        filtered =
+            filtered.where((s) => s.status == statusFilter).toList();
       }
 
       // Apply search filter
