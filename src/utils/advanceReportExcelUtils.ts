@@ -131,6 +131,7 @@ interface AdvanceRequest {
   siteName: string;
   hubName?: string | null;
   stateName?: string | null;
+  localityName?: string | null;
   projectName?: string | null;
   mmpName?: string | null;
   requestedAmount: number;

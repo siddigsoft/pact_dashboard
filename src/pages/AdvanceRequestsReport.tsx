@@ -711,6 +711,26 @@ function AdvanceRequestsReportContent() {
     return Object.values(grouped).sort((a, b) => b.totalRequested - a.totalRequested);
   }, [filteredRequests]);
 
+  const byLocality = useMemo(() => {
+    const grouped: Record<string, { id: string, name: string, requests: number, totalRequested: number, totalApproved: number, pending: number, items: typeof filteredRequests }> = {};
+    filteredRequests.forEach(req => {
+      const localityKey = req.localityName || 'Unknown Locality';
+      if (!grouped[localityKey]) {
+        grouped[localityKey] = { id: localityKey, name: localityKey, requests: 0, totalRequested: 0, totalApproved: 0, pending: 0, items: [] };
+      }
+      grouped[localityKey].requests++;
+      grouped[localityKey].totalRequested += req.requestedAmount;
+      grouped[localityKey].items.push(req);
+      if (['approved', 'partially_paid', 'fully_paid'].includes(req.status)) {
+        grouped[localityKey].totalApproved += req.requestedAmount;
+      }
+      if (['pending_supervisor', 'pending_admin'].includes(req.status)) {
+        grouped[localityKey].pending++;
+      }
+    });
+    return Object.values(grouped).sort((a, b) => b.totalRequested - a.totalRequested);
+  }, [filteredRequests]);
+
   const byProject = useMemo(() => {
     const grouped: Record<string, { id: string, name: string, requests: number, totalRequested: number, totalApproved: number, pending: number, items: typeof filteredRequests }> = {};
     filteredRequests.forEach(req => {
@@ -1157,6 +1177,63 @@ function AdvanceRequestsReportContent() {
       bodyStyles: { fontSize: 8 },
     });
     doc.save(`advance_by_state_${format(new Date(), 'yyyy-MM-dd')}.pdf`);
+  };
+
+  // Export By Locality
+  const exportLocalityToExcel = () => {
+    exportGroupedToFormattedExcel(
+      'Locality',
+      byLocality.map(l => ({ name: l.name, requests: l.requests, totalRequested: l.totalRequested, totalApproved: l.totalApproved, pending: l.pending })),
+      filteredRequests,
+      getProfileName,
+      `advance_by_locality_${format(new Date(), 'yyyy-MM-dd')}.xlsx`,
+      (req) => req.localityName || 'Unknown Locality'
+    ).catch(() => {});
+  };
+
+  const exportLocalityToPDF = () => {
+    const doc = new jsPDF();
+    let yPos = addPdfHeader(doc, 'Advance Requests by Locality');
+    const localityTotals = byLocality.reduce((acc, l) => ({
+      requests: acc.requests + l.requests,
+      totalRequested: acc.totalRequested + l.totalRequested,
+      totalApproved: acc.totalApproved + l.totalApproved,
+      pending: acc.pending + l.pending,
+    }), { requests: 0, totalRequested: 0, totalApproved: 0, pending: 0 });
+    autoTable(doc, {
+      startY: yPos,
+      head: [['Locality', 'Requests', 'Requested (SDG)', 'Approved (SDG)', 'Pending']],
+      body: byLocality.map(l => [l.name, l.requests, l.totalRequested.toLocaleString(), l.totalApproved.toLocaleString(), l.pending]),
+      foot: [['SUBTOTAL', localityTotals.requests.toString(), localityTotals.totalRequested.toLocaleString(), localityTotals.totalApproved.toLocaleString(), localityTotals.pending.toString()]],
+      theme: 'striped',
+      headStyles: { fillColor: [30, 64, 175], fontSize: 11, fontStyle: 'bold' },
+      bodyStyles: { fontSize: 10 },
+      footStyles: { fillColor: [230, 235, 245], textColor: [0, 0, 0], fontStyle: 'bold', fontSize: 11 },
+    });
+    yPos = (doc as any).lastAutoTable.finalY + 10;
+    doc.setFontSize(14);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Detailed Requests', 14, yPos);
+    yPos += 6;
+    autoTable(doc, {
+      startY: yPos,
+      head: [['Date', 'Locality', 'Team Member', 'Site', 'State', 'Hub', 'Amount', 'Status', 'Paid']],
+      body: filteredRequests.slice(0, 100).map(r => [
+        format(parseISO(r.requestedAt), 'MMM dd'),
+        (r.localityName || 'Unknown').substring(0, 15),
+        getProfileName(r.requestedBy).substring(0, 20),
+        r.siteName.substring(0, 20),
+        (r.stateName || 'N/A').substring(0, 10),
+        (r.hubName || 'N/A').substring(0, 10),
+        r.requestedAmount.toLocaleString(),
+        r.status.replace(/_/g, ' '),
+        (r.totalPaidAmount || 0).toLocaleString()
+      ]),
+      theme: 'striped',
+      headStyles: { fillColor: [30, 64, 175], fontSize: 9, fontStyle: 'bold' },
+      bodyStyles: { fontSize: 8 },
+    });
+    doc.save(`advance_by_locality_${format(new Date(), 'yyyy-MM-dd')}.pdf`);
   };
 
   // Export By Project
@@ -1702,6 +1779,10 @@ function AdvanceRequestsReportContent() {
           <TabsTrigger value="byState" className="gap-1" data-testid="tab-by-state">
             <MapPin className="h-4 w-4" />
             By State
+          </TabsTrigger>
+          <TabsTrigger value="byLocality" className="gap-1" data-testid="tab-by-locality">
+            <MapPin className="h-4 w-4" />
+            By Locality
           </TabsTrigger>
           <TabsTrigger value="byTeam" className="gap-1" data-testid="tab-by-team">
             <Users className="h-4 w-4" />
@@ -2638,6 +2719,137 @@ function AdvanceRequestsReportContent() {
                           <TableCell className="font-medium">{req.stateName || 'Unknown'}</TableCell>
                           <TableCell>{getProfileName(req.requestedBy)}</TableCell>
                           <TableCell className="max-w-[180px] truncate">{req.siteName}</TableCell>
+                          <TableCell>{req.hubName || 'N/A'}</TableCell>
+                          <TableCell className="text-right font-mono">{req.requestedAmount.toLocaleString()}</TableCell>
+                          <TableCell>{getStatusBadge(req.status)}</TableCell>
+                          <TableCell className="text-right font-mono text-green-600">{(req.totalPaidAmount || 0).toLocaleString()}</TableCell>
+                          <TableCell className="text-right font-mono">{remaining > 0 ? <span className="text-amber-600">{remaining.toLocaleString()}</span> : '0'}</TableCell>
+                          <TableCell className="text-center">
+                            <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => navigate('/down-payment-approval')}>
+                              <ExternalLink className="h-3.5 w-3.5" />
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
+            </CardContent>
+          </Card>
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between gap-2 px-2">
+              <p className="text-sm text-muted-foreground">
+                Showing {((currentPage - 1) * PAGE_SIZE) + 1}-{Math.min(currentPage * PAGE_SIZE, filteredRequests.length)} of {filteredRequests.length}
+              </p>
+              <div className="flex items-center gap-1">
+                <Button size="icon" variant="outline" disabled={currentPage === 1} onClick={() => setCurrentPage(1)}><ChevronsLeft className="h-4 w-4" /></Button>
+                <Button size="icon" variant="outline" disabled={currentPage === 1} onClick={() => setCurrentPage(p => p - 1)}><ChevronLeft className="h-4 w-4" /></Button>
+                <span className="text-sm px-3 font-medium">Page {currentPage} / {totalPages}</span>
+                <Button size="icon" variant="outline" disabled={currentPage === totalPages} onClick={() => setCurrentPage(p => p + 1)}><ChevronRight className="h-4 w-4" /></Button>
+                <Button size="icon" variant="outline" disabled={currentPage === totalPages} onClick={() => setCurrentPage(totalPages)}><ChevronsRight className="h-4 w-4" /></Button>
+              </div>
+            </div>
+          )}
+        </TabsContent>
+
+        <TabsContent value="byLocality" className="space-y-4">
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" size="sm" onClick={exportLocalityToPDF} data-testid="button-locality-pdf">
+              <FileText className="h-4 w-4 mr-1" />
+              PDF
+            </Button>
+            <Button size="sm" onClick={exportLocalityToExcel} data-testid="button-locality-excel">
+              <Download className="h-4 w-4 mr-1" />
+              Excel
+            </Button>
+          </div>
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <MapPin className="h-5 w-5" />
+                Summary by Locality
+              </CardTitle>
+              <CardDescription>Breakdown of advance requests per locality/district</CardDescription>
+            </CardHeader>
+            <CardContent className="p-0">
+              {loading ? (
+                <div className="p-6 space-y-3">
+                  {[1,2,3].map(i => <Skeleton key={i} className="h-12 w-full" />)}
+                </div>
+              ) : byLocality.length === 0 ? (
+                <div className="p-12 text-center text-muted-foreground">No data available</div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Locality</TableHead>
+                        <TableHead className="text-right">Requests</TableHead>
+                        <TableHead className="text-right">Total Requested (SDG)</TableHead>
+                        <TableHead className="text-right">Total Approved (SDG)</TableHead>
+                        <TableHead className="text-right">Pending</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {byLocality.map((loc, idx) => (
+                        <TableRow key={idx} data-testid={`row-locality-${idx}`}>
+                          <TableCell className="font-medium">{loc.name}</TableCell>
+                          <TableCell className="text-right">{loc.requests}</TableCell>
+                          <TableCell className="text-right font-mono">{loc.totalRequested.toLocaleString()}</TableCell>
+                          <TableCell className="text-right font-mono text-green-600">{loc.totalApproved.toLocaleString()}</TableCell>
+                          <TableCell className="text-right">
+                            {loc.pending > 0 && <Badge variant="outline" className="border-amber-500 text-amber-600">{loc.pending}</Badge>}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                    <tfoot>
+                      <TableRow className="bg-muted/50 font-bold border-t-2">
+                        <TableCell className="font-bold">Subtotal</TableCell>
+                        <TableCell className="text-right font-bold">{byLocality.reduce((sum, l) => sum + l.requests, 0)}</TableCell>
+                        <TableCell className="text-right font-mono font-bold">{byLocality.reduce((sum, l) => sum + l.totalRequested, 0).toLocaleString()}</TableCell>
+                        <TableCell className="text-right font-mono font-bold text-green-600">{byLocality.reduce((sum, l) => sum + l.totalApproved, 0).toLocaleString()}</TableCell>
+                        <TableCell className="text-right font-bold">{byLocality.reduce((sum, l) => sum + l.pending, 0)}</TableCell>
+                      </TableRow>
+                    </tfoot>
+                  </Table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">All Requests (Detailed)</CardTitle>
+            </CardHeader>
+            <CardContent className="p-0">
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Date</TableHead>
+                      <TableHead>Locality</TableHead>
+                      <TableHead>State</TableHead>
+                      <TableHead>Team Member</TableHead>
+                      <TableHead>Site</TableHead>
+                      <TableHead>Hub</TableHead>
+                      <TableHead className="text-right">Amount (SDG)</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead className="text-right">Paid</TableHead>
+                      <TableHead className="text-right">Remaining</TableHead>
+                      <TableHead className="text-center">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {paginatedRequests.map(req => {
+                      const remaining = req.remainingAmount || (req.requestedAmount - (req.totalPaidAmount || 0));
+                      return (
+                        <TableRow key={req.id}>
+                          <TableCell className="text-sm">{format(parseISO(req.requestedAt), 'MMM dd, yyyy')}</TableCell>
+                          <TableCell className="font-medium">{req.localityName || 'Unknown'}</TableCell>
+                          <TableCell>{req.stateName || 'N/A'}</TableCell>
+                          <TableCell>{getProfileName(req.requestedBy)}</TableCell>
+                          <TableCell className="max-w-[140px] truncate">{req.siteName}</TableCell>
                           <TableCell>{req.hubName || 'N/A'}</TableCell>
                           <TableCell className="text-right font-mono">{req.requestedAmount.toLocaleString()}</TableCell>
                           <TableCell>{getStatusBadge(req.status)}</TableCell>
