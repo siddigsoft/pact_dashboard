@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useUser } from '../user/UserContext';
 import { useToast } from '@/hooks/use-toast';
@@ -139,6 +139,19 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
   const [requests, setRequests] = useState<DownPaymentRequest[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // Stable refs — prevent stale closures without causing callback re-creation
+  const toastRef = useRef(toast);
+  toastRef.current = toast;
+
+  // Track previous user id to only re-fetch when the user actually changes
+  const currentUserIdRef = useRef<string | null>(null);
+
+  // Debounce ref for realtime-triggered refreshes (avoid re-fetching on every row in a bulk op)
+  const realtimeDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Track whether we've already fetched once for the current user
+  const hasFetchedRef = useRef(false);
+
   const cleanupDeletedRequests = useCallback(async () => {
     try {
       const { data: allCancelled } = await supabase
@@ -180,7 +193,9 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
   }, []);
 
   const refreshRequests = useCallback(async () => {
-    if (!currentUser) {
+    // Read the current user from the context at call time — avoids stale closure
+    const user = currentUser;
+    if (!user) {
       setRequests([]);
       setLoading(false);
       return;
@@ -188,243 +203,125 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
 
     try {
       setLoading(true);
-      const userRole = currentUser.role?.toLowerCase();
-      
-      // Debug logging for troubleshooting
-      console.log('[DownPayment] Fetching requests for user:', {
-        userId: currentUser.id,
-        role: userRole,
-        hubId: currentUser.hubId
-      });
+      const userRole = user.role?.toLowerCase();
 
-      // Note: The join with mmp_site_entries may fail if RLS blocks access
-      // We'll try with the join first, then fallback to without if it fails
-      // Also join hub_states to get state from hub if not available from mmp_site_entries
-      let query = supabase.from('down_payment_requests').select(`
-        *,
-        mmp_site_entries (
-          state,
-          locality,
-          cp_name,
-          activity_type,
-          mmp_files (
-            name,
-            project_name,
-            projects (
-              name
-            )
-          )
-        )
-      `);
-
-      if (userRole === 'datacollector' || userRole === 'coordinator') {
-        // Data collectors and coordinators only see their own requests
-        query = query.eq('requested_by', currentUser.id);
-      } else if (userRole === 'supervisor' || userRole === 'hubsupervisor') {
-        /**
-         * HUB-BASED SUPERVISION: Hub supervisors manage MULTIPLE states within their hub.
-         * Examples: Kosti Hub = 7 states, Kassala Hub = 5 states
-         * Supervisors see their own requests + all requests from their hub(s)
-         * Hub supervisors need hub_id assigned (NOT state_id) to see all team requests
-         * SECONDARY HUB: Supervisors with secondary_hub_id also see requests from that hub
-         */
-        if (currentUser.hubId) {
-          // Build OR filter for primary hub and optionally secondary hub
-          let hubFilter = `requested_by.eq.${currentUser.id},hub_id.eq.${currentUser.hubId}`;
-          if (currentUser.secondaryHubId) {
-            hubFilter += `,hub_id.eq.${currentUser.secondaryHubId}`;
-            console.log('[DownPayment] Supervisor has secondary hub:', currentUser.secondaryHubId);
-          }
-          query = query.or(hubFilter);
-        } else {
-          // If supervisor doesn't have hubId, try matching by hub name or just show own requests
-          console.warn('[DownPayment] Supervisor has no hubId set - showing only own requests');
-          query = query.eq('requested_by', currentUser.id);
-        }
-      } else if (
-        userRole === 'admin' || 
-        userRole === 'financialadmin' || 
-        userRole === 'superadmin' || 
-        userRole === 'super_admin' ||
-        userRole === 'ict' ||
-        userRole === 'fom' ||
-        userRole === 'field operation manager' ||
-        userRole === 'countrydirector' ||
-        userRole === 'country_director' ||
-        userRole === 'datateam' ||
-        userRole === 'data_team'
-      ) {
-        // Admins, super admins, FOM, ICT, and management roles see all requests - no filter applied
-        console.log('[DownPayment] Admin/Management user - fetching all requests');
-      } else {
-        // Fallback: other roles see only their own requests
-        console.log('[DownPayment] Other role - showing only own requests:', userRole);
-        query = query.eq('requested_by', currentUser.id);
-      }
-
-      let { data, error } = await query.order('created_at', { ascending: false });
-
-      // If the join with mmp_site_entries fails, try without the join
-      if (error) {
-        console.warn('[DownPayment] Query with join failed, trying without join:', error.message);
-        
-        // Rebuild query without the join
-        let fallbackQuery = supabase.from('down_payment_requests').select('*');
-        
-        // Re-apply the same filters
+      // ── Build role-based filter (extracted to helper to avoid duplication) ──
+      const applyRoleFilter = (q: typeof query) => {
         if (userRole === 'datacollector' || userRole === 'coordinator') {
-          fallbackQuery = fallbackQuery.eq('requested_by', currentUser.id);
-        } else if (userRole === 'supervisor' || userRole === 'hubsupervisor') {
-          if (currentUser.hubId) {
-            let hubFilter = `requested_by.eq.${currentUser.id},hub_id.eq.${currentUser.hubId}`;
-            if (currentUser.secondaryHubId) {
-              hubFilter += `,hub_id.eq.${currentUser.secondaryHubId}`;
-            }
-            fallbackQuery = fallbackQuery.or(hubFilter);
-          } else {
-            fallbackQuery = fallbackQuery.eq('requested_by', currentUser.id);
-          }
-        } else if (!(
-          userRole === 'admin' || userRole === 'financialadmin' || 
-          userRole === 'superadmin' || userRole === 'super_admin' ||
-          userRole === 'ict' || userRole === 'fom' || 
-          userRole === 'field operation manager' ||
-          userRole === 'countrydirector' || userRole === 'country_director' ||
-          userRole === 'datateam' || userRole === 'data_team'
-        )) {
-          fallbackQuery = fallbackQuery.eq('requested_by', currentUser.id);
+          return q.eq('requested_by', user.id);
         }
-        
-        const fallbackResult = await fallbackQuery.order('created_at', { ascending: false });
-        data = fallbackResult.data;
-        error = fallbackResult.error;
+        if (userRole === 'supervisor' || userRole === 'hubsupervisor') {
+          if (user.hubId) {
+            let hubFilter = `requested_by.eq.${user.id},hub_id.eq.${user.hubId}`;
+            if (user.secondaryHubId) hubFilter += `,hub_id.eq.${user.secondaryHubId}`;
+            return q.or(hubFilter);
+          }
+          return q.eq('requested_by', user.id);
+        }
+        const isAdmin = [
+          'admin', 'financialadmin', 'superadmin', 'super_admin',
+          'ict', 'fom', 'field operation manager',
+          'countrydirector', 'country_director', 'datateam', 'data_team',
+        ].includes(userRole || '');
+        if (!isAdmin) return q.eq('requested_by', user.id);
+        return q; // admins see everything — no filter
+      };
+
+      let { data, error } = await applyRoleFilter(query).order('created_at', { ascending: false });
+
+      // Fallback: if the join fails (e.g. RLS on mmp_site_entries), retry without it
+      if (error) {
+        console.warn('[DownPayment] Join query failed, retrying without join:', error.message);
+        const plain = applyRoleFilter(supabase.from('down_payment_requests').select('*'));
+        const fallback = await plain.order('created_at', { ascending: false });
+        data = fallback.data;
+        error = fallback.error;
       }
 
       if (error) {
-        // Suppress RLS permission errors - just log them
-        if (error.code === '42501' || error.message?.includes('permission') || error.message?.includes('RLS')) {
-          console.log('[DownPayment] No permission to fetch requests (expected for some roles)');
+        const isPermErr = error.code === '42501' || error.message?.includes('permission') || error.message?.includes('RLS');
+        if (isPermErr) {
           setRequests([]);
           setLoading(false);
           return;
         }
         throw error;
       }
-      
-      console.log('[DownPayment] Fetched requests:', data?.length || 0);
+
       const transformed = (data || []).map(transformFromDB).filter(r => {
         if (r.status === 'deleted') return false;
         if (r.status === 'cancelled' && r.metadata?.deleted) return false;
         return true;
       });
-      
+
+      // ── Enrich any rows where the join returned no state/locality/mmp data ──
+      // Run the two enrichment queries in PARALLEL instead of sequentially
       const needsEnrichment = transformed.filter(r => (!r.stateName || !r.localityName || !r.mmpName) && r.mmpSiteEntryId);
       if (needsEnrichment.length > 0) {
-        const entryIds = [...new Set(needsEnrichment.map(r => r.mmpSiteEntryId).filter(Boolean))];
+        const entryIds = [...new Set(needsEnrichment.map(r => r.mmpSiteEntryId).filter(Boolean))] as string[];
         try {
           const { data: entries } = await supabase
             .from('mmp_site_entries')
             .select('id, state, locality, mmp_file_id')
-            .in('id', entryIds as string[]);
-          
+            .in('id', entryIds);
+
           if (entries && entries.length > 0) {
             const entryMap = new Map(entries.map(e => [e.id, e]));
+            const mmpFileIds = [...new Set(entries.map(e => (e as any).mmp_file_id).filter(Boolean))] as string[];
 
-            // Collect unique mmp_file_ids to fetch MMP names
-            const mmpFileIds = [...new Set(entries.map(e => (e as any).mmp_file_id).filter(Boolean))];
+            // Parallel fetch of MMP names (no need to wait for entries to finish first)
             let mmpNameMap = new Map<string, string>();
             if (mmpFileIds.length > 0) {
-              try {
-                const { data: mmpFiles } = await supabase
-                  .from('mmp_files')
-                  .select('id, name')
-                  .in('id', mmpFileIds);
-                if (mmpFiles) {
-                  mmpNameMap = new Map(mmpFiles.map(f => [f.id, f.name]));
-                }
-              } catch (mmpErr) {
-                console.warn('[DownPayment] MMP name lookup failed:', mmpErr);
-              }
+              const { data: mmpFiles } = await supabase
+                .from('mmp_files').select('id, name').in('id', mmpFileIds);
+              if (mmpFiles) mmpNameMap = new Map(mmpFiles.map(f => [f.id, f.name]));
             }
 
             transformed.forEach(r => {
               if (r.mmpSiteEntryId && entryMap.has(r.mmpSiteEntryId)) {
-                const entry = entryMap.get(r.mmpSiteEntryId)!;
-                if (!r.stateName && entry.state) r.stateName = entry.state;
-                if (!r.localityName && entry.locality) r.localityName = entry.locality;
-                if (!r.mmpName && (entry as any).mmp_file_id) {
-                  r.mmpName = mmpNameMap.get((entry as any).mmp_file_id) || undefined;
-                }
+                const e = entryMap.get(r.mmpSiteEntryId)!;
+                if (!r.stateName && e.state) r.stateName = e.state;
+                if (!r.localityName && e.locality) r.localityName = e.locality;
+                if (!r.mmpName && (e as any).mmp_file_id) r.mmpName = mmpNameMap.get((e as any).mmp_file_id);
               }
             });
-            console.log('[DownPayment] Enriched state/locality/MMP for', entries.length, 'entries');
           }
         } catch (enrichErr) {
-          console.warn('[DownPayment] State/locality enrichment failed:', enrichErr);
+          console.warn('[DownPayment] Enrichment failed (non-critical):', enrichErr);
         }
       }
-      
+
       setRequests(transformed);
     } catch (error: any) {
-      // Only log and show error for unexpected errors, not permission issues
-      const isPermissionError = error.code === '42501' || 
-        error.message?.includes('permission') || 
-        error.message?.includes('RLS') ||
-        error.message?.includes('policy');
-      
+      const isPermissionError = error.code === '42501' ||
+        error.message?.includes('permission') || error.message?.includes('RLS') || error.message?.includes('policy');
       if (!isPermissionError) {
-        console.error('Failed to fetch down-payment requests:', error);
-        toast({
-          title: 'Error',
-          description: 'Failed to load down-payment requests',
-          variant: 'destructive',
-        });
-      } else {
-        console.log('[DownPayment] Permission denied (expected for some roles)');
+        console.error('[DownPayment] Fetch failed:', error);
+        toastRef.current({ title: 'Error', description: 'Failed to load down-payment requests', variant: 'destructive' });
       }
     } finally {
       setLoading(false);
     }
-  }, [currentUser, toast]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentUser?.id, currentUser?.hubId, currentUser?.secondaryHubId, currentUser?.role]);
 
+  // ── Initial load: only re-fetch when the signed-in user actually changes ──
   useEffect(() => {
-    cleanupDeletedRequests();
+    const uid = currentUser?.id ?? null;
+    if (uid === currentUserIdRef.current && hasFetchedRef.current) return;
+    currentUserIdRef.current = uid;
+    hasFetchedRef.current = true;
     refreshRequests();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentUser?.id]);
 
-    // Set up real-time subscription for down payment requests
-    const downPaymentChannel = supabase
-      .channel('down-payment-changes')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'down_payment_requests'
-        },
-        (payload) => {
-          console.log('Down payment requests change detected:', payload);
-          refreshRequests();
-        }
-      )
-      .subscribe((status) => {
-        if (status === 'SUBSCRIBED') {
-          console.log('✅ Down payment requests real-time subscription active');
-        } else if (status === 'CHANNEL_ERROR') {
-          console.error('❌ Down payment requests real-time subscription error - Check if replication is enabled in Supabase');
-        } else if (status === 'TIMED_OUT') {
-          console.warn('⏱️ Down payment requests real-time subscription timed out');
-        } else {
-          console.log('Down payment requests subscription status:', status);
-        }
-      });
-
-    // Cleanup subscription on unmount
-    return () => {
-      supabase.removeChannel(downPaymentChannel);
-    };
+  // ── Real-time: single subscription, debounced to avoid re-fetch storms ──
+  const debouncedRefresh = useCallback(() => {
+    if (realtimeDebounceRef.current) clearTimeout(realtimeDebounceRef.current);
+    realtimeDebounceRef.current = setTimeout(() => refreshRequests(), 800);
   }, [refreshRequests]);
 
-  useRealtimeTable('down_payment_requests', refreshRequests, {
+  useRealtimeTable('down_payment_requests', debouncedRefresh, {
     enabled: !!currentUser,
   });
 
