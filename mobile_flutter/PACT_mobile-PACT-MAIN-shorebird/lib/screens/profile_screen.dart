@@ -936,30 +936,45 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 size: 20,
               ),
               const SizedBox(width: 8),
-              Text(
-                'Bank Account / الحساب البنكي',
-                style: GoogleFonts.poppins(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                  color: hasAccount ? Colors.green[700] : Colors.orange[700],
-                ),
-              ),
-              const Spacer(),
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(
-                  color: hasAccount
-                      ? Colors.green.withOpacity(0.1)
-                      : Colors.orange.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(8),
-                ),
+              Expanded(
                 child: Text(
-                  hasAccount ? 'Verified ✓' : 'Required',
+                  'Bank Account / الحساب البنكي',
                   style: GoogleFonts.poppins(
-                    fontSize: 11,
+                    fontSize: 14,
                     fontWeight: FontWeight.w600,
                     color: hasAccount ? Colors.green[700] : Colors.orange[700],
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              // Add / Edit button
+              GestureDetector(
+                onTap: () => _showBankAccountSheet(profile),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: AppColors.primaryBlue.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: AppColors.primaryBlue.withOpacity(0.3)),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        hasAccount ? Icons.edit : Icons.add,
+                        size: 13,
+                        color: AppColors.primaryBlue,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        hasAccount ? 'Edit / تعديل' : 'Add / إضافة',
+                        style: GoogleFonts.poppins(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.primaryBlue,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ),
@@ -969,7 +984,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
           if (hasAccount) ...[
             _buildInfoRow(
               'Account Name',
-              bankAccount.accountName ?? '-',
+              bankAccount.accountName?.isNotEmpty == true ? bankAccount.accountName! : '-',
               icon: Icons.person_outline,
             ),
             const SizedBox(height: 8),
@@ -1005,6 +1020,203 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             ),
         ],
       ),
+    );
+  }
+
+  void _showBankAccountSheet(PACTUserProfile profile) {
+    final existing = profile.bankAccount;
+    final accountNameCtrl = TextEditingController(text: existing?.accountName ?? '');
+    final accountNumberCtrl = TextEditingController(text: existing?.accountNumber ?? '');
+    final bankNameCtrl = TextEditingController(text: existing?.bankName ?? '');
+    final branchCodeCtrl = TextEditingController(text: existing?.branchCode ?? '');
+    final sheetFormKey = GlobalKey<FormState>();
+    bool isSaving = false;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, setSheetState) {
+            return Padding(
+              padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
+              child: Container(
+                decoration: const BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+                ),
+                padding: const EdgeInsets.fromLTRB(20, 16, 20, 28),
+                child: Form(
+                  key: sheetFormKey,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Handle bar
+                      Center(
+                        child: Container(
+                          width: 40,
+                          height: 4,
+                          margin: const EdgeInsets.only(bottom: 16),
+                          decoration: BoxDecoration(
+                            color: Colors.grey[300],
+                            borderRadius: BorderRadius.circular(2),
+                          ),
+                        ),
+                      ),
+                      // Title
+                      Row(
+                        children: [
+                          const Icon(Icons.account_balance, color: AppColors.primaryBlue, size: 20),
+                          const SizedBox(width: 8),
+                          Text(
+                            existing?.accountNumber?.isNotEmpty == true
+                                ? 'Edit Bank Account / تعديل الحساب'
+                                : 'Add Bank Account / إضافة حساب بنكي',
+                            style: GoogleFonts.poppins(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 20),
+                      // Bank Name (required)
+                      TextFormField(
+                        controller: bankNameCtrl,
+                        style: GoogleFonts.poppins(),
+                        decoration: InputDecoration(
+                          labelText: 'Bank Name / اسم البنك *',
+                          labelStyle: GoogleFonts.poppins(color: Colors.grey[600]),
+                          prefixIcon: const Icon(Icons.account_balance_outlined),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                        validator: (v) =>
+                            (v == null || v.trim().isEmpty) ? 'Bank name is required' : null,
+                      ),
+                      const SizedBox(height: 14),
+                      // Account Number (required)
+                      TextFormField(
+                        controller: accountNumberCtrl,
+                        style: GoogleFonts.poppins(),
+                        keyboardType: TextInputType.number,
+                        decoration: InputDecoration(
+                          labelText: 'Account Number / رقم الحساب *',
+                          labelStyle: GoogleFonts.poppins(color: Colors.grey[600]),
+                          prefixIcon: const Icon(Icons.credit_card),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                        validator: (v) {
+                          if (v == null || v.trim().isEmpty) return 'Account number is required';
+                          if (v.trim().length < 8) return 'Must be at least 8 digits';
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 14),
+                      // Account Name (optional)
+                      TextFormField(
+                        controller: accountNameCtrl,
+                        style: GoogleFonts.poppins(),
+                        decoration: InputDecoration(
+                          labelText: 'Account Holder Name / اسم صاحب الحساب',
+                          labelStyle: GoogleFonts.poppins(color: Colors.grey[600]),
+                          prefixIcon: const Icon(Icons.person_outline),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                      // Branch Code (optional)
+                      TextFormField(
+                        controller: branchCodeCtrl,
+                        style: GoogleFonts.poppins(),
+                        decoration: InputDecoration(
+                          labelText: 'Branch Code / رمز الفرع (optional)',
+                          labelStyle: GoogleFonts.poppins(color: Colors.grey[600]),
+                          prefixIcon: const Icon(Icons.location_city),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+                      // Save button
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton(
+                          onPressed: isSaving
+                              ? null
+                              : () async {
+                                  if (!sheetFormKey.currentState!.validate()) return;
+                                  setSheetState(() => isSaving = true);
+                                  try {
+                                    await ref
+                                        .read(profileProvider.notifier)
+                                        .updateProfile(
+                                          bankAccount: BankAccount(
+                                            bankName: bankNameCtrl.text.trim(),
+                                            accountNumber: accountNumberCtrl.text.trim(),
+                                            accountName: accountNameCtrl.text.trim().isEmpty
+                                                ? null
+                                                : accountNameCtrl.text.trim(),
+                                            branchCode: branchCodeCtrl.text.trim().isEmpty
+                                                ? null
+                                                : branchCodeCtrl.text.trim(),
+                                          ),
+                                        );
+                                    if (ctx.mounted) Navigator.of(ctx).pop();
+                                    if (mounted) {
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        const SnackBar(
+                                          content: Text('Bank account saved / تم حفظ الحساب البنكي'),
+                                          backgroundColor: Colors.green,
+                                        ),
+                                      );
+                                    }
+                                  } catch (e) {
+                                    setSheetState(() => isSaving = false);
+                                    if (ctx.mounted) {
+                                      ScaffoldMessenger.of(ctx).showSnackBar(
+                                        SnackBar(
+                                          content: Text('Failed to save: $e'),
+                                          backgroundColor: Colors.red,
+                                        ),
+                                      );
+                                    }
+                                  }
+                                },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.primaryBlue,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                          child: isSaving
+                              ? const SizedBox(
+                                  height: 20,
+                                  width: 20,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: Colors.white,
+                                  ),
+                                )
+                              : Text(
+                                  'Save / حفظ',
+                                  style: GoogleFonts.poppins(
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 15,
+                                  ),
+                                ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
     );
   }
 
