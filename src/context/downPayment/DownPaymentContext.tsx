@@ -205,6 +205,24 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
       setLoading(true);
       const userRole = user.role?.toLowerCase();
 
+      // Main query with full join so we get state/locality/project in one round-trip
+      let query = supabase.from('down_payment_requests').select(`
+        *,
+        mmp_site_entries (
+          state,
+          locality,
+          cp_name,
+          activity_type,
+          mmp_files (
+            name,
+            project_name,
+            projects (
+              name
+            )
+          )
+        )
+      `);
+
       // ── Build role-based filter (extracted to helper to avoid duplication) ──
       const applyRoleFilter = (q: typeof query) => {
         if (userRole === 'datacollector' || userRole === 'coordinator') {
