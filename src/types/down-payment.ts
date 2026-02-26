@@ -81,6 +81,8 @@ export interface DownPaymentRequest {
   stateName?: string;
   localityName?: string;
   projectName?: string;
+  /** The actual WFP project name from the projects table (e.g. "WFP TPM", "WFP VAM") */
+  wfpProjectName?: string;
   activityType?: string;
   
   // Requester information

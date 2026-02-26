@@ -57,8 +57,9 @@ function fmtDate(iso?: string) {
   try { return format(parseISO(iso), 'MMM dd, yyyy'); } catch { return '—'; }
 }
 
-/** Returns the effective project label — uses cp_name / projects.name; falls back to activityType. */
+/** Returns the WFP project name (e.g. "WFP TPM", "WFP VAM") — falls back to activityType. */
 function projectLabel(req: DownPaymentRequest): string {
+  if (req.wfpProjectName) return req.wfpProjectName;
   const p = req.projectName;
   if (p && p !== 'PACT') return p;
   return req.activityType || 'General / عام';
