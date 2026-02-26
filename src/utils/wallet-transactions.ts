@@ -189,14 +189,27 @@ export async function createSiteVisitWalletTransaction(
         .eq('requested_by', userIdToPay);
 
       // Fallback lookup: match by site_name when no explicit link exists
+      // Uses contains match (%name%) to handle partial name differences (e.g. "AL ALWIAAB" vs "AL ALWIAAB - Khartoum")
       let advances = advancesByLink || [];
       if (!advanceError && advances.length === 0 && siteName) {
-        const { data: advancesByName } = await supabase
+        const cleanName = siteName.trim();
+        // Try 1: exact ilike
+        let { data: advancesByName } = await supabase
           .from('down_payment_requests')
           .select('id, site_name, total_paid_amount, status, mmp_site_entry_id, requested_by, metadata')
-          .ilike('site_name', siteName.trim())
+          .ilike('site_name', cleanName)
           .in('status', ['partially_paid', 'fully_paid'])
           .eq('requested_by', userIdToPay);
+        // Try 2: contains match (handles "AL ALWIAAB" matching "AL ALWIAAB - Khartoum")
+        if (!advancesByName || advancesByName.length === 0) {
+          const { data: advancesByContains } = await supabase
+            .from('down_payment_requests')
+            .select('id, site_name, total_paid_amount, status, mmp_site_entry_id, requested_by, metadata')
+            .ilike('site_name', `%${cleanName}%`)
+            .in('status', ['partially_paid', 'fully_paid'])
+            .eq('requested_by', userIdToPay);
+          advancesByName = advancesByContains;
+        }
         if (advancesByName && advancesByName.length > 0) {
           console.log(`[WalletTransaction] Found ${advancesByName.length} advance(s) by site name fallback for "${siteName}"`);
           advances = advancesByName;

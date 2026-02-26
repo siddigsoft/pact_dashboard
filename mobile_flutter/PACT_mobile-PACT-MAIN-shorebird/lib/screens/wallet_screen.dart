@@ -1,7 +1,6 @@
 import 'dart:convert';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
@@ -1378,15 +1377,26 @@ class _WalletScreenState extends State<WalletScreen> {
                   ]),
                 ],
                 const SizedBox(height: 12),
-                Text(
-                  widget.isArabic ? 'التوقيع:' : 'Signature:',
-                  style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.w600),
+                Row(
+                  children: [
+                    Text(
+                      widget.isArabic ? 'التوقيع: ' : 'Signature: ',
+                      style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.w600),
+                    ),
+                    Text(
+                      widget.isArabic ? '(مطلوب — ارسم بإصبعك)' : '(required — draw with finger)',
+                      style: GoogleFonts.poppins(fontSize: 11, color: Colors.red.shade600),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 4),
                 Container(
-                  height: 120,
+                  height: 130,
                   decoration: BoxDecoration(
-                    border: Border.all(color: Colors.grey.shade300),
+                    border: Border.all(
+                      color: signatureStrokes.isEmpty ? Colors.red.shade300 : Colors.green.shade400,
+                      width: 1.5,
+                    ),
                     borderRadius: BorderRadius.circular(8),
                     color: Colors.grey.shade50,
                   ),
@@ -1397,9 +1407,16 @@ class _WalletScreenState extends State<WalletScreen> {
                     child: CustomPaint(
                       painter: _SignaturePainter(signatureStrokes),
                       child: signatureStrokes.isEmpty
-                          ? Center(child: Text(
-                              widget.isArabic ? 'ارسم توقيعك هنا' : 'Draw signature here',
-                              style: GoogleFonts.poppins(color: Colors.grey.shade400, fontSize: 12)))
+                          ? Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(Icons.draw, color: Colors.grey.shade400, size: 28),
+                                const SizedBox(height: 4),
+                                Text(
+                                  widget.isArabic ? 'ارسم توقيعك هنا' : 'Draw your signature here',
+                                  style: GoogleFonts.poppins(color: Colors.grey.shade500, fontSize: 12)),
+                              ],
+                            )
                           : null,
                     ),
                   ),
@@ -1435,7 +1452,19 @@ class _WalletScreenState extends State<WalletScreen> {
               child: Text(widget.isArabic ? 'إلغاء' : 'Cancel', style: GoogleFonts.poppins()),
             ),
             ElevatedButton(
-              onPressed: signatureStrokes.isEmpty ? null : () => Navigator.pop(ctx, true),
+              onPressed: () {
+                if (signatureStrokes.isEmpty) {
+                  ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(
+                    content: Text(widget.isArabic
+                        ? 'يرجى رسم توقيعك أولاً'
+                        : 'Please draw your signature first'),
+                    backgroundColor: Colors.orange,
+                    duration: const Duration(seconds: 2),
+                  ));
+                  return;
+                }
+                Navigator.pop(ctx, true);
+              },
               style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
               child: Text(widget.isArabic ? 'تأكيد' : 'Confirm',
                   style: GoogleFonts.poppins(color: Colors.white)),
