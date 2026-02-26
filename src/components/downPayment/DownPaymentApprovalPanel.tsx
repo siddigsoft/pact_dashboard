@@ -1104,6 +1104,7 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
                         <TableHead className="py-2 text-xs">Requester</TableHead>
                         <TableHead className="py-2 text-xs">Date</TableHead>
                         <TableHead className="py-2 text-xs">Role</TableHead>
+                        <TableHead className="py-2 text-xs">MMP</TableHead>
                         <TableHead className="py-2 text-xs text-right">Amount (SDG)</TableHead>
                         <TableHead className="py-2 text-xs">Status</TableHead>
                         <TableHead className="py-2 text-xs">Justification</TableHead>
@@ -1120,6 +1121,7 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
                         </TableCell>
                         <TableCell className="py-2">{format(new Date(request.requestedAt), 'MMM d, yyyy')}</TableCell>
                         <TableCell className="py-2 capitalize">{request.requesterRole}</TableCell>
+                        <TableCell className="py-2 max-w-[130px] truncate">{request.mmpName || '—'}</TableCell>
                         <TableCell className="py-2 text-right font-mono">{(request.approvedAmount || request.requestedAmount).toLocaleString()}</TableCell>
                         <TableCell className="py-2">{getStatusBadge(request.status)}</TableCell>
                         <TableCell className="py-2 max-w-[160px] truncate text-muted-foreground">{request.justification || '—'}</TableCell>
@@ -1130,6 +1132,7 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
                           <TableCell className="py-2">{resolveUserName(s.requestedBy, s.requestedByName)}</TableCell>
                           <TableCell className="py-2">{format(new Date(s.requestedAt), 'MMM d, yyyy')}</TableCell>
                           <TableCell className="py-2 capitalize">{s.requesterRole}</TableCell>
+                          <TableCell className="py-2 max-w-[130px] truncate">{s.mmpName || '—'}</TableCell>
                           <TableCell className="py-2 text-right font-mono">{(s.approvedAmount || s.requestedAmount).toLocaleString()}</TableCell>
                           <TableCell className="py-2">{getStatusBadge(s.status)}</TableCell>
                           <TableCell className="py-2 max-w-[160px] truncate text-muted-foreground">{s.justification || '—'}</TableCell>
