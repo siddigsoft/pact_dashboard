@@ -1057,6 +1057,13 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
     const isDuplicate = duplicateSiteNames.has(request.siteName);
     const requesterName = resolveUserName(request.requestedBy, request.requestedByName);
 
+    // All OTHER active requests for the same site (siblings)
+    const sitemates = isDuplicate
+      ? requests.filter(r => r.id !== request.id && r.siteName === request.siteName && !['cancelled', 'rejected', 'deleted'].includes(r.status))
+      : [];
+
+    const [showDuplicatePanel, setShowDuplicatePanel] = useState(false);
+
     return (
     <Card
       key={request.id}
@@ -1067,10 +1074,75 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
       <CardContent className="p-4">
         <div className="space-y-3">
           {isDuplicate && (
-            <div className="flex items-center gap-2 rounded-md bg-amber-50 dark:bg-amber-950/30 border border-amber-300 dark:border-amber-700 px-3 py-1.5 text-xs font-medium text-amber-700 dark:text-amber-400" data-testid={`banner-duplicate-${request.id}`}>
-              <AlertTriangle className="h-3.5 w-3.5 flex-shrink-0" />
-              Duplicate site request — another active advance exists for this site
-              <span className="ml-auto font-normal opacity-75">/ طلب مكرر لهذا الموقع</span>
+            <div className="space-y-2">
+              {/* ── Duplicate warning banner ── */}
+              <div className="flex items-center gap-2 rounded-md bg-amber-50 dark:bg-amber-950/30 border border-amber-300 dark:border-amber-700 px-3 py-1.5 text-xs font-medium text-amber-700 dark:text-amber-400" data-testid={`banner-duplicate-${request.id}`}>
+                <AlertTriangle className="h-3.5 w-3.5 flex-shrink-0" />
+                <span>Duplicate — {sitemates.length} other active advance{sitemates.length !== 1 ? 's' : ''} for this site</span>
+                <span className="opacity-60">/ طلب مكرر</span>
+                <button
+                  type="button"
+                  onClick={() => setShowDuplicatePanel(v => !v)}
+                  className="ml-auto flex items-center gap-1 rounded px-2 py-0.5 bg-amber-100 dark:bg-amber-900/40 hover:bg-amber-200 dark:hover:bg-amber-800/50 transition-colors text-amber-700 dark:text-amber-300 font-semibold text-xs"
+                  data-testid={`button-view-duplicates-${request.id}`}
+                >
+                  {showDuplicatePanel ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                  {showDuplicatePanel ? 'Hide' : 'View all'}
+                </button>
+              </div>
+
+              {/* ── Expandable sibling-requests panel ── */}
+              {showDuplicatePanel && (
+                <div className="rounded-lg border border-amber-300 dark:border-amber-700 overflow-hidden">
+                  <div className="bg-amber-100/60 dark:bg-amber-950/40 px-3 py-1.5 text-xs font-semibold text-amber-800 dark:text-amber-300 flex items-center gap-2">
+                    <AlertTriangle className="h-3.5 w-3.5" />
+                    All active advances for "{request.siteName}"
+                  </div>
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="bg-amber-50/50 dark:bg-amber-950/20 text-xs">
+                        <TableHead className="py-2 text-xs">Requester</TableHead>
+                        <TableHead className="py-2 text-xs">Date</TableHead>
+                        <TableHead className="py-2 text-xs">Role</TableHead>
+                        <TableHead className="py-2 text-xs text-right">Amount (SDG)</TableHead>
+                        <TableHead className="py-2 text-xs">Status</TableHead>
+                        <TableHead className="py-2 text-xs">Justification</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {/* Current request — highlighted */}
+                      <TableRow className="bg-amber-100/40 dark:bg-amber-900/20 text-xs font-medium">
+                        <TableCell className="py-2">
+                          <span className="flex items-center gap-1">
+                            {requesterName}
+                            <Badge variant="outline" className="text-[9px] py-0 px-1 border-amber-400 text-amber-700 ml-1">this</Badge>
+                          </span>
+                        </TableCell>
+                        <TableCell className="py-2">{format(new Date(request.requestedAt), 'MMM d, yyyy')}</TableCell>
+                        <TableCell className="py-2 capitalize">{request.requesterRole}</TableCell>
+                        <TableCell className="py-2 text-right font-mono">{(request.approvedAmount || request.requestedAmount).toLocaleString()}</TableCell>
+                        <TableCell className="py-2">{getStatusBadge(request.status)}</TableCell>
+                        <TableCell className="py-2 max-w-[160px] truncate text-muted-foreground">{request.justification || '—'}</TableCell>
+                      </TableRow>
+                      {/* Sibling requests */}
+                      {sitemates.map(s => (
+                        <TableRow key={s.id} className="text-xs hover:bg-amber-50/30 dark:hover:bg-amber-950/10">
+                          <TableCell className="py-2">{resolveUserName(s.requestedBy, s.requestedByName)}</TableCell>
+                          <TableCell className="py-2">{format(new Date(s.requestedAt), 'MMM d, yyyy')}</TableCell>
+                          <TableCell className="py-2 capitalize">{s.requesterRole}</TableCell>
+                          <TableCell className="py-2 text-right font-mono">{(s.approvedAmount || s.requestedAmount).toLocaleString()}</TableCell>
+                          <TableCell className="py-2">{getStatusBadge(s.status)}</TableCell>
+                          <TableCell className="py-2 max-w-[160px] truncate text-muted-foreground">{s.justification || '—'}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                  <div className="bg-amber-50/40 dark:bg-amber-950/20 px-3 py-1.5 text-xs text-amber-700 dark:text-amber-400 flex justify-between">
+                    <span>Total exposure: <strong>SDG {[request, ...sitemates].reduce((s, r) => s + (r.approvedAmount || r.requestedAmount), 0).toLocaleString()}</strong></span>
+                    <span className="opacity-70">Review all requests before approving</span>
+                  </div>
+                </div>
+              )}
             </div>
           )}
           <div className="flex justify-between items-start gap-2">
