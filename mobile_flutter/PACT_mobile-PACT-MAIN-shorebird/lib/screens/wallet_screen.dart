@@ -394,6 +394,34 @@ class _WalletScreenState extends State<WalletScreen> {
       return;
     }
 
+    // Check bank account before submitting withdrawal
+    if (_userId != null) {
+      try {
+        final profileData = await Supabase.instance.client
+            .from('profiles')
+            .select('bank_account')
+            .eq('id', _userId!)
+            .maybeSingle();
+        final bankAccount = profileData?['bank_account'];
+        final accountNumber = bankAccount?['accountNumber'] ?? bankAccount?['account_number'];
+        if (accountNumber == null || (accountNumber as String).isEmpty) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text(
+                  'Bank account required / الحساب البنكي مطلوب\n'
+                  'Please add your bank account in Profile Settings before requesting a withdrawal.',
+                ),
+                backgroundColor: Colors.orange,
+                duration: Duration(seconds: 5),
+              ),
+            );
+          }
+          return;
+        }
+      } catch (_) {}
+    }
+
     setState(() => _isSubmittingWithdrawal = true);
 
     try {

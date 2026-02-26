@@ -41,6 +41,7 @@ import {
   Banknote,
   CreditCard,
   CheckCircle2,
+  Megaphone,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useSettings } from "@/context/settings/SettingsContext";
@@ -1879,64 +1880,37 @@ const Settings = () => {
             </CardContent>
           </Card>
 
-          {/* Admin Broadcast Bank Account Reminder */}
+          {/* Admin Broadcast Center Link */}
           {isAdminUser && (
             <Card className="border border-violet-500/30 shadow-sm">
               <CardHeader className="bg-gradient-to-r from-violet-50 to-purple-50 dark:from-violet-900/20 dark:to-purple-800/20 border-b p-4 sm:p-6">
                 <div className="flex items-center gap-2">
                   <div className="p-2 bg-violet-600 rounded-lg">
-                    <Bell className="h-5 w-5 text-white" />
+                    <Megaphone className="h-5 w-5 text-white" />
                   </div>
                   <div>
                     <CardTitle className="text-lg flex items-center gap-2">
-                      Broadcast Bank Account Reminder
+                      Broadcast Center
                       <span className="text-xs font-normal bg-violet-100 dark:bg-violet-900/40 text-violet-700 dark:text-violet-300 px-2 py-0.5 rounded">Admin Only</span>
                     </CardTitle>
                     <CardDescription>
-                      Send a bilingual notification to all users reminding them to update their bank account details / إرسال إشعار ثنائي اللغة لجميع المستخدمين
+                      Send custom notifications or announcements to all users or specific groups / إرسال إشعارات مخصصة لجميع المستخدمين أو مجموعات محددة
                     </CardDescription>
                   </div>
                 </div>
               </CardHeader>
-              <CardContent className="p-4 sm:p-6 space-y-4">
-                <div className="flex items-center gap-3 rounded-lg border border-violet-200 dark:border-violet-800 bg-violet-50 dark:bg-violet-900/10 p-3">
+              <CardContent className="p-4 sm:p-6">
+                <div className="flex items-start gap-3 rounded-lg border border-violet-200 dark:border-violet-800 bg-violet-50 dark:bg-violet-900/10 p-3 mb-4">
                   <AlertCircle className="w-4 h-4 text-violet-600 dark:text-violet-400 mt-0.5 flex-shrink-0" />
                   <p className="text-sm text-violet-700 dark:text-violet-300">
-                    This will send an in-app notification to users reminding them to add their bank account in Profile Settings. The notification will appear in their notification bell and as a toast alert. / سيتم إرسال إشعار داخل التطبيق للمستخدمين لتذكيرهم بإضافة بياناتهم البنكية.
+                    The Broadcast Center lets you compose and send any notification to all users, specific roles, or users missing bank accounts. Includes quick templates, priority settings, and broadcast history.
                   </p>
                 </div>
-
-                <div className="flex items-center justify-between p-3 rounded-lg border bg-muted/30">
-                  <div>
-                    <p className="text-sm font-medium">Only notify users without bank accounts</p>
-                    <p className="text-xs text-muted-foreground mt-0.5">إرسال الإشعار للمستخدمين الذين لم يضيفوا بياناتهم البنكية فقط</p>
-                  </div>
-                  <Switch
-                    checked={broadcastOnlyMissing}
-                    onCheckedChange={setBroadcastOnlyMissing}
-                  />
-                </div>
-
-                {broadcastResult && (
-                  <div className="flex items-center gap-3 rounded-lg border border-emerald-500/30 bg-emerald-50 dark:bg-emerald-900/10 p-3">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 flex-shrink-0" />
-                    <p className="text-sm text-emerald-700 dark:text-emerald-300">
-                      Sent to <strong>{broadcastResult.sent}</strong> user(s). <strong>{broadcastResult.skipped}</strong> already have bank accounts and were skipped.
-                    </p>
-                  </div>
-                )}
-
-                <Button
-                  onClick={handleBroadcastBankAccountReminder}
-                  disabled={broadcastSending}
-                  className="w-full bg-violet-600 hover:bg-violet-700 text-white"
-                >
-                  {broadcastSending ? (
-                    <><RefreshCw className="w-4 h-4 mr-2 animate-spin" /> Sending notifications...</>
-                  ) : (
-                    <><Bell className="w-4 h-4 mr-2" /> Send Bank Account Reminder to All Users</>
-                  )}
-                </Button>
+                <a href="/admin/broadcast">
+                  <Button className="w-full bg-violet-600 hover:bg-violet-700 text-white">
+                    <Megaphone className="w-4 h-4 mr-2" /> Open Broadcast Center
+                  </Button>
+                </a>
               </CardContent>
             </Card>
           )}

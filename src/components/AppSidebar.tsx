@@ -44,7 +44,8 @@
     HelpCircle,
     PenTool,
     PhoneCall,
-    RefreshCw
+    RefreshCw,
+    Megaphone
   } from "lucide-react";
   import { RealtimeStatusDot } from '@/components/realtime';
   import { useSiteVisitReminders } from "@/hooks/use-site-visit-reminders";
@@ -460,6 +461,9 @@
       }
       if (!isHidden('/email-management')) {
         superAdminItems.push({ id: 'email-management', title: "Email Management", url: "/email-management", icon: Mail, priority: 6, isPinned: isPinned('/email-management') });
+      }
+      if (!isHidden('/admin/broadcast')) {
+        superAdminItems.push({ id: 'admin-broadcast', title: "Broadcast Center", url: "/admin/broadcast", icon: Megaphone, priority: 7, isPinned: isPinned('/admin/broadcast') });
       }
       if (!isHidden('/mobile-help-articles')) {
         superAdminItems.push({ id: 'mobile-help-articles', title: "Mobile Help Articles", url: "/mobile-help-articles", icon: HelpCircle, priority: 8, isPinned: isPinned('/mobile-help-articles') });
