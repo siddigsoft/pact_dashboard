@@ -105,7 +105,6 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
   const [selectedRequest, setSelectedRequest] = useState<DownPaymentRequest | null>(null);
   const [action, setAction] = useState<'approve' | 'reject' | 'pay' | 'view_audit' | 'revert' | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<DownPaymentRequest | null>(null);
-  const [deleteProcessing, setDeleteProcessing] = useState(false);
   const [signatureRequest, setSignatureRequest] = useState<DownPaymentRequest | null>(null);
   const [notes, setNotes] = useState('');
   const [rejectionReason, setRejectionReason] = useState('');
@@ -2887,29 +2886,20 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
             </div>
           )}
           <DialogFooter>
-            <Button variant="outline" onClick={() => setDeleteConfirm(null)} disabled={deleteProcessing} data-testid="button-cancel-delete">
+            <Button variant="outline" onClick={() => setDeleteConfirm(null)} data-testid="button-cancel-delete">
               Cancel
             </Button>
             <Button
               variant="destructive"
-              disabled={deleteProcessing}
-              onClick={async () => {
+              onClick={() => {
                 if (!deleteConfirm) return;
-                setDeleteProcessing(true);
-                try {
-                  const success = await deleteRequest(deleteConfirm.id);
-                  if (success) setDeleteConfirm(null);
-                } finally {
-                  setDeleteProcessing(false);
-                }
+                const targetId = deleteConfirm.id;
+                setDeleteConfirm(null);
+                deleteRequest(targetId);
               }}
               data-testid="button-confirm-delete"
             >
-              {deleteProcessing ? (
-                <><RefreshCw className="h-4 w-4 mr-1 animate-spin" /> Deleting...</>
-              ) : (
-                <><Trash2 className="h-4 w-4 mr-1" /> Delete Permanently</>
-              )}
+              <Trash2 className="h-4 w-4 mr-1" /> Delete Permanently
             </Button>
           </DialogFooter>
         </DialogContent>
