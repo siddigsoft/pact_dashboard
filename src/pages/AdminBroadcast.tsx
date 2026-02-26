@@ -188,8 +188,6 @@ export default function AdminBroadcastPage() {
     setSendResult(null);
 
     try {
-      let userIds: string[] = [];
-
       const { data: users } = await supabase
         .from('profiles')
         .select('id, bank_account, role')
@@ -197,40 +195,82 @@ export default function AdminBroadcastPage() {
 
       if (!users) throw new Error('Could not load users');
 
-      if (audience === 'all') {
-        userIds = users.map(u => u.id);
-      } else if (audience === 'no_bank_account') {
-        userIds = users.filter(u => {
+      let targetUsers = users;
+      if (audience === 'no_bank_account') {
+        targetUsers = users.filter(u => {
           const ba = u.bank_account as any;
           return !ba?.accountNumber && !ba?.account_number;
-        }).map(u => u.id);
-      } else {
-        userIds = users.filter(u => (u.role || '').toLowerCase() === audience).map(u => u.id);
+        });
+      } else if (audience !== 'all') {
+        targetUsers = users.filter(u => (u.role || '').toLowerCase() === audience);
       }
 
-      if (userIds.length === 0) {
+      if (targetUsers.length === 0) {
         toast({ title: 'No recipients', description: 'No users match the selected audience.', variant: 'destructive' });
         setSending(false);
         return;
       }
 
-      const sent = await NotificationTriggerService.sendBulk(userIds, {
-        title: titleEn.trim(),
-        titleAr: titleAr.trim() || titleEn.trim(),
-        message: messageEn.trim(),
-        messageAr: messageAr.trim() || messageEn.trim(),
-        type: priority === 'urgent' ? 'error' : priority === 'high' ? 'warning' : 'info',
-        category: 'broadcast' as any,
-        priority: priority as any,
-        link: actionLink.trim() || undefined,
-        sendEmail,
-      });
+      const now = new Date().toISOString();
+      const titleText = titleEn.trim();
+      const titleArText = titleAr.trim() || titleText;
+      const messageText = messageEn.trim();
+      const messageArText = messageAr.trim() || messageText;
+      const notifType = priority === 'urgent' ? 'error' : priority === 'high' ? 'warning' : 'info';
+      const link = actionLink.trim() || null;
 
+      // Single bulk insert — one DB call for all recipients
+      const rows = targetUsers.map(u => ({
+        recipient_id: u.id,
+        user_id: u.id,
+        title_en: titleText,
+        title_ar: titleArText,
+        message_en: messageText,
+        message_ar: messageArText,
+        priority: priority,
+        action_url: link,
+        event_type: 'broadcast',
+        status: 'pending',
+        email_sent: false,
+        title: titleText,
+        message: messageText,
+        link: link,
+        type: notifType,
+        is_read: false,
+        created_at: now,
+      }));
+
+      const { error: insertError } = await supabase.from('notifications').insert(rows);
+      if (insertError) throw new Error(insertError.message);
+
+      const sent = targetUsers.length;
       setSendResult({ sent, audience });
       toast({
         title: 'Broadcast sent / تم الإرسال',
         description: `Notification delivered to ${sent} user(s).`,
       });
+
+      // If email requested, send sequentially in the background (fire-and-forget)
+      if (sendEmail) {
+        (async () => {
+          for (const u of targetUsers) {
+            try {
+              await NotificationTriggerService.send({
+                userId: u.id,
+                title: titleText,
+                titleAr: titleArText,
+                message: messageText,
+                messageAr: messageArText,
+                type: notifType as any,
+                category: 'broadcast' as any,
+                priority: priority as any,
+                link: link || undefined,
+                sendEmail: true,
+              });
+            } catch { /* ignore per-user email errors */ }
+          }
+        })();
+      }
 
       // Clear form
       setTitleEn(''); setTitleAr('');
