@@ -649,18 +649,33 @@ export default function AdminBroadcastPage() {
           )}
 
           {/* Send Button */}
-          <Button
+          <button
+            type="button"
             onClick={handleSend}
             disabled={sending || !titleEn.trim() || !messageEn.trim()}
-            className="w-full bg-violet-600 hover:bg-violet-700 text-white h-11 text-base"
-            size="lg"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '8px',
+              width: '100%',
+              height: '48px',
+              backgroundColor: sending || !titleEn.trim() || !messageEn.trim() ? '#a78bfa' : '#7c3aed',
+              color: '#ffffff',
+              border: 'none',
+              borderRadius: '8px',
+              fontSize: '16px',
+              fontWeight: '600',
+              cursor: sending || !titleEn.trim() || !messageEn.trim() ? 'not-allowed' : 'pointer',
+              opacity: sending || !titleEn.trim() || !messageEn.trim() ? 0.7 : 1,
+            }}
           >
             {sending ? (
-              <><RefreshCw className="w-5 h-5 mr-2 animate-spin" /> Sending broadcast...</>
+              <><RefreshCw className="w-5 h-5 animate-spin" /> Sending broadcast...</>
             ) : (
-              <><Send className="w-5 h-5 mr-2" /> Send Broadcast to {AUDIENCE_OPTIONS.find(a => a.value === audience)?.label.split('/')[0].trim()}</>
+              <><Send className="w-5 h-5" /> Send Broadcast to {AUDIENCE_OPTIONS.find(a => a.value === audience)?.label.split('/')[0].trim()}</>
             )}
-          </Button>
+          </button>
 
           {/* Preview */}
           {(titleEn || messageEn) && (
