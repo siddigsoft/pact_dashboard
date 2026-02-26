@@ -515,7 +515,7 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
           title: 'Request Approved',
           description: `Approved ${approvedAmount.toLocaleString()} SDG - forwarded to admin`,
         });
-        await refreshRequests();
+        refreshRequests().catch(console.error);
       }
       return true;
     } catch (error: any) {
@@ -668,7 +668,7 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
           title: 'Request Approved',
           description: `Approved ${approvedAmount.toLocaleString()} SDG - ready for payment`,
         });
-        await refreshRequests();
+        refreshRequests().catch(console.error);
       }
       return true;
     } catch (error: any) {
