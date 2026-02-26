@@ -879,11 +879,13 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
   };
 
   const deleteRequest = async (requestId: string): Promise<boolean> => {
+    // Optimistic removal — item disappears from the list instantly
+    const snapshot = requests.slice();
+    setRequests(prev => prev.filter(r => r.id !== requestId));
+
     try {
       const now = new Date().toISOString();
 
-      // Single DB call: update status to cancelled and mark as deleted in metadata
-      // Using raw SQL merge so we don't need a separate SELECT first
       const { data: updated, error } = await supabase
         .from('down_payment_requests')
         .update({
@@ -904,17 +906,19 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
 
       toast({
         title: 'Request Deleted / تم حذف الطلب',
-        description: 'The request has been removed. A new request can be submitted if needed. / تم إزالة الطلب. يمكن تقديم طلب جديد إذا لزم الأمر.',
+        description: 'The request has been removed. / تم إزالة الطلب.',
       });
 
-      // Fire-and-forget refresh — don't block the dialog from closing
+      // Silent background refresh to sync any server-side state
       refreshRequests().catch(console.error);
       return true;
     } catch (error: any) {
+      // Rollback optimistic removal on failure
+      setRequests(snapshot);
       console.error('Failed to delete request:', error);
       toast({
         title: 'Delete Failed / فشل الحذف',
-        description: error.message || 'Failed to delete request. Please try again or contact support.',
+        description: error.message || 'Failed to delete request. Please try again.',
         variant: 'destructive',
       });
       return false;
