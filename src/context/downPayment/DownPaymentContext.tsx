@@ -497,34 +497,36 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
         }
       }
 
-      if (request.requestedBy) {
-        await NotificationTriggerService.send({
-          userId: request.requestedBy,
-          title: 'Down-Payment Request Approved by Supervisor',
-          message: `Your down-payment request for "${request.siteName}" (${approvedAmount.toLocaleString()} SDG) has been approved by supervisor and forwarded to admin.`,
-          type: 'success',
-          category: 'financial',
-          priority: 'high',
-          link: '/down-payment-approval',
-          sendEmail: true,
-          emailActionLabel: 'View Request'
+      if (!data.silent) {
+        if (request.requestedBy) {
+          NotificationTriggerService.send({
+            userId: request.requestedBy,
+            title: 'Down-Payment Request Approved by Supervisor',
+            message: `Your down-payment request for "${request.siteName}" (${approvedAmount.toLocaleString()} SDG) has been approved by supervisor and forwarded to admin.`,
+            type: 'success',
+            category: 'financial',
+            priority: 'high',
+            link: '/down-payment-approval',
+            sendEmail: true,
+            emailActionLabel: 'View Request'
+          }).catch(console.error);
+        }
+        toast({
+          title: 'Request Approved',
+          description: `Approved ${approvedAmount.toLocaleString()} SDG - forwarded to admin`,
         });
+        await refreshRequests();
       }
-
-      toast({
-        title: 'Request Approved',
-        description: `Approved ${approvedAmount.toLocaleString()} SDG - forwarded to admin`,
-      });
-
-      await refreshRequests();
       return true;
     } catch (error: any) {
       console.error('Failed to approve request:', error);
-      toast({
-        title: 'Error',
-        description: error.message || 'Failed to approve request',
-        variant: 'destructive',
-      });
+      if (!data.silent) {
+        toast({
+          title: 'Error',
+          description: error.message || 'Failed to approve request',
+          variant: 'destructive',
+        });
+      }
       return false;
     }
   };
@@ -648,34 +650,36 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
         }
       }
 
-      if (request.requestedBy) {
-        await NotificationTriggerService.send({
-          userId: request.requestedBy,
-          title: 'Down-Payment Request Fully Approved',
-          message: `Your down-payment request for "${request.siteName}" (${approvedAmount.toLocaleString()} SDG) has been approved and is ready for payment processing.`,
-          type: 'success',
-          category: 'financial',
-          priority: 'high',
-          link: '/wallet',
-          sendEmail: true,
-          emailActionLabel: 'View Wallet'
+      if (!data.silent) {
+        if (request.requestedBy) {
+          NotificationTriggerService.send({
+            userId: request.requestedBy,
+            title: 'Down-Payment Request Fully Approved',
+            message: `Your down-payment request for "${request.siteName}" (${approvedAmount.toLocaleString()} SDG) has been approved and is ready for payment processing.`,
+            type: 'success',
+            category: 'financial',
+            priority: 'high',
+            link: '/wallet',
+            sendEmail: true,
+            emailActionLabel: 'View Wallet'
+          }).catch(console.error);
+        }
+        toast({
+          title: 'Request Approved',
+          description: `Approved ${approvedAmount.toLocaleString()} SDG - ready for payment`,
         });
+        await refreshRequests();
       }
-
-      toast({
-        title: 'Request Approved',
-        description: `Approved ${approvedAmount.toLocaleString()} SDG - ready for payment`,
-      });
-
-      await refreshRequests();
       return true;
     } catch (error: any) {
       console.error('Failed to approve request:', error);
-      toast({
-        title: 'Error',
-        description: error.message || 'Failed to approve request',
-        variant: 'destructive',
-      });
+      if (!data.silent) {
+        toast({
+          title: 'Error',
+          description: error.message || 'Failed to approve request',
+          variant: 'destructive',
+        });
+      }
       return false;
     }
   };
@@ -973,15 +977,14 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
   const bulkApprove = async (
     data: BulkApprovalRequest
   ): Promise<{ success: number; failed: number }> => {
-    let success = 0;
-    let failed = 0;
+    const userRole = currentUser?.role?.toLowerCase();
+    const isSupervisor = userRole === 'supervisor' || userRole === 'hubsupervisor';
+    const isAdminRole = ['admin', 'financialadmin', 'superadmin', 'super_admin', 'ict', 'fom',
+      'countrydirector', 'country_director', 'datateam', 'data_team'].includes(userRole || '');
 
-    for (const requestId of data.requestIds) {
+    const tasks = data.requestIds.map(async (requestId): Promise<boolean> => {
       const request = requests.find(r => r.id === requestId);
-      if (!request) {
-        failed++;
-        continue;
-      }
+      if (!request) return false;
 
       const approvedAmount = calculateApprovedAmount(
         request.requestedAmount,
@@ -990,50 +993,70 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
         data.customAmount
       );
 
-      try {
-        const userRole = currentUser?.role?.toLowerCase();
-        const isSupervisor = userRole === 'supervisor' || userRole === 'hubsupervisor';
-        const isAdminRole = ['admin', 'financialadmin', 'superadmin', 'super_admin', 'ict', 'fom',
-          'countrydirector', 'country_director', 'datateam', 'data_team'].includes(userRole || '');
+      const basePayload = {
+        requestId,
+        approvedBy: data.approvedBy,
+        approvedByName: data.approvedByName,
+        notes: data.notes,
+        approvalType: data.approvalType,
+        approvalPercentage: data.approvalPercentage,
+        customAmount: approvedAmount,
+        silent: true,
+      };
 
-        let result: boolean;
-        if (request.status === 'pending_supervisor' && (isSupervisor || isAdminRole)) {
-          result = await supervisorApprove({
-            requestId,
-            approvedBy: data.approvedBy,
-            approvedByName: data.approvedByName,
-            notes: data.notes,
-            approvalType: data.approvalType,
-            approvalPercentage: data.approvalPercentage,
-            customAmount: approvedAmount,
-          });
-        } else if (request.status === 'pending_admin' && isAdminRole) {
-          result = await adminApprove({
-            requestId,
-            approvedBy: data.approvedBy,
-            approvedByName: data.approvedByName,
-            notes: data.notes,
-            approvalType: data.approvalType,
-            approvalPercentage: data.approvalPercentage,
-            customAmount: approvedAmount,
-          });
-        } else {
-          console.warn(`[BulkApprove] Skipping ${requestId}: status=${request.status}, role=${userRole}`);
-          failed++;
-          continue;
+      if (request.status === 'pending_supervisor' && (isSupervisor || isAdminRole)) {
+        return supervisorApprove(basePayload);
+      } else if (request.status === 'pending_admin' && isAdminRole) {
+        return adminApprove(basePayload);
+      } else {
+        console.warn(`[BulkApprove] Skipping ${requestId}: status=${request.status}, role=${userRole}`);
+        return false;
+      }
+    });
+
+    const results = await Promise.allSettled(tasks);
+    let success = 0;
+    let failed = 0;
+    const approvedUserIds: { userId: string; siteName: string; amount: number }[] = [];
+
+    results.forEach((result, i) => {
+      if (result.status === 'fulfilled' && result.value === true) {
+        success++;
+        const req = requests.find(r => r.id === data.requestIds[i]);
+        if (req?.requestedBy) {
+          approvedUserIds.push({ userId: req.requestedBy, siteName: req.siteName || '', amount: req.requestedAmount });
         }
-        if (result) success++;
-        else failed++;
-      } catch (error) {
-        console.error('Bulk approve error for request:', requestId, error);
+      } else {
         failed++;
       }
-    }
+    });
 
     if (success > 0) {
       toast({
-        title: 'Bulk Approval Complete',
-        description: `${success} request(s) approved successfully${failed > 0 ? `, ${failed} failed` : ''}`,
+        title: `${success} Request${success > 1 ? 's' : ''} Approved`,
+        description: `${success} request${success > 1 ? 's' : ''} approved successfully${failed > 0 ? ` · ${failed} failed` : ''}`,
+      });
+
+      approvedUserIds.forEach(({ userId, siteName, amount }) => {
+        NotificationTriggerService.send({
+          userId,
+          title: 'Down-Payment Request Approved',
+          message: `Your down-payment request for "${siteName}" (${amount.toLocaleString()} SDG) has been approved.`,
+          type: 'success',
+          category: 'financial',
+          priority: 'high',
+          link: '/wallet',
+          sendEmail: true,
+          emailActionLabel: 'View Wallet'
+        }).catch(console.error);
+      });
+    }
+
+    if (failed > 0 && success === 0) {
+      toast({
+        title: 'Approval Failed',
+        description: `${failed} request${failed > 1 ? 's' : ''} could not be approved`,
+        variant: 'destructive',
       });
     }
 

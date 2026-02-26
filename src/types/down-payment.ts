@@ -174,6 +174,7 @@ export interface ApproveDownPaymentRequest {
   approvalType?: ApprovalType;
   approvalPercentage?: number;
   customAmount?: number;
+  silent?: boolean;
 }
 
 export interface RejectDownPaymentRequest {
