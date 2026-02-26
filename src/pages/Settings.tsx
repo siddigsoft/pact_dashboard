@@ -75,6 +75,7 @@ import { useDevice } from "@/hooks/use-device";
 import { Fingerprint } from "lucide-react";
 import { useViewMode } from "@/context/ViewModeContext";
 import { MobileSettingsScreen } from "@/components/mobile/MobileSettingsScreen";
+import { NotificationTriggerService } from "@/services/NotificationTriggerService";
 
 function BiometricSettingsSection() {
   const { isNative } = useDevice();
@@ -527,6 +528,32 @@ const Settings = () => {
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
   const avatarInputRef = useRef<HTMLInputElement>(null);
   const [bankAccountSubmitting, setBankAccountSubmitting] = useState(false);
+  const [broadcastSending, setBroadcastSending] = useState(false);
+  const [broadcastResult, setBroadcastResult] = useState<{ sent: number; skipped: number } | null>(null);
+  const [broadcastOnlyMissing, setBroadcastOnlyMissing] = useState(true);
+
+  const isAdminUser = ['admin', 'superadmin', 'ict', 'financialadmin'].includes(
+    (currentUser?.role || '').toLowerCase()
+  );
+
+  const handleBroadcastBankAccountReminder = async () => {
+    setBroadcastSending(true);
+    setBroadcastResult(null);
+    try {
+      const result = await NotificationTriggerService.broadcastBankAccountReminder({
+        onlyMissing: broadcastOnlyMissing,
+      });
+      setBroadcastResult({ sent: result.sent, skipped: result.skipped });
+      toast({
+        title: 'Broadcast Sent / تم الإرسال',
+        description: `Notification sent to ${result.sent} user(s). ${result.skipped} already have bank accounts.`,
+      });
+    } catch (err) {
+      toast({ title: 'Error', description: 'Failed to send broadcast.', variant: 'destructive' });
+    } finally {
+      setBroadcastSending(false);
+    }
+  };
 
   const handleBankAccountSubmit = async (values: BankakAccountFormValues) => {
     if (!currentUser) return;
@@ -1851,6 +1878,68 @@ const Settings = () => {
               />
             </CardContent>
           </Card>
+
+          {/* Admin Broadcast Bank Account Reminder */}
+          {isAdminUser && (
+            <Card className="border border-violet-500/30 shadow-sm">
+              <CardHeader className="bg-gradient-to-r from-violet-50 to-purple-50 dark:from-violet-900/20 dark:to-purple-800/20 border-b p-4 sm:p-6">
+                <div className="flex items-center gap-2">
+                  <div className="p-2 bg-violet-600 rounded-lg">
+                    <Bell className="h-5 w-5 text-white" />
+                  </div>
+                  <div>
+                    <CardTitle className="text-lg flex items-center gap-2">
+                      Broadcast Bank Account Reminder
+                      <span className="text-xs font-normal bg-violet-100 dark:bg-violet-900/40 text-violet-700 dark:text-violet-300 px-2 py-0.5 rounded">Admin Only</span>
+                    </CardTitle>
+                    <CardDescription>
+                      Send a bilingual notification to all users reminding them to update their bank account details / إرسال إشعار ثنائي اللغة لجميع المستخدمين
+                    </CardDescription>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent className="p-4 sm:p-6 space-y-4">
+                <div className="flex items-center gap-3 rounded-lg border border-violet-200 dark:border-violet-800 bg-violet-50 dark:bg-violet-900/10 p-3">
+                  <AlertCircle className="w-4 h-4 text-violet-600 dark:text-violet-400 mt-0.5 flex-shrink-0" />
+                  <p className="text-sm text-violet-700 dark:text-violet-300">
+                    This will send an in-app notification to users reminding them to add their bank account in Profile Settings. The notification will appear in their notification bell and as a toast alert. / سيتم إرسال إشعار داخل التطبيق للمستخدمين لتذكيرهم بإضافة بياناتهم البنكية.
+                  </p>
+                </div>
+
+                <div className="flex items-center justify-between p-3 rounded-lg border bg-muted/30">
+                  <div>
+                    <p className="text-sm font-medium">Only notify users without bank accounts</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">إرسال الإشعار للمستخدمين الذين لم يضيفوا بياناتهم البنكية فقط</p>
+                  </div>
+                  <Switch
+                    checked={broadcastOnlyMissing}
+                    onCheckedChange={setBroadcastOnlyMissing}
+                  />
+                </div>
+
+                {broadcastResult && (
+                  <div className="flex items-center gap-3 rounded-lg border border-emerald-500/30 bg-emerald-50 dark:bg-emerald-900/10 p-3">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 flex-shrink-0" />
+                    <p className="text-sm text-emerald-700 dark:text-emerald-300">
+                      Sent to <strong>{broadcastResult.sent}</strong> user(s). <strong>{broadcastResult.skipped}</strong> already have bank accounts and were skipped.
+                    </p>
+                  </div>
+                )}
+
+                <Button
+                  onClick={handleBroadcastBankAccountReminder}
+                  disabled={broadcastSending}
+                  className="w-full bg-violet-600 hover:bg-violet-700 text-white"
+                >
+                  {broadcastSending ? (
+                    <><RefreshCw className="w-4 h-4 mr-2 animate-spin" /> Sending notifications...</>
+                  ) : (
+                    <><Bell className="w-4 h-4 mr-2" /> Send Bank Account Reminder to All Users</>
+                  )}
+                </Button>
+              </CardContent>
+            </Card>
+          )}
 
         </TabsContent>
 

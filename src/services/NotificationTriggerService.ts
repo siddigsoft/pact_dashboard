@@ -2841,6 +2841,65 @@ export const NotificationTriggerService = {
       console.error('Failed to send payment completed notification:', error);
       return false;
     }
+  },
+
+  async broadcastBankAccountReminder(options: {
+    onlyMissing?: boolean;
+    customTitleEn?: string;
+    customTitleAr?: string;
+    customMessageEn?: string;
+    customMessageAr?: string;
+  } = {}): Promise<{ sent: number; skipped: number; errors: number }> {
+    const {
+      onlyMissing = true,
+      customTitleEn = 'Action Required: Update Your Bank Account',
+      customTitleAr = 'إجراء مطلوب: تحديث بيانات حسابك البنكي',
+      customMessageEn = 'Please ensure your bank account details (account name, number, branch) are up to date in your Profile Settings. This is required for all transportation advance and withdrawal requests. / يرجى التأكد من تحديث بيانات حسابك البنكي (الاسم، الرقم، الفرع) في إعدادات ملفك الشخصي. هذا مطلوب لجميع طلبات السلف والمكافآت.',
+      customMessageAr = 'يرجى التأكد من تحديث بيانات حسابك البنكي (الاسم، الرقم، الفرع) في إعدادات ملفك الشخصي. هذا مطلوب لجميع طلبات السلف والمكافآت.',
+    } = options;
+
+    let sent = 0;
+    let skipped = 0;
+    let errors = 0;
+
+    try {
+      const { data: users, error } = await supabase
+        .from('profiles')
+        .select('id, bank_account')
+        .not('role', 'is', null);
+
+      if (error) throw error;
+      if (!users || users.length === 0) return { sent: 0, skipped: 0, errors: 0 };
+
+      const targets = onlyMissing
+        ? users.filter(u => {
+            const ba = u.bank_account as any;
+            return !ba?.accountNumber && !ba?.account_number;
+          })
+        : users;
+
+      const userIds = targets.map(u => u.id);
+      if (userIds.length === 0) return { sent: 0, skipped: users.length, errors: 0 };
+
+      const result = await this.sendBulk(userIds, {
+        title: customTitleEn,
+        titleAr: customTitleAr,
+        message: customMessageEn,
+        messageAr: customMessageAr,
+        type: 'warning',
+        category: 'account',
+        priority: 'high',
+        link: '/settings?tab=profile',
+      });
+
+      sent = result;
+      skipped = users.length - targets.length;
+    } catch (error) {
+      console.error('[BankAccountBroadcast] Failed:', error);
+      errors = 1;
+    }
+
+    return { sent, skipped, errors };
   }
 };
 

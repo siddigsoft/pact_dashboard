@@ -121,6 +121,7 @@ import { Toaster } from './components/ui/toaster';
 import { Toaster as SonnerToaster } from './components/ui/sonner';
 import { Toaster as HotToaster } from 'react-hot-toast';
 import { useAppContext } from './context/AppContext';
+import { NotificationTriggerService } from './services/NotificationTriggerService';
 import { NotificationProvider } from './context/NotificationContext';
 import { NotificationStack } from './components/NotificationStack';
 import { useNotifications } from './context/NotificationContext';
@@ -150,6 +151,34 @@ const AppNotifications = () => {
 // FCM initialization component - must be inside AppProviders context
 const FCMInitializer = () => {
   useFCM();
+  return null;
+};
+
+// Auto-reminds users without a bank account once per session
+const BankAccountReminderInit = () => {
+  const { currentUser } = useAppContext();
+
+  useEffect(() => {
+    if (!currentUser?.id) return;
+    const hasBankAccount = !!(currentUser as any)?.bankAccount?.accountNumber;
+    if (hasBankAccount) return;
+    const sessionKey = `bank_account_reminder_sent_${currentUser.id}`;
+    if (sessionStorage.getItem(sessionKey)) return;
+
+    sessionStorage.setItem(sessionKey, '1');
+    NotificationTriggerService.send({
+      userId: currentUser.id,
+      title: 'Action Required: Add Your Bank Account',
+      titleAr: 'إجراء مطلوب: أضف بيانات حسابك البنكي',
+      message: 'Your bank account details are missing. Please add them in Settings → Profile to be able to request transportation advances and withdrawals.',
+      messageAr: 'بيانات حسابك البنكي مفقودة. يرجى إضافتها في الإعدادات ← الملف الشخصي لتتمكن من طلب سلف النقل والمكافآت.',
+      type: 'warning',
+      category: 'account',
+      priority: 'high',
+      link: '/settings?tab=profile',
+    }).catch(() => {});
+  }, [currentUser?.id]);
+
   return null;
 };
 
@@ -408,6 +437,7 @@ function App() {
                       <Suspense fallback={<PageLoader />}>
                         <LiveDashboardProvider>
                         <FCMInitializer />
+                        <BankAccountReminderInit />
                         <SessionGuard>
                         <SessionManager>
                           <AuthGuard>
