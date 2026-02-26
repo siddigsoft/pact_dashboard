@@ -786,6 +786,7 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
           user_id: request.requestedBy,
           type: 'down_payment',
           amount: data.amount,
+          amount_cents: Math.round(data.amount * 100),
           currency: 'SDG',
           description: `Transport advance: ${request.siteName}${request.stateName ? ' - ' + request.stateName : ''}${request.projectName ? ' | Project: ' + request.projectName : ''}${data.notes ? ' | ' + data.notes : ''}`,
           balance_before: currentBalance,
