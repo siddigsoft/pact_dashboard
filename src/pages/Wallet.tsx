@@ -126,6 +126,8 @@ const WalletPage = () => {
   const [transactionTypeFilter, setTransactionTypeFilter] = useState<string>('all');
   const [dateRangeFilter, setDateRangeFilter] = useState<string>('all');
   const [withdrawalStatusFilter, setWithdrawalStatusFilter] = useState<'all' | 'pending' | 'approved' | 'rejected'>('all');
+  const [allAdvancesStatusFilter, setAllAdvancesStatusFilter] = useState<string>('all');
+  const [allAdvancesSearch, setAllAdvancesSearch] = useState('');
   const [searchFilters, setSearchFilters] = useState<SearchFilters>({});
 
   const currentBalance = getBalance(DEFAULT_CURRENCY);
@@ -134,6 +136,11 @@ const WalletPage = () => {
     if (!currentUser?.id) return [];
     return advanceRequests.filter(r => r.requestedBy === currentUser.id || r.metadata?.requestedById === currentUser.id);
   }, [advanceRequests, currentUser?.id]);
+
+  const isAdminUser = useMemo(() => {
+    const role = currentUser?.role?.toLowerCase() ?? '';
+    return ['admin', 'superadmin', 'ict', 'financialadmin', 'supervisor', 'data_team'].includes(role);
+  }, [currentUser?.role]);
 
   const pendingAdvanceConfirmations = useMemo(() =>
     myAdvances.filter(r =>
@@ -943,6 +950,18 @@ const WalletPage = () => {
                     </span>
                   )}
                 </TabsTrigger>
+                {isAdminUser && (
+                  <TabsTrigger
+                    value="all-advances"
+                    data-testid="tab-all-advances"
+                    className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-violet-600 data-[state=active]:to-purple-600 data-[state=active]:text-white data-[state=active]:shadow-[0_0_15px_rgba(139,92,246,0.5)] text-blue-300 min-h-[44px] text-xs sm:text-sm flex-shrink-0 whitespace-nowrap relative"
+                  >
+                    ALL ADVANCES
+                    <span className="ml-1 text-[10px] bg-violet-500/20 text-violet-300 px-1.5 py-0.5 rounded-full">
+                      {advanceRequests.length}
+                    </span>
+                  </TabsTrigger>
+                )}
               </TabsList>
             </div>
 
@@ -2045,6 +2064,152 @@ const WalletPage = () => {
             </CardContent>
           </Card>
         </TabsContent>
+
+        {/* ALL ADVANCES — admin only */}
+        {isAdminUser && (
+          <TabsContent value="all-advances" className="space-y-4">
+            <Card className="border-violet-500/20">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Truck className="w-5 h-5 text-violet-400" />
+                  All Transport Advances / جميع سلفات النقل
+                  <span className="ml-auto text-xs font-normal text-muted-foreground">{advanceRequests.length} total</span>
+                </CardTitle>
+                <CardDescription>
+                  All transportation advance requests across all users and hubs.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {/* Filters */}
+                <div className="flex flex-col sm:flex-row gap-3 mb-4">
+                  <input
+                    type="text"
+                    placeholder="Search by name, site, hub..."
+                    value={allAdvancesSearch}
+                    onChange={e => setAllAdvancesSearch(e.target.value)}
+                    className="flex-1 h-9 rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                  />
+                  <select
+                    value={allAdvancesStatusFilter}
+                    onChange={e => setAllAdvancesStatusFilter(e.target.value)}
+                    className="h-9 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                  >
+                    <option value="all">All Statuses</option>
+                    <option value="pending_supervisor">Pending Supervisor</option>
+                    <option value="pending_admin">Pending Admin</option>
+                    <option value="approved">Approved</option>
+                    <option value="partially_paid">Partially Paid</option>
+                    <option value="fully_paid">Fully Paid</option>
+                    <option value="rejected">Rejected</option>
+                    <option value="cancelled">Cancelled</option>
+                  </select>
+                </div>
+
+                {advanceLoading ? (
+                  <div className="flex items-center justify-center py-12">
+                    <RefreshCw className="w-5 h-5 animate-spin text-muted-foreground" />
+                    <span className="ml-2 text-sm text-muted-foreground">Loading advances...</span>
+                  </div>
+                ) : (() => {
+                  const filtered = advanceRequests.filter(r => {
+                    const matchesStatus = allAdvancesStatusFilter === 'all' || r.status === allAdvancesStatusFilter;
+                    const q = allAdvancesSearch.toLowerCase();
+                    const matchesSearch = !q || 
+                      r.siteName?.toLowerCase().includes(q) ||
+                      r.hubName?.toLowerCase().includes(q) ||
+                      r.mmpName?.toLowerCase().includes(q) ||
+                      (r as any).requestedByName?.toLowerCase().includes(q);
+                    return matchesStatus && matchesSearch;
+                  });
+
+                  const statusColors: Record<string, string> = {
+                    pending_supervisor: 'bg-yellow-500/10 text-yellow-400 border-yellow-500/30',
+                    pending_admin: 'bg-blue-500/10 text-blue-400 border-blue-500/30',
+                    approved: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30',
+                    rejected: 'bg-red-500/10 text-red-400 border-red-500/30',
+                    partially_paid: 'bg-amber-500/10 text-amber-400 border-amber-500/30',
+                    fully_paid: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30',
+                    cancelled: 'bg-slate-500/10 text-slate-400 border-slate-500/30',
+                  };
+                  const statusLabels: Record<string, string> = {
+                    pending_supervisor: 'Pending Supervisor',
+                    pending_admin: 'Pending Admin',
+                    approved: 'Approved',
+                    rejected: 'Rejected',
+                    partially_paid: 'Partially Paid',
+                    fully_paid: 'Fully Paid',
+                    cancelled: 'Cancelled',
+                  };
+
+                  if (filtered.length === 0) {
+                    return (
+                      <div className="text-center py-12 text-muted-foreground">
+                        <Truck className="w-8 h-8 mx-auto mb-3 opacity-40" />
+                        <p className="text-sm">No advances found matching your filters.</p>
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div className="space-y-3">
+                      {filtered.map(advance => {
+                        const disbursedAmount = advance.approvedAmount ?? advance.requestedAmount;
+                        const receiptConfirmed = (advance.metadata as any)?.receipt_confirmation?.confirmed;
+                        const requesterName = (advance as any).requestedByName || advance.requestedBy?.slice(0, 8) + '…';
+                        return (
+                          <div
+                            key={advance.id}
+                            data-testid={`all-advance-card-${advance.id}`}
+                            className="rounded-lg border border-border bg-card p-4 space-y-2"
+                          >
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="flex items-start gap-2 min-w-0">
+                                <MapPin className="w-4 h-4 text-violet-400 mt-0.5 flex-shrink-0" />
+                                <div className="min-w-0">
+                                  <p className="text-sm font-medium truncate">{advance.siteName}</p>
+                                  <p className="text-xs text-muted-foreground">
+                                    Requested by: <span className="text-violet-300">{requesterName}</span>
+                                    {advance.hubName && <span className="ml-1">· {advance.hubName}</span>}
+                                  </p>
+                                  {advance.mmpName && (
+                                    <p className="text-xs text-muted-foreground">MMP: {advance.mmpName}</p>
+                                  )}
+                                  <p className="text-xs text-muted-foreground">
+                                    {format(new Date(advance.createdAt), 'MMM dd, yyyy')}
+                                  </p>
+                                </div>
+                              </div>
+                              <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                                <span className={`text-xs font-semibold px-2 py-0.5 rounded-full border ${statusColors[advance.status] || 'bg-slate-500/10 text-slate-400 border-slate-500/30'}`}>
+                                  {statusLabels[advance.status] || advance.status}
+                                </span>
+                                <span className="text-sm font-bold tabular-nums text-violet-300">
+                                  {formatCurrency(disbursedAmount)}
+                                </span>
+                              </div>
+                            </div>
+                            {receiptConfirmed && (
+                              <div className="flex items-center gap-2 text-xs text-emerald-400 bg-emerald-500/10 rounded px-2 py-1">
+                                <CheckCircle2 className="w-3.5 h-3.5" />
+                                <span>Receipt confirmed by user</span>
+                              </div>
+                            )}
+                            {(advance.status === 'partially_paid' || advance.status === 'fully_paid') && !receiptConfirmed && (
+                              <div className="flex items-center gap-2 text-xs text-amber-400 bg-amber-500/10 rounded px-2 py-1">
+                                <Info className="w-3.5 h-3.5" />
+                                <span>Awaiting receipt confirmation from user</span>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })()}
+              </CardContent>
+            </Card>
+          </TabsContent>
+        )}
 
       </Tabs>
         </CardContent>
