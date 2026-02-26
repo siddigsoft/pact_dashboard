@@ -909,7 +909,7 @@ export function SuperAdminProvider({ children }: { children: React.ReactNode }) 
 
   const reclaimSite = async (params: ReclaimSiteParams): Promise<boolean> => {
     try {
-      const { siteEntryId, reason, reclaimedBy, reclaimedByName, reclaimedByRole } = params;
+      const { siteEntryId, reason, reclaimedBy, reclaimedByName, reclaimedByRole, cancelPendingAdvances = true } = params;
 
       // 1. Get the site entry details first
       const { data: siteEntry, error: fetchError } = await supabase

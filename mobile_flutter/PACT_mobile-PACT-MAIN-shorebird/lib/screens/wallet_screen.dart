@@ -1306,6 +1306,106 @@ class _WalletScreenState extends State<WalletScreen> {
     );
   }
 
+  Future<void> _confirmAdvanceReceipt(Map<String, dynamic> advance) async {
+    final notesController = TextEditingController();
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            const Icon(Icons.verified, color: Colors.green),
+            const SizedBox(width: 8),
+            Text(
+              widget.isArabic ? 'تأكيد استلام السلفة' : 'Confirm Fund Receipt',
+              style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 16),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              widget.isArabic
+                  ? 'هل تؤكد استلامك لمبلغ السلفة؟'
+                  : 'Do you confirm that you have received the advance funds?',
+              style: GoogleFonts.poppins(fontSize: 13),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: notesController,
+              maxLines: 3,
+              decoration: InputDecoration(
+                hintText: widget.isArabic ? 'ملاحظات (اختياري)' : 'Notes (optional)',
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                contentPadding: const EdgeInsets.all(10),
+              ),
+              style: GoogleFonts.poppins(fontSize: 13),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text(widget.isArabic ? 'إلغاء' : 'Cancel',
+                style: GoogleFonts.poppins()),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
+            child: Text(widget.isArabic ? 'تأكيد' : 'Confirm',
+                style: GoogleFonts.poppins(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    try {
+      final advanceId = advance['id'] as String?;
+      if (advanceId == null) return;
+
+      final existingMeta = Map<String, dynamic>.from(
+          (advance['metadata'] as Map?)?.cast<String, dynamic>() ?? {});
+      existingMeta['receipt_confirmation'] = {
+        'confirmed': true,
+        'confirmedAt': DateTime.now().toIso8601String(),
+        'confirmedBy': _userId,
+        'notes': notesController.text.trim(),
+      };
+
+      await Supabase.instance.client
+          .from('transportation_advances')
+          .update({'metadata': existingMeta})
+          .eq('id', advanceId);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(widget.isArabic
+                ? 'تم تأكيد الاستلام بنجاح'
+                : 'Receipt confirmed successfully'),
+            backgroundColor: Colors.green,
+          ),
+        );
+        await _loadAdvances();
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(widget.isArabic
+                ? 'حدث خطأ أثناء التأكيد'
+                : 'Error confirming receipt: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
   Widget _buildAdvanceItem(Map<String, dynamic> advance) {
     final status = (advance['status'] as String? ?? 'pending').toLowerCase();
     final amount = (advance['requested_amount'] as num?)?.toDouble() ?? 0.0;
@@ -1437,6 +1537,24 @@ class _WalletScreenState extends State<WalletScreen> {
                       ),
                     ),
                   ],
+                ),
+              ),
+              const SizedBox(height: 8),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: () => _confirmAdvanceReceipt(advance),
+                  icon: const Icon(Icons.check_circle_outline, size: 16),
+                  label: Text(
+                    widget.isArabic ? 'تأكيد الاستلام' : 'Confirm Receipt',
+                    style: GoogleFonts.poppins(fontSize: 13, fontWeight: FontWeight.w600),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.green,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
                 ),
               ),
             ],
