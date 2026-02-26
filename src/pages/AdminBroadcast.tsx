@@ -11,7 +11,7 @@ import { Switch } from '@/components/ui/switch';
 import {
   Megaphone, Send, Clock, Users, AlertCircle, CheckCircle2,
   RefreshCw, Info, Bell, Link as LinkIcon, Shield, Eye, UserCheck, UserX, ChevronDown, ChevronUp,
-  Download, RotateCcw, SendHorizonal
+  Download, RotateCcw, SendHorizonal, Smartphone
 } from 'lucide-react';
 import { useUser } from '@/context/user/UserContext';
 import { useToast } from '@/hooks/use-toast';
@@ -114,6 +114,8 @@ export default function AdminBroadcastPage() {
   const [receiptsLoading, setReceiptsLoading] = useState<Record<string, boolean>>({});
   const [resendingId, setResendingId] = useState<string | null>(null);
   const [userCount, setUserCount] = useState<number | null>(null);
+  const [fcmResult, setFcmResult] = useState<{ sent: number; failed: number; tokens: number; error?: string } | null>(null);
+  const [fcmTesting, setFcmTesting] = useState(false);
 
   const role = (currentUser?.role || '').toLowerCase();
   const isAdmin = ['admin', 'superadmin', 'ict', 'financialadmin'].includes(role);
@@ -421,21 +423,36 @@ export default function AdminBroadcastPage() {
       const { error: insertError } = await supabase.from('notifications').insert(rows);
       if (insertError) throw new Error(insertError.message);
 
-      // Fire FCM push to all mobile devices — single batch call, fire-and-forget
+      // Fire FCM push to all mobile devices — single batch call, awaited for diagnostics
       const fcmPriority = priority === 'urgent' || priority === 'high' ? 'high' : 'normal';
-      supabase.functions.invoke('send-fcm-push', {
-        body: {
-          user_ids: targetUsers.map(u => u.id),
-          title: titleText,
-          body: messageText,
-          priority: fcmPriority,
-          data: { type: 'broadcast', broadcast_id: broadcastId, action_url: link || '' },
-          ...(link ? { action_url: link } : {}),
-        },
-      }).then(({ error: fcmError }) => {
-        if (fcmError) console.warn('[BROADCAST] FCM push error:', fcmError.message);
-        else console.log(`[BROADCAST] FCM push sent to ${targetUsers.length} users`);
-      }).catch(err => console.warn('[BROADCAST] FCM push failed:', err));
+      setFcmResult(null);
+      try {
+        const { data: fcmData, error: fcmError } = await supabase.functions.invoke('send-fcm-push', {
+          body: {
+            user_ids: targetUsers.map(u => u.id),
+            title: titleText,
+            body: messageText,
+            priority: fcmPriority,
+            data: { type: 'broadcast', broadcast_id: broadcastId, action_url: link || '' },
+            ...(link ? { action_url: link } : {}),
+          },
+        });
+        if (fcmError) {
+          console.error('[BROADCAST] FCM push error:', fcmError.message);
+          setFcmResult({ sent: 0, failed: 0, tokens: 0, error: fcmError.message });
+        } else {
+          console.log('[BROADCAST] FCM push result:', fcmData);
+          setFcmResult({
+            sent: fcmData?.sent ?? 0,
+            failed: fcmData?.failed ?? 0,
+            tokens: fcmData?.tokens_targeted ?? 0,
+            error: fcmData?.error,
+          });
+        }
+      } catch (fcmEx: any) {
+        console.error('[BROADCAST] FCM push threw:', fcmEx);
+        setFcmResult({ sent: 0, failed: 0, tokens: 0, error: fcmEx?.message || 'Unknown error' });
+      }
 
       const sent = targetUsers.length;
       setSendResult({ sent, audience });
@@ -673,6 +690,46 @@ export default function AdminBroadcastPage() {
                 <p className="text-xs text-emerald-600 dark:text-emerald-400 mt-0.5">
                   Delivered to <strong>{sendResult.sent}</strong> user(s) — <em>{AUDIENCE_OPTIONS.find(a => a.value === sendResult.audience)?.label}</em>
                 </p>
+              </div>
+            </div>
+          )}
+
+          {/* FCM Push Result */}
+          {fcmResult && (
+            <div className={`rounded-lg border p-4 ${
+              fcmResult.error
+                ? 'border-red-300 bg-red-50 dark:bg-red-900/10'
+                : fcmResult.tokens === 0
+                  ? 'border-amber-300 bg-amber-50 dark:bg-amber-900/10'
+                  : 'border-blue-300 bg-blue-50 dark:bg-blue-900/10'
+            }`}>
+              <div className="flex items-start gap-3">
+                <Smartphone className={`w-4 h-4 mt-0.5 flex-shrink-0 ${
+                  fcmResult.error ? 'text-red-500' : fcmResult.tokens === 0 ? 'text-amber-500' : 'text-blue-500'
+                }`} />
+                <div className="flex-1 min-w-0">
+                  <p className={`text-sm font-medium ${
+                    fcmResult.error ? 'text-red-700 dark:text-red-300' : fcmResult.tokens === 0 ? 'text-amber-700 dark:text-amber-300' : 'text-blue-700 dark:text-blue-300'
+                  }`}>
+                    {fcmResult.error
+                      ? 'Mobile push failed / فشل الإشعار للجوال'
+                      : fcmResult.tokens === 0
+                        ? 'No mobile devices registered / لا أجهزة مسجلة'
+                        : `Mobile push sent / أُرسل للجوال`}
+                  </p>
+                  {fcmResult.error ? (
+                    <p className="text-xs text-red-600 dark:text-red-400 mt-1 break-all font-mono">{fcmResult.error}</p>
+                  ) : fcmResult.tokens === 0 ? (
+                    <p className="text-xs text-amber-600 dark:text-amber-400 mt-0.5">
+                      None of the selected users have a registered mobile device. They will still see the in-app notification when they open the web app.
+                    </p>
+                  ) : (
+                    <p className="text-xs text-blue-600 dark:text-blue-400 mt-0.5">
+                      {fcmResult.tokens} device(s) targeted — <strong>{fcmResult.sent}</strong> delivered
+                      {fcmResult.failed > 0 && <>, <strong>{fcmResult.failed}</strong> failed (stale tokens auto-cleaned)</>}
+                    </p>
+                  )}
+                </div>
               </div>
             </div>
           )}
