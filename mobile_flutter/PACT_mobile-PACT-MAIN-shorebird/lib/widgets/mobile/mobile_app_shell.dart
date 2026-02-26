@@ -1,4 +1,74 @@
- _connectivity.checkConnectivity();
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:uuid/uuid.dart';
+import '../../services/offline/offline_db.dart';
+import '../../services/offline/models.dart';
+import '../../providers/offline_provider.dart';
+import '../offline/sync_status_widget.dart'
+    show SyncStatusBar, SyncProgressToast, OfflineBanner;
+
+/// Main app shell for mobile that sets up offline functionality
+class MobileAppShell extends ConsumerStatefulWidget {
+  final Widget child;
+  final bool enableOfflineMode;
+  final bool enableGPSTracking;
+  final int autoSyncIntervalMs;
+
+  const MobileAppShell({
+    super.key,
+    required this.child,
+    this.enableOfflineMode = true,
+    this.enableGPSTracking = true,
+    this.autoSyncIntervalMs = 60000,
+  });
+
+  @override
+  ConsumerState<MobileAppShell> createState() => _MobileAppShellState();
+}
+
+class _MobileAppShellState extends ConsumerState<MobileAppShell>
+    with WidgetsBindingObserver {
+  late Connectivity _connectivity;
+  late FirebaseMessaging _firebaseMessaging;
+  bool _isOnline = true;
+  bool _fcmInitialized = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+
+    if (widget.enableOfflineMode) {
+      _initializeOfflineMode();
+    }
+
+    if (widget.enableGPSTracking) {
+      _startGPSTracking();
+    }
+
+    _setupFirebaseMessaging();
+  }
+
+  /// Initialize offline database and sync manager
+  Future<void> _initializeOfflineMode() async {
+    try {
+      final db = OfflineDb();
+      await db.init();
+
+      final syncManager = ref.read(syncManagerProvider);
+      syncManager.setupAutoSync(widget.autoSyncIntervalMs);
+
+      _connectivity = Connectivity();
+      _connectivity.onConnectivityChanged.listen((result) {
+        final isOnline = !(result as List).contains(ConnectivityResult.none);
+        _handleNetworkChange(isOnline);
+      });
+
+      final result = await _connectivity.checkConnectivity();
       _isOnline = !(result as List).contains(ConnectivityResult.none);
       _handleNetworkChange(_isOnline);
 
@@ -14,7 +84,6 @@
 
     final syncManager = ref.read(syncManagerProvider);
     if (isOnline && !syncManager.isSyncing) {
-      // Network came back online, force sync
       debugPrint('[OfflineMode] Network restored, forcing sync...');
       syncManager.forceSync();
     }
@@ -23,7 +92,6 @@
       '[OfflineMode] Network status changed: ${isOnline ? 'ONLINE' : 'OFFLINE'}',
     );
 
-    // Show snackbar for network changes
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -40,7 +108,6 @@
   /// Start GPS tracking for location updates
   Future<void> _startGPSTracking() async {
     try {
-      // Request location permission (correct method name)
       final permission = await Geolocator.requestPermission();
       if (permission == LocationPermission.denied ||
           permission == LocationPermission.deniedForever) {
@@ -48,17 +115,15 @@
         return;
       }
 
-      // Check if location services are enabled
       final isServiceEnabled = await Geolocator.isLocationServiceEnabled();
       if (!isServiceEnabled) {
         debugPrint('[GPSTracking] Location services disabled');
         return;
       }
 
-      // Start position stream
       const locationSettings = LocationSettings(
         accuracy: LocationAccuracy.best,
-        distanceFilter: 100, // Update every 100 meters
+        distanceFilter: 100,
       );
 
       Geolocator.getPositionStream(locationSettings: locationSettings).listen(
@@ -90,7 +155,7 @@
       final db = OfflineDb();
       final location = CachedLocation(
         id: const Uuid().v4(),
-        userId: '', // Will be set by sync manager if needed
+        userId: '',
         lat: lat,
         lng: lng,
         accuracy: accuracy,
@@ -103,11 +168,10 @@
     }
   }
 
-  /// Setup Firebase Cloud Messaging
+  /// Setup Firebase Cloud Messaging — awaits permission before fetching token
   Future<void> _setupFirebaseMessaging() async {
     _firebaseMessaging = FirebaseMessaging.instance;
 
-    // Request notification permission and wait for the result
     final settings = await _firebaseMessaging.requestPermission(
       alert: true,
       badge: true,
@@ -115,9 +179,10 @@
       provisional: false,
     );
 
-    debugPrint('[FCM] Notification permission: ${settings.authorizationStatus}');
+    debugPrint(
+      '[FCM] Notification permission: ${settings.authorizationStatus}',
+    );
 
-    // Handle foreground messages
     FirebaseMessaging.onMessage.listen((RemoteMessage message) {
       debugPrint('[FCM] Foreground message: ${message.notification?.title}');
 
@@ -133,7 +198,6 @@
       }
     });
 
-    // Handle background/terminated messages
     FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
       debugPrint('[FCM] Message opened app: ${message.notification?.title}');
 
@@ -142,13 +206,13 @@
       }
     });
 
-    // Only fetch and save token if permission was granted
     if (settings.authorizationStatus == AuthorizationStatus.authorized ||
         settings.authorizationStatus == AuthorizationStatus.provisional) {
       final token = await _firebaseMessaging.getToken();
       if (token != null) {
         debugPrint('[FCM] Got token: ${token.substring(0, 20)}...');
         await _saveFCMToken(token);
+        _fcmInitialized = true;
       } else {
         debugPrint('[FCM] getToken() returned null');
       }
@@ -156,10 +220,23 @@
       debugPrint('[FCM] Permission denied — skipping token registration');
     }
 
-    // Listen for token refresh
     _firebaseMessaging.onTokenRefresh.listen((newToken) {
       _saveFCMToken(newToken);
     });
+  }
+
+  /// Re-register FCM token when app comes back to foreground
+  Future<void> _refreshFCMToken() async {
+    if (_fcmInitialized) return;
+    try {
+      final token = await _firebaseMessaging.getToken();
+      if (token != null) {
+        await _saveFCMToken(token);
+        _fcmInitialized = true;
+      }
+    } catch (e) {
+      debugPrint('[FCM] Token refresh failed: $e');
+    }
   }
 
   /// Handle sync request from push notification
@@ -178,7 +255,7 @@
     }
   }
 
-  /// Save FCM token to user profile in Supabase
+  /// Save FCM token to user profile in Supabase — shows visible confirmation
   Future<void> _saveFCMToken(String token) async {
     try {
       final supabase = Supabase.instance.client;
@@ -204,16 +281,43 @@
             .from('profiles')
             .update({'fcm_tokens': currentTokens})
             .eq('id', userId);
-        debugPrint('[FCM] Token saved for user $userId: ${token.substring(0, 20)}...');
+        debugPrint(
+          '[FCM] Token saved for user $userId: ${token.substring(0, 20)}...',
+        );
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              duration: Duration(seconds: 3),
+              backgroundColor: Color(0xFF1976D2),
+              content: Text(
+                'Push notifications activated / تم تفعيل الإشعارات',
+                style: TextStyle(color: Colors.white),
+              ),
+            ),
+          );
+        }
       } else {
         debugPrint('[FCM] Token already registered for user $userId');
+        _fcmInitialized = true;
       }
     } catch (e) {
       debugPrint('[FCM] Failed to save token: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            duration: const Duration(seconds: 4),
+            backgroundColor: Colors.red.shade700,
+            content: Text(
+              'Push setup error: $e',
+              style: const TextStyle(color: Colors.white, fontSize: 12),
+            ),
+          ),
+        );
+      }
     }
   }
 
-  /// Show local notification
+  /// Show local notification as a snackbar (foreground only)
   void _showLocalNotification({required String title, required String body}) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
@@ -236,13 +340,13 @@
   void didChangeAppLifecycleState(AppLifecycleState state) {
     switch (state) {
       case AppLifecycleState.resumed:
-        debugPrint('[AppLifecycle] App resumed - checking for offline sync');
+        debugPrint('[AppLifecycle] App resumed');
+        // Re-try FCM token registration if not yet done
+        _refreshFCMToken();
         if (!_isOnline) {
-          // App came to foreground, check if we're online again
           _connectivity.checkConnectivity().then((result) {
-            final isOnline = !(result as List).contains(
-              ConnectivityResult.none,
-            );
+            final isOnline =
+                !(result as List).contains(ConnectivityResult.none);
             if (isOnline) {
               _handleNetworkChange(true);
             }
@@ -275,9 +379,7 @@
     return Stack(
       children: [
         widget.child,
-        // Offline banner at top
         const Positioned(top: 0, left: 0, right: 0, child: OfflineBanner()),
-        // Sync progress toast at bottom
         const SyncProgressToast(),
       ],
     );
@@ -304,9 +406,9 @@ class OfflineModeWrapper extends ConsumerWidget {
         if (showStatusBar)
           SyncStatusBar(
             onSyncPressed: () {
-              ScaffoldMessenger.of(
-                context,
-              ).showSnackBar(const SnackBar(content: Text('Starting sync...')));
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Starting sync...')),
+              );
             },
           ),
         Expanded(
@@ -328,7 +430,6 @@ Future<void> initializeOfflineMode() async {
     await db.init();
     debugPrint('[OfflineMode] Hive boxes initialized successfully');
 
-    // Log diagnostics
     final diagnostics = db.getDiagnostics();
     debugPrint('[OfflineMode] Diagnostics: $diagnostics');
   } catch (e) {
