@@ -617,37 +617,39 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
         throw new Error('Approval failed: permission denied. Please contact your database administrator.');
       }
 
-      // Automatically update the linked mmp_site_entry to mark it as claimed
+      // Automatically update the linked mmp_site_entry to mark it as claimed (background)
       if (request.mmpSiteEntryId && request.requestedBy) {
-        const now = new Date().toISOString();
-        try {
-          const { data: existingEntry } = await supabase
-            .from('mmp_site_entries')
-            .select('additional_data')
-            .eq('id', request.mmpSiteEntryId)
-            .single();
-          
-          const existingAdditionalData = existingEntry?.additional_data || {};
-          
-          await supabase
-            .from('mmp_site_entries')
-            .update({
-              status: 'accepted',
-              accepted_by: request.requestedBy,
-              accepted_at: now,
-              updated_at: now,
-              additional_data: {
-                ...existingAdditionalData,
-                claimed_by: data.approvedByName || request.requestedByName,
-                claimed_at: now,
-                claim_source: 'advance_request',
-                down_payment_request_id: data.requestId,
-              }
-            })
-            .eq('id', request.mmpSiteEntryId);
-        } catch (siteUpdateError) {
-          console.error('Failed to update linked site entry after advance approval:', siteUpdateError);
-        }
+        const siteEntryId = request.mmpSiteEntryId;
+        const requestedBy = request.requestedBy;
+        (async () => {
+          try {
+            const now = new Date().toISOString();
+            const { data: existingEntry } = await supabase
+              .from('mmp_site_entries')
+              .select('additional_data')
+              .eq('id', siteEntryId)
+              .single();
+            const existingAdditionalData = existingEntry?.additional_data || {};
+            await supabase
+              .from('mmp_site_entries')
+              .update({
+                status: 'accepted',
+                accepted_by: requestedBy,
+                accepted_at: now,
+                updated_at: now,
+                additional_data: {
+                  ...existingAdditionalData,
+                  claimed_by: data.approvedByName || request.requestedByName,
+                  claimed_at: now,
+                  claim_source: 'advance_request',
+                  down_payment_request_id: data.requestId,
+                }
+              })
+              .eq('id', siteEntryId);
+          } catch (siteUpdateError) {
+            console.error('Failed to update linked site entry after advance approval:', siteUpdateError);
+          }
+        })();
       }
 
       if (!data.silent) {
