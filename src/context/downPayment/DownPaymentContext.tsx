@@ -841,9 +841,10 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
         .from('down_payment_requests')
         .select('metadata')
         .eq('id', requestId)
-        .single();
-      const existingMeta = existing?.metadata || {};
-      const { error } = await supabase
+        .maybeSingle();
+      const existingMeta = (existing?.metadata as Record<string, any>) || {};
+
+      const { data: updated, error } = await supabase
         .from('down_payment_requests')
         .update({
           status: 'cancelled',
@@ -852,9 +853,14 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
           updated_at: now,
           metadata: { ...existingMeta, deleted: true, deleted_at: now },
         } as any)
-        .eq('id', requestId);
+        .eq('id', requestId)
+        .select('id');
 
       if (error) throw error;
+
+      if (!updated || updated.length === 0) {
+        throw new Error('Delete failed: record not found or permission denied. Contact your administrator.');
+      }
 
       toast({
         title: 'Request Deleted / تم حذف الطلب',
@@ -866,8 +872,8 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
     } catch (error: any) {
       console.error('Failed to delete request:', error);
       toast({
-        title: 'Error',
-        description: error.message || 'Failed to delete request',
+        title: 'Delete Failed / فشل الحذف',
+        description: error.message || 'Failed to delete request. Please try again or contact support.',
         variant: 'destructive',
       });
       return false;
