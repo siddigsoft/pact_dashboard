@@ -35,9 +35,10 @@ class _MissedCallsScreenState extends State<MissedCallsScreen> {
   Future<void> _callBack(CallHistoryEntry entry, {bool isVideo = false}) async {
     try {
       await _webrtcService.initiateCall(
-        targetUserId: entry.remoteUserId,
-        targetUserName: entry.remoteUserName,
-        isVideoCall: isVideo,
+        entry.remoteUserId,
+        entry.remoteUserName,
+        targetUserAvatar: entry.remoteUserAvatar,
+        isAudioOnly: !isVideo,
       );
     } catch (e) {
       if (!mounted) return;
