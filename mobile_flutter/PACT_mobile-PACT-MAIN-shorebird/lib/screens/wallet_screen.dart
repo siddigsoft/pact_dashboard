@@ -369,9 +369,9 @@ class _WalletScreenState extends State<WalletScreen> {
       if (_userId == null) return;
 
       final data = await Supabase.instance.client
-          .from('transportation_advances')
+          .from('down_payment_requests')
           .select('*, mmp_site_entries(site_name)')
-          .eq('requester_id', _userId!)
+          .eq('requested_by', _userId!)
           .order('created_at', ascending: false)
           .limit(100);
 
@@ -1377,7 +1377,7 @@ class _WalletScreenState extends State<WalletScreen> {
       };
 
       await Supabase.instance.client
-          .from('transportation_advances')
+          .from('down_payment_requests')
           .update({'metadata': existingMeta})
           .eq('id', advanceId);
 
