@@ -176,22 +176,27 @@ class _MobileAppShellState extends ConsumerState<MobileAppShell>
   }
 
   /// Setup Firebase Cloud Messaging
-  void _setupFirebaseMessaging() {
+  Future<void> _setupFirebaseMessaging() async {
     _firebaseMessaging = FirebaseMessaging.instance;
 
-    // Request notification permission (iOS)
-    _firebaseMessaging.requestPermission();
+    // Request notification permission and wait for the result
+    final settings = await _firebaseMessaging.requestPermission(
+      alert: true,
+      badge: true,
+      sound: true,
+      provisional: false,
+    );
+
+    debugPrint('[FCM] Notification permission: ${settings.authorizationStatus}');
 
     // Handle foreground messages
     FirebaseMessaging.onMessage.listen((RemoteMessage message) {
       debugPrint('[FCM] Foreground message: ${message.notification?.title}');
 
-      // Check if this is a sync request
       if (message.data['type'] == 'sync') {
         _handleSyncRequest();
       }
 
-      // Show local notification if available
       if (message.notification != null) {
         _showLocalNotification(
           title: message.notification?.title ?? 'Notification',
@@ -204,18 +209,24 @@ class _MobileAppShellState extends ConsumerState<MobileAppShell>
     FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
       debugPrint('[FCM] Message opened app: ${message.notification?.title}');
 
-      // Handle navigation based on message data
       if (message.data['type'] == 'sync') {
         _handleSyncRequest();
       }
     });
 
-    // Get FCM token and save to user profile
-    _firebaseMessaging.getToken().then((token) {
+    // Only fetch and save token if permission was granted
+    if (settings.authorizationStatus == AuthorizationStatus.authorized ||
+        settings.authorizationStatus == AuthorizationStatus.provisional) {
+      final token = await _firebaseMessaging.getToken();
       if (token != null) {
-        _saveFCMToken(token);
+        debugPrint('[FCM] Got token: ${token.substring(0, 20)}...');
+        await _saveFCMToken(token);
+      } else {
+        debugPrint('[FCM] getToken() returned null');
       }
-    });
+    } else {
+      debugPrint('[FCM] Permission denied — skipping token registration');
+    }
 
     // Listen for token refresh
     _firebaseMessaging.onTokenRefresh.listen((newToken) {
