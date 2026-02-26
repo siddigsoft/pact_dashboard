@@ -761,7 +761,7 @@ class _WalletScreenState extends State<WalletScreen> {
                                             Expanded(
                                               child: _buildTabButton(
                                                 'advances',
-                                                widget.isArabic ? 'السلف' : 'My Advances',
+                                                widget.isArabic ? 'مقدم الترحيل والمواصلات' : 'My Advances',
                                               ),
                                             ),
                                           ],
@@ -1254,7 +1254,7 @@ class _WalletScreenState extends State<WalletScreen> {
               const SizedBox(height: 12),
               Text(
                 widget.isArabic
-                    ? 'لا توجد سلف بعد'
+                    ? 'لا توجد مقدمات ترحيل بعد'
                     : 'No advances yet',
                 style: GoogleFonts.poppins(color: AppColors.textLight),
               ),
@@ -1268,7 +1268,7 @@ class _WalletScreenState extends State<WalletScreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          widget.isArabic ? 'سلفي' : 'My Transportation Advances',
+          widget.isArabic ? 'مقدم الترحيل والمواصلات' : 'My Transportation Advances',
           style: GoogleFonts.poppins(
               fontSize: 16, fontWeight: FontWeight.w600),
         ),
