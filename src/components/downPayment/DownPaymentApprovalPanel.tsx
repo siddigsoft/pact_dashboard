@@ -154,6 +154,21 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
   const uniqueLocalities = useMemo(() => [...new Set(requests.map(r => r.localityName).filter(Boolean))], [requests]);
   const uniqueMMPs = useMemo(() => [...new Set(requests.map(r => r.mmpName).filter(Boolean))].sort(), [requests]);
   const uniqueSites = useMemo(() => [...new Set(requests.filter(r => ['approved', 'partially_paid', 'fully_paid'].includes(r.status)).map(r => r.siteName).filter(Boolean))].sort(), [requests]);
+
+  // Sites with more than one active (non-cancelled, non-rejected) request — used to flag duplicates
+  const duplicateSiteNames = useMemo(() => {
+    const active = requests.filter(r => !['cancelled', 'rejected', 'deleted'].includes(r.status));
+    const counts = new Map<string, number>();
+    active.forEach(r => { if (r.siteName) counts.set(r.siteName, (counts.get(r.siteName) || 0) + 1); });
+    return new Set([...counts.entries()].filter(([, c]) => c > 1).map(([name]) => name));
+  }, [requests]);
+
+  // Resolve a user display name — prefers stored name, falls back to users list lookup
+  const resolveUserName = (userId: string, storedName?: string) => {
+    if (storedName && storedName !== 'Unknown') return storedName;
+    const u = users?.find(u => u.id === userId);
+    return (u as any)?.fullName || (u as any)?.full_name || u?.email || 'Unknown';
+  };
   const uniqueSupervisors = useMemo(() => {
     const approvedReqs = requests.filter(r => ['approved', 'partially_paid', 'fully_paid'].includes(r.status));
     const supervisorIds = [...new Set(approvedReqs.map(r => r.supervisorApprovedBy).filter(Boolean))];
@@ -1039,10 +1054,25 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
     const [showAuditDetails, setShowAuditDetails] = useState(false);
     const shortId = request.id.substring(0, 8).toUpperCase();
 
+    const isDuplicate = duplicateSiteNames.has(request.siteName);
+    const requesterName = resolveUserName(request.requestedBy, request.requestedByName);
+
     return (
-    <Card key={request.id} className="hover-elevate" data-testid={`card-request-${request.id}`}>
+    <Card
+      key={request.id}
+      className={`hover-elevate${isDuplicate ? ' border-amber-400 dark:border-amber-500' : ''}`}
+      style={isDuplicate ? { background: 'rgba(251,191,36,0.06)' } : undefined}
+      data-testid={`card-request-${request.id}`}
+    >
       <CardContent className="p-4">
         <div className="space-y-3">
+          {isDuplicate && (
+            <div className="flex items-center gap-2 rounded-md bg-amber-50 dark:bg-amber-950/30 border border-amber-300 dark:border-amber-700 px-3 py-1.5 text-xs font-medium text-amber-700 dark:text-amber-400" data-testid={`banner-duplicate-${request.id}`}>
+              <AlertTriangle className="h-3.5 w-3.5 flex-shrink-0" />
+              Duplicate site request — another active advance exists for this site
+              <span className="ml-auto font-normal opacity-75">/ طلب مكرر لهذا الموقع</span>
+            </div>
+          )}
           <div className="flex justify-between items-start gap-2">
             <div className="flex items-start gap-2">
               {showCheckbox && (
@@ -1066,9 +1096,9 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
                     <Hash className="h-3 w-3" />
                     ID: {shortId}
                   </span>
-                  <span className="flex items-center gap-1">
-                    <User className="h-3 w-3" />
-                    {request.requestedByName || 'Unknown'}
+                  <span className="flex items-center gap-1 font-medium text-foreground/80" data-testid={`text-requester-${request.id}`}>
+                    <User className="h-3 w-3 text-muted-foreground" />
+                    {requesterName}
                   </span>
                   <span className="flex items-center gap-1">
                     <Calendar className="h-3 w-3" />
