@@ -180,16 +180,32 @@ export async function createSiteVisitWalletTransaction(
     // After deducting, we mark them as reconciled to prevent double-deduction
     let advancesToReconcile: string[] = [];
     try {
-      const { data: advances, error: advanceError } = await supabase
+      // Primary lookup: match by mmp_site_entry_id or site_visit_id (explicit link)
+      const { data: advancesByLink, error: advanceError } = await supabase
         .from('down_payment_requests')
         .select('id, site_name, total_paid_amount, status, mmp_site_entry_id, requested_by, metadata')
         .or(`mmp_site_entry_id.eq.${siteVisitId},site_visit_id.eq.${siteVisitId}`)
         .in('status', ['partially_paid', 'fully_paid'])
         .eq('requested_by', userIdToPay);
 
+      // Fallback lookup: match by site_name when no explicit link exists
+      let advances = advancesByLink || [];
+      if (!advanceError && advances.length === 0 && siteName) {
+        const { data: advancesByName } = await supabase
+          .from('down_payment_requests')
+          .select('id, site_name, total_paid_amount, status, mmp_site_entry_id, requested_by, metadata')
+          .ilike('site_name', siteName.trim())
+          .in('status', ['partially_paid', 'fully_paid'])
+          .eq('requested_by', userIdToPay);
+        if (advancesByName && advancesByName.length > 0) {
+          console.log(`[WalletTransaction] Found ${advancesByName.length} advance(s) by site name fallback for "${siteName}"`);
+          advances = advancesByName;
+        }
+      }
+
       if (advanceError) {
         console.warn(`[WalletTransaction] Could not check for advances: ${advanceError.message}`);
-      } else if (advances && advances.length > 0) {
+      } else if (advances.length > 0) {
         for (const adv of advances) {
           const meta = (adv.metadata as Record<string, any>) || {};
           if (meta.advance_reconciled_at) {
