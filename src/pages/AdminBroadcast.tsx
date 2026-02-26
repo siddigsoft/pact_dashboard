@@ -156,7 +156,7 @@ export default function AdminBroadcastPage() {
       const ninetyDaysAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString();
       const { data } = await supabase
         .from('notifications')
-        .select('id, title_en, message_en, created_at, priority, entity_id')
+        .select('id, title_en, message_en, created_at, priority, related_entity_id')
         .eq('event_type', 'broadcast')
         .gte('created_at', ninetyDaysAgo)
         .order('created_at', { ascending: false })
@@ -164,11 +164,11 @@ export default function AdminBroadcastPage() {
 
       const grouped: Record<string, BroadcastHistory> = {};
       (data || []).forEach(n => {
-        const key = n.entity_id || `${n.title_en}_${n.created_at?.slice(0, 16)}`;
+        const key = n.related_entity_id || `${n.title_en}_${n.created_at?.slice(0, 16)}`;
         if (!grouped[key]) {
           grouped[key] = {
             id: n.id,
-            broadcast_id: n.entity_id || null,
+            broadcast_id: n.related_entity_id || null,
             title: n.title_en || '',
             message: n.message_en || '',
             created_at: n.created_at,
@@ -200,7 +200,7 @@ export default function AdminBroadcastPage() {
       const { data: notifs } = await supabase
         .from('notifications')
         .select('user_id, is_read, read_at, status')
-        .eq('entity_id', broadcastId)
+        .eq('related_entity_id', broadcastId)
         .eq('event_type', 'broadcast');
 
       if (!notifs || notifs.length === 0) {
@@ -272,7 +272,7 @@ export default function AdminBroadcastPage() {
       const { data: orig } = await supabase
         .from('notifications')
         .select('title_ar, message_ar, action_url')
-        .eq('entity_id', bid)
+        .eq('related_entity_id', bid)
         .limit(1)
         .single();
 
@@ -288,7 +288,7 @@ export default function AdminBroadcastPage() {
         message_ar: orig?.message_ar || item.message,
         priority: item.priority,
         action_url: orig?.action_url || null,
-        entity_id: broadcastId,
+        related_entity_id: broadcastId,
         entity_type: 'broadcast_batch',
         event_type: 'broadcast',
         status: 'pending',
@@ -392,7 +392,7 @@ export default function AdminBroadcastPage() {
         message_ar: messageArText,
         priority: priority,
         action_url: link,
-        entity_id: broadcastId,
+        related_entity_id: broadcastId,
         entity_type: 'broadcast_batch',
         event_type: 'broadcast',
         status: 'pending',
