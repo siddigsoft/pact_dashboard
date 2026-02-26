@@ -1193,6 +1193,12 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
                       {request.stateName}{request.localityName ? ` / ${request.localityName}` : ''}
                     </span>
                   )}
+                  {request.mmpName && (
+                    <span className="flex items-center gap-1">
+                      <FileText className="h-3 w-3" />
+                      {request.mmpName}
+                    </span>
+                  )}
                 </div>
               </div>
             </div>
