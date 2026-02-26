@@ -19,6 +19,9 @@ dist-ssr
 # Replit internal cache (never commit these)
 .cache/
 
+# Replit chat-attached assets (images/files dropped in conversation)
+attached_assets/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
