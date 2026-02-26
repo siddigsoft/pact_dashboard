@@ -302,6 +302,19 @@ export default function AdminBroadcastPage() {
       }));
       const { error } = await supabase.from('notifications').insert(rows);
       if (error) throw new Error(error.message);
+
+      // FCM push to mobile devices for re-sent broadcast
+      const resendFcmPriority = item.priority === 'urgent' || item.priority === 'high' ? 'high' : 'normal';
+      supabase.functions.invoke('send-fcm-push', {
+        body: {
+          user_ids: unread.map(u => u.userId),
+          title: item.title,
+          body: item.message,
+          priority: resendFcmPriority,
+          data: { type: 'broadcast', broadcast_id: broadcastId },
+        },
+      }).catch(() => {});
+
       toast({
         title: 'Re-sent / أعيد الإرسال',
         description: `Re-sent to ${unread.length} user(s) who hadn't read it.`,
@@ -407,6 +420,22 @@ export default function AdminBroadcastPage() {
 
       const { error: insertError } = await supabase.from('notifications').insert(rows);
       if (insertError) throw new Error(insertError.message);
+
+      // Fire FCM push to all mobile devices — single batch call, fire-and-forget
+      const fcmPriority = priority === 'urgent' || priority === 'high' ? 'high' : 'normal';
+      supabase.functions.invoke('send-fcm-push', {
+        body: {
+          user_ids: targetUsers.map(u => u.id),
+          title: titleText,
+          body: messageText,
+          priority: fcmPriority,
+          data: { type: 'broadcast', broadcast_id: broadcastId, action_url: link || '' },
+          ...(link ? { action_url: link } : {}),
+        },
+      }).then(({ error: fcmError }) => {
+        if (fcmError) console.warn('[BROADCAST] FCM push error:', fcmError.message);
+        else console.log(`[BROADCAST] FCM push sent to ${targetUsers.length} users`);
+      }).catch(err => console.warn('[BROADCAST] FCM push failed:', err));
 
       const sent = targetUsers.length;
       setSendResult({ sent, audience });
