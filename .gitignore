@@ -16,6 +16,9 @@ dist-ssr
 /.env.*.local
 !.env.example
 
+# Replit internal cache (never commit these)
+.cache/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
