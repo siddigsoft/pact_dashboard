@@ -579,98 +579,90 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                       icon: Icons.business,
                       color: AppColors.primaryBlue,
                       children: [
-                        if (profile.hubId != null ||
-                            profile.hubName != null) ...[
-                          _buildInfoRow(
-                            'Hub',
-                            _isLoadingLookups
-                                ? 'Loading...'
-                                : (_hubName ??
-                                      profile.hubName ??
-                                      'Not assigned'),
-                            icon: Icons.hub,
-                          ),
-                          const SizedBox(height: 12),
-                        ],
-                        if (profile.stateId != null ||
-                            profile.stateName != null) ...[
-                          _buildInfoRow(
-                            'State',
-                            _isLoadingLookups
-                                ? 'Loading...'
-                                : (_stateName ??
-                                      profile.stateName ??
-                                      'Not assigned'),
-                            icon: Icons.location_city,
-                          ),
-                          const SizedBox(height: 12),
-                        ],
-                        if (profile.localityId != null ||
-                            profile.localityName != null) ...[
-                          _buildInfoRow(
-                            'Locality',
-                            _isLoadingLookups
-                                ? 'Loading...'
-                                : (_localityName ??
-                                      profile.localityName ??
-                                      'Not assigned'),
-                            icon: Icons.location_on,
-                          ),
-                          const SizedBox(height: 12),
-                        ],
-                        if (profile.employeeId != null) ...[
-                          _buildInfoRow(
-                            'Employee ID',
-                            profile.employeeId!,
-                            icon: Icons.badge_outlined,
-                          ),
-                        ],
+                        _buildInfoRow(
+                          'Hub',
+                          _isLoadingLookups
+                              ? 'Loading...'
+                              : (_hubName ??
+                                    profile.hubName ??
+                                    'Not assigned'),
+                          icon: Icons.hub,
+                        ),
+                        const SizedBox(height: 12),
+                        _buildInfoRow(
+                          'State',
+                          _isLoadingLookups
+                              ? 'Loading...'
+                              : (_stateName ??
+                                    profile.stateName ??
+                                    'Not assigned'),
+                          icon: Icons.location_city,
+                        ),
+                        const SizedBox(height: 12),
+                        _buildInfoRow(
+                          'Locality',
+                          _isLoadingLookups
+                              ? 'Loading...'
+                              : (_localityName ??
+                                    profile.localityName ??
+                                    'Not assigned'),
+                          icon: Icons.location_on,
+                        ),
+                        const SizedBox(height: 12),
+                        _buildInfoRow(
+                          'Employee ID',
+                          profile.employeeId ?? 'Not assigned',
+                          icon: Icons.badge_outlined,
+                        ),
                       ],
                     ),
                     const SizedBox(height: 16),
 
                     // Classifications Section
-                    if (_classificationNames.isNotEmpty ||
-                        profile.classification != null)
-                      _buildSection(
-                        title: 'Classifications',
-                        icon: Icons.stars,
-                        color: AppColors.primaryOrange,
-                        children: [
-                          if (_classificationNames.isNotEmpty)
-                            ..._classificationNames.map(
-                              (name) => Padding(
-                                padding: const EdgeInsets.only(bottom: 8),
-                                child: _buildInfoRow(
-                                  'Level',
-                                  name,
-                                  icon: Icons.grade,
-                                ),
+                    _buildSection(
+                      title: 'Classifications',
+                      icon: Icons.stars,
+                      color: AppColors.primaryOrange,
+                      children: [
+                        if (_classificationNames.isNotEmpty)
+                          ..._classificationNames.map(
+                            (name) => Padding(
+                              padding: const EdgeInsets.only(bottom: 8),
+                              child: _buildInfoRow(
+                                'Level',
+                                name,
+                                icon: Icons.grade,
                               ),
-                            )
-                          else if (profile.classification != null) ...[
-                            _buildInfoRow(
-                              'Level',
-                              profile.classification!.level.toUpperCase(),
-                              icon: Icons.grade,
                             ),
+                          )
+                        else if (profile.classification != null) ...[
+                          _buildInfoRow(
+                            'Level',
+                            profile.classification!.level.toUpperCase(),
+                            icon: Icons.grade,
+                          ),
+                          const SizedBox(height: 8),
+                          _buildInfoRow(
+                            'Scope',
+                            profile.classification!.roleScope,
+                            icon: Icons.work,
+                          ),
+                          if (profile.classification!.hasRetainer) ...[
                             const SizedBox(height: 8),
                             _buildInfoRow(
-                              'Scope',
-                              profile.classification!.roleScope,
-                              icon: Icons.work,
+                              'Retainer',
+                              '${profile.classification!.retainerAmount} ${profile.classification!.retainerCurrency}',
+                              icon: Icons.payments,
                             ),
-                            if (profile.classification!.hasRetainer) ...[
-                              const SizedBox(height: 8),
-                              _buildInfoRow(
-                                'Retainer',
-                                '${profile.classification!.retainerAmount} ${profile.classification!.retainerCurrency}',
-                                icon: Icons.payments,
-                              ),
-                            ],
                           ],
-                        ],
-                      ),
+                        ] else
+                          _buildInfoRow(
+                            'Classification',
+                            'Not assigned',
+                            icon: Icons.grade,
+                          ),
+                      ],
+                    ),
                     const SizedBox(height: 16),
 
                     // Bank Account Section
