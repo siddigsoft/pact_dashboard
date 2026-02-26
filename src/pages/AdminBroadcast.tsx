@@ -150,15 +150,17 @@ export default function AdminBroadcastPage() {
     try {
       const { data } = await supabase
         .from('notifications')
-        .select('id, title_en, message_en, created_at, event_type, priority, entity_id, is_read')
+        .select('id, title_en, message_en, created_at, event_type, priority, entity_id, is_read, status, read_at')
         .eq('event_type', 'broadcast')
         .order('created_at', { ascending: false })
-        .limit(200);
+        .limit(500);
 
       const grouped: Record<string, BroadcastHistory> = {};
       (data || []).forEach(n => {
         // Group by entity_id (broadcast_id) when available, else fall back to title+minute
         const key = n.entity_id || `${n.title_en}_${n.created_at?.slice(0, 16)}`;
+        // A notification is read if any of the three signals are set
+        const isRead = n.is_read === true || n.status === 'read' || !!n.read_at;
         if (!grouped[key]) {
           grouped[key] = {
             id: n.id,
@@ -169,11 +171,11 @@ export default function AdminBroadcastPage() {
             event_type: n.event_type,
             priority: n.priority,
             recipient_count: 1,
-            read_count: n.is_read ? 1 : 0,
+            read_count: isRead ? 1 : 0,
           };
         } else {
           grouped[key].recipient_count = (grouped[key].recipient_count || 1) + 1;
-          if (n.is_read) grouped[key].read_count = (grouped[key].read_count || 0) + 1;
+          if (isRead) grouped[key].read_count = (grouped[key].read_count || 0) + 1;
         }
       });
 
@@ -191,9 +193,11 @@ export default function AdminBroadcastPage() {
     if (receiptsLoading[broadcastId]) return;
     setReceiptsLoading(prev => ({ ...prev, [broadcastId]: true }));
     try {
+      // Select all three read-signal columns — the standard mark-as-read path sets
+      // status='read' + read_at, while the acknowledgment hook also sets is_read=true
       const { data: notifs } = await supabase
         .from('notifications')
-        .select('user_id, is_read, read_at')
+        .select('user_id, is_read, read_at, status')
         .eq('entity_id', broadcastId)
         .eq('event_type', 'broadcast');
 
@@ -211,16 +215,24 @@ export default function AdminBroadcastPage() {
       const profileMap: Record<string, { full_name: string; role: string }> = {};
       (profiles || []).forEach(p => { profileMap[p.id] = p; });
 
-      const receiptList: ReceiptUser[] = notifs.map(n => ({
-        userId: n.user_id,
-        name: profileMap[n.user_id]?.full_name || n.user_id?.slice(0, 8) || 'Unknown',
-        role: profileMap[n.user_id]?.role || '—',
-        isRead: n.is_read || false,
-        readAt: n.read_at || null,
-      }));
+      const receiptList: ReceiptUser[] = notifs.map(n => {
+        // A notification is considered read if ANY of the three signals is set
+        const isRead = n.is_read === true || n.status === 'read' || !!n.read_at;
+        return {
+          userId: n.user_id,
+          name: profileMap[n.user_id]?.full_name || n.user_id?.slice(0, 8) || 'Unknown',
+          role: profileMap[n.user_id]?.role || '—',
+          isRead,
+          readAt: n.read_at || null,
+        };
+      });
 
-      // Sort: read first, then unread
-      receiptList.sort((a, b) => (b.isRead ? 1 : 0) - (a.isRead ? 1 : 0));
+      // Sort: read first (by readAt desc), then unread alphabetically
+      receiptList.sort((a, b) => {
+        if (a.isRead !== b.isRead) return b.isRead ? 1 : -1;
+        if (a.isRead && a.readAt && b.readAt) return new Date(b.readAt).getTime() - new Date(a.readAt).getTime();
+        return a.name.localeCompare(b.name);
+      });
       setReceipts(prev => ({ ...prev, [broadcastId]: receiptList }));
     } catch {
       setReceipts(prev => ({ ...prev, [broadcastId]: [] }));
