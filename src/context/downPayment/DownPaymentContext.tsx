@@ -88,7 +88,7 @@ function transformFromDB(data: any): DownPaymentRequest {
     mmpName: mmpEntry?.mmp_files?.name || data.metadata?.mmp_name || undefined,
     stateName,
     localityName: mmpEntry?.locality || data.metadata?.locality_name || undefined,
-    projectName: mmpEntry?.cp_name || mmpEntry?.mmp_files?.projects?.name || mmpEntry?.mmp_files?.project_name || data.metadata?.project_name || 'PACT',
+    projectName: mmpEntry?.cp_name || mmpEntry?.mmp_files?.projects?.name || mmpEntry?.mmp_files?.project_name || data.metadata?.project_name || 'WFP TPM',
     wfpProjectName: mmpEntry?.mmp_files?.projects?.name || mmpEntry?.mmp_files?.project_name || data.metadata?.project_name || undefined,
     activityType: mmpEntry?.activity_type || data.metadata?.activity_type || undefined,
     requestedBy: data.requested_by,
@@ -743,27 +743,30 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
       const request = requests.find(r => r.id === data.requestId);
       if (!request) throw new Error('Request not found');
 
-      const { data: walletData, error: walletError } = await supabase
+      // Fetch or create wallet — advance does NOT change balance (it is deducted from the site visit fee at completion)
+      let walletData: any;
+      const { data: existingWallet, error: walletError } = await supabase
         .from('wallets')
         .select('*')
         .eq('user_id', request.requestedBy)
-        .single();
+        .maybeSingle();
 
       if (walletError) throw walletError;
 
-      const currentBalance = walletData.balances['SDG'] || 0;
-      const newBalance = currentBalance + data.amount;
+      if (!existingWallet) {
+        const { data: newWallet, error: createError } = await supabase
+          .from('wallets')
+          .insert({ user_id: request.requestedBy, balances: { SDG: 0 }, total_earned: 0 })
+          .select()
+          .single();
+        if (createError) throw createError;
+        walletData = newWallet;
+      } else {
+        walletData = existingWallet;
+      }
 
-      const { error: walletUpdateError } = await supabase
-        .from('wallets')
-        .update({
-          balances: { ...walletData.balances, SDG: newBalance },
-          total_earned: parseFloat(walletData.total_earned || 0) + data.amount,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', walletData.id);
-
-      if (walletUpdateError) throw walletUpdateError;
+      // Balance is unchanged — advance is a pre-payment deducted from the site visit fee
+      const currentBalance = Number(walletData.balances?.['SDG'] ?? 0);
 
       const advanceMetadata: Record<string, any> = {
         type: 'transportation_advance',
@@ -776,9 +779,11 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
         hub: request.hubName,
         requested_amount: request.requestedAmount,
         approved_amount: request.approvedAmount,
+        advance_from_total: true,
       };
       if (request.mmpSiteEntryId) advanceMetadata.mmp_site_entry_id = request.mmpSiteEntryId;
 
+      const projectLabel = request.projectName || 'WFP TPM';
       const { data: transactionData, error: transactionError } = await supabase
         .from('wallet_transactions')
         .insert({
@@ -788,9 +793,9 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
           amount: data.amount,
           amount_cents: Math.round(data.amount * 100),
           currency: 'SDG',
-          description: `Transport advance: ${request.siteName}${request.stateName ? ' - ' + request.stateName : ''}${request.projectName ? ' | Project: ' + request.projectName : ''}${data.notes ? ' | ' + data.notes : ''}`,
+          description: `Transport advance (deducted from site fee): ${request.siteName}${request.stateName ? ' - ' + request.stateName : ''} | Project: ${projectLabel}${data.notes ? ' | ' + data.notes : ''}`,
           balance_before: currentBalance,
-          balance_after: newBalance,
+          balance_after: currentBalance,
           created_by: data.processedBy,
           metadata: advanceMetadata,
         })
@@ -832,8 +837,8 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
       if (requestUpdateError) throw requestUpdateError;
 
       toast({
-        title: 'Payment Processed',
-        description: `Payment of ${data.amount} SDG credited to wallet`,
+        title: 'Advance Recorded',
+        description: `Transport advance of ${data.amount} SDG recorded — will be deducted from site visit fee upon completion`,
       });
 
       // Send FCM push notification to enumerator's mobile device
