@@ -32,8 +32,9 @@ class MobileAppShell extends ConsumerStatefulWidget {
 
 class _MobileAppShellState extends ConsumerState<MobileAppShell>
     with WidgetsBindingObserver {
-  late Connectivity _connectivity;
-  late FirebaseMessaging _firebaseMessaging;
+  // Initialized directly — no `late` to avoid LateInitializationError
+  final Connectivity _connectivity = Connectivity();
+  final FirebaseMessaging _firebaseMessaging = FirebaseMessaging.instance;
   bool _isOnline = true;
   bool _fcmInitialized = false;
 
@@ -62,7 +63,6 @@ class _MobileAppShellState extends ConsumerState<MobileAppShell>
       final syncManager = ref.read(syncManagerProvider);
       syncManager.setupAutoSync(widget.autoSyncIntervalMs);
 
-      _connectivity = Connectivity();
       _connectivity.onConnectivityChanged.listen((result) {
         final isOnline = !(result as List).contains(ConnectivityResult.none);
         _handleNetworkChange(isOnline);
@@ -168,64 +168,63 @@ class _MobileAppShellState extends ConsumerState<MobileAppShell>
     }
   }
 
-  /// Setup Firebase Cloud Messaging — awaits permission before fetching token
+  /// Setup Firebase Cloud Messaging — properly awaits permission before fetching token
   Future<void> _setupFirebaseMessaging() async {
-    _firebaseMessaging = FirebaseMessaging.instance;
+    try {
+      final settings = await _firebaseMessaging.requestPermission(
+        alert: true,
+        badge: true,
+        sound: true,
+        provisional: false,
+      );
 
-    final settings = await _firebaseMessaging.requestPermission(
-      alert: true,
-      badge: true,
-      sound: true,
-      provisional: false,
-    );
+      debugPrint(
+        '[FCM] Notification permission: ${settings.authorizationStatus}',
+      );
 
-    debugPrint(
-      '[FCM] Notification permission: ${settings.authorizationStatus}',
-    );
+      FirebaseMessaging.onMessage.listen((RemoteMessage message) {
+        debugPrint('[FCM] Foreground message: ${message.notification?.title}');
+        if (message.data['type'] == 'sync') {
+          _handleSyncRequest();
+        }
+        if (message.notification != null) {
+          _showLocalNotification(
+            title: message.notification?.title ?? 'Notification',
+            body: message.notification?.body ?? '',
+          );
+        }
+      });
 
-    FirebaseMessaging.onMessage.listen((RemoteMessage message) {
-      debugPrint('[FCM] Foreground message: ${message.notification?.title}');
+      FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
+        debugPrint('[FCM] Message opened app: ${message.notification?.title}');
+        if (message.data['type'] == 'sync') {
+          _handleSyncRequest();
+        }
+      });
 
-      if (message.data['type'] == 'sync') {
-        _handleSyncRequest();
-      }
-
-      if (message.notification != null) {
-        _showLocalNotification(
-          title: message.notification?.title ?? 'Notification',
-          body: message.notification?.body ?? '',
-        );
-      }
-    });
-
-    FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
-      debugPrint('[FCM] Message opened app: ${message.notification?.title}');
-
-      if (message.data['type'] == 'sync') {
-        _handleSyncRequest();
-      }
-    });
-
-    if (settings.authorizationStatus == AuthorizationStatus.authorized ||
-        settings.authorizationStatus == AuthorizationStatus.provisional) {
-      final token = await _firebaseMessaging.getToken();
-      if (token != null) {
-        debugPrint('[FCM] Got token: ${token.substring(0, 20)}...');
-        await _saveFCMToken(token);
-        _fcmInitialized = true;
+      if (settings.authorizationStatus == AuthorizationStatus.authorized ||
+          settings.authorizationStatus == AuthorizationStatus.provisional) {
+        final token = await _firebaseMessaging.getToken();
+        if (token != null) {
+          debugPrint('[FCM] Got token: ${token.substring(0, 20)}...');
+          await _saveFCMToken(token);
+          _fcmInitialized = true;
+        } else {
+          debugPrint('[FCM] getToken() returned null');
+        }
       } else {
-        debugPrint('[FCM] getToken() returned null');
+        debugPrint('[FCM] Permission denied — skipping token registration');
       }
-    } else {
-      debugPrint('[FCM] Permission denied — skipping token registration');
-    }
 
-    _firebaseMessaging.onTokenRefresh.listen((newToken) {
-      _saveFCMToken(newToken);
-    });
+      _firebaseMessaging.onTokenRefresh.listen((newToken) {
+        _saveFCMToken(newToken);
+      });
+    } catch (e) {
+      debugPrint('[FCM] Setup error: $e');
+    }
   }
 
-  /// Re-register FCM token when app comes back to foreground
+  /// Re-register FCM token when app resumes (in case it wasn't registered yet)
   Future<void> _refreshFCMToken() async {
     if (_fcmInitialized) return;
     try {
@@ -255,7 +254,7 @@ class _MobileAppShellState extends ConsumerState<MobileAppShell>
     }
   }
 
-  /// Save FCM token to user profile in Supabase — shows visible confirmation
+  /// Save FCM token to user profile in Supabase — shows visible feedback
   Future<void> _saveFCMToken(String token) async {
     try {
       final supabase = Supabase.instance.client;
@@ -317,7 +316,7 @@ class _MobileAppShellState extends ConsumerState<MobileAppShell>
     }
   }
 
-  /// Show local notification as a snackbar (foreground only)
+  /// Show local notification as snackbar when app is in foreground
   void _showLocalNotification({required String title, required String body}) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
@@ -341,15 +340,12 @@ class _MobileAppShellState extends ConsumerState<MobileAppShell>
     switch (state) {
       case AppLifecycleState.resumed:
         debugPrint('[AppLifecycle] App resumed');
-        // Re-try FCM token registration if not yet done
         _refreshFCMToken();
         if (!_isOnline) {
           _connectivity.checkConnectivity().then((result) {
             final isOnline =
                 !(result as List).contains(ConnectivityResult.none);
-            if (isOnline) {
-              _handleNetworkChange(true);
-            }
+            if (isOnline) _handleNetworkChange(true);
           });
         }
         break;
