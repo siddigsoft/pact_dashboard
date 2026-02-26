@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/site_visit.dart';
 import '../providers/down_payment_provider.dart';
 import '../providers/site_visit_provider.dart';
@@ -217,6 +218,32 @@ class _DownPaymentRequestDialogState
 
   Future<void> _submitRequest() async {
     if (_selectedSiteVisit == null) return;
+
+    // Check bank account requirement
+    try {
+      final profileData = await Supabase.instance.client
+          .from('profiles')
+          .select('bank_account')
+          .eq('id', widget.userId)
+          .maybeSingle();
+      final bankAccount = profileData?['bank_account'];
+      final accountNumber = bankAccount?['accountNumber'] ?? bankAccount?['account_number'];
+      if (accountNumber == null || (accountNumber as String).isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Bank account required / الحساب البنكي مطلوب\n'
+                'Please add your bank account in Profile Settings first.',
+              ),
+              backgroundColor: Colors.orange,
+              duration: Duration(seconds: 5),
+            ),
+          );
+        }
+        return;
+      }
+    } catch (_) {}
 
     final amount = double.tryParse(_amountController.text);
     if (amount == null || amount <= 0) {

@@ -2715,6 +2715,30 @@ class _MMPScreenState extends State<MMPScreen> {
         return;
       }
 
+      // Check bank account before showing advance dialog
+      final profileCheck = await Supabase.instance.client
+          .from('profiles')
+          .select('bank_account')
+          .eq('id', _userId!)
+          .maybeSingle();
+      final bankAccount = profileCheck?['bank_account'];
+      final bankAccountNumber = bankAccount?['accountNumber'] ?? bankAccount?['account_number'];
+      if (bankAccountNumber == null || (bankAccountNumber as String).isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Bank account required / الحساب البنكي مطلوب\n'
+                'Please add your bank account in your Profile Settings before requesting an advance.',
+              ),
+              backgroundColor: Colors.orange,
+              duration: Duration(seconds: 5),
+            ),
+          );
+        }
+        return;
+      }
+
       final siteName = site['site_name'] ?? site['siteName'] ?? 'Unknown Site';
       final hubId = site['hub_id'] ?? site['hubId'];
       final hubName =

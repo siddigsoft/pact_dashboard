@@ -35,6 +35,7 @@ class _WalletScreenState extends State<WalletScreen> {
 
   List<Map<String, dynamic>> _transactions = [];
   List<Map<String, dynamic>> _withdrawalRequests = [];
+  List<Map<String, dynamic>> _advances = [];
 
   String _activeTab = 'overview';
   String _transactionFilter = 'all';
@@ -98,6 +99,7 @@ class _WalletScreenState extends State<WalletScreen> {
           _loadTransactions(),
           _loadWithdrawalRequests(),
           _loadPaymentMethods(),
+          _loadAdvances(),
         ]);
 
         // Cache wallet data for offline use
@@ -359,6 +361,24 @@ class _WalletScreenState extends State<WalletScreen> {
       if (mounted) setState(() {});
     } catch (e) {
       debugPrint('Error loading payment methods: $e');
+    }
+  }
+
+  Future<void> _loadAdvances() async {
+    try {
+      if (_userId == null) return;
+
+      final data = await Supabase.instance.client
+          .from('transportation_advances')
+          .select('*, mmp_site_entries(site_name)')
+          .eq('requester_id', _userId!)
+          .order('created_at', ascending: false)
+          .limit(100);
+
+      _advances = (data ?? []).map((a) => a).toList();
+      if (mounted) setState(() {});
+    } catch (e) {
+      debugPrint('Error loading advances: $e');
     }
   }
 
@@ -738,6 +758,12 @@ class _WalletScreenState extends State<WalletScreen> {
                                                 widget.isArabic ? 'عمليات السحب' : 'Withdrawals',
                                               ),
                                             ),
+                                            Expanded(
+                                              child: _buildTabButton(
+                                                'advances',
+                                                widget.isArabic ? 'السلف' : 'My Advances',
+                                              ),
+                                            ),
                                           ],
                                         ),
                                         const Divider(height: 1),
@@ -1012,6 +1038,8 @@ class _WalletScreenState extends State<WalletScreen> {
         return _buildTransactionsTab();
       case 'withdrawals':
         return _buildWithdrawalsTab();
+      case 'advances':
+        return _buildAdvancesTab();
       default:
         return const SizedBox();
     }
@@ -1210,6 +1238,197 @@ class _WalletScreenState extends State<WalletScreen> {
         else
           ...filtered.map((withdrawal) => _buildWithdrawalItem(withdrawal)),
       ],
+    );
+  }
+
+  Widget _buildAdvancesTab() {
+    if (_advances.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.account_balance_wallet_outlined,
+                  size: 48, color: AppColors.textLight),
+              const SizedBox(height: 12),
+              Text(
+                widget.isArabic
+                    ? 'لا توجد سلف بعد'
+                    : 'No advances yet',
+                style: GoogleFonts.poppins(color: AppColors.textLight),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          widget.isArabic ? 'سلفي' : 'My Transportation Advances',
+          style: GoogleFonts.poppins(
+              fontSize: 16, fontWeight: FontWeight.w600),
+        ),
+        const SizedBox(height: 12),
+        ..._advances.map((advance) => _buildAdvanceItem(advance)),
+      ],
+    );
+  }
+
+  Widget _buildAdvanceItem(Map<String, dynamic> advance) {
+    final status = (advance['status'] as String? ?? 'pending').toLowerCase();
+    final amount = (advance['requested_amount'] as num?)?.toDouble() ?? 0.0;
+    final siteName = advance['site_name'] as String? ??
+        (advance['mmp_site_entries'] as Map?)?['site_name'] as String? ??
+        'Unknown Site';
+    final createdAt = advance['created_at'] != null
+        ? DateTime.parse(advance['created_at'] as String)
+        : DateTime.now();
+    final receiptConfirmed =
+        (advance['metadata'] as Map?)?['receipt_confirmation']?['confirmed'] == true;
+
+    Color statusColor;
+    IconData statusIcon;
+    switch (status) {
+      case 'approved':
+      case 'partially_paid':
+      case 'fully_paid':
+        statusColor = Colors.green;
+        statusIcon = Icons.check_circle;
+        break;
+      case 'rejected':
+      case 'cancelled':
+        statusColor = Colors.red;
+        statusIcon = Icons.cancel;
+        break;
+      default:
+        statusColor = Colors.orange;
+        statusIcon = Icons.hourglass_empty;
+    }
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.directions_car, color: AppColors.primaryBlue, size: 20),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    siteName,
+                    style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: statusColor.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: statusColor.withOpacity(0.3)),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(statusIcon, size: 12, color: statusColor),
+                      const SizedBox(width: 4),
+                      Text(
+                        status.toUpperCase().replaceAll('_', ' '),
+                        style: GoogleFonts.poppins(
+                            fontSize: 10,
+                            color: statusColor,
+                            fontWeight: FontWeight.w600),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  widget.isArabic ? 'المبلغ:' : 'Amount:',
+                  style: GoogleFonts.poppins(
+                      fontSize: 12, color: AppColors.textLight),
+                ),
+                Text(
+                  '${amount.toStringAsFixed(0)} SDG',
+                  style: GoogleFonts.poppins(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.primaryBlue),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  widget.isArabic ? 'التاريخ:' : 'Date:',
+                  style: GoogleFonts.poppins(
+                      fontSize: 12, color: AppColors.textLight),
+                ),
+                Text(
+                  '${createdAt.day}/${createdAt.month}/${createdAt.year}',
+                  style: GoogleFonts.poppins(fontSize: 12),
+                ),
+              ],
+            ),
+            if ((status == 'partially_paid' || status == 'fully_paid') &&
+                !receiptConfirmed) ...[
+              const SizedBox(height: 8),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.amber.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.amber.withOpacity(0.4)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.warning_amber, color: Colors.amber, size: 16),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        widget.isArabic
+                            ? 'يرجى تأكيد استلام هذه السلفة'
+                            : 'Please confirm receipt of this advance',
+                        style: GoogleFonts.poppins(
+                            fontSize: 12, color: Colors.amber[800]),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+            if (receiptConfirmed) ...[
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  const Icon(Icons.verified, color: Colors.green, size: 16),
+                  const SizedBox(width: 4),
+                  Text(
+                    widget.isArabic ? 'تم تأكيد الاستلام' : 'Receipt confirmed',
+                    style: GoogleFonts.poppins(
+                        fontSize: 12, color: Colors.green),
+                  ),
+                ],
+              ),
+            ],
+          ],
+        ),
+      ),
     );
   }
 

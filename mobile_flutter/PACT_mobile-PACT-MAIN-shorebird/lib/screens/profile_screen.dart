@@ -673,6 +673,10 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                       ),
                     const SizedBox(height: 16),
 
+                    // Bank Account Section
+                    _buildBankAccountSection(profile),
+                    const SizedBox(height: 16),
+
                     // Timestamps Section
                     _buildSection(
                       title: 'Activity',
@@ -906,6 +910,108 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
         filled: !enabled,
         fillColor: enabled ? null : Colors.grey[100],
+      ),
+    );
+  }
+
+  Widget _buildBankAccountSection(PACTUserProfile profile) {
+    final bankAccount = profile.bankAccount;
+    final hasAccount = bankAccount != null &&
+        (bankAccount.accountNumber?.isNotEmpty ?? false);
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: hasAccount
+            ? Colors.green.withOpacity(0.05)
+            : Colors.orange.withOpacity(0.05),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: hasAccount
+              ? Colors.green.withOpacity(0.3)
+              : Colors.orange.withOpacity(0.4),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                Icons.account_balance,
+                color: hasAccount ? Colors.green : Colors.orange,
+                size: 20,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                'Bank Account / الحساب البنكي',
+                style: GoogleFonts.poppins(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: hasAccount ? Colors.green[700] : Colors.orange[700],
+                ),
+              ),
+              const Spacer(),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: hasAccount
+                      ? Colors.green.withOpacity(0.1)
+                      : Colors.orange.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  hasAccount ? 'Verified ✓' : 'Required',
+                  style: GoogleFonts.poppins(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: hasAccount ? Colors.green[700] : Colors.orange[700],
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          if (hasAccount) ...[
+            _buildInfoRow(
+              'Account Name',
+              bankAccount.accountName ?? '-',
+              icon: Icons.person_outline,
+            ),
+            const SizedBox(height: 8),
+            _buildInfoRow(
+              'Account Number',
+              bankAccount.accountNumber!,
+              icon: Icons.credit_card,
+            ),
+            if (bankAccount.bankName?.isNotEmpty ?? false) ...[
+              const SizedBox(height: 8),
+              _buildInfoRow(
+                'Bank Name',
+                bankAccount.bankName!,
+                icon: Icons.account_balance_outlined,
+              ),
+            ],
+            if (bankAccount.branchCode?.isNotEmpty ?? false) ...[
+              const SizedBox(height: 8),
+              _buildInfoRow(
+                'Branch Code',
+                bankAccount.branchCode!,
+                icon: Icons.location_city,
+              ),
+            ],
+          ] else
+            Text(
+              'A verified bank account is required to request transportation advances and withdrawals.\n'
+              'يرجى إضافة حساب بنكي لطلب السلف وعمليات السحب.',
+              style: GoogleFonts.poppins(
+                fontSize: 12,
+                color: Colors.orange[800],
+              ),
+            ),
+        ],
       ),
     );
   }
