@@ -10,7 +10,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Switch } from '@/components/ui/switch';
 import {
   Megaphone, Send, Clock, Users, AlertCircle, CheckCircle2,
-  RefreshCw, Info, Bell, Link as LinkIcon, Shield, Eye, UserCheck, UserX, ChevronDown, ChevronUp
+  RefreshCw, Info, Bell, Link as LinkIcon, Shield, Eye, UserCheck, UserX, ChevronDown, ChevronUp,
+  Download, RotateCcw, SendHorizonal
 } from 'lucide-react';
 import { useUser } from '@/context/user/UserContext';
 import { useToast } from '@/hooks/use-toast';
@@ -111,6 +112,7 @@ export default function AdminBroadcastPage() {
   const [openReceiptId, setOpenReceiptId] = useState<string | null>(null);
   const [receipts, setReceipts] = useState<Record<string, ReceiptUser[]>>({});
   const [receiptsLoading, setReceiptsLoading] = useState<Record<string, boolean>>({});
+  const [resendingId, setResendingId] = useState<string | null>(null);
   const [userCount, setUserCount] = useState<number | null>(null);
 
   const role = (currentUser?.role || '').toLowerCase();
@@ -250,6 +252,82 @@ export default function AdminBroadcastPage() {
       setOpenReceiptId(bid);
       if (!receipts[bid]) loadReceipts(bid);
     }
+  };
+
+  const refreshReceipts = (bid: string) => {
+    setReceipts(prev => { const next = { ...prev }; delete next[bid]; return next; });
+    loadReceipts(bid);
+  };
+
+  const resendToUnread = async (item: BroadcastHistory, bid: string) => {
+    const receiptList = receipts[bid] || [];
+    const unread = receiptList.filter(r => !r.isRead);
+    if (unread.length === 0) {
+      toast({ title: 'All caught up', description: 'Every recipient has already read this broadcast.' });
+      return;
+    }
+    setResendingId(bid);
+    try {
+      // Fetch original Arabic content from one of the existing notifications
+      const { data: orig } = await supabase
+        .from('notifications')
+        .select('title_ar, message_ar, action_url')
+        .eq('entity_id', bid)
+        .limit(1)
+        .single();
+
+      const broadcastId = crypto.randomUUID();
+      const now = new Date().toISOString();
+      const notifType = item.priority === 'urgent' ? 'error' : item.priority === 'high' ? 'warning' : 'info';
+      const rows = unread.map(u => ({
+        recipient_id: u.userId,
+        user_id: u.userId,
+        title_en: item.title,
+        title_ar: orig?.title_ar || item.title,
+        message_en: item.message,
+        message_ar: orig?.message_ar || item.message,
+        priority: item.priority,
+        action_url: orig?.action_url || null,
+        entity_id: broadcastId,
+        entity_type: 'broadcast_batch',
+        event_type: 'broadcast',
+        status: 'pending',
+        email_sent: false,
+        title: item.title,
+        message: item.message,
+        link: orig?.action_url || null,
+        type: notifType,
+        is_read: false,
+        created_at: now,
+      }));
+      const { error } = await supabase.from('notifications').insert(rows);
+      if (error) throw new Error(error.message);
+      toast({
+        title: 'Re-sent / أعيد الإرسال',
+        description: `Re-sent to ${unread.length} user(s) who hadn't read it.`,
+      });
+      loadHistory();
+    } catch (err: any) {
+      toast({ title: 'Re-send failed', description: err.message, variant: 'destructive' });
+    } finally {
+      setResendingId(null);
+    }
+  };
+
+  const exportReceiptsCSV = (item: BroadcastHistory, bid: string) => {
+    const receiptList = receipts[bid];
+    if (!receiptList || receiptList.length === 0) return;
+    const header = 'Name,Role,Status,Read At\n';
+    const rows = receiptList.map(r =>
+      `"${r.name}","${r.role}","${r.isRead ? 'Read' : 'Pending'}","${r.readAt ? format(new Date(r.readAt), 'yyyy-MM-dd HH:mm:ss') : ''}"`
+    ).join('\n');
+    const blob = new Blob(['\uFEFF' + header + rows], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `receipts_${item.title.slice(0, 20).replace(/\s+/g, '_')}_${format(new Date(item.created_at), 'yyyy-MM-dd')}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
   const applyTemplate = (t: typeof QUICK_TEMPLATES[0]) => {
@@ -620,10 +698,20 @@ export default function AdminBroadcastPage() {
         <TabsContent value="history" className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Clock className="w-5 h-5 text-violet-500" />
-                Recent Broadcasts / الإرسالات الأخيرة
-              </CardTitle>
+              <div className="flex items-center justify-between">
+                <CardTitle className="flex items-center gap-2">
+                  <Clock className="w-5 h-5 text-violet-500" />
+                  Recent Broadcasts / الإرسالات الأخيرة
+                </CardTitle>
+                <button
+                  onClick={loadHistory}
+                  disabled={historyLoading}
+                  className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  <RotateCcw className={`w-3.5 h-3.5 ${historyLoading ? 'animate-spin' : ''}`} />
+                  Refresh
+                </button>
+              </div>
               <CardDescription>History of broadcast notifications sent from this system.</CardDescription>
             </CardHeader>
             <CardContent>
@@ -713,13 +801,42 @@ export default function AdminBroadcastPage() {
                               <p className="text-xs text-muted-foreground py-2">No receipt data available for this broadcast.</p>
                             ) : (
                               <div>
-                                <div className="flex items-center justify-between mb-3">
+                                <div className="flex items-center justify-between mb-3 gap-2 flex-wrap">
                                   <p className="text-xs font-semibold text-slate-600 dark:text-slate-400">
-                                    Read Receipts — {receiptList.filter(r => r.isRead).length} of {receiptList.length} acknowledged
+                                    {receiptList.filter(r => r.isRead).length} of {receiptList.length} acknowledged
                                   </p>
-                                  <div className="flex gap-3 text-[11px]">
-                                    <span className="flex items-center gap-1 text-emerald-600"><UserCheck className="w-3 h-3" /> Read</span>
-                                    <span className="flex items-center gap-1 text-slate-400"><UserX className="w-3 h-3" /> Unread</span>
+                                  <div className="flex items-center gap-2">
+                                    {/* Refresh receipts */}
+                                    <button
+                                      onClick={() => refreshReceipts(bid)}
+                                      disabled={isLoadingReceipts}
+                                      title="Refresh"
+                                      className="flex items-center gap-1 text-[11px] text-slate-500 hover:text-slate-800 transition-colors"
+                                    >
+                                      <RotateCcw className={`w-3 h-3 ${isLoadingReceipts ? 'animate-spin' : ''}`} />
+                                    </button>
+                                    {/* Export CSV */}
+                                    <button
+                                      onClick={() => exportReceiptsCSV(item, bid)}
+                                      title="Export CSV"
+                                      className="flex items-center gap-1 text-[11px] text-slate-500 hover:text-slate-800 transition-colors"
+                                    >
+                                      <Download className="w-3 h-3" />
+                                      CSV
+                                    </button>
+                                    {/* Re-send to unread */}
+                                    {receiptList.some(r => !r.isRead) && (
+                                      <button
+                                        onClick={() => resendToUnread(item, bid)}
+                                        disabled={resendingId === bid}
+                                        className="flex items-center gap-1 text-[11px] bg-amber-50 border border-amber-200 text-amber-700 hover:bg-amber-100 rounded px-2 py-1 font-medium transition-colors"
+                                      >
+                                        {resendingId === bid
+                                          ? <><RefreshCw className="w-3 h-3 animate-spin" /> Sending...</>
+                                          : <><SendHorizonal className="w-3 h-3" /> Re-send to {receiptList.filter(r => !r.isRead).length} unread</>
+                                        }
+                                      </button>
+                                    )}
                                   </div>
                                 </div>
                                 <div className="space-y-1 max-h-72 overflow-y-auto">
