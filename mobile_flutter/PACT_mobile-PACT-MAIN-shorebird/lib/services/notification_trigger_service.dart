@@ -668,7 +668,7 @@ class NotificationTriggerService {
           category: NotificationCategory.financial,
           priority: NotificationPriority.high,
           link: '/advance-requests-report',
-          relatedEntityType: RelatedEntityType.downPaymentRequest,
+          relatedEntityType: RelatedEntityType.downPayment,
           sendEmail: false,
         ),
       );
@@ -700,7 +700,7 @@ class NotificationTriggerService {
           category: NotificationCategory.financial,
           priority: NotificationPriority.high,
           link: '/advance-requests-report',
-          relatedEntityType: RelatedEntityType.downPaymentRequest,
+          relatedEntityType: RelatedEntityType.downPayment,
           sendEmail: false,
         ),
       );
@@ -728,12 +728,12 @@ class NotificationTriggerService {
               'Advance of SDG ${amount.toStringAsFixed(0)} for $enumeratorName '
               '(site: $siteName) requires manual financial reconciliation after '
               'site reclaim. Please review in the Transportation Advance Report.',
-          type: NotificationType.alert,
+          type: NotificationType.warning,
           category: NotificationCategory.financial,
           priority: NotificationPriority.urgent,
           link: '/advance-requests-report?tab=reclaimImpact',
           relatedEntityId: advanceId,
-          relatedEntityType: RelatedEntityType.downPaymentRequest,
+          relatedEntityType: RelatedEntityType.downPayment,
           sendEmail: true,
           emailActionUrl: '/advance-requests-report?tab=reclaimImpact',
           emailActionLabel: 'View Reclaim Impact Report',
@@ -765,10 +765,10 @@ class NotificationTriggerService {
               'Reason: $writeOffReason.',
           type: NotificationType.info,
           category: NotificationCategory.financial,
-          priority: NotificationPriority.normal,
+          priority: NotificationPriority.medium,
           link: '/advance-requests-report?tab=reclaimImpact',
           relatedEntityId: advanceId,
-          relatedEntityType: RelatedEntityType.downPaymentRequest,
+          relatedEntityType: RelatedEntityType.downPayment,
           sendEmail: false,
         ),
       );
