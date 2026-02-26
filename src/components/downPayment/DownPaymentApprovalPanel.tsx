@@ -1116,6 +1116,7 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
                         <TableHead className="py-2 text-xs text-right">Amount (SDG)</TableHead>
                         <TableHead className="py-2 text-xs">Status</TableHead>
                         <TableHead className="py-2 text-xs">Justification</TableHead>
+                        <TableHead className="py-2 text-xs">Action</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -1133,6 +1134,17 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
                         <TableCell className="py-2 text-right font-mono">{(request.approvedAmount || request.requestedAmount).toLocaleString()}</TableCell>
                         <TableCell className="py-2">{getStatusBadge(request.status)}</TableCell>
                         <TableCell className="py-2 max-w-[160px] truncate text-muted-foreground">{request.justification || '—'}</TableCell>
+                        <TableCell className="py-2">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-6 px-2 text-destructive hover:text-destructive hover:bg-destructive/10"
+                            onClick={() => setDeleteConfirm(request)}
+                            data-testid={`button-delete-duplicate-current-${request.id}`}
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </Button>
+                        </TableCell>
                       </TableRow>
                       {/* Sibling requests */}
                       {sitemates.map(s => (
@@ -1144,6 +1156,17 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
                           <TableCell className="py-2 text-right font-mono">{(s.approvedAmount || s.requestedAmount).toLocaleString()}</TableCell>
                           <TableCell className="py-2">{getStatusBadge(s.status)}</TableCell>
                           <TableCell className="py-2 max-w-[160px] truncate text-muted-foreground">{s.justification || '—'}</TableCell>
+                          <TableCell className="py-2">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-6 px-2 text-destructive hover:text-destructive hover:bg-destructive/10"
+                              onClick={() => setDeleteConfirm(s)}
+                              data-testid={`button-delete-duplicate-${s.id}`}
+                            >
+                              <Trash2 className="h-3 w-3" />
+                            </Button>
+                          </TableCell>
                         </TableRow>
                       ))}
                     </TableBody>

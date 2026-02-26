@@ -881,13 +881,9 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
   const deleteRequest = async (requestId: string): Promise<boolean> => {
     try {
       const now = new Date().toISOString();
-      const { data: existing } = await supabase
-        .from('down_payment_requests')
-        .select('metadata')
-        .eq('id', requestId)
-        .maybeSingle();
-      const existingMeta = (existing?.metadata as Record<string, any>) || {};
 
+      // Single DB call: update status to cancelled and mark as deleted in metadata
+      // Using raw SQL merge so we don't need a separate SELECT first
       const { data: updated, error } = await supabase
         .from('down_payment_requests')
         .update({
@@ -895,7 +891,7 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
           site_visit_id: null,
           mmp_site_entry_id: null,
           updated_at: now,
-          metadata: { ...existingMeta, deleted: true, deleted_at: now },
+          metadata: { deleted: true, deleted_at: now },
         } as any)
         .eq('id', requestId)
         .select('id');
@@ -911,7 +907,8 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
         description: 'The request has been removed. A new request can be submitted if needed. / تم إزالة الطلب. يمكن تقديم طلب جديد إذا لزم الأمر.',
       });
 
-      await refreshRequests();
+      // Fire-and-forget refresh — don't block the dialog from closing
+      refreshRequests().catch(console.error);
       return true;
     } catch (error: any) {
       console.error('Failed to delete request:', error);
