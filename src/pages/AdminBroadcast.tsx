@@ -150,19 +150,21 @@ export default function AdminBroadcastPage() {
   const loadHistory = async () => {
     setHistoryLoading(true);
     try {
+      // Minimal query — only metadata columns, no read-status fields.
+      // Read counts are loaded on-demand when the user opens the Receipts panel.
+      // Date window limits the scan to recent data only.
+      const ninetyDaysAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString();
       const { data } = await supabase
         .from('notifications')
-        .select('id, title_en, message_en, created_at, event_type, priority, entity_id, is_read, status, read_at')
+        .select('id, title_en, message_en, created_at, priority, entity_id')
         .eq('event_type', 'broadcast')
+        .gte('created_at', ninetyDaysAgo)
         .order('created_at', { ascending: false })
-        .limit(500);
+        .limit(300);
 
       const grouped: Record<string, BroadcastHistory> = {};
       (data || []).forEach(n => {
-        // Group by entity_id (broadcast_id) when available, else fall back to title+minute
         const key = n.entity_id || `${n.title_en}_${n.created_at?.slice(0, 16)}`;
-        // A notification is read if any of the three signals are set
-        const isRead = n.is_read === true || n.status === 'read' || !!n.read_at;
         if (!grouped[key]) {
           grouped[key] = {
             id: n.id,
@@ -170,14 +172,12 @@ export default function AdminBroadcastPage() {
             title: n.title_en || '',
             message: n.message_en || '',
             created_at: n.created_at,
-            event_type: n.event_type,
+            event_type: 'broadcast',
             priority: n.priority,
             recipient_count: 1,
-            read_count: isRead ? 1 : 0,
           };
         } else {
           grouped[key].recipient_count = (grouped[key].recipient_count || 1) + 1;
-          if (isRead) grouped[key].read_count = (grouped[key].read_count || 0) + 1;
         }
       });
 
@@ -731,10 +731,11 @@ export default function AdminBroadcastPage() {
                     const bid = item.broadcast_id;
                     const isOpen = openReceiptId === bid;
                     const total = item.recipient_count || 0;
-                    const readCount = item.read_count || 0;
-                    const readPct = total > 0 ? Math.round((readCount / total) * 100) : 0;
                     const receiptList = bid ? receipts[bid] : null;
                     const isLoadingReceipts = bid ? receiptsLoading[bid] : false;
+                    // Read counts come from the on-demand receipts query
+                    const readCount = receiptList ? receiptList.filter(r => r.isRead).length : null;
+                    const readPct = readCount !== null && total > 0 ? Math.round((readCount / total) * 100) : null;
 
                     return (
                       <div key={item.id + idx} className="rounded-lg border overflow-hidden">
@@ -762,13 +763,22 @@ export default function AdminBroadcastPage() {
                                 <Users className="w-3 h-3" />
                                 {total} sent
                               </span>
-                              <span className="flex items-center gap-1 text-emerald-600">
-                                <UserCheck className="w-3 h-3" />
-                                {readCount} read ({readPct}%)
-                              </span>
+                              {readCount !== null ? (
+                                <span className="flex items-center gap-1 text-emerald-600">
+                                  <UserCheck className="w-3 h-3" />
+                                  {readCount} read ({readPct}%)
+                                </span>
+                              ) : (
+                                bid && (
+                                  <span className="flex items-center gap-1 text-violet-400">
+                                    <Eye className="w-3 h-3" />
+                                    Open receipts to see reads
+                                  </span>
+                                )
+                              )}
                             </div>
-                            {/* Read progress bar */}
-                            {total > 0 && (
+                            {/* Progress bar — only shown after receipts are loaded */}
+                            {readPct !== null && total > 0 && (
                               <div className="mt-2 w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
                                 <div
                                   className="h-full bg-emerald-400 rounded-full transition-all"
