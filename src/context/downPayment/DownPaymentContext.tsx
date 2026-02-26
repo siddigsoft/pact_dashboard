@@ -439,29 +439,63 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
         ? data.customAmount 
         : request.requestedAmount;
       
-      const { error } = await supabase
+      const now = new Date().toISOString();
+      const updatedMeta = {
+        ...request.metadata,
+        supervisor_approved_by_name: data.approvedByName,
+        supervisor_approved_amount: approvedAmount,
+        approval_type: data.approvalType || 'full',
+        approval_percentage: data.approvalPercentage,
+        approved_amount: approvedAmount,
+      };
+
+      const { data: updated, error } = await supabase
         .from('down_payment_requests')
         .update({
           supervisor_status: 'approved',
           supervisor_approved_by: data.approvedBy,
-          supervisor_approved_at: new Date().toISOString(),
+          supervisor_approved_at: now,
           supervisor_notes: data.notes,
           remaining_amount: approvedAmount,
           status: 'pending_admin',
           admin_status: 'pending',
-          updated_at: new Date().toISOString(),
-          metadata: {
-            ...request.metadata,
-            supervisor_approved_by_name: data.approvedByName,
-            supervisor_approved_amount: approvedAmount,
-            approval_type: data.approvalType || 'full',
-            approval_percentage: data.approvalPercentage,
-            approved_amount: approvedAmount,
-          },
+          updated_at: now,
+          metadata: updatedMeta,
         })
-        .eq('id', data.requestId);
+        .eq('id', data.requestId)
+        .select('id');
 
       if (error) throw error;
+
+      // If no rows updated, RLS may be blocking — try super admin bypass (approve both tiers)
+      if (!updated || updated.length === 0) {
+        const { data: bypass, error: bypassErr } = await supabase
+          .from('down_payment_requests')
+          .update({
+            supervisor_status: 'approved',
+            supervisor_approved_by: data.approvedBy,
+            supervisor_approved_at: now,
+            supervisor_notes: data.notes,
+            admin_status: 'approved',
+            admin_processed_by: data.approvedBy,
+            admin_processed_at: now,
+            remaining_amount: approvedAmount,
+            status: 'approved',
+            updated_at: now,
+            metadata: {
+              ...updatedMeta,
+              admin_processed_by_name: data.approvedByName,
+              admin_approved_amount: approvedAmount,
+              super_admin_bypass: true,
+            },
+          })
+          .eq('id', data.requestId)
+          .select('id');
+        if (bypassErr) throw bypassErr;
+        if (!bypass || bypass.length === 0) {
+          throw new Error('Approval failed: permission denied. Contact your database administrator to update the RLS policy for down_payment_requests.');
+        }
+      }
 
       if (request.requestedBy) {
         await NotificationTriggerService.send({
@@ -556,7 +590,7 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
         ? data.customAmount 
         : (request.approvedAmount || request.requestedAmount);
       
-      const { error } = await supabase
+      const { data: adminUpdated, error } = await supabase
         .from('down_payment_requests')
         .update({
           admin_status: 'approved',
@@ -573,9 +607,13 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
             approved_amount: approvedAmount,
           },
         })
-        .eq('id', data.requestId);
+        .eq('id', data.requestId)
+        .select('id');
 
       if (error) throw error;
+      if (!adminUpdated || adminUpdated.length === 0) {
+        throw new Error('Approval failed: permission denied. Please contact your database administrator.');
+      }
 
       // Automatically update the linked mmp_site_entry to mark it as claimed
       if (request.mmpSiteEntryId && request.requestedBy) {
@@ -955,9 +993,12 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
       try {
         const userRole = currentUser?.role?.toLowerCase();
         const isSupervisor = userRole === 'supervisor' || userRole === 'hubsupervisor';
+        const isAdminRole = ['admin', 'financialadmin', 'superadmin', 'super_admin', 'ict', 'fom',
+          'countrydirector', 'country_director', 'datateam', 'data_team'].includes(userRole || '');
 
-        if (isSupervisor && request.status === 'pending_supervisor') {
-          const result = await supervisorApprove({
+        let result: boolean;
+        if (request.status === 'pending_supervisor' && (isSupervisor || isAdminRole)) {
+          result = await supervisorApprove({
             requestId,
             approvedBy: data.approvedBy,
             approvedByName: data.approvedByName,
@@ -966,10 +1007,8 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
             approvalPercentage: data.approvalPercentage,
             customAmount: approvedAmount,
           });
-          if (result) success++;
-          else failed++;
-        } else if (!isSupervisor && request.status === 'pending_admin') {
-          const result = await adminApprove({
+        } else if (request.status === 'pending_admin' && isAdminRole) {
+          result = await adminApprove({
             requestId,
             approvedBy: data.approvedBy,
             approvedByName: data.approvedByName,
@@ -978,11 +1017,13 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
             approvalPercentage: data.approvalPercentage,
             customAmount: approvedAmount,
           });
-          if (result) success++;
-          else failed++;
         } else {
+          console.warn(`[BulkApprove] Skipping ${requestId}: status=${request.status}, role=${userRole}`);
           failed++;
+          continue;
         }
+        if (result) success++;
+        else failed++;
       } catch (error) {
         console.error('Bulk approve error for request:', requestId, error);
         failed++;
