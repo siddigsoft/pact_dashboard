@@ -57,3 +57,4 @@ The project utilizes a unified Supabase client for all interactions, ensuring co
 *   **Vercel:** Production hosting.
 *   **Capacitor:** For mobile deployment (iOS/Android builds, native API access).
 *   **Flutter Mobile:** Dart/Flutter framework with Supabase Flutter, flutter_webrtc, Hive, flutter_map, Google Fonts, and Shorebird for OTA updates.
+*   **Firebase Cloud Messaging (FCM):** Push notification delivery to mobile devices via `send-fcm-push` Supabase Edge Function. Service account configured via `FIREBASE_SERVICE_ACCOUNT_JSON` secret. FCM tokens stored in `profiles.fcm_tokens[]`. Notifications triggered fire-and-forget from both `NotificationTriggerService` (web) and `dispatch-notification` Edge Function.

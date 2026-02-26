@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
 import '../../services/offline/offline_db.dart';
 import '../../services/offline/models.dart';
@@ -238,12 +239,36 @@ class _MobileAppShellState extends ConsumerState<MobileAppShell>
     }
   }
 
-  /// Save FCM token to user profile
+  /// Save FCM token to user profile in Supabase
   Future<void> _saveFCMToken(String token) async {
     try {
-      // This would typically update the user's profile with the FCM token
-      // await supabase.from('profiles').update({'fcm_token': token}).eq('id', userId);
-      debugPrint('[FCM] Token saved: ${token.substring(0, 20)}...');
+      final supabase = Supabase.instance.client;
+      final userId = supabase.auth.currentUser?.id;
+      if (userId == null) {
+        debugPrint('[FCM] No authenticated user, cannot save token');
+        return;
+      }
+
+      final profileData = await supabase
+          .from('profiles')
+          .select('fcm_tokens')
+          .eq('id', userId)
+          .maybeSingle();
+
+      final currentTokens = List<String>.from(
+        (profileData?['fcm_tokens'] as List?) ?? [],
+      );
+
+      if (!currentTokens.contains(token)) {
+        currentTokens.add(token);
+        await supabase
+            .from('profiles')
+            .update({'fcm_tokens': currentTokens})
+            .eq('id', userId);
+        debugPrint('[FCM] Token saved for user $userId: ${token.substring(0, 20)}...');
+      } else {
+        debugPrint('[FCM] Token already registered for user $userId');
+      }
     } catch (e) {
       debugPrint('[FCM] Failed to save token: $e');
     }

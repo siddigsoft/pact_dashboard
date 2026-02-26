@@ -283,6 +283,30 @@ export const NotificationTriggerService = {
 
       console.log(`[NOTIFICATION] Successfully inserted notification with id:`, data?.[0]?.id);
 
+      // Send FCM push notification to mobile devices (fire-and-forget, non-blocking)
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
+      if (supabaseUrl && userId) {
+        const fcmPriority = priority === 'high' ? 'high' : 'normal';
+        supabase.functions.invoke('send-fcm-push', {
+          body: {
+            user_ids: [userId],
+            title: title || 'Notification',
+            body: message || '',
+            priority: fcmPriority,
+            data: {
+              event_type: category || 'system',
+              ...(link ? { action_url: link } : {}),
+              ...(relatedEntityId ? { entity_id: relatedEntityId } : {}),
+              ...(relatedEntityType ? { entity_type: relatedEntityType } : {}),
+            },
+            ...(data?.[0]?.id ? { notification_id: data[0].id } : {}),
+          },
+        }).then(({ error: fcmError }) => {
+          if (fcmError) console.warn('[NOTIFICATION] FCM push error:', fcmError.message);
+          else console.log(`[NOTIFICATION] FCM push dispatched for user ${userId}`);
+        }).catch(err => console.warn('[NOTIFICATION] FCM push call failed:', err));
+      }
+
       // Send email ONLY if explicitly requested via sendEmail=true
       // Do NOT auto-send for high priority - bilingual emails are sent separately
       const shouldSendEmail = sendEmail === true;

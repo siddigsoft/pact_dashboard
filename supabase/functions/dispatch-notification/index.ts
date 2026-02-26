@@ -409,6 +409,35 @@ serve(async (req) => {
       }
     }
 
+    // Send FCM push notifications to mobile devices (fire-and-forget)
+    if (recipients.length > 0) {
+      const recipientIds = recipients.map((r: any) => r.id).filter(Boolean)
+      if (recipientIds.length > 0) {
+        const fcmPriority = priority === 'urgent' || priority === 'high' ? 'high' : 'normal'
+        fetch(`${supabaseUrl}/functions/v1/send-fcm-push`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${serviceRoleKey}`,
+          },
+          body: JSON.stringify({
+            user_ids: recipientIds,
+            title: finalTitleEn,
+            body: message_en,
+            priority: fcmPriority,
+            data: {
+              event_type,
+              ...(action_url ? { action_url } : {}),
+              ...(entity_id ? { entity_id } : {}),
+              ...(entity_type ? { entity_type } : {}),
+            },
+          }),
+        }).then(r => r.json())
+          .then(result => console.log(`FCM push result: sent=${result.sent}, failed=${result.failed}`))
+          .catch(err => console.warn('FCM push fire-and-forget error:', err))
+      }
+    }
+
     // Log to audit
     try {
       await supabase.from('audit_logs').insert({
