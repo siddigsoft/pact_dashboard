@@ -40,12 +40,14 @@ class _MainLayoutState extends State<MainLayout> {
   late int _currentIndex;
   bool _isCoordinator = false;
   bool _isLoadingRole = true;
+  int _walletBadgeCount = 0;
 
   @override
   void initState() {
     super.initState();
     _currentIndex = widget.currentIndex;
     _checkUserRole();
+    _fetchWalletBadgeCount();
   }
 
   Future<void> _checkUserRole() async {
@@ -76,6 +78,30 @@ class _MainLayoutState extends State<MainLayout> {
     } catch (e) {
       debugPrint('Error checking user role: $e');
       setState(() => _isLoadingRole = false);
+    }
+  }
+
+  Future<void> _fetchWalletBadgeCount() async {
+    try {
+      final user = Supabase.instance.client.auth.currentUser;
+      if (user == null) return;
+
+      final data = await Supabase.instance.client
+          .from('down_payment_requests')
+          .select('id, metadata')
+          .eq('requested_by', user.id)
+          .inFilter('status', ['partially_paid', 'fully_paid']);
+
+      int count = 0;
+      for (final row in (data as List<dynamic>? ?? [])) {
+        final meta = (row['metadata'] as Map?)?.cast<String, dynamic>() ?? {};
+        final rc = meta['receipt_confirmation'] as Map?;
+        if (rc == null || rc['confirmed'] != true) count++;
+      }
+
+      if (mounted) setState(() => _walletBadgeCount = count);
+    } catch (e) {
+      debugPrint('Error fetching wallet badge count: $e');
     }
   }
 
@@ -146,6 +172,7 @@ class _MainLayoutState extends State<MainLayout> {
               currentIndex: _currentIndex,
               onTap: _onItemTapped,
               isCoordinator: _isCoordinator,
+              walletBadgeCount: _walletBadgeCount,
             ),
     );
   }

@@ -836,6 +836,28 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
         description: `Payment of ${data.amount} SDG credited to wallet`,
       });
 
+      // Send FCM push notification to enumerator's mobile device
+      try {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('fcm_tokens')
+          .eq('id', request.requestedBy)
+          .maybeSingle();
+        const tokens: string[] = profile?.fcm_tokens || [];
+        if (tokens.length > 0) {
+          await supabase.functions.invoke('send-fcm-push', {
+            body: {
+              tokens,
+              title: '💰 Transport Advance Ready',
+              body: `Your ${data.amount} SDG advance for ${request.siteName} has been sent. Please confirm receipt in the app.`,
+              data: { type: 'fund_receipt_confirmation', requestId: data.requestId, siteName: request.siteName },
+            },
+          });
+        }
+      } catch (fcmErr) {
+        console.warn('[DownPayment] FCM notification failed (non-fatal):', fcmErr);
+      }
+
       await refreshRequests();
       return true;
     } catch (error: any) {

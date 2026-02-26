@@ -1,8 +1,13 @@
+import 'dart:convert';
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:hive_flutter/hive_flutter.dart';
 import '../widgets/reusable_app_bar.dart';
 import '../widgets/custom_drawer_menu.dart';
 import '../theme/app_colors.dart';
@@ -94,6 +99,9 @@ class _WalletScreenState extends State<WalletScreen> {
 
       // ONLINE MODE: Fetch from Supabase and cache
       try {
+        // Sync any offline-saved confirmations first
+        _syncPendingConfirmations();
+
         await Future.wait([
           _loadWallet(),
           _loadTransactions(),
@@ -1307,102 +1315,263 @@ class _WalletScreenState extends State<WalletScreen> {
   }
 
   Future<void> _confirmAdvanceReceipt(Map<String, dynamic> advance) async {
+    // Step 1: Get GPS location (non-blocking)
+    Position? gpsPosition;
+    try {
+      LocationPermission perm = await Geolocator.checkPermission();
+      if (perm == LocationPermission.denied) {
+        perm = await Geolocator.requestPermission();
+      }
+      if (perm == LocationPermission.whileInUse || perm == LocationPermission.always) {
+        gpsPosition = await Geolocator.getCurrentPosition(
+          desiredAccuracy: LocationAccuracy.high,
+          timeLimit: const Duration(seconds: 8),
+        );
+      }
+    } catch (e) {
+      debugPrint('GPS error (non-fatal): $e');
+    }
+
+    // Step 2: Show dialog with signature pad and notes
     final notesController = TextEditingController();
+    final signatureStrokes = <List<Offset>>[];
+    String? signatureBase64;
+
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Row(
-          children: [
-            const Icon(Icons.verified, color: Colors.green),
-            const SizedBox(width: 8),
-            Text(
-              widget.isArabic ? 'تأكيد استلام السلفة' : 'Confirm Fund Receipt',
-              style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 16),
-            ),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              widget.isArabic
-                  ? 'هل تؤكد استلامك لمبلغ السلفة؟'
-                  : 'Do you confirm that you have received the advance funds?',
-              style: GoogleFonts.poppins(fontSize: 13),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: notesController,
-              maxLines: 3,
-              decoration: InputDecoration(
-                hintText: widget.isArabic ? 'ملاحظات (اختياري)' : 'Notes (optional)',
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                contentPadding: const EdgeInsets.all(10),
+      barrierDismissible: false,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Row(
+            children: [
+              const Icon(Icons.verified, color: Colors.green),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  widget.isArabic ? 'تأكيد استلام السلفة' : 'Confirm Fund Receipt',
+                  style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 15),
+                ),
               ),
-              style: GoogleFonts.poppins(fontSize: 13),
+            ],
+          ),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  widget.isArabic
+                      ? 'هل تؤكد استلامك لمبلغ السلفة؟'
+                      : 'Confirm you have received the advance funds.',
+                  style: GoogleFonts.poppins(fontSize: 13),
+                ),
+                if (gpsPosition != null) ...[
+                  const SizedBox(height: 6),
+                  Row(children: [
+                    const Icon(Icons.location_on, color: Colors.blue, size: 14),
+                    const SizedBox(width: 4),
+                    Text(
+                      '${gpsPosition.latitude.toStringAsFixed(5)}, ${gpsPosition.longitude.toStringAsFixed(5)}',
+                      style: GoogleFonts.poppins(fontSize: 11, color: Colors.blue),
+                    ),
+                  ]),
+                ],
+                const SizedBox(height: 12),
+                Text(
+                  widget.isArabic ? 'التوقيع:' : 'Signature:',
+                  style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.w600),
+                ),
+                const SizedBox(height: 4),
+                Container(
+                  height: 120,
+                  decoration: BoxDecoration(
+                    border: Border.all(color: Colors.grey.shade300),
+                    borderRadius: BorderRadius.circular(8),
+                    color: Colors.grey.shade50,
+                  ),
+                  clipBehavior: Clip.hardEdge,
+                  child: GestureDetector(
+                    onPanStart: (d) => setDialogState(() => signatureStrokes.add([d.localPosition])),
+                    onPanUpdate: (d) => setDialogState(() => signatureStrokes.last.add(d.localPosition)),
+                    child: CustomPaint(
+                      painter: _SignaturePainter(signatureStrokes),
+                      child: signatureStrokes.isEmpty
+                          ? Center(child: Text(
+                              widget.isArabic ? 'ارسم توقيعك هنا' : 'Draw signature here',
+                              style: GoogleFonts.poppins(color: Colors.grey.shade400, fontSize: 12)))
+                          : null,
+                    ),
+                  ),
+                ),
+                if (signatureStrokes.isNotEmpty)
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton.icon(
+                      onPressed: () => setDialogState(() => signatureStrokes.clear()),
+                      icon: const Icon(Icons.refresh, size: 14),
+                      label: Text(widget.isArabic ? 'مسح' : 'Clear',
+                          style: GoogleFonts.poppins(fontSize: 12)),
+                    ),
+                  ),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: notesController,
+                  maxLines: 2,
+                  decoration: InputDecoration(
+                    hintText: widget.isArabic ? 'ملاحظات (اختياري)' : 'Notes (optional)',
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                    contentPadding: const EdgeInsets.all(10),
+                    isDense: true,
+                  ),
+                  style: GoogleFonts.poppins(fontSize: 13),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: Text(widget.isArabic ? 'إلغاء' : 'Cancel', style: GoogleFonts.poppins()),
+            ),
+            ElevatedButton(
+              onPressed: signatureStrokes.isEmpty ? null : () => Navigator.pop(ctx, true),
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
+              child: Text(widget.isArabic ? 'تأكيد' : 'Confirm',
+                  style: GoogleFonts.poppins(color: Colors.white)),
             ),
           ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: Text(widget.isArabic ? 'إلغاء' : 'Cancel',
-                style: GoogleFonts.poppins()),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
-            child: Text(widget.isArabic ? 'تأكيد' : 'Confirm',
-                style: GoogleFonts.poppins(color: Colors.white)),
-          ),
-        ],
       ),
     );
 
     if (confirmed != true) return;
 
+    // Convert signature strokes to base64 PNG
     try {
-      final advanceId = advance['id'] as String?;
-      if (advanceId == null) return;
+      final recorder = ui.PictureRecorder();
+      final canvas = Canvas(recorder, const Rect.fromLTWH(0, 0, 300, 120));
+      canvas.drawRect(const Rect.fromLTWH(0, 0, 300, 120), Paint()..color = Colors.white);
+      final paint = Paint()
+        ..color = Colors.black
+        ..strokeWidth = 2.5
+        ..strokeCap = StrokeCap.round
+        ..style = PaintingStyle.stroke;
+      for (final stroke in signatureStrokes) {
+        if (stroke.length < 2) continue;
+        final path = Path()..moveTo(stroke[0].dx, stroke[0].dy);
+        for (int i = 1; i < stroke.length; i++) {
+          path.lineTo(stroke[i].dx, stroke[i].dy);
+        }
+        canvas.drawPath(path, paint);
+      }
+      final picture = recorder.endRecording();
+      final img = await picture.toImage(300, 120);
+      final byteData = await img.toByteData(format: ui.ImageByteFormat.png);
+      if (byteData != null) {
+        signatureBase64 = base64Encode(byteData.buffer.asUint8List());
+      }
+    } catch (e) {
+      debugPrint('Signature encoding error (non-fatal): $e');
+    }
 
-      final existingMeta = Map<String, dynamic>.from(
-          (advance['metadata'] as Map?)?.cast<String, dynamic>() ?? {});
-      existingMeta['receipt_confirmation'] = {
-        'confirmed': true,
-        'confirmedAt': DateTime.now().toIso8601String(),
-        'confirmedBy': _userId,
-        'notes': notesController.text.trim(),
-      };
+    final advanceId = advance['id'] as String?;
+    if (advanceId == null) return;
 
+    final existingMeta = Map<String, dynamic>.from(
+        (advance['metadata'] as Map?)?.cast<String, dynamic>() ?? {});
+    existingMeta['receipt_confirmation'] = {
+      'confirmed': true,
+      'confirmedAt': DateTime.now().toIso8601String(),
+      'confirmedBy': _userId,
+      'notes': notesController.text.trim(),
+      if (gpsPosition != null) 'gps': {
+        'latitude': gpsPosition.latitude,
+        'longitude': gpsPosition.longitude,
+        'accuracy': gpsPosition.accuracy,
+      },
+      if (signatureBase64 != null) 'signatureBase64': signatureBase64,
+    };
+
+    // Step 3: Check connectivity — save offline if needed
+    final connectivity = await Connectivity().checkConnectivity();
+    final isOffline = connectivity.contains(ConnectivityResult.none) ||
+        (connectivity.length == 1 && connectivity.first == ConnectivityResult.none);
+
+    if (isOffline) {
+      try {
+        final box = await Hive.openBox<Map>('pending_confirmations');
+        await box.put(advanceId, {
+          'advanceId': advanceId,
+          'metadata': existingMeta,
+          'savedAt': DateTime.now().toIso8601String(),
+        });
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(widget.isArabic
+                ? 'تم حفظ التأكيد — سيتم المزامنة عند الاتصال'
+                : 'Saved offline — will sync when connected'),
+            backgroundColor: Colors.orange,
+            duration: const Duration(seconds: 4),
+          ));
+        }
+      } catch (e) {
+        debugPrint('Hive save error: $e');
+      }
+      return;
+    }
+
+    // Online: submit immediately
+    try {
       await Supabase.instance.client
           .from('down_payment_requests')
           .update({'metadata': existingMeta})
           .eq('id', advanceId);
 
+      // Also sync any previously offline confirmations
+      await _syncPendingConfirmations();
+
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(widget.isArabic
-                ? 'تم تأكيد الاستلام بنجاح'
-                : 'Receipt confirmed successfully'),
-            backgroundColor: Colors.green,
-          ),
-        );
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(widget.isArabic ? 'تم تأكيد الاستلام بنجاح' : 'Receipt confirmed successfully'),
+          backgroundColor: Colors.green,
+        ));
         await _loadAdvances();
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(widget.isArabic
-                ? 'حدث خطأ أثناء التأكيد'
-                : 'Error confirming receipt: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(widget.isArabic ? 'حدث خطأ أثناء التأكيد' : 'Error confirming receipt: $e'),
+          backgroundColor: Colors.red,
+        ));
       }
+    }
+  }
+
+  Future<void> _syncPendingConfirmations() async {
+    try {
+      final box = await Hive.openBox<Map>('pending_confirmations');
+      if (box.isEmpty) return;
+      final keys = box.keys.toList();
+      for (final key in keys) {
+        final pending = box.get(key);
+        if (pending == null) continue;
+        final advanceId = pending['advanceId'] as String?;
+        final metadata = pending['metadata'];
+        if (advanceId == null || metadata == null) continue;
+        try {
+          await Supabase.instance.client
+              .from('down_payment_requests')
+              .update({'metadata': metadata})
+              .eq('id', advanceId);
+          await box.delete(key);
+          debugPrint('[Wallet] Synced offline confirmation for $advanceId');
+        } catch (e) {
+          debugPrint('[Wallet] Sync failed for $advanceId: $e');
+        }
+      }
+    } catch (e) {
+      debugPrint('[Wallet] Sync error: $e');
     }
   }
 
@@ -1712,4 +1881,32 @@ class _WalletScreenState extends State<WalletScreen> {
       ),
     );
   }
+}
+
+
+class _SignaturePainter extends CustomPainter {
+  final List<List<Offset>> strokes;
+  _SignaturePainter(this.strokes);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = Colors.black
+      ..strokeWidth = 2.5
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round
+      ..style = PaintingStyle.stroke;
+
+    for (final stroke in strokes) {
+      if (stroke.length < 2) continue;
+      final path = Path()..moveTo(stroke[0].dx, stroke[0].dy);
+      for (int i = 1; i < stroke.length; i++) {
+        path.lineTo(stroke[i].dx, stroke[i].dy);
+      }
+      canvas.drawPath(path, paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(_SignaturePainter old) => true;
 }

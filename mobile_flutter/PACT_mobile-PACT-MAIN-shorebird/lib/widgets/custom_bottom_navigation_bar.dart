@@ -35,11 +35,15 @@ class CustomBottomNavigationBar extends StatelessWidget {
   /// Whether the user is a coordinator (shows extra "Verify" tab)
   final bool isCoordinator;
 
+  /// Number of pending fund receipt confirmations (shows badge on Wallet tab)
+  final int walletBadgeCount;
+
   const CustomBottomNavigationBar({
     super.key,
     required this.currentIndex,
     required this.onTap,
     this.isCoordinator = false,
+    this.walletBadgeCount = 0,
   });
 
   @override
@@ -120,8 +124,8 @@ class CustomBottomNavigationBar extends StatelessWidget {
       _buildNavItem(0, AppLocalizations.of(context)!.home, Icons.home_outlined),
       // Sites Management
       _buildNavItem(1, 'Sites', Icons.assignment_rounded),
-      // Wallet
-      _buildNavItem(2, 'Wallet', Icons.wallet_giftcard),
+      // Wallet (with badge if there are pending confirmations)
+      _buildNavItem(2, 'Wallet', Icons.wallet_giftcard, badge: walletBadgeCount),
     ];
 
     // Commented out items - keeping for future use
@@ -166,7 +170,7 @@ class CustomBottomNavigationBar extends StatelessWidget {
   }
 
   /// Builds a single navigation item
-  Widget _buildNavItem(int index, String label, IconData icon) {
+  Widget _buildNavItem(int index, String label, IconData icon, {int badge = 0}) {
     final isActive = currentIndex == index;
     final activeColor = _getActiveColor(index);
     // Width for 3 items
@@ -180,29 +184,56 @@ class CustomBottomNavigationBar extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: isActive
-                    ? activeColor.withOpacity(0.1)
-                    : Colors.transparent,
-                borderRadius: BorderRadius.circular(16),
-                boxShadow: isActive
-                    ? [
-                        BoxShadow(
-                          color: activeColor.withOpacity(0.2),
-                          blurRadius: 8,
-                          offset: const Offset(0, 3),
-                          spreadRadius: -2,
+            Stack(
+              clipBehavior: Clip.none,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: isActive
+                        ? activeColor.withOpacity(0.1)
+                        : Colors.transparent,
+                    borderRadius: BorderRadius.circular(16),
+                    boxShadow: isActive
+                        ? [
+                            BoxShadow(
+                              color: activeColor.withOpacity(0.2),
+                              blurRadius: 8,
+                              offset: const Offset(0, 3),
+                              spreadRadius: -2,
+                            ),
+                          ]
+                        : null,
+                  ),
+                  child: Icon(
+                    icon,
+                    color: isActive ? activeColor : AppColors.textLight,
+                    size: isActive ? 24 : 22,
+                  ),
+                ),
+                if (badge > 0)
+                  Positioned(
+                    right: -4,
+                    top: -4,
+                    child: Container(
+                      padding: const EdgeInsets.all(3),
+                      decoration: const BoxDecoration(
+                        color: Colors.red,
+                        shape: BoxShape.circle,
+                      ),
+                      constraints: const BoxConstraints(minWidth: 18, minHeight: 18),
+                      child: Text(
+                        badge > 9 ? '9+' : '$badge',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
                         ),
-                      ]
-                    : null,
-              ),
-              child: Icon(
-                icon,
-                color: isActive ? activeColor : AppColors.textLight,
-                size: isActive ? 24 : 22,
-              ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                  ),
+              ],
             ),
             const SizedBox(height: 2),
             FittedBox(
