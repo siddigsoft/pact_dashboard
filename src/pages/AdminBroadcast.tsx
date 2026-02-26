@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Switch } from '@/components/ui/switch';
 import {
   Megaphone, Send, Clock, Users, AlertCircle, CheckCircle2,
-  RefreshCw, Info, Bell, Link as LinkIcon, Shield
+  RefreshCw, Info, Bell, Link as LinkIcon, Shield, Eye, UserCheck, UserX, ChevronDown, ChevronUp
 } from 'lucide-react';
 import { useUser } from '@/context/user/UserContext';
 import { useToast } from '@/hooks/use-toast';
@@ -72,12 +72,22 @@ const QUICK_TEMPLATES = [
 
 type BroadcastHistory = {
   id: string;
+  broadcast_id: string | null;
   title: string;
   message: string;
   created_at: string;
   event_type: string;
   priority: string;
   recipient_count?: number;
+  read_count?: number;
+};
+
+type ReceiptUser = {
+  userId: string;
+  name: string;
+  role: string;
+  isRead: boolean;
+  readAt: string | null;
 };
 
 export default function AdminBroadcastPage() {
@@ -98,6 +108,9 @@ export default function AdminBroadcastPage() {
   const [history, setHistory] = useState<BroadcastHistory[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [activeTab, setActiveTab] = useState('compose');
+  const [openReceiptId, setOpenReceiptId] = useState<string | null>(null);
+  const [receipts, setReceipts] = useState<Record<string, ReceiptUser[]>>({});
+  const [receiptsLoading, setReceiptsLoading] = useState<Record<string, boolean>>({});
   const [userCount, setUserCount] = useState<number | null>(null);
 
   const role = (currentUser?.role || '').toLowerCase();
@@ -137,34 +150,93 @@ export default function AdminBroadcastPage() {
     try {
       const { data } = await supabase
         .from('notifications')
-        .select('id, title_en, message_en, created_at, event_type, priority')
+        .select('id, title_en, message_en, created_at, event_type, priority, entity_id, is_read')
         .eq('event_type', 'broadcast')
         .order('created_at', { ascending: false })
-        .limit(50);
+        .limit(200);
 
       const grouped: Record<string, BroadcastHistory> = {};
       (data || []).forEach(n => {
-        const key = `${n.title_en}_${n.created_at?.slice(0, 16)}`;
+        // Group by entity_id (broadcast_id) when available, else fall back to title+minute
+        const key = n.entity_id || `${n.title_en}_${n.created_at?.slice(0, 16)}`;
         if (!grouped[key]) {
           grouped[key] = {
             id: n.id,
+            broadcast_id: n.entity_id || null,
             title: n.title_en || '',
             message: n.message_en || '',
             created_at: n.created_at,
             event_type: n.event_type,
             priority: n.priority,
             recipient_count: 1,
+            read_count: n.is_read ? 1 : 0,
           };
         } else {
           grouped[key].recipient_count = (grouped[key].recipient_count || 1) + 1;
+          if (n.is_read) grouped[key].read_count = (grouped[key].read_count || 0) + 1;
         }
       });
 
-      setHistory(Object.values(grouped).slice(0, 20));
+      setHistory(Object.values(grouped).sort((a, b) =>
+        new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      ).slice(0, 30));
     } catch {
       setHistory([]);
     } finally {
       setHistoryLoading(false);
+    }
+  };
+
+  const loadReceipts = async (broadcastId: string) => {
+    if (receiptsLoading[broadcastId]) return;
+    setReceiptsLoading(prev => ({ ...prev, [broadcastId]: true }));
+    try {
+      const { data: notifs } = await supabase
+        .from('notifications')
+        .select('user_id, is_read, read_at')
+        .eq('entity_id', broadcastId)
+        .eq('event_type', 'broadcast');
+
+      if (!notifs || notifs.length === 0) {
+        setReceipts(prev => ({ ...prev, [broadcastId]: [] }));
+        return;
+      }
+
+      const userIds = [...new Set(notifs.map(n => n.user_id).filter(Boolean))];
+      const { data: profiles } = await supabase
+        .from('profiles')
+        .select('id, full_name, role')
+        .in('id', userIds);
+
+      const profileMap: Record<string, { full_name: string; role: string }> = {};
+      (profiles || []).forEach(p => { profileMap[p.id] = p; });
+
+      const receiptList: ReceiptUser[] = notifs.map(n => ({
+        userId: n.user_id,
+        name: profileMap[n.user_id]?.full_name || n.user_id?.slice(0, 8) || 'Unknown',
+        role: profileMap[n.user_id]?.role || '—',
+        isRead: n.is_read || false,
+        readAt: n.read_at || null,
+      }));
+
+      // Sort: read first, then unread
+      receiptList.sort((a, b) => (b.isRead ? 1 : 0) - (a.isRead ? 1 : 0));
+      setReceipts(prev => ({ ...prev, [broadcastId]: receiptList }));
+    } catch {
+      setReceipts(prev => ({ ...prev, [broadcastId]: [] }));
+    } finally {
+      setReceiptsLoading(prev => ({ ...prev, [broadcastId]: false }));
+    }
+  };
+
+  const toggleReceipts = (item: BroadcastHistory) => {
+    if (!item.broadcast_id) return;
+    const bid = item.broadcast_id;
+    if (openReceiptId === bid) {
+      setOpenReceiptId(null);
+    } else {
+      setOpenReceiptId(bid);
+      if (!receipts[bid]) loadReceipts(bid);
     }
   };
 
@@ -212,6 +284,7 @@ export default function AdminBroadcastPage() {
       }
 
       const now = new Date().toISOString();
+      const broadcastId = crypto.randomUUID();
       const titleText = titleEn.trim();
       const titleArText = titleAr.trim() || titleText;
       const messageText = messageEn.trim();
@@ -229,6 +302,8 @@ export default function AdminBroadcastPage() {
         message_ar: messageArText,
         priority: priority,
         action_url: link,
+        entity_id: broadcastId,
+        entity_type: 'broadcast_batch',
         event_type: 'broadcast',
         status: 'pending',
         email_sent: false,
@@ -552,34 +627,116 @@ export default function AdminBroadcastPage() {
                 </div>
               ) : (
                 <div className="space-y-3">
-                  {history.map((item, idx) => (
-                    <div key={item.id + idx} className="flex items-start gap-3 rounded-lg border p-4">
-                      <Megaphone className="w-4 h-4 text-violet-400 mt-0.5 flex-shrink-0" />
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <p className="text-sm font-medium truncate">{item.title}</p>
-                          <Badge variant="outline" className={
-                            item.priority === 'urgent' ? 'border-red-300 text-red-600 text-[10px]' :
-                            item.priority === 'high' ? 'border-amber-300 text-amber-600 text-[10px]' :
-                            'text-[10px]'
-                          }>
-                            {item.priority}
-                          </Badge>
+                  {history.map((item, idx) => {
+                    const bid = item.broadcast_id;
+                    const isOpen = openReceiptId === bid;
+                    const total = item.recipient_count || 0;
+                    const readCount = item.read_count || 0;
+                    const readPct = total > 0 ? Math.round((readCount / total) * 100) : 0;
+                    const receiptList = bid ? receipts[bid] : null;
+                    const isLoadingReceipts = bid ? receiptsLoading[bid] : false;
+
+                    return (
+                      <div key={item.id + idx} className="rounded-lg border overflow-hidden">
+                        {/* Broadcast header row */}
+                        <div className="flex items-start gap-3 p-4">
+                          <Megaphone className="w-4 h-4 text-violet-400 mt-0.5 flex-shrink-0" />
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <p className="text-sm font-medium truncate">{item.title}</p>
+                              <Badge variant="outline" className={
+                                item.priority === 'urgent' ? 'border-red-300 text-red-600 text-[10px]' :
+                                item.priority === 'high' ? 'border-amber-300 text-amber-600 text-[10px]' :
+                                'text-[10px]'
+                              }>
+                                {item.priority}
+                              </Badge>
+                            </div>
+                            <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{item.message}</p>
+                            <div className="flex items-center gap-3 mt-2 text-xs text-muted-foreground flex-wrap">
+                              <span className="flex items-center gap-1">
+                                <Clock className="w-3 h-3" />
+                                {item.created_at ? format(new Date(item.created_at), 'MMM dd, yyyy HH:mm') : '—'}
+                              </span>
+                              <span className="flex items-center gap-1">
+                                <Users className="w-3 h-3" />
+                                {total} sent
+                              </span>
+                              <span className="flex items-center gap-1 text-emerald-600">
+                                <UserCheck className="w-3 h-3" />
+                                {readCount} read ({readPct}%)
+                              </span>
+                            </div>
+                            {/* Read progress bar */}
+                            {total > 0 && (
+                              <div className="mt-2 w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                                <div
+                                  className="h-full bg-emerald-400 rounded-full transition-all"
+                                  style={{ width: `${readPct}%` }}
+                                />
+                              </div>
+                            )}
+                          </div>
+                          {/* View receipts button */}
+                          {bid && (
+                            <button
+                              onClick={() => toggleReceipts(item)}
+                              className="flex items-center gap-1 text-[11px] text-violet-600 hover:text-violet-800 font-medium shrink-0 mt-0.5"
+                            >
+                              <Eye className="w-3.5 h-3.5" />
+                              {isOpen ? 'Hide' : 'Receipts'}
+                              {isOpen ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                            </button>
+                          )}
                         </div>
-                        <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{item.message}</p>
-                        <div className="flex items-center gap-3 mt-2 text-xs text-muted-foreground">
-                          <span className="flex items-center gap-1">
-                            <Clock className="w-3 h-3" />
-                            {item.created_at ? format(new Date(item.created_at), 'MMM dd, yyyy HH:mm') : '—'}
-                          </span>
-                          <span className="flex items-center gap-1">
-                            <Users className="w-3 h-3" />
-                            {item.recipient_count} recipient(s) tracked
-                          </span>
-                        </div>
+
+                        {/* Expandable receipts panel */}
+                        {isOpen && bid && (
+                          <div className="border-t bg-slate-50 dark:bg-slate-900/40 p-4">
+                            {isLoadingReceipts ? (
+                              <div className="flex items-center gap-2 text-xs text-muted-foreground py-2">
+                                <RefreshCw className="w-3.5 h-3.5 animate-spin" /> Loading receipts...
+                              </div>
+                            ) : !receiptList || receiptList.length === 0 ? (
+                              <p className="text-xs text-muted-foreground py-2">No receipt data available for this broadcast.</p>
+                            ) : (
+                              <div>
+                                <div className="flex items-center justify-between mb-3">
+                                  <p className="text-xs font-semibold text-slate-600 dark:text-slate-400">
+                                    Read Receipts — {receiptList.filter(r => r.isRead).length} of {receiptList.length} acknowledged
+                                  </p>
+                                  <div className="flex gap-3 text-[11px]">
+                                    <span className="flex items-center gap-1 text-emerald-600"><UserCheck className="w-3 h-3" /> Read</span>
+                                    <span className="flex items-center gap-1 text-slate-400"><UserX className="w-3 h-3" /> Unread</span>
+                                  </div>
+                                </div>
+                                <div className="space-y-1 max-h-72 overflow-y-auto">
+                                  {receiptList.map(r => (
+                                    <div key={r.userId} className={`flex items-center gap-3 rounded px-3 py-2 text-xs ${r.isRead ? 'bg-emerald-50 dark:bg-emerald-900/20' : 'bg-white dark:bg-slate-800'}`}>
+                                      {r.isRead
+                                        ? <UserCheck className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                                        : <UserX className="w-3.5 h-3.5 text-slate-300 shrink-0" />
+                                      }
+                                      <span className="flex-1 font-medium truncate">{r.name}</span>
+                                      <span className="text-muted-foreground capitalize shrink-0">{r.role}</span>
+                                      {r.isRead && r.readAt && (
+                                        <span className="text-emerald-600 shrink-0">
+                                          {format(new Date(r.readAt), 'MMM dd HH:mm')}
+                                        </span>
+                                      )}
+                                      {!r.isRead && (
+                                        <span className="text-slate-400 shrink-0">Pending</span>
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )}
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </CardContent>
