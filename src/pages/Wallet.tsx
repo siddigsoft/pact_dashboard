@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useWallet } from '@/context/wallet/WalletContext';
 import { useAppContext } from '@/context/AppContext';
+import { useDownPayment } from '@/context/downPayment/DownPaymentContext';
 import { useRealtimeWallet } from '@/hooks/use-realtime-wallet';
 import { supabase } from '@/integrations/supabase/client';
 import { DataFreshnessBadge } from '@/components/realtime';
@@ -44,7 +45,11 @@ import {
   FileText,
   Banknote,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  Truck,
+  MapPin,
+  AlertTriangle,
+  Info
 } from 'lucide-react';
 import { format, startOfMonth, endOfMonth, subMonths, isWithinInterval } from 'date-fns';
 import { DEFAULT_CURRENCY } from '@/types/wallet';
@@ -79,6 +84,12 @@ const WalletPage = () => {
     refreshWithdrawalRequests
   } = useWallet();
 
+  const {
+    requests: advanceRequests,
+    loading: advanceLoading,
+    confirmReceipt: confirmAdvanceReceipt,
+  } = useDownPayment();
+
   // Real-time wallet updates
   const { lastRefresh } = useRealtimeWallet();
 
@@ -110,6 +121,7 @@ const WalletPage = () => {
   const [paymentMethods, setPaymentMethods] = useState<any[]>([]);
   
   const [signatureWithdrawalRequest, setSignatureWithdrawalRequest] = useState<typeof withdrawalRequests[0] | null>(null);
+  const [signatureAdvanceRequest, setSignatureAdvanceRequest] = useState<typeof advanceRequests[0] | null>(null);
 
   const [transactionTypeFilter, setTransactionTypeFilter] = useState<string>('all');
   const [dateRangeFilter, setDateRangeFilter] = useState<string>('all');
@@ -117,6 +129,24 @@ const WalletPage = () => {
   const [searchFilters, setSearchFilters] = useState<SearchFilters>({});
 
   const currentBalance = getBalance(DEFAULT_CURRENCY);
+
+  const myAdvances = useMemo(() => {
+    if (!currentUser?.id) return [];
+    return advanceRequests.filter(r => r.requestedBy === currentUser.id || r.metadata?.requestedById === currentUser.id);
+  }, [advanceRequests, currentUser?.id]);
+
+  const pendingAdvanceConfirmations = useMemo(() =>
+    myAdvances.filter(r =>
+      (r.status === 'partially_paid' || r.status === 'fully_paid') &&
+      !(r.metadata as any)?.receipt_confirmation?.confirmed
+    ),
+    [myAdvances]
+  );
+
+  const pendingWithdrawalConfirmations = useMemo(() =>
+    withdrawalRequests.filter(r => r.status === 'approved' && !r.fundReceiptConfirmed),
+    [withdrawalRequests]
+  );
 
   const handleWithdrawalRequest = async () => {
     const amount = parseFloat(withdrawalAmount);
@@ -881,6 +911,18 @@ const WalletPage = () => {
                 >
                   STATEMENTS
                 </TabsTrigger>
+                <TabsTrigger 
+                  value="advances" 
+                  data-testid="tab-advances"
+                  className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-amber-600 data-[state=active]:to-orange-600 data-[state=active]:text-white data-[state=active]:shadow-[0_0_15px_rgba(245,158,11,0.5)] text-blue-300 min-h-[44px] text-xs sm:text-sm flex-shrink-0 whitespace-nowrap relative"
+                >
+                  MY ADVANCES
+                  {pendingAdvanceConfirmations.length > 0 && (
+                    <span className="absolute -top-1 -right-1 w-4 h-4 bg-amber-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">
+                      {pendingAdvanceConfirmations.length}
+                    </span>
+                  )}
+                </TabsTrigger>
               </TabsList>
             </div>
 
@@ -895,6 +937,52 @@ const WalletPage = () => {
 
         {/* Overview Tab */}
         <TabsContent value="overview" className="space-y-4">
+
+          {/* Pending Receipt Confirmation Alerts */}
+          {(pendingAdvanceConfirmations.length > 0 || pendingWithdrawalConfirmations.length > 0) && (
+            <div className="rounded-lg border border-amber-500/50 bg-amber-500/10 p-4 flex items-start gap-3">
+              <AlertTriangle className="w-5 h-5 text-amber-400 mt-0.5 flex-shrink-0" />
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold text-amber-300">
+                  تأكيد استلام الأموال مطلوب / Fund Receipt Confirmation Required
+                </p>
+                <p className="text-xs text-amber-200/80 mt-0.5">
+                  {pendingAdvanceConfirmations.length > 0 && (
+                    <span>{pendingAdvanceConfirmations.length} transport advance{pendingAdvanceConfirmations.length !== 1 ? 's' : ''} awaiting your receipt confirmation. </span>
+                  )}
+                  {pendingWithdrawalConfirmations.length > 0 && (
+                    <span>{pendingWithdrawalConfirmations.length} withdrawal{pendingWithdrawalConfirmations.length !== 1 ? 's' : ''} awaiting your receipt confirmation. </span>
+                  )}
+                  Please confirm in the respective tab below.
+                </p>
+              </div>
+              <div className="flex gap-2 flex-shrink-0">
+                {pendingAdvanceConfirmations.length > 0 && (
+                  <button
+                    onClick={() => {
+                      const el = document.querySelector('[data-testid="tab-advances"]') as HTMLButtonElement;
+                      el?.click();
+                    }}
+                    className="text-xs text-amber-300 underline underline-offset-2 hover:text-amber-100"
+                  >
+                    View Advances
+                  </button>
+                )}
+                {pendingWithdrawalConfirmations.length > 0 && (
+                  <button
+                    onClick={() => {
+                      const el = document.querySelector('[data-testid="tab-withdrawals"]') as HTMLButtonElement;
+                      el?.click();
+                    }}
+                    className="text-xs text-amber-300 underline underline-offset-2 hover:text-amber-100"
+                  >
+                    View Withdrawals
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             {/* Recent Transactions */}
             <Card>
@@ -1824,6 +1912,120 @@ const WalletPage = () => {
             </CardContent>
           </Card>
         </TabsContent>
+
+        {/* My Advances Tab */}
+        <TabsContent value="advances" className="space-y-4">
+          <Card className="border-amber-500/20">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Truck className="w-5 h-5 text-amber-400" />
+                My Transport Advances / سلفات النقل الخاصة بي
+              </CardTitle>
+              <CardDescription>
+                Transport advances you have requested. Confirm receipt for paid advances below.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {advanceLoading ? (
+                <div className="flex items-center justify-center py-12">
+                  <RefreshCw className="w-5 h-5 animate-spin text-muted-foreground" />
+                  <span className="ml-2 text-sm text-muted-foreground">Loading advances...</span>
+                </div>
+              ) : myAdvances.length === 0 ? (
+                <div className="text-center py-12 text-muted-foreground">
+                  <Truck className="w-8 h-8 mx-auto mb-3 opacity-40" />
+                  <p className="text-sm">No transport advance requests found.</p>
+                  <p className="text-xs mt-1 text-slate-500">Advances are created when you request funds for a site visit.</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {myAdvances.map((advance) => {
+                    const receiptConfirmed = (advance.metadata as any)?.receipt_confirmation?.confirmed;
+                    const confirmedAt = (advance.metadata as any)?.receipt_confirmation?.confirmedAt;
+                    const canConfirm = (advance.status === 'partially_paid' || advance.status === 'fully_paid') && !receiptConfirmed;
+                    const disbursedAmount = advance.approvedAmount ?? advance.requestedAmount;
+
+                    const statusColors: Record<string, string> = {
+                      pending_supervisor: 'bg-yellow-500/10 text-yellow-400 border-yellow-500/30',
+                      pending_admin: 'bg-blue-500/10 text-blue-400 border-blue-500/30',
+                      approved: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30',
+                      rejected: 'bg-red-500/10 text-red-400 border-red-500/30',
+                      partially_paid: 'bg-amber-500/10 text-amber-400 border-amber-500/30',
+                      fully_paid: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30',
+                      cancelled: 'bg-slate-500/10 text-slate-400 border-slate-500/30',
+                    };
+
+                    const statusLabels: Record<string, string> = {
+                      pending_supervisor: 'Pending Supervisor',
+                      pending_admin: 'Pending Admin',
+                      approved: 'Approved',
+                      rejected: 'Rejected',
+                      partially_paid: 'Partially Paid',
+                      fully_paid: 'Fully Paid',
+                      cancelled: 'Cancelled',
+                    };
+
+                    return (
+                      <div
+                        key={advance.id}
+                        data-testid={`advance-card-${advance.id}`}
+                        className={`rounded-lg border p-4 space-y-2 transition-all ${canConfirm ? 'border-amber-500/50 bg-amber-500/5' : 'border-border bg-card'}`}
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex items-start gap-2 min-w-0">
+                            <MapPin className="w-4 h-4 text-amber-400 mt-0.5 flex-shrink-0" />
+                            <div className="min-w-0">
+                              <p className="text-sm font-medium truncate">{advance.siteName}</p>
+                              {advance.mmpName && (
+                                <p className="text-xs text-muted-foreground">MMP: {advance.mmpName}</p>
+                              )}
+                              <p className="text-xs text-muted-foreground">
+                                {format(new Date(advance.createdAt), 'MMM dd, yyyy')}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                            <span className={`text-xs font-semibold px-2 py-0.5 rounded-full border ${statusColors[advance.status] || 'bg-slate-500/10 text-slate-400 border-slate-500/30'}`}>
+                              {statusLabels[advance.status] || advance.status}
+                            </span>
+                            <span className="text-sm font-bold tabular-nums text-amber-300">
+                              {formatCurrency(disbursedAmount)}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Receipt status */}
+                        {receiptConfirmed && confirmedAt && (
+                          <div className="flex items-center gap-2 text-xs text-emerald-400 bg-emerald-500/10 rounded px-2 py-1">
+                            <CheckCircle2 className="w-3.5 h-3.5" />
+                            <span>تم تأكيد الاستلام / Receipt confirmed on {format(new Date(confirmedAt), 'MMM dd, yyyy HH:mm')}</span>
+                          </div>
+                        )}
+
+                        {canConfirm && (
+                          <div className="pt-1">
+                            <div className="flex items-start gap-2 text-xs text-amber-300 bg-amber-500/10 rounded px-2 py-1 mb-2">
+                              <Info className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
+                              <span>Funds have been disbursed. Please confirm you received them / تم صرف المبلغ، يرجى تأكيد استلامه</span>
+                            </div>
+                            <button
+                              data-testid={`confirm-advance-receipt-${advance.id}`}
+                              onClick={() => setSignatureAdvanceRequest(advance)}
+                              className="w-full py-2 px-4 rounded-md text-sm font-semibold bg-amber-500 hover:bg-amber-400 text-black transition-colors"
+                            >
+                              ✓ تأكيد الاستلام / Confirm Receipt
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
       </Tabs>
         </CardContent>
       </Card>
@@ -1858,6 +2060,42 @@ const WalletPage = () => {
             setSignatureWithdrawalRequest(null);
           }}
           onCancel={() => setSignatureWithdrawalRequest(null)}
+        />
+      )}
+
+      {signatureAdvanceRequest && currentUser && (
+        <SignatureConfirmationModal
+          open={!!signatureAdvanceRequest}
+          onOpenChange={(open) => { if (!open) setSignatureAdvanceRequest(null); }}
+          transaction={{
+            id: signatureAdvanceRequest.id,
+            type: 'advance',
+            title: 'تأكيد استلام سلفة النقل / Confirm Transport Advance Receipt',
+            description: `أؤكد أنني استلمت كامل مبلغ سلفة النقل لموقع ${signatureAdvanceRequest.siteName}. / I confirm that I have received the full transport advance for site ${signatureAdvanceRequest.siteName}.`,
+            amount: signatureAdvanceRequest.approvedAmount ?? signatureAdvanceRequest.requestedAmount,
+            currency: DEFAULT_CURRENCY,
+            counterparty: 'Finance / المالية',
+            date: new Date().toISOString(),
+            reference: signatureAdvanceRequest.id,
+          }}
+          userId={currentUser.id}
+          userName={currentUser.fullName || currentUser.email || ''}
+          userEmail={currentUser.email}
+          userRole={currentUser.role}
+          allowedMethods={['handwriting', 'uuid']}
+          onSignatureComplete={async (signature) => {
+            await confirmAdvanceReceipt({
+              requestId: signatureAdvanceRequest.id,
+              userId: currentUser.id,
+              userName: currentUser.fullName || currentUser.email || '',
+              signatureId: signature.signatureId,
+              signatureHash: signature.signatureHash,
+              signatureMethod: signature.method,
+              signedAt: signature.signedAt,
+            });
+            setSignatureAdvanceRequest(null);
+          }}
+          onCancel={() => setSignatureAdvanceRequest(null)}
         />
       )}
     </div>
