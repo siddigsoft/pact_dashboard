@@ -7,7 +7,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { useDownPayment } from '@/context/downPayment/DownPaymentContext';
 import { useUser } from '@/context/user/UserContext';
-import { Plus, Trash2, DollarSign } from 'lucide-react';
+import { Plus, Trash2, DollarSign, AlertTriangle, Banknote } from 'lucide-react';
 import { PaymentType, InstallmentPlan } from '@/types/down-payment';
 
 interface DownPaymentRequestDialogProps {
@@ -63,6 +63,11 @@ export function DownPaymentRequestDialog({
 
   const handleSubmit = async () => {
     if (!currentUser) return;
+
+    if (!currentUser.bankAccount?.accountNumber) {
+      alert('Please add your bank account details in Settings → Profile → Bank Account before requesting an advance.');
+      return;
+    }
 
     if (!justification.trim()) {
       alert('Please provide justification for this request');
@@ -123,6 +128,41 @@ export function DownPaymentRequestDialog({
         </DialogHeader>
 
         <div className="space-y-6">
+
+          {/* Bank Account Gate */}
+          {!currentUser?.bankAccount?.accountNumber ? (
+            <div className="rounded-lg border border-red-500/40 bg-red-50 dark:bg-red-900/10 p-4 space-y-2">
+              <div className="flex items-start gap-2">
+                <AlertTriangle className="w-4 h-4 text-red-500 mt-0.5 flex-shrink-0" />
+                <div>
+                  <p className="text-sm font-semibold text-red-600 dark:text-red-400">
+                    Bank Account Required / الحساب البنكي مطلوب
+                  </p>
+                  <p className="text-xs text-red-500 dark:text-red-300 mt-1">
+                    You must add your bank account details in your profile Settings before requesting an advance. / يجب إضافة بيانات حسابك البنكي في الإعدادات قبل طلب السلفة.
+                  </p>
+                  <a
+                    href="/settings"
+                    className="inline-block mt-2 text-xs font-semibold text-red-600 dark:text-red-400 underline underline-offset-2"
+                    onClick={() => onOpenChange(false)}
+                  >
+                    Go to Settings → Profile → Bank Account
+                  </a>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="rounded-lg border border-emerald-500/30 bg-emerald-50 dark:bg-emerald-900/10 p-3 flex items-start gap-2">
+              <Banknote className="w-4 h-4 text-emerald-600 dark:text-emerald-400 mt-0.5 flex-shrink-0" />
+              <div className="text-xs space-y-0.5">
+                <p className="font-semibold text-emerald-700 dark:text-emerald-300">Funds will be sent to / سيتم إرسال المبلغ إلى:</p>
+                <p><span className="text-emerald-600 dark:text-emerald-400">Account Name:</span> {currentUser.bankAccount.accountName}</p>
+                <p><span className="text-emerald-600 dark:text-emerald-400">Account No:</span> {currentUser.bankAccount.accountNumber}</p>
+                <p><span className="text-emerald-600 dark:text-emerald-400">Branch:</span> {currentUser.bankAccount.branch}</p>
+              </div>
+            </div>
+          )}
+
           <div className="bg-muted/50 p-4 rounded-md">
             <div className="grid grid-cols-2 gap-4 text-sm">
               <div>
@@ -286,8 +326,9 @@ export function DownPaymentRequestDialog({
           </Button>
           <Button 
             onClick={handleSubmit} 
-            disabled={submitting || requestedAmount <= 0 || requestedAmount > transportationBudget} 
+            disabled={submitting || requestedAmount <= 0 || requestedAmount > transportationBudget || !currentUser?.bankAccount?.accountNumber} 
             data-testid="button-submit-request"
+            title={!currentUser?.bankAccount?.accountNumber ? 'Add bank account in Settings first' : undefined}
           >
             {submitting ? 'Submitting...' : 'Submit Request'}
           </Button>

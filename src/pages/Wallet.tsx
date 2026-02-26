@@ -578,12 +578,20 @@ const WalletPage = () => {
                   <span className="hidden xs:inline">CLEAR FILTERS</span>
                   <span className="xs:hidden">✕</span>
                 </button>
+            {!currentUser?.bankAccount?.accountNumber && (
+              <div className="flex items-center gap-2 px-3 py-2 rounded-md border border-amber-500/40 bg-amber-500/10 text-amber-300 text-xs">
+                <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
+                <span>Add your <a href="/settings" className="underline font-semibold hover:text-amber-100">bank account</a> in Settings before requesting a withdrawal.</span>
+              </div>
+            )}
             <Dialog open={withdrawalDialogOpen} onOpenChange={setWithdrawalDialogOpen}>
               <DialogTrigger asChild>
                 <button
                   type="button"
-                  className="px-4 py-2 rounded-md bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white border-0 shadow-[0_0_20px_rgba(168,85,247,0.5)] transition-all inline-flex items-center focus:outline-none focus:ring-2 focus:ring-purple-400/70 focus:ring-offset-2 focus:ring-offset-slate-950 min-h-[44px]"
+                  className="px-4 py-2 rounded-md bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white border-0 shadow-[0_0_20px_rgba(168,85,247,0.5)] transition-all inline-flex items-center focus:outline-none focus:ring-2 focus:ring-purple-400/70 focus:ring-offset-2 focus:ring-offset-slate-950 min-h-[44px] disabled:opacity-40 disabled:cursor-not-allowed"
                   data-testid="button-request-withdrawal"
+                  disabled={!currentUser?.bankAccount?.accountNumber}
+                  title={!currentUser?.bankAccount?.accountNumber ? 'Add bank account in Settings first' : undefined}
                 >
                   <TrendingDown className="w-4 h-4 mr-2" />
                   REQUEST WITHDRAWAL
@@ -594,6 +602,18 @@ const WalletPage = () => {
                   <DialogTitle>Request Withdrawal</DialogTitle>
                 </DialogHeader>
                 <div className="grid gap-4 py-4">
+                  {/* Bank Account Destination Info */}
+                  {currentUser?.bankAccount?.accountNumber && (
+                    <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3 flex items-start gap-2">
+                      <Banknote className="w-4 h-4 text-emerald-400 mt-0.5 flex-shrink-0" />
+                      <div className="text-xs space-y-0.5">
+                        <p className="font-semibold text-emerald-300">Funds will be sent to / سيتم إرسال المبلغ إلى:</p>
+                        <p className="text-emerald-200"><span className="text-emerald-400">Account Name:</span> {currentUser.bankAccount.accountName}</p>
+                        <p className="text-emerald-200"><span className="text-emerald-400">Account No:</span> {currentUser.bankAccount.accountNumber}</p>
+                        <p className="text-emerald-200"><span className="text-emerald-400">Branch:</span> {currentUser.bankAccount.branch}</p>
+                      </div>
+                    </div>
+                  )}
                   <div className="grid gap-2">
                     <Label htmlFor="amount">Amount ({DEFAULT_CURRENCY})</Label>
                     <Input

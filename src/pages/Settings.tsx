@@ -38,6 +38,9 @@ import {
   Camera,
   Upload,
   AlertCircle,
+  Banknote,
+  CreditCard,
+  CheckCircle2,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useSettings } from "@/context/settings/SettingsContext";
@@ -64,6 +67,7 @@ import {
 } from "@/components/ui/select";
 import { TwoFactorSetup } from "@/components/auth/TwoFactorSetup";
 import { useMFA } from "@/hooks/use-mfa";
+import { BankakAccountForm, BankakAccountFormValues } from "@/components/BankakAccountForm";
 import { Badge } from "@/components/ui/badge";
 import { NotificationSettings as NotificationSettingsComponent } from "@/components/settings/NotificationSettings";
 import { useBiometric } from "@/hooks/use-biometric";
@@ -522,6 +526,37 @@ const Settings = () => {
   const [avatar, setAvatar] = useState(currentUser?.avatar || "");
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
   const avatarInputRef = useRef<HTMLInputElement>(null);
+  const [bankAccountSubmitting, setBankAccountSubmitting] = useState(false);
+
+  const handleBankAccountSubmit = async (values: BankakAccountFormValues) => {
+    if (!currentUser) return;
+    setBankAccountSubmitting(true);
+    try {
+      const updatedUser = {
+        ...currentUser,
+        bankAccount: {
+          accountName: values.accountName,
+          accountNumber: values.accountNumber,
+          branch: values.branch,
+        },
+      };
+      const success = await updateUser(updatedUser as any);
+      if (success) {
+        toast({
+          title: 'Bank Account Saved / تم حفظ بيانات الحساب',
+          description: 'Your bank account details have been saved. / تم حفظ بيانات حسابك البنكي.',
+        });
+      }
+    } catch (err) {
+      toast({
+        title: 'Error',
+        description: 'Failed to save bank account details.',
+        variant: 'destructive',
+      });
+    } finally {
+      setBankAccountSubmitting(false);
+    }
+  };
 
   useEffect(() => {
     if (currentUser) {
@@ -1773,6 +1808,50 @@ const Settings = () => {
               </div>
             </CardContent>
           </Card>
+
+          {/* Bank Account Details Card */}
+          <Card className="border shadow-sm">
+            <CardHeader className="bg-gradient-to-r from-amber-50 to-yellow-100 dark:from-amber-900/20 dark:to-yellow-800/20 border-b p-4 sm:p-6">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <div className="p-2 bg-amber-500 rounded-lg">
+                    <Banknote className="h-5 w-5 text-white" />
+                  </div>
+                  <div>
+                    <CardTitle className="text-lg flex items-center gap-2">
+                      Bank Account Details
+                      {currentUser?.bankAccount?.accountNumber ? (
+                        <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+                      ) : (
+                        <span className="text-xs font-normal text-red-500 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded px-2 py-0.5">Required</span>
+                      )}
+                    </CardTitle>
+                    <CardDescription>
+                      بيانات الحساب البنكي — Required for all fund requests and withdrawals
+                    </CardDescription>
+                  </div>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="p-4 sm:p-6 space-y-4">
+              {!currentUser?.bankAccount?.accountNumber && (
+                <div className="flex items-start gap-3 rounded-lg border border-amber-500/40 bg-amber-50 dark:bg-amber-900/10 p-3">
+                  <AlertCircle className="w-4 h-4 text-amber-600 dark:text-amber-400 mt-0.5 flex-shrink-0" />
+                  <p className="text-sm text-amber-700 dark:text-amber-300">
+                    You must add your bank account details before submitting any withdrawal or advance fund request. / يجب إضافة بيانات حسابك البنكي قبل تقديم أي طلب سحب أو سلفة.
+                  </p>
+                </div>
+              )}
+              <BankakAccountForm
+                onSubmit={handleBankAccountSubmit}
+                isSubmitting={bankAccountSubmitting}
+                existingDetails={currentUser?.bankAccount as any}
+                currentUserRole={currentUser?.role}
+                isEditable={true}
+              />
+            </CardContent>
+          </Card>
+
         </TabsContent>
 
         <TabsContent value="dataVisibility" className="space-y-4">
