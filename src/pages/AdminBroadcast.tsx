@@ -459,7 +459,7 @@ export default function AdminBroadcastPage() {
   }
 
   return (
-    <div className="p-4 sm:p-6 max-w-4xl mx-auto space-y-6 pb-24">
+    <div className="p-4 sm:p-6 max-w-4xl mx-auto space-y-6">
       {/* Header */}
       <div className="flex items-center gap-3">
         <div className="p-3 bg-violet-600 rounded-xl">
@@ -633,6 +633,35 @@ export default function AdminBroadcastPage() {
             </CardContent>
           </Card>
 
+          {/* Send Result */}
+          {sendResult && (
+            <div className="flex items-center gap-3 rounded-lg border border-emerald-500/30 bg-emerald-50 dark:bg-emerald-900/10 p-4">
+              <CheckCircle2 className="w-5 h-5 text-emerald-600 dark:text-emerald-400 flex-shrink-0" />
+              <div>
+                <p className="text-sm font-medium text-emerald-700 dark:text-emerald-300">
+                  Broadcast sent successfully / تم إرسال الإذاعة بنجاح
+                </p>
+                <p className="text-xs text-emerald-600 dark:text-emerald-400 mt-0.5">
+                  Delivered to <strong>{sendResult.sent}</strong> user(s) — <em>{AUDIENCE_OPTIONS.find(a => a.value === sendResult.audience)?.label}</em>
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Send Button */}
+          <Button
+            onClick={handleSend}
+            disabled={sending || !titleEn.trim() || !messageEn.trim()}
+            className="w-full bg-violet-600 hover:bg-violet-700 text-white h-11 text-base"
+            size="lg"
+          >
+            {sending ? (
+              <><RefreshCw className="w-5 h-5 mr-2 animate-spin" /> Sending broadcast...</>
+            ) : (
+              <><Send className="w-5 h-5 mr-2" /> Send Broadcast to {AUDIENCE_OPTIONS.find(a => a.value === audience)?.label.split('/')[0].trim()}</>
+            )}
+          </Button>
+
           {/* Preview */}
           {(titleEn || messageEn) && (
             <Card className="border-violet-200 dark:border-violet-800 bg-violet-50/50 dark:bg-violet-900/10">
@@ -662,21 +691,6 @@ export default function AdminBroadcastPage() {
                 </div>
               </CardContent>
             </Card>
-          )}
-
-          {/* Send Result */}
-          {sendResult && (
-            <div className="flex items-center gap-3 rounded-lg border border-emerald-500/30 bg-emerald-50 dark:bg-emerald-900/10 p-4">
-              <CheckCircle2 className="w-5 h-5 text-emerald-600 dark:text-emerald-400 flex-shrink-0" />
-              <div>
-                <p className="text-sm font-medium text-emerald-700 dark:text-emerald-300">
-                  Broadcast sent successfully / تم إرسال الإذاعة بنجاح
-                </p>
-                <p className="text-xs text-emerald-600 dark:text-emerald-400 mt-0.5">
-                  Delivered to <strong>{sendResult.sent}</strong> user(s) in audience: <em>{AUDIENCE_OPTIONS.find(a => a.value === sendResult.audience)?.label}</em>
-                </p>
-              </div>
-            </div>
           )}
 
         </TabsContent>
@@ -870,33 +884,6 @@ export default function AdminBroadcastPage() {
         </TabsContent>
       </Tabs>
 
-      {/* Sticky Send Bar — always visible at bottom of page when on Compose tab */}
-      {activeTab === 'compose' && (
-        <div className="fixed bottom-0 left-0 right-0 z-30 flex justify-center pointer-events-none">
-          <div className="w-full max-w-4xl px-4 sm:px-6 pb-4 pointer-events-auto">
-            <div className="bg-background/95 backdrop-blur border rounded-xl shadow-lg p-3">
-              {sendResult && (
-                <div className="flex items-center gap-2 mb-2 text-sm text-emerald-600 dark:text-emerald-400">
-                  <CheckCircle2 className="w-4 h-4 flex-shrink-0" />
-                  <span>Sent to <strong>{sendResult.sent}</strong> user(s) — <em>{AUDIENCE_OPTIONS.find(a => a.value === sendResult.audience)?.label}</em></span>
-                </div>
-              )}
-              <Button
-                onClick={handleSend}
-                disabled={sending || !titleEn.trim() || !messageEn.trim()}
-                className="w-full bg-violet-600 hover:bg-violet-700 text-white h-11 text-base"
-                size="lg"
-              >
-                {sending ? (
-                  <><RefreshCw className="w-5 h-5 mr-2 animate-spin" /> Sending broadcast...</>
-                ) : (
-                  <><Send className="w-5 h-5 mr-2" /> Send Broadcast to {AUDIENCE_OPTIONS.find(a => a.value === audience)?.label.split('/')[0].trim()}</>
-                )}
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
