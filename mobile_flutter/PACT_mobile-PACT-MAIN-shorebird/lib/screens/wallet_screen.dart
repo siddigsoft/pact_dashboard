@@ -367,26 +367,38 @@ class _WalletScreenState extends State<WalletScreen> {
           })
           .fold(0.0, (sum, t) => sum + (t['amount'] as num).toDouble().abs());
 
-      // Compute advance deductions so stat cards show net balance.
-      // Includes both 'down_payment' (advance disbursed, stored as positive)
-      // and 'advance_deduction' (stored as negative) types.
-      bool _isAdvanceTx(Map<String, dynamic> t) {
-        final type = t['type'] as String? ?? '';
-        return type == 'down_payment' || type == 'advance_deduction';
-      }
+      // Compute outstanding advance deductions.
+      // Only 'down_payment' (advance disbursed, stored as positive) is subtracted
+      // from the net balance. 'advance_deduction' transactions already reduce
+      // _currentBalance (wallets.balances.SDG) so they must NOT be double-counted.
+      final disbursedAdvances = _transactions
+          .where((t) => t['type'] == 'down_payment')
+          .fold(0.0, (sum, t) => sum + (t['amount'] as num).toDouble().abs());
 
-      _totalAdvanceDeductions = _transactions
-          .where(_isAdvanceTx)
-          .fold(
-              0.0, (sum, t) => sum + (t['amount'] as num).toDouble().abs());
+      final repaidAdvances = _transactions
+          .where((t) => t['type'] == 'advance_deduction')
+          .fold(0.0, (sum, t) => sum + (t['amount'] as num).toDouble().abs());
 
-      _thisMonthAdvanceDeductions = _transactions
+      _totalAdvanceDeductions =
+          (disbursedAdvances - repaidAdvances).clamp(0.0, double.infinity);
+
+      // This-month outstanding advances
+      final monthDisbursed = _transactions
           .where((t) {
             final date = DateTime.parse(t['created_at'] as String);
-            return date.isAfter(startOfMonth) && _isAdvanceTx(t);
+            return date.isAfter(startOfMonth) && t['type'] == 'down_payment';
           })
-          .fold(
-              0.0, (sum, t) => sum + (t['amount'] as num).toDouble().abs());
+          .fold(0.0, (sum, t) => sum + (t['amount'] as num).toDouble().abs());
+      final monthRepaid = _transactions
+          .where((t) {
+            final date = DateTime.parse(t['created_at'] as String);
+            return date.isAfter(startOfMonth) &&
+                t['type'] == 'advance_deduction';
+          })
+          .fold(0.0, (sum, t) => sum + (t['amount'] as num).toDouble().abs());
+
+      _thisMonthAdvanceDeductions =
+          (monthDisbursed - monthRepaid).clamp(0.0, double.infinity);
 
       if (mounted) setState(() {});
     } catch (e) {
@@ -976,7 +988,20 @@ class _WalletScreenState extends State<WalletScreen> {
                 ],
               ),
             ),
-            if (_showWithdrawalDialog) _buildWithdrawalDialog(),
+            if (_showWithdrawalDialog) ...[
+              // Dimmed background barrier — blocks all taps on content behind
+              ModalBarrier(
+                color: Colors.black.withValues(alpha: 0.55),
+                dismissible: true,
+                onDismiss: () => setState(() {
+                  _showWithdrawalDialog = false;
+                  _withdrawalAmountController.clear();
+                  _withdrawalReasonController.clear();
+                  _selectedPaymentMethod = '';
+                }),
+              ),
+              _buildWithdrawalDialog(),
+            ],
           ],
         ),
       ),
@@ -3415,6 +3440,94 @@ class _WalletScreenState extends State<WalletScreen> {
 
                       if (referenceId != null || referenceType != null)
                         const SizedBox(height: 12),
+
+                      // ── Related site-visit financial activity ─────────
+                      Builder(builder: (ctx2) {
+                        if (referenceId == null ||
+                            (type != 'site_visit_fee' &&
+                                type != 'down_payment' &&
+                                type != 'advance_deduction')) {
+                          return const SizedBox.shrink();
+                        }
+                        final related = _transactions
+                            .where((t) =>
+                                t['id'] != tx['id'] &&
+                                t['reference_id'] == referenceId &&
+                                (t['type'] == 'site_visit_fee' ||
+                                    t['type'] == 'down_payment' ||
+                                    t['type'] == 'advance_deduction'))
+                            .toList();
+                        if (related.isEmpty) return const SizedBox.shrink();
+
+                        String _relLabel(String t) {
+                          if (t == 'down_payment') {
+                            return 'Transport Advance / سلفة مواصلات';
+                          }
+                          if (t == 'advance_deduction') {
+                            return 'Advance Deducted / خصم السلفة';
+                          }
+                          return 'Site Visit Fee / رسوم زيارة';
+                        }
+
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            _txDetailSection(
+                              'Related Activity / النشاط المرتبط',
+                              Icons.compare_arrows_rounded,
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: related
+                                    .map((r) {
+                                      final rType =
+                                          r['type'] as String? ?? '';
+                                      final rAmt = (r['amount'] as num?)
+                                              ?.toDouble()
+                                              .abs() ??
+                                          0.0;
+                                      final rSign =
+                                          _isDebitType(rType) ? '−' : '+';
+                                      final rColor =
+                                          _getTransactionColor(rType);
+                                      return Padding(
+                                        padding: const EdgeInsets.only(
+                                            bottom: 6),
+                                        child: Row(
+                                          children: [
+                                            Icon(
+                                              _getTransactionIcon(rType),
+                                              size: 16,
+                                              color: rColor,
+                                            ),
+                                            const SizedBox(width: 8),
+                                            Expanded(
+                                              child: Text(
+                                                _relLabel(rType),
+                                                style: GoogleFonts.poppins(
+                                                  fontSize: 12,
+                                                  color: AppColors.textDark,
+                                                ),
+                                              ),
+                                            ),
+                                            Text(
+                                              '$rSign${_formatCurrency(rAmt)} SDG',
+                                              style: GoogleFonts.poppins(
+                                                fontSize: 13,
+                                                fontWeight: FontWeight.w700,
+                                                color: rColor,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      );
+                                    })
+                                    .toList(),
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                          ],
+                        );
+                      }),
 
                       // ── Metadata extras ──────────────────────────────
                       if (metadata is Map && (metadata).isNotEmpty)

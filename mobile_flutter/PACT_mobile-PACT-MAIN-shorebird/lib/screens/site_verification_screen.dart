@@ -105,14 +105,13 @@ class SiteVerificationScreen extends StatefulWidget {
   State<SiteVerificationScreen> createState() => _SiteVerificationScreenState();
 }
 
-class _SiteVerificationScreenState extends State<SiteVerificationScreen>
-    with SingleTickerProviderStateMixin {
+class _SiteVerificationScreenState extends State<SiteVerificationScreen> {
   final SiteVisitService _siteVisitService = SiteVisitService();
   final SupabaseClient _supabase = Supabase.instance.client;
   // Key to control the Scaffold for opening/closing drawer
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
 
-  late TabController _tabController;
+  String _activeTab = 'new';
   bool _isLoading = true;
   String? _userId;
   String? _userState;
@@ -167,13 +166,11 @@ class _SiteVerificationScreenState extends State<SiteVerificationScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 6, vsync: this);
     _loadData();
   }
 
   @override
   void dispose() {
-    _tabController.dispose();
     super.dispose();
   }
 
@@ -890,95 +887,47 @@ class _SiteVerificationScreenState extends State<SiteVerificationScreen>
               ],
             ),
 
-            // Tabs container
+            // ── Custom bilingual scrollable pill tab row ──────────────
             Container(
-              margin: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(16),
-                boxShadow: [
-                  BoxShadow(
-                    color: AppColors.shadowColor.withValues(alpha: 0.06),
-                    blurRadius: 10,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
-              ),
-              child: TabBar(
-                controller: _tabController,
-                isScrollable: true,
-                indicator: BoxDecoration(
-                  color: AppColors.primaryBlue,
-                  borderRadius: BorderRadius.circular(12),
+              color: Colors.white,
+              padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: [
+                    _buildVerifTabButton('new', 'New', 'جديد',
+                        Icons.fiber_new_rounded, _newSites.length, Colors.blue),
+                    const SizedBox(width: 8),
+                    _buildVerifTabButton('cp_verification', 'CP Verification',
+                        'تحقق المنسق', Icons.fact_check_outlined,
+                        _cpVerificationSites.length, Colors.indigo),
+                    const SizedBox(width: 8),
+                    _buildVerifTabButton('verified', 'Verified', 'موثق',
+                        Icons.verified_outlined, _verifiedSites.length,
+                        Colors.green),
+                    const SizedBox(width: 8),
+                    _buildVerifTabButton('approved', 'Approved', 'معتمد',
+                        Icons.thumb_up_outlined, _approvedSites.length,
+                        Colors.teal),
+                    const SizedBox(width: 8),
+                    _buildVerifTabButton('completed', 'Completed', 'مكتمل',
+                        Icons.check_circle_outline, _completedSites.length,
+                        Colors.purple),
+                    const SizedBox(width: 8),
+                    _buildVerifTabButton('rejected', 'Rejected', 'مرفوض',
+                        Icons.cancel_outlined, _rejectedSites.length,
+                        Colors.red),
+                  ],
                 ),
-                indicatorSize: TabBarIndicatorSize.tab,
-                labelColor: Colors.white,
-                unselectedLabelColor: AppColors.textDark,
-                labelStyle: GoogleFonts.poppins(
-                  fontWeight: FontWeight.w600,
-                  fontSize: 13,
-                ),
-                unselectedLabelStyle: GoogleFonts.poppins(
-                  fontWeight: FontWeight.w500,
-                  fontSize: 12,
-                ),
-                tabs: [
-                  _buildTab(
-                    icon: Icons.fiber_new_rounded,
-                    label: 'New',
-                    labelAr: 'جديد',
-                    count: _newSites.length,
-                    badgeColor: AppColors.primaryBlue,
-                  ),
-                  _buildTab(
-                    icon: Icons.fact_check_outlined,
-                    label: 'CP Verification',
-                    labelAr: 'تحقق المنسق',
-                    count: _cpVerificationSites.length,
-                    badgeColor: Colors.blue,
-                  ),
-                  _buildTab(
-                    icon: Icons.verified_outlined,
-                    label: 'Verified',
-                    labelAr: 'موثق',
-                    count: _verifiedSites.length,
-                    badgeColor: Colors.green,
-                  ),
-                  _buildTab(
-                    icon: Icons.thumb_up_outlined,
-                    label: 'Approved',
-                    labelAr: 'معتمد',
-                    count: _approvedSites.length,
-                    badgeColor: Colors.teal,
-                  ),
-                  _buildTab(
-                    icon: Icons.check_circle_outline,
-                    label: 'Completed',
-                    labelAr: 'مكتمل',
-                    count: _completedSites.length,
-                    badgeColor: Colors.purple,
-                  ),
-                  _buildTab(
-                    icon: Icons.cancel_outlined,
-                    label: 'Rejected',
-                    labelAr: 'مرفوض',
-                    count: _rejectedSites.length,
-                    badgeColor: Colors.red,
-                    highlightIfNonZero: true,
-                  ),
-                ],
               ),
             ),
+            const Divider(height: 1),
 
             // Search
             Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+              padding: const EdgeInsets.fromLTRB(16, 10, 16, 6),
               child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 6,
-                ),
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                 decoration: BoxDecoration(
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(14),
@@ -993,18 +942,14 @@ class _SiteVerificationScreenState extends State<SiteVerificationScreen>
                 child: TextField(
                   decoration: const InputDecoration(
                     prefixIcon: Icon(Icons.search),
-                    hintText: 'Search by site name, code, state, or locality',
+                    hintText:
+                        'Search / بحث — site name, code, state, locality',
                     border: InputBorder.none,
-                    contentPadding: EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 12,
-                    ),
+                    contentPadding:
+                        EdgeInsets.symmetric(horizontal: 8, vertical: 12),
                   ),
-                  onChanged: (value) {
-                    setState(() {
-                      _searchQuery = value.trim();
-                    });
-                  },
+                  onChanged: (value) =>
+                      setState(() => _searchQuery = value.trim()),
                 ),
               ),
             ),
@@ -1013,17 +958,20 @@ class _SiteVerificationScreenState extends State<SiteVerificationScreen>
             Expanded(
               child: _isLoading
                   ? const Center(child: CircularProgressIndicator())
-                  : TabBarView(
-                      controller: _tabController,
-                      children: [
-                        _buildNewTabContent(),
-                        _buildSiteList(_cpVerificationSites, 'cp_verification'),
-                        _buildSiteList(_verifiedSites, 'verified'),
-                        _buildSiteList(_approvedSites, 'approved'),
-                        _buildSiteList(_completedSites, 'completed'),
-                        _buildSiteList(_rejectedSites, 'rejected'),
-                      ],
-                    ),
+                  : _activeTab == 'cp_verification'
+                      ? _buildSiteList(
+                          _cpVerificationSites, 'cp_verification')
+                      : _activeTab == 'verified'
+                          ? _buildSiteList(_verifiedSites, 'verified')
+                          : _activeTab == 'approved'
+                              ? _buildSiteList(_approvedSites, 'approved')
+                              : _activeTab == 'completed'
+                                  ? _buildSiteList(
+                                      _completedSites, 'completed')
+                                  : _activeTab == 'rejected'
+                                      ? _buildSiteList(
+                                          _rejectedSites, 'rejected')
+                                      : _buildNewTabContent(),
             ),
           ],
         ),
@@ -1031,43 +979,45 @@ class _SiteVerificationScreenState extends State<SiteVerificationScreen>
     );
   }
 
-  /// Build a styled tab with icon, label, and badge
-  Widget _buildTab({
-    required IconData icon,
-    required String label,
-    required String labelAr,
-    required int count,
-    required Color badgeColor,
-    bool highlightIfNonZero = false,
-  }) {
-    final showHighlight = highlightIfNonZero && count > 0;
-
-    return Tab(
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 6),
+  /// Bilingual animated pill tab button for site verification tabs
+  Widget _buildVerifTabButton(String tab, String labelEn, String labelAr,
+      IconData icon, int count, Color activeColor) {
+    final isActive = _activeTab == tab;
+    return GestureDetector(
+      onTap: () => setState(() => _activeTab = tab),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+        decoration: BoxDecoration(
+          color: isActive ? activeColor : const Color(0xFFF3F6FA),
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: isActive
+              ? [
+                  BoxShadow(
+                    color: activeColor.withValues(alpha: 0.25),
+                    blurRadius: 8,
+                    offset: const Offset(0, 3),
+                  )
+                ]
+              : null,
+        ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Container(
-              padding: const EdgeInsets.all(5),
-              decoration: BoxDecoration(
-                color: showHighlight
-                    ? Colors.red.withValues(alpha: 0.3)
-                    : Colors.white.withValues(alpha: 0.2),
-                borderRadius: BorderRadius.circular(6),
-              ),
-              child: Icon(icon, size: 14),
-            ),
+            Icon(icon,
+                size: 16,
+                color: isActive ? Colors.white : AppColors.textLight),
             const SizedBox(width: 6),
             Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  label,
+                  labelEn,
                   style: GoogleFonts.poppins(
                     fontSize: 12,
-                    fontWeight: FontWeight.w600,
+                    fontWeight: FontWeight.w700,
+                    color: isActive ? Colors.white : AppColors.textLight,
                   ),
                 ),
                 Text(
@@ -1075,29 +1025,34 @@ class _SiteVerificationScreenState extends State<SiteVerificationScreen>
                   style: GoogleFonts.poppins(
                     fontSize: 11,
                     fontWeight: FontWeight.w700,
-                  ),
-                ),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 6,
-                    vertical: 1,
-                  ),
-                  decoration: BoxDecoration(
-                    color: showHighlight
-                        ? Colors.red
-                        : badgeColor.withValues(alpha: 0.3),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Text(
-                    '$count',
-                    style: GoogleFonts.poppins(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w600,
-                    ),
+                    color: isActive
+                        ? Colors.white.withValues(alpha: 0.85)
+                        : AppColors.textLight,
                   ),
                 ),
               ],
             ),
+            if (count > 0) ...[
+              const SizedBox(width: 6),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: isActive
+                      ? Colors.white.withValues(alpha: 0.3)
+                      : activeColor,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Text(
+                  count.toString(),
+                  style: GoogleFonts.poppins(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w800,
+                    color: Colors.white,
+                  ),
+                ),
+              ),
+            ],
           ],
         ),
       ),
@@ -1197,15 +1152,31 @@ class _SiteVerificationScreenState extends State<SiteVerificationScreen>
                               : Colors.grey[600],
                         ),
                         const SizedBox(width: 6),
-                        Text(
-                          'State (${sitesNeedingStatePermit.length})',
-                          style: GoogleFonts.poppins(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                            color: _newSubTabIndex == 0
-                                ? Colors.white
-                                : Colors.grey[600],
-                          ),
+                        Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'State (${sitesNeedingStatePermit.length})',
+                              style: GoogleFonts.poppins(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                                color: _newSubTabIndex == 0
+                                    ? Colors.white
+                                    : Colors.grey[700],
+                              ),
+                            ),
+                            Text(
+                              'تصريح الولاية (${sitesNeedingStatePermit.length})',
+                              style: GoogleFonts.poppins(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                                color: _newSubTabIndex == 0
+                                    ? Colors.white.withValues(alpha: 0.85)
+                                    : Colors.grey[600],
+                              ),
+                            ),
+                          ],
                         ),
                       ],
                     ),
@@ -1234,15 +1205,31 @@ class _SiteVerificationScreenState extends State<SiteVerificationScreen>
                               : Colors.grey[600],
                         ),
                         const SizedBox(width: 6),
-                        Text(
-                          'Locality (${sitesNeedingLocalityPermit.length})',
-                          style: GoogleFonts.poppins(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                            color: _newSubTabIndex == 1
-                                ? Colors.white
-                                : Colors.grey[600],
-                          ),
+                        Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Locality (${sitesNeedingLocalityPermit.length})',
+                              style: GoogleFonts.poppins(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                                color: _newSubTabIndex == 1
+                                    ? Colors.white
+                                    : Colors.grey[700],
+                              ),
+                            ),
+                            Text(
+                              'تصريح المحلية (${sitesNeedingLocalityPermit.length})',
+                              style: GoogleFonts.poppins(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                                color: _newSubTabIndex == 1
+                                    ? Colors.white.withValues(alpha: 0.85)
+                                    : Colors.grey[600],
+                              ),
+                            ),
+                          ],
                         ),
                       ],
                     ),
@@ -1338,8 +1325,14 @@ class _SiteVerificationScreenState extends State<SiteVerificationScreen>
                       Expanded(
                         child: ElevatedButton.icon(
                           icon: const Icon(Icons.upload_file),
-                          label: Text(
-                            'Manage state permit (${sitesNeedingStatePermit.length})',
+                          label: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text('Manage state permit (${sitesNeedingStatePermit.length})',
+                                  style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.w600)),
+                              Text('إدارة تصريح الولاية (${sitesNeedingStatePermit.length})',
+                                  style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.w700)),
+                            ],
                           ),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: Colors.white,
@@ -1469,8 +1462,14 @@ class _SiteVerificationScreenState extends State<SiteVerificationScreen>
                       Expanded(
                         child: ElevatedButton.icon(
                           icon: const Icon(Icons.upload_file),
-                          label: Text(
-                            'Upload locality permit (${sitesNeedingLocalityPermit.length})',
+                          label: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text('Upload locality permit (${sitesNeedingLocalityPermit.length})',
+                                  style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.w600)),
+                              Text('رفع تصريح المحلية (${sitesNeedingLocalityPermit.length})',
+                                  style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.w700)),
+                            ],
                           ),
                           onPressed: () {
                             final parts = locality.split(' - ');
