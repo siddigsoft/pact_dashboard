@@ -11,15 +11,14 @@ class SuperAdminScreen extends StatefulWidget {
   State<SuperAdminScreen> createState() => _SuperAdminScreenState();
 }
 
-class _SuperAdminScreenState extends State<SuperAdminScreen>
-    with SingleTickerProviderStateMixin {
+class _SuperAdminScreenState extends State<SuperAdminScreen> {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   final _supabase = Supabase.instance.client;
-  late TabController _tabController;
 
   bool _isLoading = true;
   bool _isSuperAdmin = false;
   String _searchQuery = '';
+  String _activeTab = 'users';
   final TextEditingController _searchController = TextEditingController();
 
   // Users data
@@ -33,13 +32,11 @@ class _SuperAdminScreenState extends State<SuperAdminScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
     _checkAccess();
   }
 
   @override
   void dispose() {
-    _tabController.dispose();
     _searchController.dispose();
     super.dispose();
   }
@@ -185,10 +182,11 @@ class _SuperAdminScreenState extends State<SuperAdminScreen>
           _buildHeader(),
           _buildTabs(),
           Expanded(
-            child: TabBarView(
-              controller: _tabController,
-              children: [_buildUsersTab(), _buildRolesTab(), _buildSystemTab()],
-            ),
+            child: _activeTab == 'roles'
+                ? _buildRolesTab()
+                : _activeTab == 'system'
+                    ? _buildSystemTab()
+                    : _buildUsersTab(),
           ),
         ],
       ),
@@ -308,17 +306,53 @@ class _SuperAdminScreenState extends State<SuperAdminScreen>
   Widget _buildTabs() {
     return Container(
       color: Colors.white,
-      child: TabBar(
-        controller: _tabController,
-        labelColor: AppColors.primaryBlue,
-        unselectedLabelColor: Colors.grey,
-        indicatorColor: AppColors.primaryBlue,
-        indicatorWeight: 3,
-        tabs: const [
-          Tab(icon: Icon(Icons.people, size: 20), text: 'Users'),
-          Tab(icon: Icon(Icons.security, size: 20), text: 'Roles'),
-          Tab(icon: Icon(Icons.settings, size: 20), text: 'System'),
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+      child: Row(
+        children: [
+          Expanded(child: _buildTabButton('users', 'Users', 'المستخدمون', Icons.people_rounded)),
+          const SizedBox(width: 8),
+          Expanded(child: _buildTabButton('roles', 'Roles', 'الأدوار', Icons.security_rounded)),
+          const SizedBox(width: 8),
+          Expanded(child: _buildTabButton('system', 'System', 'النظام', Icons.settings_rounded)),
         ],
+      ),
+    );
+  }
+
+  Widget _buildTabButton(String tab, String labelEn, String labelAr, IconData icon) {
+    final isActive = _activeTab == tab;
+    return GestureDetector(
+      onTap: () => setState(() => _activeTab = tab),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(vertical: 10),
+        decoration: BoxDecoration(
+          color: isActive ? AppColors.primaryBlue : const Color(0xFFF3F6FA),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 20, color: isActive ? Colors.white : AppColors.textLight),
+            const SizedBox(height: 3),
+            Text(
+              labelEn,
+              style: GoogleFonts.poppins(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: isActive ? Colors.white : AppColors.textLight,
+              ),
+            ),
+            Text(
+              labelAr,
+              style: GoogleFonts.poppins(
+                fontSize: 10,
+                fontWeight: FontWeight.w700,
+                color: isActive ? Colors.white.withValues(alpha: 0.85) : AppColors.textLight,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/cost_submission.dart';
 import '../services/cost_submission_service.dart';
+import '../theme/app_colors.dart';
 
 class CostSubmissionScreen extends StatefulWidget {
   final CostSubmissionService? costService;
@@ -25,10 +27,9 @@ class CostSubmissionScreen extends StatefulWidget {
   State<CostSubmissionScreen> createState() => _CostSubmissionScreenState();
 }
 
-class _CostSubmissionScreenState extends State<CostSubmissionScreen>
-    with SingleTickerProviderStateMixin {
-  late TabController _tabController;
+class _CostSubmissionScreenState extends State<CostSubmissionScreen> {
   late CostSubmissionService _costService;
+  String _activeTab = 'submit';
   List<OperationalCostSubmission> _submissions = [];
   CostSubmissionStats _stats = CostSubmissionStats.empty();
   bool _isLoading = true;
@@ -54,13 +55,11 @@ class _CostSubmissionScreenState extends State<CostSubmissionScreen>
   void initState() {
     super.initState();
     _costService = widget.costService ?? CostSubmissionService();
-    _tabController = TabController(length: 4, vsync: this);
     _loadData();
   }
 
   @override
   void dispose() {
-    _tabController.dispose();
     super.dispose();
   }
 
@@ -100,47 +99,96 @@ class _CostSubmissionScreenState extends State<CostSubmissionScreen>
       appBar: AppBar(
         title: Text(isArabic ? 'تقديم التكاليف' : 'Cost Submission'),
         elevation: 0,
-        bottom: TabBar(
-          controller: _tabController,
-          isScrollable: true,
-          tabs: [
-            Tab(
-              icon: const Icon(Icons.add_circle_outline),
-              text: isArabic ? 'تقديم' : 'Submit',
-            ),
-            Tab(
-              icon: const Icon(Icons.sync),
-              text: isArabic ? 'التسوية' : 'Reconciliation',
-            ),
-            Tab(
-              icon: const Icon(Icons.account_balance_wallet),
-              text: isArabic ? 'المستحقات' : 'Outstanding',
-            ),
-            Tab(
-              icon: const Icon(Icons.history),
-              text: isArabic ? 'السجل' : 'History',
-            ),
-          ],
-        ),
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : Column(
               children: [
                 _buildStatsCards(),
+                // ── Bilingual tab row ──────────────────────────────────
+                Container(
+                  color: Colors.white,
+                  padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: [
+                        _buildTabButton('submit', 'Submit', 'تقديم',
+                            Icons.add_circle_outline_rounded, isArabic),
+                        const SizedBox(width: 8),
+                        _buildTabButton('reconciliation', 'Reconciliation',
+                            'التسوية', Icons.sync_rounded, isArabic),
+                        const SizedBox(width: 8),
+                        _buildTabButton('outstanding', 'Outstanding',
+                            'المستحقات', Icons.account_balance_wallet_rounded, isArabic),
+                        const SizedBox(width: 8),
+                        _buildTabButton(
+                            'history', 'History', 'السجل', Icons.history_rounded, isArabic),
+                      ],
+                    ),
+                  ),
+                ),
+                const Divider(height: 1),
                 Expanded(
-                  child: TabBarView(
-                    controller: _tabController,
-                    children: [
-                      _buildSubmitTab(),
-                      _buildReconciliationTab(),
-                      _buildOutstandingTab(),
-                      _buildHistoryTab(),
-                    ],
+                  child: _activeTab == 'reconciliation'
+                      ? _buildReconciliationTab()
+                      : _activeTab == 'outstanding'
+                          ? _buildOutstandingTab()
+                          : _activeTab == 'history'
+                              ? _buildHistoryTab()
+                              : _buildSubmitTab(),
+                ),
+              ],
+            ),
+    );
+  }
+
+  Widget _buildTabButton(String tab, String labelEn, String labelAr,
+      IconData icon, bool isArabic) {
+    final isActive = _activeTab == tab;
+    return GestureDetector(
+      onTap: () => setState(() => _activeTab = tab),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        decoration: BoxDecoration(
+          color: isActive ? AppColors.primaryBlue : const Color(0xFFF3F6FA),
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon,
+                size: 16,
+                color: isActive ? Colors.white : AppColors.textLight),
+            const SizedBox(width: 6),
+            Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  isArabic ? labelAr : labelEn,
+                  style: GoogleFonts.poppins(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: isActive ? Colors.white : AppColors.textLight,
+                  ),
+                ),
+                Text(
+                  isArabic ? labelEn : labelAr,
+                  style: GoogleFonts.poppins(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                    color: isActive
+                        ? Colors.white.withValues(alpha: 0.8)
+                        : AppColors.textLight,
                   ),
                 ),
               ],
             ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -570,7 +618,7 @@ class _CostSubmissionScreenState extends State<CostSubmissionScreen>
       );
 
       await _loadData();
-      _tabController.animateTo(3);
+      setState(() => _activeTab = 'history');
     } catch (e) {
       _showError(
         widget.isArabic ? 'فشل في تقديم المصروف' : 'Failed to submit expense',

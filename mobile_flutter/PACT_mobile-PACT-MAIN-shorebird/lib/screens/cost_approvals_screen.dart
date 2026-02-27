@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:google_fonts/google_fonts.dart';
 import '../models/operational_cost_submission.dart';
 import '../services/operational_cost_service.dart';
+import '../theme/app_colors.dart';
 
 class CostApprovalsScreen extends StatefulWidget {
   final String userRole;
@@ -19,10 +21,9 @@ class CostApprovalsScreen extends StatefulWidget {
   State<CostApprovalsScreen> createState() => _CostApprovalsScreenState();
 }
 
-class _CostApprovalsScreenState extends State<CostApprovalsScreen>
-    with SingleTickerProviderStateMixin {
-  late TabController _tabController;
+class _CostApprovalsScreenState extends State<CostApprovalsScreen> {
   final _costService = OperationalCostService();
+  String _activeTab = 'tier1';
   late CostSubmissionPermissions _permissions;
   List<OperationalCostSubmission> _allSubmissions = [];
   bool _isLoading = true;
@@ -50,13 +51,11 @@ class _CostApprovalsScreenState extends State<CostApprovalsScreen>
   void initState() {
     super.initState();
     _permissions = CostSubmissionPermissions.fromRole(widget.userRole);
-    _tabController = TabController(length: 4, vsync: this);
     _loadData();
   }
 
   @override
   void dispose() {
-    _tabController.dispose();
     super.dispose();
   }
 
@@ -117,52 +116,115 @@ class _CostApprovalsScreenState extends State<CostApprovalsScreen>
             ],
           ),
         ],
-        bottom: TabBar(
-          controller: _tabController,
-          isScrollable: true,
-          tabs: [
-            _buildTab(isArabic ? 'المستوى 1' : 'Tier 1', _tier1Pending.length),
-            _buildTab(isArabic ? 'المستوى 2' : 'Tier 2', _tier2Pending.length),
-            _buildTab(isArabic ? 'المستوى 3' : 'Tier 3', _tier3Pending.length),
-            Tab(text: isArabic ? 'المعالجة' : 'Processed'),
-          ],
-        ),
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
-          : TabBarView(
-              controller: _tabController,
+          : Column(
               children: [
-                _buildApprovalList(_tier1Pending, 1),
-                _buildApprovalList(_tier2Pending, 2),
-                _buildApprovalList(_tier3Pending, 3),
-                _buildProcessedList(),
+                // ── Bilingual scrollable tab row ───────────────────────
+                Container(
+                  color: Colors.white,
+                  padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: [
+                        _buildTabButton('tier1', 'Tier 1', 'المستوى 1',
+                            Icons.looks_one_rounded, _tier1Pending.length, isArabic),
+                        const SizedBox(width: 8),
+                        _buildTabButton('tier2', 'Tier 2', 'المستوى 2',
+                            Icons.looks_two_rounded, _tier2Pending.length, isArabic),
+                        const SizedBox(width: 8),
+                        _buildTabButton('tier3', 'Tier 3', 'المستوى 3',
+                            Icons.looks_3_rounded, _tier3Pending.length, isArabic),
+                        const SizedBox(width: 8),
+                        _buildTabButton('processed', 'Processed', 'المعالجة',
+                            Icons.check_circle_outline_rounded, 0, isArabic),
+                      ],
+                    ),
+                  ),
+                ),
+                const Divider(height: 1),
+                Expanded(
+                  child: _activeTab == 'tier2'
+                      ? _buildApprovalList(_tier2Pending, 2)
+                      : _activeTab == 'tier3'
+                          ? _buildApprovalList(_tier3Pending, 3)
+                          : _activeTab == 'processed'
+                              ? _buildProcessedList()
+                              : _buildApprovalList(_tier1Pending, 1),
+                ),
               ],
             ),
     );
   }
 
-  Tab _buildTab(String label, int count) {
-    return Tab(
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(label),
-          if (count > 0) ...[
+  Widget _buildTabButton(String tab, String labelEn, String labelAr,
+      IconData icon, int count, bool isArabic) {
+    final isActive = _activeTab == tab;
+    return GestureDetector(
+      onTap: () => setState(() => _activeTab = tab),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        decoration: BoxDecoration(
+          color: isActive ? AppColors.primaryBlue : const Color(0xFFF3F6FA),
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon,
+                size: 16,
+                color: isActive ? Colors.white : AppColors.textLight),
             const SizedBox(width: 6),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-              decoration: BoxDecoration(
-                color: Colors.red,
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Text(
-                count.toString(),
-                style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
-              ),
+            Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  isArabic ? labelAr : labelEn,
+                  style: GoogleFonts.poppins(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: isActive ? Colors.white : AppColors.textLight,
+                  ),
+                ),
+                Text(
+                  isArabic ? labelEn : labelAr,
+                  style: GoogleFonts.poppins(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                    color: isActive
+                        ? Colors.white.withValues(alpha: 0.8)
+                        : AppColors.textLight,
+                  ),
+                ),
+              ],
             ),
+            if (count > 0) ...[
+              const SizedBox(width: 6),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: isActive
+                      ? Colors.white.withValues(alpha: 0.3)
+                      : AppColors.accentRed,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Text(
+                  count.toString(),
+                  style: GoogleFonts.poppins(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w800,
+                    color: Colors.white,
+                  ),
+                ),
+              ),
+            ],
           ],
-        ],
+        ),
       ),
     );
   }

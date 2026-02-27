@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:pact_mobile/providers/cost_submission_provider.dart';
 import 'package:pact_mobile/providers/withdrawal_provider.dart';
 import 'package:pact_mobile/models/cost_submission_models.dart';
 import 'package:pact_mobile/models/wallet_models.dart';
+import 'package:pact_mobile/theme/app_colors.dart';
 import 'package:intl/intl.dart';
 
 class ApprovalDashboardScreen extends ConsumerStatefulWidget {
@@ -15,38 +17,103 @@ class ApprovalDashboardScreen extends ConsumerStatefulWidget {
 }
 
 class _ApprovalDashboardScreenState
-    extends ConsumerState<ApprovalDashboardScreen>
-    with SingleTickerProviderStateMixin {
-  late TabController _tabController;
-
-  @override
-  void initState() {
-    super.initState();
-    _tabController = TabController(length: 2, vsync: this);
-  }
-
-  @override
-  void dispose() {
-    _tabController.dispose();
-    super.dispose();
-  }
+    extends ConsumerState<ApprovalDashboardScreen> {
+  String _activeTab = 'cost_submissions';
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Approval Dashboard'),
-        bottom: TabBar(
-          controller: _tabController,
-          tabs: const [
-            Tab(text: 'Cost Submissions'),
-            Tab(text: 'Withdrawal Requests'),
+        backgroundColor: AppColors.primaryBlue,
+        foregroundColor: Colors.white,
+        title: Text(
+          'لوحة الموافقات | Approval Dashboard',
+          style: GoogleFonts.poppins(
+              color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
+        ),
+        elevation: 0,
+      ),
+      body: Column(
+        children: [
+          // ── Bilingual tab row ──────────────────────────────────────
+          Container(
+            color: Colors.white,
+            padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+            child: Row(
+              children: [
+                Expanded(
+                  child: _buildTabButton(
+                    'cost_submissions',
+                    'Cost Submissions',
+                    'تقديمات التكاليف',
+                    Icons.receipt_long_rounded,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _buildTabButton(
+                    'withdrawal_requests',
+                    'Withdrawal Requests',
+                    'طلبات السحب',
+                    Icons.account_balance_wallet_rounded,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const Divider(height: 1),
+          // ── Tab content ────────────────────────────────────────────
+          Expanded(
+            child: _activeTab == 'cost_submissions'
+                ? _CostSubmissionsTab()
+                : _WithdrawalRequestsTab(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTabButton(
+      String tab, String labelEn, String labelAr, IconData icon) {
+    final isActive = _activeTab == tab;
+    return GestureDetector(
+      onTap: () => setState(() => _activeTab = tab),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(vertical: 10),
+        decoration: BoxDecoration(
+          color: isActive ? AppColors.primaryBlue : const Color(0xFFF3F6FA),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon,
+                size: 20,
+                color: isActive ? Colors.white : AppColors.textLight),
+            const SizedBox(height: 3),
+            Text(
+              labelEn,
+              style: GoogleFonts.poppins(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: isActive ? Colors.white : AppColors.textLight,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            Text(
+              labelAr,
+              style: GoogleFonts.poppins(
+                fontSize: 10,
+                fontWeight: FontWeight.w700,
+                color: isActive
+                    ? Colors.white.withValues(alpha: 0.85)
+                    : AppColors.textLight,
+              ),
+              textAlign: TextAlign.center,
+            ),
           ],
         ),
-      ),
-      body: TabBarView(
-        controller: _tabController,
-        children: [_CostSubmissionsTab(), _WithdrawalRequestsTab()],
       ),
     );
   }
