@@ -317,18 +317,21 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
     if (!currentUser || selectedIds.size === 0) return;
 
     setProcessing(true);
-    await bulkApprove({
-      requestIds: Array.from(selectedIds),
-      approvalType,
-      approvalPercentage: approvalType === 'percentage' ? customPercentage : undefined,
-      customAmount: approvalType === 'custom' ? customAmount : undefined,
-      notes,
-      approvedBy: currentUser.id,
-      approvedByName: currentUser.fullName || currentUser.email,
-    });
-    setProcessing(false);
-    setSelectedIds(new Set());
-    closeDialog();
+    try {
+      await bulkApprove({
+        requestIds: Array.from(selectedIds),
+        approvalType,
+        approvalPercentage: approvalType === 'percentage' ? customPercentage : undefined,
+        customAmount: approvalType === 'custom' ? customAmount : undefined,
+        notes,
+        approvedBy: currentUser.id,
+        approvedByName: currentUser.fullName || currentUser.email,
+      });
+      setSelectedIds(new Set());
+      closeDialog();
+    } finally {
+      setProcessing(false);
+    }
   };
 
   const handleRevert = async () => {
