@@ -39,8 +39,34 @@ class _WalletScreenState extends State<WalletScreen> {
   double _pendingWithdrawals = 0.0;
   double _thisMonthEarnings = 0.0;
   double _thisWeekEarnings = 0.0;
-  double _totalAdvanceDeductions = 0.0;
   double _thisMonthAdvanceDeductions = 0.0;
+
+  // Computed from _advances (down_payment_requests) as primary source,
+  // falling back to wallet_transactions if no advance records exist.
+  double get _totalAdvanceDeductions => _computeAdvanceDeductions();
+
+  double _computeAdvanceDeductions() {
+    if (_advances.isNotEmpty) {
+      return _advances.fold(0.0, (sum, a) {
+        final status = (a['status'] as String? ?? '').toLowerCase();
+        // 'approved' = disbursed but not yet started repaying
+        // 'partially_paid' = disbursed, partially repaid
+        if (status != 'approved' && status != 'partially_paid') return sum;
+        final approved = (a['approved_amount'] as num?)?.toDouble() ??
+            (a['requested_amount'] as num?)?.toDouble() ?? 0.0;
+        final paid = (a['total_paid_amount'] as num?)?.toDouble() ?? 0.0;
+        return sum + (approved - paid).clamp(0.0, double.infinity);
+      });
+    }
+    // Fallback: wallet_transactions
+    final disbursed = _transactions
+        .where((t) => t['type'] == 'down_payment')
+        .fold(0.0, (sum, t) => sum + (t['amount'] as num).toDouble().abs());
+    final repaid = _transactions
+        .where((t) => t['type'] == 'advance_deduction')
+        .fold(0.0, (sum, t) => sum + (t['amount'] as num).toDouble().abs());
+    return (disbursed - repaid).clamp(0.0, double.infinity);
+  }
 
   List<Map<String, dynamic>> _transactions = [];
   List<Map<String, dynamic>> _withdrawalRequests = [];
@@ -367,20 +393,8 @@ class _WalletScreenState extends State<WalletScreen> {
           })
           .fold(0.0, (sum, t) => sum + (t['amount'] as num).toDouble().abs());
 
-      // Compute outstanding advance deductions.
-      // Only 'down_payment' (advance disbursed, stored as positive) is subtracted
-      // from the net balance. 'advance_deduction' transactions already reduce
-      // _currentBalance (wallets.balances.SDG) so they must NOT be double-counted.
-      final disbursedAdvances = _transactions
-          .where((t) => t['type'] == 'down_payment')
-          .fold(0.0, (sum, t) => sum + (t['amount'] as num).toDouble().abs());
-
-      final repaidAdvances = _transactions
-          .where((t) => t['type'] == 'advance_deduction')
-          .fold(0.0, (sum, t) => sum + (t['amount'] as num).toDouble().abs());
-
-      _totalAdvanceDeductions =
-          (disbursedAdvances - repaidAdvances).clamp(0.0, double.infinity);
+      // _totalAdvanceDeductions is a computed getter using _advances as primary
+      // source — see _computeAdvanceDeductions(). No manual assignment needed.
 
       // This-month outstanding advances
       final monthDisbursed = _transactions
@@ -1645,22 +1659,62 @@ class _WalletScreenState extends State<WalletScreen> {
     }
   }
 
+  // ── Helper: extract a display site name from a wallet transaction ──────────
+  String _siteNameFromTx(Map<String, dynamic> tx) {
+    final meta = tx['metadata'];
+    if (meta is Map) {
+      final s = meta['site_name'] as String? ??
+          meta['siteName'] as String? ??
+          meta['site'] as String?;
+      if (s != null && s.isNotEmpty) return s;
+    }
+    final desc = (tx['description'] as String? ?? '').trim();
+    if (desc.isNotEmpty) return desc;
+    final type = tx['type'] as String? ?? '';
+    switch (type) {
+      case 'site_visit_fee': return widget.isArabic ? 'رسوم زيارة' : 'Site Visit Fee';
+      case 'down_payment': return widget.isArabic ? 'سلفة مواصلات' : 'Transport Advance';
+      case 'advance_deduction': return widget.isArabic ? 'خصم سلفة' : 'Advance Deduction';
+      default: return type.replaceAll('_', ' ');
+    }
+  }
+
   Widget _buildOverviewTab() {
-    final recentTransactions = _transactions.take(5).toList();
-    final earningsTransactions = _transactions
-        .where((t) => t['type'] == 'earning' || t['type'] == 'site_visit_fee')
-        .take(10)
-        .toList();
+    // Group recent transactions by reference_id (site visit), or show individually
+    final siteTypes = {'site_visit_fee', 'advance_deduction', 'down_payment', 'earning'};
+    final recent = _transactions.where((t) => siteTypes.contains(t['type'])).take(30).toList();
+
+    // Build groups: key = reference_id (non-null) or "__solo_<index>"
+    final Map<String, List<Map<String, dynamic>>> groups = {};
+    final List<String> groupOrder = [];
+    int soloIdx = 0;
+    for (final tx in recent) {
+      final refId = tx['reference_id'] as String?;
+      if (refId != null && refId.isNotEmpty) {
+        if (!groups.containsKey(refId)) {
+          groups[refId] = [];
+          groupOrder.add(refId);
+        }
+        groups[refId]!.add(tx);
+      } else {
+        final k = '__solo_${soloIdx++}';
+        groups[k] = [tx];
+        groupOrder.add(k);
+      }
+    }
+
+    // Take only the first 8 groups
+    final displayKeys = groupOrder.take(8).toList();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          widget.isArabic ? 'المعاملات الأخيرة' : 'Recent Transactions',
+          widget.isArabic ? 'معاملات حسب الموقع' : 'Recent by Site',
           style: GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.w600),
         ),
         const SizedBox(height: 16),
-        if (recentTransactions.isEmpty)
+        if (displayKeys.isEmpty)
           Center(
             child: Padding(
               padding: const EdgeInsets.all(32),
@@ -1671,32 +1725,223 @@ class _WalletScreenState extends State<WalletScreen> {
             ),
           )
         else
-          ...recentTransactions.map(
-            (transaction) => _buildTransactionItem(transaction),
-          ),
-        const SizedBox(height: 24),
-        Text(
-          widget.isArabic ? 'الأرباح الأخيرة' : 'Recent Earnings',
-          style: GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.w600),
-        ),
-        const SizedBox(height: 16),
-        if (earningsTransactions.isEmpty)
-          Center(
-            child: Padding(
-              padding: const EdgeInsets.all(32),
-              child: Text(
-                widget.isArabic ? 'لا توجد أرباح بعد' : 'No earnings yet',
-                style: GoogleFonts.poppins(color: AppColors.textLight),
-              ),
-            ),
-          )
-        else
-          ...earningsTransactions.map(
-            (transaction) => _buildTransactionItem(transaction),
-          ),
+          ...displayKeys.map((key) => _buildSiteGroupCard(groups[key]!)),
         const SizedBox(height: 24),
         _buildAdvanceReconciliationSection(),
       ],
+    );
+  }
+
+  Widget _buildSiteGroupCard(List<Map<String, dynamic>> txs) {
+    if (txs.isEmpty) return const SizedBox();
+    if (txs.length == 1) return _buildTransactionItem(txs.first);
+
+    // Compute totals
+    double totalFee = 0, totalAdvance = 0, totalDeduction = 0;
+    DateTime latest = DateTime(2000);
+    for (final tx in txs) {
+      final type = tx['type'] as String? ?? '';
+      final amt = (tx['amount'] as num?)?.toDouble().abs() ?? 0.0;
+      final dt = tx['created_at'] != null
+          ? DateTime.parse(tx['created_at'] as String).toLocal()
+          : DateTime.now();
+      if (dt.isAfter(latest)) latest = dt;
+      if (type == 'site_visit_fee' || type == 'earning') {
+        totalFee += amt;
+      } else if (type == 'down_payment') {
+        totalAdvance += amt;
+      } else if (type == 'advance_deduction') {
+        totalDeduction += amt;
+      }
+    }
+    final net = totalFee - totalAdvance - totalDeduction;
+    final siteName = _siteNameFromTx(txs.firstWhere(
+      (t) => t['type'] == 'site_visit_fee' || t['type'] == 'earning',
+      orElse: () => txs.first,
+    ));
+    final dateLabel = '${latest.day}/${latest.month}/${latest.year}';
+
+    return GestureDetector(
+      onTap: () => _showSiteGroupDetail(txs, siteName),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 10),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.teal.withValues(alpha: 0.25), width: 1),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.04),
+              blurRadius: 6,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(9),
+                    decoration: BoxDecoration(
+                      color: Colors.teal.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(Icons.location_on, color: Colors.teal, size: 20),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          siteName,
+                          style: GoogleFonts.poppins(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: const Color(0xFF1A2340),
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        Text(
+                          '$dateLabel · ${txs.length} ${widget.isArabic ? 'معاملات' : 'transactions'}',
+                          style: GoogleFonts.poppins(
+                            fontSize: 11,
+                            color: AppColors.textLight,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text(
+                        '${net >= 0 ? '+' : '−'}${_formatCurrency(net.abs())} SDG',
+                        style: GoogleFonts.poppins(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                          color: net >= 0 ? Colors.green[700] : Colors.red[600],
+                        ),
+                      ),
+                      Text(
+                        widget.isArabic ? 'صافي' : 'Net',
+                        style: GoogleFonts.poppins(fontSize: 10, color: AppColors.textLight),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              const Divider(height: 1, thickness: 0.5),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  if (totalFee > 0) ...[
+                    Icon(Icons.trending_up, size: 13, color: Colors.green[600]),
+                    const SizedBox(width: 3),
+                    Text(
+                      '+${_formatCurrency(totalFee)}',
+                      style: GoogleFonts.poppins(fontSize: 11, color: Colors.green[700], fontWeight: FontWeight.w600),
+                    ),
+                    const SizedBox(width: 10),
+                  ],
+                  if (totalAdvance > 0) ...[
+                    Icon(Icons.arrow_circle_up, size: 13, color: Colors.orange[600]),
+                    const SizedBox(width: 3),
+                    Text(
+                      '−${_formatCurrency(totalAdvance)}',
+                      style: GoogleFonts.poppins(fontSize: 11, color: Colors.orange[700], fontWeight: FontWeight.w600),
+                    ),
+                    const SizedBox(width: 10),
+                  ],
+                  if (totalDeduction > 0) ...[
+                    Icon(Icons.remove_circle_outline, size: 13, color: Colors.red[400]),
+                    const SizedBox(width: 3),
+                    Text(
+                      '−${_formatCurrency(totalDeduction)}',
+                      style: GoogleFonts.poppins(fontSize: 11, color: Colors.red[600], fontWeight: FontWeight.w600),
+                    ),
+                  ],
+                  const Spacer(),
+                  Icon(Icons.chevron_right, size: 16, color: AppColors.textLight),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showSiteGroupDetail(List<Map<String, dynamic>> txs, String siteName) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => DraggableScrollableSheet(
+        initialChildSize: 0.7,
+        minChildSize: 0.4,
+        maxChildSize: 0.95,
+        expand: false,
+        builder: (ctx, sc) => Container(
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+          ),
+          child: Column(
+            children: [
+              Container(
+                margin: const EdgeInsets.symmetric(vertical: 10),
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.grey[300],
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: Colors.teal.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Icon(Icons.location_on, color: Colors.teal, size: 18),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        siteName,
+                        style: GoogleFonts.poppins(fontSize: 15, fontWeight: FontWeight.w700),
+                      ),
+                    ),
+                    Text(
+                      '${txs.length} ${widget.isArabic ? 'معاملة' : 'entries'}',
+                      style: GoogleFonts.poppins(fontSize: 12, color: AppColors.textLight),
+                    ),
+                  ],
+                ),
+              ),
+              const Divider(height: 1),
+              Expanded(
+                child: ListView(
+                  controller: sc,
+                  padding: const EdgeInsets.all(16),
+                  children: txs.map((tx) => _buildTransactionItem(tx)).toList(),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
