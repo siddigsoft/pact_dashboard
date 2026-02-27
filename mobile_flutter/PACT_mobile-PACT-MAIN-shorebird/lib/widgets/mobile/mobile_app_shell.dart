@@ -7,6 +7,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
 import '../../services/offline/offline_db.dart';
 import '../../services/offline/models.dart';
+import '../../screens/wallet_screen.dart';
 import '../../providers/offline_provider.dart';
 import '../offline/sync_status_widget.dart'
     show SyncStatusBar, SyncProgressToast, OfflineBanner;
@@ -184,9 +185,17 @@ class _MobileAppShellState extends ConsumerState<MobileAppShell>
 
       FirebaseMessaging.onMessage.listen((RemoteMessage message) {
         debugPrint('[FCM] Foreground message: ${message.notification?.title}');
-        if (message.data['type'] == 'sync') {
+        final msgType = message.data['type'] as String? ?? '';
+
+        if (msgType == 'sync') {
           _handleSyncRequest();
         }
+
+        if (msgType == 'fund_receipt_confirmation') {
+          _handleFundReceiptNotification(message, openWallet: false);
+          return;
+        }
+
         if (message.notification != null) {
           _showLocalNotification(
             title: message.notification?.title ?? 'Notification',
@@ -197,8 +206,14 @@ class _MobileAppShellState extends ConsumerState<MobileAppShell>
 
       FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
         debugPrint('[FCM] Message opened app: ${message.notification?.title}');
-        if (message.data['type'] == 'sync') {
+        final msgType = message.data['type'] as String? ?? '';
+
+        if (msgType == 'sync') {
           _handleSyncRequest();
+        }
+
+        if (msgType == 'fund_receipt_confirmation') {
+          _handleFundReceiptNotification(message, openWallet: true);
         }
       });
 
@@ -249,6 +264,64 @@ class _MobileAppShellState extends ConsumerState<MobileAppShell>
         const SnackBar(
           duration: Duration(seconds: 2),
           content: Text('Syncing updates...'),
+        ),
+      );
+    }
+  }
+
+  /// Handle fund_receipt_confirmation FCM message.
+  /// [openWallet] = true when the user tapped the notification (app opened from background).
+  void _handleFundReceiptNotification(RemoteMessage message, {required bool openWallet}) {
+    final data = message.data;
+    final amount = data['amount']?.toString() ?? '';
+    final siteName = data['siteName']?.toString() ?? data['site_name']?.toString() ?? '';
+    debugPrint('[FCM] Fund receipt confirmation: amount=$amount site=$siteName openWallet=$openWallet');
+
+    if (!mounted) return;
+
+    if (openWallet) {
+      // User tapped the notification → open Wallet → My Advances tab
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => const WalletScreen(initialTab: 3),
+        ),
+      );
+    } else {
+      // App is in foreground → show an action SnackBar
+      final amountLabel = amount.isNotEmpty ? ' ($amount SDG)' : '';
+      final siteLabel = siteName.isNotEmpty ? ' — $siteName' : '';
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          duration: const Duration(seconds: 8),
+          backgroundColor: Colors.green.shade700,
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '💰 Transport Advance Disbursed$amountLabel$siteLabel',
+                style: const TextStyle(
+                    fontWeight: FontWeight.bold, color: Colors.white),
+              ),
+              const SizedBox(height: 2),
+              const Text(
+                'تم صرف سلفة المواصلات — اضغط لتأكيد الاستلام',
+                style: TextStyle(fontSize: 12, color: Colors.white70),
+              ),
+            ],
+          ),
+          action: SnackBarAction(
+            label: 'Confirm / تأكيد',
+            textColor: Colors.yellow,
+            onPressed: () {
+              if (!mounted) return;
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => const WalletScreen(initialTab: 3),
+                ),
+              );
+            },
+          ),
         ),
       );
     }

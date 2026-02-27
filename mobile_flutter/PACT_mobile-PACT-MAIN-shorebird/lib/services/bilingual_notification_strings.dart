@@ -151,4 +151,21 @@ class BilingualNotificationStrings {
   static String permitRejectedBody(String permitType, String location) =>
       '$permitType rejected for $location.\n'
       'تم رفض $permitType لـ $location.';
+
+  // ── Fund Receipt Confirmation ───────────────────────────────────────────────
+  static String get transportAdvanceReadyTitle =>
+      '💰 Transport Advance Disbursed | تم صرف سلفة المواصلات';
+
+  static String transportAdvanceReadyBody(
+          String amount, String siteName) =>
+      'Your $amount SDG advance for $siteName has been disbursed.\n'
+      'تم صرف سلفة $amount ج.س لموقع $siteName.\n'
+      'Please open the app to confirm receipt. | افتح التطبيق لتأكيد الاستلام.';
+
+  static String get receiptConfirmedTitle =>
+      '✅ Receipt Confirmed | تم تأكيد الاستلام';
+
+  static String receiptConfirmedBody(String siteName) =>
+      'Fund receipt for $siteName has been acknowledged by the enumerator.\n'
+      'تم تأكيد استلام أموال موقع $siteName من قِبل المُعدِّد.';
 }

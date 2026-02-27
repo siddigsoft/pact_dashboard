@@ -61,6 +61,15 @@ class BilingualNotificationService {
     'permit_rejected': {'en': 'Permit Rejected', 'ar': 'تم رفض التصريح'},
     'update_available': {'en': 'Update Available', 'ar': 'تحديث متاح'},
     'update_installed': {'en': 'Update Installed', 'ar': 'تم تثبيت التحديث'},
+    'advance_disbursed': {
+      'en': '💰 Transport Advance Disbursed',
+      'ar': '💰 تم صرف سلفة المواصلات',
+    },
+    'receipt_confirmed': {
+      'en': '✅ Receipt Confirmed',
+      'ar': '✅ تم تأكيد الاستلام',
+    },
+    'tap_to_view_details': {'en': 'Tap to view details', 'ar': 'اضغط لعرض التفاصيل'},
   };
 
   static const Map<String, Map<String, String>> _bodyTranslations = {

@@ -18,6 +18,7 @@ import 'authentication/improved_register_screen.dart';
 import 'authentication/forgot_password_screen.dart';
 import 'authentication/biometric_prompt_screen.dart';
 import 'screens/main_screen.dart';
+import 'screens/wallet_screen.dart';
 import 'screens/field_operations_enhanced_screen.dart';
 import 'screens/comprehensive_monitoring_form_screen.dart';
 import 'screens/chat_screen.dart';
@@ -89,10 +90,22 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
       return;
     }
 
+    // Fund receipt confirmation — enumerator needs to acknowledge in-app
+    if (type == 'fund_receipt_confirmation') {
+      final amount = data['amount']?.toString() ?? '';
+      final siteName = data['siteName']?.toString() ?? data['site_name']?.toString() ?? '';
+      await BilingualNotificationService.showBilingualNotification(
+        titleKey: 'advance_disbursed',
+        bodyKey: 'tap_to_view_details',
+        payload: 'wallet:advances',
+        bodyParams: {'amount': amount, 'site': siteName},
+      );
+      return;
+    }
+
     // Fallback: show a simple bilingual notification for generic messages
     if (message.notification != null) {
       final title = message.notification?.title ?? '';
-      final body = message.notification?.body ?? '';
       await BilingualNotificationService.showBilingualNotification(
         titleKey: 'new_message',
         bodyKey: 'tap_to_view_details',
@@ -260,6 +273,13 @@ void main() async {
           navigatorKey.currentState?.pushNamed(
             '/main',
             arguments: {'siteVisitId': siteVisitId, 'tab': 'cost_submissions'},
+          );
+        } else if (payload == 'wallet:advances') {
+          // Navigate directly to Wallet screen — My Advances tab
+          navigatorKey.currentState?.push(
+            MaterialPageRoute(
+              builder: (_) => const WalletScreen(initialTab: 3),
+            ),
           );
         } else if (payload == 'offline_sync_completed') {
           navigatorKey.currentState?.pushNamed(

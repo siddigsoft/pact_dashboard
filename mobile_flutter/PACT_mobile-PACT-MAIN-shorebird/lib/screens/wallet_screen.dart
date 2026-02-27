@@ -16,7 +16,13 @@ import '../services/offline/offline_db.dart';
 
 class WalletScreen extends StatefulWidget {
   final bool isArabic;
-  const WalletScreen({super.key, this.isArabic = false});
+  /// 0=overview  1=transactions  2=withdrawals  3=advances
+  final int initialTab;
+  const WalletScreen({
+    super.key,
+    this.isArabic = false,
+    this.initialTab = 0,
+  });
 
   @override
   State<WalletScreen> createState() => _WalletScreenState();
@@ -41,7 +47,7 @@ class _WalletScreenState extends State<WalletScreen> {
   List<Map<String, dynamic>> _withdrawalRequests = [];
   List<Map<String, dynamic>> _advances = [];
 
-  String _activeTab = 'overview';
+  String _activeTab = 'overview'; // set from initialTab in initState
   String _transactionFilter = 'all';
   String _withdrawalFilter = 'all';
 
@@ -60,6 +66,10 @@ class _WalletScreenState extends State<WalletScreen> {
   @override
   void initState() {
     super.initState();
+    const tabNames = ['overview', 'transactions', 'withdrawals', 'advances'];
+    if (widget.initialTab >= 0 && widget.initialTab < tabNames.length) {
+      _activeTab = tabNames[widget.initialTab];
+    }
     _initializeWallet();
   }
 
@@ -1221,12 +1231,12 @@ class _WalletScreenState extends State<WalletScreen> {
             value: _transactionFilter,
             isExpanded: true,
             underline: const SizedBox(),
-            items: const [
-              DropdownMenuItem(value: 'all', child: Text('All Transactions')),
-              DropdownMenuItem(value: 'earning', child: Text('Earnings')),
-              DropdownMenuItem(value: 'withdrawal', child: Text('Withdrawals')),
-              DropdownMenuItem(value: 'bonus', child: Text('Bonuses')),
-              DropdownMenuItem(value: 'penalty', child: Text('Penalties')),
+            items: [
+              DropdownMenuItem(value: 'all', child: Text(widget.isArabic ? 'جميع المعاملات' : 'All Transactions')),
+              DropdownMenuItem(value: 'earning', child: Text(widget.isArabic ? 'الأرباح' : 'Earnings')),
+              DropdownMenuItem(value: 'withdrawal', child: Text(widget.isArabic ? 'السحوبات' : 'Withdrawals')),
+              DropdownMenuItem(value: 'bonus', child: Text(widget.isArabic ? 'المكافآت' : 'Bonuses')),
+              DropdownMenuItem(value: 'penalty', child: Text(widget.isArabic ? 'الغرامات' : 'Penalties')),
             ],
             onChanged: (value) =>
                 setState(() => _transactionFilter = value ?? 'all'),
@@ -1238,7 +1248,7 @@ class _WalletScreenState extends State<WalletScreen> {
             child: Padding(
               padding: const EdgeInsets.all(32),
               child: Text(
-                'No transactions found',
+                widget.isArabic ? 'لا توجد معاملات' : 'No transactions found',
                 style: GoogleFonts.poppins(color: AppColors.textLight),
               ),
             ),
@@ -1266,11 +1276,11 @@ class _WalletScreenState extends State<WalletScreen> {
             value: _withdrawalFilter,
             isExpanded: true,
             underline: const SizedBox(),
-            items: const [
-              DropdownMenuItem(value: 'all', child: Text('All Withdrawals')),
-              DropdownMenuItem(value: 'pending', child: Text('Pending')),
-              DropdownMenuItem(value: 'approved', child: Text('Approved')),
-              DropdownMenuItem(value: 'rejected', child: Text('Rejected')),
+            items: [
+              DropdownMenuItem(value: 'all', child: Text(widget.isArabic ? 'جميع السحوبات' : 'All Withdrawals')),
+              DropdownMenuItem(value: 'pending', child: Text(widget.isArabic ? 'قيد الانتظار' : 'Pending')),
+              DropdownMenuItem(value: 'approved', child: Text(widget.isArabic ? 'معتمدة' : 'Approved')),
+              DropdownMenuItem(value: 'rejected', child: Text(widget.isArabic ? 'مرفوضة' : 'Rejected')),
             ],
             onChanged: (value) =>
                 setState(() => _withdrawalFilter = value ?? 'all'),
@@ -1282,7 +1292,7 @@ class _WalletScreenState extends State<WalletScreen> {
             child: Padding(
               padding: const EdgeInsets.all(32),
               child: Text(
-                'No withdrawal requests found',
+                widget.isArabic ? 'لا توجد طلبات سحب' : 'No withdrawal requests found',
                 style: GoogleFonts.poppins(color: AppColors.textLight),
               ),
             ),
@@ -1972,7 +1982,9 @@ class _WalletScreenState extends State<WalletScreen> {
         : DateTime.now();
     final isDebit = _isDebitType(type);
     final txColor = _getTransactionColor(type);
-    final label = isDebit ? 'DEBIT' : 'CREDIT';
+    final label = isDebit
+        ? (widget.isArabic ? 'مدين' : 'DEBIT')
+        : (widget.isArabic ? 'دائن' : 'CREDIT');
     final sign = isDebit ? '−' : '+';
 
     // Build a short label for the type when description is too long
