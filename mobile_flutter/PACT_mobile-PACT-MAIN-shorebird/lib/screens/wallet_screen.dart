@@ -939,6 +939,11 @@ class _WalletScreenState extends State<WalletScreen> {
                                     ],
                                   ),
 
+                                  if (_totalAdvanceDeductions > 0) ...[
+                                    const SizedBox(height: 12),
+                                    _buildAdvanceDeductionBanner(),
+                                  ],
+
                                   const SizedBox(height: 24),
 
                                   // Tabs
@@ -1587,6 +1592,85 @@ class _WalletScreenState extends State<WalletScreen> {
               fontWeight: FontWeight.bold,
               color: AppColors.textDark,
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAdvanceDeductionBanner() {
+    final isArabic = widget.isArabic;
+    final remaining = _totalAdvanceDeductions;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: Colors.deepOrange.shade50,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.deepOrange.shade200),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.deepOrange.withValues(alpha: 0.08),
+            blurRadius: 8,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: Colors.deepOrange.shade100,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(Icons.warning_amber_rounded,
+                color: Colors.deepOrange.shade700, size: 22),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  isArabic ? 'سلفة مستحقة' : 'Outstanding Advance',
+                  style: GoogleFonts.poppins(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.deepOrange.shade700,
+                  ),
+                ),
+                Text(
+                  isArabic
+                      ? 'يُخصم من رصيدك المتاح'
+                      : 'Deducted from your available balance',
+                  style: GoogleFonts.poppins(
+                    fontSize: 11,
+                    color: Colors.deepOrange.shade500,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                '− ${_formatCurrency(remaining)}',
+                style: GoogleFonts.poppins(
+                  fontSize: 15,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.deepOrange.shade700,
+                ),
+              ),
+              Text(
+                'SDG',
+                style: GoogleFonts.poppins(
+                  fontSize: 10,
+                  color: Colors.deepOrange.shade400,
+                ),
+              ),
+            ],
           ),
         ],
       ),
