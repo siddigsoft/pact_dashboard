@@ -835,35 +835,49 @@ class _WalletScreenState extends State<WalletScreen> {
                                     child: Column(
                                       children: [
                                         // Tab Buttons
-                                        Row(
-                                          children: [
-                                            Expanded(
-                                              child: _buildTabButton(
-                                                'overview',
-                                                widget.isArabic ? 'نظرة عامة' : 'Overview',
+                                        Container(
+                                          padding: const EdgeInsets.all(8),
+                                          color: Colors.grey.shade50,
+                                          child: Row(
+                                            children: [
+                                              Expanded(
+                                                child: _buildTabButton(
+                                                  'overview',
+                                                  'Overview',
+                                                  'نظرة عامة',
+                                                  Icons.dashboard_outlined,
+                                                ),
                                               ),
-                                            ),
-                                            Expanded(
-                                              child: _buildTabButton(
-                                                'transactions',
-                                                widget.isArabic ? 'المعاملات' : 'Transactions',
+                                              const SizedBox(width: 6),
+                                              Expanded(
+                                                child: _buildTabButton(
+                                                  'transactions',
+                                                  'History',
+                                                  'المعاملات',
+                                                  Icons.receipt_long_outlined,
+                                                ),
                                               ),
-                                            ),
-                                            Expanded(
-                                              child: _buildTabButton(
-                                                'withdrawals',
-                                                widget.isArabic ? 'عمليات السحب' : 'Withdrawals',
+                                              const SizedBox(width: 6),
+                                              Expanded(
+                                                child: _buildTabButton(
+                                                  'withdrawals',
+                                                  'Withdraw',
+                                                  'السحوبات',
+                                                  Icons.arrow_circle_down_outlined,
+                                                ),
                                               ),
-                                            ),
-                                            Expanded(
-                                              child: _buildTabButton(
-                                                'advances',
-                                                widget.isArabic ? 'مقدم الترحيل والمواصلات' : 'My Advances',
+                                              const SizedBox(width: 6),
+                                              Expanded(
+                                                child: _buildTabButton(
+                                                  'advances',
+                                                  'Advances',
+                                                  'السلف',
+                                                  Icons.directions_car_outlined,
+                                                ),
                                               ),
-                                            ),
-                                          ],
+                                            ],
+                                          ),
                                         ),
-                                        const Divider(height: 1),
                                         // Tab Content
                                         Padding(
                                           padding: const EdgeInsets.all(16),
@@ -1086,28 +1100,66 @@ class _WalletScreenState extends State<WalletScreen> {
     );
   }
 
-  Widget _buildTabButton(String tab, String label) {
+  Widget _buildTabButton(
+      String tab, String labelEn, String labelAr, IconData icon) {
     final isActive = _activeTab == tab;
-    return InkWell(
+    return GestureDetector(
       onTap: () => setState(() => _activeTab = tab),
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 16),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        curve: Curves.easeInOut,
+        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
         decoration: BoxDecoration(
-          border: Border(
-            bottom: BorderSide(
-              color: isActive ? AppColors.primaryBlue : Colors.transparent,
-              width: 2,
-            ),
-          ),
+          color: isActive ? AppColors.primaryBlue : Colors.white,
+          borderRadius: BorderRadius.circular(10),
+          boxShadow: isActive
+              ? [
+                  BoxShadow(
+                    color: AppColors.primaryBlue.withOpacity(0.3),
+                    blurRadius: 8,
+                    offset: const Offset(0, 3),
+                  ),
+                ]
+              : [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.05),
+                    blurRadius: 4,
+                    offset: const Offset(0, 1),
+                  ),
+                ],
+          border: isActive
+              ? null
+              : Border.all(color: Colors.grey.shade200, width: 1),
         ),
-        child: Text(
-          label,
-          textAlign: TextAlign.center,
-          style: GoogleFonts.poppins(
-            fontSize: 14,
-            fontWeight: isActive ? FontWeight.w600 : FontWeight.normal,
-            color: isActive ? AppColors.primaryBlue : AppColors.textLight,
-          ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              icon,
+              size: 18,
+              color: isActive ? Colors.white : Colors.grey.shade500,
+            ),
+            const SizedBox(height: 3),
+            Text(
+              labelEn,
+              textAlign: TextAlign.center,
+              style: GoogleFonts.poppins(
+                fontSize: 10,
+                fontWeight: FontWeight.w600,
+                color: isActive ? Colors.white : Colors.grey.shade700,
+              ),
+            ),
+            Text(
+              labelAr,
+              textAlign: TextAlign.center,
+              style: GoogleFonts.poppins(
+                fontSize: 9,
+                color: isActive
+                    ? Colors.white.withOpacity(0.85)
+                    : Colors.grey.shade400,
+              ),
+            ),
+          ],
         ),
       ),
     );
