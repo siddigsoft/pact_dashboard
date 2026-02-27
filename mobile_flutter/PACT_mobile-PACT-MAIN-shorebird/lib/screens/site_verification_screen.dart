@@ -8531,97 +8531,140 @@ class _BulkLocalityPermitRequirementDialogState
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      backgroundColor: Colors.white,
-      title: Row(
-        children: [
-          Icon(Icons.location_on, color: Colors.green[600], size: 24),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              'Bulk Locality Permit Verification',
-              style: GoogleFonts.poppins(
-                fontSize: 18,
-                fontWeight: FontWeight.w600,
-                color: Colors.green[800],
+    final isArabic = Localizations.localeOf(context).languageCode == 'ar';
+    return Directionality(
+      textDirection: isArabic ? TextDirection.rtl : TextDirection.ltr,
+      child: AlertDialog(
+        backgroundColor: Colors.white,
+        title: Row(
+          children: [
+            Icon(Icons.location_on, color: Colors.green[600], size: 24),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    isArabic
+                        ? '\u0627\u0644\u062a\u062d\u0642\u0642 \u0645\u0646 \u062a\u0635\u0631\u064a\u062d \u0627\u0644\u0645\u062d\u0644\u064a\u0629'
+                        : 'Bulk Locality Permit Verification',
+                    style: GoogleFonts.poppins(
+                      fontSize: 17,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.green[800],
+                    ),
+                  ),
+                  if (isArabic)
+                    Text(
+                      'Bulk Locality Permit Verification',
+                      style: GoogleFonts.poppins(
+                        fontSize: 11,
+                        color: Colors.green[600],
+                      ),
+                    ),
+                ],
               ),
+            ),
+          ],
+        ),
+        content: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.of(context).size.height * 0.6,
+          ),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  isArabic
+                      ? '\u0627\u0644\u062a\u062d\u0642\u0642 \u0645\u0646 \u0645\u062a\u0637\u0644\u0628\u0627\u062a \u062a\u0635\u0631\u064a\u062d \u0627\u0644\u0645\u062d\u0644\u064a\u0629 \u0641\u064a ${widget.locality}\u060c ${widget.state}'
+                      : 'Verify locality permit requirements for \${widget.locality}, \${widget.state}',
+                  style: GoogleFonts.poppins(fontSize: 13, color: Colors.grey[600]),
+                ),
+                Text(
+                  isArabic
+                      ? '\u0633\u064a\u062a\u0623\u062b\u0631 \${widget.siteCount} \u0645\u0648\u0627\u0642\u0639'
+                      : '\${widget.siteCount} sites will be affected',
+                  style: GoogleFonts.poppins(
+                    fontSize: 12,
+                    color: Colors.grey[500],
+                    fontStyle: FontStyle.italic,
+                  ),
+                ),
+                const SizedBox(height: 24),
+                Text(
+                  isArabic
+                      ? '\u0647\u0644 \u062a\u062d\u062a\u0627\u062c \u0625\u0644\u0649 \u062a\u0635\u0631\u064a\u062d \u0645\u062d\u0644\u064a\u0629 \u0641\u064a \u0647\u0630\u0647 \u0627\u0644\u0645\u062d\u0644\u064a\u0629\u061f'
+                      : 'Do you require a Locality permit in this locality?',
+                  style: GoogleFonts.poppins(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w500,
+                    color: Colors.grey[800],
+                  ),
+                ),
+                const SizedBox(height: 16),
+                _buildOptionWithDescription(
+                  isArabic
+                      ? '\u0646\u0639\u0645\u060c \u0645\u0637\u0644\u0648\u0628 \u0648\u0633\u0623\u0631\u0641\u0639\u0647'
+                      : 'Yes, it\'s required and I will upload it',
+                  isArabic
+                      ? '\u0644\u062f\u064a \u062a\u0635\u0631\u064a\u062d \u0627\u0644\u0645\u062d\u0644\u064a\u0629 \u0648\u0633\u0623\u0631\u0641\u0639\u0647 \u0627\u0644\u0622\u0646'
+                      : 'I have the locality permit and will upload it now',
+                  'required_have_it',
+                  _localityPermitRequirement,
+                  (value) => setState(() => _localityPermitRequirement = value),
+                ),
+                _buildOptionWithDescription(
+                  isArabic
+                      ? '\u0646\u0639\u0645\u060c \u0645\u0637\u0644\u0648\u0628 \u0644\u0643\u0646 \u0644\u064a\u0633 \u0644\u062f\u064a'
+                      : 'Yes, it\'s required but I don\'t have it',
+                  isArabic
+                      ? '\u0627\u0644\u062a\u0635\u0631\u064a\u062d \u0645\u0637\u0644\u0648\u0628 \u0644\u0643\u0646 \u063a\u064a\u0631 \u0645\u062a\u0627\u062d'
+                      : 'The locality permit is required but not available',
+                  'required_dont_have_it',
+                  _localityPermitRequirement,
+                  (value) => setState(() => _localityPermitRequirement = value),
+                ),
+                _buildOptionWithDescription(
+                  isArabic
+                      ? '\u0644\u0627\u060c \u0644\u064a\u0633 \u0645\u0637\u0644\u0648\u0628\u0627\u064b'
+                      : 'No, it\'s not a requirement',
+                  isArabic
+                      ? '\u0644\u0627 \u064a\u0648\u062c\u062f \u062a\u0635\u0631\u064a\u062d \u0645\u062d\u0644\u064a\u0629 \u0645\u0637\u0644\u0648\u0628 \u0641\u064a \u0647\u0630\u0647 \u0627\u0644\u0645\u062d\u0644\u064a\u0629'
+                      : 'Locality permit is not required in this locality',
+                  'not_required',
+                  _localityPermitRequirement,
+                  (value) => setState(() => _localityPermitRequirement = value),
+                ),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: Text(
+              isArabic ? '\u0625\u0644\u063a\u0627\u0621' : 'Cancel',
+              style: GoogleFonts.poppins(),
+            ),
+          ),
+          ElevatedButton(
+            onPressed: _localityPermitRequirement != null
+                ? () => Navigator.of(
+                    context,
+                  ).pop({'requirement': _localityPermitRequirement})
+                : null,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primaryBlue,
+            ),
+            child: Text(
+              isArabic ? '\u0627\u0644\u062a\u0627\u0644\u064a' : 'Next',
+              style: GoogleFonts.poppins(color: Colors.white),
             ),
           ),
         ],
       ),
-      content: ConstrainedBox(
-        constraints: BoxConstraints(
-          maxHeight: MediaQuery.of(context).size.height * 0.6,
-        ),
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Verify locality permit requirements for ${widget.locality}, ${widget.state}',
-                style: GoogleFonts.poppins(fontSize: 13, color: Colors.grey[600]),
-              ),
-              Text(
-                '${widget.siteCount} sites will be affected',
-                style: GoogleFonts.poppins(
-                  fontSize: 12,
-                  color: Colors.grey[500],
-                  fontStyle: FontStyle.italic,
-                ),
-              ),
-              const SizedBox(height: 24),
-              Text(
-                'Do you require a Locality permit in this locality?',
-                style: GoogleFonts.poppins(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w500,
-                  color: Colors.grey[800],
-                ),
-              ),
-              const SizedBox(height: 16),
-              _buildOptionWithDescription(
-                'Yes, it\'s required and I will upload it',
-                'I have the locality permit and will upload it now',
-                'required_have_it',
-                _localityPermitRequirement,
-                (value) => setState(() => _localityPermitRequirement = value),
-              ),
-              _buildOptionWithDescription(
-                'Yes, it\'s required but I don\'t have it',
-                'The locality permit is required but not available',
-                'required_dont_have_it',
-                _localityPermitRequirement,
-                (value) => setState(() => _localityPermitRequirement = value),
-              ),
-              _buildOptionWithDescription(
-                'No, it\'s not a requirement',
-                'Locality permit is not required in this locality',
-                'not_required',
-                _localityPermitRequirement,
-                (value) => setState(() => _localityPermitRequirement = value),
-              ),
-            ],
-          ),
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: Text('Cancel', style: GoogleFonts.poppins()),
-        ),
-        ElevatedButton(
-          onPressed: _localityPermitRequirement != null
-              ? () => Navigator.of(
-                  context,
-                ).pop({'requirement': _localityPermitRequirement})
-              : null,
-          style: ElevatedButton.styleFrom(
-            backgroundColor: AppColors.primaryBlue,
-          ),
-          child: Text('Next', style: GoogleFonts.poppins(color: Colors.white)),
-        ),
-      ],
     );
   }
 
@@ -8721,123 +8764,161 @@ class _BulkLocalityPermitFollowUpDialogState
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      title: Row(
-        children: [
-          const Icon(
-            Icons.warning_amber,
-            color: AppColors.primaryBlue,
-            size: 24,
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              'Locality Permit Not Available',
-              style: GoogleFonts.poppins(
-                fontSize: 18,
-                fontWeight: FontWeight.w600,
-                color: AppColors.primaryBlue,
-              ),
+    final isArabic = Localizations.localeOf(context).languageCode == 'ar';
+    return Directionality(
+      textDirection: isArabic ? TextDirection.rtl : TextDirection.ltr,
+      child: AlertDialog(
+        title: Row(
+          children: [
+            const Icon(
+              Icons.warning_amber,
+              color: AppColors.primaryBlue,
+              size: 24,
             ),
-          ),
-        ],
-      ),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'You indicated the locality permit for ${widget.locality}, ${widget.state} is required but not available',
-            style: GoogleFonts.poppins(fontSize: 13, color: Colors.grey[600]),
-          ),
-          Text(
-            '${widget.siteCount} sites will be affected',
-            style: GoogleFonts.poppins(
-              fontSize: 12,
-              color: Colors.grey[500],
-              fontStyle: FontStyle.italic,
-            ),
-          ),
-          const SizedBox(height: 16),
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: AppColors.primaryBlue.withValues(alpha: 0.05),
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(
-                color: AppColors.primaryBlue.withValues(alpha: 0.12),
-              ),
-            ),
-            child: Row(
-              children: [
-                const Icon(
-                  Icons.info_outline,
-                  color: AppColors.primaryBlue,
-                  size: 20,
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    'The locality permit is required but you don\'t have it. Can you proceed with the verification without it?',
+            const SizedBox(width: 8),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    isArabic
+                        ? '\u062a\u0635\u0631\u064a\u062d \u0627\u0644\u0645\u062d\u0644\u064a\u0629 \u063a\u064a\u0631 \u0645\u062a\u0627\u062d'
+                        : 'Locality Permit Not Available',
                     style: GoogleFonts.poppins(
-                      fontSize: 13,
+                      fontSize: 17,
+                      fontWeight: FontWeight.w600,
                       color: AppColors.primaryBlue,
                     ),
                   ),
+                  if (isArabic)
+                    Text(
+                      'Locality Permit Not Available',
+                      style: GoogleFonts.poppins(
+                        fontSize: 11,
+                        color: AppColors.primaryBlue.withValues(alpha: 0.7),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              isArabic
+                  ? '\u0644\u0642\u062f \u0623\u0634\u0631\u062a \u0625\u0644\u0649 \u0623\u0646 \u062a\u0635\u0631\u064a\u062d \u0627\u0644\u0645\u062d\u0644\u064a\u0629 \u0641\u064a \${widget.locality}\u060c \${widget.state} \u0645\u0637\u0644\u0648\u0628 \u0644\u0643\u0646 \u063a\u064a\u0631 \u0645\u062a\u0627\u062d'
+                  : 'You indicated the locality permit for \${widget.locality}, \${widget.state} is required but not available',
+              style: GoogleFonts.poppins(fontSize: 13, color: Colors.grey[600]),
+            ),
+            Text(
+              isArabic
+                  ? '\u0633\u064a\u062a\u0623\u062b\u0631 \${widget.siteCount} \u0645\u0648\u0627\u0642\u0639'
+                  : '\${widget.siteCount} sites will be affected',
+              style: GoogleFonts.poppins(
+                fontSize: 12,
+                color: Colors.grey[500],
+                fontStyle: FontStyle.italic,
+              ),
+            ),
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppColors.primaryBlue.withValues(alpha: 0.05),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: AppColors.primaryBlue.withValues(alpha: 0.12),
                 ),
-              ],
+              ),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.info_outline,
+                    color: AppColors.primaryBlue,
+                    size: 20,
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      isArabic
+                          ? '\u0627\u0644\u062a\u0635\u0631\u064a\u062d \u0645\u0637\u0644\u0648\u0628 \u0644\u0643\u0646\u0643 \u0644\u0627 \u062a\u0645\u0644\u0643\u0647. \u0647\u0644 \u064a\u0645\u0643\u0646\u0643 \u0627\u0644\u0645\u0636\u064a \u0641\u064a \u0627\u0644\u062a\u062d\u0642\u0642 \u0628\u062f\u0648\u0646\u0647\u061f'
+                          : 'The locality permit is required but you don\'t have it. Can you proceed with the verification without it?',
+                      style: GoogleFonts.poppins(
+                        fontSize: 13,
+                        color: AppColors.primaryBlue,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 24),
+            Text(
+              isArabic
+                  ? '\u0647\u0644 \u064a\u0645\u0643\u0646\u0643 \u0627\u0644\u0639\u0645\u0644 \u0628\u062f\u0648\u0646 \u062a\u0635\u0631\u064a\u062d \u0627\u0644\u0645\u062d\u0644\u064a\u0629\u061f'
+                  : 'Are you able to work without the locality permit?',
+              style: GoogleFonts.poppins(
+                fontSize: 16,
+                fontWeight: FontWeight.w500,
+                color: Colors.grey[800],
+              ),
+            ),
+            const SizedBox(height: 16),
+            _buildOptionWithDescription(
+              isArabic
+                  ? '\u0646\u0639\u0645\u060c \u064a\u0645\u0643\u0646\u0646\u064a \u0627\u0644\u0645\u062a\u0627\u0628\u0639\u0629 \u0628\u062f\u0648\u0646\u0647'
+                  : 'Yes, I can proceed without it',
+              isArabic
+                  ? '\u0633\u0623\u0643\u0645\u0644 \u0639\u0645\u0644\u064a\u0629 \u0627\u0644\u062a\u062d\u0642\u0642'
+                  : 'I will continue with the verification',
+              'yes',
+              _canWorkWithoutLocalityPermit,
+              (value) => setState(() => _canWorkWithoutLocalityPermit = value),
+            ),
+            _buildOptionWithDescription(
+              isArabic
+                  ? '\u0644\u0627\u060c \u0644\u0627 \u064a\u0645\u0643\u0646\u0646\u064a \u0627\u0644\u0645\u062a\u0627\u0628\u0639\u0629 \u0628\u062f\u0648\u0646\u0647'
+                  : 'No, I cannot proceed without it',
+              isArabic
+                  ? '\u0625\u0639\u0627\u062f\u0629 \u0627\u0644\u0645\u0648\u0627\u0642\u0639 \u0625\u0644\u0649 \u0645\u0633\u0624\u0648\u0644 \u0627\u0644\u0639\u0645\u0644\u064a\u0627\u062a'
+                  : 'Send the sites back to FOM for action',
+              'no',
+              _canWorkWithoutLocalityPermit,
+              (value) => setState(() => _canWorkWithoutLocalityPermit = value),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: Text(
+              isArabic ? '\u0625\u0644\u063a\u0627\u0621' : 'Cancel',
+              style: GoogleFonts.poppins(),
             ),
           ),
-          const SizedBox(height: 24),
-          Text(
-            'Are you able to work without the locality permit?',
-            style: GoogleFonts.poppins(
-              fontSize: 16,
-              fontWeight: FontWeight.w500,
-              color: Colors.grey[800],
+          ElevatedButton(
+            onPressed: _canWorkWithoutLocalityPermit != null
+                ? () => Navigator.of(
+                    context,
+                  ).pop({'canWorkWithout': _canWorkWithoutLocalityPermit})
+                : null,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: _canWorkWithoutLocalityPermit == 'no'
+                  ? Colors.red
+                  : AppColors.primaryBlue,
             ),
-          ),
-          const SizedBox(height: 16),
-          _buildOptionWithDescription(
-            'Yes, I can proceed without it',
-            'I will continue with the verification',
-            'yes',
-            _canWorkWithoutLocalityPermit,
-            (value) => setState(() => _canWorkWithoutLocalityPermit = value),
-          ),
-          _buildOptionWithDescription(
-            'No, I cannot proceed without it',
-            'Send the sites back to FOM for action',
-            'no',
-            _canWorkWithoutLocalityPermit,
-            (value) => setState(() => _canWorkWithoutLocalityPermit = value),
+            child: Text(
+              _canWorkWithoutLocalityPermit == 'no'
+                  ? (isArabic ? '\u0625\u0631\u062c\u0627\u0639 \u0644\u0645\u0633\u0624\u0648\u0644 \u0627\u0644\u0639\u0645\u0644\u064a\u0627\u062a' : 'Send Back to FOM')
+                  : (isArabic ? '\u0645\u062a\u0627\u0628\u0639\u0629' : 'Continue'),
+              style: GoogleFonts.poppins(color: Colors.white),
+            ),
           ),
         ],
       ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: Text('Cancel', style: GoogleFonts.poppins()),
-        ),
-        ElevatedButton(
-          onPressed: _canWorkWithoutLocalityPermit != null
-              ? () => Navigator.of(
-                  context,
-                ).pop({'canWorkWithout': _canWorkWithoutLocalityPermit})
-              : null,
-          style: ElevatedButton.styleFrom(
-            backgroundColor: _canWorkWithoutLocalityPermit == 'no'
-                ? Colors.red
-                : AppColors.primaryBlue,
-          ),
-          child: Text(
-            _canWorkWithoutLocalityPermit == 'no'
-                ? 'Send Back to FOM'
-                : 'Continue',
-            style: GoogleFonts.poppins(color: Colors.white),
-          ),
-        ),
-      ],
     );
   }
 
