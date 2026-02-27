@@ -49,10 +49,20 @@ class _WalletScreenState extends State<WalletScreen> {
     if (_advances.isNotEmpty) {
       return _advances.fold(0.0, (sum, a) {
         final status = (a['status'] as String? ?? '').toLowerCase();
-        // 'approved' = disbursed but not yet started repaying
-        // 'partially_paid' = disbursed, partially repaid
-        if (status != 'approved' && status != 'partially_paid') return sum;
+        // Outstanding advance statuses — money already in wallet, not yet fully repaid:
+        // 'approved'        = fully approved (may be pre-disbursement or post)
+        // 'disbursed'       = money sent to wallet, repayment not started
+        // 'active'          = active advance outstanding
+        // 'partially_paid'  = partially repaid, remainder still owed
+        const outstanding = {
+          'approved',
+          'disbursed',
+          'active',
+          'partially_paid',
+        };
+        if (!outstanding.contains(status)) return sum;
         final approved = (a['approved_amount'] as num?)?.toDouble() ??
+            (a['disbursed_amount'] as num?)?.toDouble() ??
             (a['requested_amount'] as num?)?.toDouble() ?? 0.0;
         final paid = (a['total_paid_amount'] as num?)?.toDouble() ?? 0.0;
         return sum + (approved - paid).clamp(0.0, double.infinity);
@@ -477,6 +487,15 @@ class _WalletScreenState extends State<WalletScreen> {
           .limit(100);
 
       _advances = List<Map<String, dynamic>>.from(data ?? []);
+      debugPrint('[Wallet] Loaded ${_advances.length} advances for user $_userId');
+      for (final a in _advances) {
+        debugPrint(
+          '[Wallet] Advance: id=${a['id']}, status=${a['status']}, '
+          'approved_amount=${a['approved_amount']}, disbursed_amount=${a['disbursed_amount']}, '
+          'requested_amount=${a['requested_amount']}, total_paid=${a['total_paid_amount']}',
+        );
+      }
+      debugPrint('[Wallet] Total advance deductions: $_totalAdvanceDeductions');
       if (mounted) setState(() {});
     } catch (e) {
       debugPrint('[Wallet] Error loading advances: $e');
