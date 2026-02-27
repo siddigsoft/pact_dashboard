@@ -1,6 +1,7 @@
 // lib/screens/site_verification_screen.dart
 
 import 'dart:io';
+import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -8541,7 +8542,7 @@ class _BulkLocalityPermitRequirementDialogState
   Widget build(BuildContext context) {
     final isArabic = widget.isArabic;
     return Directionality(
-      textDirection: isArabic ? TextDirection.rtl : TextDirection.ltr,
+      textDirection: isArabic ? ui.TextDirection.rtl : ui.TextDirection.ltr,
       child: AlertDialog(
         backgroundColor: Colors.white,
         title: Row(
@@ -8776,7 +8777,7 @@ class _BulkLocalityPermitFollowUpDialogState
   Widget build(BuildContext context) {
     final isArabic = widget.isArabic;
     return Directionality(
-      textDirection: isArabic ? TextDirection.rtl : TextDirection.ltr,
+      textDirection: isArabic ? ui.TextDirection.rtl : ui.TextDirection.ltr,
       child: AlertDialog(
         title: Row(
           children: [
