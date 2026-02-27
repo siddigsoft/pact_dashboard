@@ -73,6 +73,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
   void initState() {
     super.initState();
     _initializeDashboard();
+    // Ensure the notification service is running with realtime subscribed.
+    // initialize() is a no-op if already done; this guards against session
+    // restore or biometric re-auth paths that skip the normal login flow.
+    UserNotificationService().initialize();
     _broadcastSub = UserNotificationService().broadcastStream.listen((n) {
       if (mounted) BroadcastPopup.show(context, n);
     });

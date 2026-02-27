@@ -37,7 +37,12 @@ class BroadcastPopup {
   static void dismiss() {
     _timer?.cancel();
     _timer = null;
-    _entry?.remove();
+    try {
+      _entry?.remove();
+    } catch (_) {
+      // OverlayEntry may already be detached (e.g. user navigated away).
+      // Swallow the error so future popups are never blocked.
+    }
     _entry = null;
   }
 }

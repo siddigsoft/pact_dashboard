@@ -154,19 +154,23 @@ class UserNotificationService {
     debugPrint(
         'UserNotificationService: Subscribing to realtime for user $userId');
 
+    // Filter by user_id so Supabase delivers only this user's rows via RLS.
+    // Broadcasts are stored with user_id = recipient user ID, so this covers both
+    // personal notifications and broadcast messages.
     _realtimeChannel
       ?..onPostgresChanges(
         event: PostgresChangeEvent.insert,
         schema: 'public',
         table: 'notifications',
+        filter: PostgresChangeFilter(
+          type: PostgresChangeFilterType.eq,
+          column: 'user_id',
+          value: userId,
+        ),
         callback: (payload) {
-          final data = payload.newRecord;
-          final notifUserId = data['user_id'];
-          final notifRecipientId = data['recipient_id'];
-          if (notifUserId != userId && notifRecipientId != userId) return;
           try {
-            final notification =
-                UserNotification.fromJson(Map<String, dynamic>.from(data));
+            final data = Map<String, dynamic>.from(payload.newRecord);
+            final notification = UserNotification.fromJson(data);
             _handleInsert(notification);
           } catch (e) {
             debugPrint('UserNotificationService realtime insert error: $e');
@@ -174,17 +178,41 @@ class UserNotificationService {
         },
       )
       ..onPostgresChanges(
+        event: PostgresChangeEvent.insert,
+        schema: 'public',
+        table: 'notifications',
+        filter: PostgresChangeFilter(
+          type: PostgresChangeFilterType.eq,
+          column: 'recipient_id',
+          value: userId,
+        ),
+        callback: (payload) {
+          try {
+            final data = Map<String, dynamic>.from(payload.newRecord);
+            // Avoid duplicates — only process if user_id != userId
+            // (when user_id == userId the first listener already handles it)
+            if (data['user_id'] == userId) return;
+            final notification = UserNotification.fromJson(data);
+            _handleInsert(notification);
+          } catch (e) {
+            debugPrint(
+                'UserNotificationService realtime recipient insert error: $e');
+          }
+        },
+      )
+      ..onPostgresChanges(
         event: PostgresChangeEvent.update,
         schema: 'public',
         table: 'notifications',
+        filter: PostgresChangeFilter(
+          type: PostgresChangeFilterType.eq,
+          column: 'user_id',
+          value: userId,
+        ),
         callback: (payload) {
-          final data = payload.newRecord;
-          final notifUserId = data['user_id'];
-          final notifRecipientId = data['recipient_id'];
-          if (notifUserId != userId && notifRecipientId != userId) return;
           try {
-            final notification =
-                UserNotification.fromJson(Map<String, dynamic>.from(data));
+            final data = Map<String, dynamic>.from(payload.newRecord);
+            final notification = UserNotification.fromJson(data);
             _handleUpdate(notification);
           } catch (e) {
             debugPrint('UserNotificationService realtime update error: $e');
@@ -194,6 +222,13 @@ class UserNotificationService {
       ..subscribe((status, error) {
         debugPrint(
             'UserNotificationService: Realtime status: $status, error: $error');
+        // If the channel drops, attempt to re-subscribe once.
+        if (status == 'CHANNEL_ERROR' || status == 'TIMED_OUT') {
+          debugPrint('UserNotificationService: Channel error, re-subscribing…');
+          Future.delayed(const Duration(seconds: 3), () {
+            if (_isInitialized) _subscribeToRealtime(userId);
+          });
+        }
       });
   }
 
