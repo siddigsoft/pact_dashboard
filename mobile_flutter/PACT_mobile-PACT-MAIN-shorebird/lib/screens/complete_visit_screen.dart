@@ -1470,7 +1470,7 @@ class _CompleteVisitScreenState extends ConsumerState<CompleteVisitScreen> {
                 const SizedBox(height: 6),
                 TextField(
                   controller: _marketNameController,
-                  textDirection: _isArabic ? ui.TextDirection.rtl : ui.TextDirection.ltr,
+                  textDirection: _isArabic ? TextDirection.rtl : TextDirection.ltr,
                   decoration: InputDecoration(
                     hintText: _isArabic
                         ? 'أدخل اسم السوق...'
