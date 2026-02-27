@@ -613,9 +613,9 @@ class _WalletScreenState extends State<WalletScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
+        color: color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withOpacity(0.3)),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -678,7 +678,7 @@ class _WalletScreenState extends State<WalletScreen> {
                                       borderRadius: BorderRadius.circular(20),
                                       boxShadow: [
                                         BoxShadow(
-                                          color: Colors.blue.withOpacity(0.3),
+                                          color: Colors.blue.withValues(alpha: 0.3),
                                           blurRadius: 20,
                                           offset: const Offset(0, 10),
                                         ),
@@ -696,15 +696,15 @@ class _WalletScreenState extends State<WalletScreen> {
                                               widget.isArabic ? 'الرصيد الحالي' : 'Current Balance',
                                               style: GoogleFonts.poppins(
                                                 fontSize: 14,
-                                                color: Colors.white.withOpacity(
-                                                  0.9,
+                                                color: Colors.white.withValues(
+                                                  alpha: 0.9,
                                                 ),
                                               ),
                                             ),
                                             Icon(
                                               Icons.account_balance_wallet,
-                                              color: Colors.white.withOpacity(
-                                                0.9,
+                                              color: Colors.white.withValues(
+                                                alpha: 0.9,
                                               ),
                                               size: 24,
                                             ),
@@ -724,7 +724,7 @@ class _WalletScreenState extends State<WalletScreen> {
                                           widget.isArabic ? 'متاح للسحب' : 'Available for withdrawal',
                                           style: GoogleFonts.poppins(
                                             fontSize: 12,
-                                            color: Colors.white.withOpacity(0.8),
+                                            color: Colors.white.withValues(alpha: 0.8),
                                           ),
                                         ),
                                         if (_currentBalance > 0) ...[
@@ -826,7 +826,7 @@ class _WalletScreenState extends State<WalletScreen> {
                                       borderRadius: BorderRadius.circular(16),
                                       boxShadow: [
                                         BoxShadow(
-                                          color: Colors.black.withOpacity(0.05),
+                                          color: Colors.black.withValues(alpha: 0.05),
                                           blurRadius: 10,
                                           offset: const Offset(0, 2),
                                         ),
@@ -1064,7 +1064,7 @@ class _WalletScreenState extends State<WalletScreen> {
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: color.withOpacity(0.1),
+            color: color.withValues(alpha: 0.1),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
@@ -1115,14 +1115,14 @@ class _WalletScreenState extends State<WalletScreen> {
           boxShadow: isActive
               ? [
                   BoxShadow(
-                    color: AppColors.primaryBlue.withOpacity(0.3),
+                    color: AppColors.primaryBlue.withValues(alpha: 0.3),
                     blurRadius: 8,
                     offset: const Offset(0, 3),
                   ),
                 ]
               : [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.05),
+                    color: Colors.black.withValues(alpha: 0.05),
                     blurRadius: 4,
                     offset: const Offset(0, 1),
                   ),
@@ -1155,7 +1155,7 @@ class _WalletScreenState extends State<WalletScreen> {
               style: GoogleFonts.poppins(
                 fontSize: 9,
                 color: isActive
-                    ? Colors.white.withOpacity(0.85)
+                    ? Colors.white.withValues(alpha: 0.85)
                     : Colors.grey.shade400,
               ),
             ),
@@ -1262,9 +1262,9 @@ class _WalletScreenState extends State<WalletScreen> {
         Container(
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color: Colors.blue.withOpacity(0.05),
+            color: Colors.blue.withValues(alpha: 0.05),
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: Colors.blue.withOpacity(0.2)),
+            border: Border.all(color: Colors.blue.withValues(alpha: 0.2)),
           ),
           child: Row(
             children: [
@@ -1655,7 +1655,7 @@ class _WalletScreenState extends State<WalletScreen> {
                         child: Stack(children: [
                           Center(
                             child: Image.memory(
-                              base64Decode(savedSignatureBase64),
+                              base64Decode(savedSignatureBase64!),
                               fit: BoxFit.contain,
                             ),
                           ),
@@ -2038,7 +2038,7 @@ class _WalletScreenState extends State<WalletScreen> {
       elevation: 1,
       shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(12),
-          side: BorderSide(color: statusColor.withOpacity(0.2))),
+          side: BorderSide(color: statusColor.withValues(alpha: 0.2))),
       child: Padding(
         padding: const EdgeInsets.all(14),
         child: Column(
@@ -2070,9 +2070,9 @@ class _WalletScreenState extends State<WalletScreen> {
                   padding:
                       const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                   decoration: BoxDecoration(
-                    color: statusColor.withOpacity(0.1),
+                    color: statusColor.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: statusColor.withOpacity(0.35)),
+                    border: Border.all(color: statusColor.withValues(alpha: 0.35)),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
@@ -2305,10 +2305,10 @@ class _WalletScreenState extends State<WalletScreen> {
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: txColor.withOpacity(0.2), width: 1),
+          border: Border.all(color: txColor.withValues(alpha: 0.2), width: 1),
           boxShadow: [
             BoxShadow(
-                color: Colors.black.withOpacity(0.04),
+                color: Colors.black.withValues(alpha: 0.04),
                 blurRadius: 6,
                 offset: const Offset(0, 2))
           ],
@@ -2322,7 +2322,7 @@ class _WalletScreenState extends State<WalletScreen> {
               Container(
                 padding: const EdgeInsets.all(9),
                 decoration: BoxDecoration(
-                  color: txColor.withOpacity(0.12),
+                  color: txColor.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child:
@@ -2372,7 +2372,7 @@ class _WalletScreenState extends State<WalletScreen> {
                     padding:
                         const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                     decoration: BoxDecoration(
-                      color: txColor.withOpacity(0.12),
+                      color: txColor.withValues(alpha: 0.12),
                       borderRadius: BorderRadius.circular(4),
                     ),
                     child: Text(
@@ -2484,7 +2484,7 @@ class _WalletScreenState extends State<WalletScreen> {
                           Container(
                             padding: const EdgeInsets.all(12),
                             decoration: BoxDecoration(
-                              color: txColor.withOpacity(0.12),
+                              color: txColor.withValues(alpha: 0.12),
                               borderRadius: BorderRadius.circular(14),
                             ),
                             child: Icon(_getTransactionIcon(type),
@@ -2514,7 +2514,7 @@ class _WalletScreenState extends State<WalletScreen> {
                             padding: const EdgeInsets.symmetric(
                                 horizontal: 8, vertical: 4),
                             decoration: BoxDecoration(
-                              color: txColor.withOpacity(0.12),
+                              color: txColor.withValues(alpha: 0.12),
                               borderRadius: BorderRadius.circular(8),
                             ),
                             child: Text(
@@ -2538,15 +2538,15 @@ class _WalletScreenState extends State<WalletScreen> {
                         decoration: BoxDecoration(
                           gradient: LinearGradient(
                             colors: [
-                              txColor.withOpacity(0.12),
-                              txColor.withOpacity(0.04),
+                              txColor.withValues(alpha: 0.12),
+                              txColor.withValues(alpha: 0.04),
                             ],
                             begin: Alignment.topLeft,
                             end: Alignment.bottomRight,
                           ),
                           borderRadius: BorderRadius.circular(14),
                           border:
-                              Border.all(color: txColor.withOpacity(0.25)),
+                              Border.all(color: txColor.withValues(alpha: 0.25)),
                         ),
                         child: Column(
                           children: [
