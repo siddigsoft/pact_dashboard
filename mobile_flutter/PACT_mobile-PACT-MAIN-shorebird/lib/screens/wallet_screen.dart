@@ -2298,95 +2298,517 @@ class _WalletScreenState extends State<WalletScreen> {
         typeLabel = type.replaceAll('_', ' ').toUpperCase();
     }
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-            color: txColor.withOpacity(0.2), width: 1),
-        boxShadow: [
-          BoxShadow(
-              color: Colors.black.withOpacity(0.04),
-              blurRadius: 6,
-              offset: const Offset(0, 2))
-        ],
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Icon badge
-            Container(
-              padding: const EdgeInsets.all(9),
-              decoration: BoxDecoration(
-                color: txColor.withOpacity(0.12),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Icon(_getTransactionIcon(type), color: txColor, size: 22),
-            ),
-            const SizedBox(width: 12),
-            // Description + date + type
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    description.isNotEmpty ? description : typeLabel,
-                    style: GoogleFonts.poppins(
-                      fontSize: 12.5,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.textDark,
-                    ),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  const SizedBox(height: 3),
-                  Text(
-                    DateFormat('dd MMM yyyy  HH:mm').format(createdAt.toLocal()),
-                    style: GoogleFonts.poppins(
-                        fontSize: 11, color: AppColors.textLight),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 8),
-            // Amount + DEBIT/CREDIT badge
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Text(
-                  '$sign${_formatCurrency(amount)}',
-                  style: GoogleFonts.poppins(
-                    fontSize: 15,
-                    fontWeight: FontWeight.bold,
-                    color: txColor,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: txColor.withOpacity(0.12),
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                  child: Text(
-                    label,
-                    style: GoogleFonts.poppins(
-                      fontSize: 9,
-                      fontWeight: FontWeight.w700,
-                      color: txColor,
-                      letterSpacing: 0.5,
-                    ),
-                  ),
-                ),
-              ],
-            ),
+    return GestureDetector(
+      onTap: () => _showTransactionDetail(transaction),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 10),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: txColor.withOpacity(0.2), width: 1),
+          boxShadow: [
+            BoxShadow(
+                color: Colors.black.withOpacity(0.04),
+                blurRadius: 6,
+                offset: const Offset(0, 2))
           ],
         ),
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Icon badge
+              Container(
+                padding: const EdgeInsets.all(9),
+                decoration: BoxDecoration(
+                  color: txColor.withOpacity(0.12),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child:
+                    Icon(_getTransactionIcon(type), color: txColor, size: 22),
+              ),
+              const SizedBox(width: 12),
+              // Description + date + type
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      description.isNotEmpty ? description : typeLabel,
+                      style: GoogleFonts.poppins(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.textDark,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      DateFormat('dd MMM yyyy  HH:mm')
+                          .format(createdAt.toLocal()),
+                      style: GoogleFonts.poppins(
+                          fontSize: 11, color: AppColors.textLight),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              // Amount + DEBIT/CREDIT badge
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    '$sign${_formatCurrency(amount)}',
+                    style: GoogleFonts.poppins(
+                      fontSize: 15,
+                      fontWeight: FontWeight.bold,
+                      color: txColor,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: txColor.withOpacity(0.12),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(
+                      label,
+                      style: GoogleFonts.poppins(
+                        fontSize: 9,
+                        fontWeight: FontWeight.w700,
+                        color: txColor,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  // "Tap for details" hint
+                  Row(children: [
+                    Icon(Icons.info_outline,
+                        size: 10, color: Colors.grey.shade400),
+                    const SizedBox(width: 2),
+                    Text('Details',
+                        style: GoogleFonts.poppins(
+                            fontSize: 9, color: Colors.grey.shade400)),
+                  ]),
+                ],
+              ),
+            ],
+          ),
+        ),
       ),
+    );
+  }
+
+  void _showTransactionDetail(Map<String, dynamic> tx) {
+    final type = tx['type'] as String? ?? '';
+    final amount = (tx['amount'] as num?)?.toDouble().abs() ?? 0.0;
+    final description = tx['description'] as String? ?? '';
+    final createdAt = tx['created_at'] != null
+        ? DateTime.parse(tx['created_at'] as String).toLocal()
+        : DateTime.now();
+    final balanceBefore = (tx['balance_before'] as num?)?.toDouble();
+    final balanceAfter = (tx['balance_after'] as num?)?.toDouble();
+    final currency = tx['currency'] as String? ?? 'SDG';
+    final referenceId = tx['reference_id'] as String?;
+    final referenceType = tx['reference_type'] as String?;
+    final txId = tx['id'] as String? ?? '';
+    final status = tx['status'] as String?;
+    final metadata = tx['metadata'];
+    final isDebit = _isDebitType(type);
+    final txColor = _getTransactionColor(type);
+    final sign = isDebit ? '−' : '+';
+
+    String typeLabel;
+    switch (type) {
+      case 'down_payment':
+        typeLabel = 'Transport Advance / سلفة مواصلات';
+        break;
+      case 'site_visit_fee':
+        typeLabel = 'Site Visit Fee / رسوم زيارة';
+        break;
+      case 'earning':
+        typeLabel = 'Earnings / أرباح';
+        break;
+      case 'withdrawal':
+        typeLabel = 'Withdrawal / سحب';
+        break;
+      case 'advance_deduction':
+        typeLabel = 'Advance Deduction / خصم سلفة';
+        break;
+      default:
+        typeLabel = type.replaceAll('_', ' ');
+    }
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => DraggableScrollableSheet(
+        initialChildSize: 0.75,
+        minChildSize: 0.5,
+        maxChildSize: 0.95,
+        expand: false,
+        builder: (ctx, scrollController) => Container(
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+          ),
+          child: Column(
+            children: [
+              // Handle bar
+              Container(
+                margin: const EdgeInsets.symmetric(vertical: 10),
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade300,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+
+              Expanded(
+                child: SingleChildScrollView(
+                  controller: scrollController,
+                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // ── Header ───────────────────────────────────────
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: txColor.withOpacity(0.12),
+                              borderRadius: BorderRadius.circular(14),
+                            ),
+                            child: Icon(_getTransactionIcon(type),
+                                color: txColor, size: 28),
+                          ),
+                          const SizedBox(width: 14),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(typeLabel,
+                                    style: GoogleFonts.poppins(
+                                        fontWeight: FontWeight.w700,
+                                        fontSize: 15,
+                                        color: AppColors.textDark)),
+                                Text(
+                                  DateFormat('dd MMM yyyy, HH:mm')
+                                      .format(createdAt),
+                                  style: GoogleFonts.poppins(
+                                      fontSize: 12,
+                                      color: AppColors.textLight),
+                                ),
+                              ],
+                            ),
+                          ),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: txColor.withOpacity(0.12),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Text(
+                              isDebit ? 'DEBIT / مدين' : 'CREDIT / دائن',
+                              style: GoogleFonts.poppins(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w700,
+                                  color: txColor),
+                            ),
+                          ),
+                        ],
+                      ),
+
+                      const SizedBox(height: 20),
+
+                      // ── Amount hero ──────────────────────────────────
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(
+                            vertical: 20, horizontal: 16),
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            colors: [
+                              txColor.withOpacity(0.12),
+                              txColor.withOpacity(0.04),
+                            ],
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                          ),
+                          borderRadius: BorderRadius.circular(14),
+                          border:
+                              Border.all(color: txColor.withOpacity(0.25)),
+                        ),
+                        child: Column(
+                          children: [
+                            Text(
+                              'Amount / المبلغ',
+                              style: GoogleFonts.poppins(
+                                  fontSize: 11, color: Colors.grey.shade500),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              '$sign${_formatCurrency(amount)} $currency',
+                              style: GoogleFonts.poppins(
+                                fontSize: 28,
+                                fontWeight: FontWeight.w800,
+                                color: txColor,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+
+                      const SizedBox(height: 16),
+
+                      // ── Description ──────────────────────────────────
+                      if (description.isNotEmpty) ...[
+                        _txDetailSection(
+                            'Description / الوصف', Icons.description_outlined,
+                            child: Text(
+                              description,
+                              style: GoogleFonts.poppins(
+                                  fontSize: 13, color: AppColors.textDark),
+                            )),
+                        const SizedBox(height: 12),
+                      ],
+
+                      // ── Balance before / after ───────────────────────
+                      if (balanceBefore != null || balanceAfter != null)
+                        _txDetailSection(
+                            'Balance Impact / أثر الرصيد',
+                            Icons.account_balance_wallet_outlined,
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child: _txBalanceCell(
+                                    'Before / قبل',
+                                    balanceBefore != null
+                                        ? '${_formatCurrency(balanceBefore)} $currency'
+                                        : '—',
+                                    Colors.grey.shade600,
+                                  ),
+                                ),
+                                Icon(Icons.arrow_forward,
+                                    size: 16,
+                                    color: Colors.grey.shade400),
+                                Expanded(
+                                  child: _txBalanceCell(
+                                    'After / بعد',
+                                    balanceAfter != null
+                                        ? '${_formatCurrency(balanceAfter)} $currency'
+                                        : '—',
+                                    txColor,
+                                  ),
+                                ),
+                              ],
+                            )),
+
+                      const SizedBox(height: 12),
+
+                      // ── Status ───────────────────────────────────────
+                      if (status != null && status.isNotEmpty)
+                        _txDetailSection(
+                            'Status / الحالة', Icons.info_outline,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 10, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: status == 'completed'
+                                    ? Colors.green.shade50
+                                    : status == 'pending'
+                                        ? Colors.orange.shade50
+                                        : Colors.red.shade50,
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(
+                                    color: status == 'completed'
+                                        ? Colors.green.shade200
+                                        : status == 'pending'
+                                            ? Colors.orange.shade200
+                                            : Colors.red.shade200),
+                              ),
+                              child: Text(
+                                status.toUpperCase(),
+                                style: GoogleFonts.poppins(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: status == 'completed'
+                                      ? Colors.green.shade700
+                                      : status == 'pending'
+                                          ? Colors.orange.shade700
+                                          : Colors.red.shade700,
+                                ),
+                              ),
+                            )),
+
+                      if (status != null && status.isNotEmpty)
+                        const SizedBox(height: 12),
+
+                      // ── Reference ────────────────────────────────────
+                      if (referenceId != null || referenceType != null)
+                        _txDetailSection(
+                            'Reference / المرجع', Icons.link,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                if (referenceType != null)
+                                  _txDetailRow('Type / النوع',
+                                      referenceType.replaceAll('_', ' ')),
+                                if (referenceId != null)
+                                  _txDetailRow(
+                                      'ID',
+                                      referenceId.length > 20
+                                          ? '${referenceId.substring(0, 20)}…'
+                                          : referenceId),
+                              ],
+                            )),
+
+                      if (referenceId != null || referenceType != null)
+                        const SizedBox(height: 12),
+
+                      // ── Metadata extras ──────────────────────────────
+                      if (metadata is Map && (metadata).isNotEmpty)
+                        _txDetailSection(
+                            'Additional Info / معلومات إضافية',
+                            Icons.layers_outlined,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: (metadata as Map)
+                                  .entries
+                                  .where((e) =>
+                                      e.value != null &&
+                                      e.value.toString().isNotEmpty &&
+                                      e.value is! Map &&
+                                      e.value is! List)
+                                  .map((e) => _txDetailRow(
+                                        e.key
+                                            .toString()
+                                            .replaceAll('_', ' '),
+                                        e.value.toString(),
+                                      ))
+                                  .toList(),
+                            )),
+
+                      if (metadata is Map && (metadata).isNotEmpty)
+                        const SizedBox(height: 12),
+
+                      // ── Transaction ID ───────────────────────────────
+                      _txDetailSection(
+                          'Transaction ID', Icons.fingerprint,
+                          child: Text(
+                            txId,
+                            style: GoogleFonts.poppins(
+                                fontSize: 11,
+                                color: Colors.grey.shade500,
+                                fontFamily: 'monospace'),
+                          )),
+
+                      const SizedBox(height: 24),
+
+                      // ── Close button ─────────────────────────────────
+                      SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton(
+                          onPressed: () => Navigator.pop(ctx),
+                          style: OutlinedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12)),
+                            side: BorderSide(color: Colors.grey.shade300),
+                          ),
+                          child: Text('Close / إغلاق',
+                              style: GoogleFonts.poppins(
+                                  fontSize: 14,
+                                  color: Colors.grey.shade700)),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ── Transaction detail helpers ─────────────────────────────────────────────
+  Widget _txDetailSection(String title, IconData icon,
+      {required Widget child}) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.grey.shade50,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.grey.shade200),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(children: [
+            Icon(icon, size: 13, color: Colors.grey.shade500),
+            const SizedBox(width: 5),
+            Text(title,
+                style: GoogleFonts.poppins(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.grey.shade500,
+                    letterSpacing: 0.3)),
+          ]),
+          const SizedBox(height: 8),
+          child,
+        ],
+      ),
+    );
+  }
+
+  Widget _txDetailRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 110,
+            child: Text(label,
+                style: GoogleFonts.poppins(
+                    fontSize: 11, color: Colors.grey.shade500)),
+          ),
+          Expanded(
+            child: Text(value,
+                style: GoogleFonts.poppins(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textDark)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _txBalanceCell(String label, String value, Color color) {
+    return Column(
+      children: [
+        Text(label,
+            style: GoogleFonts.poppins(
+                fontSize: 10, color: Colors.grey.shade500)),
+        const SizedBox(height: 2),
+        Text(value,
+            style: GoogleFonts.poppins(
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+                color: color)),
+      ],
     );
   }
 
