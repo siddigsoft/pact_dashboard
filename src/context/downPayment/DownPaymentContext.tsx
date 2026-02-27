@@ -1115,28 +1115,27 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
     let success = 0;
     let failed = 0;
 
-    // Single upsert per group — 1-2 DB calls total instead of up to 90
-    if (supervisorRows.length > 0) {
-      const { error } = await supabase
-        .from('down_payment_requests')
-        .upsert(supervisorRows, { onConflict: 'id' });
-      if (error) {
-        console.error('[BulkApprove] supervisor upsert failed:', error.message);
-        failed += supervisorRows.length;
-      } else {
-        success += supervisorRows.length;
-      }
-    }
+    // Use individual updates (not upsert) — upsert requires INSERT permission
+    // which RLS may not grant; update only needs UPDATE permission
+    const allRows = [...supervisorRows, ...adminRows];
 
-    if (adminRows.length > 0) {
-      const { error } = await supabase
-        .from('down_payment_requests')
-        .upsert(adminRows, { onConflict: 'id' });
-      if (error) {
-        console.error('[BulkApprove] admin upsert failed:', error.message);
-        failed += adminRows.length;
-      } else {
-        success += adminRows.length;
+    if (allRows.length > 0) {
+      const results = await Promise.all(
+        allRows.map(({ id, ...updateData }) =>
+          supabase
+            .from('down_payment_requests')
+            .update(updateData)
+            .eq('id', id)
+        )
+      );
+
+      for (const { error } of results) {
+        if (error) {
+          console.error('[BulkApprove] update failed:', error.message);
+          failed += 1;
+        } else {
+          success += 1;
+        }
       }
     }
 
