@@ -8579,13 +8579,13 @@ class _BulkLocalityPermitRequirementDialogState
                 Text(
                   isArabic
                       ? '\u0627\u0644\u062a\u062d\u0642\u0642 \u0645\u0646 \u0645\u062a\u0637\u0644\u0628\u0627\u062a \u062a\u0635\u0631\u064a\u062d \u0627\u0644\u0645\u062d\u0644\u064a\u0629 \u0641\u064a ${widget.locality}\u060c ${widget.state}'
-                      : 'Verify locality permit requirements for \${widget.locality}, \${widget.state}',
+                      : 'Verify locality permit requirements for ${widget.locality}, ${widget.state}',
                   style: GoogleFonts.poppins(fontSize: 13, color: Colors.grey[600]),
                 ),
                 Text(
                   isArabic
-                      ? '\u0633\u064a\u062a\u0623\u062b\u0631 \${widget.siteCount} \u0645\u0648\u0627\u0642\u0639'
-                      : '\${widget.siteCount} sites will be affected',
+                      ? '\u0633\u064a\u062a\u0623\u062b\u0631 ${widget.siteCount} \u0645\u0648\u0627\u0642\u0639'
+                      : '${widget.siteCount} sites will be affected',
                   style: GoogleFonts.poppins(
                     fontSize: 12,
                     color: Colors.grey[500],
@@ -8809,14 +8809,14 @@ class _BulkLocalityPermitFollowUpDialogState
           children: [
             Text(
               isArabic
-                  ? '\u0644\u0642\u062f \u0623\u0634\u0631\u062a \u0625\u0644\u0649 \u0623\u0646 \u062a\u0635\u0631\u064a\u062d \u0627\u0644\u0645\u062d\u0644\u064a\u0629 \u0641\u064a \${widget.locality}\u060c \${widget.state} \u0645\u0637\u0644\u0648\u0628 \u0644\u0643\u0646 \u063a\u064a\u0631 \u0645\u062a\u0627\u062d'
-                  : 'You indicated the locality permit for \${widget.locality}, \${widget.state} is required but not available',
+                  ? '\u0644\u0642\u062f \u0623\u0634\u0631\u062a \u0625\u0644\u0649 \u0623\u0646 \u062a\u0635\u0631\u064a\u062d \u0627\u0644\u0645\u062d\u0644\u064a\u0629 \u0641\u064a ${widget.locality}\u060c ${widget.state} \u0645\u0637\u0644\u0648\u0628 \u0644\u0643\u0646 \u063a\u064a\u0631 \u0645\u062a\u0627\u062d'
+                  : 'You indicated the locality permit for ${widget.locality}, ${widget.state} is required but not available',
               style: GoogleFonts.poppins(fontSize: 13, color: Colors.grey[600]),
             ),
             Text(
               isArabic
-                  ? '\u0633\u064a\u062a\u0623\u062b\u0631 \${widget.siteCount} \u0645\u0648\u0627\u0642\u0639'
-                  : '\${widget.siteCount} sites will be affected',
+                  ? '\u0633\u064a\u062a\u0623\u062b\u0631 ${widget.siteCount} \u0645\u0648\u0627\u0642\u0639'
+                  : '${widget.siteCount} sites will be affected',
               style: GoogleFonts.poppins(
                 fontSize: 12,
                 color: Colors.grey[500],
