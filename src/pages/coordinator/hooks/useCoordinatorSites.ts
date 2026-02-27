@@ -145,12 +145,8 @@ export const useCoordinatorSites = () => {
             id,
             name,
             project_id,
-            project_name,
             status,
-            hub,
-            projects (
-              name
-            )
+            hub
           )
         `)
         .neq('status', 'returned_to_fom');
@@ -168,6 +164,10 @@ export const useCoordinatorSites = () => {
 
       if (fetchError) {
         console.error('Error fetching coordinator sites:', fetchError);
+        // Common cause: column/relationship missing in Supabase/PostgREST schema (e.g. project_name or projects relationship)
+        if ((fetchError as any)?.code === '42703') {
+          console.warn('[useCoordinatorSites] Column not found in DB schema (42703). Falling back to a safer select. Consider migrating the DB schema or adjusting queries.');
+        }
         setError(fetchError.message);
         setCoordinatorSites([]);
         return;

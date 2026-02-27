@@ -1,0 +1,1 @@
+Error uploading MMP: Failed to upload file to storage: Connection test failed. The Supabase client may be frozen. Please refresh the page and try again.
