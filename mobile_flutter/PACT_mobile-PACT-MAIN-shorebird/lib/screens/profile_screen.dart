@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../constants/sudanese_banks.dart';
 import '../models/pact_user_profile.dart';
 import '../providers/profile_provider.dart';
 import '../services/offline/offline_db.dart';
@@ -1291,10 +1292,15 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     final existing = profile.bankAccount;
     final accountNameCtrl = TextEditingController(text: existing?.accountName ?? '');
     final accountNumberCtrl = TextEditingController(text: existing?.accountNumber ?? '');
-    final bankNameCtrl = TextEditingController(text: existing?.bankName ?? '');
     final branchCodeCtrl = TextEditingController(text: existing?.branchCode ?? '');
     final sheetFormKey = GlobalKey<FormState>();
     bool isSaving = false;
+    // Resolve existing bank name to a bank in the list (or null if not found)
+    String? selectedBankName = kSudaneseBanks
+        .map((b) => b.nameEn)
+        .contains(existing?.bankName)
+        ? existing?.bankName
+        : null;
 
     showModalBottomSheet(
       context: context,
@@ -1349,34 +1355,59 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                         ],
                       ),
                       const SizedBox(height: 20),
-                      // Bank Name (required)
-                      TextFormField(
-                        controller: bankNameCtrl,
-                        style: GoogleFonts.poppins(),
+                      // Bank Name — dropdown with all Sudanese banks
+                      DropdownButtonFormField<String>(
+                        value: selectedBankName,
+                        isExpanded: true,
                         decoration: InputDecoration(
                           labelText: 'Bank Name / اسم البنك *',
                           labelStyle: GoogleFonts.poppins(color: Colors.grey[600]),
                           prefixIcon: const Icon(Icons.account_balance_outlined),
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                          border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12)),
                         ),
+                        hint: Text('Select bank / اختر البنك',
+                            style: GoogleFonts.poppins(color: Colors.grey[500])),
+                        items: kSudaneseBanks
+                            .map((bank) => DropdownMenuItem<String>(
+                                  value: bank.nameEn,
+                                  child: Text(
+                                    bank.display,
+                                    style: GoogleFonts.poppins(fontSize: 13),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ))
+                            .toList(),
+                        onChanged: (v) => setSheetState(() => selectedBankName = v),
                         validator: (v) =>
-                            (v == null || v.trim().isEmpty) ? 'Bank name is required' : null,
+                            (v == null || v.isEmpty) ? 'Bank name is required / مطلوب' : null,
                       ),
                       const SizedBox(height: 14),
-                      // Account Number (required)
+                      // Account Number — exactly 7 digits
                       TextFormField(
                         controller: accountNumberCtrl,
                         style: GoogleFonts.poppins(),
                         keyboardType: TextInputType.number,
+                        maxLength: 7,
                         decoration: InputDecoration(
                           labelText: 'Account Number / رقم الحساب *',
                           labelStyle: GoogleFonts.poppins(color: Colors.grey[600]),
                           prefixIcon: const Icon(Icons.credit_card),
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                          hintText: '7-digit account number',
+                          border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12)),
+                          counterStyle: GoogleFonts.poppins(fontSize: 11),
                         ),
                         validator: (v) {
-                          if (v == null || v.trim().isEmpty) return 'Account number is required';
-                          if (v.trim().length < 8) return 'Must be at least 8 digits';
+                          if (v == null || v.trim().isEmpty) {
+                            return 'Account number is required / مطلوب';
+                          }
+                          if (v.trim().length != 7) {
+                            return 'Must be exactly 7 digits / يجب أن يكون 7 أرقام';
+                          }
+                          if (!RegExp(r'^\d{7}$').hasMatch(v.trim())) {
+                            return 'Digits only / أرقام فقط';
+                          }
                           return null;
                         },
                       ),
@@ -1419,7 +1450,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                                         .read(profileProvider.notifier)
                                         .updateProfile(
                                           bankAccount: BankAccount(
-                                            bankName: bankNameCtrl.text.trim(),
+                                            bankName: selectedBankName ?? '',
                                             accountNumber: accountNumberCtrl.text.trim(),
                                             accountName: accountNameCtrl.text.trim().isEmpty
                                                 ? null

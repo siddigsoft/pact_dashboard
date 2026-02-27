@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../constants/sudanese_banks.dart';
 import '../models/payment_method_models.dart';
 import '../providers/payment_method_provider.dart';
 
@@ -340,7 +341,7 @@ class _AddPaymentMethodDialogState extends State<AddPaymentMethodDialog> {
   bool _isLoading = false;
 
   // Bank fields
-  final _bankNameController = TextEditingController();
+  String? _selectedBankName; // chosen from the Sudanese banks dropdown
   final _accountNumberController = TextEditingController();
 
   // Mobile money fields
@@ -353,7 +354,6 @@ class _AddPaymentMethodDialogState extends State<AddPaymentMethodDialog> {
 
   @override
   void dispose() {
-    _bankNameController.dispose();
     _accountNumberController.dispose();
     _providerNameController.dispose();
     _phoneNumberController.dispose();
@@ -432,35 +432,50 @@ class _AddPaymentMethodDialogState extends State<AddPaymentMethodDialog> {
       case PaymentType.bank:
         return Column(
           children: [
-            TextFormField(
-              controller: _bankNameController,
+            // Bank Name — dropdown with all Sudanese banks
+            DropdownButtonFormField<String>(
+              value: _selectedBankName,
+              isExpanded: true,
               decoration: const InputDecoration(
-                labelText: 'Bank Name',
+                labelText: 'Bank Name / اسم البنك',
                 border: OutlineInputBorder(),
                 prefixIcon: Icon(Icons.account_balance),
               ),
-              validator: (value) {
-                if (value == null || value.isEmpty) {
-                  return 'Bank name is required';
-                }
-                return null;
-              },
+              hint: const Text('Select bank / اختر البنك'),
+              items: kSudaneseBanks
+                  .map((bank) => DropdownMenuItem<String>(
+                        value: bank.nameEn,
+                        child: Text(
+                          bank.display,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ))
+                  .toList(),
+              onChanged: (v) => setState(() => _selectedBankName = v),
+              validator: (v) =>
+                  (v == null || v.isEmpty) ? 'Bank name is required' : null,
             ),
             const SizedBox(height: 16),
+            // Account Number — exactly 7 digits
             TextFormField(
               controller: _accountNumberController,
               decoration: const InputDecoration(
-                labelText: 'Account Number',
+                labelText: 'Account Number / رقم الحساب',
                 border: OutlineInputBorder(),
                 prefixIcon: Icon(Icons.numbers),
+                hintText: '7-digit account number',
               ),
               keyboardType: TextInputType.number,
+              maxLength: 7,
               validator: (value) {
                 if (value == null || value.isEmpty) {
                   return 'Account number is required';
                 }
-                if (value.length < 8) {
-                  return 'Account number must be at least 8 digits';
+                if (value.length != 7) {
+                  return 'Must be exactly 7 digits';
+                }
+                if (!RegExp(r'^\d{7}$').hasMatch(value)) {
+                  return 'Digits only';
                 }
                 return null;
               },
@@ -565,12 +580,12 @@ class _AddPaymentMethodDialogState extends State<AddPaymentMethodDialog> {
         type: _selectedType,
         // Map provider name or cardholder name to 'name' field based on type
         name: _selectedType == PaymentType.bank
-            ? _bankNameController.text
+            ? (_selectedBankName ?? '')
             : _selectedType == PaymentType.mobileMoney
             ? _providerNameController.text
             : _cardholderNameController.text,
         bankName: _selectedType == PaymentType.bank
-            ? _bankNameController.text
+            ? (_selectedBankName ?? '')
             : null,
         accountNumber: _selectedType == PaymentType.bank
             ? _accountNumberController.text
