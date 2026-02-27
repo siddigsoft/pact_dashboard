@@ -33,7 +33,7 @@ class AppDesignSystem {
   // ============================================
   static List<BoxShadow> shadowSM = [
     BoxShadow(
-      color: Colors.black.withOpacity(0.05),
+      color: Colors.black.withValues(alpha: 0.05),
       blurRadius: 8,
       offset: const Offset(0, 2),
     ),
@@ -41,7 +41,7 @@ class AppDesignSystem {
 
   static List<BoxShadow> shadowMD = [
     BoxShadow(
-      color: Colors.black.withOpacity(0.08),
+      color: Colors.black.withValues(alpha: 0.08),
       blurRadius: 16,
       offset: const Offset(0, 4),
     ),
@@ -49,7 +49,7 @@ class AppDesignSystem {
 
   static List<BoxShadow> shadowLG = [
     BoxShadow(
-      color: Colors.black.withOpacity(0.1),
+      color: Colors.black.withValues(alpha: 0.1),
       blurRadius: 24,
       offset: const Offset(0, 8),
     ),
@@ -57,7 +57,7 @@ class AppDesignSystem {
 
   static List<BoxShadow> shadowXL = [
     BoxShadow(
-      color: Colors.black.withOpacity(0.15),
+      color: Colors.black.withValues(alpha: 0.15),
       blurRadius: 32,
       offset: const Offset(0, 12),
     ),
@@ -66,7 +66,7 @@ class AppDesignSystem {
   // Colored shadows for emphasis
   static List<BoxShadow> shadowOrange = [
     BoxShadow(
-      color: AppColors.primaryOrange.withOpacity(0.3),
+      color: AppColors.primaryOrange.withValues(alpha: 0.3),
       blurRadius: 20,
       offset: const Offset(0, 8),
     ),
@@ -74,7 +74,7 @@ class AppDesignSystem {
 
   static List<BoxShadow> shadowBlue = [
     BoxShadow(
-      color: AppColors.primaryBlue.withOpacity(0.3),
+      color: AppColors.primaryBlue.withValues(alpha: 0.3),
       blurRadius: 20,
       offset: const Offset(0, 8),
     ),

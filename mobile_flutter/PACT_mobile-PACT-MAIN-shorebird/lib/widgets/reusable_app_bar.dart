@@ -319,7 +319,7 @@ class ReusableAppBar extends StatelessWidget {
           border: Border.all(color: Colors.white, width: 2),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.1),
+              color: Colors.black.withValues(alpha: 0.1),
               blurRadius: 8,
               offset: const Offset(0, 2),
             ),
@@ -327,7 +327,7 @@ class ReusableAppBar extends StatelessWidget {
         ),
         child: CircleAvatar(
           radius: 18,
-          backgroundColor: AppColors.primaryOrange.withOpacity(0.1),
+          backgroundColor: AppColors.primaryOrange.withValues(alpha: 0.1),
           backgroundImage: avatarUrl != null && avatarUrl.isNotEmpty
               ? NetworkImage(avatarUrl)
               : null,
@@ -435,7 +435,7 @@ class _AccountDropdownMenu extends StatelessWidget {
                 borderRadius: BorderRadius.circular(12),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.1),
+                    color: Colors.black.withValues(alpha: 0.1),
                     blurRadius: 10,
                     offset: const Offset(0, 4),
                   ),

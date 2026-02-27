@@ -212,7 +212,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
                         border: Border.all(
                           color: const Color(
                             0xFFFF9800,
-                          ).withOpacity(0.1), // Light orange border
+                          ).withValues(alpha: 0.1), // Light orange border
                           width: 1,
                         ),
                       ),
@@ -269,7 +269,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
                                 style: TextStyle(
                                   color: const Color(
                                     0xFF263238,
-                                  ).withOpacity(0.7),
+                                  ).withValues(alpha: 0.7),
                                   fontSize: 14,
                                 ),
                               )
@@ -339,7 +339,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
               shape: BoxShape.circle,
               boxShadow: [
                 BoxShadow(
-                  color: const Color(0xFFFF9800).withOpacity(0.3),
+                  color: const Color(0xFFFF9800).withValues(alpha: 0.3),
                   blurRadius: 12,
                   offset: const Offset(0, 6),
                 ),
@@ -367,7 +367,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
               'Start a new chat to connect with team members',
               style: TextStyle(
                 fontSize: 16,
-                color: const Color(0xFF263238).withOpacity(0.7),
+                color: const Color(0xFF263238).withValues(alpha: 0.7),
               ),
               textAlign: TextAlign.center,
             ),
@@ -384,7 +384,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
               borderRadius: BorderRadius.circular(12),
               boxShadow: [
                 BoxShadow(
-                  color: const Color(0xFFFF9800).withOpacity(0.3),
+                  color: const Color(0xFFFF9800).withValues(alpha: 0.3),
                   blurRadius: 8,
                   offset: const Offset(0, 4),
                 ),

@@ -16,13 +16,10 @@ import '../services/offline/offline_db.dart';
 
 class WalletScreen extends StatefulWidget {
   final bool isArabic;
+
   /// 0=overview  1=transactions  2=withdrawals  3=advances
   final int initialTab;
-  const WalletScreen({
-    super.key,
-    this.isArabic = false,
-    this.initialTab = 0,
-  });
+  const WalletScreen({super.key, this.isArabic = false, this.initialTab = 0});
 
   @override
   State<WalletScreen> createState() => _WalletScreenState();
@@ -421,7 +418,8 @@ class _WalletScreenState extends State<WalletScreen> {
             .eq('id', _userId!)
             .maybeSingle();
         final bankAccount = profileData?['bank_account'];
-        final accountNumber = bankAccount?['accountNumber'] ?? bankAccount?['account_number'];
+        final accountNumber =
+            bankAccount?['accountNumber'] ?? bankAccount?['account_number'];
         if (accountNumber == null || (accountNumber as String).isEmpty) {
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
@@ -651,7 +649,10 @@ class _WalletScreenState extends State<WalletScreen> {
             SafeArea(
               child: Column(
                 children: [
-                  ReusableAppBar(title: widget.isArabic ? 'المحفظة' : 'Wallet', scaffoldKey: _scaffoldKey),
+                  ReusableAppBar(
+                    title: widget.isArabic ? 'المحفظة' : 'Wallet',
+                    scaffoldKey: _scaffoldKey,
+                  ),
                   Expanded(
                     child: _isLoading
                         ? const Center(child: CircularProgressIndicator())
@@ -678,7 +679,9 @@ class _WalletScreenState extends State<WalletScreen> {
                                       borderRadius: BorderRadius.circular(20),
                                       boxShadow: [
                                         BoxShadow(
-                                          color: Colors.blue.withValues(alpha: 0.3),
+                                          color: Colors.blue.withValues(
+                                            alpha: 0.3,
+                                          ),
                                           blurRadius: 20,
                                           offset: const Offset(0, 10),
                                         ),
@@ -693,7 +696,9 @@ class _WalletScreenState extends State<WalletScreen> {
                                               MainAxisAlignment.spaceBetween,
                                           children: [
                                             Text(
-                                              widget.isArabic ? 'الرصيد الحالي' : 'Current Balance',
+                                              widget.isArabic
+                                                  ? 'الرصيد الحالي'
+                                                  : 'Current Balance',
                                               style: GoogleFonts.poppins(
                                                 fontSize: 14,
                                                 color: Colors.white.withValues(
@@ -721,10 +726,14 @@ class _WalletScreenState extends State<WalletScreen> {
                                         ),
                                         const SizedBox(height: 4),
                                         Text(
-                                          widget.isArabic ? 'متاح للسحب' : 'Available for withdrawal',
+                                          widget.isArabic
+                                              ? 'متاح للسحب'
+                                              : 'Available for withdrawal',
                                           style: GoogleFonts.poppins(
                                             fontSize: 12,
-                                            color: Colors.white.withValues(alpha: 0.8),
+                                            color: Colors.white.withValues(
+                                              alpha: 0.8,
+                                            ),
                                           ),
                                         ),
                                         if (_currentBalance > 0) ...[
@@ -733,7 +742,9 @@ class _WalletScreenState extends State<WalletScreen> {
                                             width: double.infinity,
                                             child: OutlinedButton.icon(
                                               onPressed: () => setState(
-                                                  () => _showWithdrawalDialog = true),
+                                                () => _showWithdrawalDialog =
+                                                    true,
+                                              ),
                                               icon: const Icon(
                                                 Icons.arrow_downward_rounded,
                                                 color: Colors.white,
@@ -751,15 +762,17 @@ class _WalletScreenState extends State<WalletScreen> {
                                               ),
                                               style: OutlinedButton.styleFrom(
                                                 side: const BorderSide(
-                                                    color: Colors.white70,
-                                                    width: 1.5),
+                                                  color: Colors.white70,
+                                                  width: 1.5,
+                                                ),
                                                 shape: RoundedRectangleBorder(
                                                   borderRadius:
                                                       BorderRadius.circular(12),
                                                 ),
                                                 padding:
                                                     const EdgeInsets.symmetric(
-                                                        vertical: 12),
+                                                      vertical: 12,
+                                                    ),
                                               ),
                                             ),
                                           ),
@@ -775,7 +788,9 @@ class _WalletScreenState extends State<WalletScreen> {
                                     children: [
                                       Expanded(
                                         child: _buildStatCard(
-                                          widget.isArabic ? 'إجمالي الأرباح' : 'Total Earned',
+                                          widget.isArabic
+                                              ? 'إجمالي الأرباح'
+                                              : 'Total Earned',
                                           _formatCurrency(_totalEarned),
                                           Icons.trending_up,
                                           Colors.green,
@@ -784,7 +799,9 @@ class _WalletScreenState extends State<WalletScreen> {
                                       const SizedBox(width: 12),
                                       Expanded(
                                         child: _buildStatCard(
-                                          widget.isArabic ? 'هذا الشهر' : 'This Month',
+                                          widget.isArabic
+                                              ? 'هذا الشهر'
+                                              : 'This Month',
                                           _formatCurrency(_thisMonthEarnings),
                                           Icons.calendar_today,
                                           Colors.purple,
@@ -799,7 +816,9 @@ class _WalletScreenState extends State<WalletScreen> {
                                     children: [
                                       Expanded(
                                         child: _buildStatCard(
-                                          widget.isArabic ? 'قيد الانتظار' : 'Pending',
+                                          widget.isArabic
+                                              ? 'قيد الانتظار'
+                                              : 'Pending',
                                           _formatCurrency(_pendingWithdrawals),
                                           Icons.pending,
                                           Colors.orange,
@@ -808,7 +827,9 @@ class _WalletScreenState extends State<WalletScreen> {
                                       const SizedBox(width: 12),
                                       Expanded(
                                         child: _buildStatCard(
-                                          widget.isArabic ? 'المسحوب' : 'Withdrawn',
+                                          widget.isArabic
+                                              ? 'المسحوب'
+                                              : 'Withdrawn',
                                           _formatCurrency(_totalWithdrawn),
                                           Icons.check_circle,
                                           Colors.cyan,
@@ -826,7 +847,9 @@ class _WalletScreenState extends State<WalletScreen> {
                                       borderRadius: BorderRadius.circular(16),
                                       boxShadow: [
                                         BoxShadow(
-                                          color: Colors.black.withValues(alpha: 0.05),
+                                          color: Colors.black.withValues(
+                                            alpha: 0.05,
+                                          ),
                                           blurRadius: 10,
                                           offset: const Offset(0, 2),
                                         ),
@@ -863,7 +886,8 @@ class _WalletScreenState extends State<WalletScreen> {
                                                   'withdrawals',
                                                   'Withdraw',
                                                   'السحوبات',
-                                                  Icons.arrow_circle_down_outlined,
+                                                  Icons
+                                                      .arrow_circle_down_outlined,
                                                 ),
                                               ),
                                               const SizedBox(width: 6),
@@ -1101,7 +1125,11 @@ class _WalletScreenState extends State<WalletScreen> {
   }
 
   Widget _buildTabButton(
-      String tab, String labelEn, String labelAr, IconData icon) {
+    String tab,
+    String labelEn,
+    String labelAr,
+    IconData icon,
+  ) {
     final isActive = _activeTab == tab;
     return GestureDetector(
       onTap: () => setState(() => _activeTab = tab),
@@ -1237,13 +1265,20 @@ class _WalletScreenState extends State<WalletScreen> {
 
   Widget _buildAdvanceReconciliationSection() {
     final advanceDeductions = _transactions
-        .where((t) => t['type'] == 'advance_deduction' || t['description']?.toString().toLowerCase().contains('advance') == true)
+        .where(
+          (t) =>
+              t['type'] == 'advance_deduction' ||
+              t['description']?.toString().toLowerCase().contains('advance') ==
+                  true,
+        )
         .toList();
 
     if (advanceDeductions.isEmpty) return const SizedBox();
 
-    final totalDeducted = advanceDeductions
-        .fold(0.0, (sum, t) => sum + (t['amount'] as num).toDouble().abs());
+    final totalDeducted = advanceDeductions.fold(
+      0.0,
+      (sum, t) => sum + (t['amount'] as num).toDouble().abs(),
+    );
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1254,7 +1289,10 @@ class _WalletScreenState extends State<WalletScreen> {
             const SizedBox(width: 8),
             Text(
               widget.isArabic ? 'تسوية السلف' : 'Advance Reconciliation',
-              style: GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.w600),
+              style: GoogleFonts.poppins(
+                fontSize: 18,
+                fontWeight: FontWeight.w600,
+              ),
             ),
           ],
         ),
@@ -1275,7 +1313,10 @@ class _WalletScreenState extends State<WalletScreen> {
                   widget.isArabic
                       ? 'إجمالي خصومات السلف من رسوم الزيارة: ${_formatCurrency(totalDeducted)}'
                       : 'Total advance deductions from visit fees: ${_formatCurrency(totalDeducted)}',
-                  style: GoogleFonts.poppins(fontSize: 12, color: Colors.blue[700]),
+                  style: GoogleFonts.poppins(
+                    fontSize: 12,
+                    color: Colors.blue[700],
+                  ),
                 ),
               ),
             ],
@@ -1305,11 +1346,28 @@ class _WalletScreenState extends State<WalletScreen> {
             isExpanded: true,
             underline: const SizedBox(),
             items: [
-              DropdownMenuItem(value: 'all', child: Text(widget.isArabic ? 'جميع المعاملات' : 'All Transactions')),
-              DropdownMenuItem(value: 'earning', child: Text(widget.isArabic ? 'الأرباح' : 'Earnings')),
-              DropdownMenuItem(value: 'withdrawal', child: Text(widget.isArabic ? 'السحوبات' : 'Withdrawals')),
-              DropdownMenuItem(value: 'bonus', child: Text(widget.isArabic ? 'المكافآت' : 'Bonuses')),
-              DropdownMenuItem(value: 'penalty', child: Text(widget.isArabic ? 'الغرامات' : 'Penalties')),
+              DropdownMenuItem(
+                value: 'all',
+                child: Text(
+                  widget.isArabic ? 'جميع المعاملات' : 'All Transactions',
+                ),
+              ),
+              DropdownMenuItem(
+                value: 'earning',
+                child: Text(widget.isArabic ? 'الأرباح' : 'Earnings'),
+              ),
+              DropdownMenuItem(
+                value: 'withdrawal',
+                child: Text(widget.isArabic ? 'السحوبات' : 'Withdrawals'),
+              ),
+              DropdownMenuItem(
+                value: 'bonus',
+                child: Text(widget.isArabic ? 'المكافآت' : 'Bonuses'),
+              ),
+              DropdownMenuItem(
+                value: 'penalty',
+                child: Text(widget.isArabic ? 'الغرامات' : 'Penalties'),
+              ),
             ],
             onChanged: (value) =>
                 setState(() => _transactionFilter = value ?? 'all'),
@@ -1350,10 +1408,24 @@ class _WalletScreenState extends State<WalletScreen> {
             isExpanded: true,
             underline: const SizedBox(),
             items: [
-              DropdownMenuItem(value: 'all', child: Text(widget.isArabic ? 'جميع السحوبات' : 'All Withdrawals')),
-              DropdownMenuItem(value: 'pending', child: Text(widget.isArabic ? 'قيد الانتظار' : 'Pending')),
-              DropdownMenuItem(value: 'approved', child: Text(widget.isArabic ? 'معتمدة' : 'Approved')),
-              DropdownMenuItem(value: 'rejected', child: Text(widget.isArabic ? 'مرفوضة' : 'Rejected')),
+              DropdownMenuItem(
+                value: 'all',
+                child: Text(
+                  widget.isArabic ? 'جميع السحوبات' : 'All Withdrawals',
+                ),
+              ),
+              DropdownMenuItem(
+                value: 'pending',
+                child: Text(widget.isArabic ? 'قيد الانتظار' : 'Pending'),
+              ),
+              DropdownMenuItem(
+                value: 'approved',
+                child: Text(widget.isArabic ? 'معتمدة' : 'Approved'),
+              ),
+              DropdownMenuItem(
+                value: 'rejected',
+                child: Text(widget.isArabic ? 'مرفوضة' : 'Rejected'),
+              ),
             ],
             onChanged: (value) =>
                 setState(() => _withdrawalFilter = value ?? 'all'),
@@ -1365,7 +1437,9 @@ class _WalletScreenState extends State<WalletScreen> {
             child: Padding(
               padding: const EdgeInsets.all(32),
               child: Text(
-                widget.isArabic ? 'لا توجد طلبات سحب' : 'No withdrawal requests found',
+                widget.isArabic
+                    ? 'لا توجد طلبات سحب'
+                    : 'No withdrawal requests found',
                 style: GoogleFonts.poppins(color: AppColors.textLight),
               ),
             ),
@@ -1384,8 +1458,11 @@ class _WalletScreenState extends State<WalletScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.account_balance_wallet_outlined,
-                  size: 48, color: AppColors.textLight),
+              Icon(
+                Icons.account_balance_wallet_outlined,
+                size: 48,
+                color: AppColors.textLight,
+              ),
               const SizedBox(height: 12),
               Text(
                 widget.isArabic
@@ -1403,9 +1480,10 @@ class _WalletScreenState extends State<WalletScreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          widget.isArabic ? 'مقدم الترحيل والمواصلات' : 'My Transportation Advances',
-          style: GoogleFonts.poppins(
-              fontSize: 16, fontWeight: FontWeight.w600),
+          widget.isArabic
+              ? 'مقدم الترحيل والمواصلات'
+              : 'My Transportation Advances',
+          style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.w600),
         ),
         const SizedBox(height: 12),
         ..._advances.map((advance) => _buildAdvanceItem(advance)),
@@ -1441,8 +1519,7 @@ class _WalletScreenState extends State<WalletScreen> {
           .select('signature_base64')
           .eq('id', _userId ?? '')
           .maybeSingle();
-      savedSignatureBase64 =
-          profileData?['signature_base64'] as String?;
+      savedSignatureBase64 = profileData?['signature_base64'] as String?;
     } catch (_) {}
 
     // Step 3: Show confirmation dialog
@@ -1462,8 +1539,9 @@ class _WalletScreenState extends State<WalletScreen> {
               : signatureStrokes.isNotEmpty;
 
           return AlertDialog(
-            shape:
-                RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(18),
+            ),
             titlePadding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
             contentPadding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
 
@@ -1476,14 +1554,21 @@ class _WalletScreenState extends State<WalletScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('Confirm Fund Receipt',
-                          style: GoogleFonts.poppins(
-                              fontWeight: FontWeight.w700, fontSize: 14)),
-                      Text('تأكيد استلام السلفة',
-                          style: GoogleFonts.poppins(
-                              fontWeight: FontWeight.w600,
-                              fontSize: 12,
-                              color: Colors.grey.shade600)),
+                      Text(
+                        'Confirm Fund Receipt',
+                        style: GoogleFonts.poppins(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 14,
+                        ),
+                      ),
+                      Text(
+                        'تأكيد استلام السلفة',
+                        style: GoogleFonts.poppins(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 12,
+                          color: Colors.grey.shade600,
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -1505,7 +1590,9 @@ class _WalletScreenState extends State<WalletScreen> {
                   Text(
                     'أؤكد أنني استلمت مبلغ السلفة كاملاً.',
                     style: GoogleFonts.poppins(
-                        fontSize: 12, color: Colors.grey.shade600),
+                      fontSize: 12,
+                      color: Colors.grey.shade600,
+                    ),
                     textDirection: TextDirection.rtl,
                   ),
 
@@ -1515,22 +1602,31 @@ class _WalletScreenState extends State<WalletScreen> {
                   if (gpsPosition != null)
                     Container(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 5),
+                        horizontal: 8,
+                        vertical: 5,
+                      ),
                       decoration: BoxDecoration(
                         color: Colors.blue.shade50,
                         borderRadius: BorderRadius.circular(6),
                       ),
-                      child: Row(children: [
-                        Icon(Icons.location_on,
-                            color: Colors.blue.shade700, size: 13),
-                        const SizedBox(width: 4),
-                        Text(
-                          '${gpsPosition.latitude.toStringAsFixed(5)}, '
-                          '${gpsPosition.longitude.toStringAsFixed(5)}',
-                          style: GoogleFonts.poppins(
-                              fontSize: 11, color: Colors.blue.shade700),
-                        ),
-                      ]),
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.location_on,
+                            color: Colors.blue.shade700,
+                            size: 13,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            '${gpsPosition.latitude.toStringAsFixed(5)}, '
+                            '${gpsPosition.longitude.toStringAsFixed(5)}',
+                            style: GoogleFonts.poppins(
+                              fontSize: 11,
+                              color: Colors.blue.shade700,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
 
                   const SizedBox(height: 10),
@@ -1546,39 +1642,58 @@ class _WalletScreenState extends State<WalletScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Row(children: [
-                          Icon(Icons.info_outline,
-                              size: 14, color: Colors.green.shade700),
-                          const SizedBox(width: 4),
-                          Text('What happens after you confirm:',
+                        Row(
+                          children: [
+                            Icon(
+                              Icons.info_outline,
+                              size: 14,
+                              color: Colors.green.shade700,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              'What happens after you confirm:',
                               style: GoogleFonts.poppins(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w700,
-                                  color: Colors.green.shade800)),
-                        ]),
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                                color: Colors.green.shade800,
+                              ),
+                            ),
+                          ],
+                        ),
                         const SizedBox(height: 4),
-                        _infoPoint('✓ Advance marked as received in the system'),
+                        _infoPoint(
+                          '✓ Advance marked as received in the system',
+                        ),
                         _infoPoint('✓ Your supervisor will be notified'),
                         _infoPoint(
-                            '✓ Amount will be deducted from your site visit fee'),
+                          '✓ Amount will be deducted from your site visit fee',
+                        ),
                         _infoPoint(
-                            '✓ Your signature & GPS are saved as legal proof'),
+                          '✓ Your signature & GPS are saved as legal proof',
+                        ),
                         const SizedBox(height: 6),
-                        Text('ماذا يحدث بعد التأكيد:',
-                            style: GoogleFonts.poppins(
-                                fontSize: 10,
-                                fontWeight: FontWeight.w700,
-                                color: Colors.green.shade800),
-                            textDirection: TextDirection.rtl),
-                        _infoPoint('✓ تُسجَّل السلفة كمستلمة في النظام',
-                            rtl: true),
+                        Text(
+                          'ماذا يحدث بعد التأكيد:',
+                          style: GoogleFonts.poppins(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.green.shade800,
+                          ),
+                          textDirection: TextDirection.rtl,
+                        ),
+                        _infoPoint(
+                          '✓ تُسجَّل السلفة كمستلمة في النظام',
+                          rtl: true,
+                        ),
                         _infoPoint('✓ يتم إشعار المشرف', rtl: true),
                         _infoPoint(
-                            '✓ يُخصم المبلغ من رسوم الزيارة الميدانية',
-                            rtl: true),
+                          '✓ يُخصم المبلغ من رسوم الزيارة الميدانية',
+                          rtl: true,
+                        ),
                         _infoPoint(
-                            '✓ توقيعك وموقعك الجغرافي يُحفظان كدليل رسمي',
-                            rtl: true),
+                          '✓ توقيعك وموقعك الجغرافي يُحفظان كدليل رسمي',
+                          rtl: true,
+                        ),
                       ],
                     ),
                   ),
@@ -1589,52 +1704,62 @@ class _WalletScreenState extends State<WalletScreen> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text('Signature / التوقيع',
-                          style: GoogleFonts.poppins(
-                              fontSize: 12, fontWeight: FontWeight.w700)),
+                      Text(
+                        'Signature / التوقيع',
+                        style: GoogleFonts.poppins(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
                       if (savedSignatureBase64 != null)
-                        Row(children: [
-                          Text(
-                            useSaved ? 'Saved' : 'Draw new',
-                            style: GoogleFonts.poppins(
+                        Row(
+                          children: [
+                            Text(
+                              useSaved ? 'Saved' : 'Draw new',
+                              style: GoogleFonts.poppins(
                                 fontSize: 10,
                                 color: useSaved
                                     ? Colors.green.shade700
-                                    : Colors.orange.shade700),
-                          ),
-                          const SizedBox(width: 4),
-                          GestureDetector(
-                            onTap: () => setDialogState(() {
-                              useSaved = !useSaved;
-                              if (!useSaved) signatureStrokes.clear();
-                            }),
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 8, vertical: 3),
-                              decoration: BoxDecoration(
-                                color: useSaved
-                                    ? Colors.orange.shade50
-                                    : Colors.green.shade50,
-                                borderRadius: BorderRadius.circular(12),
-                                border: Border.all(
-                                  color: useSaved
-                                      ? Colors.orange.shade300
-                                      : Colors.green.shade300,
-                                ),
+                                    : Colors.orange.shade700,
                               ),
-                              child: Text(
-                                useSaved
-                                    ? 'Draw new / ارسم جديداً'
-                                    : 'Use saved / استخدم المحفوظ',
-                                style: GoogleFonts.poppins(
+                            ),
+                            const SizedBox(width: 4),
+                            GestureDetector(
+                              onTap: () => setDialogState(() {
+                                useSaved = !useSaved;
+                                if (!useSaved) signatureStrokes.clear();
+                              }),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 3,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: useSaved
+                                      ? Colors.orange.shade50
+                                      : Colors.green.shade50,
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(
+                                    color: useSaved
+                                        ? Colors.orange.shade300
+                                        : Colors.green.shade300,
+                                  ),
+                                ),
+                                child: Text(
+                                  useSaved
+                                      ? 'Draw new / ارسم جديداً'
+                                      : 'Use saved / استخدم المحفوظ',
+                                  style: GoogleFonts.poppins(
                                     fontSize: 9,
                                     color: useSaved
                                         ? Colors.orange.shade800
-                                        : Colors.green.shade800),
+                                        : Colors.green.shade800,
+                                  ),
+                                ),
                               ),
                             ),
-                          ),
-                        ]),
+                          ],
+                        ),
                     ],
                   ),
                   const SizedBox(height: 6),
@@ -1646,38 +1771,47 @@ class _WalletScreenState extends State<WalletScreen> {
                       width: double.infinity,
                       decoration: BoxDecoration(
                         border: Border.all(
-                            color: Colors.green.shade400, width: 1.5),
+                          color: Colors.green.shade400,
+                          width: 1.5,
+                        ),
                         borderRadius: BorderRadius.circular(8),
                         color: Colors.white,
                       ),
                       child: ClipRRect(
                         borderRadius: BorderRadius.circular(7),
-                        child: Stack(children: [
-                          Center(
-                            child: Image.memory(
-                              base64Decode(savedSignatureBase64!),
-                              fit: BoxFit.contain,
-                            ),
-                          ),
-                          Positioned(
-                            top: 4,
-                            right: 6,
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 6, vertical: 2),
-                              decoration: BoxDecoration(
-                                color: Colors.green.shade600,
-                                borderRadius: BorderRadius.circular(8),
+                        child: Stack(
+                          children: [
+                            Center(
+                              child: Image.memory(
+                                base64Decode(savedSignatureBase64!),
+                                fit: BoxFit.contain,
                               ),
-                              child: Text('Saved / محفوظ',
-                                  style: GoogleFonts.poppins(
-                                      fontSize: 9, color: Colors.white)),
                             ),
-                          ),
-                        ]),
+                            Positioned(
+                              top: 4,
+                              right: 6,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 6,
+                                  vertical: 2,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Colors.green.shade600,
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Text(
+                                  'Saved / محفوظ',
+                                  style: GoogleFonts.poppins(
+                                    fontSize: 9,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     )
-
                   // ── Draw new signature ─────────────────────────────────
                   else
                     Container(
@@ -1697,10 +1831,11 @@ class _WalletScreenState extends State<WalletScreen> {
                         borderRadius: BorderRadius.circular(7),
                         child: GestureDetector(
                           onPanStart: (d) => setDialogState(
-                              () => signatureStrokes.add([d.localPosition])),
+                            () => signatureStrokes.add([d.localPosition]),
+                          ),
                           onPanUpdate: (d) => setDialogState(
-                              () =>
-                                  signatureStrokes.last.add(d.localPosition)),
+                            () => signatureStrokes.last.add(d.localPosition),
+                          ),
                           child: CustomPaint(
                             painter: _SignaturePainter(signatureStrokes),
                             child: signatureStrokes.isEmpty
@@ -1709,21 +1844,25 @@ class _WalletScreenState extends State<WalletScreen> {
                                       mainAxisAlignment:
                                           MainAxisAlignment.center,
                                       children: [
-                                        Icon(Icons.draw_outlined,
-                                            color: Colors.grey.shade400,
-                                            size: 28),
+                                        Icon(
+                                          Icons.draw_outlined,
+                                          color: Colors.grey.shade400,
+                                          size: 28,
+                                        ),
                                         const SizedBox(height: 4),
                                         Text(
                                           'Draw your signature here',
                                           style: GoogleFonts.poppins(
-                                              color: Colors.grey.shade400,
-                                              fontSize: 11),
+                                            color: Colors.grey.shade400,
+                                            fontSize: 11,
+                                          ),
                                         ),
                                         Text(
                                           'ارسم توقيعك هنا',
                                           style: GoogleFonts.poppins(
-                                              color: Colors.grey.shade400,
-                                              fontSize: 10),
+                                            color: Colors.grey.shade400,
+                                            fontSize: 10,
+                                          ),
                                         ),
                                       ],
                                     ),
@@ -1742,11 +1881,14 @@ class _WalletScreenState extends State<WalletScreen> {
                         onPressed: () =>
                             setDialogState(() => signatureStrokes.clear()),
                         icon: const Icon(Icons.refresh, size: 13),
-                        label: Text('Clear / مسح',
-                            style: GoogleFonts.poppins(fontSize: 10)),
+                        label: Text(
+                          'Clear / مسح',
+                          style: GoogleFonts.poppins(fontSize: 10),
+                        ),
                         style: TextButton.styleFrom(
-                            foregroundColor: Colors.red.shade400,
-                            padding: EdgeInsets.zero),
+                          foregroundColor: Colors.red.shade400,
+                          padding: EdgeInsets.zero,
+                        ),
                       ),
                     ),
 
@@ -1759,7 +1901,8 @@ class _WalletScreenState extends State<WalletScreen> {
                     decoration: InputDecoration(
                       hintText: 'Notes (optional) / ملاحظات (اختياري)',
                       border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8)),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
                       contentPadding: const EdgeInsets.all(10),
                       isDense: true,
                     ),
@@ -1773,32 +1916,39 @@ class _WalletScreenState extends State<WalletScreen> {
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(ctx, false),
-                child: Text('Cancel / إلغاء',
-                    style: GoogleFonts.poppins(fontSize: 12)),
+                child: Text(
+                  'Cancel / إلغاء',
+                  style: GoogleFonts.poppins(fontSize: 12),
+                ),
               ),
               ElevatedButton.icon(
                 icon: const Icon(Icons.check_circle_outline, size: 16),
                 label: Text(
                   'Confirm / تأكيد الاستلام',
                   style: GoogleFonts.poppins(
-                      fontWeight: FontWeight.w600,
-                      color: Colors.white,
-                      fontSize: 12),
+                    fontWeight: FontWeight.w600,
+                    color: Colors.white,
+                    fontSize: 12,
+                  ),
                 ),
                 onPressed: () {
                   if (!hasSig) {
-                    ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(
-                      content: Text(
-                          'Please sign first / يرجى رسم توقيعك أولاً'),
-                      backgroundColor: Colors.orange,
-                      duration: const Duration(seconds: 2),
-                    ));
+                    ScaffoldMessenger.of(ctx).showSnackBar(
+                      SnackBar(
+                        content: Text(
+                          'Please sign first / يرجى رسم توقيعك أولاً',
+                        ),
+                        backgroundColor: Colors.orange,
+                        duration: const Duration(seconds: 2),
+                      ),
+                    );
                     return;
                   }
                   Navigator.pop(ctx, true);
                 },
                 style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.green.shade600),
+                  backgroundColor: Colors.green.shade600,
+                ),
               ),
             ],
           );
@@ -1816,11 +1966,11 @@ class _WalletScreenState extends State<WalletScreen> {
     } else {
       try {
         final recorder = ui.PictureRecorder();
-        final uiCanvas = ui.Canvas(
-            recorder, ui.Rect.fromLTWH(0, 0, 320, 120));
+        final uiCanvas = ui.Canvas(recorder, ui.Rect.fromLTWH(0, 0, 320, 120));
         uiCanvas.drawRect(
-            ui.Rect.fromLTWH(0, 0, 320, 120),
-            ui.Paint()..color = const ui.Color(0xFFFFFFFF));
+          ui.Rect.fromLTWH(0, 0, 320, 120),
+          ui.Paint()..color = const ui.Color(0xFFFFFFFF),
+        );
         final sigPaint = ui.Paint()
           ..color = const ui.Color(0xFF000000)
           ..strokeWidth = 2.5
@@ -1829,8 +1979,7 @@ class _WalletScreenState extends State<WalletScreen> {
           ..style = ui.PaintingStyle.stroke;
         for (final stroke in signatureStrokes) {
           if (stroke.length < 2) continue;
-          final path = ui.Path()
-            ..moveTo(stroke[0].dx, stroke[0].dy);
+          final path = ui.Path()..moveTo(stroke[0].dx, stroke[0].dy);
           for (int i = 1; i < stroke.length; i++) {
             path.lineTo(stroke[i].dx, stroke[i].dy);
           }
@@ -1838,8 +1987,7 @@ class _WalletScreenState extends State<WalletScreen> {
         }
         final picture = recorder.endRecording();
         final img = await picture.toImage(320, 120);
-        final byteData =
-            await img.toByteData(format: ui.ImageByteFormat.png);
+        final byteData = await img.toByteData(format: ui.ImageByteFormat.png);
         if (byteData != null) {
           signatureBase64 = base64Encode(byteData.buffer.asUint8List());
         }
@@ -1851,7 +1999,8 @@ class _WalletScreenState extends State<WalletScreen> {
     // Step 5: Build metadata payload
     // signatureBase64 is either from profile (saved) or encoded from drawn strokes
     final existingMeta = Map<String, dynamic>.from(
-        (advance['metadata'] as Map?)?.cast<String, dynamic>() ?? {});
+      (advance['metadata'] as Map?)?.cast<String, dynamic>() ?? {},
+    );
     existingMeta['receipt_confirmation'] = {
       'confirmed': true,
       'confirmedAt': DateTime.now().toIso8601String(),
@@ -1871,26 +2020,34 @@ class _WalletScreenState extends State<WalletScreen> {
     bool isOffline = false;
     try {
       final conn = await Connectivity().checkConnectivity();
-      isOffline = conn.isEmpty ||
+      isOffline =
+          conn.isEmpty ||
           (conn.length == 1 && conn.first == ConnectivityResult.none);
     } catch (_) {}
 
     if (isOffline) {
       try {
         final box = await Hive.openBox<String>('pending_confirmations');
-        await box.put(advanceId, jsonEncode({
-          'advanceId': advanceId,
-          'metadata': existingMeta,
-          'savedAt': DateTime.now().toIso8601String(),
-        }));
+        await box.put(
+          advanceId,
+          jsonEncode({
+            'advanceId': advanceId,
+            'metadata': existingMeta,
+            'savedAt': DateTime.now().toIso8601String(),
+          }),
+        );
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text(widget.isArabic
-                ? 'تم حفظ التأكيد — سيتم المزامنة عند الاتصال'
-                : 'Saved offline — will sync when connected'),
-            backgroundColor: Colors.orange,
-            duration: const Duration(seconds: 4),
-          ));
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                widget.isArabic
+                    ? 'تم حفظ التأكيد — سيتم المزامنة عند الاتصال'
+                    : 'Saved offline — will sync when connected',
+              ),
+              backgroundColor: Colors.orange,
+              duration: const Duration(seconds: 4),
+            ),
+          );
         }
       } catch (e) {
         debugPrint('[Receipt] Hive save error: $e');
@@ -1908,23 +2065,31 @@ class _WalletScreenState extends State<WalletScreen> {
       await _syncPendingConfirmations();
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(widget.isArabic
-              ? 'تم تأكيد الاستلام بنجاح ✓'
-              : 'Receipt confirmed successfully ✓'),
-          backgroundColor: Colors.green,
-          duration: const Duration(seconds: 3),
-        ));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              widget.isArabic
+                  ? 'تم تأكيد الاستلام بنجاح ✓'
+                  : 'Receipt confirmed successfully ✓',
+            ),
+            backgroundColor: Colors.green,
+            duration: const Duration(seconds: 3),
+          ),
+        );
         await _loadAdvances();
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(widget.isArabic
-              ? 'حدث خطأ أثناء التأكيد: $e'
-              : 'Error confirming receipt: $e'),
-          backgroundColor: Colors.red,
-        ));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              widget.isArabic
+                  ? 'حدث خطأ أثناء التأكيد: $e'
+                  : 'Error confirming receipt: $e',
+            ),
+            backgroundColor: Colors.red,
+          ),
+        );
       }
     }
   }
@@ -1969,7 +2134,9 @@ class _WalletScreenState extends State<WalletScreen> {
             child: Text(
               text,
               style: GoogleFonts.poppins(
-                  fontSize: 10, color: Colors.green.shade900),
+                fontSize: 10,
+                color: Colors.green.shade900,
+              ),
               textDirection: rtl ? TextDirection.rtl : TextDirection.ltr,
             ),
           ),
@@ -1997,7 +2164,8 @@ class _WalletScreenState extends State<WalletScreen> {
     final advanceReconciled = meta['advance_reconciled_at'] != null;
 
     // Statuses that mean the advance has been disbursed
-    final isDisbursed = status == 'partially_paid' ||
+    final isDisbursed =
+        status == 'partially_paid' ||
         status == 'fully_paid' ||
         status == 'paid';
 
@@ -2037,8 +2205,9 @@ class _WalletScreenState extends State<WalletScreen> {
       margin: const EdgeInsets.only(bottom: 12),
       elevation: 1,
       shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-          side: BorderSide(color: statusColor.withValues(alpha: 0.2))),
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(color: statusColor.withValues(alpha: 0.2)),
+      ),
       child: Padding(
         padding: const EdgeInsets.all(14),
         child: Column(
@@ -2048,42 +2217,59 @@ class _WalletScreenState extends State<WalletScreen> {
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(Icons.directions_car,
-                    color: AppColors.primaryBlue, size: 18),
+                Icon(
+                  Icons.directions_car,
+                  color: AppColors.primaryBlue,
+                  size: 18,
+                ),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(siteName,
-                          style: GoogleFonts.poppins(
-                              fontWeight: FontWeight.w700, fontSize: 14)),
+                      Text(
+                        siteName,
+                        style: GoogleFonts.poppins(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 14,
+                        ),
+                      ),
                       if (stateName.isNotEmpty)
-                        Text(stateName,
-                            style: GoogleFonts.poppins(
-                                fontSize: 11,
-                                color: AppColors.textLight)),
+                        Text(
+                          stateName,
+                          style: GoogleFonts.poppins(
+                            fontSize: 11,
+                            color: AppColors.textLight,
+                          ),
+                        ),
                     ],
                   ),
                 ),
                 Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 3,
+                  ),
                   decoration: BoxDecoration(
                     color: statusColor.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: statusColor.withValues(alpha: 0.35)),
+                    border: Border.all(
+                      color: statusColor.withValues(alpha: 0.35),
+                    ),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Icon(statusIcon, size: 11, color: statusColor),
                       const SizedBox(width: 3),
-                      Text(statusLabel,
-                          style: GoogleFonts.poppins(
-                              fontSize: 10,
-                              color: statusColor,
-                              fontWeight: FontWeight.w700)),
+                      Text(
+                        statusLabel,
+                        style: GoogleFonts.poppins(
+                          fontSize: 10,
+                          color: statusColor,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -2122,16 +2308,21 @@ class _WalletScreenState extends State<WalletScreen> {
             if (isDisbursed) ...[
               const SizedBox(height: 6),
               Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 6,
+                ),
                 decoration: BoxDecoration(
                   color: Colors.blue.shade50,
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Row(
                   children: [
-                    Icon(Icons.info_outline,
-                        color: Colors.blue.shade600, size: 14),
+                    Icon(
+                      Icons.info_outline,
+                      color: Colors.blue.shade600,
+                      size: 14,
+                    ),
                     const SizedBox(width: 6),
                     Expanded(
                       child: Text(
@@ -2139,7 +2330,9 @@ class _WalletScreenState extends State<WalletScreen> {
                             ? 'تُخصم هذه السلفة من رسوم الزيارة الميدانية عند اكتمالها'
                             : 'This advance is deducted from your site visit fee at completion',
                         style: GoogleFonts.poppins(
-                            fontSize: 11, color: Colors.blue.shade700),
+                          fontSize: 11,
+                          color: Colors.blue.shade700,
+                        ),
                       ),
                     ),
                   ],
@@ -2149,16 +2342,22 @@ class _WalletScreenState extends State<WalletScreen> {
             // Reconciled badge
             if (advanceReconciled) ...[
               const SizedBox(height: 6),
-              Row(children: [
-                Icon(Icons.sync, color: Colors.teal.shade600, size: 14),
-                const SizedBox(width: 4),
-                Text(
-                  widget.isArabic ? 'تمت التسوية' : 'Reconciled with site visit',
-                  style: GoogleFonts.poppins(
-                      fontSize: 11, color: Colors.teal.shade700,
-                      fontWeight: FontWeight.w600),
-                ),
-              ]),
+              Row(
+                children: [
+                  Icon(Icons.sync, color: Colors.teal.shade600, size: 14),
+                  const SizedBox(width: 4),
+                  Text(
+                    widget.isArabic
+                        ? 'تمت التسوية'
+                        : 'Reconciled with site visit',
+                    style: GoogleFonts.poppins(
+                      fontSize: 11,
+                      color: Colors.teal.shade700,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
             ],
             // Confirm receipt banner + button
             if (isDisbursed && !receiptConfirmed) ...[
@@ -2171,22 +2370,28 @@ class _WalletScreenState extends State<WalletScreen> {
                   borderRadius: BorderRadius.circular(8),
                   border: Border.all(color: Colors.amber.shade300),
                 ),
-                child: Row(children: [
-                  Icon(Icons.warning_amber,
-                      color: Colors.amber.shade700, size: 15),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: Text(
-                      widget.isArabic
-                          ? 'لم يتم تأكيد الاستلام بعد'
-                          : 'Receipt not yet acknowledged',
-                      style: GoogleFonts.poppins(
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.warning_amber,
+                      color: Colors.amber.shade700,
+                      size: 15,
+                    ),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        widget.isArabic
+                            ? 'لم يتم تأكيد الاستلام بعد'
+                            : 'Receipt not yet acknowledged',
+                        style: GoogleFonts.poppins(
                           fontSize: 11.5,
                           color: Colors.amber.shade800,
-                          fontWeight: FontWeight.w600),
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
                     ),
-                  ),
-                ]),
+                  ],
+                ),
               ),
               const SizedBox(height: 8),
               SizedBox(
@@ -2199,14 +2404,17 @@ class _WalletScreenState extends State<WalletScreen> {
                         ? 'تأكيد استلام السلفة'
                         : 'Acknowledge Fund Receipt',
                     style: GoogleFonts.poppins(
-                        fontSize: 13, fontWeight: FontWeight.w600),
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.green.shade600,
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(vertical: 10),
                     shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8)),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
                   ),
                 ),
               ),
@@ -2215,26 +2423,35 @@ class _WalletScreenState extends State<WalletScreen> {
             if (receiptConfirmed) ...[
               const SizedBox(height: 8),
               Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 6,
+                ),
                 decoration: BoxDecoration(
                   color: Colors.green.shade50,
                   borderRadius: BorderRadius.circular(8),
                   border: Border.all(color: Colors.green.shade200),
                 ),
-                child: Row(children: [
-                  Icon(Icons.verified, color: Colors.green.shade700, size: 15),
-                  const SizedBox(width: 6),
-                  Text(
-                    widget.isArabic
-                        ? 'تم تأكيد استلام الأموال ✓'
-                        : 'Fund receipt acknowledged ✓',
-                    style: GoogleFonts.poppins(
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.verified,
+                      color: Colors.green.shade700,
+                      size: 15,
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      widget.isArabic
+                          ? 'تم تأكيد استلام الأموال ✓'
+                          : 'Fund receipt acknowledged ✓',
+                      style: GoogleFonts.poppins(
                         fontSize: 12,
                         color: Colors.green.shade700,
-                        fontWeight: FontWeight.w600),
-                  ),
-                ]),
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ],
           ],
@@ -2249,14 +2466,21 @@ class _WalletScreenState extends State<WalletScreen> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label,
-              style: GoogleFonts.poppins(
-                  fontSize: 12, color: AppColors.textLight)),
-          Text(value,
-              style: GoogleFonts.poppins(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  color: valueColor)),
+          Text(
+            label,
+            style: GoogleFonts.poppins(
+              fontSize: 12,
+              color: AppColors.textLight,
+            ),
+          ),
+          Text(
+            value,
+            style: GoogleFonts.poppins(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: valueColor,
+            ),
+          ),
         ],
       ),
     );
@@ -2308,9 +2532,10 @@ class _WalletScreenState extends State<WalletScreen> {
           border: Border.all(color: txColor.withValues(alpha: 0.2), width: 1),
           boxShadow: [
             BoxShadow(
-                color: Colors.black.withValues(alpha: 0.04),
-                blurRadius: 6,
-                offset: const Offset(0, 2))
+              color: Colors.black.withValues(alpha: 0.04),
+              blurRadius: 6,
+              offset: const Offset(0, 2),
+            ),
           ],
         ),
         child: Padding(
@@ -2325,8 +2550,11 @@ class _WalletScreenState extends State<WalletScreen> {
                   color: txColor.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(10),
                 ),
-                child:
-                    Icon(_getTransactionIcon(type), color: txColor, size: 22),
+                child: Icon(
+                  _getTransactionIcon(type),
+                  color: txColor,
+                  size: 22,
+                ),
               ),
               const SizedBox(width: 12),
               // Description + date + type
@@ -2346,10 +2574,13 @@ class _WalletScreenState extends State<WalletScreen> {
                     ),
                     const SizedBox(height: 3),
                     Text(
-                      DateFormat('dd MMM yyyy  HH:mm')
-                          .format(createdAt.toLocal()),
+                      DateFormat(
+                        'dd MMM yyyy  HH:mm',
+                      ).format(createdAt.toLocal()),
                       style: GoogleFonts.poppins(
-                          fontSize: 11, color: AppColors.textLight),
+                        fontSize: 11,
+                        color: AppColors.textLight,
+                      ),
                     ),
                   ],
                 ),
@@ -2369,8 +2600,10 @@ class _WalletScreenState extends State<WalletScreen> {
                   ),
                   const SizedBox(height: 2),
                   Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 6,
+                      vertical: 2,
+                    ),
                     decoration: BoxDecoration(
                       color: txColor.withValues(alpha: 0.12),
                       borderRadius: BorderRadius.circular(4),
@@ -2387,14 +2620,23 @@ class _WalletScreenState extends State<WalletScreen> {
                   ),
                   const SizedBox(height: 4),
                   // "Tap for details" hint
-                  Row(children: [
-                    Icon(Icons.info_outline,
-                        size: 10, color: Colors.grey.shade400),
-                    const SizedBox(width: 2),
-                    Text('Details',
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.info_outline,
+                        size: 10,
+                        color: Colors.grey.shade400,
+                      ),
+                      const SizedBox(width: 2),
+                      Text(
+                        'Details',
                         style: GoogleFonts.poppins(
-                            fontSize: 9, color: Colors.grey.shade400)),
-                  ]),
+                          fontSize: 9,
+                          color: Colors.grey.shade400,
+                        ),
+                      ),
+                    ],
+                  ),
                 ],
               ),
             ],
@@ -2487,32 +2729,42 @@ class _WalletScreenState extends State<WalletScreen> {
                               color: txColor.withValues(alpha: 0.12),
                               borderRadius: BorderRadius.circular(14),
                             ),
-                            child: Icon(_getTransactionIcon(type),
-                                color: txColor, size: 28),
+                            child: Icon(
+                              _getTransactionIcon(type),
+                              color: txColor,
+                              size: 28,
+                            ),
                           ),
                           const SizedBox(width: 14),
                           Expanded(
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text(typeLabel,
-                                    style: GoogleFonts.poppins(
-                                        fontWeight: FontWeight.w700,
-                                        fontSize: 15,
-                                        color: AppColors.textDark)),
                                 Text(
-                                  DateFormat('dd MMM yyyy, HH:mm')
-                                      .format(createdAt),
+                                  typeLabel,
                                   style: GoogleFonts.poppins(
-                                      fontSize: 12,
-                                      color: AppColors.textLight),
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 15,
+                                    color: AppColors.textDark,
+                                  ),
+                                ),
+                                Text(
+                                  DateFormat(
+                                    'dd MMM yyyy, HH:mm',
+                                  ).format(createdAt),
+                                  style: GoogleFonts.poppins(
+                                    fontSize: 12,
+                                    color: AppColors.textLight,
+                                  ),
                                 ),
                               ],
                             ),
                           ),
                           Container(
                             padding: const EdgeInsets.symmetric(
-                                horizontal: 8, vertical: 4),
+                              horizontal: 8,
+                              vertical: 4,
+                            ),
                             decoration: BoxDecoration(
                               color: txColor.withValues(alpha: 0.12),
                               borderRadius: BorderRadius.circular(8),
@@ -2520,9 +2772,10 @@ class _WalletScreenState extends State<WalletScreen> {
                             child: Text(
                               isDebit ? 'DEBIT / مدين' : 'CREDIT / دائن',
                               style: GoogleFonts.poppins(
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w700,
-                                  color: txColor),
+                                fontSize: 10,
+                                fontWeight: FontWeight.w700,
+                                color: txColor,
+                              ),
                             ),
                           ),
                         ],
@@ -2534,7 +2787,9 @@ class _WalletScreenState extends State<WalletScreen> {
                       Container(
                         width: double.infinity,
                         padding: const EdgeInsets.symmetric(
-                            vertical: 20, horizontal: 16),
+                          vertical: 20,
+                          horizontal: 16,
+                        ),
                         decoration: BoxDecoration(
                           gradient: LinearGradient(
                             colors: [
@@ -2545,15 +2800,18 @@ class _WalletScreenState extends State<WalletScreen> {
                             end: Alignment.bottomRight,
                           ),
                           borderRadius: BorderRadius.circular(14),
-                          border:
-                              Border.all(color: txColor.withValues(alpha: 0.25)),
+                          border: Border.all(
+                            color: txColor.withValues(alpha: 0.25),
+                          ),
                         ),
                         child: Column(
                           children: [
                             Text(
                               'Amount / المبلغ',
                               style: GoogleFonts.poppins(
-                                  fontSize: 11, color: Colors.grey.shade500),
+                                fontSize: 11,
+                                color: Colors.grey.shade500,
+                              ),
                             ),
                             const SizedBox(height: 4),
                             Text(
@@ -2573,82 +2831,94 @@ class _WalletScreenState extends State<WalletScreen> {
                       // ── Description ──────────────────────────────────
                       if (description.isNotEmpty) ...[
                         _txDetailSection(
-                            'Description / الوصف', Icons.description_outlined,
-                            child: Text(
-                              description,
-                              style: GoogleFonts.poppins(
-                                  fontSize: 13, color: AppColors.textDark),
-                            )),
+                          'Description / الوصف',
+                          Icons.description_outlined,
+                          child: Text(
+                            description,
+                            style: GoogleFonts.poppins(
+                              fontSize: 13,
+                              color: AppColors.textDark,
+                            ),
+                          ),
+                        ),
                         const SizedBox(height: 12),
                       ],
 
                       // ── Balance before / after ───────────────────────
                       if (balanceBefore != null || balanceAfter != null)
                         _txDetailSection(
-                            'Balance Impact / أثر الرصيد',
-                            Icons.account_balance_wallet_outlined,
-                            child: Row(
-                              children: [
-                                Expanded(
-                                  child: _txBalanceCell(
-                                    'Before / قبل',
-                                    balanceBefore != null
-                                        ? '${_formatCurrency(balanceBefore)} $currency'
-                                        : '—',
-                                    Colors.grey.shade600,
-                                  ),
+                          'Balance Impact / أثر الرصيد',
+                          Icons.account_balance_wallet_outlined,
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: _txBalanceCell(
+                                  'Before / قبل',
+                                  balanceBefore != null
+                                      ? '${_formatCurrency(balanceBefore)} $currency'
+                                      : '—',
+                                  Colors.grey.shade600,
                                 ),
-                                Icon(Icons.arrow_forward,
-                                    size: 16,
-                                    color: Colors.grey.shade400),
-                                Expanded(
-                                  child: _txBalanceCell(
-                                    'After / بعد',
-                                    balanceAfter != null
-                                        ? '${_formatCurrency(balanceAfter)} $currency'
-                                        : '—',
-                                    txColor,
-                                  ),
+                              ),
+                              Icon(
+                                Icons.arrow_forward,
+                                size: 16,
+                                color: Colors.grey.shade400,
+                              ),
+                              Expanded(
+                                child: _txBalanceCell(
+                                  'After / بعد',
+                                  balanceAfter != null
+                                      ? '${_formatCurrency(balanceAfter)} $currency'
+                                      : '—',
+                                  txColor,
                                 ),
-                              ],
-                            )),
+                              ),
+                            ],
+                          ),
+                        ),
 
                       const SizedBox(height: 12),
 
                       // ── Status ───────────────────────────────────────
                       if (status != null && status.isNotEmpty)
                         _txDetailSection(
-                            'Status / الحالة', Icons.info_outline,
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 10, vertical: 4),
-                              decoration: BoxDecoration(
+                          'Status / الحالة',
+                          Icons.info_outline,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 4,
+                            ),
+                            decoration: BoxDecoration(
+                              color: status == 'completed'
+                                  ? Colors.green.shade50
+                                  : status == 'pending'
+                                  ? Colors.orange.shade50
+                                  : Colors.red.shade50,
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(
                                 color: status == 'completed'
-                                    ? Colors.green.shade50
+                                    ? Colors.green.shade200
                                     : status == 'pending'
-                                        ? Colors.orange.shade50
-                                        : Colors.red.shade50,
-                                borderRadius: BorderRadius.circular(8),
-                                border: Border.all(
-                                    color: status == 'completed'
-                                        ? Colors.green.shade200
-                                        : status == 'pending'
-                                            ? Colors.orange.shade200
-                                            : Colors.red.shade200),
+                                    ? Colors.orange.shade200
+                                    : Colors.red.shade200,
                               ),
-                              child: Text(
-                                status.toUpperCase(),
-                                style: GoogleFonts.poppins(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w600,
-                                  color: status == 'completed'
-                                      ? Colors.green.shade700
-                                      : status == 'pending'
-                                          ? Colors.orange.shade700
-                                          : Colors.red.shade700,
-                                ),
+                            ),
+                            child: Text(
+                              status.toUpperCase(),
+                              style: GoogleFonts.poppins(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: status == 'completed'
+                                    ? Colors.green.shade700
+                                    : status == 'pending'
+                                    ? Colors.orange.shade700
+                                    : Colors.red.shade700,
                               ),
-                            )),
+                            ),
+                          ),
+                        ),
 
                       if (status != null && status.isNotEmpty)
                         const SizedBox(height: 12),
@@ -2656,21 +2926,26 @@ class _WalletScreenState extends State<WalletScreen> {
                       // ── Reference ────────────────────────────────────
                       if (referenceId != null || referenceType != null)
                         _txDetailSection(
-                            'Reference / المرجع', Icons.link,
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                if (referenceType != null)
-                                  _txDetailRow('Type / النوع',
-                                      referenceType.replaceAll('_', ' ')),
-                                if (referenceId != null)
-                                  _txDetailRow(
-                                      'ID',
-                                      referenceId.length > 20
-                                          ? '${referenceId.substring(0, 20)}…'
-                                          : referenceId),
-                              ],
-                            )),
+                          'Reference / المرجع',
+                          Icons.link,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              if (referenceType != null)
+                                _txDetailRow(
+                                  'Type / النوع',
+                                  referenceType.replaceAll('_', ' '),
+                                ),
+                              if (referenceId != null)
+                                _txDetailRow(
+                                  'ID',
+                                  referenceId.length > 20
+                                      ? '${referenceId.substring(0, 20)}…'
+                                      : referenceId,
+                                ),
+                            ],
+                          ),
+                        ),
 
                       if (referenceId != null || referenceType != null)
                         const SizedBox(height: 12),
@@ -2678,39 +2953,44 @@ class _WalletScreenState extends State<WalletScreen> {
                       // ── Metadata extras ──────────────────────────────
                       if (metadata is Map && (metadata).isNotEmpty)
                         _txDetailSection(
-                            'Additional Info / معلومات إضافية',
-                            Icons.layers_outlined,
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: (metadata as Map)
-                                  .entries
-                                  .where((e) =>
+                          'Additional Info / معلومات إضافية',
+                          Icons.layers_outlined,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: (metadata as Map).entries
+                                .where(
+                                  (e) =>
                                       e.value != null &&
                                       e.value.toString().isNotEmpty &&
                                       e.value is! Map &&
-                                      e.value is! List)
-                                  .map((e) => _txDetailRow(
-                                        e.key
-                                            .toString()
-                                            .replaceAll('_', ' '),
-                                        e.value.toString(),
-                                      ))
-                                  .toList(),
-                            )),
+                                      e.value is! List,
+                                )
+                                .map(
+                                  (e) => _txDetailRow(
+                                    e.key.toString().replaceAll('_', ' '),
+                                    e.value.toString(),
+                                  ),
+                                )
+                                .toList(),
+                          ),
+                        ),
 
                       if (metadata is Map && (metadata).isNotEmpty)
                         const SizedBox(height: 12),
 
                       // ── Transaction ID ───────────────────────────────
                       _txDetailSection(
-                          'Transaction ID', Icons.fingerprint,
-                          child: Text(
-                            txId,
-                            style: GoogleFonts.poppins(
-                                fontSize: 11,
-                                color: Colors.grey.shade500,
-                                fontFamily: 'monospace'),
-                          )),
+                        'Transaction ID',
+                        Icons.fingerprint,
+                        child: Text(
+                          txId,
+                          style: GoogleFonts.poppins(
+                            fontSize: 11,
+                            color: Colors.grey.shade500,
+                            fontFamily: 'monospace',
+                          ),
+                        ),
+                      ),
 
                       const SizedBox(height: 24),
 
@@ -2722,13 +3002,17 @@ class _WalletScreenState extends State<WalletScreen> {
                           style: OutlinedButton.styleFrom(
                             padding: const EdgeInsets.symmetric(vertical: 14),
                             shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12)),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
                             side: BorderSide(color: Colors.grey.shade300),
                           ),
-                          child: Text('Close / إغلاق',
-                              style: GoogleFonts.poppins(
-                                  fontSize: 14,
-                                  color: Colors.grey.shade700)),
+                          child: Text(
+                            'Close / إغلاق',
+                            style: GoogleFonts.poppins(
+                              fontSize: 14,
+                              color: Colors.grey.shade700,
+                            ),
+                          ),
                         ),
                       ),
                     ],
@@ -2743,8 +3027,11 @@ class _WalletScreenState extends State<WalletScreen> {
   }
 
   // ── Transaction detail helpers ─────────────────────────────────────────────
-  Widget _txDetailSection(String title, IconData icon,
-      {required Widget child}) {
+  Widget _txDetailSection(
+    String title,
+    IconData icon, {
+    required Widget child,
+  }) {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
@@ -2755,16 +3042,21 @@ class _WalletScreenState extends State<WalletScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(children: [
-            Icon(icon, size: 13, color: Colors.grey.shade500),
-            const SizedBox(width: 5),
-            Text(title,
+          Row(
+            children: [
+              Icon(icon, size: 13, color: Colors.grey.shade500),
+              const SizedBox(width: 5),
+              Text(
+                title,
                 style: GoogleFonts.poppins(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.grey.shade500,
-                    letterSpacing: 0.3)),
-          ]),
+                  fontSize: 10,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.grey.shade500,
+                  letterSpacing: 0.3,
+                ),
+              ),
+            ],
+          ),
           const SizedBox(height: 8),
           child,
         ],
@@ -2780,16 +3072,23 @@ class _WalletScreenState extends State<WalletScreen> {
         children: [
           SizedBox(
             width: 110,
-            child: Text(label,
-                style: GoogleFonts.poppins(
-                    fontSize: 11, color: Colors.grey.shade500)),
+            child: Text(
+              label,
+              style: GoogleFonts.poppins(
+                fontSize: 11,
+                color: Colors.grey.shade500,
+              ),
+            ),
           ),
           Expanded(
-            child: Text(value,
-                style: GoogleFonts.poppins(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.textDark)),
+            child: Text(
+              value,
+              style: GoogleFonts.poppins(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: AppColors.textDark,
+              ),
+            ),
           ),
         ],
       ),
@@ -2799,15 +3098,19 @@ class _WalletScreenState extends State<WalletScreen> {
   Widget _txBalanceCell(String label, String value, Color color) {
     return Column(
       children: [
-        Text(label,
-            style: GoogleFonts.poppins(
-                fontSize: 10, color: Colors.grey.shade500)),
+        Text(
+          label,
+          style: GoogleFonts.poppins(fontSize: 10, color: Colors.grey.shade500),
+        ),
         const SizedBox(height: 2),
-        Text(value,
-            style: GoogleFonts.poppins(
-                fontSize: 13,
-                fontWeight: FontWeight.w700,
-                color: color)),
+        Text(
+          value,
+          style: GoogleFonts.poppins(
+            fontSize: 13,
+            fontWeight: FontWeight.w700,
+            color: color,
+          ),
+        ),
       ],
     );
   }
@@ -2879,7 +3182,6 @@ class _WalletScreenState extends State<WalletScreen> {
     );
   }
 }
-
 
 class _SignaturePainter extends CustomPainter {
   final List<List<Offset>> strokes;

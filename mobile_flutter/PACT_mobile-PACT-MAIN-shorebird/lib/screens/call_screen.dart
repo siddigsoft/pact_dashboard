@@ -266,7 +266,7 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: Colors.black.withOpacity(0.3),
+        color: Colors.black.withValues(alpha: 0.3),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Row(
@@ -319,7 +319,7 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
             child: Container(
               padding: const EdgeInsets.all(24),
               decoration: BoxDecoration(
-                color: Colors.black.withOpacity(0.8),
+                color: Colors.black.withValues(alpha: 0.8),
                 borderRadius: const BorderRadius.vertical(
                   top: Radius.circular(24),
                 ),
@@ -365,7 +365,7 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
                       hintText: 'Add notes about this call...',
                       hintStyle: GoogleFonts.poppins(color: Colors.white38),
                       filled: true,
-                      fillColor: Colors.white.withOpacity(0.1),
+                      fillColor: Colors.white.withValues(alpha: 0.1),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
                         borderSide: BorderSide.none,
@@ -488,10 +488,10 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
         child: Container(
           padding: const EdgeInsets.all(24),
           decoration: BoxDecoration(
-            color: Colors.black.withOpacity(0.8),
+            color: Colors.black.withValues(alpha: 0.8),
             borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
             border: Border(
-              top: BorderSide(color: Colors.white.withOpacity(0.1)),
+              top: BorderSide(color: Colors.white.withValues(alpha: 0.1)),
             ),
           ),
           child: Column(
@@ -593,7 +593,7 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
               width: 44,
               height: 44,
               decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.1),
+                color: Colors.white.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Icon(icon, color: Colors.white70, size: 22),
@@ -691,7 +691,7 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
                   size: Size.infinite,
                   painter: ParticlePainter(
                     animation: _particleController.value,
-                    particleColor: AppColors.primaryBlue.withOpacity(0.3),
+                    particleColor: AppColors.primaryBlue.withValues(alpha: 0.3),
                   ),
                 )
               : null,
@@ -707,9 +707,9 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
         filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
         child: Container(
           decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.1),
+            color: Colors.white.withValues(alpha: 0.1),
             borderRadius: BorderRadius.circular(30),
-            border: Border.all(color: Colors.white.withOpacity(0.2)),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.2)),
           ),
           child: IconButton(
             icon: const Icon(
@@ -737,16 +737,16 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
               decoration: BoxDecoration(
-                color: Colors.black.withOpacity(0.3),
+                color: Colors.black.withValues(alpha: 0.3),
                 borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: Colors.white.withOpacity(0.1)),
+                border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
               ),
               child: Row(
                 children: [
                   Container(
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
-                      color: AppColors.primaryGreen.withOpacity(0.2),
+                      color: AppColors.primaryGreen.withValues(alpha: 0.2),
                       shape: BoxShape.circle,
                     ),
                     child: const Icon(
@@ -818,13 +818,13 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
             borderRadius: BorderRadius.circular(20),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(_isDraggingPip ? 0.5 : 0.3),
+                color: Colors.black.withValues(alpha: _isDraggingPip ? 0.5 : 0.3),
                 blurRadius: _isDraggingPip ? 20 : 15,
                 spreadRadius: _isDraggingPip ? 4 : 2,
               ),
             ],
             border: Border.all(
-              color: Colors.white.withOpacity(_isDraggingPip ? 0.4 : 0.2),
+              color: Colors.white.withValues(alpha: _isDraggingPip ? 0.4 : 0.2),
               width: 2,
             ),
           ),
@@ -883,7 +883,7 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
                     shape: BoxShape.circle,
                     boxShadow: [
                       BoxShadow(
-                        color: AppColors.primaryBlue.withOpacity(
+                        color: AppColors.primaryBlue.withValues(alpha: 
                           _glowAnimation.value,
                         ),
                         blurRadius: 50,
@@ -909,11 +909,11 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
                         end: Alignment.bottomRight,
                         colors: [
                           AppColors.primaryBlue,
-                          AppColors.primaryBlue.withOpacity(0.7),
+                          AppColors.primaryBlue.withValues(alpha: 0.7),
                         ],
                       ),
                       border: Border.all(
-                        color: Colors.white.withOpacity(0.3),
+                        color: Colors.white.withValues(alpha: 0.3),
                         width: 3,
                       ),
                     ),
@@ -965,7 +965,7 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.1),
+              color: Colors.white.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(20),
             ),
             child: Text(
@@ -992,7 +992,7 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
                   shape: BoxShape.circle,
                   boxShadow: [
                     BoxShadow(
-                      color: AppColors.primaryGreen.withOpacity(0.5),
+                      color: AppColors.primaryGreen.withValues(alpha: 0.5),
                       blurRadius: 8,
                       spreadRadius: 2,
                     ),
@@ -1010,7 +1010,7 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
                   shape: BoxShape.circle,
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.red.withOpacity(0.5),
+                      color: Colors.red.withValues(alpha: 0.5),
                       blurRadius: 8,
                       spreadRadius: 2,
                     ),
@@ -1045,9 +1045,9 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
           decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.1),
+            color: Colors.white.withValues(alpha: 0.1),
             borderRadius: BorderRadius.circular(25),
-            border: Border.all(color: Colors.white.withOpacity(0.2)),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.2)),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
@@ -1121,15 +1121,15 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
                 colors: [
-                  Colors.black.withOpacity(0.3),
-                  Colors.black.withOpacity(0.5),
+                  Colors.black.withValues(alpha: 0.3),
+                  Colors.black.withValues(alpha: 0.5),
                 ],
               ),
               borderRadius: const BorderRadius.vertical(
                 top: Radius.circular(30),
               ),
               border: Border(
-                top: BorderSide(color: Colors.white.withOpacity(0.1), width: 1),
+                top: BorderSide(color: Colors.white.withValues(alpha: 0.1), width: 1),
               ),
             ),
             child: Column(
@@ -1306,7 +1306,7 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
           child: Container(
             padding: const EdgeInsets.all(24),
             decoration: BoxDecoration(
-              color: Colors.black.withOpacity(0.8),
+              color: Colors.black.withValues(alpha: 0.8),
               borderRadius: const BorderRadius.vertical(
                 top: Radius.circular(24),
               ),
@@ -1446,13 +1446,13 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
             height: 50,
             decoration: BoxDecoration(
               color: isActive && activeColor != null
-                  ? activeColor.withOpacity(0.2)
-                  : Colors.white.withOpacity(isActive ? 0.15 : 0.08),
+                  ? activeColor.withValues(alpha: 0.2)
+                  : Colors.white.withValues(alpha: isActive ? 0.15 : 0.08),
               shape: BoxShape.circle,
               border: Border.all(
                 color: isActive && activeColor != null
-                    ? activeColor.withOpacity(0.5)
-                    : Colors.white.withOpacity(0.2),
+                    ? activeColor.withValues(alpha: 0.5)
+                    : Colors.white.withValues(alpha: 0.2),
                 width: 1,
               ),
             ),
@@ -1495,19 +1495,19 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
               gradient: isWarning
                   ? LinearGradient(
                       colors: [
-                        Colors.orange.withOpacity(0.3),
-                        Colors.orange.withOpacity(0.2),
+                        Colors.orange.withValues(alpha: 0.3),
+                        Colors.orange.withValues(alpha: 0.2),
                       ],
                     )
                   : null,
               color: isWarning
                   ? null
-                  : Colors.white.withOpacity(isActive ? 0.15 : 0.08),
+                  : Colors.white.withValues(alpha: isActive ? 0.15 : 0.08),
               shape: BoxShape.circle,
               border: Border.all(
                 color: isWarning
                     ? Colors.orange
-                    : Colors.white.withOpacity(0.2),
+                    : Colors.white.withValues(alpha: 0.2),
                 width: 1.5,
               ),
             ),
@@ -1552,7 +1552,7 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
               shape: BoxShape.circle,
               boxShadow: [
                 BoxShadow(
-                  color: Colors.red.withOpacity(0.4),
+                  color: Colors.red.withValues(alpha: 0.4),
                   blurRadius: 20,
                   spreadRadius: 2,
                   offset: const Offset(0, 4),
@@ -1596,7 +1596,7 @@ class EnhancedRipplePainter extends CustomPainter {
       final opacity = (1 - progress) * 0.5;
 
       final paint = Paint()
-        ..color = color.withOpacity(opacity)
+        ..color = color.withValues(alpha: opacity)
         ..style = PaintingStyle.stroke
         ..strokeWidth = 3 - (2 * progress);
 
@@ -1631,7 +1631,7 @@ class ParticlePainter extends CustomPainter {
       final opacity =
           0.3 + (math.sin((animation + i / 30) * math.pi * 2) * 0.3);
 
-      paint.color = particleColor.withOpacity(opacity.clamp(0.0, 1.0));
+      paint.color = particleColor.withValues(alpha: opacity.clamp(0.0, 1.0));
       canvas.drawCircle(Offset(baseX, y), particleSize, paint);
     }
   }

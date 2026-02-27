@@ -166,11 +166,11 @@ class _FloatingCallOverlayState extends State<FloatingCallOverlay>
                         end: Alignment.bottomRight,
                         colors: [
                           isConnected
-                              ? AppColors.primaryGreen.withOpacity(0.9)
-                              : AppColors.primaryBlue.withOpacity(0.9),
+                              ? AppColors.primaryGreen.withValues(alpha: 0.9)
+                              : AppColors.primaryBlue.withValues(alpha: 0.9),
                           isConnected
-                              ? AppColors.primaryGreen.withOpacity(0.7)
-                              : AppColors.primaryBlue.withOpacity(0.7),
+                              ? AppColors.primaryGreen.withValues(alpha: 0.7)
+                              : AppColors.primaryBlue.withValues(alpha: 0.7),
                         ],
                       ),
                       borderRadius: BorderRadius.circular(16),
@@ -180,7 +180,7 @@ class _FloatingCallOverlayState extends State<FloatingCallOverlay>
                               (isConnected
                                       ? AppColors.primaryGreen
                                       : AppColors.primaryBlue)
-                                  .withOpacity(
+                                  .withValues(alpha: 
                                     0.3 + (_pulseController.value * 0.2),
                                   ),
                           blurRadius: 15,
@@ -188,7 +188,7 @@ class _FloatingCallOverlayState extends State<FloatingCallOverlay>
                         ),
                       ],
                       border: Border.all(
-                        color: Colors.white.withOpacity(0.3),
+                        color: Colors.white.withValues(alpha: 0.3),
                         width: 1.5,
                       ),
                     ),
@@ -199,9 +199,9 @@ class _FloatingCallOverlayState extends State<FloatingCallOverlay>
                           height: 44,
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
-                            color: Colors.white.withOpacity(0.2),
+                            color: Colors.white.withValues(alpha: 0.2),
                             border: Border.all(
-                              color: Colors.white.withOpacity(0.5),
+                              color: Colors.white.withValues(alpha: 0.5),
                               width: 2,
                             ),
                           ),
@@ -267,7 +267,7 @@ class _FloatingCallOverlayState extends State<FloatingCallOverlay>
                                         ? _formatDuration()
                                         : 'Connecting...',
                                     style: GoogleFonts.poppins(
-                                      color: Colors.white.withOpacity(0.9),
+                                      color: Colors.white.withValues(alpha: 0.9),
                                       fontSize: 11,
                                       fontWeight: FontWeight.w500,
                                     ),

@@ -30,7 +30,7 @@ class ErrorMessagesScreen extends StatelessWidget {
                 leading: Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: const Color(0xFFF44336).withOpacity(0.1),
+                    color: const Color(0xFFF44336).withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: const Icon(
@@ -61,7 +61,7 @@ class ErrorMessagesScreen extends StatelessWidget {
                     width: double.infinity,
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
-                      color: const Color(0xFF4CAF50).withOpacity(0.05),
+                      color: const Color(0xFF4CAF50).withValues(alpha: 0.05),
                       border: Border(
                         top: BorderSide(
                           color: Colors.grey[300]!,

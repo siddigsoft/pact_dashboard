@@ -75,12 +75,12 @@ class _UserSelectionScreenState extends State<UserSelectionScreen> {
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
                   borderSide:
-                      BorderSide(color: AppColors.textLight.withOpacity(0.3)),
+                      BorderSide(color: AppColors.textLight.withValues(alpha: 0.3)),
                 ),
                 enabledBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
                   borderSide:
-                      BorderSide(color: AppColors.textLight.withOpacity(0.3)),
+                      BorderSide(color: AppColors.textLight.withValues(alpha: 0.3)),
                 ),
                 focusedBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
@@ -165,7 +165,7 @@ class _UserSelectionScreenState extends State<UserSelectionScreen> {
           Icon(
             Icons.people_outline,
             size: 80,
-            color: AppColors.textLight.withOpacity(0.5),
+            color: AppColors.textLight.withValues(alpha: 0.5),
           ),
           const SizedBox(height: 16),
           Text(

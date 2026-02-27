@@ -328,7 +328,7 @@ class _EquipmentScreenState extends State<EquipmentScreen> {
                                         ),
                                         decoration: BoxDecoration(
                                           color: AppColors.primaryOrange
-                                              .withOpacity(0.1),
+                                              .withValues(alpha: 0.1),
                                           shape: BoxShape.circle,
                                         ),
                                         child: Icon(
@@ -394,7 +394,7 @@ class _EquipmentScreenState extends State<EquipmentScreen> {
         color: Colors.white,
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 10,
             offset: const Offset(0, 2),
           ),
@@ -505,7 +505,7 @@ class _EquipmentScreenState extends State<EquipmentScreen> {
       child: FilterChip(
         selected: isSelected,
         showCheckmark: false,
-        selectedColor: AppColors.primaryOrange.withOpacity(0.1),
+        selectedColor: AppColors.primaryOrange.withValues(alpha: 0.1),
         backgroundColor: Colors.white,
         side: BorderSide(
           color: isSelected ? AppColors.primaryOrange : AppColors.borderColor,
@@ -549,7 +549,7 @@ class _EquipmentScreenState extends State<EquipmentScreen> {
           Container(
             padding: EdgeInsets.all(AppDesignSystem.spaceMD),
             decoration: BoxDecoration(
-              color: statusColor.withOpacity(0.1),
+              color: statusColor.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(AppDesignSystem.radiusMD),
             ),
             child: Icon(

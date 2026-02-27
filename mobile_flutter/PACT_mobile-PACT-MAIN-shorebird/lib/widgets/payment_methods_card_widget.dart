@@ -293,7 +293,7 @@ class _PaymentMethodsCardWidgetState
                   color: const Color(0xFFFFEBEE),
                   borderRadius: BorderRadius.circular(8),
                   border: Border.all(
-                    color: const Color(0xFFE53935).withOpacity(0.3),
+                    color: const Color(0xFFE53935).withValues(alpha: 0.3),
                   ),
                 ),
                 child: Column(
@@ -389,7 +389,7 @@ class _PaymentMethodsCardWidgetState
                             vertical: 4,
                           ),
                           decoration: BoxDecoration(
-                            color: const Color(0xFF4CAF50).withOpacity(0.1),
+                            color: const Color(0xFF4CAF50).withValues(alpha: 0.1),
                             borderRadius: BorderRadius.circular(4),
                           ),
                           child: const Text(

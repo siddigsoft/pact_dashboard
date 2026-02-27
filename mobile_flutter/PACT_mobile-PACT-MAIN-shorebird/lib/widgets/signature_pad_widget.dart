@@ -169,7 +169,7 @@ class _SignaturePadWidgetState extends State<SignaturePadWidget> {
                       vertical: 4,
                     ),
                     decoration: BoxDecoration(
-                      color: AppColors.primaryBlue.withOpacity(0.1),
+                      color: AppColors.primaryBlue.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Row(
@@ -210,8 +210,8 @@ class _SignaturePadWidgetState extends State<SignaturePadWidget> {
                 borderRadius: BorderRadius.circular(8),
                 border: Border.all(
                   color: _hasSignature
-                      ? AppColors.primaryBlue.withOpacity(0.5)
-                      : Colors.grey.withOpacity(0.3),
+                      ? AppColors.primaryBlue.withValues(alpha: 0.5)
+                      : Colors.grey.withValues(alpha: 0.3),
                   width: 2,
                   style: BorderStyle.solid,
                 ),
@@ -235,7 +235,7 @@ class _SignaturePadWidgetState extends State<SignaturePadWidget> {
                             child: Text(
                               widget.isArabic ? 'وقّع هنا' : 'Sign here',
                               style: TextStyle(
-                                color: Colors.grey.withOpacity(0.4),
+                                color: Colors.grey.withValues(alpha: 0.4),
                                 fontSize: 14,
                               ),
                             ),

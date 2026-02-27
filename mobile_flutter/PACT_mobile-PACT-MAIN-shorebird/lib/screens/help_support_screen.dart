@@ -277,7 +277,7 @@ class _HelpSupportScreenState extends State<HelpSupportScreen>
         color: Colors.white,
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 4,
             offset: const Offset(0, 2),
           ),
@@ -420,7 +420,7 @@ class _HelpSupportScreenState extends State<HelpSupportScreen>
         gradient: LinearGradient(
           colors: [
             AppColors.primaryBlue,
-            AppColors.primaryBlue.withOpacity(0.8),
+            AppColors.primaryBlue.withValues(alpha: 0.8),
           ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
@@ -435,7 +435,7 @@ class _HelpSupportScreenState extends State<HelpSupportScreen>
               Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.2),
+                  color: Colors.white.withValues(alpha: 0.2),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: const Icon(
@@ -496,7 +496,7 @@ class _HelpSupportScreenState extends State<HelpSupportScreen>
             width: 28,
             height: 28,
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.2),
+              color: Colors.white.withValues(alpha: 0.2),
               shape: BoxShape.circle,
             ),
             child: Center(
@@ -514,7 +514,7 @@ class _HelpSupportScreenState extends State<HelpSupportScreen>
             child: Text(
               text,
               style: GoogleFonts.poppins(
-                color: Colors.white.withOpacity(0.95),
+                color: Colors.white.withValues(alpha: 0.95),
                 fontSize: 14,
               ),
             ),
@@ -655,9 +655,9 @@ class _HelpSupportScreenState extends State<HelpSupportScreen>
       margin: const EdgeInsets.only(bottom: 16),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: AppColors.primaryGreen.withOpacity(0.1),
+        color: AppColors.primaryGreen.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.primaryGreen.withOpacity(0.3)),
+        border: Border.all(color: AppColors.primaryGreen.withValues(alpha: 0.3)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -719,7 +719,7 @@ class _HelpSupportScreenState extends State<HelpSupportScreen>
           Container(
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: AppColors.primaryGreen.withOpacity(0.15),
+              color: AppColors.primaryGreen.withValues(alpha: 0.15),
               borderRadius: BorderRadius.circular(8),
             ),
             child: Icon(icon, color: AppColors.primaryGreen, size: 20),
@@ -799,7 +799,7 @@ class _HelpSupportScreenState extends State<HelpSupportScreen>
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 10,
             offset: const Offset(0, 2),
           ),
@@ -825,7 +825,7 @@ class _HelpSupportScreenState extends State<HelpSupportScreen>
                 Container(
                   padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.2),
+                    color: Colors.white.withValues(alpha: 0.2),
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: const Icon(
@@ -854,7 +854,7 @@ class _HelpSupportScreenState extends State<HelpSupportScreen>
                             ? 'المشرفين والمنسقين في منطقتك'
                             : 'Supervisors & coordinators in your area',
                         style: GoogleFonts.poppins(
-                          color: Colors.white.withOpacity(0.9),
+                          color: Colors.white.withValues(alpha: 0.9),
                           fontSize: 12,
                         ),
                       ),
@@ -988,7 +988,7 @@ class _HelpSupportScreenState extends State<HelpSupportScreen>
             icon: Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: AppColors.primaryGreen.withOpacity(0.1),
+                color: AppColors.primaryGreen.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Icon(
@@ -1006,7 +1006,7 @@ class _HelpSupportScreenState extends State<HelpSupportScreen>
               icon: Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: Colors.blue.withOpacity(0.1),
+                  color: Colors.blue.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: const Icon(Icons.phone, color: Colors.blue, size: 18),
@@ -1019,7 +1019,7 @@ class _HelpSupportScreenState extends State<HelpSupportScreen>
             icon: Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: Colors.purple.withOpacity(0.1),
+                color: Colors.purple.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: const Icon(Icons.message, color: Colors.purple, size: 18),
@@ -1165,7 +1165,7 @@ class _HelpSupportScreenState extends State<HelpSupportScreen>
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 10,
             offset: const Offset(0, 2),
           ),
@@ -1180,7 +1180,7 @@ class _HelpSupportScreenState extends State<HelpSupportScreen>
               gradient: LinearGradient(
                 colors: [
                   AppColors.primaryBlue,
-                  AppColors.primaryBlue.withOpacity(0.8),
+                  AppColors.primaryBlue.withValues(alpha: 0.8),
                 ],
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
@@ -1194,7 +1194,7 @@ class _HelpSupportScreenState extends State<HelpSupportScreen>
                 Container(
                   padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.2),
+                    color: Colors.white.withValues(alpha: 0.2),
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: const Icon(
@@ -1223,7 +1223,7 @@ class _HelpSupportScreenState extends State<HelpSupportScreen>
                             ? 'للمشاكل التقنية والإدارية'
                             : 'For technical and administrative issues',
                         style: GoogleFonts.poppins(
-                          color: Colors.white.withOpacity(0.9),
+                          color: Colors.white.withValues(alpha: 0.9),
                           fontSize: 12,
                         ),
                       ),
@@ -1300,7 +1300,7 @@ class _HelpSupportScreenState extends State<HelpSupportScreen>
                 children: [
                   CircleAvatar(
                     radius: 24,
-                    backgroundColor: AppColors.primaryBlue.withOpacity(0.1),
+                    backgroundColor: AppColors.primaryBlue.withValues(alpha: 0.1),
                     backgroundImage: avatarUrl != null
                         ? NetworkImage(avatarUrl)
                         : null,
@@ -1409,7 +1409,7 @@ class _HelpSupportScreenState extends State<HelpSupportScreen>
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         decoration: BoxDecoration(
-          color: color.withOpacity(0.1),
+          color: color.withValues(alpha: 0.1),
           borderRadius: BorderRadius.circular(8),
         ),
         child: Column(
@@ -1438,7 +1438,7 @@ class _HelpSupportScreenState extends State<HelpSupportScreen>
         gradient: LinearGradient(
           colors: [
             AppColors.primaryBlue,
-            AppColors.primaryBlue.withOpacity(0.8),
+            AppColors.primaryBlue.withValues(alpha: 0.8),
           ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
@@ -1450,7 +1450,7 @@ class _HelpSupportScreenState extends State<HelpSupportScreen>
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.2),
+              color: Colors.white.withValues(alpha: 0.2),
               borderRadius: BorderRadius.circular(12),
             ),
             child: const Icon(Icons.access_time, color: Colors.white, size: 28),
@@ -1475,7 +1475,7 @@ class _HelpSupportScreenState extends State<HelpSupportScreen>
                     vertical: 6,
                   ),
                   decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.2),
+                    color: Colors.white.withValues(alpha: 0.2),
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: Text(
@@ -1495,7 +1495,7 @@ class _HelpSupportScreenState extends State<HelpSupportScreen>
                       ? 'نحن هنا لمساعدتك في أي وقت'
                       : 'We are here to help you anytime',
                   style: GoogleFonts.poppins(
-                    color: Colors.white.withOpacity(0.9),
+                    color: Colors.white.withValues(alpha: 0.9),
                     fontSize: 12,
                   ),
                 ),
@@ -1526,7 +1526,7 @@ class _HelpSupportScreenState extends State<HelpSupportScreen>
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.2),
+                    color: Colors.white.withValues(alpha: 0.2),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: const Icon(
@@ -1553,7 +1553,7 @@ class _HelpSupportScreenState extends State<HelpSupportScreen>
                             ? 'للمشاكل العاجلة في الميدان'
                             : 'For urgent field issues',
                         style: GoogleFonts.poppins(
-                          color: Colors.white.withOpacity(0.9),
+                          color: Colors.white.withValues(alpha: 0.9),
                           fontSize: 12,
                         ),
                       ),
@@ -1613,7 +1613,7 @@ class _HelpSupportScreenState extends State<HelpSupportScreen>
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
         decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.2),
+          color: Colors.white.withValues(alpha: 0.2),
           borderRadius: BorderRadius.circular(12),
         ),
         child: Column(
@@ -1909,7 +1909,7 @@ class _HelpSupportScreenState extends State<HelpSupportScreen>
           children: [
             CircleAvatar(
               radius: 28,
-              backgroundColor: AppColors.primaryBlue.withOpacity(0.1),
+              backgroundColor: AppColors.primaryBlue.withValues(alpha: 0.1),
               backgroundImage: contact.avatarUrl != null
                   ? NetworkImage(contact.avatarUrl!)
                   : null,
@@ -1954,7 +1954,7 @@ class _HelpSupportScreenState extends State<HelpSupportScreen>
                 icon: Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: AppColors.primaryGreen.withOpacity(0.1),
+                    color: AppColors.primaryGreen.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Icon(
@@ -1970,7 +1970,7 @@ class _HelpSupportScreenState extends State<HelpSupportScreen>
                 icon: Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: AppColors.primaryBlue.withOpacity(0.1),
+                    color: AppColors.primaryBlue.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Icon(
@@ -1986,7 +1986,7 @@ class _HelpSupportScreenState extends State<HelpSupportScreen>
                 icon: Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: Colors.green.withOpacity(0.1),
+                    color: Colors.green.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: const Icon(Icons.chat, color: Colors.green, size: 20),
@@ -2005,7 +2005,7 @@ class _HelpSupportScreenState extends State<HelpSupportScreen>
         leading: Container(
           padding: const EdgeInsets.all(10),
           decoration: BoxDecoration(
-            color: Colors.purple.withOpacity(0.1),
+            color: Colors.purple.withValues(alpha: 0.1),
             borderRadius: BorderRadius.circular(10),
           ),
           child: const Icon(Icons.bug_report, color: Colors.purple),
@@ -2032,7 +2032,7 @@ class _HelpSupportScreenState extends State<HelpSupportScreen>
         leading: Container(
           padding: const EdgeInsets.all(10),
           decoration: BoxDecoration(
-            color: Colors.purple.withOpacity(0.2),
+            color: Colors.purple.withValues(alpha: 0.2),
             borderRadius: BorderRadius.circular(10),
           ),
           child: const Icon(Icons.notifications_active, color: Colors.purple),
@@ -2095,7 +2095,7 @@ class _HelpSupportScreenState extends State<HelpSupportScreen>
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: ListTile(
         leading: CircleAvatar(
-          backgroundColor: AppColors.primaryBlue.withOpacity(0.1),
+          backgroundColor: AppColors.primaryBlue.withValues(alpha: 0.1),
           child: Icon(
             Icons.article_outlined,
             color: AppColors.primaryBlue,
@@ -2171,7 +2171,7 @@ class _HelpSupportScreenState extends State<HelpSupportScreen>
                             Container(
                               padding: const EdgeInsets.all(16),
                               decoration: BoxDecoration(
-                                color: AppColors.primaryGreen.withOpacity(0.1),
+                                color: AppColors.primaryGreen.withValues(alpha: 0.1),
                                 borderRadius: BorderRadius.circular(12),
                               ),
                               child: Row(

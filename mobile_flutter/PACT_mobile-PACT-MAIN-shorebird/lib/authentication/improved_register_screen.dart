@@ -804,7 +804,7 @@ class _ImprovedRegisterScreenState extends State<ImprovedRegisterScreen>
                               borderRadius: BorderRadius.circular(16),
                               boxShadow: [
                                 BoxShadow(
-                                  color: AppColors.primaryOrange.withOpacity(
+                                  color: AppColors.primaryOrange.withValues(alpha: 
                                     0.3,
                                   ),
                                   blurRadius: 12,
@@ -891,7 +891,7 @@ class _ImprovedRegisterScreenState extends State<ImprovedRegisterScreen>
             borderRadius: BorderRadius.circular(16),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(0.03),
+                color: Colors.black.withValues(alpha: 0.03),
                 blurRadius: 15,
                 offset: const Offset(0, 8),
                 spreadRadius: -5,
@@ -972,7 +972,7 @@ class _ImprovedRegisterScreenState extends State<ImprovedRegisterScreen>
             borderRadius: BorderRadius.circular(16),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(0.03),
+                color: Colors.black.withValues(alpha: 0.03),
                 blurRadius: 15,
                 offset: const Offset(0, 8),
                 spreadRadius: -5,
@@ -1042,7 +1042,7 @@ class _ImprovedRegisterScreenState extends State<ImprovedRegisterScreen>
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.03),
+            color: Colors.black.withValues(alpha: 0.03),
             blurRadius: 15,
             offset: const Offset(0, 8),
             spreadRadius: -5,

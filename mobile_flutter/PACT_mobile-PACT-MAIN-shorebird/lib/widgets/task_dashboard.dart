@@ -108,7 +108,7 @@ class _TaskDashboardState extends State<TaskDashboard> {
                     context,
                   )!.tasksInArea(widget.availableTasks.length),
                   style: GoogleFonts.poppins(
-                    color: Colors.white.withOpacity(0.9),
+                    color: Colors.white.withValues(alpha: 0.9),
                     fontSize: subtitleFontSize,
                   ),
                 ),
@@ -149,7 +149,7 @@ class _TaskDashboardState extends State<TaskDashboard> {
                         context,
                       )!.tasksInArea(widget.availableTasks.length),
                       style: GoogleFonts.poppins(
-                        color: Colors.white.withOpacity(0.9),
+                        color: Colors.white.withValues(alpha: 0.9),
                         fontSize: subtitleFontSize,
                       ),
                     ),
@@ -202,7 +202,7 @@ class _TaskDashboardState extends State<TaskDashboard> {
                           decoration: BoxDecoration(
                             color: _getPriorityColor(
                               task.priority,
-                            ).withOpacity(0.1),
+                            ).withValues(alpha: 0.1),
                             borderRadius: BorderRadius.circular(8),
                           ),
                           child: Text(

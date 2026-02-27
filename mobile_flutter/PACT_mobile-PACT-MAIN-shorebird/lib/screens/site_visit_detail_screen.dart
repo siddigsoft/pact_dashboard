@@ -251,7 +251,7 @@ class _SiteVisitDetailScreenState extends State<SiteVisitDetailScreen> {
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         gradient: LinearGradient(
-          colors: [statusColor.withOpacity(0.8), statusColor],
+          colors: [statusColor.withValues(alpha: 0.8), statusColor],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
@@ -262,7 +262,7 @@ class _SiteVisitDetailScreenState extends State<SiteVisitDetailScreen> {
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.2),
+              color: Colors.white.withValues(alpha: 0.2),
               borderRadius: BorderRadius.circular(12),
             ),
             child: Icon(_getStatusIcon(status), color: Colors.white, size: 32),
@@ -283,7 +283,7 @@ class _SiteVisitDetailScreenState extends State<SiteVisitDetailScreen> {
                 Text(
                   _siteVisit?['siteName'] ?? '-',
                   style: GoogleFonts.poppins(
-                    color: Colors.white.withOpacity(0.9),
+                    color: Colors.white.withValues(alpha: 0.9),
                     fontSize: 14,
                   ),
                 ),
@@ -469,7 +469,7 @@ class _SiteVisitDetailScreenState extends State<SiteVisitDetailScreen> {
                 children: [
                   CircleAvatar(
                     radius: 24,
-                    backgroundColor: AppColors.primaryBlue.withOpacity(0.1),
+                    backgroundColor: AppColors.primaryBlue.withValues(alpha: 0.1),
                     child: Text(
                       (_assignedUser?['full_name'] ?? 'U')[0].toUpperCase(),
                       style: GoogleFonts.poppins(
@@ -506,7 +506,7 @@ class _SiteVisitDetailScreenState extends State<SiteVisitDetailScreen> {
                               vertical: 2,
                             ),
                             decoration: BoxDecoration(
-                              color: AppColors.primaryBlue.withOpacity(0.1),
+                              color: AppColors.primaryBlue.withValues(alpha: 0.1),
                               borderRadius: BorderRadius.circular(8),
                             ),
                             child: Text(
@@ -626,7 +626,7 @@ class _SiteVisitDetailScreenState extends State<SiteVisitDetailScreen> {
                     vertical: 6,
                   ),
                   decoration: BoxDecoration(
-                    color: AppColors.primaryGreen.withOpacity(0.1),
+                    color: AppColors.primaryGreen.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: Text(

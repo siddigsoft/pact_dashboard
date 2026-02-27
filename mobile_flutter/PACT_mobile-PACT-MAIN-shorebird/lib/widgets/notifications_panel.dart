@@ -176,7 +176,7 @@ class NotificationItem extends StatelessWidget {
       },
       child: Container(
         color: isUnread
-            ? AppColors.primaryBlue.withOpacity(0.05)
+            ? AppColors.primaryBlue.withValues(alpha: 0.05)
             : Colors.transparent,
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
         child: Row(
@@ -189,7 +189,7 @@ class NotificationItem extends StatelessWidget {
               decoration: BoxDecoration(
                 color: _getNotificationColor(
                   notification.type ?? 'info',
-                ).withOpacity(0.1),
+                ).withValues(alpha: 0.1),
                 shape: BoxShape.circle,
               ),
               child: Icon(

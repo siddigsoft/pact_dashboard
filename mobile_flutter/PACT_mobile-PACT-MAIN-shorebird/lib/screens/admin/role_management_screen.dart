@@ -225,7 +225,7 @@ class _RoleManagementScreenState extends State<RoleManagementScreen> {
         gradient: LinearGradient(
           colors: [
             AppColors.primaryBlue,
-            AppColors.primaryBlue.withOpacity(0.8),
+            AppColors.primaryBlue.withValues(alpha: 0.8),
           ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
@@ -240,7 +240,7 @@ class _RoleManagementScreenState extends State<RoleManagementScreen> {
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.2),
+                  color: Colors.white.withValues(alpha: 0.2),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: const Icon(Icons.people, color: Colors.white, size: 28),
@@ -252,7 +252,7 @@ class _RoleManagementScreenState extends State<RoleManagementScreen> {
                   Text(
                     widget.isArabic ? 'إجمالي المستخدمين' : 'Total Users',
                     style: GoogleFonts.poppins(
-                      color: Colors.white.withOpacity(0.8),
+                      color: Colors.white.withValues(alpha: 0.8),
                       fontSize: 14,
                     ),
                   ),
@@ -272,7 +272,7 @@ class _RoleManagementScreenState extends State<RoleManagementScreen> {
           Text(
             widget.isArabic ? 'توزيع الأدوار' : 'Role Distribution',
             style: GoogleFonts.poppins(
-              color: Colors.white.withOpacity(0.8),
+              color: Colors.white.withValues(alpha: 0.8),
               fontSize: 13,
             ),
           ),
@@ -316,7 +316,7 @@ class _RoleManagementScreenState extends State<RoleManagementScreen> {
                   Text(
                     '${widget.isArabic ? role['name_ar'] : role['name_en']}: $count',
                     style: GoogleFonts.poppins(
-                      color: Colors.white.withOpacity(0.9),
+                      color: Colors.white.withValues(alpha: 0.9),
                       fontSize: 11,
                     ),
                   ),
@@ -348,7 +348,7 @@ class _RoleManagementScreenState extends State<RoleManagementScreen> {
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: color.withOpacity(0.1),
+                    color: color.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Icon(icon, color: color, size: 24),
@@ -384,7 +384,7 @@ class _RoleManagementScreenState extends State<RoleManagementScreen> {
                     vertical: 6,
                   ),
                   decoration: BoxDecoration(
-                    color: color.withOpacity(0.1),
+                    color: color.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: Text(

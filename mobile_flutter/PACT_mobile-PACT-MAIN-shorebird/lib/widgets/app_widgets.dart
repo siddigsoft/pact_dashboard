@@ -28,7 +28,7 @@ class AppSnackBar {
             Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.2),
+                color: Colors.white.withValues(alpha: 0.2),
                 borderRadius: BorderRadius.circular(AppDesignSystem.radiusSM),
               ),
               child: Icon(config.icon, color: Colors.white, size: 20),
@@ -139,7 +139,7 @@ class AppErrorDialog extends StatelessWidget {
             Container(
                   padding: const EdgeInsets.all(AppDesignSystem.spaceLG),
                   decoration: BoxDecoration(
-                    color: AppColors.accentRed.withOpacity(0.1),
+                    color: AppColors.accentRed.withValues(alpha: 0.1),
                     shape: BoxShape.circle,
                   ),
                   child: const Icon(
@@ -258,7 +258,7 @@ class AppSuccessDialog extends StatelessWidget {
             Container(
               padding: const EdgeInsets.all(AppDesignSystem.spaceLG),
               decoration: BoxDecoration(
-                color: AppColors.accentGreen.withOpacity(0.1),
+                color: AppColors.accentGreen.withValues(alpha: 0.1),
                 shape: BoxShape.circle,
               ),
               child: const Icon(
@@ -497,9 +497,9 @@ class StatusBadge extends StatelessWidget {
         vertical: verticalPadding,
       ),
       decoration: BoxDecoration(
-        color: config.color.withOpacity(0.1),
+        color: config.color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(AppDesignSystem.radiusFull),
-        border: Border.all(color: config.color.withOpacity(0.3), width: 1),
+        border: Border.all(color: config.color.withValues(alpha: 0.3), width: 1),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,

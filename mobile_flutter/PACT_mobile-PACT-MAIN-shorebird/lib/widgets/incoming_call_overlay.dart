@@ -127,9 +127,9 @@ class _IncomingCallOverlayState extends State<IncomingCallOverlay>
                     begin: Alignment.topCenter,
                     end: Alignment.bottomCenter,
                     colors: [
-                      Colors.black.withOpacity(0.7),
-                      const Color(0xFF1a1a2e).withOpacity(0.95),
-                      const Color(0xFF0f0f1a).withOpacity(0.98),
+                      Colors.black.withValues(alpha: 0.7),
+                      const Color(0xFF1a1a2e).withValues(alpha: 0.95),
+                      const Color(0xFF0f0f1a).withValues(alpha: 0.98),
                     ],
                   ),
                 ),
@@ -165,10 +165,10 @@ class _IncomingCallOverlayState extends State<IncomingCallOverlay>
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.1),
+              color: Colors.white.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(30),
               border: Border.all(
-                color: Colors.white.withOpacity(0.2),
+                color: Colors.white.withValues(alpha: 0.2),
                 width: 1,
               ),
             ),
@@ -183,7 +183,7 @@ class _IncomingCallOverlayState extends State<IncomingCallOverlay>
                     shape: BoxShape.circle,
                     boxShadow: [
                       BoxShadow(
-                        color: AppColors.primaryGreen.withOpacity(0.5),
+                        color: AppColors.primaryGreen.withValues(alpha: 0.5),
                         blurRadius: 8,
                         spreadRadius: 2,
                       ),
@@ -246,7 +246,7 @@ class _IncomingCallOverlayState extends State<IncomingCallOverlay>
                         (widget.isVideoCall
                                 ? AppColors.primaryBlue
                                 : AppColors.primaryGreen)
-                            .withOpacity(_glowAnimation.value),
+                            .withValues(alpha: _glowAnimation.value),
                     blurRadius: 40,
                     spreadRadius: 10,
                   ),
@@ -271,15 +271,15 @@ class _IncomingCallOverlayState extends State<IncomingCallOverlay>
                     colors: widget.isVideoCall
                         ? [
                             AppColors.primaryBlue,
-                            AppColors.primaryBlue.withOpacity(0.7),
+                            AppColors.primaryBlue.withValues(alpha: 0.7),
                           ]
                         : [
                             AppColors.primaryGreen,
-                            AppColors.primaryGreen.withOpacity(0.7),
+                            AppColors.primaryGreen.withValues(alpha: 0.7),
                           ],
                   ),
                   border: Border.all(
-                    color: Colors.white.withOpacity(0.3),
+                    color: Colors.white.withValues(alpha: 0.3),
                     width: 3,
                   ),
                 ),
@@ -345,7 +345,7 @@ class _IncomingCallOverlayState extends State<IncomingCallOverlay>
                       vertical: 6,
                     ),
                     decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.1),
+                      color: Colors.white.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(20),
                     ),
                     child: Text(
@@ -459,12 +459,12 @@ class _IncomingCallOverlayState extends State<IncomingCallOverlay>
                     gradient: LinearGradient(
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,
-                      colors: [color, color.withOpacity(0.8)],
+                      colors: [color, color.withValues(alpha: 0.8)],
                     ),
                     shape: BoxShape.circle,
                     boxShadow: [
                       BoxShadow(
-                        color: shadowColor.withOpacity(0.4),
+                        color: shadowColor.withValues(alpha: 0.4),
                         blurRadius: 20,
                         spreadRadius: 2,
                         offset: const Offset(0, 4),
@@ -507,7 +507,7 @@ class EnhancedRipplePainter extends CustomPainter {
       final opacity = (1 - progress) * 0.4;
 
       final paint = Paint()
-        ..color = color.withOpacity(opacity)
+        ..color = color.withValues(alpha: opacity)
         ..style = PaintingStyle.stroke
         ..strokeWidth = 2 + (2 * (1 - progress));
 
@@ -601,18 +601,18 @@ class _IncomingCallPopupState extends State<IncomingCallPopup>
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,
                       colors: [
-                        Colors.black.withOpacity(0.85),
-                        Colors.black.withOpacity(0.75),
+                        Colors.black.withValues(alpha: 0.85),
+                        Colors.black.withValues(alpha: 0.75),
                       ],
                     ),
                     borderRadius: BorderRadius.circular(20),
                     border: Border.all(
-                      color: Colors.white.withOpacity(0.2),
+                      color: Colors.white.withValues(alpha: 0.2),
                       width: 1,
                     ),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withOpacity(0.3),
+                        color: Colors.black.withValues(alpha: 0.3),
                         blurRadius: 20,
                         spreadRadius: 5,
                       ),
@@ -634,15 +634,15 @@ class _IncomingCallPopupState extends State<IncomingCallPopup>
                                 colors: widget.isVideoCall
                                     ? [
                                         AppColors.primaryBlue,
-                                        AppColors.primaryBlue.withOpacity(0.7),
+                                        AppColors.primaryBlue.withValues(alpha: 0.7),
                                       ]
                                     : [
                                         AppColors.primaryGreen,
-                                        AppColors.primaryGreen.withOpacity(0.7),
+                                        AppColors.primaryGreen.withValues(alpha: 0.7),
                                       ],
                               ),
                               border: Border.all(
-                                color: Colors.white.withOpacity(0.3),
+                                color: Colors.white.withValues(alpha: 0.3),
                                 width: 2,
                               ),
                             ),
@@ -751,7 +751,7 @@ class _IncomingCallPopupState extends State<IncomingCallPopup>
                                   borderRadius: BorderRadius.circular(14),
                                   boxShadow: [
                                     BoxShadow(
-                                      color: Colors.red.withOpacity(0.3),
+                                      color: Colors.red.withValues(alpha: 0.3),
                                       blurRadius: 10,
                                       spreadRadius: 1,
                                     ),
@@ -800,7 +800,7 @@ class _IncomingCallPopupState extends State<IncomingCallPopup>
                                   borderRadius: BorderRadius.circular(14),
                                   boxShadow: [
                                     BoxShadow(
-                                      color: Colors.green.withOpacity(0.3),
+                                      color: Colors.green.withValues(alpha: 0.3),
                                       blurRadius: 10,
                                       spreadRadius: 1,
                                     ),

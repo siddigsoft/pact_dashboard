@@ -1829,7 +1829,7 @@ class _MMPScreenState extends State<MMPScreen> {
                   borderRadius: BorderRadius.circular(24),
                   boxShadow: [
                     BoxShadow(
-                      color: AppColors.primaryBlue.withOpacity(0.3),
+                      color: AppColors.primaryBlue.withValues(alpha: 0.3),
                       blurRadius: 20,
                       offset: const Offset(0, 10),
                     ),
@@ -1847,12 +1847,12 @@ class _MMPScreenState extends State<MMPScreen> {
                         gradient: LinearGradient(
                           colors: [
                             AppColors.primaryBlue,
-                            AppColors.primaryBlue.withOpacity(0.6),
+                            AppColors.primaryBlue.withValues(alpha: 0.6),
                           ],
                         ),
                         boxShadow: [
                           BoxShadow(
-                            color: AppColors.primaryBlue.withOpacity(0.4),
+                            color: AppColors.primaryBlue.withValues(alpha: 0.4),
                             blurRadius: 15,
                             offset: const Offset(0, 5),
                           ),
@@ -1865,7 +1865,7 @@ class _MMPScreenState extends State<MMPScreen> {
                           valueColor: const AlwaysStoppedAnimation<Color>(
                             Colors.white,
                           ),
-                          backgroundColor: Colors.white.withOpacity(0.3),
+                          backgroundColor: Colors.white.withValues(alpha: 0.3),
                         ),
                       ),
                     ),
@@ -2105,7 +2105,7 @@ class _MMPScreenState extends State<MMPScreen> {
               borderRadius: BorderRadius.circular(24),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.1),
+                  color: Colors.black.withValues(alpha: 0.1),
                   blurRadius: 20,
                   offset: const Offset(0, 10),
                 ),
@@ -2121,7 +2121,7 @@ class _MMPScreenState extends State<MMPScreen> {
                     gradient: LinearGradient(
                       colors: [
                         AppColors.primaryBlue,
-                        AppColors.primaryBlue.withOpacity(0.85),
+                        AppColors.primaryBlue.withValues(alpha: 0.85),
                       ],
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,
@@ -2138,7 +2138,7 @@ class _MMPScreenState extends State<MMPScreen> {
                           Container(
                             padding: const EdgeInsets.all(12),
                             decoration: BoxDecoration(
-                              color: Colors.white.withOpacity(0.2),
+                              color: Colors.white.withValues(alpha: 0.2),
                               borderRadius: BorderRadius.circular(12),
                             ),
                             child: const Icon(
@@ -2164,7 +2164,7 @@ class _MMPScreenState extends State<MMPScreen> {
                                   'Review assignment details',
                                   style: GoogleFonts.poppins(
                                     fontSize: 13,
-                                    color: Colors.white.withOpacity(0.9),
+                                    color: Colors.white.withValues(alpha: 0.9),
                                   ),
                                 ),
                               ],
@@ -2190,7 +2190,7 @@ class _MMPScreenState extends State<MMPScreen> {
                               Container(
                                 padding: const EdgeInsets.all(8),
                                 decoration: BoxDecoration(
-                                  color: AppColors.primaryBlue.withOpacity(0.1),
+                                  color: AppColors.primaryBlue.withValues(alpha: 0.1),
                                   borderRadius: BorderRadius.circular(8),
                                 ),
                                 child: Icon(
@@ -2296,7 +2296,7 @@ class _MMPScreenState extends State<MMPScreen> {
                                 BoxShadow(
                                   color: const Color(
                                     0xFF10B981,
-                                  ).withOpacity(0.4),
+                                  ).withValues(alpha: 0.4),
                                   blurRadius: 12,
                                   offset: const Offset(0, 6),
                                 ),
@@ -2309,7 +2309,7 @@ class _MMPScreenState extends State<MMPScreen> {
                                   children: [
                                     Icon(
                                       Icons.payments_rounded,
-                                      color: Colors.white.withOpacity(0.9),
+                                      color: Colors.white.withValues(alpha: 0.9),
                                       size: 24,
                                     ),
                                     const SizedBox(width: 8),
@@ -2317,7 +2317,7 @@ class _MMPScreenState extends State<MMPScreen> {
                                       'Total Payment',
                                       style: GoogleFonts.poppins(
                                         fontSize: 15,
-                                        color: Colors.white.withOpacity(0.95),
+                                        color: Colors.white.withValues(alpha: 0.95),
                                         fontWeight: FontWeight.w600,
                                         letterSpacing: 0.5,
                                       ),
@@ -2336,7 +2336,7 @@ class _MMPScreenState extends State<MMPScreen> {
                                         style: GoogleFonts.poppins(
                                           fontSize: 18,
                                           fontWeight: FontWeight.w600,
-                                          color: Colors.white.withOpacity(0.9),
+                                          color: Colors.white.withValues(alpha: 0.9),
                                         ),
                                       ),
                                     ),
@@ -2359,7 +2359,7 @@ class _MMPScreenState extends State<MMPScreen> {
                                     vertical: 6,
                                   ),
                                   decoration: BoxDecoration(
-                                    color: Colors.white.withOpacity(0.2),
+                                    color: Colors.white.withValues(alpha: 0.2),
                                     borderRadius: BorderRadius.circular(20),
                                   ),
                                   child: Row(
@@ -2368,14 +2368,14 @@ class _MMPScreenState extends State<MMPScreen> {
                                       Icon(
                                         Icons.check_circle_rounded,
                                         size: 14,
-                                        color: Colors.white.withOpacity(0.9),
+                                        color: Colors.white.withValues(alpha: 0.9),
                                       ),
                                       const SizedBox(width: 6),
                                       Text(
                                         'Upon visit completion',
                                         style: GoogleFonts.poppins(
                                           fontSize: 11,
-                                          color: Colors.white.withOpacity(0.9),
+                                          color: Colors.white.withValues(alpha: 0.9),
                                           fontWeight: FontWeight.w500,
                                         ),
                                       ),
@@ -2470,7 +2470,7 @@ class _MMPScreenState extends State<MMPScreen> {
                             backgroundColor: AppColors.primaryBlue,
                             foregroundColor: Colors.white,
                             elevation: 2,
-                            shadowColor: AppColors.primaryBlue.withOpacity(0.5),
+                            shadowColor: AppColors.primaryBlue.withValues(alpha: 0.5),
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(12),
                             ),
@@ -2510,7 +2510,7 @@ class _MMPScreenState extends State<MMPScreen> {
         Container(
           padding: const EdgeInsets.all(6),
           decoration: BoxDecoration(
-            color: AppColors.primaryBlue.withOpacity(0.1),
+            color: AppColors.primaryBlue.withValues(alpha: 0.1),
             borderRadius: BorderRadius.circular(6),
           ),
           child: Icon(icon, color: AppColors.primaryBlue, size: 18),
@@ -2891,9 +2891,9 @@ class _MMPScreenState extends State<MMPScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
       decoration: BoxDecoration(
-        color: badgeColor.withOpacity(0.1),
+        color: badgeColor.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: badgeColor.withOpacity(0.3)),
+        border: Border.all(color: badgeColor.withValues(alpha: 0.3)),
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -3926,7 +3926,7 @@ class _MMPScreenState extends State<MMPScreen> {
             ),
             boxShadow: [
               BoxShadow(
-                color: Colors.blue.withOpacity(0.3),
+                color: Colors.blue.withValues(alpha: 0.3),
                 blurRadius: 10,
                 offset: const Offset(0, 4),
               ),
@@ -3940,7 +3940,7 @@ class _MMPScreenState extends State<MMPScreen> {
                   Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.2),
+                      color: Colors.white.withValues(alpha: 0.2),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: const Icon(
@@ -3967,7 +3967,7 @@ class _MMPScreenState extends State<MMPScreen> {
                               'Claim, manage, and complete site visits',
                           style: GoogleFonts.poppins(
                             fontSize: 12,
-                            color: Colors.white.withOpacity(0.9),
+                            color: Colors.white.withValues(alpha: 0.9),
                           ),
                         ),
                       ],
@@ -4128,7 +4128,7 @@ class _MMPScreenState extends State<MMPScreen> {
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
               decoration: BoxDecoration(
                 color: isActive
-                    ? AppColors.primaryBlue.withOpacity(0.1)
+                    ? AppColors.primaryBlue.withValues(alpha: 0.1)
                     : AppColors.backgroundGray,
                 borderRadius: BorderRadius.circular(12),
               ),
@@ -4162,7 +4162,7 @@ class _MMPScreenState extends State<MMPScreen> {
         padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
         decoration: BoxDecoration(
           color: isActive
-              ? AppColors.primaryBlue.withOpacity(0.1)
+              ? AppColors.primaryBlue.withValues(alpha: 0.1)
               : Colors.transparent,
           border: Border(
             bottom: BorderSide(
@@ -4592,7 +4592,7 @@ class _MMPScreenState extends State<MMPScreen> {
         border: Border.all(color: AppColors.backgroundGray),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 5,
             offset: const Offset(0, 2),
           ),
@@ -4639,7 +4639,7 @@ class _MMPScreenState extends State<MMPScreen> {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
-                  color: _getStatusColor(status).withOpacity(0.1),
+                  color: _getStatusColor(status).withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(
@@ -4719,7 +4719,7 @@ class _MMPScreenState extends State<MMPScreen> {
             ),
             boxShadow: [
               BoxShadow(
-                color: Colors.blue.withOpacity(0.3),
+                color: Colors.blue.withValues(alpha: 0.3),
                 blurRadius: 10,
                 offset: const Offset(0, 4),
               ),
@@ -4733,7 +4733,7 @@ class _MMPScreenState extends State<MMPScreen> {
                   Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.2),
+                      color: Colors.white.withValues(alpha: 0.2),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: const Icon(
@@ -4759,7 +4759,7 @@ class _MMPScreenState extends State<MMPScreen> {
                           'Sites forwarded to you for verification',
                           style: GoogleFonts.poppins(
                             fontSize: 12,
-                            color: Colors.white.withOpacity(0.9),
+                            color: Colors.white.withValues(alpha: 0.9),
                           ),
                         ),
                       ],
@@ -4896,7 +4896,7 @@ class _MMPScreenState extends State<MMPScreen> {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
-                  color: _getStatusColor(status).withOpacity(0.1),
+                  color: _getStatusColor(status).withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(

@@ -63,7 +63,7 @@ class SafetyHubScreen extends StatelessWidget {
             icon: Icons.info_outline_rounded,
             tooltip: AppLocalizations.of(context)!.information,
             color: Colors.white,
-            backgroundColor: Colors.white.withOpacity(0.2),
+            backgroundColor: Colors.white.withValues(alpha: 0.2),
             onPressed: () {},
           ),
         ],
@@ -94,7 +94,7 @@ class SafetyHubScreen extends StatelessWidget {
             icon: Icons.checklist_rounded,
             title: AppLocalizations.of(context)!.safetyChecklist,
             iconBackgroundColor:
-                const Color(0xFFFF9800).withOpacity(0.15), // Orange background
+                const Color(0xFFFF9800).withValues(alpha: 0.15), // Orange background
             iconColor: const Color(0xFFFF9800), // Orange icon
           ),
           _buildSafetyItem(
@@ -102,7 +102,7 @@ class SafetyHubScreen extends StatelessWidget {
             icon: Icons.warning_amber_rounded,
             title: AppLocalizations.of(context)!.incidentReport,
             iconBackgroundColor:
-                const Color(0xFF1976D2).withOpacity(0.15), // Blue background
+                const Color(0xFF1976D2).withValues(alpha: 0.15), // Blue background
             iconColor: const Color(0xFF1976D2), // Blue icon
           ),
           _buildSafetyItem(
@@ -110,7 +110,7 @@ class SafetyHubScreen extends StatelessWidget {
             icon: Icons.support_agent,
             title: AppLocalizations.of(context)!.regionalHelplines,
             iconBackgroundColor:
-                const Color(0xFF4CAF50).withOpacity(0.15), // Green background
+                const Color(0xFF4CAF50).withValues(alpha: 0.15), // Green background
             iconColor: const Color(0xFF4CAF50), // Green icon
           ),
         ],
@@ -139,7 +139,7 @@ class SafetyHubScreen extends StatelessWidget {
         ],
         border: Border.all(
           color:
-              const Color(0xFFFF9800).withOpacity(0.1), // Light orange border
+              const Color(0xFFFF9800).withValues(alpha: 0.1), // Light orange border
           width: 1,
         ),
       ),
@@ -222,7 +222,7 @@ class SafetyHubScreen extends StatelessWidget {
                 borderRadius: BorderRadius.circular(16),
                 boxShadow: [
                   BoxShadow(
-                    color: const Color(0xFF1976D2).withOpacity(0.3),
+                    color: const Color(0xFF1976D2).withValues(alpha: 0.3),
                     blurRadius: 10,
                     offset: const Offset(0, 5),
                     spreadRadius: -2,
@@ -264,7 +264,7 @@ class SafetyHubScreen extends StatelessWidget {
                         // View more safety tips
                       },
                       style: TextButton.styleFrom(
-                        backgroundColor: Colors.white.withOpacity(0.3),
+                        backgroundColor: Colors.white.withValues(alpha: 0.3),
                         padding: const EdgeInsets.symmetric(
                           horizontal: 16,
                           vertical: 8,

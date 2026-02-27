@@ -467,7 +467,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                         children: [
                           CircleAvatar(
                             radius: 60,
-                            backgroundColor: AppColors.primaryBlue.withOpacity(
+                            backgroundColor: AppColors.primaryBlue.withValues(alpha: 
                               0.2,
                             ),
                             backgroundImage: _selectedImageBytes != null
@@ -712,7 +712,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         border: Border.all(color: Colors.orange.shade100),
         boxShadow: [
           BoxShadow(
-            color: Colors.orange.withOpacity(0.06),
+            color: Colors.orange.withValues(alpha: 0.06),
             blurRadius: 8,
             offset: const Offset(0, 2),
           ),
@@ -725,7 +725,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             decoration: BoxDecoration(
-              color: AppColors.primaryOrange.withOpacity(0.08),
+              color: AppColors.primaryOrange.withValues(alpha: 0.08),
               borderRadius:
                   const BorderRadius.vertical(top: Radius.circular(12)),
             ),
@@ -744,7 +744,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                     Text('التصنيفات',
                         style: GoogleFonts.poppins(
                             fontSize: 10,
-                            color: AppColors.primaryOrange.withOpacity(0.8))),
+                            color: AppColors.primaryOrange.withValues(alpha: 0.8))),
                   ],
                 ),
                 const Spacer(),
@@ -753,7 +753,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                     padding: const EdgeInsets.symmetric(
                         horizontal: 8, vertical: 3),
                     decoration: BoxDecoration(
-                      color: AppColors.primaryOrange.withOpacity(0.15),
+                      color: AppColors.primaryOrange.withValues(alpha: 0.15),
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: Text('${_classifications.length} records',
@@ -822,14 +822,14 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                                   border: isCurrent
                                       ? Border.all(
                                           color: AppColors.primaryOrange
-                                              .withOpacity(0.3),
+                                              .withValues(alpha: 0.3),
                                           width: 3)
                                       : null,
                                   boxShadow: isCurrent
                                       ? [
                                           BoxShadow(
                                             color: AppColors.primaryOrange
-                                                .withOpacity(0.35),
+                                                .withValues(alpha: 0.35),
                                             blurRadius: 6,
                                           )
                                         ]
@@ -859,13 +859,13 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                             decoration: BoxDecoration(
                               color: isCurrent
                                   ? AppColors.primaryOrange
-                                      .withOpacity(0.07)
+                                      .withValues(alpha: 0.07)
                                   : Colors.grey.shade50,
                               borderRadius: BorderRadius.circular(10),
                               border: Border.all(
                                 color: isCurrent
                                     ? AppColors.primaryOrange
-                                        .withOpacity(0.35)
+                                        .withValues(alpha: 0.35)
                                     : Colors.grey.shade200,
                                 width: isCurrent ? 1.5 : 1,
                               ),
@@ -954,7 +954,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                                     decoration: BoxDecoration(
                                       color: isCurrent
                                           ? AppColors.primaryOrange
-                                              .withOpacity(0.1)
+                                              .withValues(alpha: 0.1)
                                           : Colors.blue.shade50,
                                       borderRadius:
                                           BorderRadius.circular(6),
@@ -1005,9 +1005,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       margin: const EdgeInsets.only(bottom: 16),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Colors.orange.withOpacity(0.1),
+        color: Colors.orange.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.orange.withOpacity(0.3)),
+        border: Border.all(color: Colors.orange.withValues(alpha: 0.3)),
       ),
       child: Row(
         children: [
@@ -1088,7 +1088,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 10,
             offset: const Offset(0, 2),
           ),
@@ -1100,7 +1100,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: color.withOpacity(0.1),
+              color: color.withValues(alpha: 0.1),
               borderRadius: const BorderRadius.only(
                 topLeft: Radius.circular(16),
                 topRight: Radius.circular(16),
@@ -1180,13 +1180,13 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: hasAccount
-            ? Colors.green.withOpacity(0.05)
-            : Colors.orange.withOpacity(0.05),
+            ? Colors.green.withValues(alpha: 0.05)
+            : Colors.orange.withValues(alpha: 0.05),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
           color: hasAccount
-              ? Colors.green.withOpacity(0.3)
-              : Colors.orange.withOpacity(0.4),
+              ? Colors.green.withValues(alpha: 0.3)
+              : Colors.orange.withValues(alpha: 0.4),
         ),
       ),
       child: Column(
@@ -1217,9 +1217,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                   decoration: BoxDecoration(
-                    color: AppColors.primaryBlue.withOpacity(0.1),
+                    color: AppColors.primaryBlue.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: AppColors.primaryBlue.withOpacity(0.3)),
+                    border: Border.all(color: AppColors.primaryBlue.withValues(alpha: 0.3)),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,

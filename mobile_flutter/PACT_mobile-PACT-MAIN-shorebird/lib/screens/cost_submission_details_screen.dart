@@ -143,7 +143,7 @@ class _CostSubmissionDetailsScreenState extends State<CostSubmissionDetailsScree
       width: double.infinity,
       decoration: BoxDecoration(
         gradient: LinearGradient(
-          colors: [Theme.of(context).primaryColor, Theme.of(context).primaryColor.withOpacity(0.8)],
+          colors: [Theme.of(context).primaryColor, Theme.of(context).primaryColor.withValues(alpha: 0.8)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
@@ -176,7 +176,7 @@ class _CostSubmissionDetailsScreenState extends State<CostSubmissionDetailsScree
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
               decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.2),
+                color: Colors.white.withValues(alpha: 0.2),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Text(
@@ -326,7 +326,7 @@ class _CostSubmissionDetailsScreenState extends State<CostSubmissionDetailsScree
               height: 24,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: stepColor.withOpacity(0.2),
+                color: stepColor.withValues(alpha: 0.2),
                 border: Border.all(color: stepColor, width: 2),
               ),
               child: Icon(
@@ -353,9 +353,9 @@ class _CostSubmissionDetailsScreenState extends State<CostSubmissionDetailsScree
                   Container(
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
-                      color: Colors.grey.withOpacity(0.05),
+                      color: Colors.grey.withValues(alpha: 0.05),
                       borderRadius: BorderRadius.circular(6),
-                      border: Border.all(color: Colors.grey.withOpacity(0.2)),
+                      border: Border.all(color: Colors.grey.withValues(alpha: 0.2)),
                     ),
                     child: Text(
                       notes.replaceAll(RegExp(r'\[Signed:.*?\]'), '').trim(),
@@ -375,9 +375,9 @@ class _CostSubmissionDetailsScreenState extends State<CostSubmissionDetailsScree
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Colors.green.withOpacity(0.05),
+        color: Colors.green.withValues(alpha: 0.05),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.green.withOpacity(0.3)),
+        border: Border.all(color: Colors.green.withValues(alpha: 0.3)),
       ),
       child: Row(
         children: [
@@ -411,7 +411,7 @@ class _CostSubmissionDetailsScreenState extends State<CostSubmissionDetailsScree
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
                   decoration: BoxDecoration(
-                    color: Theme.of(context).primaryColor.withOpacity(0.1),
+                    color: Theme.of(context).primaryColor.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Text(

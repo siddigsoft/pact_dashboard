@@ -193,19 +193,19 @@ class _SupportTicketsScreenState extends State<SupportTicketsScreen>
                           _buildStatChip(
                             'Total',
                             _countByStatus('all'),
-                            Colors.white.withOpacity(0.2),
+                            Colors.white.withValues(alpha: 0.2),
                           ),
                           const SizedBox(width: 8),
                           _buildStatChip(
                             'Open',
                             _countByStatus('open'),
-                            Colors.orange.withOpacity(0.3),
+                            Colors.orange.withValues(alpha: 0.3),
                           ),
                           const SizedBox(width: 8),
                           _buildStatChip(
                             'Resolved',
                             _countByStatus('resolved'),
-                            Colors.green.withOpacity(0.3),
+                            Colors.green.withValues(alpha: 0.3),
                           ),
                         ],
                       ),
@@ -308,7 +308,7 @@ class _SupportTicketsScreenState extends State<SupportTicketsScreen>
       decoration: BoxDecoration(
         color: bgColor,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.white.withOpacity(0.1)),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -325,7 +325,7 @@ class _SupportTicketsScreenState extends State<SupportTicketsScreen>
             label,
             style: TextStyle(
               fontSize: 11,
-              color: Colors.white.withOpacity(0.8),
+              color: Colors.white.withValues(alpha: 0.8),
             ),
           ),
         ],
@@ -341,7 +341,7 @@ class _SupportTicketsScreenState extends State<SupportTicketsScreen>
           Icon(
             Icons.support_agent,
             size: 64,
-            color: Colors.grey.withOpacity(0.3),
+            color: Colors.grey.withValues(alpha: 0.3),
           ),
           const SizedBox(height: 16),
           Text(
@@ -404,10 +404,10 @@ class _SupportTicketsScreenState extends State<SupportTicketsScreen>
                       vertical: 4,
                     ),
                     decoration: BoxDecoration(
-                      color: _priorityColor(ticket.priority).withOpacity(0.1),
+                      color: _priorityColor(ticket.priority).withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(8),
                       border: Border.all(
-                        color: _priorityColor(ticket.priority).withOpacity(0.3),
+                        color: _priorityColor(ticket.priority).withValues(alpha: 0.3),
                       ),
                     ),
                     child: Row(
@@ -458,7 +458,7 @@ class _SupportTicketsScreenState extends State<SupportTicketsScreen>
                       vertical: 4,
                     ),
                     decoration: BoxDecoration(
-                      color: _statusColor(ticket.status).withOpacity(0.1),
+                      color: _statusColor(ticket.status).withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Text(
@@ -477,7 +477,7 @@ class _SupportTicketsScreenState extends State<SupportTicketsScreen>
                       vertical: 4,
                     ),
                     decoration: BoxDecoration(
-                      color: Colors.grey.withOpacity(0.1),
+                      color: Colors.grey.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Text(

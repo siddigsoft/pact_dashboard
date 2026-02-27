@@ -57,7 +57,7 @@ class DashboardCard extends StatelessWidget {
       ]; // purple-500 to purple-700
     } else {
       // Default gradient
-      return [color, color.withOpacity(0.7)];
+      return [color, color.withValues(alpha: 0.7)];
     }
   }
 
@@ -77,7 +77,7 @@ class DashboardCard extends StatelessWidget {
           borderRadius: BorderRadius.circular(16),
           boxShadow: [
             BoxShadow(
-              color: gradientColors[0].withOpacity(0.3),
+              color: gradientColors[0].withValues(alpha: 0.3),
               blurRadius: 12,
               offset: const Offset(0, 4),
               spreadRadius: 0,
@@ -115,13 +115,13 @@ class DashboardCard extends StatelessWidget {
                           style: GoogleFonts.poppins(
                             fontSize: 14,
                             fontWeight: FontWeight.w500,
-                            color: Colors.white.withOpacity(0.9),
+                            color: Colors.white.withValues(alpha: 0.9),
                           ),
                         ),
                       ),
                       Icon(
                         icon,
-                        color: Colors.white.withOpacity(0.8),
+                        color: Colors.white.withValues(alpha: 0.8),
                         size: 20,
                       ),
                       if (onTap != null) ...[
@@ -129,7 +129,7 @@ class DashboardCard extends StatelessWidget {
                         Icon(
                           Icons.arrow_forward_ios_rounded,
                           size: 14,
-                          color: Colors.white.withOpacity(0.7),
+                          color: Colors.white.withValues(alpha: 0.7),
                         ),
                       ],
                     ],
@@ -152,7 +152,7 @@ class DashboardCard extends StatelessWidget {
                       subtitle!,
                       style: GoogleFonts.poppins(
                         fontSize: 12,
-                        color: Colors.white.withOpacity(0.8),
+                        color: Colors.white.withValues(alpha: 0.8),
                       ),
                     ),
                   ],

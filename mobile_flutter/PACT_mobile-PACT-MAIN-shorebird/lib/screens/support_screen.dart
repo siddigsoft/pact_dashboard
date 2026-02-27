@@ -263,7 +263,7 @@ PACT Mobile Support System
             end: Alignment.bottomCenter,
             colors: [
               AppColors.primaryWhite,
-              AppColors.backgroundGray.withOpacity(0.3),
+              AppColors.backgroundGray.withValues(alpha: 0.3),
             ],
           ),
         ),
@@ -405,7 +405,7 @@ PACT Mobile Support System
           borderRadius: BorderRadius.circular(12),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.05),
+              color: Colors.black.withValues(alpha: 0.05),
               blurRadius: 10,
               offset: const Offset(0, 2),
             ),
@@ -434,7 +434,7 @@ PACT Mobile Support System
                     vertical: 4,
                   ),
                   decoration: BoxDecoration(
-                    color: _statusColor(ticket.status).withOpacity(0.15),
+                    color: _statusColor(ticket.status).withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: Text(
@@ -467,7 +467,7 @@ PACT Mobile Support System
                     vertical: 2,
                   ),
                   decoration: BoxDecoration(
-                    color: _priorityColor(ticket.priority).withOpacity(0.1),
+                    color: _priorityColor(ticket.priority).withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(4),
                   ),
                   child: Row(
@@ -641,7 +641,7 @@ PACT Mobile Support System
                     padding: const EdgeInsets.symmetric(vertical: 12),
                     decoration: BoxDecoration(
                       color: isSelected
-                          ? (p['color'] as Color).withOpacity(0.15)
+                          ? (p['color'] as Color).withValues(alpha: 0.15)
                           : Colors.white,
                       borderRadius: BorderRadius.circular(12),
                       border: Border.all(
@@ -847,7 +847,7 @@ PACT Mobile Support System
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: AppColors.primaryOrange.withOpacity(0.1),
+                    color: AppColors.primaryOrange.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Icon(icon, color: AppColors.primaryOrange, size: 24),

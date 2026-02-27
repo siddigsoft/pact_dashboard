@@ -148,7 +148,7 @@ class _ActiveCallScreenState extends ConsumerState<ActiveCallScreen> {
                     begin: Alignment.topCenter,
                     end: Alignment.bottomCenter,
                     colors: [
-                      Theme.of(context).primaryColor.withOpacity(0.8),
+                      Theme.of(context).primaryColor.withValues(alpha: 0.8),
                       Theme.of(context).primaryColor,
                     ],
                   ),
@@ -246,7 +246,7 @@ class _ActiveCallScreenState extends ConsumerState<ActiveCallScreen> {
                       begin: Alignment.topCenter,
                       end: Alignment.bottomCenter,
                       colors: [
-                        Colors.black.withOpacity(0.6),
+                        Colors.black.withValues(alpha: 0.6),
                         Colors.transparent,
                       ],
                     ),
@@ -301,7 +301,7 @@ class _ActiveCallScreenState extends ConsumerState<ActiveCallScreen> {
                       begin: Alignment.bottomCenter,
                       end: Alignment.topCenter,
                       colors: [
-                        Colors.black.withOpacity(0.8),
+                        Colors.black.withValues(alpha: 0.8),
                         Colors.transparent,
                       ],
                     ),
@@ -386,7 +386,7 @@ class _ControlButton extends StatelessWidget {
             shape: BoxShape.circle,
             color: isEndCall
                 ? Colors.red
-                : (isActive ? Colors.white : Colors.white.withOpacity(0.2)),
+                : (isActive ? Colors.white : Colors.white.withValues(alpha: 0.2)),
           ),
           child: Material(
             color: Colors.transparent,

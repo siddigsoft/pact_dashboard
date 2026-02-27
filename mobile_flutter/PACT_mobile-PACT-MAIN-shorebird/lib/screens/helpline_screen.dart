@@ -110,7 +110,7 @@ class HelplineScreen extends StatelessWidget {
                       Container(
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
-                          color: AppColors.primaryOrange.withOpacity(0.1),
+                          color: AppColors.primaryOrange.withValues(alpha: 0.1),
                           shape: BoxShape.circle,
                         ),
                         child: const Icon(
@@ -178,7 +178,7 @@ class HelplineScreen extends StatelessWidget {
                           style: TextButton.styleFrom(
                             padding: const EdgeInsets.all(12),
                             backgroundColor:
-                                AppColors.primaryOrange.withOpacity(0.1),
+                                AppColors.primaryOrange.withValues(alpha: 0.1),
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(8),
                             ),
@@ -194,7 +194,7 @@ class HelplineScreen extends StatelessWidget {
                         icon: const Icon(Icons.email,
                             color: AppColors.primaryOrange),
                         style: IconButton.styleFrom(
-                          backgroundColor: AppColors.primaryOrange.withOpacity(
+                          backgroundColor: AppColors.primaryOrange.withValues(alpha: 
                             0.1,
                           ),
                           padding: const EdgeInsets.all(12),

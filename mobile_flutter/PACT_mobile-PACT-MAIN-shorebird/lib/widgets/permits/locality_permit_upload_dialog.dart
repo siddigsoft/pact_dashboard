@@ -313,7 +313,7 @@ class _LocalityPermitUploadDialogState
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: AppColors.primaryBlue.withOpacity(0.1),
+        color: AppColors.primaryBlue.withValues(alpha: 0.1),
         borderRadius: const BorderRadius.only(
           topLeft: Radius.circular(16),
           topRight: Radius.circular(16),
@@ -362,9 +362,9 @@ class _LocalityPermitUploadDialogState
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: AppColors.primaryBlue.withOpacity(0.05),
+        color: AppColors.primaryBlue.withValues(alpha: 0.05),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: AppColors.primaryBlue.withOpacity(0.2)),
+        border: Border.all(color: AppColors.primaryBlue.withValues(alpha: 0.2)),
       ),
       child: Row(
         children: [
@@ -476,7 +476,7 @@ class _LocalityPermitUploadDialogState
                     style: BorderStyle.solid,
                   ),
                   borderRadius: BorderRadius.circular(8),
-                  color: AppColors.primaryBlue.withOpacity(0.05),
+                  color: AppColors.primaryBlue.withValues(alpha: 0.05),
                 ),
                 child: Column(
                   children: [
@@ -638,7 +638,7 @@ class _LocalityPermitUploadDialogState
             color: date != null ? AppColors.primaryBlue : Colors.grey.shade300,
           ),
           borderRadius: BorderRadius.circular(8),
-          color: date != null ? AppColors.primaryBlue.withOpacity(0.05) : null,
+          color: date != null ? AppColors.primaryBlue.withValues(alpha: 0.05) : null,
         ),
         child: Row(
           children: [

@@ -75,7 +75,7 @@ class WalletScreenWithPaymentMethods extends ConsumerWidget {
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF1976D2).withOpacity(0.3),
+            color: const Color(0xFF1976D2).withValues(alpha: 0.3),
             blurRadius: 8,
             offset: const Offset(0, 4),
           ),
@@ -87,7 +87,7 @@ class WalletScreenWithPaymentMethods extends ConsumerWidget {
           Text(
             'Available Balance',
             style: TextStyle(
-              color: Colors.white.withOpacity(0.9),
+              color: Colors.white.withValues(alpha: 0.9),
               fontSize: 14,
             ),
           ),
@@ -227,7 +227,7 @@ class PaymentMethodsScreen extends ConsumerWidget {
                 color: const Color(0xFFE3F2FD),
                 borderRadius: BorderRadius.circular(8),
                 border:
-                    Border.all(color: const Color(0xFF1976D2).withOpacity(0.3)),
+                    Border.all(color: const Color(0xFF1976D2).withValues(alpha: 0.3)),
               ),
               child: const Column(
                 crossAxisAlignment: CrossAxisAlignment.start,

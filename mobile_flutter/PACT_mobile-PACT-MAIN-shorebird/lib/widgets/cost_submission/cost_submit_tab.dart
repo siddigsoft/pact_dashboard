@@ -441,7 +441,7 @@ class _CostSubmitTabState extends State<CostSubmitTab> {
       style: TextStyle(
         fontSize: 14,
         fontWeight: FontWeight.w600,
-        color: Theme.of(context).colorScheme.onSurface.withOpacity(0.8),
+        color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.8),
       ),
     );
   }
@@ -584,13 +584,13 @@ class _FundingTypeCard extends StatelessWidget {
         decoration: BoxDecoration(
           color: isSelected
               ? (isAdvance
-                    ? Colors.blue.withOpacity(0.1)
-                    : Colors.green.withOpacity(0.1))
+                    ? Colors.blue.withValues(alpha: 0.1)
+                    : Colors.green.withValues(alpha: 0.1))
               : colorScheme.surface,
           border: Border.all(
             color: isSelected
                 ? (isAdvance ? Colors.blue : Colors.green)
-                : colorScheme.outline.withOpacity(0.3),
+                : colorScheme.outline.withValues(alpha: 0.3),
             width: isSelected ? 2 : 1,
           ),
           borderRadius: BorderRadius.circular(12),
@@ -602,7 +602,7 @@ class _FundingTypeCard extends StatelessWidget {
               size: 28,
               color: isSelected
                   ? (isAdvance ? Colors.blue : Colors.green)
-                  : colorScheme.onSurface.withOpacity(0.5),
+                  : colorScheme.onSurface.withValues(alpha: 0.5),
             ),
             const SizedBox(height: 8),
             Text(

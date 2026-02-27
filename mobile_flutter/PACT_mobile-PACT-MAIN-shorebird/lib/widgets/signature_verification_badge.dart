@@ -51,42 +51,42 @@ class SignatureVerificationBadge extends StatelessWidget {
       label: 'Pending Signature',
       labelAr: 'في انتظار التوقيع',
       color: Colors.orange,
-      bgColor: Colors.orange.withOpacity(0.1),
+      bgColor: Colors.orange.withValues(alpha: 0.1),
       icon: Icons.schedule,
     ),
     SignatureStatus.signed: _StatusConfig(
       label: 'Signed',
       labelAr: 'موقّع',
       color: Colors.blue,
-      bgColor: Colors.blue.withOpacity(0.1),
+      bgColor: Colors.blue.withValues(alpha: 0.1),
       icon: Icons.edit,
     ),
     SignatureStatus.verified: _StatusConfig(
       label: 'Verified',
       labelAr: 'مُتحقق',
       color: Colors.green,
-      bgColor: Colors.green.withOpacity(0.1),
+      bgColor: Colors.green.withValues(alpha: 0.1),
       icon: Icons.verified_user,
     ),
     SignatureStatus.expired: _StatusConfig(
       label: 'Expired',
       labelAr: 'منتهي الصلاحية',
       color: Colors.deepOrange,
-      bgColor: Colors.deepOrange.withOpacity(0.1),
+      bgColor: Colors.deepOrange.withValues(alpha: 0.1),
       icon: Icons.timer_off,
     ),
     SignatureStatus.revoked: _StatusConfig(
       label: 'Revoked',
       labelAr: 'ملغى',
       color: Colors.red,
-      bgColor: Colors.red.withOpacity(0.1),
+      bgColor: Colors.red.withValues(alpha: 0.1),
       icon: Icons.cancel,
     ),
     SignatureStatus.invalid: _StatusConfig(
       label: 'Invalid',
       labelAr: 'غير صالح',
       color: Colors.red,
-      bgColor: Colors.red.withOpacity(0.1),
+      bgColor: Colors.red.withValues(alpha: 0.1),
       icon: Icons.error,
     ),
   };
@@ -167,7 +167,7 @@ class SignatureVerificationBadge extends StatelessWidget {
       decoration: BoxDecoration(
         color: config.bgColor,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: config.color.withOpacity(0.3)),
+        border: Border.all(color: config.color.withValues(alpha: 0.3)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -187,7 +187,7 @@ class SignatureVerificationBadge extends StatelessWidget {
             Icon(
               _methodIcons[method]!,
               size: _iconSize,
-              color: config.color.withOpacity(0.7),
+              color: config.color.withValues(alpha: 0.7),
             ),
           ],
         ],
@@ -256,9 +256,9 @@ class SignatureRequiredBadge extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
-        color: Colors.amber.withOpacity(0.15),
+        color: Colors.amber.withValues(alpha: 0.15),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.amber.withOpacity(0.5)),
+        border: Border.all(color: Colors.amber.withValues(alpha: 0.5)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,

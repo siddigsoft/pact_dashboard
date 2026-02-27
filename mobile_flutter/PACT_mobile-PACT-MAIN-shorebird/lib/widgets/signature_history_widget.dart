@@ -137,11 +137,11 @@ class _SignatureHistoryWidgetState extends State<SignatureHistoryWidget> {
         borderRadius: BorderRadius.circular(12),
         side: BorderSide(
           color: isExpanded
-              ? AppColors.primaryBlue.withOpacity(0.3)
+              ? AppColors.primaryBlue.withValues(alpha: 0.3)
               : Colors.transparent,
         ),
       ),
-      color: isExpanded ? AppColors.primaryBlue.withOpacity(0.05) : null,
+      color: isExpanded ? AppColors.primaryBlue.withValues(alpha: 0.05) : null,
       child: InkWell(
         onTap: () {
           setState(() {
@@ -163,10 +163,10 @@ class _SignatureHistoryWidgetState extends State<SignatureHistoryWidget> {
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
                       color: signature.status == SignatureStatus.verified
-                          ? Colors.green.withOpacity(0.1)
+                          ? Colors.green.withValues(alpha: 0.1)
                           : signature.status == SignatureStatus.signed
-                          ? Colors.blue.withOpacity(0.1)
-                          : Colors.grey.withOpacity(0.1),
+                          ? Colors.blue.withValues(alpha: 0.1)
+                          : Colors.grey.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Icon(
@@ -330,7 +330,7 @@ class _SignatureHistoryWidgetState extends State<SignatureHistoryWidget> {
                           vertical: 2,
                         ),
                         decoration: BoxDecoration(
-                          color: Colors.grey.withOpacity(0.1),
+                          color: Colors.grey.withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: Text(
@@ -476,7 +476,7 @@ class _SignatureHistoryWidgetState extends State<SignatureHistoryWidget> {
                     Icon(
                       Icons.edit_off,
                       size: 48,
-                      color: Colors.grey.withOpacity(0.3),
+                      color: Colors.grey.withValues(alpha: 0.3),
                     ),
                     const SizedBox(height: 12),
                     Text(
