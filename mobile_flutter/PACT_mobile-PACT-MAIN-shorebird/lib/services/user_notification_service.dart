@@ -21,6 +21,13 @@ class UserNotificationService {
   final StreamController<List<UserNotification>> _controller =
       StreamController<List<UserNotification>>.broadcast();
 
+  // Broadcast-specific stream — emits whenever a new broadcast arrives.
+  // Consumers (e.g. DashboardScreen) listen to this to show a pop-up banner.
+  final StreamController<UserNotification> _broadcastController =
+      StreamController<UserNotification>.broadcast();
+
+  Stream<UserNotification> get broadcastStream => _broadcastController.stream;
+
   Box<dynamic>? _cacheBox;
   RealtimeChannel? _realtimeChannel;
   bool _isInitialized = false;
@@ -28,9 +35,7 @@ class UserNotificationService {
 
   Future<void> initialize() async {
     if (_isInitialized || _isInitializing) {
-      if (_isInitialized) {
-        _emit();
-      }
+      if (_isInitialized) _emit();
       return;
     }
 
@@ -62,21 +67,19 @@ class UserNotificationService {
       List<UserNotification>.unmodifiable(_notifications);
 
   int get unreadCount =>
-      _notifications.where((notification) => !notification.isRead).length;
+      _notifications.where((n) => !n.isRead).length;
+
+  int get unreadBroadcastCount =>
+      _notifications.where((n) => !n.isRead && n.isBroadcast).length;
 
   Future<void> markAsRead(String id) async {
     final index = _notifications.indexWhere((item) => item.id == id);
-    if (index == -1) {
-      return;
-    }
-    if (_notifications[index].isRead) {
-      return;
-    }
+    if (index == -1) return;
+    if (_notifications[index].isRead) return;
     try {
       await _supabase
           .from('notifications')
-          .update({'is_read': true})
-          .eq('id', id);
+          .update({'is_read': true, 'status': 'read'}).eq('id', id);
     } catch (e) {
       debugPrint('UserNotificationService markAsRead error: $e');
     }
@@ -86,17 +89,13 @@ class UserNotificationService {
   }
 
   Future<void> markManyAsRead(List<String> ids) async {
-    if (ids.isEmpty) {
-      return;
-    }
+    if (ids.isEmpty) return;
     try {
-      final sanitizedIds = ids
-          .map((id) => '"${id.replaceAll('"', '""')}"')
-          .join(',');
-
+      final sanitizedIds =
+          ids.map((id) => '"${id.replaceAll('"', '""')}"').join(',');
       await _supabase
           .from('notifications')
-          .update({'is_read': true})
+          .update({'is_read': true, 'status': 'read'})
           .filter('id', 'in', '($sanitizedIds)');
     } catch (e) {
       debugPrint('UserNotificationService markManyAsRead error: $e');
@@ -113,8 +112,6 @@ class UserNotificationService {
 
   Future<void> _fetchLatest(String userId) async {
     try {
-      // Query notifications where user_id OR recipient_id matches
-      // Using or filter to catch both columns
       final response = await _supabase
           .from('notifications')
           .select()
@@ -136,18 +133,15 @@ class UserNotificationService {
   }
 
   Future<void> _loadFromCache() async {
-    if (_cacheBox == null) {
-      return;
-    }
+    if (_cacheBox == null) return;
     _notifications.clear();
     for (final key in _cacheBox!.keys) {
       final raw = _cacheBox!.get(key);
       if (raw is Map<String, dynamic>) {
         _notifications.add(UserNotification.fromJson(raw));
       } else if (raw is Map) {
-        _notifications.add(
-          UserNotification.fromJson(Map<String, dynamic>.from(raw)),
-        );
+        _notifications
+            .add(UserNotification.fromJson(Map<String, dynamic>.from(raw)));
       }
     }
     _notifications.sort((a, b) => b.createdAt.compareTo(a.createdAt));
@@ -158,8 +152,7 @@ class UserNotificationService {
     _realtimeChannel = _supabase.channel('user_notifications_$userId');
 
     debugPrint(
-      'UserNotificationService: Subscribing to realtime for user $userId',
-    );
+        'UserNotificationService: Subscribing to realtime for user $userId');
 
     _realtimeChannel
       ?..onPostgresChanges(
@@ -168,22 +161,12 @@ class UserNotificationService {
         table: 'notifications',
         callback: (payload) {
           final data = payload.newRecord;
-          debugPrint(
-            'UserNotificationService: Received INSERT event: ${data.keys.toList()}',
-          );
-          // Check both user_id and recipient_id columns
           final notifUserId = data['user_id'];
           final notifRecipientId = data['recipient_id'];
-          if (notifUserId != userId && notifRecipientId != userId) {
-            debugPrint(
-              'UserNotificationService: Notification not for this user (user_id: $notifUserId, recipient_id: $notifRecipientId)',
-            );
-            return;
-          }
+          if (notifUserId != userId && notifRecipientId != userId) return;
           try {
-            final notification = UserNotification.fromJson(
-              Map<String, dynamic>.from(data),
-            );
+            final notification =
+                UserNotification.fromJson(Map<String, dynamic>.from(data));
             _handleInsert(notification);
           } catch (e) {
             debugPrint('UserNotificationService realtime insert error: $e');
@@ -196,17 +179,12 @@ class UserNotificationService {
         table: 'notifications',
         callback: (payload) {
           final data = payload.newRecord;
-          debugPrint('UserNotificationService: Received UPDATE event');
-          // Check both user_id and recipient_id columns
           final notifUserId = data['user_id'];
           final notifRecipientId = data['recipient_id'];
-          if (notifUserId != userId && notifRecipientId != userId) {
-            return;
-          }
+          if (notifUserId != userId && notifRecipientId != userId) return;
           try {
-            final notification = UserNotification.fromJson(
-              Map<String, dynamic>.from(data),
-            );
+            final notification =
+                UserNotification.fromJson(Map<String, dynamic>.from(data));
             _handleUpdate(notification);
           } catch (e) {
             debugPrint('UserNotificationService realtime update error: $e');
@@ -215,22 +193,22 @@ class UserNotificationService {
       )
       ..subscribe((status, error) {
         debugPrint(
-          'UserNotificationService: Realtime subscription status: $status, error: $error',
-        );
+            'UserNotificationService: Realtime status: $status, error: $error');
       });
   }
 
   void _handleInsert(UserNotification notification) {
-    final alreadyExists = _notifications.any(
-      (item) => item.id == notification.id,
-    );
+    final alreadyExists =
+        _notifications.any((item) => item.id == notification.id);
     _upsertNotification(notification);
+
     if (!alreadyExists) {
+      // Show OS-level push notification
       unawaited(
         NotificationService.showUserNotification(
           notificationId: notification.id,
           title: notification.title.isEmpty
-              ? 'PACT Notification'
+              ? 'WFP TPM Notification'
               : notification.title,
           body: notification.message.isEmpty
               ? 'You have a new update.'
@@ -238,6 +216,11 @@ class UserNotificationService {
           type: notification.type,
         ),
       );
+
+      // Emit on the broadcast stream so screens can show an in-app pop-up banner
+      if (notification.isBroadcast && !_broadcastController.isClosed) {
+        _broadcastController.add(notification);
+      }
     }
     _emit();
   }
@@ -248,9 +231,8 @@ class UserNotificationService {
   }
 
   void _upsertNotification(UserNotification notification) {
-    final index = _notifications.indexWhere(
-      (item) => item.id == notification.id,
-    );
+    final index =
+        _notifications.indexWhere((item) => item.id == notification.id);
     if (index >= 0) {
       _notifications[index] = notification;
     } else {
@@ -262,35 +244,28 @@ class UserNotificationService {
   }
 
   void _trimCache() {
-    if (_notifications.length <= _maxCachedNotifications) {
-      return;
-    }
+    if (_notifications.length <= _maxCachedNotifications) return;
     final removed = _notifications
         .sublist(_maxCachedNotifications)
         .toList(growable: false);
     _notifications.removeRange(_maxCachedNotifications, _notifications.length);
     if (_cacheBox != null) {
-      for (final notification in removed) {
-        unawaited(_cacheBox!.delete(notification.id));
+      for (final n in removed) {
+        unawaited(_cacheBox!.delete(n.id));
       }
     }
   }
 
   Future<void> _cacheNotification(UserNotification notification) async {
-    if (_cacheBox == null) {
-      return;
-    }
+    if (_cacheBox == null) return;
     await _cacheBox!.put(notification.id, notification.toJson());
   }
 
   Future<void> _writeCache() async {
-    if (_cacheBox == null) {
-      return;
-    }
-    final Map<String, Map<String, dynamic>> data =
-        <String, Map<String, dynamic>>{};
-    for (final notification in _notifications) {
-      data[notification.id] = notification.toJson();
+    if (_cacheBox == null) return;
+    final Map<String, Map<String, dynamic>> data = {};
+    for (final n in _notifications) {
+      data[n.id] = n.toJson();
     }
     await _cacheBox!.putAll(data);
   }
@@ -305,9 +280,8 @@ class UserNotificationService {
     _realtimeChannel?.unsubscribe();
     _realtimeChannel = null;
     _cacheBox = null;
-    if (!_controller.isClosed) {
-      _controller.close();
-    }
+    if (!_controller.isClosed) _controller.close();
+    if (!_broadcastController.isClosed) _broadcastController.close();
     _notifications.clear();
     _isInitialized = false;
   }
