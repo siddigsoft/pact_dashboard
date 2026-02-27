@@ -724,11 +724,46 @@ class _WalletScreenState extends State<WalletScreen> {
                                           widget.isArabic ? 'متاح للسحب' : 'Available for withdrawal',
                                           style: GoogleFonts.poppins(
                                             fontSize: 12,
-                                            color: Colors.white.withOpacity(
-                                              0.8,
-                                            ),
+                                            color: Colors.white.withOpacity(0.8),
                                           ),
                                         ),
+                                        if (_currentBalance > 0) ...[
+                                          const SizedBox(height: 16),
+                                          SizedBox(
+                                            width: double.infinity,
+                                            child: OutlinedButton.icon(
+                                              onPressed: () => setState(
+                                                  () => _showWithdrawalDialog = true),
+                                              icon: const Icon(
+                                                Icons.arrow_downward_rounded,
+                                                color: Colors.white,
+                                                size: 18,
+                                              ),
+                                              label: Text(
+                                                widget.isArabic
+                                                    ? 'طلب سحب'
+                                                    : 'Request Withdrawal',
+                                                style: GoogleFonts.poppins(
+                                                  color: Colors.white,
+                                                  fontWeight: FontWeight.w600,
+                                                  fontSize: 14,
+                                                ),
+                                              ),
+                                              style: OutlinedButton.styleFrom(
+                                                side: const BorderSide(
+                                                    color: Colors.white70,
+                                                    width: 1.5),
+                                                shape: RoundedRectangleBorder(
+                                                  borderRadius:
+                                                      BorderRadius.circular(12),
+                                                ),
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                        vertical: 12),
+                                              ),
+                                            ),
+                                          ),
+                                        ],
                                       ],
                                     ),
                                   ),
@@ -850,20 +885,6 @@ class _WalletScreenState extends State<WalletScreen> {
             if (_showWithdrawalDialog) _buildWithdrawalDialog(),
           ],
         ),
-        floatingActionButton: _currentBalance > 0
-            ? FloatingActionButton.extended(
-                onPressed: () => setState(() => _showWithdrawalDialog = true),
-                backgroundColor: AppColors.primaryBlue,
-                icon: const Icon(Icons.arrow_downward, color: Colors.white),
-                label: Text(
-                  widget.isArabic ? 'طلب سحب' : 'Request Withdrawal',
-                  style: GoogleFonts.poppins(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              )
-            : null,
       ),
     );
   }
