@@ -131,9 +131,9 @@ class _AdminUserApprovalScreenState extends State<AdminUserApprovalScreen> {
           : SafeArea(
               top: false,
               child: _pendingUsers.isEmpty
-              ? _buildEmptyState()
-            )
-              : _buildUserList(),
+                  ? _buildEmptyState()
+                  : _buildUserList(),
+            ),
     );
   }
 

@@ -194,28 +194,27 @@ class _RoleManagementScreenState extends State<RoleManagementScreen> {
             : SafeArea(
                 top: false,
                 child: _isLoading
-            ? const Center(child: CircularProgressIndicator())
-              )
-            : RefreshIndicator(
-                onRefresh: _loadRoles,
-                child: ListView(
-                  padding: const EdgeInsets.all(16),
-                  children: [
-                    _buildRolesSummary(),
-                    const SizedBox(height: 24),
-                    Text(
-                      widget.isArabic ? 'الأدوار المتاحة' : 'Available Roles',
-                      style: GoogleFonts.poppins(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
+                    ? const Center(child: CircularProgressIndicator())
+                    : RefreshIndicator(
+                        onRefresh: _loadRoles,
+                        child: ListView(
+                          padding: const EdgeInsets.all(16),
+                          children: [
+                            _buildRolesSummary(),
+                            const SizedBox(height: 24),
+                            Text(
+                              widget.isArabic ? 'الأدوار المتاحة' : 'Available Roles',
+                              style: GoogleFonts.poppins(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+                            ..._defaultRoles.map((role) => _buildRoleCard(role)),
+                          ],
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 16),
-                    ..._defaultRoles.map((role) => _buildRoleCard(role)),
-                  ],
-                ),
               ),
-      ),
     );
   }
 

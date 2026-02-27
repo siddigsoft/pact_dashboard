@@ -202,47 +202,46 @@ class _SiteVisitDetailScreenState extends State<SiteVisitDetailScreen> {
             : SafeArea(
                 top: false,
                 child: _siteVisit == null
-            ? Center(
-                child: Text(
-                  l10n?.noData ??
-                      (isArabic
-                          ? 'لم يتم العثور على الزيارة'
-                          : 'Site visit not found'),
-                  style: GoogleFonts.poppins(fontSize: 16, color: Colors.grey),
-                ),
-              )
-              )
-            : RefreshIndicator(
-                onRefresh: _loadSiteVisitDetails,
-                child: SingleChildScrollView(
-                  physics: const AlwaysScrollableScrollPhysics(),
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _buildStatusHeader(isArabic),
-                      const SizedBox(height: 16),
-                      _buildSiteInfoCard(isArabic),
-                      const SizedBox(height: 16),
-                      _buildLocationCard(isArabic),
-                      const SizedBox(height: 16),
-                      _buildAssignmentCard(isArabic),
-                      const SizedBox(height: 16),
-                      _buildDatesCard(isArabic),
-                      if (_costSubmissions.isNotEmpty) ...[
-                        const SizedBox(height: 16),
-                        _buildCostsCard(isArabic),
-                      ],
-                      if (_auditTrail.isNotEmpty) ...[
-                        const SizedBox(height: 16),
-                        _buildAuditTrailCard(isArabic),
-                      ],
-                      const SizedBox(height: 32),
-                    ],
-                  ),
-                ),
+                    ? Center(
+                        child: Text(
+                          l10n?.noData ??
+                              (isArabic
+                                  ? 'لم يتم العثور على الزيارة'
+                                  : 'Site visit not found'),
+                          style: GoogleFonts.poppins(fontSize: 16, color: Colors.grey),
+                        ),
+                      )
+                    : RefreshIndicator(
+                        onRefresh: _loadSiteVisitDetails,
+                        child: SingleChildScrollView(
+                          physics: const AlwaysScrollableScrollPhysics(),
+                          padding: const EdgeInsets.all(16),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              _buildStatusHeader(isArabic),
+                              const SizedBox(height: 16),
+                              _buildSiteInfoCard(isArabic),
+                              const SizedBox(height: 16),
+                              _buildLocationCard(isArabic),
+                              const SizedBox(height: 16),
+                              _buildAssignmentCard(isArabic),
+                              const SizedBox(height: 16),
+                              _buildDatesCard(isArabic),
+                              if (_costSubmissions.isNotEmpty) ...[
+                                const SizedBox(height: 16),
+                                _buildCostsCard(isArabic),
+                              ],
+                              if (_auditTrail.isNotEmpty) ...[
+                                const SizedBox(height: 16),
+                                _buildAuditTrailCard(isArabic),
+                              ],
+                              const SizedBox(height: 32),
+                            ],
+                          ),
+                        ),
+                      ),
               ),
-      ),
     );
   }
 
