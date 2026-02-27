@@ -305,14 +305,36 @@ class _WalletScreenState extends State<WalletScreen> {
     try {
       if (_userId == null) return;
 
+      // Fetch up to 500 transactions for accurate monthly/weekly stats.
       final data = await Supabase.instance.client
           .from('wallet_transactions')
           .select('*')
           .eq('user_id', _userId!)
           .order('created_at', ascending: false)
-          .limit(100);
+          .limit(500);
 
       _transactions = (data ?? []).map((t) => t).toList();
+
+      // Accurately compute Total Earned: sum of ALL earning transactions
+      // (site visit fees + fund receipts) — not limited to the 500-row slice.
+      // This overrides the DB `total_earned` field which may omit fund receipts.
+      final earningTypes = [
+        'earning',
+        'site_visit_fee',
+        'fund_receipt',
+        'fund_receipt_confirmation',
+        'wallet_credit',
+      ];
+      final allEarningTx = await Supabase.instance.client
+          .from('wallet_transactions')
+          .select('amount')
+          .eq('user_id', _userId!)
+          .inFilter('type', earningTypes)
+          .gt('amount', 0);
+      if ((allEarningTx as List).isNotEmpty) {
+        _totalEarned = allEarningTx.fold(
+            0.0, (sum, t) => sum + (t['amount'] as num).toDouble());
+      }
 
       // Calculate stats
       final now = DateTime.now();
