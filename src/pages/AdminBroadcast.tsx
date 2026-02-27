@@ -1,17 +1,19 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import {
   Megaphone, Send, Clock, Users, AlertCircle, CheckCircle2,
-  RefreshCw, Info, Bell, Link as LinkIcon, Shield, Eye, UserCheck, UserX, ChevronDown, ChevronUp,
-  Download, RotateCcw, SendHorizonal, Smartphone
+  RefreshCw, Info, Bell, Link as LinkIcon, Shield, Eye, UserCheck,
+  UserX, ChevronDown, ChevronUp, Download, RotateCcw, SendHorizonal,
+  Smartphone, Rss, FileText, BarChart3, Globe, AlertTriangle,
+  CheckCheck, Radio, TrendingUp, MessageSquare, X
 } from 'lucide-react';
 import { useUser } from '@/context/user/UserContext';
 import { useToast } from '@/hooks/use-toast';
@@ -20,25 +22,27 @@ import { NotificationTriggerService } from '@/services/NotificationTriggerServic
 import { format } from 'date-fns';
 
 const AUDIENCE_OPTIONS = [
-  { value: 'all', label: 'All Users / جميع المستخدمين' },
-  { value: 'no_bank_account', label: 'Users without bank account / مستخدمون بدون حساب بنكي' },
-  { value: 'data_collector', label: 'Data Collectors / جامعو البيانات' },
-  { value: 'coordinator', label: 'Coordinators / المنسقون' },
-  { value: 'supervisor', label: 'Supervisors / المشرفون' },
-  { value: 'admin', label: 'Admins / المدراء' },
-  { value: 'financialadmin', label: 'Financial Admins / المدراء الماليون' },
+  { value: 'all', labelEn: 'All Users', labelAr: 'جميع المستخدمين', icon: '👥' },
+  { value: 'no_bank_account', labelEn: 'No Bank Account', labelAr: 'بدون حساب بنكي', icon: '🏦' },
+  { value: 'data_collector', labelEn: 'Data Collectors', labelAr: 'جامعو البيانات', icon: '📋' },
+  { value: 'coordinator', labelEn: 'Coordinators', labelAr: 'المنسقون', icon: '🤝' },
+  { value: 'supervisor', labelEn: 'Supervisors', labelAr: 'المشرفون', icon: '👁' },
+  { value: 'admin', labelEn: 'Admins', labelAr: 'المدراء', icon: '⚙️' },
+  { value: 'financialadmin', labelEn: 'Financial Admins', labelAr: 'المدراء الماليون', icon: '💰' },
 ];
 
 const PRIORITY_OPTIONS = [
-  { value: 'normal', label: 'Normal / عادي', color: 'bg-slate-100 text-slate-700' },
-  { value: 'high', label: 'High / عالي', color: 'bg-amber-100 text-amber-700' },
-  { value: 'urgent', label: 'Urgent / عاجل', color: 'bg-red-100 text-red-700' },
+  { value: 'normal', labelEn: 'Normal', labelAr: 'عادي', color: 'bg-slate-100 text-slate-700', border: 'border-l-slate-400', badge: 'bg-slate-100 text-slate-600', dot: 'bg-slate-400' },
+  { value: 'high', labelEn: 'High', labelAr: 'عالي', color: 'bg-amber-100 text-amber-700', border: 'border-l-amber-400', badge: 'bg-amber-100 text-amber-700', dot: 'bg-amber-400' },
+  { value: 'urgent', labelEn: 'Urgent', labelAr: 'عاجل', color: 'bg-red-100 text-red-700', border: 'border-l-red-500', badge: 'bg-red-100 text-red-700', dot: 'bg-red-500' },
 ];
 
 const QUICK_TEMPLATES = [
   {
     id: 'bank_account',
     label: 'Bank Account Reminder',
+    labelAr: 'تذكير بالحساب البنكي',
+    icon: '🏦',
     titleEn: 'Action Required: Update Your Bank Account',
     titleAr: 'إجراء مطلوب: تحديث بيانات حسابك البنكي',
     messageEn: 'Please ensure your bank account details (account name, number, branch) are up to date in your Profile Settings. This is required for all transportation advance and withdrawal requests.',
@@ -50,6 +54,8 @@ const QUICK_TEMPLATES = [
   {
     id: 'system_maintenance',
     label: 'System Maintenance',
+    labelAr: 'صيانة النظام',
+    icon: '🔧',
     titleEn: 'Scheduled Maintenance Notice',
     titleAr: 'إشعار صيانة مجدولة',
     messageEn: 'The system will undergo scheduled maintenance. Please save your work before the maintenance window.',
@@ -60,7 +66,9 @@ const QUICK_TEMPLATES = [
   },
   {
     id: 'new_feature',
-    label: 'New Feature Announcement',
+    label: 'New Feature',
+    labelAr: 'ميزة جديدة',
+    icon: '✨',
     titleEn: 'New Feature Available',
     titleAr: 'ميزة جديدة متاحة',
     messageEn: 'A new feature has been added to the platform. Please check it out.',
@@ -69,18 +77,34 @@ const QUICK_TEMPLATES = [
     audience: 'all',
     priority: 'normal',
   },
+  {
+    id: 'field_reminder',
+    label: 'Field Reminder',
+    labelAr: 'تذكير ميداني',
+    icon: '📍',
+    titleEn: 'Field Operations Reminder',
+    titleAr: 'تذكير بالعمليات الميدانية',
+    messageEn: 'Please complete your pending site visits and submit reports before the deadline.',
+    messageAr: 'يرجى إكمال زيارات المواقع المعلقة وتقديم التقارير قبل الموعد النهائي.',
+    link: '/site-visits',
+    audience: 'data_collector',
+    priority: 'high',
+  },
 ];
 
 type BroadcastHistory = {
   id: string;
   broadcast_id: string | null;
   title: string;
+  title_ar?: string;
   message: string;
+  message_ar?: string;
   created_at: string;
   event_type: string;
   priority: string;
   recipient_count?: number;
   read_count?: number;
+  action_url?: string | null;
 };
 
 type ReceiptUser = {
@@ -89,6 +113,15 @@ type ReceiptUser = {
   role: string;
   isRead: boolean;
   readAt: string | null;
+};
+
+type SendSummary = {
+  sent: number;
+  audience: string;
+  titleEn: string;
+  titleAr: string;
+  priority: string;
+  fcm?: { sent: number; failed: number; tokens: number; error?: string };
 };
 
 export default function AdminBroadcastPage() {
@@ -102,9 +135,12 @@ export default function AdminBroadcastPage() {
   const [audience, setAudience] = useState('all');
   const [priority, setPriority] = useState('normal');
   const [actionLink, setActionLink] = useState('');
+  const [requireAck, setRequireAck] = useState(false);
   const [sendEmail, setSendEmail] = useState(false);
   const [sending, setSending] = useState(false);
-  const [sendResult, setSendResult] = useState<{ sent: number; audience: string } | null>(null);
+
+  const [sendSummary, setSendSummary] = useState<SendSummary | null>(null);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
 
   const [history, setHistory] = useState<BroadcastHistory[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
@@ -114,14 +150,16 @@ export default function AdminBroadcastPage() {
   const [receiptsLoading, setReceiptsLoading] = useState<Record<string, boolean>>({});
   const [resendingId, setResendingId] = useState<string | null>(null);
   const [userCount, setUserCount] = useState<number | null>(null);
-  const [fcmResult, setFcmResult] = useState<{ sent: number; failed: number; tokens: number; error?: string } | null>(null);
-  const [fcmTesting, setFcmTesting] = useState(false);
+  const [stats, setStats] = useState<{ total: number; avgRead: number } | null>(null);
 
   const role = (currentUser?.role || '').toLowerCase();
   const isAdmin = ['admin', 'superadmin', 'ict', 'financialadmin'].includes(role);
 
+  const getPriority = (val: string) => PRIORITY_OPTIONS.find(p => p.value === val) || PRIORITY_OPTIONS[0];
+  const getAudience = (val: string) => AUDIENCE_OPTIONS.find(a => a.value === val) || AUDIENCE_OPTIONS[0];
+
   useEffect(() => {
-    if (activeTab === 'history') loadHistory();
+    if (activeTab === 'feed') loadHistory();
   }, [activeTab]);
 
   useEffect(() => {
@@ -132,7 +170,6 @@ export default function AdminBroadcastPage() {
     try {
       let query = supabase.from('profiles').select('id', { count: 'exact', head: true });
       if (audience === 'no_bank_account') {
-        // Can't easily filter JSONB missing in count query, just show total
         const { count } = await supabase.from('profiles').select('id', { count: 'exact', head: true }).not('role', 'is', null);
         setUserCount(count ?? 0);
         return;
@@ -149,16 +186,13 @@ export default function AdminBroadcastPage() {
     }
   };
 
-  const loadHistory = async () => {
+  const loadHistory = useCallback(async () => {
     setHistoryLoading(true);
     try {
-      // Minimal query — only metadata columns, no read-status fields.
-      // Read counts are loaded on-demand when the user opens the Receipts panel.
-      // Date window limits the scan to recent data only.
       const ninetyDaysAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString();
       const { data } = await supabase
         .from('notifications')
-        .select('id, title_en, message_en, created_at, priority, related_entity_id')
+        .select('id, title_en, title_ar, message_en, message_ar, created_at, priority, related_entity_id, action_url')
         .eq('event_type', 'broadcast')
         .gte('created_at', ninetyDaysAgo)
         .order('created_at', { ascending: false })
@@ -172,33 +206,40 @@ export default function AdminBroadcastPage() {
             id: n.id,
             broadcast_id: n.related_entity_id || null,
             title: n.title_en || '',
+            title_ar: n.title_ar || '',
             message: n.message_en || '',
+            message_ar: n.message_ar || '',
             created_at: n.created_at,
             event_type: 'broadcast',
-            priority: n.priority,
+            priority: n.priority || 'normal',
             recipient_count: 1,
+            action_url: n.action_url || null,
           };
         } else {
           grouped[key].recipient_count = (grouped[key].recipient_count || 1) + 1;
         }
       });
 
-      setHistory(Object.values(grouped).sort((a, b) =>
-        new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-      ).slice(0, 30));
+      const sorted = Object.values(grouped)
+        .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+        .slice(0, 30);
+
+      setHistory(sorted);
+
+      // Stats
+      const total = sorted.length;
+      setStats({ total, avgRead: 0 });
     } catch {
       setHistory([]);
     } finally {
       setHistoryLoading(false);
     }
-  };
+  }, []);
 
   const loadReceipts = async (broadcastId: string) => {
     if (receiptsLoading[broadcastId]) return;
     setReceiptsLoading(prev => ({ ...prev, [broadcastId]: true }));
     try {
-      // Select all three read-signal columns — the standard mark-as-read path sets
-      // status='read' + read_at, while the acknowledgment hook also sets is_read=true
       const { data: notifs } = await supabase
         .from('notifications')
         .select('user_id, is_read, read_at, status')
@@ -219,24 +260,20 @@ export default function AdminBroadcastPage() {
       const profileMap: Record<string, { full_name: string; role: string }> = {};
       (profiles || []).forEach(p => { profileMap[p.id] = p; });
 
-      const receiptList: ReceiptUser[] = notifs.map(n => {
-        // A notification is considered read if ANY of the three signals is set
-        const isRead = n.is_read === true || n.status === 'read' || !!n.read_at;
-        return {
-          userId: n.user_id,
-          name: profileMap[n.user_id]?.full_name || n.user_id?.slice(0, 8) || 'Unknown',
-          role: profileMap[n.user_id]?.role || '—',
-          isRead,
-          readAt: n.read_at || null,
-        };
-      });
+      const receiptList: ReceiptUser[] = notifs.map(n => ({
+        userId: n.user_id,
+        name: profileMap[n.user_id]?.full_name || n.user_id?.slice(0, 8) || 'Unknown',
+        role: profileMap[n.user_id]?.role || '—',
+        isRead: n.is_read === true || n.status === 'read' || !!n.read_at,
+        readAt: n.read_at || null,
+      }));
 
-      // Sort: read first (by readAt desc), then unread alphabetically
       receiptList.sort((a, b) => {
         if (a.isRead !== b.isRead) return b.isRead ? 1 : -1;
         if (a.isRead && a.readAt && b.readAt) return new Date(b.readAt).getTime() - new Date(a.readAt).getTime();
         return a.name.localeCompare(b.name);
       });
+
       setReceipts(prev => ({ ...prev, [broadcastId]: receiptList }));
     } catch {
       setReceipts(prev => ({ ...prev, [broadcastId]: [] }));
@@ -270,7 +307,6 @@ export default function AdminBroadcastPage() {
     }
     setResendingId(bid);
     try {
-      // Fetch original Arabic content from one of the existing notifications
       const { data: orig } = await supabase
         .from('notifications')
         .select('title_ar, message_ar, action_url')
@@ -285,9 +321,9 @@ export default function AdminBroadcastPage() {
         recipient_id: u.userId,
         user_id: u.userId,
         title_en: item.title,
-        title_ar: orig?.title_ar || item.title,
+        title_ar: orig?.title_ar || item.title_ar || item.title,
         message_en: item.message,
-        message_ar: orig?.message_ar || item.message,
+        message_ar: orig?.message_ar || item.message_ar || item.message,
         priority: item.priority,
         action_url: orig?.action_url || null,
         related_entity_id: broadcastId,
@@ -305,29 +341,17 @@ export default function AdminBroadcastPage() {
       const { error } = await supabase.from('notifications').insert(rows);
       if (error) throw new Error(error.message);
 
-      // FCM push to mobile devices for re-sent broadcast
-      const resendFcmPriority = item.priority === 'urgent' || item.priority === 'high' ? 'high' : 'normal';
-      const resendTitleAr = orig?.title_ar && orig.title_ar !== item.title ? ` | ${orig.title_ar}` : '';
-      const resendBodyAr  = orig?.message_ar && orig.message_ar !== item.message ? `\n${orig.message_ar}` : '';
       supabase.functions.invoke('send-fcm-push', {
         body: {
           user_ids: unread.map(u => u.userId),
-          title: `${item.title}${resendTitleAr}`,
-          body:  `${item.message}${resendBodyAr}`,
-          priority: resendFcmPriority,
-          data: {
-            type: 'broadcast',
-            broadcast_id: broadcastId,
-            action_url: orig?.action_url || '',
-            priority: item.priority,
-          },
+          title: item.title_ar ? `${item.title} | ${item.title_ar}` : item.title,
+          body: item.message_ar ? `${item.message}\n${item.message_ar}` : item.message,
+          priority: item.priority === 'urgent' || item.priority === 'high' ? 'high' : 'normal',
+          data: { type: 'broadcast', broadcast_id: broadcastId, priority: item.priority },
         },
       }).catch(() => {});
 
-      toast({
-        title: 'Re-sent / أعيد الإرسال',
-        description: `Re-sent to ${unread.length} user(s) who hadn't read it.`,
-      });
+      toast({ title: 'Re-sent / أعيد الإرسال', description: `Re-sent to ${unread.length} user(s) who hadn't read it.` });
       loadHistory();
     } catch (err: any) {
       toast({ title: 'Re-send failed', description: err.message, variant: 'destructive' });
@@ -364,12 +388,10 @@ export default function AdminBroadcastPage() {
 
   const handleSend = async () => {
     if (!titleEn.trim() || !messageEn.trim()) {
-      toast({ title: 'Missing fields', description: 'Please fill in at least the English title and message.', variant: 'destructive' });
+      toast({ title: 'Missing fields / حقول مفقودة', description: 'Please fill in the English title and message.', variant: 'destructive' });
       return;
     }
-
     setSending(true);
-    setSendResult(null);
 
     try {
       const { data: users } = await supabase
@@ -404,7 +426,6 @@ export default function AdminBroadcastPage() {
       const notifType = priority === 'urgent' ? 'error' : priority === 'high' ? 'warning' : 'info';
       const link = actionLink.trim() || null;
 
-      // Single bulk insert — one DB call for all recipients
       const rows = targetUsers.map(u => ({
         recipient_id: u.id,
         user_id: u.id,
@@ -412,7 +433,7 @@ export default function AdminBroadcastPage() {
         title_ar: titleArText,
         message_en: messageText,
         message_ar: messageArText,
-        priority: priority,
+        priority,
         action_url: link,
         related_entity_id: broadcastId,
         entity_type: 'broadcast_batch',
@@ -421,7 +442,7 @@ export default function AdminBroadcastPage() {
         email_sent: false,
         title: titleText,
         message: messageText,
-        link: link,
+        link,
         type: notifType,
         is_read: false,
         created_at: now,
@@ -430,58 +451,30 @@ export default function AdminBroadcastPage() {
       const { error: insertError } = await supabase.from('notifications').insert(rows);
       if (insertError) throw new Error(insertError.message);
 
-      // Fire FCM push to all mobile devices — single batch call, awaited for diagnostics
-      const fcmPriority = priority === 'urgent' || priority === 'high' ? 'high' : 'normal';
-      setFcmResult(null);
+      // FCM push
+      let fcmResult: SendSummary['fcm'] | undefined;
       try {
-        // Build bilingual FCM title/body — show both languages so all users understand
-        const fcmTitle = titleAr.trim()
-          ? `${titleText} | ${titleAr.trim()}`
-          : titleText;
-        const fcmBody = messageAr.trim()
-          ? `${messageText}\n${messageAr.trim()}`
-          : messageText;
-
+        const fcmTitle = titleAr.trim() ? `${titleText} | ${titleAr.trim()}` : titleText;
+        const fcmBody = messageAr.trim() ? `${messageText}\n${messageAr.trim()}` : messageText;
         const { data: fcmData, error: fcmError } = await supabase.functions.invoke('send-fcm-push', {
           body: {
             user_ids: targetUsers.map(u => u.id),
             title: fcmTitle,
             body: fcmBody,
-            priority: fcmPriority,
-            data: {
-              type: 'broadcast',
-              broadcast_id: broadcastId,
-              action_url: link || '',
-              priority,
-            },
+            priority: priority === 'urgent' || priority === 'high' ? 'high' : 'normal',
+            data: { type: 'broadcast', broadcast_id: broadcastId, action_url: link || '', priority },
             ...(link ? { action_url: link } : {}),
           },
         });
         if (fcmError) {
-          console.error('[BROADCAST] FCM push error:', fcmError.message);
-          setFcmResult({ sent: 0, failed: 0, tokens: 0, error: fcmError.message });
+          fcmResult = { sent: 0, failed: 0, tokens: 0, error: fcmError.message };
         } else {
-          console.log('[BROADCAST] FCM push result:', fcmData);
-          setFcmResult({
-            sent: fcmData?.sent ?? 0,
-            failed: fcmData?.failed ?? 0,
-            tokens: fcmData?.tokens_targeted ?? 0,
-            error: fcmData?.error,
-          });
+          fcmResult = { sent: fcmData?.sent ?? 0, failed: fcmData?.failed ?? 0, tokens: fcmData?.tokens_targeted ?? 0, error: fcmData?.error };
         }
       } catch (fcmEx: any) {
-        console.error('[BROADCAST] FCM push threw:', fcmEx);
-        setFcmResult({ sent: 0, failed: 0, tokens: 0, error: fcmEx?.message || 'Unknown error' });
+        fcmResult = { sent: 0, failed: 0, tokens: 0, error: fcmEx?.message };
       }
 
-      const sent = targetUsers.length;
-      setSendResult({ sent, audience });
-      toast({
-        title: 'Broadcast sent / تم الإرسال',
-        description: `Notification delivered to ${sent} user(s).`,
-      });
-
-      // If email requested, send sequentially in the background (fire-and-forget)
       if (sendEmail) {
         (async () => {
           for (const u of targetUsers) {
@@ -498,12 +491,13 @@ export default function AdminBroadcastPage() {
                 link: link || undefined,
                 sendEmail: true,
               });
-            } catch { /* ignore per-user email errors */ }
+            } catch { }
           }
         })();
       }
 
-      // Clear form
+      setSendSummary({ sent: targetUsers.length, audience, titleEn: titleText, titleAr: titleArText, priority, fcm: fcmResult });
+      setShowSuccessModal(true);
       setTitleEn(''); setTitleAr('');
       setMessageEn(''); setMessageAr('');
       setActionLink('');
@@ -524,487 +518,593 @@ export default function AdminBroadcastPage() {
     );
   }
 
+  const selectedPriority = getPriority(priority);
+  const selectedAudience = getAudience(audience);
+
   return (
-    <div className="p-4 sm:p-6 max-w-4xl mx-auto space-y-6">
-      {/* Header */}
-      <div className="flex items-center gap-3">
-        <div className="p-3 bg-violet-600 rounded-xl">
-          <Megaphone className="w-6 h-6 text-white" />
-        </div>
-        <div>
-          <h1 className="text-2xl font-bold">Broadcast Center</h1>
-          <p className="text-muted-foreground text-sm">مركز الإذاعة — Send notifications to all users or specific groups</p>
-        </div>
-      </div>
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-violet-50 dark:from-slate-950 dark:to-violet-950/30">
 
-      <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="mb-4">
-          <TabsTrigger value="compose" className="gap-2">
-            <Megaphone className="w-4 h-4" /> Compose
-          </TabsTrigger>
-          <TabsTrigger value="history" className="gap-2" onClick={loadHistory}>
-            <Clock className="w-4 h-4" /> History
-          </TabsTrigger>
-        </TabsList>
-
-        {/* COMPOSE TAB */}
-        <TabsContent value="compose" className="space-y-4">
-
-          {/* Quick Templates */}
-          <Card className="border-dashed border-violet-300 dark:border-violet-700">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-                <Bell className="w-4 h-4" /> Quick Templates / قوالب سريعة
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="flex flex-wrap gap-2">
-                {QUICK_TEMPLATES.map(t => (
-                  <Button
-                    key={t.id}
-                    variant="outline"
-                    size="sm"
-                    onClick={() => applyTemplate(t)}
-                    className="text-xs border-violet-300 dark:border-violet-700 hover:bg-violet-50 dark:hover:bg-violet-900/20"
-                  >
-                    {t.label}
-                  </Button>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Message Form */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Compose Message / كتابة الرسالة</CardTitle>
-              <CardDescription>Write your message in both English and Arabic for full bilingual support.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <Label>Title (English) <span className="text-red-500">*</span></Label>
-                  <Input
-                    value={titleEn}
-                    onChange={e => setTitleEn(e.target.value)}
-                    placeholder="Enter notification title..."
-                    maxLength={120}
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label>Title (Arabic) / العنوان بالعربية</Label>
-                  <Input
-                    value={titleAr}
-                    onChange={e => setTitleAr(e.target.value)}
-                    placeholder="أدخل عنوان الإشعار..."
-                    dir="rtl"
-                    maxLength={120}
-                  />
+      {/* ── Success Modal ─────────────────────────────────────────── */}
+      <Dialog open={showSuccessModal} onOpenChange={setShowSuccessModal}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-emerald-600">
+              <CheckCircle2 className="w-5 h-5" />
+              Broadcast Sent / تم إرسال الإذاعة
+            </DialogTitle>
+          </DialogHeader>
+          {sendSummary && (
+            <div className="space-y-4 pt-2">
+              {/* Notification card preview */}
+              <div className={`rounded-xl border-l-4 p-4 bg-white dark:bg-slate-900 shadow-sm ${getPriority(sendSummary.priority).border}`}>
+                <div className="flex items-start gap-3">
+                  <div className="p-2 bg-violet-100 dark:bg-violet-900/40 rounded-lg shrink-0">
+                    <Megaphone className="w-4 h-4 text-violet-600 dark:text-violet-400" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold text-sm">{sendSummary.titleEn}</p>
+                    {sendSummary.titleAr && sendSummary.titleAr !== sendSummary.titleEn && (
+                      <p className="text-sm font-medium text-slate-500 mt-0.5" dir="rtl">{sendSummary.titleAr}</p>
+                    )}
+                    <Badge className={`mt-2 text-xs border-0 ${getPriority(sendSummary.priority).badge}`}>
+                      {sendSummary.priority.toUpperCase()}
+                    </Badge>
+                  </div>
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <Label>Message (English) <span className="text-red-500">*</span></Label>
-                  <Textarea
-                    value={messageEn}
-                    onChange={e => setMessageEn(e.target.value)}
-                    placeholder="Enter your message..."
-                    rows={4}
-                    maxLength={500}
-                  />
-                  <p className="text-xs text-muted-foreground text-right">{messageEn.length}/500</p>
+              {/* Stats */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="rounded-lg bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 p-3 text-center">
+                  <p className="text-2xl font-bold text-emerald-600">{sendSummary.sent}</p>
+                  <p className="text-xs text-emerald-700 dark:text-emerald-400">Recipients / المستلمون</p>
                 </div>
-                <div className="space-y-1.5">
-                  <Label>Message (Arabic) / الرسالة بالعربية</Label>
-                  <Textarea
-                    value={messageAr}
-                    onChange={e => setMessageAr(e.target.value)}
-                    placeholder="أدخل رسالتك..."
-                    rows={4}
-                    dir="rtl"
-                    maxLength={500}
-                  />
-                  <p className="text-xs text-muted-foreground text-right">{messageAr.length}/500</p>
+                <div className="rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 p-3 text-center">
+                  <p className="text-2xl font-bold text-blue-600">{sendSummary.fcm?.sent ?? 0}</p>
+                  <p className="text-xs text-blue-700 dark:text-blue-400">Mobile pushed / الجوال</p>
                 </div>
               </div>
 
-              <div className="space-y-1.5">
-                <Label className="flex items-center gap-2">
-                  <LinkIcon className="w-3.5 h-3.5" /> Action Link (optional)
-                </Label>
-                <Input
-                  value={actionLink}
-                  onChange={e => setActionLink(e.target.value)}
-                  placeholder="/settings?tab=profile or https://..."
-                />
-                <p className="text-xs text-muted-foreground">Users will be directed here when they tap the notification.</p>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Delivery Settings */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Delivery Settings / إعدادات الإرسال</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <Label className="flex items-center gap-2">
-                    <Users className="w-4 h-4" /> Target Audience / الجمهور المستهدف
-                  </Label>
-                  <Select value={audience} onValueChange={setAudience}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {AUDIENCE_OPTIONS.map(o => (
-                        <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  {userCount !== null && (
-                    <p className="text-xs text-muted-foreground flex items-center gap-1">
-                      <Users className="w-3 h-3" />
-                      {audience === 'no_bank_account'
-                        ? `Up to ${userCount} users (filtered at send time)`
-                        : `~${userCount} user(s) will receive this`}
-                    </p>
-                  )}
+              {sendSummary.fcm && (
+                <div className={`rounded-lg p-3 text-xs flex items-start gap-2 ${sendSummary.fcm.error ? 'bg-red-50 text-red-700 border border-red-200' : sendSummary.fcm.tokens === 0 ? 'bg-amber-50 text-amber-700 border border-amber-200' : 'bg-blue-50 text-blue-700 border border-blue-200'}`}>
+                  <Smartphone className="w-4 h-4 mt-0.5 shrink-0" />
+                  <span>
+                    {sendSummary.fcm.error
+                      ? `Mobile push failed: ${sendSummary.fcm.error}`
+                      : sendSummary.fcm.tokens === 0
+                        ? 'No mobile devices registered — users will see the in-app notification.'
+                        : `${sendSummary.fcm.tokens} devices targeted · ${sendSummary.fcm.sent} delivered${sendSummary.fcm.failed > 0 ? ` · ${sendSummary.fcm.failed} failed` : ''}`
+                    }
+                  </span>
                 </div>
+              )}
 
-                <div className="space-y-1.5">
-                  <Label>Priority / الأولوية</Label>
-                  <Select value={priority} onValueChange={setPriority}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {PRIORITY_OPTIONS.map(o => (
-                        <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-
-              <div className="flex items-center justify-between p-3 rounded-lg border bg-muted/30">
-                <div>
-                  <p className="text-sm font-medium">Also send by email</p>
-                  <p className="text-xs text-muted-foreground">إرسال نسخة عبر البريد الإلكتروني أيضاً</p>
-                </div>
-                <Switch checked={sendEmail} onCheckedChange={setSendEmail} />
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Send Result */}
-          {sendResult && (
-            <div className="flex items-center gap-3 rounded-lg border border-emerald-500/30 bg-emerald-50 dark:bg-emerald-900/10 p-4">
-              <CheckCircle2 className="w-5 h-5 text-emerald-600 dark:text-emerald-400 flex-shrink-0" />
-              <div>
-                <p className="text-sm font-medium text-emerald-700 dark:text-emerald-300">
-                  Broadcast sent successfully / تم إرسال الإذاعة بنجاح
-                </p>
-                <p className="text-xs text-emerald-600 dark:text-emerald-400 mt-0.5">
-                  Delivered to <strong>{sendResult.sent}</strong> user(s) — <em>{AUDIENCE_OPTIONS.find(a => a.value === sendResult.audience)?.label}</em>
-                </p>
+              <div className="flex gap-2">
+                <Button className="flex-1" variant="outline" onClick={() => { setShowSuccessModal(false); setActiveTab('feed'); loadHistory(); }}>
+                  <Rss className="w-4 h-4 mr-2" /> View Feed
+                </Button>
+                <Button className="flex-1 bg-violet-600 hover:bg-violet-700 text-white" onClick={() => setShowSuccessModal(false)}>
+                  New Broadcast
+                </Button>
               </div>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
 
-          {/* FCM Push Result */}
-          {fcmResult && (
-            <div className={`rounded-lg border p-4 ${
-              fcmResult.error
-                ? 'border-red-300 bg-red-50 dark:bg-red-900/10'
-                : fcmResult.tokens === 0
-                  ? 'border-amber-300 bg-amber-50 dark:bg-amber-900/10'
-                  : 'border-blue-300 bg-blue-50 dark:bg-blue-900/10'
-            }`}>
-              <div className="flex items-start gap-3">
-                <Smartphone className={`w-4 h-4 mt-0.5 flex-shrink-0 ${
-                  fcmResult.error ? 'text-red-500' : fcmResult.tokens === 0 ? 'text-amber-500' : 'text-blue-500'
-                }`} />
-                <div className="flex-1 min-w-0">
-                  <p className={`text-sm font-medium ${
-                    fcmResult.error ? 'text-red-700 dark:text-red-300' : fcmResult.tokens === 0 ? 'text-amber-700 dark:text-amber-300' : 'text-blue-700 dark:text-blue-300'
-                  }`}>
-                    {fcmResult.error
-                      ? 'Mobile push failed / فشل الإشعار للجوال'
-                      : fcmResult.tokens === 0
-                        ? 'No mobile devices registered / لا أجهزة مسجلة'
-                        : `Mobile push sent / أُرسل للجوال`}
-                  </p>
-                  {fcmResult.error ? (
-                    <p className="text-xs text-red-600 dark:text-red-400 mt-1 break-all font-mono">{fcmResult.error}</p>
-                  ) : fcmResult.tokens === 0 ? (
-                    <p className="text-xs text-amber-600 dark:text-amber-400 mt-0.5">
-                      None of the selected users have a registered mobile device. They will still see the in-app notification when they open the web app.
-                    </p>
-                  ) : (
-                    <p className="text-xs text-blue-600 dark:text-blue-400 mt-0.5">
-                      {fcmResult.tokens} device(s) targeted — <strong>{fcmResult.sent}</strong> delivered
-                      {fcmResult.failed > 0 && <>, <strong>{fcmResult.failed}</strong> failed (stale tokens auto-cleaned)</>}
-                    </p>
-                  )}
+      <div className="p-4 sm:p-6 max-w-5xl mx-auto space-y-6">
+
+        {/* ── Header ──────────────────────────────────────────────── */}
+        <div className="rounded-2xl bg-gradient-to-r from-violet-700 to-purple-700 dark:from-violet-800 dark:to-purple-900 text-white p-6 shadow-lg">
+          <div className="flex items-center gap-4">
+            <div className="p-3 bg-white/15 backdrop-blur rounded-xl">
+              <Radio className="w-7 h-7" />
+            </div>
+            <div>
+              <h1 className="text-2xl font-bold tracking-tight">Broadcast Center</h1>
+              <p className="text-violet-200 text-sm mt-0.5">مركز الإذاعة — Send bilingual updates to your field team</p>
+            </div>
+          </div>
+          {stats && (
+            <div className="grid grid-cols-3 gap-3 mt-5">
+              {[
+                { label: 'Total Sent', labelAr: 'إجمالي المرسل', value: stats.total, icon: <Send className="w-4 h-4" /> },
+                { label: 'Recipients', labelAr: 'المستلمون', value: userCount ?? '—', icon: <Users className="w-4 h-4" /> },
+                { label: 'This Quarter', labelAr: 'هذا الربع', value: history.filter(h => new Date(h.created_at) > new Date(Date.now() - 90 * 24 * 60 * 60 * 1000)).length, icon: <TrendingUp className="w-4 h-4" /> },
+              ].map(s => (
+                <div key={s.label} className="bg-white/10 backdrop-blur rounded-xl p-3">
+                  <div className="flex items-center gap-2 text-violet-200 text-xs mb-1">{s.icon}{s.label}</div>
+                  <p className="text-2xl font-bold">{s.value}</p>
+                  <p className="text-violet-300 text-xs">{s.labelAr}</p>
                 </div>
-              </div>
+              ))}
             </div>
           )}
+        </div>
 
-          {/* Send Button */}
-          <button
-            type="button"
-            onClick={handleSend}
-            disabled={sending || !titleEn.trim() || !messageEn.trim()}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: '8px',
-              width: '100%',
-              height: '48px',
-              backgroundColor: sending || !titleEn.trim() || !messageEn.trim() ? '#a78bfa' : '#7c3aed',
-              color: '#ffffff',
-              border: 'none',
-              borderRadius: '8px',
-              fontSize: '16px',
-              fontWeight: '600',
-              cursor: sending || !titleEn.trim() || !messageEn.trim() ? 'not-allowed' : 'pointer',
-              opacity: sending || !titleEn.trim() || !messageEn.trim() ? 0.7 : 1,
-            }}
-          >
-            {sending ? (
-              <><RefreshCw className="w-5 h-5 animate-spin" /> Sending broadcast...</>
-            ) : (
-              <><Send className="w-5 h-5" /> Send Broadcast to {AUDIENCE_OPTIONS.find(a => a.value === audience)?.label.split('/')[0].trim()}</>
-            )}
-          </button>
+        {/* ── Tab Bar ──────────────────────────────────────────────── */}
+        <div className="flex gap-1 bg-white dark:bg-slate-900 rounded-xl p-1.5 shadow-sm border">
+          {[
+            { id: 'compose', icon: <MessageSquare className="w-4 h-4" />, label: 'Compose', labelAr: 'كتابة' },
+            { id: 'feed', icon: <Rss className="w-4 h-4" />, label: 'Broadcasts Feed', labelAr: 'سجل الإرسال' },
+          ].map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`flex-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-lg text-sm font-semibold transition-all duration-200 ${
+                activeTab === tab.id
+                  ? 'bg-violet-600 text-white shadow-md'
+                  : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+              }`}
+            >
+              {tab.icon}
+              <span>{tab.label}</span>
+              <span className={`text-xs font-normal ${activeTab === tab.id ? 'text-violet-200' : 'text-slate-400'}`}>/ {tab.labelAr}</span>
+            </button>
+          ))}
+        </div>
 
-          {/* Preview */}
-          {(titleEn || messageEn) && (
-            <Card className="border-violet-200 dark:border-violet-800 bg-violet-50/50 dark:bg-violet-900/10">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm text-muted-foreground flex items-center gap-2">
-                  <Info className="w-4 h-4" /> Preview / معاينة
+        {/* ═══════════════════════════════════════════════════════════
+            COMPOSE TAB
+        ════════════════════════════════════════════════════════════ */}
+        {activeTab === 'compose' && (
+          <div className="space-y-5">
+
+            {/* Quick Templates */}
+            <Card className="border-violet-200 dark:border-violet-800">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                  <FileText className="w-4 h-4 text-violet-500" />
+                  Quick Templates / قوالب سريعة
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="rounded-lg border border-border bg-card p-4 space-y-2">
-                  <div className="flex items-start justify-between">
-                    <p className="font-semibold text-sm">{titleEn || '—'}</p>
-                    {priority !== 'normal' && (
-                      <Badge className={PRIORITY_OPTIONS.find(p => p.value === priority)?.color + ' text-xs border-0'}>
-                        {priority.toUpperCase()}
-                      </Badge>
-                    )}
-                  </div>
-                  <p className="text-xs text-muted-foreground">{messageEn || '—'}</p>
-                  {titleAr && <p className="text-sm font-semibold text-right" dir="rtl">{titleAr}</p>}
-                  {messageAr && <p className="text-xs text-muted-foreground text-right" dir="rtl">{messageAr}</p>}
-                  {actionLink && (
-                    <p className="text-xs text-blue-500 flex items-center gap-1">
-                      <LinkIcon className="w-3 h-3" /> {actionLink}
-                    </p>
-                  )}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                  {QUICK_TEMPLATES.map(t => (
+                    <button
+                      key={t.id}
+                      onClick={() => applyTemplate(t)}
+                      className="flex flex-col items-center gap-1.5 p-3 rounded-xl border border-violet-200 dark:border-violet-800 hover:bg-violet-50 dark:hover:bg-violet-900/20 hover:border-violet-400 transition-all text-center"
+                    >
+                      <span className="text-2xl">{t.icon}</span>
+                      <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">{t.label}</span>
+                      <span className="text-[10px] text-slate-500">{t.labelAr}</span>
+                    </button>
+                  ))}
                 </div>
               </CardContent>
             </Card>
-          )}
 
-        </TabsContent>
-
-        {/* HISTORY TAB */}
-        <TabsContent value="history" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between">
+            {/* Compose Form */}
+            <Card>
+              <CardHeader>
                 <CardTitle className="flex items-center gap-2">
-                  <Clock className="w-5 h-5 text-violet-500" />
-                  Recent Broadcasts / الإرسالات الأخيرة
+                  <Megaphone className="w-5 h-5 text-violet-500" />
+                  Compose Message / كتابة الرسالة
                 </CardTitle>
-                <button
-                  onClick={loadHistory}
-                  disabled={historyLoading}
-                  className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
-                >
-                  <RotateCcw className={`w-3.5 h-3.5 ${historyLoading ? 'animate-spin' : ''}`} />
-                  Refresh
-                </button>
-              </div>
-              <CardDescription>History of broadcast notifications sent from this system.</CardDescription>
-            </CardHeader>
-            <CardContent>
-              {historyLoading ? (
-                <div className="flex items-center justify-center py-12">
-                  <RefreshCw className="w-5 h-5 animate-spin text-muted-foreground" />
-                  <span className="ml-2 text-sm text-muted-foreground">Loading history...</span>
-                </div>
-              ) : history.length === 0 ? (
-                <div className="text-center py-12 text-muted-foreground">
-                  <Megaphone className="w-8 h-8 mx-auto mb-3 opacity-40" />
-                  <p className="text-sm">No broadcasts sent yet.</p>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {history.map((item, idx) => {
-                    const bid = item.broadcast_id;
-                    const isOpen = openReceiptId === bid;
-                    const total = item.recipient_count || 0;
-                    const receiptList = bid ? receipts[bid] : null;
-                    const isLoadingReceipts = bid ? receiptsLoading[bid] : false;
-                    // Read counts come from the on-demand receipts query
-                    const readCount = receiptList ? receiptList.filter(r => r.isRead).length : null;
-                    const readPct = readCount !== null && total > 0 ? Math.round((readCount / total) * 100) : null;
+                <CardDescription>Write your broadcast in both English and Arabic for full bilingual reach.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-5">
 
-                    return (
-                      <div key={item.id + idx} className="rounded-lg border overflow-hidden">
-                        {/* Broadcast header row */}
-                        <div className="flex items-start gap-3 p-4">
-                          <Megaphone className="w-4 h-4 text-violet-400 mt-0.5 flex-shrink-0" />
+                {/* Titles */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <Label className="flex items-center gap-1.5">
+                      <span className="text-base">🇬🇧</span> Title (English) <span className="text-red-500">*</span>
+                    </Label>
+                    <Input value={titleEn} onChange={e => setTitleEn(e.target.value)} placeholder="Enter notification title..." maxLength={120} />
+                    <p className="text-xs text-muted-foreground text-right">{titleEn.length}/120</p>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="flex items-center gap-1.5">
+                      <span className="text-base">🇸🇩</span> العنوان (عربي)
+                    </Label>
+                    <Input value={titleAr} onChange={e => setTitleAr(e.target.value)} placeholder="أدخل عنوان الإشعار..." dir="rtl" maxLength={120} />
+                    <p className="text-xs text-muted-foreground text-right">{titleAr.length}/120</p>
+                  </div>
+                </div>
+
+                {/* Messages */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <Label className="flex items-center gap-1.5">
+                      <span className="text-base">🇬🇧</span> Message (English) <span className="text-red-500">*</span>
+                    </Label>
+                    <Textarea value={messageEn} onChange={e => setMessageEn(e.target.value)} placeholder="Enter your message..." rows={5} maxLength={600} />
+                    <p className="text-xs text-muted-foreground text-right">{messageEn.length}/600</p>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="flex items-center gap-1.5">
+                      <span className="text-base">🇸🇩</span> الرسالة (عربي)
+                    </Label>
+                    <Textarea value={messageAr} onChange={e => setMessageAr(e.target.value)} placeholder="أدخل رسالتك..." rows={5} dir="rtl" maxLength={600} />
+                    <p className="text-xs text-muted-foreground text-right">{messageAr.length}/600</p>
+                  </div>
+                </div>
+
+                {/* Action Link */}
+                <div className="space-y-1.5">
+                  <Label className="flex items-center gap-2">
+                    <LinkIcon className="w-3.5 h-3.5 text-muted-foreground" /> Action Link <span className="text-muted-foreground font-normal">(optional)</span>
+                  </Label>
+                  <Input value={actionLink} onChange={e => setActionLink(e.target.value)} placeholder="/settings?tab=profile or https://..." />
+                  <p className="text-xs text-muted-foreground">رابط إجراء — Users will be directed here when they tap the notification.</p>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Delivery Settings */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Globe className="w-5 h-5 text-violet-500" />
+                  Delivery Settings / إعدادات الإرسال
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+
+                  {/* Audience */}
+                  <div className="space-y-1.5">
+                    <Label className="flex items-center gap-2">
+                      <Users className="w-4 h-4 text-muted-foreground" /> Target Audience / الجمهور المستهدف
+                    </Label>
+                    <Select value={audience} onValueChange={setAudience}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {AUDIENCE_OPTIONS.map(o => (
+                          <SelectItem key={o.value} value={o.value}>
+                            <span className="flex items-center gap-2">
+                              <span>{o.icon}</span>
+                              <span>{o.labelEn}</span>
+                              <span className="text-muted-foreground">/ {o.labelAr}</span>
+                            </span>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {userCount !== null && (
+                      <p className="text-xs text-muted-foreground flex items-center gap-1">
+                        <Users className="w-3 h-3" />
+                        {audience === 'no_bank_account'
+                          ? `Up to ${userCount} users (filtered at send time)`
+                          : `~${userCount} user(s) will receive this`}
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Priority */}
+                  <div className="space-y-1.5">
+                    <Label className="flex items-center gap-2">
+                      <AlertTriangle className="w-4 h-4 text-muted-foreground" /> Priority / الأولوية
+                    </Label>
+                    <Select value={priority} onValueChange={setPriority}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {PRIORITY_OPTIONS.map(o => (
+                          <SelectItem key={o.value} value={o.value}>
+                            <span className="flex items-center gap-2">
+                              <span className={`w-2 h-2 rounded-full ${o.dot}`} />
+                              <span>{o.labelEn}</span>
+                              <span className="text-muted-foreground">/ {o.labelAr}</span>
+                            </span>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                {/* Toggles */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between p-3.5 rounded-xl border bg-muted/30">
+                    <div>
+                      <p className="text-sm font-medium">Send by Email / إرسال بالبريد الإلكتروني</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">Also deliver via IONOS SMTP to each recipient</p>
+                    </div>
+                    <Switch checked={sendEmail} onCheckedChange={setSendEmail} />
+                  </div>
+                  <div className="flex items-center justify-between p-3.5 rounded-xl border bg-muted/30">
+                    <div>
+                      <p className="text-sm font-medium">Require Read Confirmation / تأكيد القراءة</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">Track who has explicitly confirmed reading — يتتبع من أكد القراءة</p>
+                    </div>
+                    <Switch checked={requireAck} onCheckedChange={setRequireAck} />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Live Preview */}
+            {(titleEn || messageEn) && (
+              <Card className="border-violet-200 dark:border-violet-800 bg-gradient-to-br from-violet-50 to-purple-50 dark:from-violet-950/40 dark:to-purple-950/40">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-sm flex items-center gap-2">
+                    <Eye className="w-4 h-4 text-violet-500" /> Live Preview / معاينة مباشرة
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {/* Notification card mockup */}
+                  <div className={`rounded-xl border-l-4 ${selectedPriority.border} bg-white dark:bg-slate-900 shadow-md p-4 space-y-2`}>
+                    <div className="flex items-start gap-3">
+                      <div className="p-2 bg-violet-100 dark:bg-violet-900/40 rounded-lg shrink-0">
+                        <Megaphone className="w-4 h-4 text-violet-600 dark:text-violet-400" />
+                      </div>
+                      <div className="flex-1">
+                        <div className="flex items-center justify-between gap-2 flex-wrap">
+                          <p className="font-bold text-sm">{titleEn || '—'}</p>
+                          <Badge className={`text-[10px] border-0 ${selectedPriority.badge}`}>{priority.toUpperCase()}</Badge>
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-1 leading-relaxed">{messageEn || '—'}</p>
+                        {titleAr && <p className="text-sm font-semibold mt-2 text-right" dir="rtl">{titleAr}</p>}
+                        {messageAr && <p className="text-xs text-muted-foreground mt-1 text-right leading-relaxed" dir="rtl">{messageAr}</p>}
+                        {actionLink && (
+                          <p className="text-xs text-violet-500 flex items-center gap-1 mt-2">
+                            <LinkIcon className="w-3 h-3" /> {actionLink}
+                          </p>
+                        )}
+                        {requireAck && (
+                          <div className="mt-3 pt-2 border-t flex items-center gap-2">
+                            <div className="flex-1 text-xs text-slate-500">Read this announcement? / قرأت هذا الإعلان؟</div>
+                            <div className="flex items-center gap-1.5 px-3 py-1 bg-emerald-500 text-white rounded-full text-xs font-semibold cursor-default">
+                              <CheckCheck className="w-3 h-3" /> Confirm Read
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 pt-1">
+                      <div className={`w-2 h-2 rounded-full ${selectedPriority.dot}`} />
+                      <p className="text-[10px] text-muted-foreground">WFP TPM · {selectedAudience.icon} {selectedAudience.labelEn} · Just now</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Send Button */}
+            <button
+              type="button"
+              onClick={handleSend}
+              disabled={sending || !titleEn.trim() || !messageEn.trim()}
+              className={`w-full h-14 rounded-xl text-white font-bold text-base flex items-center justify-center gap-3 transition-all shadow-lg ${
+                sending || !titleEn.trim() || !messageEn.trim()
+                  ? 'bg-violet-400 cursor-not-allowed opacity-70'
+                  : 'bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-700 hover:to-purple-700 cursor-pointer shadow-violet-500/30'
+              }`}
+            >
+              {sending ? (
+                <><RefreshCw className="w-5 h-5 animate-spin" /> Sending broadcast... / جارٍ الإرسال</>
+              ) : (
+                <>
+                  <Send className="w-5 h-5" />
+                  Send to {selectedAudience.labelEn} · أرسل إلى {selectedAudience.labelAr}
+                  {userCount !== null && <span className="ml-1 bg-white/20 rounded-full px-2 py-0.5 text-sm font-normal">{userCount}</span>}
+                </>
+              )}
+            </button>
+
+          </div>
+        )}
+
+        {/* ═══════════════════════════════════════════════════════════
+            FEED TAB
+        ════════════════════════════════════════════════════════════ */}
+        {activeTab === 'feed' && (
+          <div className="space-y-4">
+
+            {/* Feed Header */}
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-lg font-bold flex items-center gap-2">
+                  <Rss className="w-5 h-5 text-violet-500" /> Broadcasts Feed
+                </h2>
+                <p className="text-sm text-muted-foreground">سجل الإرسال — All broadcasts from the last 90 days</p>
+              </div>
+              <Button variant="outline" size="sm" onClick={loadHistory} disabled={historyLoading} className="gap-2">
+                <RotateCcw className={`w-4 h-4 ${historyLoading ? 'animate-spin' : ''}`} />
+                Refresh
+              </Button>
+            </div>
+
+            {historyLoading ? (
+              <div className="flex flex-col items-center justify-center py-20 gap-3">
+                <RefreshCw className="w-6 h-6 animate-spin text-violet-400" />
+                <p className="text-sm text-muted-foreground">Loading broadcasts...</p>
+              </div>
+            ) : history.length === 0 ? (
+              <div className="text-center py-20">
+                <div className="w-16 h-16 bg-violet-100 dark:bg-violet-900/40 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                  <Megaphone className="w-8 h-8 text-violet-400" />
+                </div>
+                <p className="text-sm font-medium text-muted-foreground">No broadcasts sent yet / لم يُرسَل أي إذاعة بعد</p>
+                <Button className="mt-4" variant="outline" size="sm" onClick={() => setActiveTab('compose')}>
+                  <Send className="w-4 h-4 mr-2" /> Send your first broadcast
+                </Button>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {history.map((item, idx) => {
+                  const bid = item.broadcast_id;
+                  const isOpen = openReceiptId === bid;
+                  const total = item.recipient_count || 0;
+                  const receiptList = bid ? receipts[bid] : null;
+                  const isLoadingReceipts = bid ? receiptsLoading[bid] : false;
+                  const readCount = receiptList ? receiptList.filter(r => r.isRead).length : null;
+                  const readPct = readCount !== null && total > 0 ? Math.round((readCount / total) * 100) : null;
+                  const prio = getPriority(item.priority);
+
+                  return (
+                    <div key={item.id + idx} className="bg-white dark:bg-slate-900 rounded-2xl border shadow-sm overflow-hidden">
+                      {/* Priority stripe + content */}
+                      <div className={`border-l-4 ${prio.border} p-4`}>
+                        <div className="flex items-start gap-3">
+
+                          {/* Icon */}
+                          <div className="p-2.5 bg-violet-100 dark:bg-violet-900/40 rounded-xl shrink-0 mt-0.5">
+                            <Megaphone className="w-4 h-4 text-violet-600 dark:text-violet-400" />
+                          </div>
+
+                          {/* Main content */}
                           <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <p className="text-sm font-medium truncate">{item.title}</p>
-                              <Badge variant="outline" className={
-                                item.priority === 'urgent' ? 'border-red-300 text-red-600 text-[10px]' :
-                                item.priority === 'high' ? 'border-amber-300 text-amber-600 text-[10px]' :
-                                'text-[10px]'
-                              }>
-                                {item.priority}
+
+                            {/* Title row */}
+                            <div className="flex items-start gap-2 flex-wrap">
+                              <p className="font-bold text-sm flex-1">{item.title}</p>
+                              <Badge className={`text-[10px] border-0 shrink-0 ${prio.badge}`}>
+                                <span className={`w-1.5 h-1.5 rounded-full ${prio.dot} inline-block mr-1`} />
+                                {item.priority.toUpperCase()}
                               </Badge>
                             </div>
-                            <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{item.message}</p>
-                            <div className="flex items-center gap-3 mt-2 text-xs text-muted-foreground flex-wrap">
+
+                            {/* Arabic title */}
+                            {item.title_ar && item.title_ar !== item.title && (
+                              <p className="text-sm font-semibold text-slate-500 mt-0.5 text-right" dir="rtl">{item.title_ar}</p>
+                            )}
+
+                            {/* Message */}
+                            <p className="text-xs text-muted-foreground mt-1.5 leading-relaxed line-clamp-2">{item.message}</p>
+                            {item.message_ar && item.message_ar !== item.message && (
+                              <p className="text-xs text-muted-foreground mt-1 text-right leading-relaxed line-clamp-2" dir="rtl">{item.message_ar}</p>
+                            )}
+
+                            {/* Metadata */}
+                            <div className="flex items-center gap-3 mt-2.5 text-xs text-muted-foreground flex-wrap">
                               <span className="flex items-center gap-1">
                                 <Clock className="w-3 h-3" />
-                                {item.created_at ? format(new Date(item.created_at), 'MMM dd, yyyy HH:mm') : '—'}
+                                {item.created_at ? format(new Date(item.created_at), 'MMM dd, yyyy · HH:mm') : '—'}
                               </span>
                               <span className="flex items-center gap-1">
                                 <Users className="w-3 h-3" />
-                                {total} sent
+                                {total} recipients
                               </span>
                               {readCount !== null ? (
-                                <span className="flex items-center gap-1 text-emerald-600">
-                                  <UserCheck className="w-3 h-3" />
-                                  {readCount} read ({readPct}%)
+                                <span className="flex items-center gap-1 text-emerald-600 font-medium">
+                                  <CheckCheck className="w-3 h-3" />
+                                  {readCount}/{total} confirmed ({readPct}%)
                                 </span>
-                              ) : (
-                                bid && (
-                                  <span className="flex items-center gap-1 text-violet-400">
-                                    <Eye className="w-3 h-3" />
-                                    Open receipts to see reads
-                                  </span>
-                                )
+                              ) : bid && (
+                                <span className="flex items-center gap-1 text-violet-400">
+                                  <Eye className="w-3 h-3" /> Click receipts to load
+                                </span>
                               )}
                             </div>
-                            {/* Progress bar — only shown after receipts are loaded */}
+
+                            {/* Read progress bar */}
                             {readPct !== null && total > 0 && (
-                              <div className="mt-2 w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                                <div
-                                  className="h-full bg-emerald-400 rounded-full transition-all"
-                                  style={{ width: `${readPct}%` }}
-                                />
+                              <div className="mt-2.5">
+                                <div className="w-full h-1.5 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
+                                  <div
+                                    className={`h-full rounded-full transition-all duration-500 ${readPct === 100 ? 'bg-emerald-500' : readPct >= 50 ? 'bg-blue-400' : 'bg-amber-400'}`}
+                                    style={{ width: `${readPct}%` }}
+                                  />
+                                </div>
+                                <p className="text-[10px] text-muted-foreground mt-1">{readPct}% read confirmation rate</p>
                               </div>
                             )}
                           </div>
-                          {/* View receipts button */}
+
+                          {/* Toggle button */}
                           {bid && (
                             <button
                               onClick={() => toggleReceipts(item)}
-                              className="flex items-center gap-1 text-[11px] text-violet-600 hover:text-violet-800 font-medium shrink-0 mt-0.5"
+                              className="flex flex-col items-center gap-0.5 text-[10px] text-violet-500 hover:text-violet-700 font-semibold shrink-0 mt-0.5 transition-colors"
                             >
-                              <Eye className="w-3.5 h-3.5" />
-                              {isOpen ? 'Hide' : 'Receipts'}
+                              <UserCheck className="w-4 h-4" />
+                              <span>Receipts</span>
                               {isOpen ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
                             </button>
                           )}
                         </div>
+                      </div>
 
-                        {/* Expandable receipts panel */}
-                        {isOpen && bid && (
-                          <div className="border-t bg-slate-50 dark:bg-slate-900/40 p-4">
-                            {isLoadingReceipts ? (
-                              <div className="flex items-center gap-2 text-xs text-muted-foreground py-2">
-                                <RefreshCw className="w-3.5 h-3.5 animate-spin" /> Loading receipts...
-                              </div>
-                            ) : !receiptList || receiptList.length === 0 ? (
-                              <p className="text-xs text-muted-foreground py-2">No receipt data available for this broadcast.</p>
-                            ) : (
-                              <div>
-                                <div className="flex items-center justify-between mb-3 gap-2 flex-wrap">
-                                  <p className="text-xs font-semibold text-slate-600 dark:text-slate-400">
-                                    {receiptList.filter(r => r.isRead).length} of {receiptList.length} acknowledged
-                                  </p>
-                                  <div className="flex items-center gap-2">
-                                    {/* Refresh receipts */}
-                                    <button
-                                      onClick={() => refreshReceipts(bid)}
-                                      disabled={isLoadingReceipts}
-                                      title="Refresh"
-                                      className="flex items-center gap-1 text-[11px] text-slate-500 hover:text-slate-800 transition-colors"
-                                    >
-                                      <RotateCcw className={`w-3 h-3 ${isLoadingReceipts ? 'animate-spin' : ''}`} />
-                                    </button>
-                                    {/* Export CSV */}
-                                    <button
-                                      onClick={() => exportReceiptsCSV(item, bid)}
-                                      title="Export CSV"
-                                      className="flex items-center gap-1 text-[11px] text-slate-500 hover:text-slate-800 transition-colors"
-                                    >
-                                      <Download className="w-3 h-3" />
-                                      CSV
-                                    </button>
-                                    {/* Re-send to unread */}
-                                    {receiptList.some(r => !r.isRead) && (
-                                      <button
-                                        onClick={() => resendToUnread(item, bid)}
-                                        disabled={resendingId === bid}
-                                        className="flex items-center gap-1 text-[11px] bg-amber-50 border border-amber-200 text-amber-700 hover:bg-amber-100 rounded px-2 py-1 font-medium transition-colors"
-                                      >
-                                        {resendingId === bid
-                                          ? <><RefreshCw className="w-3 h-3 animate-spin" /> Sending...</>
-                                          : <><SendHorizonal className="w-3 h-3" /> Re-send to {receiptList.filter(r => !r.isRead).length} unread</>
-                                        }
-                                      </button>
-                                    )}
+                      {/* Expandable receipts panel */}
+                      {isOpen && bid && (
+                        <div className="border-t bg-slate-50 dark:bg-slate-950/60 p-4">
+                          {isLoadingReceipts ? (
+                            <div className="flex items-center gap-2 text-xs text-muted-foreground py-3 justify-center">
+                              <RefreshCw className="w-3.5 h-3.5 animate-spin" /> Loading receipt data...
+                            </div>
+                          ) : !receiptList || receiptList.length === 0 ? (
+                            <p className="text-xs text-muted-foreground py-3 text-center">No receipt data for this broadcast.</p>
+                          ) : (
+                            <>
+                              {/* Receipt summary bar */}
+                              <div className="flex items-center justify-between mb-3 gap-2 flex-wrap">
+                                <div className="flex items-center gap-3">
+                                  <div className="flex items-center gap-1.5 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 text-xs font-semibold rounded-full px-3 py-1">
+                                    <CheckCheck className="w-3 h-3" />
+                                    {receiptList.filter(r => r.isRead).length} confirmed / تم التأكيد
+                                  </div>
+                                  <div className="flex items-center gap-1.5 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 text-xs font-semibold rounded-full px-3 py-1">
+                                    <UserX className="w-3 h-3" />
+                                    {receiptList.filter(r => !r.isRead).length} pending / في الانتظار
                                   </div>
                                 </div>
-                                <div className="space-y-1 max-h-72 overflow-y-auto">
-                                  {receiptList.map(r => (
-                                    <div key={r.userId} className={`flex items-center gap-3 rounded px-3 py-2 text-xs ${r.isRead ? 'bg-emerald-50 dark:bg-emerald-900/20' : 'bg-white dark:bg-slate-800'}`}>
-                                      {r.isRead
-                                        ? <UserCheck className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
-                                        : <UserX className="w-3.5 h-3.5 text-slate-300 shrink-0" />
+                                <div className="flex items-center gap-2">
+                                  <button onClick={() => refreshReceipts(bid)} disabled={isLoadingReceipts} title="Refresh" className="p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800">
+                                    <RotateCcw className={`w-3.5 h-3.5 ${isLoadingReceipts ? 'animate-spin' : ''}`} />
+                                  </button>
+                                  <button onClick={() => exportReceiptsCSV(item, bid)} title="Export CSV" className="flex items-center gap-1.5 text-xs font-medium text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 transition-colors p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800">
+                                    <Download className="w-3.5 h-3.5" /> CSV
+                                  </button>
+                                  {receiptList.some(r => !r.isRead) && (
+                                    <button
+                                      onClick={() => resendToUnread(item, bid)}
+                                      disabled={resendingId === bid}
+                                      className="flex items-center gap-1.5 text-xs bg-amber-500 hover:bg-amber-600 text-white rounded-lg px-3 py-1.5 font-semibold transition-colors"
+                                    >
+                                      {resendingId === bid
+                                        ? <><RefreshCw className="w-3 h-3 animate-spin" /> Sending...</>
+                                        : <><SendHorizonal className="w-3 h-3" /> Re-send to {receiptList.filter(r => !r.isRead).length} unread</>
                                       }
-                                      <span className="flex-1 font-medium truncate">{r.name}</span>
-                                      <span className="text-muted-foreground capitalize shrink-0">{r.role}</span>
-                                      {r.isRead && r.readAt && (
-                                        <span className="text-emerald-600 shrink-0">
-                                          {format(new Date(r.readAt), 'MMM dd HH:mm')}
-                                        </span>
-                                      )}
-                                      {!r.isRead && (
-                                        <span className="text-slate-400 shrink-0">Pending</span>
-                                      )}
-                                    </div>
-                                  ))}
+                                    </button>
+                                  )}
                                 </div>
                               </div>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
 
+                              {/* User list */}
+                              <div className="space-y-1.5 max-h-64 overflow-y-auto pr-1">
+                                {receiptList.map(r => (
+                                  <div key={r.userId} className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-xs transition-colors ${r.isRead ? 'bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-100 dark:border-emerald-800' : 'bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800'}`}>
+                                    <div className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 ${r.isRead ? 'bg-emerald-100 dark:bg-emerald-800' : 'bg-slate-100 dark:bg-slate-700'}`}>
+                                      {r.isRead
+                                        ? <CheckCheck className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                                        : <UserX className="w-3.5 h-3.5 text-slate-400" />
+                                      }
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                      <p className="font-semibold truncate">{r.name}</p>
+                                      <p className="text-muted-foreground capitalize">{r.role}</p>
+                                    </div>
+                                    {r.isRead && r.readAt ? (
+                                      <div className="text-right shrink-0">
+                                        <p className="text-emerald-600 dark:text-emerald-400 font-medium">Confirmed ✓</p>
+                                        <p className="text-muted-foreground">{format(new Date(r.readAt), 'MMM dd, HH:mm')}</p>
+                                      </div>
+                                    ) : (
+                                      <span className="text-slate-400 shrink-0 bg-slate-100 dark:bg-slate-700 rounded-full px-2 py-0.5">Pending</span>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
+      </div>
     </div>
   );
 }
