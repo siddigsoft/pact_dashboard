@@ -1039,14 +1039,17 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       builder: (ctx) {
         return StatefulBuilder(
           builder: (ctx, setSheetState) {
+            final mq = MediaQuery.of(ctx);
             return Padding(
-              padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
+              padding: EdgeInsets.only(
+                  bottom: mq.viewInsets.bottom),
               child: Container(
                 decoration: const BoxDecoration(
                   color: Colors.white,
                   borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
                 ),
-                padding: const EdgeInsets.fromLTRB(20, 16, 20, 28),
+                padding: EdgeInsets.fromLTRB(
+                    20, 16, 20, 28 + mq.viewPadding.bottom),
                 child: Form(
                   key: sheetFormKey,
                   child: Column(
