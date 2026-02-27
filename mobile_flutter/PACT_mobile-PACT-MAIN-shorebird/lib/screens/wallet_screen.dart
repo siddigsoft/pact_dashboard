@@ -788,9 +788,8 @@ class _WalletScreenState extends State<WalletScreen> {
                                     children: [
                                       Expanded(
                                         child: _buildStatCard(
-                                          widget.isArabic
-                                              ? 'إجمالي الأرباح'
-                                              : 'Total Earned',
+                                          'Total Earned',
+                                          'إجمالي الأرباح',
                                           _formatCurrency(_totalEarned),
                                           Icons.trending_up,
                                           Colors.green,
@@ -799,9 +798,8 @@ class _WalletScreenState extends State<WalletScreen> {
                                       const SizedBox(width: 12),
                                       Expanded(
                                         child: _buildStatCard(
-                                          widget.isArabic
-                                              ? 'هذا الشهر'
-                                              : 'This Month',
+                                          'This Month',
+                                          'هذا الشهر',
                                           _formatCurrency(_thisMonthEarnings),
                                           Icons.calendar_today,
                                           Colors.purple,
@@ -816,9 +814,8 @@ class _WalletScreenState extends State<WalletScreen> {
                                     children: [
                                       Expanded(
                                         child: _buildStatCard(
-                                          widget.isArabic
-                                              ? 'قيد الانتظار'
-                                              : 'Pending',
+                                          'Pending',
+                                          'قيد الانتظار',
                                           _formatCurrency(_pendingWithdrawals),
                                           Icons.pending,
                                           Colors.orange,
@@ -827,9 +824,8 @@ class _WalletScreenState extends State<WalletScreen> {
                                       const SizedBox(width: 12),
                                       Expanded(
                                         child: _buildStatCard(
-                                          widget.isArabic
-                                              ? 'المسحوب'
-                                              : 'Withdrawn',
+                                          'Withdrawn',
+                                          'المسحوب',
                                           _formatCurrency(_totalWithdrawn),
                                           Icons.check_circle,
                                           Colors.cyan,
@@ -1076,7 +1072,8 @@ class _WalletScreenState extends State<WalletScreen> {
   }
 
   Widget _buildStatCard(
-    String title,
+    String titleEn,
+    String titleAr,
     String value,
     IconData icon,
     Color color,
@@ -1100,11 +1097,27 @@ class _WalletScreenState extends State<WalletScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                title,
-                style: GoogleFonts.poppins(
-                  fontSize: 12,
-                  color: AppColors.textLight,
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      titleEn,
+                      style: GoogleFonts.poppins(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.textLight,
+                      ),
+                    ),
+                    Text(
+                      titleAr,
+                      style: GoogleFonts.poppins(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.textLight.withValues(alpha: 0.75),
+                      ),
+                    ),
+                  ],
                 ),
               ),
               Icon(icon, size: 20, color: color),
@@ -1181,10 +1194,11 @@ class _WalletScreenState extends State<WalletScreen> {
               labelAr,
               textAlign: TextAlign.center,
               style: GoogleFonts.poppins(
-                fontSize: 9,
+                fontSize: 10,
+                fontWeight: FontWeight.w600,
                 color: isActive
-                    ? Colors.white.withValues(alpha: 0.85)
-                    : Colors.grey.shade400,
+                    ? Colors.white
+                    : Colors.grey.shade600,
               ),
             ),
           ],

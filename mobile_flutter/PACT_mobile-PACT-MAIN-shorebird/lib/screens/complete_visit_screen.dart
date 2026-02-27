@@ -48,32 +48,21 @@ class _CompleteVisitScreenState extends ConsumerState<CompleteVisitScreen> {
   String? _selectedActivityType;
   int _pdmQuestionnaires = 0;
   final TextEditingController _pdmQController = TextEditingController();
+  final TextEditingController _marketNameController = TextEditingController();
 
   static const int _pdmQPerVisit = 7;
 
   bool get _isArabic => Localizations.localeOf(context).languageCode == 'ar';
 
-  static const List<String> _dmActivities = ['GFA', 'CBT', 'EBSFP'];
-
-  /// True if the MMP marks this site as requiring Market Diversion Monitoring
-  bool get _hasMDM {
-    final ad = widget.visit.additionalData;
-    if (ad == null) return false;
-    final raw = ad['use_market_diversion'] ?? ad['useMarketDiversion'];
-    if (raw == null) return false;
-    if (raw is bool) return raw;
-    final s = raw.toString().toLowerCase();
-    return s == 'yes' || s == 'true' || s == '1';
-  }
+  /// Only GFA sites have the Activity Type selector
+  bool get _isGfaSite =>
+      widget.visit.mainActivity.toUpperCase() == 'GFA';
 
   int get _pdmSiteVisits => (_pdmQuestionnaires / _pdmQPerVisit).floor();
   int get _pdmRemainder => _pdmQuestionnaires % _pdmQPerVisit;
 
   void _initActivityType() {
-    final act = widget.visit.mainActivity.toUpperCase();
-    if (_dmActivities.contains(act)) {
-      _selectedActivityType = 'DM';
-    } else if (act.isNotEmpty) {
+    if (_isGfaSite) {
       _selectedActivityType = 'PDM';
     }
   }
@@ -96,6 +85,7 @@ class _CompleteVisitScreenState extends ConsumerState<CompleteVisitScreen> {
     _notesController.dispose();
     _activitiesController.dispose();
     _pdmQController.dispose();
+    _marketNameController.dispose();
     super.dispose();
   }
 
@@ -450,8 +440,10 @@ class _CompleteVisitScreenState extends ConsumerState<CompleteVisitScreen> {
             }
           : <String, dynamic>{};
 
-      // Fee multiplier: DM with market diversion = 2 visits; PDM = floor(q/7)
-      final int visitFeeMultiplier = _selectedActivityType == 'DM' && _hasMDM
+      // Fee multiplier: MDM = 2 visits; PDM = floor(q/7)
+      // (used for local display only — not persisted to reports table)
+      // ignore: unused_local_variable
+      final int visitFeeMultiplier = _selectedActivityType == 'MDM'
           ? 2
           : _selectedActivityType == 'PDM'
               ? (_pdmSiteVisits > 0 ? _pdmSiteVisits : 1)
@@ -465,16 +457,10 @@ class _CompleteVisitScreenState extends ConsumerState<CompleteVisitScreen> {
             'activities': _activitiesController.text.trim().isEmpty
                 ? null
                 : _activitiesController.text.trim(),
-            'activity_type': _selectedActivityType,
             'duration_minutes': durationMinutes,
             'coordinates': coordinates,
             'submitted_by': userId,
             'is_synced': true,
-            if (_selectedActivityType == 'PDM' && _pdmQuestionnaires > 0)
-              'pdm_questionnaires_submitted': _pdmQuestionnaires,
-            if (_selectedActivityType == 'DM' && _hasMDM)
-              'has_market_diversion': true,
-            'visit_fee_multiplier': visitFeeMultiplier,
           })
           .select('id')
           .single();
@@ -677,7 +663,6 @@ class _CompleteVisitScreenState extends ConsumerState<CompleteVisitScreen> {
           'activities': _activitiesController.text.trim().isEmpty
               ? null
               : _activitiesController.text.trim(),
-          'activity_type': _selectedActivityType,
           'duration_minutes': durationMinutes,
           'coordinates': _currentLocation != null
               ? {
@@ -858,7 +843,7 @@ class _CompleteVisitScreenState extends ConsumerState<CompleteVisitScreen> {
   @override
   Widget build(BuildContext context) {
     final activityType = widget.visit.mainActivity;
-    final isDM = _dmActivities.contains(activityType.toUpperCase());
+    final isGfa = activityType.toUpperCase() == 'GFA';
 
     return Scaffold(
       appBar: AppBar(
@@ -902,29 +887,29 @@ class _CompleteVisitScreenState extends ConsumerState<CompleteVisitScreen> {
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                         decoration: BoxDecoration(
-                          color: isDM ? Colors.blue.shade50 : Colors.orange.shade50,
+                          color: isGfa ? Colors.green.shade50 : Colors.grey.shade50,
                           borderRadius: BorderRadius.circular(12),
                           border: Border.all(
-                            color: isDM ? Colors.blue.shade300 : Colors.orange.shade300,
+                            color: isGfa ? Colors.green.shade300 : Colors.grey.shade300,
                           ),
                         ),
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             Icon(
-                              isDM ? Icons.local_shipping : Icons.fact_check,
+                              isGfa ? Icons.verified_outlined : Icons.location_on_outlined,
                               size: 14,
-                              color: isDM ? Colors.blue.shade700 : Colors.orange.shade700,
+                              color: isGfa ? Colors.green.shade700 : Colors.grey.shade600,
                             ),
                             const SizedBox(width: 4),
                             Text(
-                              isDM
-                                  ? (_isArabic ? 'رصد التوزيع (DM) - $activityType' : 'Distribution Monitoring (DM) - $activityType')
-                                  : (_isArabic ? 'رصد ما بعد التوزيع (PDM) - $activityType' : 'Post-Distribution Monitoring (PDM) - $activityType'),
+                              _isArabic
+                                  ? 'نوع الموقع: $activityType'
+                                  : 'Site Type: $activityType',
                               style: TextStyle(
                                 fontSize: 12,
                                 fontWeight: FontWeight.w600,
-                                color: isDM ? Colors.blue.shade700 : Colors.orange.shade700,
+                                color: isGfa ? Colors.green.shade700 : Colors.grey.shade600,
                               ),
                             ),
                           ],
@@ -940,9 +925,10 @@ class _CompleteVisitScreenState extends ConsumerState<CompleteVisitScreen> {
 
             _buildLocationStatus(),
 
-            const SizedBox(height: 24),
-
-            _buildActivityTypeSelector(),
+            if (_isGfaSite) ...[
+              const SizedBox(height: 24),
+              _buildActivityTypeSelector(),
+            ],
 
             const SizedBox(height: 16),
 
@@ -1233,14 +1219,14 @@ class _CompleteVisitScreenState extends ConsumerState<CompleteVisitScreen> {
   }
 
   Widget _buildActivityTypeSelector() {
-    // Only PDM and DM — all other activity types removed per business rules
+    // Only PDM and MDM — for GFA sites only
     const activityTypesEn = {
-      'PDM': 'Post-Distribution Monitoring',
-      'DM': 'Distribution Monitoring',
+      'PDM': 'Post-Distribution\nMonitoring',
+      'MDM': 'Market Diversion\nMonitoring',
     };
     const activityTypesAr = {
       'PDM': 'رصد ما بعد التوزيع',
-      'DM': 'رصد التوزيع',
+      'MDM': 'رصد انحراف السوق',
     };
     final activityTypes = _isArabic ? activityTypesAr : activityTypesEn;
 
@@ -1256,18 +1242,19 @@ class _CompleteVisitScreenState extends ConsumerState<CompleteVisitScreen> {
         Row(
           children: activityTypes.entries.map((entry) {
             final isSelected = _selectedActivityType == entry.key;
-            final isDM = entry.key == 'DM';
+            final isMDM = entry.key == 'MDM';
             final chipColor =
-                isDM ? Colors.blue.shade700 : Colors.orange.shade700;
+                isMDM ? Colors.blue.shade700 : Colors.orange.shade700;
             return Expanded(
               child: Padding(
                 padding: EdgeInsets.only(
-                    right: isDM ? 0 : 8),
+                    right: isMDM ? 0 : 8),
                 child: GestureDetector(
                   onTap: () => setState(() {
                     _selectedActivityType = entry.key;
                     _pdmQuestionnaires = 0;
                     _pdmQController.clear();
+                    _marketNameController.clear();
                   }),
                   child: AnimatedContainer(
                     duration: const Duration(milliseconds: 180),
@@ -1294,7 +1281,7 @@ class _CompleteVisitScreenState extends ConsumerState<CompleteVisitScreen> {
                     child: Column(
                       children: [
                         Icon(
-                          isDM ? Icons.local_shipping : Icons.fact_check,
+                          isMDM ? Icons.store_outlined : Icons.fact_check,
                           size: 22,
                           color: isSelected
                               ? Colors.white
@@ -1423,84 +1410,85 @@ class _CompleteVisitScreenState extends ConsumerState<CompleteVisitScreen> {
           ),
         ],
 
-        // ── DM: market diversion info ─────────────────────────────────────
-        if (_selectedActivityType == 'DM') ...[
+        // ── MDM: market name + 2-visit badge ─────────────────────────────
+        if (_selectedActivityType == 'MDM') ...[
           const SizedBox(height: 16),
           Container(
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
-              color: _hasMDM ? Colors.pink.shade50 : Colors.blue.shade50,
+              color: Colors.blue.shade50,
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                  color: _hasMDM
-                      ? Colors.pink.shade200
-                      : Colors.blue.shade200),
+              border: Border.all(color: Colors.blue.shade200),
             ),
-            child: _hasMDM
-                ? Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Icon(Icons.info_outline,
-                          size: 16, color: Colors.pink.shade700),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              _isArabic
-                                  ? 'سوق التحويل مطبق'
-                                  : 'Market Diversion Applies',
-                              style: TextStyle(
-                                fontWeight: FontWeight.w700,
-                                fontSize: 13,
-                                color: Colors.pink.shade800,
-                              ),
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              _isArabic
-                                  ? 'هذا الموقع يُحتسب كزيارتين لأغراض الرسوم (سوق التحويل)'
-                                  : 'This site counts as 2 visits for fee purposes (market diversion)',
-                              style: TextStyle(
-                                  fontSize: 11,
-                                  color: Colors.pink.shade700),
-                            ),
-                          ],
-                        ),
-                      ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 8, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: Colors.pink.shade600,
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Text(
-                          _isArabic ? '× ٢ زيارة' : '× 2 visits',
-                          style: const TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w700,
-                            color: Colors.white,
-                          ),
-                        ),
-                      ),
-                    ],
-                  )
-                : Row(
-                    children: [
-                      Icon(Icons.local_shipping,
-                          size: 14, color: Colors.blue.shade600),
-                      const SizedBox(width: 8),
-                      Text(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(Icons.store_outlined,
+                        size: 16, color: Colors.blue.shade700),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
                         _isArabic
-                            ? 'رصد التوزيع — زيارة واحدة'
-                            : 'Distribution Monitoring — 1 visit fee',
+                            ? 'رصد انحراف السوق (MDM) — × ٢ زيارة'
+                            : 'Market Diversion Monitoring (MDM) — × 2 visits',
                         style: TextStyle(
-                            fontSize: 12, color: Colors.blue.shade700),
+                          fontWeight: FontWeight.w700,
+                          fontSize: 13,
+                          color: Colors.blue.shade800,
+                        ),
                       ),
-                    ],
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: Colors.blue.shade600,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        _isArabic ? '× ٢ زيارة' : '× 2 visits',
+                        style: const TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  _isArabic ? 'اسم السوق المُغطى *' : 'Market Name Covered *',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w600,
+                    fontSize: 12,
+                    color: Colors.blue.shade800,
                   ),
+                ),
+                const SizedBox(height: 6),
+                TextField(
+                  controller: _marketNameController,
+                  textDirection: _isArabic ? ui.TextDirection.rtl : ui.TextDirection.ltr,
+                  decoration: InputDecoration(
+                    hintText: _isArabic
+                        ? 'أدخل اسم السوق...'
+                        : 'Enter market name...',
+                    border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8)),
+                    contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 10),
+                    isDense: true,
+                    filled: true,
+                    fillColor: Colors.white,
+                    prefixIcon: Icon(Icons.storefront,
+                        size: 18, color: Colors.blue.shade400),
+                  ),
+                  onChanged: (_) => setState(() {}),
+                ),
+              ],
+            ),
           ),
         ],
       ],

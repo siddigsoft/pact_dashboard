@@ -38,33 +38,32 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
   String? _selectedActivityType;
   int _pdmQuestionnaires = 0;
   final TextEditingController _pdmQController = TextEditingController();
+  final TextEditingController _marketNameController = TextEditingController();
 
   static const int _pdmQPerVisit = 7;
 
-  static const List<String> _dmActivities = ['GFA', 'CBT', 'EBSFP'];
-
-  // Only PDM and DM — Assessment/Monitoring/Supervision/Verification/Other removed
+  // Activity Type selector: only for GFA sites, PDM and MDM only
   static const Map<String, String> _activityTypesEn = {
-    'PDM': 'Post-Distribution Monitoring',
-    'DM': 'Distribution Monitoring',
+    'PDM': 'Post-Distribution\nMonitoring',
+    'MDM': 'Market Diversion\nMonitoring',
   };
 
   static const Map<String, String> _activityTypesAr = {
     'PDM': 'رصد ما بعد التوزيع',
-    'DM': 'رصد التوزيع',
+    'MDM': 'رصد انحراف السوق',
   };
 
   bool get _isArabic => Localizations.localeOf(context).languageCode == 'ar';
 
-  /// True if the MMP marks this site as requiring Market Diversion Monitoring
-  bool get _hasMDM {
-    final raw = widget.site['use_market_diversion'] ??
-        widget.site['useMarketDiversion'];
-    if (raw == null) return false;
-    if (raw is bool) return raw;
-    final s = raw.toString().toLowerCase();
-    return s == 'yes' || s == 'true' || s == '1';
+  /// True if site is GFA — only GFA sites get the Activity Type selector
+  bool get _isGfaSite {
+    final siteActivityType =
+        widget.site['activity_type'] ?? widget.site['main_activity'];
+    return siteActivityType?.toString().toUpperCase() == 'GFA';
   }
+
+  /// True if MDM is selected (market diversion = 2 visits)
+  bool get _hasMDM => _selectedActivityType == 'MDM';
 
   int get _pdmSiteVisits => (_pdmQuestionnaires / _pdmQPerVisit).floor();
   int get _pdmRemainder => _pdmQuestionnaires % _pdmQPerVisit;
@@ -82,6 +81,7 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
     _activitiesController.dispose();
     _notesController.dispose();
     _pdmQController.dispose();
+    _marketNameController.dispose();
     _positionStream?.cancel();
     super.dispose();
   }
@@ -140,11 +140,12 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
       }
     }
 
-    final siteActivityType = widget.site['activity_type'] ?? widget.site['main_activity'];
+    final siteActivityType =
+        widget.site['activity_type'] ?? widget.site['main_activity'];
     if (_selectedActivityType == null && siteActivityType != null) {
       final act = siteActivityType.toString().toUpperCase();
-      if (_dmActivities.contains(act)) {
-        _selectedActivityType = 'DM';
+      if (act == 'GFA') {
+        _selectedActivityType = 'PDM';
       }
     }
 
@@ -574,9 +575,10 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
 
                       _buildSiteInfoCard(siteCode, locality, state),
 
-                      const SizedBox(height: 20),
-
-                      _buildActivityTypeSelector(),
+                      if (_isGfaSite) ...[
+                        const SizedBox(height: 20),
+                        _buildActivityTypeSelector(),
+                      ],
 
                       const SizedBox(height: 20),
 
@@ -716,21 +718,22 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
           ),
           const SizedBox(height: 12),
 
-          // ── Activity type chips (PDM / DM only) ───────────────────────────
+          // ── Activity type chips (PDM / MDM — GFA sites only) ─────────────
           Row(
             children: activityTypes.entries.map((entry) {
               final isSelected = _selectedActivityType == entry.key;
-              final isDM = entry.key == 'DM';
+              final isMDM = entry.key == 'MDM';
               final chipColor =
-                  isDM ? Colors.blue.shade700 : Colors.orange.shade700;
+                  isMDM ? Colors.blue.shade700 : Colors.orange.shade700;
               return Expanded(
                 child: Padding(
-                  padding: EdgeInsets.only(right: isDM ? 0 : 8),
+                  padding: EdgeInsets.only(right: isMDM ? 0 : 8),
                   child: GestureDetector(
                     onTap: () => setState(() {
                       _selectedActivityType = entry.key;
                       _pdmQuestionnaires = 0;
                       _pdmQController.clear();
+                      _marketNameController.clear();
                     }),
                     child: AnimatedContainer(
                       duration: const Duration(milliseconds: 180),
@@ -757,8 +760,8 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
                       child: Column(
                         children: [
                           Icon(
-                            isDM
-                                ? Icons.local_shipping
+                            isMDM
+                                ? Icons.store_outlined
                                 : Icons.fact_check,
                             size: 22,
                             color: isSelected ? Colors.white : chipColor,
@@ -886,84 +889,86 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
             ),
           ],
 
-          // ── DM: market diversion info ─────────────────────────────────────
-          if (_selectedActivityType == 'DM') ...[
+          // ── MDM: market name + 2-visit badge ─────────────────────────────
+          if (_selectedActivityType == 'MDM') ...[
             const SizedBox(height: 16),
             Container(
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
-                color: _hasMDM ? Colors.pink.shade50 : Colors.blue.shade50,
+                color: Colors.blue.shade50,
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                    color: _hasMDM
-                        ? Colors.pink.shade200
-                        : Colors.blue.shade200),
+                border: Border.all(color: Colors.blue.shade200),
               ),
-              child: _hasMDM
-                  ? Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Icon(Icons.info_outline,
-                            size: 15, color: Colors.pink.shade700),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                _isArabic
-                                    ? 'سوق التحويل مطبق'
-                                    : 'Market Diversion Applies',
-                                style: GoogleFonts.poppins(
-                                  fontWeight: FontWeight.w700,
-                                  fontSize: 12,
-                                  color: Colors.pink.shade800,
-                                ),
-                              ),
-                              const SizedBox(height: 2),
-                              Text(
-                                _isArabic
-                                    ? 'هذا الموقع يُحتسب كزيارتين لأغراض الرسوم'
-                                    : 'This site counts as 2 visits for fee purposes',
-                                style: GoogleFonts.poppins(
-                                    fontSize: 10,
-                                    color: Colors.pink.shade700),
-                              ),
-                            ],
-                          ),
-                        ),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 8, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: Colors.pink.shade600,
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Text(
-                            _isArabic ? '× ٢ زيارة' : '× 2 visits',
-                            style: GoogleFonts.poppins(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w700,
-                              color: Colors.white,
-                            ),
-                          ),
-                        ),
-                      ],
-                    )
-                  : Row(
-                      children: [
-                        Icon(Icons.local_shipping,
-                            size: 14, color: Colors.blue.shade600),
-                        const SizedBox(width: 8),
-                        Text(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(Icons.store_outlined,
+                          size: 15, color: Colors.blue.shade700),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
                           _isArabic
-                              ? 'رصد التوزيع — زيارة واحدة'
-                              : 'Distribution Monitoring — 1 visit fee',
+                              ? 'رصد انحراف السوق — × ٢ زيارة'
+                              : 'Market Diversion Monitoring — × 2 visits',
                           style: GoogleFonts.poppins(
-                              fontSize: 11, color: Colors.blue.shade700),
+                            fontWeight: FontWeight.w700,
+                            fontSize: 12,
+                            color: Colors.blue.shade800,
+                          ),
                         ),
-                      ],
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: Colors.blue.shade600,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          _isArabic ? '× ٢' : '× 2',
+                          style: GoogleFonts.poppins(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    _isArabic
+                        ? 'اسم السوق المُغطى *'
+                        : 'Market Name Covered *',
+                    style: GoogleFonts.poppins(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 11,
+                      color: Colors.blue.shade800,
                     ),
+                  ),
+                  const SizedBox(height: 6),
+                  TextField(
+                    controller: _marketNameController,
+                    decoration: InputDecoration(
+                      hintText: _isArabic
+                          ? 'أدخل اسم السوق...'
+                          : 'Enter market name...',
+                      border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8)),
+                      contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 10),
+                      isDense: true,
+                      filled: true,
+                      fillColor: Colors.white,
+                      prefixIcon: Icon(Icons.storefront,
+                          size: 18, color: Colors.blue.shade400),
+                    ),
+                    onChanged: (_) => setState(() {}),
+                  ),
+                ],
+              ),
             ),
           ],
         ],

@@ -3917,7 +3917,7 @@ class _MMPScreenState extends State<MMPScreen> {
       children: [
         // Header
         Container(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           decoration: BoxDecoration(
             gradient: const LinearGradient(
               begin: Alignment.topLeft,
@@ -3932,48 +3932,51 @@ class _MMPScreenState extends State<MMPScreen> {
               ),
             ],
           ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          child: Row(
             children: [
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.2),
-                      borderRadius: BorderRadius.circular(12),
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(
+                  Icons.assignment,
+                  color: Colors.white,
+                  size: 22,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      l10n?.myAssignments ?? 'My Assignments',
+                      style: GoogleFonts.poppins(
+                        fontSize: 17,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
                     ),
-                    child: const Icon(
-                      Icons.assignment,
-                      color: Colors.white,
-                      size: 24,
+                    Text(
+                      'مهامي الميدانية',
+                      style: GoogleFonts.poppins(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.white.withValues(alpha: 0.9),
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          l10n?.myAssignments ?? 'My Assignments',
-                          style: GoogleFonts.poppins(
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
-                          ),
-                        ),
-                        Text(
-                          l10n?.claimManageComplete ??
-                              'Claim, manage, and complete site visits',
-                          style: GoogleFonts.poppins(
-                            fontSize: 12,
-                            color: Colors.white.withValues(alpha: 0.9),
-                          ),
-                        ),
-                      ],
+                    Text(
+                      l10n?.claimManageComplete ??
+                          'Claim, manage, and complete site visits',
+                      style: GoogleFonts.poppins(
+                        fontSize: 10,
+                        color: Colors.white.withValues(alpha: 0.8),
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ],
           ),
@@ -4019,6 +4022,7 @@ class _MMPScreenState extends State<MMPScreen> {
                     child: _buildTabButton(
                       'claimable',
                       l10n?.claimable ?? 'Claimable',
+                      'قابل للمطالبة',
                       Icons.handshake,
                       _availableSites.length,
                     ),
@@ -4027,6 +4031,7 @@ class _MMPScreenState extends State<MMPScreen> {
                     child: _buildTabButton(
                       'assigned',
                       l10n?.assigned ?? 'Assigned',
+                      'مخصص',
                       Icons.assignment,
                       _smartAssignedSites.length,
                     ),
@@ -4035,6 +4040,7 @@ class _MMPScreenState extends State<MMPScreen> {
                     child: _buildTabButton(
                       'my-sites',
                       l10n?.mySites ?? 'My Sites',
+                      'مواقعي',
                       Icons.location_on,
                       _mySites.length,
                     ),
@@ -4049,6 +4055,7 @@ class _MMPScreenState extends State<MMPScreen> {
                       child: _buildSubTabButton(
                         'pending',
                         l10n?.inbox ?? 'Inbox',
+                        'الوارد',
                         _getPendingCount(),
                       ),
                     ),
@@ -4056,6 +4063,7 @@ class _MMPScreenState extends State<MMPScreen> {
                       child: _buildSubTabButton(
                         'drafts',
                         l10n?.drafts ?? 'Drafts',
+                        'المسودات',
                         _getDraftsCount(),
                       ),
                     ),
@@ -4063,6 +4071,7 @@ class _MMPScreenState extends State<MMPScreen> {
                       child: _buildSubTabButton(
                         'outbox',
                         l10n?.outbox ?? 'Outbox',
+                        'الصادر',
                         _getOutboxCount(),
                       ),
                     ),
@@ -4070,6 +4079,7 @@ class _MMPScreenState extends State<MMPScreen> {
                       child: _buildSubTabButton(
                         'sent',
                         l10n?.sent ?? 'Sent',
+                        'المرسل',
                         _getSentCount(),
                       ),
                     ),
@@ -4086,58 +4096,80 @@ class _MMPScreenState extends State<MMPScreen> {
     );
   }
 
-  Widget _buildTabButton(String tab, String label, IconData icon, int count) {
+  Widget _buildTabButton(
+      String tab, String labelEn, String labelAr, IconData icon, int count) {
     final isActive = _enumeratorSubTab == tab;
-    return InkWell(
+    return GestureDetector(
       onTap: () => setState(() => _enumeratorSubTab = tab),
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 12),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        margin: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
         decoration: BoxDecoration(
-          border: Border(
-            bottom: BorderSide(
-              color: isActive ? AppColors.primaryBlue : Colors.transparent,
-              width: 2,
-            ),
-          ),
+          color: isActive ? AppColors.primaryBlue : Colors.white,
+          borderRadius: BorderRadius.circular(10),
+          boxShadow: isActive
+              ? [
+                  BoxShadow(
+                    color: AppColors.primaryBlue.withValues(alpha: 0.3),
+                    blurRadius: 8,
+                    offset: const Offset(0, 3),
+                  ),
+                ]
+              : [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.05),
+                    blurRadius: 4,
+                    offset: const Offset(0, 1),
+                  ),
+                ],
+          border: isActive
+              ? null
+              : Border.all(color: Colors.grey.shade200, width: 1),
         ),
         child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(
-                  icon,
-                  size: 18,
-                  color: isActive ? AppColors.primaryBlue : AppColors.textLight,
-                ),
-                const SizedBox(width: 4),
-                Text(
-                  label,
-                  style: GoogleFonts.poppins(
-                    fontSize: 12,
-                    fontWeight: isActive ? FontWeight.w600 : FontWeight.normal,
-                    color: isActive
-                        ? AppColors.primaryBlue
-                        : AppColors.textLight,
-                  ),
-                ),
-              ],
+            Icon(
+              icon,
+              size: 18,
+              color: isActive ? Colors.white : Colors.grey.shade500,
             ),
-            const SizedBox(height: 4),
+            const SizedBox(height: 3),
+            Text(
+              labelEn,
+              textAlign: TextAlign.center,
+              style: GoogleFonts.poppins(
+                fontSize: 10,
+                fontWeight: FontWeight.w600,
+                color: isActive ? Colors.white : Colors.grey.shade700,
+              ),
+            ),
+            Text(
+              labelAr,
+              textAlign: TextAlign.center,
+              style: GoogleFonts.poppins(
+                fontSize: 10,
+                fontWeight: FontWeight.w600,
+                color: isActive ? Colors.white : Colors.grey.shade600,
+              ),
+            ),
+            const SizedBox(height: 2),
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
               decoration: BoxDecoration(
                 color: isActive
-                    ? AppColors.primaryBlue.withValues(alpha: 0.1)
-                    : AppColors.backgroundGray,
-                borderRadius: BorderRadius.circular(12),
+                    ? Colors.white.withValues(alpha: 0.3)
+                    : AppColors.primaryBlue.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(10),
               ),
               child: Text(
                 count.toString(),
                 style: GoogleFonts.poppins(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
-                  color: isActive ? AppColors.primaryBlue : AppColors.textLight,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                  color: isActive ? Colors.white : AppColors.primaryBlue,
                 ),
               ),
             ),
@@ -4149,17 +4181,17 @@ class _MMPScreenState extends State<MMPScreen> {
 
   Widget _buildSubTabButton(
     String tab,
-    String label,
+    String labelEn,
+    String labelAr,
     int count, {
     IconData? icon,
   }) {
     final isActive = _mySitesSubTab == tab;
-    // Default icons for sub-tabs if not provided
     final tabIcon = icon ?? _getSubTabIcon(tab);
     return InkWell(
       onTap: () => setState(() => _mySitesSubTab = tab),
       child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+        padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
         decoration: BoxDecoration(
           color: isActive
               ? AppColors.primaryBlue.withValues(alpha: 0.1)
@@ -4173,32 +4205,37 @@ class _MMPScreenState extends State<MMPScreen> {
         ),
         child: Column(
           children: [
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  tabIcon,
-                  size: 14,
-                  color: isActive ? AppColors.primaryBlue : AppColors.textLight,
-                ),
-                const SizedBox(width: 4),
-                Text(
-                  label,
-                  style: GoogleFonts.poppins(
-                    fontSize: 13,
-                    fontWeight: isActive ? FontWeight.w600 : FontWeight.normal,
-                    color: isActive
-                        ? AppColors.primaryBlue
-                        : AppColors.textLight,
-                  ),
-                ),
-              ],
+            Icon(
+              tabIcon,
+              size: 13,
+              color: isActive ? AppColors.primaryBlue : AppColors.textLight,
             ),
             const SizedBox(height: 2),
             Text(
-              count.toString(),
+              labelEn,
+              textAlign: TextAlign.center,
               style: GoogleFonts.poppins(
                 fontSize: 11,
+                fontWeight: isActive ? FontWeight.w600 : FontWeight.normal,
+                color: isActive ? AppColors.primaryBlue : AppColors.textLight,
+              ),
+            ),
+            Text(
+              labelAr,
+              textAlign: TextAlign.center,
+              style: GoogleFonts.poppins(
+                fontSize: 10,
+                fontWeight: isActive ? FontWeight.w600 : FontWeight.normal,
+                color: isActive
+                    ? AppColors.primaryBlue.withValues(alpha: 0.85)
+                    : AppColors.textLight.withValues(alpha: 0.75),
+              ),
+            ),
+            Text(
+              count.toString(),
+              style: GoogleFonts.poppins(
+                fontSize: 10,
+                fontWeight: FontWeight.w600,
                 color: isActive ? AppColors.primaryBlue : AppColors.textLight,
               ),
             ),
