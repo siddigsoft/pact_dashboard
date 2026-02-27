@@ -296,6 +296,13 @@ void main() async {
               builder: (_) => const WalletScreen(initialTab: 3),
             ),
           );
+        } else if (payload == 'broadcast' || payload.startsWith('broadcast:')) {
+          // Admin broadcast tapped — navigate to main home screen
+          // (action_url values are web paths, not mobile routes)
+          navigatorKey.currentState?.pushNamedAndRemoveUntil(
+            '/main',
+            (route) => false,
+          );
         } else if (payload == 'offline_sync_completed') {
           navigatorKey.currentState?.pushNamed(
             '/main',
