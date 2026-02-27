@@ -39,6 +39,8 @@ class _WalletScreenState extends State<WalletScreen> {
   double _pendingWithdrawals = 0.0;
   double _thisMonthEarnings = 0.0;
   double _thisWeekEarnings = 0.0;
+  double _totalAdvanceDeductions = 0.0;
+  double _thisMonthAdvanceDeductions = 0.0;
 
   List<Map<String, dynamic>> _transactions = [];
   List<Map<String, dynamic>> _withdrawalRequests = [];
@@ -327,6 +329,34 @@ class _WalletScreenState extends State<WalletScreen> {
                 (t['type'] == 'earning' || t['type'] == 'site_visit_fee');
           })
           .fold(0.0, (sum, t) => sum + (t['amount'] as num).toDouble());
+
+      // Compute advance deductions so stat cards show net balance
+      _totalAdvanceDeductions = _transactions
+          .where((t) =>
+              t['type'] == 'advance_deduction' ||
+              (t['description']
+                      ?.toString()
+                      .toLowerCase()
+                      .contains('advance') ==
+                  true &&
+                  (t['amount'] as num).toDouble() < 0))
+          .fold(
+              0.0, (sum, t) => sum + (t['amount'] as num).toDouble().abs());
+
+      _thisMonthAdvanceDeductions = _transactions
+          .where((t) {
+            final date = DateTime.parse(t['created_at'] as String);
+            return date.isAfter(startOfMonth) &&
+                (t['type'] == 'advance_deduction' ||
+                    (t['description']
+                            ?.toString()
+                            .toLowerCase()
+                            .contains('advance') ==
+                        true &&
+                        (t['amount'] as num).toDouble() < 0));
+          })
+          .fold(
+              0.0, (sum, t) => sum + (t['amount'] as num).toDouble().abs());
 
       if (mounted) setState(() {});
     } catch (e) {
@@ -790,7 +820,7 @@ class _WalletScreenState extends State<WalletScreen> {
                                         child: _buildStatCard(
                                           'Total Earned',
                                           'إجمالي الأرباح',
-                                          _formatCurrency(_totalEarned),
+                                          _formatCurrency(_totalEarned - _totalAdvanceDeductions),
                                           Icons.trending_up,
                                           Colors.green,
                                         ),
@@ -800,7 +830,7 @@ class _WalletScreenState extends State<WalletScreen> {
                                         child: _buildStatCard(
                                           'This Month',
                                           'هذا الشهر',
-                                          _formatCurrency(_thisMonthEarnings),
+                                          _formatCurrency(_thisMonthEarnings - _thisMonthAdvanceDeductions),
                                           Icons.calendar_today,
                                           Colors.purple,
                                         ),
