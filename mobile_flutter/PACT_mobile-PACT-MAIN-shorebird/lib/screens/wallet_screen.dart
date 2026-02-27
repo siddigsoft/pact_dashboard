@@ -50,6 +50,11 @@ class _WalletScreenState extends State<WalletScreen> {
   String _transactionFilter = 'all';
   String _withdrawalFilter = 'all';
 
+  // Net balance = gross balance minus all advance disbursements.
+  // This is what's truly available for withdrawal.
+  double get _netBalance =>
+      (_currentBalance - _totalAdvanceDeductions).clamp(0.0, double.infinity);
+
   // Withdrawal dialog
   bool _showWithdrawalDialog = false;
   final TextEditingController _withdrawalAmountController =
@@ -314,21 +319,31 @@ class _WalletScreenState extends State<WalletScreen> {
       final startOfMonth = DateTime(now.year, now.month, 1);
       final startOfWeek = now.subtract(Duration(days: now.weekday - 1));
 
+      // Earnings = site visit fees + any fund receipt credits (positive amounts only)
+      bool _isEarningTx(Map<String, dynamic> t) {
+        final type = t['type'] as String? ?? '';
+        final amount = (t['amount'] as num?)?.toDouble() ?? 0.0;
+        return (type == 'earning' ||
+                type == 'site_visit_fee' ||
+                type == 'fund_receipt' ||
+                type == 'fund_receipt_confirmation' ||
+                type == 'wallet_credit') &&
+            amount > 0;
+      }
+
       _thisMonthEarnings = _transactions
           .where((t) {
             final date = DateTime.parse(t['created_at'] as String);
-            return date.isAfter(startOfMonth) &&
-                (t['type'] == 'earning' || t['type'] == 'site_visit_fee');
+            return date.isAfter(startOfMonth) && _isEarningTx(t);
           })
-          .fold(0.0, (sum, t) => sum + (t['amount'] as num).toDouble());
+          .fold(0.0, (sum, t) => sum + (t['amount'] as num).toDouble().abs());
 
       _thisWeekEarnings = _transactions
           .where((t) {
             final date = DateTime.parse(t['created_at'] as String);
-            return date.isAfter(startOfWeek) &&
-                (t['type'] == 'earning' || t['type'] == 'site_visit_fee');
+            return date.isAfter(startOfWeek) && _isEarningTx(t);
           })
-          .fold(0.0, (sum, t) => sum + (t['amount'] as num).toDouble());
+          .fold(0.0, (sum, t) => sum + (t['amount'] as num).toDouble().abs());
 
       // Compute advance deductions so stat cards show net balance.
       // Includes both 'down_payment' (advance disbursed, stored as positive)
@@ -422,7 +437,7 @@ class _WalletScreenState extends State<WalletScreen> {
 
   Future<void> _requestWithdrawal() async {
     final amount = double.tryParse(_withdrawalAmountController.text);
-    if (amount == null || amount <= 0 || amount > _currentBalance) {
+    if (amount == null || amount <= 0 || amount > _netBalance) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Invalid withdrawal amount'),
@@ -740,7 +755,7 @@ class _WalletScreenState extends State<WalletScreen> {
                                         ),
                                         const SizedBox(height: 8),
                                         Text(
-                                          _formatCurrency(_currentBalance),
+                                          _formatCurrency(_netBalance),
                                           style: GoogleFonts.poppins(
                                             fontSize: 36,
                                             fontWeight: FontWeight.bold,
@@ -750,7 +765,7 @@ class _WalletScreenState extends State<WalletScreen> {
                                         const SizedBox(height: 4),
                                         Text(
                                           widget.isArabic
-                                              ? 'متاح للسحب'
+                                              ? 'الرصيد المتاح للسحب'
                                               : 'Available for withdrawal',
                                           style: GoogleFonts.poppins(
                                             fontSize: 12,
@@ -759,7 +774,7 @@ class _WalletScreenState extends State<WalletScreen> {
                                             ),
                                           ),
                                         ),
-                                        if (_currentBalance > 0) ...[
+                                        if (_netBalance > 0) ...[
                                           const SizedBox(height: 16),
                                           SizedBox(
                                             width: double.infinity,
@@ -813,7 +828,7 @@ class _WalletScreenState extends State<WalletScreen> {
                                         child: _buildStatCard(
                                           'Total Earned',
                                           'إجمالي الأرباح',
-                                          _formatCurrency(_totalEarned - _totalAdvanceDeductions),
+                                          _formatCurrency(_totalEarned),
                                           Icons.trending_up,
                                           Colors.green,
                                         ),
@@ -823,7 +838,7 @@ class _WalletScreenState extends State<WalletScreen> {
                                         child: _buildStatCard(
                                           'This Month',
                                           'هذا الشهر',
-                                          _formatCurrency(_thisMonthEarnings - _thisMonthAdvanceDeductions),
+                                          _formatCurrency(_thisMonthEarnings),
                                           Icons.calendar_today,
                                           Colors.purple,
                                         ),
@@ -947,149 +962,487 @@ class _WalletScreenState extends State<WalletScreen> {
   }
 
   Widget _buildWithdrawalDialog() {
+    final isArabic = widget.isArabic;
     final amount = double.tryParse(_withdrawalAmountController.text) ?? 0.0;
-    final isValidAmount = amount > 0 && amount <= _currentBalance;
+    final isValidAmount = amount > 0 && amount <= _netBalance;
+    final withdrawPct = _netBalance > 0 ? (amount / _netBalance).clamp(0.0, 1.0) : 0.0;
+
+    void _setQuickAmount(double pct) {
+      final val = (_netBalance * pct).floorToDouble();
+      _withdrawalAmountController.text = val == val.floorToDouble()
+          ? val.toStringAsFixed(0)
+          : val.toStringAsFixed(2);
+      setState(() {});
+    }
+
+    void _dismiss() => setState(() {
+          _showWithdrawalDialog = false;
+          _withdrawalAmountController.clear();
+          _withdrawalReasonController.clear();
+          _selectedPaymentMethod = '';
+        });
 
     return Dialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                const Icon(Icons.arrow_downward, color: AppColors.primaryBlue),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    'Request Withdrawal',
-                    style: GoogleFonts.poppins(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.close),
-                  onPressed: () => setState(() {
-                    _showWithdrawalDialog = false;
-                    _withdrawalAmountController.clear();
-                    _withdrawalReasonController.clear();
-                    _selectedPaymentMethod = '';
-                  }),
-                ),
-              ],
-            ),
-            const SizedBox(height: 24),
-            // Amount
-            TextField(
-              controller: _withdrawalAmountController,
-              keyboardType: const TextInputType.numberWithOptions(
-                decimal: true,
-              ),
-              decoration: InputDecoration(
-                labelText: 'Amount (SDG)',
-                prefixIcon: const Icon(Icons.attach_money),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                helperText: 'Available: ${_formatCurrency(_currentBalance)}',
-                errorText: amount > _currentBalance
-                    ? 'Insufficient funds'
-                    : null,
-              ),
-              onChanged: (_) => setState(() {}),
-            ),
-            const SizedBox(height: 16),
-            // Payment Method
-            if (_paymentMethods.isNotEmpty) ...[
-              DropdownButtonFormField<String>(
-                value: _selectedPaymentMethod.isEmpty
-                    ? null
-                    : _selectedPaymentMethod,
-                decoration: InputDecoration(
-                  labelText: 'Payment Method',
-                  prefixIcon: const Icon(Icons.payment),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-                items: [
-                  ..._paymentMethods.map(
-                    (method) => DropdownMenuItem(
-                      value: method['name'] as String,
-                      child: Text(
-                        '${method['name']} (${(method['type'] as String).replaceAll('_', ' ')})',
-                      ),
-                    ),
-                  ),
-                  const DropdownMenuItem(
-                    value: 'other',
-                    child: Text('Other (specify in reason)'),
-                  ),
-                ],
-                onChanged: (value) =>
-                    setState(() => _selectedPaymentMethod = value ?? ''),
-              ),
-              const SizedBox(height: 16),
-            ],
-            // Reason
-            TextField(
-              controller: _withdrawalReasonController,
-              maxLines: 3,
-              decoration: InputDecoration(
-                labelText: 'Reason',
-                hintText: 'Transportation costs, accommodation, etc.',
-                prefixIcon: const Icon(Icons.note),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
-            ),
-            const SizedBox(height: 24),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                TextButton(
-                  onPressed: () => setState(() {
-                    _showWithdrawalDialog = false;
-                    _withdrawalAmountController.clear();
-                    _withdrawalReasonController.clear();
-                    _selectedPaymentMethod = '';
-                  }),
-                  child: const Text('Cancel'),
-                ),
-                const SizedBox(width: 8),
-                ElevatedButton(
-                  onPressed: isValidAmount && !_isSubmittingWithdrawal
-                      ? _requestWithdrawal
-                      : null,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primaryBlue,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 24,
-                      vertical: 12,
-                    ),
-                  ),
-                  child: _isSubmittingWithdrawal
-                      ? const SizedBox(
-                          height: 20,
-                          width: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            valueColor: AlwaysStoppedAnimation<Color>(
-                              Colors.white,
-                            ),
-                          ),
-                        )
-                      : const Text('Submit Request'),
-                ),
-              ],
+      insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 32),
+      backgroundColor: Colors.transparent,
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(24),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.18),
+              blurRadius: 32,
+              offset: const Offset(0, 12),
             ),
           ],
         ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // ── Gradient header ──────────────────────────────────────
+            Container(
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [AppColors.primaryBlue, Color(0xFF2E5C8A)],
+                ),
+                borderRadius: BorderRadius.only(
+                  topLeft: Radius.circular(24),
+                  topRight: Radius.circular(24),
+                ),
+              ),
+              padding: const EdgeInsets.fromLTRB(20, 20, 16, 20),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.2),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.account_balance_wallet_rounded,
+                        color: Colors.white, size: 22),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          isArabic ? 'طلب سحب' : 'Request Withdrawal',
+                          style: GoogleFonts.poppins(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.white,
+                          ),
+                        ),
+                        Text(
+                          isArabic
+                              ? 'طلب سحب | Request Withdrawal'
+                              : 'طلب سحب | Request Withdrawal',
+                          style: GoogleFonts.poppins(
+                            fontSize: 11,
+                            color: Colors.white70,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  GestureDetector(
+                    onTap: _dismiss,
+                    child: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.2),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(Icons.close, color: Colors.white, size: 18),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            // ── Balance summary strip ─────────────────────────────────
+            Container(
+              color: const Color(0xFFF0F7FF),
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: _summaryTile(
+                      isArabic ? 'إجمالي الأرباح' : 'Total Earned',
+                      _formatCurrency(_totalEarned),
+                      Colors.green,
+                      Icons.trending_up,
+                    ),
+                  ),
+                  Container(width: 1, height: 40, color: Colors.blue[100]),
+                  Expanded(
+                    child: _summaryTile(
+                      isArabic ? 'السلف المدفوعة' : 'Advances Paid',
+                      '− ${_formatCurrency(_totalAdvanceDeductions)}',
+                      Colors.orange,
+                      Icons.remove_circle_outline,
+                    ),
+                  ),
+                  Container(width: 1, height: 40, color: Colors.blue[100]),
+                  Expanded(
+                    child: _summaryTile(
+                      isArabic ? 'المتاح' : 'Available',
+                      _formatCurrency(_netBalance),
+                      AppColors.primaryBlue,
+                      Icons.account_balance_wallet,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            // ── Form body ─────────────────────────────────────────────
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Quick-select buttons
+                  Row(
+                    children: [
+                      Text(
+                        isArabic ? 'اختيار سريع:' : 'Quick select:',
+                        style: GoogleFonts.poppins(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.textLight,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      ...['25%', '50%', '75%', isArabic ? 'الكل' : 'Max'].asMap().entries.map((e) {
+                        final pcts = [0.25, 0.50, 0.75, 1.0];
+                        return Padding(
+                          padding: const EdgeInsets.only(right: 6),
+                          child: GestureDetector(
+                            onTap: () => _setQuickAmount(pcts[e.key]),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 10, vertical: 5),
+                              decoration: BoxDecoration(
+                                color: AppColors.primaryBlue.withValues(alpha: 0.1),
+                                borderRadius: BorderRadius.circular(20),
+                                border: Border.all(
+                                  color: AppColors.primaryBlue.withValues(alpha: 0.3),
+                                ),
+                              ),
+                              child: Text(
+                                e.value,
+                                style: GoogleFonts.poppins(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w700,
+                                  color: AppColors.primaryBlue,
+                                ),
+                              ),
+                            ),
+                          ),
+                        );
+                      }),
+                    ],
+                  ),
+                  const SizedBox(height: 14),
+
+                  // Amount input
+                  TextField(
+                    controller: _withdrawalAmountController,
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    style: GoogleFonts.poppins(
+                        fontSize: 18, fontWeight: FontWeight.w700),
+                    decoration: InputDecoration(
+                      labelText: isArabic ? 'المبلغ (SDG)' : 'Amount (SDG)',
+                      prefixIcon: const Icon(Icons.attach_money_rounded,
+                          color: AppColors.primaryBlue),
+                      filled: true,
+                      fillColor: const Color(0xFFF8FAFF),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(14),
+                        borderSide:
+                            const BorderSide(color: AppColors.borderColor),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(14),
+                        borderSide: const BorderSide(
+                            color: AppColors.primaryBlue, width: 2),
+                      ),
+                      errorText: amount > _netBalance && amount > 0
+                          ? (isArabic ? 'رصيد غير كافٍ' : 'Insufficient balance')
+                          : null,
+                      suffix: amount > 0
+                          ? Text(
+                              '${(withdrawPct * 100).toStringAsFixed(0)}%',
+                              style: GoogleFonts.poppins(
+                                  fontSize: 12,
+                                  color: AppColors.primaryBlue,
+                                  fontWeight: FontWeight.w700),
+                            )
+                          : null,
+                    ),
+                    onChanged: (_) => setState(() {}),
+                  ),
+
+                  // Progress bar
+                  const SizedBox(height: 8),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(4),
+                    child: LinearProgressIndicator(
+                      value: withdrawPct,
+                      minHeight: 5,
+                      backgroundColor: Colors.grey[200],
+                      color: withdrawPct > 0.9
+                          ? AppColors.accentRed
+                          : withdrawPct > 0.6
+                              ? AppColors.accentYellow
+                              : AppColors.primaryBlue,
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          '0',
+                          style: GoogleFonts.poppins(
+                              fontSize: 10, color: AppColors.textLight),
+                        ),
+                        Text(
+                          _formatCurrency(_netBalance),
+                          style: GoogleFonts.poppins(
+                              fontSize: 10,
+                              color: AppColors.textLight,
+                              fontWeight: FontWeight.w600),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Payment method
+                  if (_paymentMethods.isNotEmpty) ...[
+                    DropdownButtonFormField<String>(
+                      value: _selectedPaymentMethod.isEmpty
+                          ? null
+                          : _selectedPaymentMethod,
+                      decoration: InputDecoration(
+                        labelText: isArabic ? 'طريقة الدفع' : 'Payment Method',
+                        prefixIcon: const Icon(Icons.payment_rounded,
+                            color: AppColors.primaryBlue),
+                        filled: true,
+                        fillColor: const Color(0xFFF8FAFF),
+                        border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(14)),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(14),
+                          borderSide: const BorderSide(
+                              color: AppColors.primaryBlue, width: 2),
+                        ),
+                      ),
+                      items: [
+                        ..._paymentMethods.map(
+                          (m) => DropdownMenuItem(
+                            value: m['name'] as String,
+                            child: Text(
+                              '${m['name']} · ${(m['type'] as String).replaceAll('_', ' ')}',
+                              style: GoogleFonts.poppins(fontSize: 13),
+                            ),
+                          ),
+                        ),
+                        DropdownMenuItem(
+                          value: 'other',
+                          child: Text(
+                            isArabic
+                                ? 'أخرى (حدد في السبب)'
+                                : 'Other (specify in reason)',
+                            style: GoogleFonts.poppins(fontSize: 13),
+                          ),
+                        ),
+                      ],
+                      onChanged: (v) =>
+                          setState(() => _selectedPaymentMethod = v ?? ''),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
+
+                  // Reason
+                  TextField(
+                    controller: _withdrawalReasonController,
+                    maxLines: 2,
+                    decoration: InputDecoration(
+                      labelText: isArabic ? 'سبب السحب' : 'Reason for Withdrawal',
+                      hintText: isArabic
+                          ? 'تكاليف النقل، الإقامة...'
+                          : 'Transportation, accommodation, etc.',
+                      prefixIcon: const Icon(Icons.edit_note_rounded,
+                          color: AppColors.primaryBlue),
+                      filled: true,
+                      fillColor: const Color(0xFFF8FAFF),
+                      border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(14)),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(14),
+                        borderSide: const BorderSide(
+                            color: AppColors.primaryBlue, width: 2),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            // ── Summary row when amount is valid ──────────────────────
+            if (isValidAmount)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+                child: Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF0FDF4),
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(
+                        color: AppColors.accentGreen.withValues(alpha: 0.4)),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.check_circle_rounded,
+                          color: AppColors.accentGreen, size: 18),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              isArabic
+                                  ? 'سيتم سحب ${_formatCurrency(amount)}'
+                                  : 'Withdrawing ${_formatCurrency(amount)}',
+                              style: GoogleFonts.poppins(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.accentGreen,
+                              ),
+                            ),
+                            Text(
+                              isArabic
+                                  ? 'المتبقي: ${_formatCurrency(_netBalance - amount)}'
+                                  : 'Remaining: ${_formatCurrency(_netBalance - amount)}',
+                              style: GoogleFonts.poppins(
+                                  fontSize: 11,
+                                  color: AppColors.textLight),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+
+            // ── Action buttons ────────────────────────────────────────
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: _dismiss,
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        side: BorderSide(color: Colors.grey[300]!),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14)),
+                      ),
+                      child: Text(
+                        isArabic ? 'إلغاء' : 'Cancel',
+                        style: GoogleFonts.poppins(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.textLight,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    flex: 2,
+                    child: ElevatedButton(
+                      onPressed: isValidAmount && !_isSubmittingWithdrawal
+                          ? _requestWithdrawal
+                          : null,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.primaryBlue,
+                        disabledBackgroundColor: Colors.grey[300],
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14)),
+                        elevation: 0,
+                      ),
+                      child: _isSubmittingWithdrawal
+                          ? const SizedBox(
+                              height: 20,
+                              width: 20,
+                              child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white),
+                            )
+                          : Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                const Icon(Icons.send_rounded,
+                                    color: Colors.white, size: 18),
+                                const SizedBox(width: 8),
+                                Text(
+                                  isArabic ? 'إرسال الطلب' : 'Submit Request',
+                                  style: GoogleFonts.poppins(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w700,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                              ],
+                            ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _summaryTile(String label, String value, Color color, IconData icon) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8),
+      child: Column(
+        children: [
+          Icon(icon, color: color, size: 18),
+          const SizedBox(height: 4),
+          Text(
+            value,
+            style: GoogleFonts.poppins(
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              color: color,
+            ),
+            textAlign: TextAlign.center,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          Text(
+            label,
+            style: GoogleFonts.poppins(fontSize: 9, color: AppColors.textLight),
+            textAlign: TextAlign.center,
+          ),
+        ],
       ),
     );
   }
