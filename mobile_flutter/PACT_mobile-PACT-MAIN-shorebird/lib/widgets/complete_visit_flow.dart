@@ -313,6 +313,13 @@ class CompleteVisitFlow {
       'submitted_by': currentUserId,
       'submitted_at': now,
       'is_synced': true,
+      if (reportData.activityType != null)
+        'activity_type': reportData.activityType,
+      if (reportData.pdmQuestionnaires > 0)
+        'pdm_questionnaires_submitted': reportData.pdmQuestionnaires,
+      if (reportData.hasMarketDiversion)
+        'has_market_diversion': true,
+      'visit_fee_multiplier': reportData.visitFeeMultiplier,
     };
 
     currentSession = supabase.auth.currentSession;

@@ -46,10 +46,28 @@ class _CompleteVisitScreenState extends ConsumerState<CompleteVisitScreen> {
   bool _isOnline = true;
   late Stream<List<ConnectivityResult>> _connectivityStream;
   String? _selectedActivityType;
+  int _pdmQuestionnaires = 0;
+  final TextEditingController _pdmQController = TextEditingController();
+
+  static const int _pdmQPerVisit = 7;
 
   bool get _isArabic => Localizations.localeOf(context).languageCode == 'ar';
 
   static const List<String> _dmActivities = ['GFA', 'CBT', 'EBSFP'];
+
+  /// True if the MMP marks this site as requiring Market Diversion Monitoring
+  bool get _hasMDM {
+    final ad = widget.visit.additionalData;
+    if (ad == null) return false;
+    final raw = ad['use_market_diversion'] ?? ad['useMarketDiversion'];
+    if (raw == null) return false;
+    if (raw is bool) return raw;
+    final s = raw.toString().toLowerCase();
+    return s == 'yes' || s == 'true' || s == '1';
+  }
+
+  int get _pdmSiteVisits => (_pdmQuestionnaires / _pdmQPerVisit).floor();
+  int get _pdmRemainder => _pdmQuestionnaires % _pdmQPerVisit;
 
   void _initActivityType() {
     final act = widget.visit.mainActivity.toUpperCase();
@@ -77,6 +95,7 @@ class _CompleteVisitScreenState extends ConsumerState<CompleteVisitScreen> {
   void dispose() {
     _notesController.dispose();
     _activitiesController.dispose();
+    _pdmQController.dispose();
     super.dispose();
   }
 
@@ -431,6 +450,13 @@ class _CompleteVisitScreenState extends ConsumerState<CompleteVisitScreen> {
             }
           : <String, dynamic>{};
 
+      // Fee multiplier: DM with market diversion = 2 visits; PDM = floor(q/7)
+      final int visitFeeMultiplier = _selectedActivityType == 'DM' && _hasMDM
+          ? 2
+          : _selectedActivityType == 'PDM'
+              ? (_pdmSiteVisits > 0 ? _pdmSiteVisits : 1)
+              : 1;
+
       final reportResponse = await supabase
           .from('reports')
           .insert({
@@ -444,6 +470,11 @@ class _CompleteVisitScreenState extends ConsumerState<CompleteVisitScreen> {
             'coordinates': coordinates,
             'submitted_by': userId,
             'is_synced': true,
+            if (_selectedActivityType == 'PDM' && _pdmQuestionnaires > 0)
+              'pdm_questionnaires_submitted': _pdmQuestionnaires,
+            if (_selectedActivityType == 'DM' && _hasMDM)
+              'has_market_diversion': true,
+            'visit_fee_multiplier': visitFeeMultiplier,
           })
           .select('id')
           .single();
@@ -1202,80 +1233,276 @@ class _CompleteVisitScreenState extends ConsumerState<CompleteVisitScreen> {
   }
 
   Widget _buildActivityTypeSelector() {
-    final activityTypes = _isArabic
-        ? {
-            'PDM': 'رصد ما بعد التوزيع',
-            'DM': 'رصد التوزيع',
-            'Assessment': 'تقييم',
-            'Monitoring': 'مراقبة',
-            'Supervision': 'إشراف',
-            'Verification': 'تحقق',
-            'Other': 'أخرى',
-          }
-        : {
-            'PDM': 'Post-Distribution Monitoring',
-            'DM': 'Distribution Monitoring',
-            'Assessment': 'Assessment',
-            'Monitoring': 'Monitoring',
-            'Supervision': 'Supervision',
-            'Verification': 'Verification',
-            'Other': 'Other',
-          };
+    // Only PDM and DM — all other activity types removed per business rules
+    const activityTypesEn = {
+      'PDM': 'Post-Distribution Monitoring',
+      'DM': 'Distribution Monitoring',
+    };
+    const activityTypesAr = {
+      'PDM': 'رصد ما بعد التوزيع',
+      'DM': 'رصد التوزيع',
+    };
+    final activityTypes = _isArabic ? activityTypesAr : activityTypesEn;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        // ── Activity type chips ────────────────────────────────────────────
         Text(
-          _isArabic ? 'نوع النشاط (PDM/DM)' : 'Activity Type (PDM/DM)',
+          _isArabic ? 'نوع النشاط' : 'Activity Type',
           style: AppTextStyles.titleMedium,
         ),
         const SizedBox(height: 8),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
+        Row(
           children: activityTypes.entries.map((entry) {
             final isSelected = _selectedActivityType == entry.key;
-            final isPdmDm = entry.key == 'PDM' || entry.key == 'DM';
-            final selectedColor = isPdmDm
-                ? (entry.key == 'DM' ? Colors.blue.shade700 : Colors.orange.shade700)
-                : Colors.black;
-            return GestureDetector(
-              onTap: () => setState(() => _selectedActivityType = entry.key),
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                decoration: BoxDecoration(
-                  color: isSelected ? selectedColor : Colors.white,
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(
-                    color: isSelected ? selectedColor : Colors.grey.shade300,
-                    width: isSelected ? 2 : 1,
-                  ),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    if (isPdmDm) ...[
-                      Icon(
-                        entry.key == 'PDM' ? Icons.fact_check : Icons.local_shipping,
-                        size: 14,
-                        color: isSelected ? Colors.white : (entry.key == 'DM' ? Colors.blue.shade600 : Colors.orange.shade600),
+            final isDM = entry.key == 'DM';
+            final chipColor =
+                isDM ? Colors.blue.shade700 : Colors.orange.shade700;
+            return Expanded(
+              child: Padding(
+                padding: EdgeInsets.only(
+                    right: isDM ? 0 : 8),
+                child: GestureDetector(
+                  onTap: () => setState(() {
+                    _selectedActivityType = entry.key;
+                    _pdmQuestionnaires = 0;
+                    _pdmQController.clear();
+                  }),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 180),
+                    padding: const EdgeInsets.symmetric(
+                        vertical: 12, horizontal: 10),
+                    decoration: BoxDecoration(
+                      color: isSelected ? chipColor : Colors.white,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color:
+                            isSelected ? chipColor : Colors.grey.shade300,
+                        width: isSelected ? 2 : 1,
                       ),
-                      const SizedBox(width: 4),
-                    ],
-                    Text(
-                      '${entry.key} - ${entry.value}',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-                        color: isSelected ? Colors.white : Colors.black87,
-                      ),
+                      boxShadow: isSelected
+                          ? [
+                              BoxShadow(
+                                color: chipColor.withValues(alpha: 0.3),
+                                blurRadius: 8,
+                                offset: const Offset(0, 3),
+                              )
+                            ]
+                          : [],
                     ),
-                  ],
+                    child: Column(
+                      children: [
+                        Icon(
+                          isDM ? Icons.local_shipping : Icons.fact_check,
+                          size: 22,
+                          color: isSelected
+                              ? Colors.white
+                              : chipColor,
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          entry.key,
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w800,
+                            color: isSelected
+                                ? Colors.white
+                                : chipColor,
+                          ),
+                        ),
+                        Text(
+                          entry.value,
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontSize: 10,
+                            color: isSelected
+                                ? Colors.white.withValues(alpha: 0.85)
+                                : Colors.grey.shade600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
               ),
             );
           }).toList(),
         ),
+
+        // ── PDM: questionnaire count input ────────────────────────────────
+        if (_selectedActivityType == 'PDM') ...[
+          const SizedBox(height: 16),
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: Colors.orange.shade50,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.orange.shade200),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(children: [
+                  Icon(Icons.quiz_outlined,
+                      size: 16, color: Colors.orange.shade700),
+                  const SizedBox(width: 6),
+                  Text(
+                    _isArabic
+                        ? 'عدد الاستبيانات المقدمة'
+                        : 'Questionnaires Submitted',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 13,
+                      color: Colors.orange.shade800,
+                    ),
+                  ),
+                ]),
+                const SizedBox(height: 4),
+                Text(
+                  _isArabic
+                      ? 'كل 7 استبيانات = زيارة موقع واحدة'
+                      : 'Every 7 questionnaires = 1 site visit fee',
+                  style: TextStyle(
+                      fontSize: 11, color: Colors.orange.shade600),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: _pdmQController,
+                  keyboardType: TextInputType.number,
+                  decoration: InputDecoration(
+                    hintText:
+                        _isArabic ? 'أدخل عدد الاستبيانات' : 'Enter count',
+                    border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8)),
+                    contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 10),
+                    isDense: true,
+                    filled: true,
+                    fillColor: Colors.white,
+                  ),
+                  onChanged: (v) => setState(() {
+                    _pdmQuestionnaires = int.tryParse(v) ?? 0;
+                  }),
+                ),
+                if (_pdmQuestionnaires > 0) ...[
+                  const SizedBox(height: 10),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 10, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: Colors.orange.shade100,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '$_pdmQuestionnaires ÷ $_pdmQPerVisit = $_pdmSiteVisits ${_isArabic ? 'زيارة مدفوعة' : 'site visit fee(s)'}',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 13,
+                            color: Colors.orange.shade900,
+                          ),
+                        ),
+                        if (_pdmRemainder > 0)
+                          Text(
+                            _isArabic
+                                ? '$_pdmRemainder/$_pdmQPerVisit نحو الزيارة التالية'
+                                : '$_pdmRemainder/$_pdmQPerVisit toward next visit',
+                            style: TextStyle(
+                                fontSize: 11,
+                                color: Colors.orange.shade700),
+                          ),
+                      ],
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+
+        // ── DM: market diversion info ─────────────────────────────────────
+        if (_selectedActivityType == 'DM') ...[
+          const SizedBox(height: 16),
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: _hasMDM ? Colors.pink.shade50 : Colors.blue.shade50,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                  color: _hasMDM
+                      ? Colors.pink.shade200
+                      : Colors.blue.shade200),
+            ),
+            child: _hasMDM
+                ? Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(Icons.info_outline,
+                          size: 16, color: Colors.pink.shade700),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              _isArabic
+                                  ? 'سوق التحويل مطبق'
+                                  : 'Market Diversion Applies',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w700,
+                                fontSize: 13,
+                                color: Colors.pink.shade800,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              _isArabic
+                                  ? 'هذا الموقع يُحتسب كزيارتين لأغراض الرسوم (سوق التحويل)'
+                                  : 'This site counts as 2 visits for fee purposes (market diversion)',
+                              style: TextStyle(
+                                  fontSize: 11,
+                                  color: Colors.pink.shade700),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: Colors.pink.shade600,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          _isArabic ? '× ٢ زيارة' : '× 2 visits',
+                          style: const TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                    ],
+                  )
+                : Row(
+                    children: [
+                      Icon(Icons.local_shipping,
+                          size: 14, color: Colors.blue.shade600),
+                      const SizedBox(width: 8),
+                      Text(
+                        _isArabic
+                            ? 'رصد التوزيع — زيارة واحدة'
+                            : 'Distribution Monitoring — 1 visit fee',
+                        style: TextStyle(
+                            fontSize: 12, color: Colors.blue.shade700),
+                      ),
+                    ],
+                  ),
+          ),
+        ],
       ],
     );
   }
