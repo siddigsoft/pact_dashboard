@@ -34,7 +34,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   String? _hubName;
   String? _stateName;
   String? _localityName;
-  List<String> _classificationNames = [];
+  List<Map<String, dynamic>> _classifications = [];
   bool _isLoadingLookups = false;
 
   // Sync status
@@ -218,18 +218,27 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         }
       }
 
-      // Load classifications
+      // Load classification history
       try {
         final classificationsResponse = await supabase
             .from('user_classifications')
-            .select('classification_level, role_scope')
-            .eq('user_id', profile.id);
+            .select(
+                'id, classification_level, role_scope, assigned_at, reason, is_current')
+            .eq('user_id', profile.id)
+            .order('assigned_at', ascending: false);
 
-        _classificationNames = (classificationsResponse as List).map((c) {
-          final level = c['classification_level'] as String? ?? '';
-          final scope = c['role_scope'] as String? ?? '';
-          return scope.isNotEmpty ? '$level ($scope)' : level;
-        }).toList();
+        _classifications =
+            (classificationsResponse as List).cast<Map<String, dynamic>>();
+
+        // Mark current: prefer is_current flag, else mark most-recent as current
+        bool anyMarkedCurrent =
+            _classifications.any((c) => c['is_current'] == true);
+        if (!anyMarkedCurrent && _classifications.isNotEmpty) {
+          _classifications[0] = {
+            ..._classifications[0],
+            'is_current': true,
+          };
+        }
       } catch (e) {
         debugPrint('Error loading classifications: $e');
       }
@@ -618,51 +627,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                     ),
                     const SizedBox(height: 16),
 
-                    // Classifications Section
-                    _buildSection(
-                      title: 'Classifications',
-                      icon: Icons.stars,
-                      color: AppColors.primaryOrange,
-                      children: [
-                        if (_classificationNames.isNotEmpty)
-                          ..._classificationNames.map(
-                            (name) => Padding(
-                              padding: const EdgeInsets.only(bottom: 8),
-                              child: _buildInfoRow(
-                                'Level',
-                                name,
-                                icon: Icons.grade,
-                              ),
-                            ),
-                          )
-                        else if (profile.classification != null) ...[
-                          _buildInfoRow(
-                            'Level',
-                            profile.classification!.level.toUpperCase(),
-                            icon: Icons.grade,
-                          ),
-                          const SizedBox(height: 8),
-                          _buildInfoRow(
-                            'Scope',
-                            profile.classification!.roleScope,
-                            icon: Icons.work,
-                          ),
-                          if (profile.classification!.hasRetainer) ...[
-                            const SizedBox(height: 8),
-                            _buildInfoRow(
-                              'Retainer',
-                              '${profile.classification!.retainerAmount} ${profile.classification!.retainerCurrency}',
-                              icon: Icons.payments,
-                            ),
-                          ],
-                        ] else
-                          _buildInfoRow(
-                            'Classification',
-                            'Not assigned',
-                            icon: Icons.grade,
-                          ),
-                      ],
-                    ),
+                    // Classifications Section — full history timeline
+                    _buildClassificationHistory(profile),
                     const SizedBox(height: 16),
 
                     // Bank Account Section
@@ -691,9 +657,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                       ],
                     ),
 
-                    // Save Button
+                    // Save Button / bottom safe area padding
                     if (_isEditMode) ...[
-                      const SizedBox(height: 32),
+                      const SizedBox(height: 24),
                       SizedBox(
                         width: double.infinity,
                         child: ElevatedButton(
@@ -728,11 +694,309 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                       ),
                     ],
 
-                    const SizedBox(height: 16),
+                    SizedBox(
+                        height: MediaQuery.of(context).padding.bottom + 24),
                   ],
                 ),
               ),
             ),
+    );
+  }
+
+  // ── Classification history timeline ─────────────────────────────────────────
+  Widget _buildClassificationHistory(dynamic profile) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.orange.shade100),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.orange.withOpacity(0.06),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            decoration: BoxDecoration(
+              color: AppColors.primaryOrange.withOpacity(0.08),
+              borderRadius:
+                  const BorderRadius.vertical(top: Radius.circular(12)),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.stars, color: AppColors.primaryOrange, size: 18),
+                const SizedBox(width: 8),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Classifications',
+                        style: GoogleFonts.poppins(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 14,
+                            color: AppColors.primaryOrange)),
+                    Text('التصنيفات',
+                        style: GoogleFonts.poppins(
+                            fontSize: 10,
+                            color: AppColors.primaryOrange.withOpacity(0.8))),
+                  ],
+                ),
+                const Spacer(),
+                if (_classifications.isNotEmpty)
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: AppColors.primaryOrange.withOpacity(0.15),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Text('${_classifications.length} records',
+                        style: GoogleFonts.poppins(
+                            fontSize: 10,
+                            color: AppColors.primaryOrange,
+                            fontWeight: FontWeight.w600)),
+                  ),
+              ],
+            ),
+          ),
+
+          // Timeline body
+          if (_classifications.isEmpty)
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                children: [
+                  _buildInfoRow('Classification',
+                      profile.classification?.level?.toUpperCase() ??
+                          'Not assigned',
+                      icon: Icons.grade),
+                  if (profile.classification?.roleScope != null) ...[
+                    const SizedBox(height: 8),
+                    _buildInfoRow('Scope', profile.classification!.roleScope,
+                        icon: Icons.work),
+                  ],
+                ],
+              ),
+            )
+          else
+            Padding(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              child: Column(
+                children: List.generate(_classifications.length, (i) {
+                  final c = _classifications[i];
+                  final isCurrent = c['is_current'] == true;
+                  final level =
+                      (c['classification_level'] as String? ?? '').trim();
+                  final scope = (c['role_scope'] as String? ?? '').trim();
+                  final reason = (c['reason'] as String?)?.trim();
+                  final assignedAt = c['assigned_at'] as String?;
+                  final isLast = i == _classifications.length - 1;
+
+                  return IntrinsicHeight(
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Timeline spine
+                        SizedBox(
+                          width: 28,
+                          child: Column(
+                            children: [
+                              // Circle dot
+                              Container(
+                                width: isCurrent ? 14 : 10,
+                                height: isCurrent ? 14 : 10,
+                                margin: EdgeInsets.only(
+                                    top: isCurrent ? 3 : 5),
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: isCurrent
+                                      ? AppColors.primaryOrange
+                                      : Colors.grey.shade300,
+                                  border: isCurrent
+                                      ? Border.all(
+                                          color: AppColors.primaryOrange
+                                              .withOpacity(0.3),
+                                          width: 3)
+                                      : null,
+                                  boxShadow: isCurrent
+                                      ? [
+                                          BoxShadow(
+                                            color: AppColors.primaryOrange
+                                                .withOpacity(0.35),
+                                            blurRadius: 6,
+                                          )
+                                        ]
+                                      : null,
+                                ),
+                              ),
+                              // Vertical line to next item
+                              if (!isLast)
+                                Expanded(
+                                  child: Container(
+                                    width: 2,
+                                    margin: const EdgeInsets.only(top: 4),
+                                    color: Colors.grey.shade200,
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+
+                        // Card content
+                        Expanded(
+                          child: Container(
+                            margin: EdgeInsets.only(
+                                bottom: isLast ? 0 : 10),
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              color: isCurrent
+                                  ? AppColors.primaryOrange
+                                      .withOpacity(0.07)
+                                  : Colors.grey.shade50,
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(
+                                color: isCurrent
+                                    ? AppColors.primaryOrange
+                                        .withOpacity(0.35)
+                                    : Colors.grey.shade200,
+                                width: isCurrent ? 1.5 : 1,
+                              ),
+                            ),
+                            child: Column(
+                              crossAxisAlignment:
+                                  CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    // Level badge
+                                    Container(
+                                      padding:
+                                          const EdgeInsets.symmetric(
+                                              horizontal: 8,
+                                              vertical: 3),
+                                      decoration: BoxDecoration(
+                                        color: isCurrent
+                                            ? AppColors.primaryOrange
+                                            : Colors.grey.shade400,
+                                        borderRadius:
+                                            BorderRadius.circular(6),
+                                      ),
+                                      child: Text(
+                                        level.toUpperCase(),
+                                        style: GoogleFonts.poppins(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w700,
+                                          color: Colors.white,
+                                        ),
+                                      ),
+                                    ),
+                                    if (isCurrent) ...[
+                                      const SizedBox(width: 6),
+                                      Container(
+                                        padding:
+                                            const EdgeInsets.symmetric(
+                                                horizontal: 6,
+                                                vertical: 2),
+                                        decoration: BoxDecoration(
+                                          color: Colors.green.shade600,
+                                          borderRadius:
+                                              BorderRadius.circular(5),
+                                        ),
+                                        child: Text(
+                                          'Current / الحالي',
+                                          style: GoogleFonts.poppins(
+                                              fontSize: 9,
+                                              color: Colors.white,
+                                              fontWeight:
+                                                  FontWeight.w600),
+                                        ),
+                                      ),
+                                    ],
+                                    const Spacer(),
+                                    if (assignedAt != null &&
+                                        DateTime.tryParse(assignedAt) != null)
+                                      Text(
+                                        _formatDate(
+                                            DateTime.parse(assignedAt)),
+                                        style: GoogleFonts.poppins(
+                                            fontSize: 10,
+                                            color: Colors.grey.shade500),
+                                      ),
+                                  ],
+                                ),
+                                if (scope.isNotEmpty) ...[
+                                  const SizedBox(height: 4),
+                                  Row(children: [
+                                    Icon(Icons.work_outline,
+                                        size: 11,
+                                        color: Colors.grey.shade500),
+                                    const SizedBox(width: 3),
+                                    Text(scope,
+                                        style: GoogleFonts.poppins(
+                                            fontSize: 11,
+                                            color: Colors.grey.shade600)),
+                                  ]),
+                                ],
+                                if (reason != null &&
+                                    reason.isNotEmpty) ...[
+                                  const SizedBox(height: 6),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 8, vertical: 4),
+                                    decoration: BoxDecoration(
+                                      color: isCurrent
+                                          ? AppColors.primaryOrange
+                                              .withOpacity(0.1)
+                                          : Colors.blue.shade50,
+                                      borderRadius:
+                                          BorderRadius.circular(6),
+                                    ),
+                                    child: Row(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Icon(Icons.comment_outlined,
+                                            size: 11,
+                                            color: isCurrent
+                                                ? AppColors.primaryOrange
+                                                : Colors.blue.shade600),
+                                        const SizedBox(width: 4),
+                                        Expanded(
+                                          child: Text(
+                                            reason,
+                                            style: GoogleFonts.poppins(
+                                              fontSize: 10,
+                                              color: isCurrent
+                                                  ? AppColors
+                                                      .primaryOrange
+                                                  : Colors.blue.shade700,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }),
+              ),
+            ),
+        ],
+      ),
     );
   }
 
