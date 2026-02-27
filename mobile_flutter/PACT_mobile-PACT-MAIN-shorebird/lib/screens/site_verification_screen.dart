@@ -2590,6 +2590,7 @@ class _SiteVerificationScreenState extends State<SiteVerificationScreen> {
   void _showLocalityPermitDialog(Map<String, dynamic> site) async {
     final locality = site['locality']?.toString() ?? '';
     final state = site['state']?.toString() ?? '';
+    final isArabic = Localizations.localeOf(context).languageCode == 'ar';
 
     // First show locality permit requirement dialog
     final requirementResult = await showDialog<Map<String, dynamic>>(
@@ -2598,6 +2599,7 @@ class _SiteVerificationScreenState extends State<SiteVerificationScreen> {
         locality: locality,
         state: state,
         siteCount: 1,
+        isArabic: isArabic,
       ),
     );
 
@@ -2619,6 +2621,7 @@ class _SiteVerificationScreenState extends State<SiteVerificationScreen> {
           locality: locality,
           state: state,
           siteCount: 1,
+          isArabic: isArabic,
         ),
       );
 
@@ -3201,6 +3204,7 @@ class _SiteVerificationScreenState extends State<SiteVerificationScreen> {
   ) async {
     final firstSite = sites.isNotEmpty ? sites.first : null;
     if (firstSite == null) return;
+    final isArabic = Localizations.localeOf(context).languageCode == 'ar';
 
     // First show locality permit requirement dialog
     final requirementResult = await showDialog<Map<String, dynamic>>(
@@ -3209,6 +3213,7 @@ class _SiteVerificationScreenState extends State<SiteVerificationScreen> {
         locality: locality,
         state: state,
         siteCount: sites.length,
+        isArabic: isArabic,
       ),
     );
 
@@ -3230,6 +3235,7 @@ class _SiteVerificationScreenState extends State<SiteVerificationScreen> {
           locality: locality,
           state: state,
           siteCount: sites.length,
+          isArabic: isArabic,
         ),
       );
 
@@ -8513,11 +8519,13 @@ class _BulkLocalityPermitRequirementDialog extends StatefulWidget {
   final String locality;
   final String state;
   final int siteCount;
+  final bool isArabic;
 
   const _BulkLocalityPermitRequirementDialog({
     required this.locality,
     required this.state,
     required this.siteCount,
+    this.isArabic = false,
   });
 
   @override
@@ -8531,7 +8539,7 @@ class _BulkLocalityPermitRequirementDialogState
 
   @override
   Widget build(BuildContext context) {
-    final isArabic = Localizations.localeOf(context).languageCode == 'ar';
+    final isArabic = widget.isArabic;
     return Directionality(
       textDirection: isArabic ? TextDirection.rtl : TextDirection.ltr,
       child: AlertDialog(
@@ -8746,11 +8754,13 @@ class _BulkLocalityPermitFollowUpDialog extends StatefulWidget {
   final String locality;
   final String state;
   final int siteCount;
+  final bool isArabic;
 
   const _BulkLocalityPermitFollowUpDialog({
     required this.locality,
     required this.state,
     required this.siteCount,
+    this.isArabic = false,
   });
 
   @override
@@ -8764,7 +8774,7 @@ class _BulkLocalityPermitFollowUpDialogState
 
   @override
   Widget build(BuildContext context) {
-    final isArabic = Localizations.localeOf(context).languageCode == 'ar';
+    final isArabic = widget.isArabic;
     return Directionality(
       textDirection: isArabic ? TextDirection.rtl : TextDirection.ltr,
       child: AlertDialog(
