@@ -169,7 +169,7 @@ class _CostSubmissionScreenState extends State<CostSubmissionScreen> {
                 Text(
                   isArabic ? labelAr : labelEn,
                   style: GoogleFonts.poppins(
-                    fontSize: 12,
+                    fontSize: isArabic ? 13 : 12,
                     fontWeight: FontWeight.w700,
                     color: isActive ? Colors.white : AppColors.textLight,
                   ),
@@ -177,8 +177,8 @@ class _CostSubmissionScreenState extends State<CostSubmissionScreen> {
                 Text(
                   isArabic ? labelEn : labelAr,
                   style: GoogleFonts.poppins(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w600,
+                    fontSize: isArabic ? 10 : 11,
+                    fontWeight: isArabic ? FontWeight.w600 : FontWeight.w700,
                     color: isActive
                         ? Colors.white.withValues(alpha: 0.8)
                         : AppColors.textLight,

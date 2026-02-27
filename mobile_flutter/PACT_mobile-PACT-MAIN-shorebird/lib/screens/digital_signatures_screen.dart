@@ -274,7 +274,7 @@ class _DigitalSignaturesScreenState extends State<DigitalSignaturesScreen> {
             Text(
               isArabic ? labelAr : labelEn,
               style: GoogleFonts.poppins(
-                fontSize: 11,
+                fontSize: isArabic ? 12 : 11,
                 fontWeight: FontWeight.w700,
                 color: isActive ? Colors.white : AppColors.textLight,
               ),
@@ -283,8 +283,8 @@ class _DigitalSignaturesScreenState extends State<DigitalSignaturesScreen> {
             Text(
               isArabic ? labelEn : labelAr,
               style: GoogleFonts.poppins(
-                fontSize: 10,
-                fontWeight: FontWeight.w600,
+                fontSize: isArabic ? 10 : 11,
+                fontWeight: isArabic ? FontWeight.w600 : FontWeight.w700,
                 color: isActive
                     ? Colors.white.withValues(alpha: 0.8)
                     : AppColors.textLight,

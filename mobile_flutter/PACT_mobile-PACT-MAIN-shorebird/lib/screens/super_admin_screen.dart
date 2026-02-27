@@ -346,7 +346,7 @@ class _SuperAdminScreenState extends State<SuperAdminScreen> {
             Text(
               labelAr,
               style: GoogleFonts.poppins(
-                fontSize: 10,
+                fontSize: 11,
                 fontWeight: FontWeight.w700,
                 color: isActive ? Colors.white.withValues(alpha: 0.85) : AppColors.textLight,
               ),
