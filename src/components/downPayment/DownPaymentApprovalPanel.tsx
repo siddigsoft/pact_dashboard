@@ -335,17 +335,17 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
     if (!selectedRequest || !currentUser) return;
 
     setProcessing(true);
-    const success = await revertToPending({
-      requestId: selectedRequest.id,
-      revertedBy: currentUser.id,
-      revertedByName: currentUser.fullName || currentUser.email,
-      reason: notes || undefined,
-      targetStatus: revertTarget,
-    });
-
-    setProcessing(false);
-    if (success) {
-      closeDialog();
+    try {
+      const success = await revertToPending({
+        requestId: selectedRequest.id,
+        revertedBy: currentUser.id,
+        revertedByName: currentUser.fullName || currentUser.email,
+        reason: notes || undefined,
+        targetStatus: revertTarget,
+      });
+      if (success) closeDialog();
+    } finally {
+      setProcessing(false);
     }
   };
 

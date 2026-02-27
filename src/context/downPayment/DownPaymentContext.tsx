@@ -1132,12 +1132,21 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
       const updatedAuditLog = [...(request.auditLog || []), auditEntry];
       const updatedMetadata: Record<string, any> = { ...request.metadata, audit_log: updatedAuditLog };
 
+      // Detect if request was in a paid state — need to also reset payment fields
+      const wasPaid = ['partially_paid', 'fully_paid'].includes(request.status);
+
       if (data.targetStatus === 'pending_supervisor') {
         updatedMetadata.supervisor_approved_amount = null;
         updatedMetadata.admin_approved_amount = null;
         updatedMetadata.approved_amount = null;
         updatedMetadata.approval_type = null;
         updatedMetadata.approval_percentage = null;
+        if (wasPaid) {
+          // Also clear payment reconciliation metadata when rolling back from a paid state
+          updatedMetadata.advance_reconciled_at = null;
+          updatedMetadata.payment_processed_at = null;
+          updatedMetadata.receipt_confirmation = null;
+        }
         updateData = {
           ...updateData,
           supervisor_status: 'pending',
@@ -1150,10 +1159,16 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
           admin_processed_at: null,
           admin_notes: null,
           admin_rejection_reason: null,
+          ...(wasPaid ? { total_paid_amount: 0 } : {}),
           metadata: updatedMetadata,
         };
       } else if (data.targetStatus === 'pending_admin') {
         updatedMetadata.admin_approved_amount = null;
+        if (wasPaid) {
+          updatedMetadata.advance_reconciled_at = null;
+          updatedMetadata.payment_processed_at = null;
+          updatedMetadata.receipt_confirmation = null;
+        }
         updateData = {
           ...updateData,
           admin_status: 'pending',
@@ -1161,9 +1176,13 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
           admin_processed_at: null,
           admin_notes: null,
           admin_rejection_reason: null,
+          ...(wasPaid ? { total_paid_amount: 0 } : {}),
           metadata: updatedMetadata,
         };
       } else if (data.targetStatus === 'approved') {
+        updatedMetadata.advance_reconciled_at = null;
+        updatedMetadata.payment_processed_at = null;
+        updatedMetadata.receipt_confirmation = null;
         updateData = {
           ...updateData,
           total_paid_amount: 0,
@@ -1171,16 +1190,28 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
         };
       }
 
-      const { error } = await supabase
+      // Race the DB update against a 15-second timeout so the UI never hangs indefinitely
+      const updatePromise = supabase
         .from('down_payment_requests')
         .update(updateData)
         .eq('id', data.requestId);
 
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('Request timed out — please try again')), 15000)
+      );
+
+      const { error } = await Promise.race([updatePromise, timeoutPromise]) as { error: any };
+
       if (error) throw error;
 
+      const targetLabel =
+        data.targetStatus === 'pending_supervisor' ? 'Pending Supervisor Approval' :
+        data.targetStatus === 'pending_admin'       ? 'Pending Admin Approval' :
+                                                      'Approved (Ready for Payment)';
+
       toast({
-        title: 'Status Reverted',
-        description: `Request has been reverted to ${data.targetStatus === 'pending_supervisor' ? 'Pending Supervisor Approval' : 'Pending Admin Approval'}`,
+        title: 'Status Reverted / تم الإرجاع',
+        description: `Request has been reverted to ${targetLabel}`,
       });
 
       await refreshRequests();
