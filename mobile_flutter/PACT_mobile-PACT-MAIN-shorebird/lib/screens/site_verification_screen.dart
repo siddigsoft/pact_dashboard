@@ -927,36 +927,42 @@ class _SiteVerificationScreenState extends State<SiteVerificationScreen>
                   _buildTab(
                     icon: Icons.fiber_new_rounded,
                     label: 'New',
+                    labelAr: 'جديد',
                     count: _newSites.length,
                     badgeColor: AppColors.primaryBlue,
                   ),
                   _buildTab(
                     icon: Icons.fact_check_outlined,
                     label: 'CP Verification',
+                    labelAr: 'تحقق المنسق',
                     count: _cpVerificationSites.length,
                     badgeColor: Colors.blue,
                   ),
                   _buildTab(
                     icon: Icons.verified_outlined,
                     label: 'Verified',
+                    labelAr: 'موثق',
                     count: _verifiedSites.length,
                     badgeColor: Colors.green,
                   ),
                   _buildTab(
                     icon: Icons.thumb_up_outlined,
                     label: 'Approved',
+                    labelAr: 'معتمد',
                     count: _approvedSites.length,
                     badgeColor: Colors.teal,
                   ),
                   _buildTab(
                     icon: Icons.check_circle_outline,
                     label: 'Completed',
+                    labelAr: 'مكتمل',
                     count: _completedSites.length,
                     badgeColor: Colors.purple,
                   ),
                   _buildTab(
                     icon: Icons.cancel_outlined,
                     label: 'Rejected',
+                    labelAr: 'مرفوض',
                     count: _rejectedSites.length,
                     badgeColor: Colors.red,
                     highlightIfNonZero: true,
@@ -1029,6 +1035,7 @@ class _SiteVerificationScreenState extends State<SiteVerificationScreen>
   Widget _buildTab({
     required IconData icon,
     required String label,
+    required String labelAr,
     required int count,
     required Color badgeColor,
     bool highlightIfNonZero = false,
@@ -1056,7 +1063,20 @@ class _SiteVerificationScreenState extends State<SiteVerificationScreen>
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(label, style: const TextStyle(fontSize: 12)),
+                Text(
+                  label,
+                  style: GoogleFonts.poppins(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                Text(
+                  labelAr,
+                  style: GoogleFonts.poppins(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
                 Container(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 6,

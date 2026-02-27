@@ -330,30 +330,23 @@ class _WalletScreenState extends State<WalletScreen> {
           })
           .fold(0.0, (sum, t) => sum + (t['amount'] as num).toDouble());
 
-      // Compute advance deductions so stat cards show net balance
+      // Compute advance deductions so stat cards show net balance.
+      // Includes both 'down_payment' (advance disbursed, stored as positive)
+      // and 'advance_deduction' (stored as negative) types.
+      bool _isAdvanceTx(Map<String, dynamic> t) {
+        final type = t['type'] as String? ?? '';
+        return type == 'down_payment' || type == 'advance_deduction';
+      }
+
       _totalAdvanceDeductions = _transactions
-          .where((t) =>
-              t['type'] == 'advance_deduction' ||
-              (t['description']
-                      ?.toString()
-                      .toLowerCase()
-                      .contains('advance') ==
-                  true &&
-                  (t['amount'] as num).toDouble() < 0))
+          .where(_isAdvanceTx)
           .fold(
               0.0, (sum, t) => sum + (t['amount'] as num).toDouble().abs());
 
       _thisMonthAdvanceDeductions = _transactions
           .where((t) {
             final date = DateTime.parse(t['created_at'] as String);
-            return date.isAfter(startOfMonth) &&
-                (t['type'] == 'advance_deduction' ||
-                    (t['description']
-                            ?.toString()
-                            .toLowerCase()
-                            .contains('advance') ==
-                        true &&
-                        (t['amount'] as num).toDouble() < 0));
+            return date.isAfter(startOfMonth) && _isAdvanceTx(t);
           })
           .fold(
               0.0, (sum, t) => sum + (t['amount'] as num).toDouble().abs());
@@ -1215,7 +1208,7 @@ class _WalletScreenState extends State<WalletScreen> {
               labelEn,
               textAlign: TextAlign.center,
               style: GoogleFonts.poppins(
-                fontSize: 10,
+                fontSize: 12,
                 fontWeight: FontWeight.w600,
                 color: isActive ? Colors.white : Colors.grey.shade700,
               ),
@@ -1224,8 +1217,8 @@ class _WalletScreenState extends State<WalletScreen> {
               labelAr,
               textAlign: TextAlign.center,
               style: GoogleFonts.poppins(
-                fontSize: 10,
-                fontWeight: FontWeight.w600,
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
                 color: isActive
                     ? Colors.white
                     : Colors.grey.shade600,
@@ -2463,37 +2456,91 @@ class _WalletScreenState extends State<WalletScreen> {
                 ),
               ),
             ],
-            // Receipt confirmed badge
+            // Receipt confirmed — full details
             if (receiptConfirmed) ...[
               const SizedBox(height: 8),
               Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 6,
-                ),
+                width: double.infinity,
+                padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
                   color: Colors.green.shade50,
-                  borderRadius: BorderRadius.circular(8),
+                  borderRadius: BorderRadius.circular(10),
                   border: Border.all(color: Colors.green.shade200),
                 ),
-                child: Row(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Icon(
-                      Icons.verified,
-                      color: Colors.green.shade700,
-                      size: 15,
+                    Row(
+                      children: [
+                        Icon(Icons.verified, color: Colors.green.shade700, size: 15),
+                        const SizedBox(width: 6),
+                        Text(
+                          widget.isArabic
+                              ? 'تم تأكيد استلام الأموال ✓'
+                              : 'Fund receipt acknowledged ✓',
+                          style: GoogleFonts.poppins(
+                            fontSize: 12,
+                            color: Colors.green.shade700,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ],
                     ),
-                    const SizedBox(width: 6),
-                    Text(
-                      widget.isArabic
-                          ? 'تم تأكيد استلام الأموال ✓'
-                          : 'Fund receipt acknowledged ✓',
-                      style: GoogleFonts.poppins(
-                        fontSize: 12,
-                        color: Colors.green.shade700,
-                        fontWeight: FontWeight.w600,
+                    if (meta['receipt_confirmation']?['confirmedAt'] != null) ...[
+                      const SizedBox(height: 6),
+                      Row(
+                        children: [
+                          Icon(Icons.access_time, size: 12, color: Colors.green.shade600),
+                          const SizedBox(width: 4),
+                          Text(
+                            '${widget.isArabic ? 'وقت التأكيد' : 'Confirmed at'}: ${DateFormat('dd MMM yyyy, HH:mm').format(DateTime.parse(meta['receipt_confirmation']['confirmedAt'] as String).toLocal())}',
+                            style: GoogleFonts.poppins(fontSize: 11, color: Colors.green.shade800),
+                          ),
+                        ],
                       ),
-                    ),
+                    ],
+                    if ((meta['receipt_confirmation']?['notes'] as String?)?.isNotEmpty == true) ...[
+                      const SizedBox(height: 4),
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Icon(Icons.note, size: 12, color: Colors.green.shade600),
+                          const SizedBox(width: 4),
+                          Expanded(
+                            child: Text(
+                              '${widget.isArabic ? 'الملاحظات' : 'Notes'}: ${meta['receipt_confirmation']['notes']}',
+                              style: GoogleFonts.poppins(fontSize: 11, color: Colors.green.shade800),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                    if (meta['receipt_confirmation']?['gps'] != null) ...[
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          Icon(Icons.location_on, size: 12, color: Colors.green.shade600),
+                          const SizedBox(width: 4),
+                          Text(
+                            '${widget.isArabic ? 'الموقع' : 'GPS'}: ${(meta['receipt_confirmation']['gps']['latitude'] as num).toStringAsFixed(5)}, ${(meta['receipt_confirmation']['gps']['longitude'] as num).toStringAsFixed(5)}',
+                            style: GoogleFonts.poppins(fontSize: 11, color: Colors.green.shade800),
+                          ),
+                        ],
+                      ),
+                    ],
+                    if (meta['receipt_confirmation']?['signatureSource'] != null) ...[
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          Icon(Icons.draw, size: 12, color: Colors.green.shade600),
+                          const SizedBox(width: 4),
+                          Text(
+                            '${widget.isArabic ? 'التوقيع' : 'Signature'}: ${meta['receipt_confirmation']['signatureSource'] == 'profile_saved' ? (widget.isArabic ? 'توقيع محفوظ' : 'Saved signature') : (widget.isArabic ? 'توقيع مرسوم' : 'Hand-drawn')}',
+                            style: GoogleFonts.poppins(fontSize: 11, color: Colors.green.shade800),
+                          ),
+                        ],
+                      ),
+                    ],
                   ],
                 ),
               ),
