@@ -247,7 +247,9 @@ class _HelpSupportScreenState extends State<HelpSupportScreen>
             ),
           ],
         ),
-        body: Column(
+        body: SafeArea(
+          top: false,
+          child: Column(
           children: [
             _buildSearchBar(isArabic),
             _buildTabBar(isArabic),
@@ -265,6 +267,7 @@ class _HelpSupportScreenState extends State<HelpSupportScreen>
                     ),
             ),
           ],
+        )
         ),
       ),
     );

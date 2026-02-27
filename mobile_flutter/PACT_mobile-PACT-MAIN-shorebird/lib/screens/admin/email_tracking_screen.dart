@@ -169,7 +169,9 @@ class _EmailTrackingScreenState extends State<EmailTrackingScreen> {
         ),
         body: !_hasAccess
             ? const Center(child: CircularProgressIndicator())
-            : Column(
+            : SafeArea(
+                top: false,
+                child: Column(
                 children: [
                   _buildStatsRow(),
                   _buildFilterBar(),
@@ -189,6 +191,7 @@ class _EmailTrackingScreenState extends State<EmailTrackingScreen> {
                               ),
                   ),
                 ],
+              )
               ),
       ),
     );

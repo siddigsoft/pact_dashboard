@@ -203,7 +203,9 @@ class _DigitalSignaturesScreenState extends State<DigitalSignaturesScreen> {
         ),
         body: _isLoading
             ? const Center(child: CircularProgressIndicator())
-            : Column(
+            : SafeArea(
+                top: false,
+                child: Column(
                 children: [
                   // ── Bilingual tab row ──────────────────────────────
                   Container(
@@ -241,6 +243,7 @@ class _DigitalSignaturesScreenState extends State<DigitalSignaturesScreen> {
                         : _buildHistoryTab(isArabic),
                   ),
                 ],
+              )
               ),
         floatingActionButton: FloatingActionButton.extended(
           onPressed: () => _showCreateSignatureDialog(isArabic),

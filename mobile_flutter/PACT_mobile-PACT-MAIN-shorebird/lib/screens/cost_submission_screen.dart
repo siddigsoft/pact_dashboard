@@ -102,7 +102,9 @@ class _CostSubmissionScreenState extends State<CostSubmissionScreen> {
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
-          : Column(
+          : SafeArea(
+              top: false,
+              child: Column(
               children: [
                 _buildStatsCards(),
                 // ── Bilingual tab row ──────────────────────────────────
@@ -139,6 +141,7 @@ class _CostSubmissionScreenState extends State<CostSubmissionScreen> {
                               : _buildSubmitTab(),
                 ),
               ],
+            )
             ),
     );
   }

@@ -81,7 +81,9 @@ class _CostSubmissionDetailsScreenState extends State<CostSubmissionDetailsScree
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
-          : _error != null
+          : SafeArea(
+              top: false,
+              child: _error != null
               ? Center(
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
@@ -94,6 +96,7 @@ class _CostSubmissionDetailsScreenState extends State<CostSubmissionDetailsScree
                     ],
                   ),
                 )
+            )
               : RefreshIndicator(
                   onRefresh: _loadSubmission,
                   child: SingleChildScrollView(

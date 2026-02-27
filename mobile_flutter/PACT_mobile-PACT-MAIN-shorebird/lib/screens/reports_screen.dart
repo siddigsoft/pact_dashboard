@@ -957,7 +957,9 @@ class _ReportsScreenState extends State<ReportsScreen> {
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
-          : Column(
+          : SafeArea(
+              top: false,
+              child: Column(
               children: [
                 // Summary Cards
                 Container(
@@ -1481,6 +1483,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
                         ),
                 ),
               ],
+            )
             ),
     );
   }

@@ -166,7 +166,9 @@ class _WithdrawalRequestScreenState
         foregroundColor: Colors.white,
         elevation: 0,
       ),
-      body: walletAsync.when(
+      body: SafeArea(
+        top: false,
+        child: walletAsync.when(
         data: (wallet) {
           if (wallet == null) {
             return const Center(child: Text('Wallet not found'));
@@ -481,6 +483,7 @@ class _WithdrawalRequestScreenState
             ],
           ),
         ),
+      )
       ),
     );
   }

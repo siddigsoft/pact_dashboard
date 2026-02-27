@@ -199,7 +199,9 @@ class _SiteVisitDetailScreenState extends State<SiteVisitDetailScreen> {
         ),
         body: _isLoading
             ? const Center(child: CircularProgressIndicator())
-            : _siteVisit == null
+            : SafeArea(
+                top: false,
+                child: _siteVisit == null
             ? Center(
                 child: Text(
                   l10n?.noData ??
@@ -208,6 +210,7 @@ class _SiteVisitDetailScreenState extends State<SiteVisitDetailScreen> {
                           : 'Site visit not found'),
                   style: GoogleFonts.poppins(fontSize: 16, color: Colors.grey),
                 ),
+              )
               )
             : RefreshIndicator(
                 onRefresh: _loadSiteVisitDetails,

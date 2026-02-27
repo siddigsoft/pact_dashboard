@@ -362,7 +362,9 @@ class _ComprehensiveMonitoringFormScreenState
           ),
         ),
       ),
-      body: Form(
+      body: SafeArea(
+        top: false,
+        child: Form(
         key: _formKey,
         child: ListView(
           controller: _scrollController,
@@ -402,6 +404,7 @@ class _ComprehensiveMonitoringFormScreenState
             const SizedBox(height: 40),
           ],
         ),
+      )
       ),
     );
   }

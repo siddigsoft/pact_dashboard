@@ -191,8 +191,11 @@ class _RoleManagementScreenState extends State<RoleManagementScreen> {
         ),
         body: !_hasAccess
             ? const Center(child: CircularProgressIndicator())
-            : _isLoading
+            : SafeArea(
+                top: false,
+                child: _isLoading
             ? const Center(child: CircularProgressIndicator())
+              )
             : RefreshIndicator(
                 onRefresh: _loadRoles,
                 child: ListView(

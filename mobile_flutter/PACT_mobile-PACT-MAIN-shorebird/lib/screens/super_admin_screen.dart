@@ -177,7 +177,9 @@ class _SuperAdminScreenState extends State<SuperAdminScreen> {
           ),
         ),
       ),
-      body: Column(
+      body: SafeArea(
+        top: false,
+        child: Column(
         children: [
           _buildHeader(),
           _buildTabs(),
@@ -189,6 +191,7 @@ class _SuperAdminScreenState extends State<SuperAdminScreen> {
                     : _buildUsersTab(),
           ),
         ],
+      )
       ),
     );
   }

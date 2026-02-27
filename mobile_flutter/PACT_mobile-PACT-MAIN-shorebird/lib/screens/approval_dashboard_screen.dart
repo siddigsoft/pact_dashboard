@@ -33,7 +33,9 @@ class _ApprovalDashboardScreenState
         ),
         elevation: 0,
       ),
-      body: Column(
+      body: SafeArea(
+        top: false,
+        child: Column(
         children: [
           // ── Bilingual tab row ──────────────────────────────────────
           Container(
@@ -69,6 +71,7 @@ class _ApprovalDashboardScreenState
                 : _WithdrawalRequestsTab(),
           ),
         ],
+      )
       ),
     );
   }

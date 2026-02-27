@@ -128,8 +128,11 @@ class _AdminUserApprovalScreenState extends State<AdminUserApprovalScreen> {
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
-          : _pendingUsers.isEmpty
+          : SafeArea(
+              top: false,
+              child: _pendingUsers.isEmpty
               ? _buildEmptyState()
+            )
               : _buildUserList(),
     );
   }

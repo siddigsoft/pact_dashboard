@@ -119,7 +119,9 @@ class _CostApprovalsScreenState extends State<CostApprovalsScreen> {
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
-          : Column(
+          : SafeArea(
+              top: false,
+              child: Column(
               children: [
                 // ── Bilingual scrollable tab row ───────────────────────
                 Container(
@@ -155,6 +157,7 @@ class _CostApprovalsScreenState extends State<CostApprovalsScreen> {
                               : _buildApprovalList(_tier1Pending, 1),
                 ),
               ],
+            )
             ),
     );
   }

@@ -262,7 +262,9 @@ class _FieldTeamMapScreenState extends State<FieldTeamMapScreen> {
         ),
         body: _isLoading
             ? const Center(child: CircularProgressIndicator())
-            : Column(
+            : SafeArea(
+                top: false,
+                child: Column(
                 children: [
                   _buildFilterBar(isArabic),
                   Expanded(
@@ -285,6 +287,7 @@ class _FieldTeamMapScreenState extends State<FieldTeamMapScreen> {
                     ),
                   ),
                 ],
+              )
               ),
       ),
     );

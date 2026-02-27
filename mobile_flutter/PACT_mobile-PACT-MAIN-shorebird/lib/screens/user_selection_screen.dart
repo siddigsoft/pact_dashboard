@@ -63,7 +63,9 @@ class _UserSelectionScreenState extends State<UserSelectionScreen> {
           onPressed: () => Navigator.pop(context),
         ),
       ),
-      body: Column(
+      body: SafeArea(
+        top: false,
+        child: Column(
         children: [
           // Search bar
           Padding(
@@ -153,6 +155,7 @@ class _UserSelectionScreenState extends State<UserSelectionScreen> {
                       ),
           ),
         ],
+      )
       ),
     );
   }

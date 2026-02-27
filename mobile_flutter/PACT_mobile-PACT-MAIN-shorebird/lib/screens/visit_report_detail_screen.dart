@@ -311,7 +311,10 @@ class _VisitReportDetailScreenState
             ),
         ],
       ),
-      body: _buildBody(),
+      body: SafeArea(
+        top: false,
+        child: _buildBody(),
+      ),
     );
   }
 

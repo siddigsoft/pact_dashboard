@@ -41,7 +41,9 @@ class _HelpScreenState extends State<HelpScreen> {
         title: const Text('Help & Support'),
         backgroundColor: const Color(0xFF1976D2),
       ),
-      body: Column(
+      body: SafeArea(
+        top: false,
+        child: Column(
         children: [
           _buildSearchBar(),
           Expanded(
@@ -50,6 +52,7 @@ class _HelpScreenState extends State<HelpScreen> {
                 : _buildCategoriesList(),
           ),
         ],
+      )
       ),
     );
   }

@@ -245,7 +245,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
-          : RefreshIndicator(
+          : SafeArea(
+              top: false,
+              child: RefreshIndicator(
               onRefresh: _loadData,
               child: SingleChildScrollView(
                 physics: const AlwaysScrollableScrollPhysics(),
@@ -269,6 +271,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                   ],
                 ),
               ),
+            )
             ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _showAddContactDialog,

@@ -851,7 +851,9 @@ class _CompleteVisitScreenState extends ConsumerState<CompleteVisitScreen> {
         backgroundColor: AppColors.primaryOrange,
         foregroundColor: Colors.white,
       ),
-      body: SingleChildScrollView(
+      body: SafeArea(
+        top: false,
+        child: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -1214,6 +1216,7 @@ class _CompleteVisitScreenState extends ConsumerState<CompleteVisitScreen> {
             const SizedBox(height: 16),
           ],
         ),
+      )
       ),
     );
   }

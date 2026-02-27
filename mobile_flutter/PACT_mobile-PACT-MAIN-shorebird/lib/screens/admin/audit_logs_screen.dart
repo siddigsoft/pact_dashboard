@@ -174,7 +174,9 @@ class _AuditLogsScreenState extends State<AuditLogsScreen> {
         ),
         body: !_hasAccess
             ? const Center(child: CircularProgressIndicator())
-            : Column(
+            : SafeArea(
+                top: false,
+                child: Column(
                 children: [
                   _buildFiltersBar(),
                   Expanded(
@@ -193,6 +195,7 @@ class _AuditLogsScreenState extends State<AuditLogsScreen> {
                               ),
                   ),
                 ],
+              )
               ),
       ),
     );

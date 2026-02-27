@@ -184,7 +184,9 @@ class _SupportTicketDetailScreenState extends State<SupportTicketDetailScreen> {
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
-          : _ticket == null
+          : SafeArea(
+              top: false,
+              child: _ticket == null
               ? Center(
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
@@ -201,6 +203,7 @@ class _SupportTicketDetailScreenState extends State<SupportTicketDetailScreen> {
                     ],
                   ),
                 )
+            )
               : Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [

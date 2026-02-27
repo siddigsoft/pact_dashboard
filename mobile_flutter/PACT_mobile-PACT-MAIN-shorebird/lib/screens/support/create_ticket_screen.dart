@@ -85,7 +85,9 @@ class _CreateTicketScreenState extends State<CreateTicketScreen> {
         foregroundColor: Colors.white,
         elevation: 0,
       ),
-      body: SingleChildScrollView(
+      body: SafeArea(
+        top: false,
+        child: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
         child: Form(
           key: _formKey,
@@ -291,6 +293,7 @@ class _CreateTicketScreenState extends State<CreateTicketScreen> {
             ],
           ),
         ),
+      )
       ),
     );
   }

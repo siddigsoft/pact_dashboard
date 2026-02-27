@@ -15,12 +15,15 @@ class PaymentMethodsScreen extends ConsumerWidget {
         title: const Text('Payment Methods'),
         backgroundColor: const Color(0xFF1976D2),
       ),
-      body: paymentMethodsAsync.when(
+      body: SafeArea(
+        top: false,
+        child: paymentMethodsAsync.when(
         data: (methods) => methods.isEmpty
             ? _buildEmptyState(context)
             : _buildMethodsList(context, ref, methods),
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (error, stack) => _buildErrorState(context, error),
+      )
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => _showAddPaymentMethodDialog(context, ref),

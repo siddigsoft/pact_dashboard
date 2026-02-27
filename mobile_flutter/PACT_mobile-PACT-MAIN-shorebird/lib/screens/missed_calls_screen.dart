@@ -146,7 +146,9 @@ class _MissedCallsScreenState extends State<MissedCallsScreen> {
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
-          : RefreshIndicator(
+          : SafeArea(
+              top: false,
+              child: RefreshIndicator(
               onRefresh: _loadMissedCalls,
               child: _missedCalls.isEmpty
                   ? _buildEmptyState()
@@ -157,6 +159,7 @@ class _MissedCallsScreenState extends State<MissedCallsScreen> {
                         return _buildCallTile(_missedCalls[index]);
                       },
                     ),
+            )
             ),
     );
   }

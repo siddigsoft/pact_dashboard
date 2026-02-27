@@ -13,7 +13,9 @@ class ErrorMessagesScreen extends StatelessWidget {
         title: const Text('Common Errors'),
         backgroundColor: const Color(0xFF1976D2),
       ),
-      body: ListView.builder(
+      body: SafeArea(
+        top: false,
+        child: ListView.builder(
         padding: const EdgeInsets.all(16),
         itemCount: errors.length,
         itemBuilder: (context, index) {
@@ -107,6 +109,7 @@ class ErrorMessagesScreen extends StatelessWidget {
             ),
           );
         },
+      )
       ),
     );
   }

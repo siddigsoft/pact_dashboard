@@ -231,7 +231,9 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
         ),
         body: !_hasAccess
             ? const Center(child: CircularProgressIndicator())
-            : Column(
+            : SafeArea(
+                top: false,
+                child: Column(
                 children: [
                   _buildStatsRow(),
                   _buildSearchAndFilters(),
@@ -245,6 +247,7 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
                           ),
                   ),
                 ],
+              )
               ),
       ),
     );

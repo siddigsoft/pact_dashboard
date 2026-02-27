@@ -120,7 +120,9 @@ class _ChatListScreenState extends State<ChatListScreen> {
                 color: Color(0xFFFF9800), // Orange
               ),
             )
-          : _chats.isEmpty
+          : SafeArea(
+              top: false,
+              child: _chats.isEmpty
               ? _buildEmptyState()
               : ListView.builder(
                   padding: const EdgeInsets.all(16),
@@ -308,6 +310,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
                         .slideX(begin: 0.2, end: 0);
                   },
                 ),
+            ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _startNewChat,
         backgroundColor: const Color(0xFFFF9800), // Orange

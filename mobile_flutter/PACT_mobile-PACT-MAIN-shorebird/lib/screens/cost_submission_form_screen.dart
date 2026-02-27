@@ -127,7 +127,9 @@ class _CostSubmissionFormScreenState extends State<CostSubmissionFormScreen> {
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
-          : Form(
+          : SafeArea(
+              top: false,
+              child: Form(
               key: _formKey,
               child: ListView(
                 padding: const EdgeInsets.all(16),
@@ -156,6 +158,7 @@ class _CostSubmissionFormScreenState extends State<CostSubmissionFormScreen> {
                   const SizedBox(height: 16),
                 ],
               ),
+            )
             ),
     );
   }

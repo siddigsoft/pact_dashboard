@@ -847,7 +847,9 @@ class _DocumentsScreenState extends State<DocumentsScreen>
         ),
         body: _isLoading
             ? const Center(child: CircularProgressIndicator())
-            : CustomScrollView(
+            : SafeArea(
+                top: false,
+                child: CustomScrollView(
                 slivers: [
                   SliverToBoxAdapter(child: _buildStatsCards(stats, isArabic)),
                   SliverToBoxAdapter(child: _buildSearchBar(isArabic)),
@@ -868,6 +870,7 @@ class _DocumentsScreenState extends State<DocumentsScreen>
                           isArabic,
                         ),
                 ],
+              )
               ),
       ),
     );

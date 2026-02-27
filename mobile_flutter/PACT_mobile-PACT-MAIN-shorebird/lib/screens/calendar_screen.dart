@@ -174,12 +174,15 @@ class _CalendarScreenState extends State<CalendarScreen> {
         ),
         body: _isLoading
             ? const Center(child: CircularProgressIndicator())
-            : Column(
+            : SafeArea(
+                top: false,
+                child: Column(
                 children: [
                   _buildViewModeToggle(isArabic),
                   _buildCalendarCard(isArabic),
                   Expanded(child: _buildVisitsList(selectedVisits, isArabic)),
                 ],
+              )
               ),
       ),
     );

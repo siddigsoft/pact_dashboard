@@ -90,7 +90,9 @@ class HelplineScreen extends StatelessWidget {
           onPressed: () => Navigator.pop(context),
         ),
       ),
-      body: ListView.builder(
+      body: SafeArea(
+        top: false,
+        child: ListView.builder(
         padding: const EdgeInsets.all(16),
         itemCount: supervisors.length,
         itemBuilder: (context, index) {
@@ -207,6 +209,7 @@ class HelplineScreen extends StatelessWidget {
             ),
           ).animate().fadeIn(duration: 300.ms, delay: (100 * index).ms);
         },
+      )
       ),
     );
   }
