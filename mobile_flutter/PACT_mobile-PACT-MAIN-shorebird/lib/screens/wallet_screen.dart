@@ -1593,7 +1593,7 @@ class _WalletScreenState extends State<WalletScreen> {
                       fontSize: 12,
                       color: Colors.grey.shade600,
                     ),
-                    textDirection: TextDirection.rtl,
+                    textDirection: ui.TextDirection.rtl,
                   ),
 
                   const SizedBox(height: 10),
@@ -1679,7 +1679,7 @@ class _WalletScreenState extends State<WalletScreen> {
                             fontWeight: FontWeight.w700,
                             color: Colors.green.shade800,
                           ),
-                          textDirection: TextDirection.rtl,
+                          textDirection: ui.TextDirection.rtl,
                         ),
                         _infoPoint(
                           '✓ تُسجَّل السلفة كمستلمة في النظام',
@@ -2127,7 +2127,7 @@ class _WalletScreenState extends State<WalletScreen> {
       padding: const EdgeInsets.only(top: 2),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
-        textDirection: rtl ? TextDirection.rtl : TextDirection.ltr,
+        textDirection: rtl ? ui.TextDirection.rtl : ui.TextDirection.ltr,
         children: [
           const SizedBox(width: 4),
           Expanded(
@@ -2137,7 +2137,7 @@ class _WalletScreenState extends State<WalletScreen> {
                 fontSize: 10,
                 color: Colors.green.shade900,
               ),
-              textDirection: rtl ? TextDirection.rtl : TextDirection.ltr,
+              textDirection: rtl ? ui.TextDirection.rtl : ui.TextDirection.ltr,
             ),
           ),
         ],
@@ -2984,9 +2984,9 @@ class _WalletScreenState extends State<WalletScreen> {
                         Icons.fingerprint,
                         child: Text(
                           txId,
-                          style: GoogleFonts.poppins(
+                          style: const TextStyle(
                             fontSize: 11,
-                            color: Colors.grey.shade500,
+                            color: Color(0xFF9E9E9E),
                             fontFamily: 'monospace',
                           ),
                         ),
