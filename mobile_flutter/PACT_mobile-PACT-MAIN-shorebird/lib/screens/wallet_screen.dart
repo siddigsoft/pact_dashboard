@@ -1314,42 +1314,46 @@ class _WalletScreenState extends State<WalletScreen> {
   }
 
   Future<void> _confirmAdvanceReceipt(Map<String, dynamic> advance) async {
-    // Step 1: Get GPS location (non-blocking)
+    final advanceId = advance['id'] as String?;
+    if (advanceId == null) return;
+
+    // Step 1: Get GPS location (non-blocking, 8s timeout)
     Position? gpsPosition;
     try {
       LocationPermission perm = await Geolocator.checkPermission();
       if (perm == LocationPermission.denied) {
         perm = await Geolocator.requestPermission();
       }
-      if (perm == LocationPermission.whileInUse || perm == LocationPermission.always) {
+      if (perm == LocationPermission.whileInUse ||
+          perm == LocationPermission.always) {
         gpsPosition = await Geolocator.getCurrentPosition(
-          desiredAccuracy: LocationAccuracy.high,
+          desiredAccuracy: LocationAccuracy.medium,
           timeLimit: const Duration(seconds: 8),
         );
       }
-    } catch (e) {
-      debugPrint('GPS error (non-fatal): $e');
-    }
+    } catch (_) {}
 
-    // Step 2: Show dialog with signature pad and notes
+    // Step 2: Show confirmation dialog with signature pad
     final notesController = TextEditingController();
     final signatureStrokes = <List<Offset>>[];
-    String? signatureBase64;
 
+    if (!mounted) return;
     final confirmed = await showDialog<bool>(
       context: context,
       barrierDismissible: false,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDialogState) => AlertDialog(
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          titlePadding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+          contentPadding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
           title: Row(
             children: [
-              const Icon(Icons.verified, color: Colors.green),
+              const Icon(Icons.verified_user, color: Colors.green, size: 22),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
                   widget.isArabic ? 'تأكيد استلام السلفة' : 'Confirm Fund Receipt',
-                  style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 15),
+                  style: GoogleFonts.poppins(fontWeight: FontWeight.w700, fontSize: 15),
                 ),
               ),
             ],
@@ -1359,65 +1363,90 @@ class _WalletScreenState extends State<WalletScreen> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                const SizedBox(height: 4),
                 Text(
                   widget.isArabic
                       ? 'هل تؤكد استلامك لمبلغ السلفة؟'
-                      : 'Confirm you have received the advance funds.',
+                      : 'I confirm that I have received the advance funds.',
                   style: GoogleFonts.poppins(fontSize: 13),
                 ),
                 if (gpsPosition != null) ...[
                   const SizedBox(height: 6),
-                  Row(children: [
-                    const Icon(Icons.location_on, color: Colors.blue, size: 14),
-                    const SizedBox(width: 4),
-                    Text(
-                      '${gpsPosition.latitude.toStringAsFixed(5)}, ${gpsPosition.longitude.toStringAsFixed(5)}',
-                      style: GoogleFonts.poppins(fontSize: 11, color: Colors.blue),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.blue.shade50,
+                      borderRadius: BorderRadius.circular(6),
                     ),
-                  ]),
+                    child: Row(children: [
+                      Icon(Icons.location_on, color: Colors.blue.shade700, size: 14),
+                      const SizedBox(width: 4),
+                      Text(
+                        '${gpsPosition.latitude.toStringAsFixed(5)}, '
+                        '${gpsPosition.longitude.toStringAsFixed(5)}',
+                        style: GoogleFonts.poppins(
+                            fontSize: 11, color: Colors.blue.shade700),
+                      ),
+                    ]),
+                  ),
                 ],
                 const SizedBox(height: 12),
-                Row(
-                  children: [
-                    Text(
-                      widget.isArabic ? 'التوقيع: ' : 'Signature: ',
-                      style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.w600),
-                    ),
-                    Text(
-                      widget.isArabic ? '(مطلوب — ارسم بإصبعك)' : '(required — draw with finger)',
-                      style: GoogleFonts.poppins(fontSize: 11, color: Colors.red.shade600),
-                    ),
-                  ],
-                ),
+                Row(children: [
+                  Text(
+                    widget.isArabic ? 'التوقيع: ' : 'Signature: ',
+                    style: GoogleFonts.poppins(
+                        fontSize: 12, fontWeight: FontWeight.w700),
+                  ),
+                  Text(
+                    widget.isArabic ? '(ارسم بإصبعك)' : '(draw with finger)',
+                    style: GoogleFonts.poppins(
+                        fontSize: 11, color: Colors.orange.shade700),
+                  ),
+                ]),
                 const SizedBox(height: 4),
                 Container(
-                  height: 130,
+                  height: 120,
+                  width: double.infinity,
                   decoration: BoxDecoration(
                     border: Border.all(
-                      color: signatureStrokes.isEmpty ? Colors.red.shade300 : Colors.green.shade400,
+                      color: signatureStrokes.isEmpty
+                          ? Colors.orange.shade300
+                          : Colors.green.shade400,
                       width: 1.5,
                     ),
                     borderRadius: BorderRadius.circular(8),
-                    color: Colors.grey.shade50,
+                    color: Colors.white,
                   ),
-                  clipBehavior: Clip.hardEdge,
-                  child: GestureDetector(
-                    onPanStart: (d) => setDialogState(() => signatureStrokes.add([d.localPosition])),
-                    onPanUpdate: (d) => setDialogState(() => signatureStrokes.last.add(d.localPosition)),
-                    child: CustomPaint(
-                      painter: _SignaturePainter(signatureStrokes),
-                      child: signatureStrokes.isEmpty
-                          ? Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(Icons.draw, color: Colors.grey.shade400, size: 28),
-                                const SizedBox(height: 4),
-                                Text(
-                                  widget.isArabic ? 'ارسم توقيعك هنا' : 'Draw your signature here',
-                                  style: GoogleFonts.poppins(color: Colors.grey.shade500, fontSize: 12)),
-                              ],
-                            )
-                          : null,
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(7),
+                    child: GestureDetector(
+                      onPanStart: (d) => setDialogState(
+                          () => signatureStrokes.add([d.localPosition])),
+                      onPanUpdate: (d) => setDialogState(
+                          () => signatureStrokes.last.add(d.localPosition)),
+                      child: CustomPaint(
+                        painter: _SignaturePainter(signatureStrokes),
+                        child: signatureStrokes.isEmpty
+                            ? Center(
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(Icons.draw_outlined,
+                                        color: Colors.grey.shade400, size: 30),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      widget.isArabic
+                                          ? 'ارسم توقيعك هنا'
+                                          : 'Draw your signature here',
+                                      style: GoogleFonts.poppins(
+                                          color: Colors.grey.shade400,
+                                          fontSize: 12),
+                                    ),
+                                  ],
+                                ),
+                              )
+                            : null,
+                      ),
                     ),
                   ),
                 ),
@@ -1425,33 +1454,49 @@ class _WalletScreenState extends State<WalletScreen> {
                   Align(
                     alignment: Alignment.centerRight,
                     child: TextButton.icon(
-                      onPressed: () => setDialogState(() => signatureStrokes.clear()),
+                      onPressed: () =>
+                          setDialogState(() => signatureStrokes.clear()),
                       icon: const Icon(Icons.refresh, size: 14),
-                      label: Text(widget.isArabic ? 'مسح' : 'Clear',
-                          style: GoogleFonts.poppins(fontSize: 12)),
+                      label: Text(
+                        widget.isArabic ? 'مسح التوقيع' : 'Clear',
+                        style: GoogleFonts.poppins(fontSize: 11),
+                      ),
+                      style: TextButton.styleFrom(
+                          foregroundColor: Colors.red.shade400),
                     ),
                   ),
-                const SizedBox(height: 8),
+                const SizedBox(height: 6),
                 TextField(
                   controller: notesController,
                   maxLines: 2,
                   decoration: InputDecoration(
-                    hintText: widget.isArabic ? 'ملاحظات (اختياري)' : 'Notes (optional)',
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                    hintText: widget.isArabic
+                        ? 'ملاحظات (اختياري)'
+                        : 'Notes (optional)',
+                    border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8)),
                     contentPadding: const EdgeInsets.all(10),
                     isDense: true,
                   ),
                   style: GoogleFonts.poppins(fontSize: 13),
                 ),
+                const SizedBox(height: 4),
               ],
             ),
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(ctx, false),
-              child: Text(widget.isArabic ? 'إلغاء' : 'Cancel', style: GoogleFonts.poppins()),
+              child: Text(widget.isArabic ? 'إلغاء' : 'Cancel',
+                  style: GoogleFonts.poppins()),
             ),
-            ElevatedButton(
+            ElevatedButton.icon(
+              icon: const Icon(Icons.check_circle_outline, size: 18),
+              label: Text(
+                widget.isArabic ? 'تأكيد الاستلام' : 'Confirm Receipt',
+                style: GoogleFonts.poppins(
+                    fontWeight: FontWeight.w600, color: Colors.white),
+              ),
               onPressed: () {
                 if (signatureStrokes.isEmpty) {
                   ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(
@@ -1465,9 +1510,8 @@ class _WalletScreenState extends State<WalletScreen> {
                 }
                 Navigator.pop(ctx, true);
               },
-              style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
-              child: Text(widget.isArabic ? 'تأكيد' : 'Confirm',
-                  style: GoogleFonts.poppins(color: Colors.white)),
+              style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.green.shade600),
             ),
           ],
         ),
@@ -1476,37 +1520,42 @@ class _WalletScreenState extends State<WalletScreen> {
 
     if (confirmed != true) return;
 
-    // Convert signature strokes to base64 PNG
+    // Step 3: Encode signature as base64 PNG
+    String? signatureBase64;
     try {
       final recorder = ui.PictureRecorder();
-      final canvas = Canvas(recorder, const Rect.fromLTWH(0, 0, 300, 120));
-      canvas.drawRect(const Rect.fromLTWH(0, 0, 300, 120), Paint()..color = Colors.white);
-      final paint = Paint()
-        ..color = Colors.black
+      final uiCanvas = ui.Canvas(
+          recorder, ui.Rect.fromLTWH(0, 0, 320, 120));
+      uiCanvas.drawRect(
+          ui.Rect.fromLTWH(0, 0, 320, 120),
+          ui.Paint()..color = const ui.Color(0xFFFFFFFF));
+      final sigPaint = ui.Paint()
+        ..color = const ui.Color(0xFF000000)
         ..strokeWidth = 2.5
-        ..strokeCap = StrokeCap.round
-        ..style = PaintingStyle.stroke;
+        ..strokeCap = ui.StrokeCap.round
+        ..strokeJoin = ui.StrokeJoin.round
+        ..style = ui.PaintingStyle.stroke;
       for (final stroke in signatureStrokes) {
         if (stroke.length < 2) continue;
-        final path = Path()..moveTo(stroke[0].dx, stroke[0].dy);
+        final path = ui.Path()
+          ..moveTo(stroke[0].dx, stroke[0].dy);
         for (int i = 1; i < stroke.length; i++) {
           path.lineTo(stroke[i].dx, stroke[i].dy);
         }
-        canvas.drawPath(path, paint);
+        uiCanvas.drawPath(path, sigPaint);
       }
       final picture = recorder.endRecording();
-      final img = await picture.toImage(300, 120);
-      final byteData = await img.toByteData(format: ui.ImageByteFormat.png);
+      final img = await picture.toImage(320, 120);
+      final byteData =
+          await img.toByteData(format: ui.ImageByteFormat.png);
       if (byteData != null) {
         signatureBase64 = base64Encode(byteData.buffer.asUint8List());
       }
     } catch (e) {
-      debugPrint('Signature encoding error (non-fatal): $e');
+      debugPrint('[Receipt] Signature encode error (non-fatal): $e');
     }
 
-    final advanceId = advance['id'] as String?;
-    if (advanceId == null) return;
-
+    // Step 4: Build metadata payload
     final existingMeta = Map<String, dynamic>.from(
         (advance['metadata'] as Map?)?.cast<String, dynamic>() ?? {});
     existingMeta['receipt_confirmation'] = {
@@ -1514,27 +1563,31 @@ class _WalletScreenState extends State<WalletScreen> {
       'confirmedAt': DateTime.now().toIso8601String(),
       'confirmedBy': _userId,
       'notes': notesController.text.trim(),
-      if (gpsPosition != null) 'gps': {
-        'latitude': gpsPosition.latitude,
-        'longitude': gpsPosition.longitude,
-        'accuracy': gpsPosition.accuracy,
-      },
+      if (gpsPosition != null)
+        'gps': {
+          'latitude': gpsPosition.latitude,
+          'longitude': gpsPosition.longitude,
+          'accuracy': gpsPosition.accuracy,
+        },
       if (signatureBase64 != null) 'signatureBase64': signatureBase64,
     };
 
-    // Step 3: Check connectivity — save offline if needed
-    final connectivity = await Connectivity().checkConnectivity();
-    final isOffline = connectivity.contains(ConnectivityResult.none) ||
-        (connectivity.length == 1 && connectivity.first == ConnectivityResult.none);
+    // Step 5: Check connectivity — save to Hive if offline
+    bool isOffline = false;
+    try {
+      final conn = await Connectivity().checkConnectivity();
+      isOffline = conn.isEmpty ||
+          (conn.length == 1 && conn.first == ConnectivityResult.none);
+    } catch (_) {}
 
     if (isOffline) {
       try {
-        final box = await Hive.openBox<Map>('pending_confirmations');
-        await box.put(advanceId, {
+        final box = await Hive.openBox<String>('pending_confirmations');
+        await box.put(advanceId, jsonEncode({
           'advanceId': advanceId,
           'metadata': existingMeta,
           'savedAt': DateTime.now().toIso8601String(),
-        });
+        }));
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(SnackBar(
             content: Text(widget.isArabic
@@ -1545,32 +1598,36 @@ class _WalletScreenState extends State<WalletScreen> {
           ));
         }
       } catch (e) {
-        debugPrint('Hive save error: $e');
+        debugPrint('[Receipt] Hive save error: $e');
       }
       return;
     }
 
-    // Online: submit immediately
+    // Step 6: Online — submit immediately
     try {
       await Supabase.instance.client
           .from('down_payment_requests')
           .update({'metadata': existingMeta})
           .eq('id', advanceId);
 
-      // Also sync any previously offline confirmations
       await _syncPendingConfirmations();
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(widget.isArabic ? 'تم تأكيد الاستلام بنجاح' : 'Receipt confirmed successfully'),
+          content: Text(widget.isArabic
+              ? 'تم تأكيد الاستلام بنجاح ✓'
+              : 'Receipt confirmed successfully ✓'),
           backgroundColor: Colors.green,
+          duration: const Duration(seconds: 3),
         ));
         await _loadAdvances();
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(widget.isArabic ? 'حدث خطأ أثناء التأكيد' : 'Error confirming receipt: $e'),
+          content: Text(widget.isArabic
+              ? 'حدث خطأ أثناء التأكيد: $e'
+              : 'Error confirming receipt: $e'),
           backgroundColor: Colors.red,
         ));
       }
@@ -1579,24 +1636,25 @@ class _WalletScreenState extends State<WalletScreen> {
 
   Future<void> _syncPendingConfirmations() async {
     try {
-      final box = await Hive.openBox<Map>('pending_confirmations');
+      final box = await Hive.openBox<String>('pending_confirmations');
       if (box.isEmpty) return;
       final keys = box.keys.toList();
       for (final key in keys) {
-        final pending = box.get(key);
-        if (pending == null) continue;
-        final advanceId = pending['advanceId'] as String?;
-        final metadata = pending['metadata'];
-        if (advanceId == null || metadata == null) continue;
+        final raw = box.get(key);
+        if (raw == null) continue;
         try {
+          final pending = jsonDecode(raw) as Map<String, dynamic>;
+          final advanceId = pending['advanceId'] as String?;
+          final metadata = pending['metadata'];
+          if (advanceId == null || metadata == null) continue;
           await Supabase.instance.client
               .from('down_payment_requests')
               .update({'metadata': metadata})
               .eq('id', advanceId);
           await box.delete(key);
-          debugPrint('[Wallet] Synced offline confirmation for $advanceId');
+          debugPrint('[Wallet] Synced offline confirmation: $advanceId');
         } catch (e) {
-          debugPrint('[Wallet] Sync failed for $advanceId: $e');
+          debugPrint('[Wallet] Sync failed for key $key: $e');
         }
       }
     } catch (e) {
