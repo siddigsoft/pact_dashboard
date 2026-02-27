@@ -1381,229 +1381,423 @@ class _WalletScreenState extends State<WalletScreen> {
       }
     } catch (_) {}
 
-    // Step 2: Show confirmation dialog with signature pad
+    // Step 2: Load saved signature from profile (non-blocking)
+    String? savedSignatureBase64;
+    try {
+      final profileData = await Supabase.instance.client
+          .from('profiles')
+          .select('signature_base64')
+          .eq('id', _userId ?? '')
+          .maybeSingle();
+      savedSignatureBase64 =
+          profileData?['signature_base64'] as String?;
+    } catch (_) {}
+
+    // Step 3: Show confirmation dialog
     final notesController = TextEditingController();
     final signatureStrokes = <List<Offset>>[];
+    // useSaved = true → use profile signature; false → draw new
+    bool useSaved = savedSignatureBase64 != null;
 
     if (!mounted) return;
     final confirmed = await showDialog<bool>(
       context: context,
       barrierDismissible: false,
       builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setDialogState) => AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          titlePadding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-          contentPadding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-          title: Row(
-            children: [
-              const Icon(Icons.verified_user, color: Colors.green, size: 22),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  widget.isArabic ? 'تأكيد استلام السلفة' : 'Confirm Fund Receipt',
-                  style: GoogleFonts.poppins(fontWeight: FontWeight.w700, fontSize: 15),
-                ),
-              ),
-            ],
-          ),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
+        builder: (ctx, setDialogState) {
+          final hasSig = useSaved
+              ? savedSignatureBase64 != null
+              : signatureStrokes.isNotEmpty;
+
+          return AlertDialog(
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+            titlePadding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+            contentPadding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+
+            // ── Bilingual title ──────────────────────────────────────────
+            title: Row(
               children: [
-                const SizedBox(height: 4),
-                Text(
-                  widget.isArabic
-                      ? 'هل تؤكد استلامك لمبلغ السلفة؟'
-                      : 'I confirm that I have received the advance funds.',
-                  style: GoogleFonts.poppins(fontSize: 13),
-                ),
-                if (gpsPosition != null) ...[
-                  const SizedBox(height: 6),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: Colors.blue.shade50,
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: Row(children: [
-                      Icon(Icons.location_on, color: Colors.blue.shade700, size: 14),
-                      const SizedBox(width: 4),
-                      Text(
-                        '${gpsPosition.latitude.toStringAsFixed(5)}, '
-                        '${gpsPosition.longitude.toStringAsFixed(5)}',
-                        style: GoogleFonts.poppins(
-                            fontSize: 11, color: Colors.blue.shade700),
-                      ),
-                    ]),
-                  ),
-                ],
-                const SizedBox(height: 12),
-                Row(children: [
-                  Text(
-                    widget.isArabic ? 'التوقيع: ' : 'Signature: ',
-                    style: GoogleFonts.poppins(
-                        fontSize: 12, fontWeight: FontWeight.w700),
-                  ),
-                  Text(
-                    widget.isArabic ? '(ارسم بإصبعك)' : '(draw with finger)',
-                    style: GoogleFonts.poppins(
-                        fontSize: 11, color: Colors.orange.shade700),
-                  ),
-                ]),
-                const SizedBox(height: 4),
-                Container(
-                  height: 120,
-                  width: double.infinity,
-                  decoration: BoxDecoration(
-                    border: Border.all(
-                      color: signatureStrokes.isEmpty
-                          ? Colors.orange.shade300
-                          : Colors.green.shade400,
-                      width: 1.5,
-                    ),
-                    borderRadius: BorderRadius.circular(8),
-                    color: Colors.white,
-                  ),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(7),
-                    child: GestureDetector(
-                      onPanStart: (d) => setDialogState(
-                          () => signatureStrokes.add([d.localPosition])),
-                      onPanUpdate: (d) => setDialogState(
-                          () => signatureStrokes.last.add(d.localPosition)),
-                      child: CustomPaint(
-                        painter: _SignaturePainter(signatureStrokes),
-                        child: signatureStrokes.isEmpty
-                            ? Center(
-                                child: Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Icon(Icons.draw_outlined,
-                                        color: Colors.grey.shade400, size: 30),
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      widget.isArabic
-                                          ? 'ارسم توقيعك هنا'
-                                          : 'Draw your signature here',
-                                      style: GoogleFonts.poppins(
-                                          color: Colors.grey.shade400,
-                                          fontSize: 12),
-                                    ),
-                                  ],
-                                ),
-                              )
-                            : null,
-                      ),
-                    ),
+                const Icon(Icons.verified_user, color: Colors.green, size: 22),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Confirm Fund Receipt',
+                          style: GoogleFonts.poppins(
+                              fontWeight: FontWeight.w700, fontSize: 14)),
+                      Text('تأكيد استلام السلفة',
+                          style: GoogleFonts.poppins(
+                              fontWeight: FontWeight.w600,
+                              fontSize: 12,
+                              color: Colors.grey.shade600)),
+                    ],
                   ),
                 ),
-                if (signatureStrokes.isNotEmpty)
-                  Align(
-                    alignment: Alignment.centerRight,
-                    child: TextButton.icon(
-                      onPressed: () =>
-                          setDialogState(() => signatureStrokes.clear()),
-                      icon: const Icon(Icons.refresh, size: 14),
-                      label: Text(
-                        widget.isArabic ? 'مسح التوقيع' : 'Clear',
-                        style: GoogleFonts.poppins(fontSize: 11),
-                      ),
-                      style: TextButton.styleFrom(
-                          foregroundColor: Colors.red.shade400),
-                    ),
-                  ),
-                const SizedBox(height: 6),
-                TextField(
-                  controller: notesController,
-                  maxLines: 2,
-                  decoration: InputDecoration(
-                    hintText: widget.isArabic
-                        ? 'ملاحظات (اختياري)'
-                        : 'Notes (optional)',
-                    border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8)),
-                    contentPadding: const EdgeInsets.all(10),
-                    isDense: true,
-                  ),
-                  style: GoogleFonts.poppins(fontSize: 13),
-                ),
-                const SizedBox(height: 4),
               ],
             ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: Text(widget.isArabic ? 'إلغاء' : 'Cancel',
-                  style: GoogleFonts.poppins()),
-            ),
-            ElevatedButton.icon(
-              icon: const Icon(Icons.check_circle_outline, size: 18),
-              label: Text(
-                widget.isArabic ? 'تأكيد الاستلام' : 'Confirm Receipt',
-                style: GoogleFonts.poppins(
-                    fontWeight: FontWeight.w600, color: Colors.white),
+
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const SizedBox(height: 8),
+
+                  // ── Bilingual statement ────────────────────────────────
+                  Text(
+                    'I confirm that I have received the advance funds.',
+                    style: GoogleFonts.poppins(fontSize: 13),
+                  ),
+                  Text(
+                    'أؤكد أنني استلمت مبلغ السلفة كاملاً.',
+                    style: GoogleFonts.poppins(
+                        fontSize: 12, color: Colors.grey.shade600),
+                    textDirection: TextDirection.rtl,
+                  ),
+
+                  const SizedBox(height: 10),
+
+                  // ── GPS badge ──────────────────────────────────────────
+                  if (gpsPosition != null)
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 5),
+                      decoration: BoxDecoration(
+                        color: Colors.blue.shade50,
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Row(children: [
+                        Icon(Icons.location_on,
+                            color: Colors.blue.shade700, size: 13),
+                        const SizedBox(width: 4),
+                        Text(
+                          '${gpsPosition.latitude.toStringAsFixed(5)}, '
+                          '${gpsPosition.longitude.toStringAsFixed(5)}',
+                          style: GoogleFonts.poppins(
+                              fontSize: 11, color: Colors.blue.shade700),
+                        ),
+                      ]),
+                    ),
+
+                  const SizedBox(height: 10),
+
+                  // ── What happens next info panel ───────────────────────
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: Colors.green.shade50,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.green.shade200),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(children: [
+                          Icon(Icons.info_outline,
+                              size: 14, color: Colors.green.shade700),
+                          const SizedBox(width: 4),
+                          Text('What happens after you confirm:',
+                              style: GoogleFonts.poppins(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w700,
+                                  color: Colors.green.shade800)),
+                        ]),
+                        const SizedBox(height: 4),
+                        _infoPoint('✓ Advance marked as received in the system'),
+                        _infoPoint('✓ Your supervisor will be notified'),
+                        _infoPoint(
+                            '✓ Amount will be deducted from your site visit fee'),
+                        _infoPoint(
+                            '✓ Your signature & GPS are saved as legal proof'),
+                        const SizedBox(height: 6),
+                        Text('ماذا يحدث بعد التأكيد:',
+                            style: GoogleFonts.poppins(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w700,
+                                color: Colors.green.shade800),
+                            textDirection: TextDirection.rtl),
+                        _infoPoint('✓ تُسجَّل السلفة كمستلمة في النظام',
+                            rtl: true),
+                        _infoPoint('✓ يتم إشعار المشرف', rtl: true),
+                        _infoPoint(
+                            '✓ يُخصم المبلغ من رسوم الزيارة الميدانية',
+                            rtl: true),
+                        _infoPoint(
+                            '✓ توقيعك وموقعك الجغرافي يُحفظان كدليل رسمي',
+                            rtl: true),
+                      ],
+                    ),
+                  ),
+
+                  const SizedBox(height: 12),
+
+                  // ── Signature section ──────────────────────────────────
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text('Signature / التوقيع',
+                          style: GoogleFonts.poppins(
+                              fontSize: 12, fontWeight: FontWeight.w700)),
+                      if (savedSignatureBase64 != null)
+                        Row(children: [
+                          Text(
+                            useSaved ? 'Saved' : 'Draw new',
+                            style: GoogleFonts.poppins(
+                                fontSize: 10,
+                                color: useSaved
+                                    ? Colors.green.shade700
+                                    : Colors.orange.shade700),
+                          ),
+                          const SizedBox(width: 4),
+                          GestureDetector(
+                            onTap: () => setDialogState(() {
+                              useSaved = !useSaved;
+                              if (!useSaved) signatureStrokes.clear();
+                            }),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 8, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: useSaved
+                                    ? Colors.orange.shade50
+                                    : Colors.green.shade50,
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: useSaved
+                                      ? Colors.orange.shade300
+                                      : Colors.green.shade300,
+                                ),
+                              ),
+                              child: Text(
+                                useSaved
+                                    ? 'Draw new / ارسم جديداً'
+                                    : 'Use saved / استخدم المحفوظ',
+                                style: GoogleFonts.poppins(
+                                    fontSize: 9,
+                                    color: useSaved
+                                        ? Colors.orange.shade800
+                                        : Colors.green.shade800),
+                              ),
+                            ),
+                          ),
+                        ]),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+
+                  // ── Saved signature preview ────────────────────────────
+                  if (useSaved && savedSignatureBase64 != null)
+                    Container(
+                      height: 100,
+                      width: double.infinity,
+                      decoration: BoxDecoration(
+                        border: Border.all(
+                            color: Colors.green.shade400, width: 1.5),
+                        borderRadius: BorderRadius.circular(8),
+                        color: Colors.white,
+                      ),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(7),
+                        child: Stack(children: [
+                          Center(
+                            child: Image.memory(
+                              base64Decode(savedSignatureBase64),
+                              fit: BoxFit.contain,
+                            ),
+                          ),
+                          Positioned(
+                            top: 4,
+                            right: 6,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: Colors.green.shade600,
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Text('Saved / محفوظ',
+                                  style: GoogleFonts.poppins(
+                                      fontSize: 9, color: Colors.white)),
+                            ),
+                          ),
+                        ]),
+                      ),
+                    )
+
+                  // ── Draw new signature ─────────────────────────────────
+                  else
+                    Container(
+                      height: 110,
+                      width: double.infinity,
+                      decoration: BoxDecoration(
+                        border: Border.all(
+                          color: signatureStrokes.isEmpty
+                              ? Colors.orange.shade300
+                              : Colors.green.shade400,
+                          width: 1.5,
+                        ),
+                        borderRadius: BorderRadius.circular(8),
+                        color: Colors.white,
+                      ),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(7),
+                        child: GestureDetector(
+                          onPanStart: (d) => setDialogState(
+                              () => signatureStrokes.add([d.localPosition])),
+                          onPanUpdate: (d) => setDialogState(
+                              () =>
+                                  signatureStrokes.last.add(d.localPosition)),
+                          child: CustomPaint(
+                            painter: _SignaturePainter(signatureStrokes),
+                            child: signatureStrokes.isEmpty
+                                ? Center(
+                                    child: Column(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.center,
+                                      children: [
+                                        Icon(Icons.draw_outlined,
+                                            color: Colors.grey.shade400,
+                                            size: 28),
+                                        const SizedBox(height: 4),
+                                        Text(
+                                          'Draw your signature here',
+                                          style: GoogleFonts.poppins(
+                                              color: Colors.grey.shade400,
+                                              fontSize: 11),
+                                        ),
+                                        Text(
+                                          'ارسم توقيعك هنا',
+                                          style: GoogleFonts.poppins(
+                                              color: Colors.grey.shade400,
+                                              fontSize: 10),
+                                        ),
+                                      ],
+                                    ),
+                                  )
+                                : null,
+                          ),
+                        ),
+                      ),
+                    ),
+
+                  // ── Clear drawn signature ──────────────────────────────
+                  if (!useSaved && signatureStrokes.isNotEmpty)
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: TextButton.icon(
+                        onPressed: () =>
+                            setDialogState(() => signatureStrokes.clear()),
+                        icon: const Icon(Icons.refresh, size: 13),
+                        label: Text('Clear / مسح',
+                            style: GoogleFonts.poppins(fontSize: 10)),
+                        style: TextButton.styleFrom(
+                            foregroundColor: Colors.red.shade400,
+                            padding: EdgeInsets.zero),
+                      ),
+                    ),
+
+                  const SizedBox(height: 8),
+
+                  // ── Notes ─────────────────────────────────────────────
+                  TextField(
+                    controller: notesController,
+                    maxLines: 2,
+                    decoration: InputDecoration(
+                      hintText: 'Notes (optional) / ملاحظات (اختياري)',
+                      border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8)),
+                      contentPadding: const EdgeInsets.all(10),
+                      isDense: true,
+                    ),
+                    style: GoogleFonts.poppins(fontSize: 12),
+                  ),
+                  const SizedBox(height: 4),
+                ],
               ),
-              onPressed: () {
-                if (signatureStrokes.isEmpty) {
-                  ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(
-                    content: Text(widget.isArabic
-                        ? 'يرجى رسم توقيعك أولاً'
-                        : 'Please draw your signature first'),
-                    backgroundColor: Colors.orange,
-                    duration: const Duration(seconds: 2),
-                  ));
-                  return;
-                }
-                Navigator.pop(ctx, true);
-              },
-              style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.green.shade600),
             ),
-          ],
-        ),
+
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: Text('Cancel / إلغاء',
+                    style: GoogleFonts.poppins(fontSize: 12)),
+              ),
+              ElevatedButton.icon(
+                icon: const Icon(Icons.check_circle_outline, size: 16),
+                label: Text(
+                  'Confirm / تأكيد الاستلام',
+                  style: GoogleFonts.poppins(
+                      fontWeight: FontWeight.w600,
+                      color: Colors.white,
+                      fontSize: 12),
+                ),
+                onPressed: () {
+                  if (!hasSig) {
+                    ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(
+                      content: Text(
+                          'Please sign first / يرجى رسم توقيعك أولاً'),
+                      backgroundColor: Colors.orange,
+                      duration: const Duration(seconds: 2),
+                    ));
+                    return;
+                  }
+                  Navigator.pop(ctx, true);
+                },
+                style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.green.shade600),
+              ),
+            ],
+          );
+        },
       ),
     );
 
     if (confirmed != true) return;
 
-    // Step 3: Encode signature as base64 PNG
+    // Step 4: Encode signature as base64 PNG
     String? signatureBase64;
-    try {
-      final recorder = ui.PictureRecorder();
-      final uiCanvas = ui.Canvas(
-          recorder, ui.Rect.fromLTWH(0, 0, 320, 120));
-      uiCanvas.drawRect(
-          ui.Rect.fromLTWH(0, 0, 320, 120),
-          ui.Paint()..color = const ui.Color(0xFFFFFFFF));
-      final sigPaint = ui.Paint()
-        ..color = const ui.Color(0xFF000000)
-        ..strokeWidth = 2.5
-        ..strokeCap = ui.StrokeCap.round
-        ..strokeJoin = ui.StrokeJoin.round
-        ..style = ui.PaintingStyle.stroke;
-      for (final stroke in signatureStrokes) {
-        if (stroke.length < 2) continue;
-        final path = ui.Path()
-          ..moveTo(stroke[0].dx, stroke[0].dy);
-        for (int i = 1; i < stroke.length; i++) {
-          path.lineTo(stroke[i].dx, stroke[i].dy);
+    if (useSaved && savedSignatureBase64 != null) {
+      // User chose saved profile signature — use directly
+      signatureBase64 = savedSignatureBase64;
+    } else {
+      try {
+        final recorder = ui.PictureRecorder();
+        final uiCanvas = ui.Canvas(
+            recorder, ui.Rect.fromLTWH(0, 0, 320, 120));
+        uiCanvas.drawRect(
+            ui.Rect.fromLTWH(0, 0, 320, 120),
+            ui.Paint()..color = const ui.Color(0xFFFFFFFF));
+        final sigPaint = ui.Paint()
+          ..color = const ui.Color(0xFF000000)
+          ..strokeWidth = 2.5
+          ..strokeCap = ui.StrokeCap.round
+          ..strokeJoin = ui.StrokeJoin.round
+          ..style = ui.PaintingStyle.stroke;
+        for (final stroke in signatureStrokes) {
+          if (stroke.length < 2) continue;
+          final path = ui.Path()
+            ..moveTo(stroke[0].dx, stroke[0].dy);
+          for (int i = 1; i < stroke.length; i++) {
+            path.lineTo(stroke[i].dx, stroke[i].dy);
+          }
+          uiCanvas.drawPath(path, sigPaint);
         }
-        uiCanvas.drawPath(path, sigPaint);
+        final picture = recorder.endRecording();
+        final img = await picture.toImage(320, 120);
+        final byteData =
+            await img.toByteData(format: ui.ImageByteFormat.png);
+        if (byteData != null) {
+          signatureBase64 = base64Encode(byteData.buffer.asUint8List());
+        }
+      } catch (e) {
+        debugPrint('[Receipt] Signature encode error (non-fatal): $e');
       }
-      final picture = recorder.endRecording();
-      final img = await picture.toImage(320, 120);
-      final byteData =
-          await img.toByteData(format: ui.ImageByteFormat.png);
-      if (byteData != null) {
-        signatureBase64 = base64Encode(byteData.buffer.asUint8List());
-      }
-    } catch (e) {
-      debugPrint('[Receipt] Signature encode error (non-fatal): $e');
     }
 
-    // Step 4: Build metadata payload
+    // Step 5: Build metadata payload
+    // signatureBase64 is either from profile (saved) or encoded from drawn strokes
     final existingMeta = Map<String, dynamic>.from(
         (advance['metadata'] as Map?)?.cast<String, dynamic>() ?? {});
     existingMeta['receipt_confirmation'] = {
@@ -1611,6 +1805,7 @@ class _WalletScreenState extends State<WalletScreen> {
       'confirmedAt': DateTime.now().toIso8601String(),
       'confirmedBy': _userId,
       'notes': notesController.text.trim(),
+      'signatureSource': useSaved ? 'profile_saved' : 'drawn',
       if (gpsPosition != null)
         'gps': {
           'latitude': gpsPosition.latitude,
@@ -1620,7 +1815,7 @@ class _WalletScreenState extends State<WalletScreen> {
       if (signatureBase64 != null) 'signatureBase64': signatureBase64,
     };
 
-    // Step 5: Check connectivity — save to Hive if offline
+    // Step 6: Check connectivity — save to Hive if offline
     bool isOffline = false;
     try {
       final conn = await Connectivity().checkConnectivity();
@@ -1708,6 +1903,27 @@ class _WalletScreenState extends State<WalletScreen> {
     } catch (e) {
       debugPrint('[Wallet] Sync error: $e');
     }
+  }
+
+  Widget _infoPoint(String text, {bool rtl = false}) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 2),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        textDirection: rtl ? TextDirection.rtl : TextDirection.ltr,
+        children: [
+          const SizedBox(width: 4),
+          Expanded(
+            child: Text(
+              text,
+              style: GoogleFonts.poppins(
+                  fontSize: 10, color: Colors.green.shade900),
+              textDirection: rtl ? TextDirection.rtl : TextDirection.ltr,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   Widget _buildAdvanceItem(Map<String, dynamic> advance) {
