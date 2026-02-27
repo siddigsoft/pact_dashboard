@@ -307,13 +307,20 @@ export default function AdminBroadcastPage() {
 
       // FCM push to mobile devices for re-sent broadcast
       const resendFcmPriority = item.priority === 'urgent' || item.priority === 'high' ? 'high' : 'normal';
+      const resendTitleAr = orig?.title_ar && orig.title_ar !== item.title ? ` | ${orig.title_ar}` : '';
+      const resendBodyAr  = orig?.message_ar && orig.message_ar !== item.message ? `\n${orig.message_ar}` : '';
       supabase.functions.invoke('send-fcm-push', {
         body: {
           user_ids: unread.map(u => u.userId),
-          title: item.title,
-          body: item.message,
+          title: `${item.title}${resendTitleAr}`,
+          body:  `${item.message}${resendBodyAr}`,
           priority: resendFcmPriority,
-          data: { type: 'broadcast', broadcast_id: broadcastId },
+          data: {
+            type: 'broadcast',
+            broadcast_id: broadcastId,
+            action_url: orig?.action_url || '',
+            priority: item.priority,
+          },
         },
       }).catch(() => {});
 
@@ -427,13 +434,26 @@ export default function AdminBroadcastPage() {
       const fcmPriority = priority === 'urgent' || priority === 'high' ? 'high' : 'normal';
       setFcmResult(null);
       try {
+        // Build bilingual FCM title/body — show both languages so all users understand
+        const fcmTitle = titleAr.trim()
+          ? `${titleText} | ${titleAr.trim()}`
+          : titleText;
+        const fcmBody = messageAr.trim()
+          ? `${messageText}\n${messageAr.trim()}`
+          : messageText;
+
         const { data: fcmData, error: fcmError } = await supabase.functions.invoke('send-fcm-push', {
           body: {
             user_ids: targetUsers.map(u => u.id),
-            title: titleText,
-            body: messageText,
+            title: fcmTitle,
+            body: fcmBody,
             priority: fcmPriority,
-            data: { type: 'broadcast', broadcast_id: broadcastId, action_url: link || '' },
+            data: {
+              type: 'broadcast',
+              broadcast_id: broadcastId,
+              action_url: link || '',
+              priority,
+            },
             ...(link ? { action_url: link } : {}),
           },
         });

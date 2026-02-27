@@ -189,10 +189,16 @@ class _MobileAppShellState extends ConsumerState<MobileAppShell>
 
         if (msgType == 'sync') {
           _handleSyncRequest();
+          return;
         }
 
         if (msgType == 'fund_receipt_confirmation') {
           _handleFundReceiptNotification(message, openWallet: false);
+          return;
+        }
+
+        if (msgType == 'broadcast') {
+          _handleBroadcastNotification(message, openApp: false);
           return;
         }
 
@@ -210,10 +216,16 @@ class _MobileAppShellState extends ConsumerState<MobileAppShell>
 
         if (msgType == 'sync') {
           _handleSyncRequest();
+          return;
         }
 
         if (msgType == 'fund_receipt_confirmation') {
           _handleFundReceiptNotification(message, openWallet: true);
+          return;
+        }
+
+        if (msgType == 'broadcast') {
+          _handleBroadcastNotification(message, openApp: true);
         }
       });
 
@@ -267,6 +279,92 @@ class _MobileAppShellState extends ConsumerState<MobileAppShell>
         ),
       );
     }
+  }
+
+  /// Handle an admin broadcast FCM message.
+  /// [openApp] = true when the user tapped the notification from the background.
+  void _handleBroadcastNotification(RemoteMessage message, {required bool openApp}) {
+    final data = message.data;
+    final title = message.notification?.title ?? data['title']?.toString() ?? '';
+    final body  = message.notification?.body  ?? data['body']?.toString()  ?? '';
+    final actionUrl = data['action_url']?.toString() ?? '';
+    debugPrint('[FCM] Broadcast: openApp=$openApp title=$title');
+
+    if (!mounted) return;
+
+    // When user taps the notification, just bring the app to the foreground.
+    // Action URLs are web paths (/settings, /admin/...) — no deep navigation on mobile.
+    if (openApp) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          duration: const Duration(seconds: 5),
+          backgroundColor: Colors.indigo.shade700,
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title.isNotEmpty ? title : '📢 Admin Announcement',
+                style: const TextStyle(
+                    fontWeight: FontWeight.bold, color: Colors.white),
+              ),
+              if (body.isNotEmpty) ...[
+                const SizedBox(height: 3),
+                Text(body, style: const TextStyle(fontSize: 12, color: Colors.white70)),
+              ],
+            ],
+          ),
+        ),
+      );
+      return;
+    }
+
+    // App is in foreground — show an in-app banner
+    final priorityColor = data['priority'] == 'urgent'
+        ? Colors.red.shade700
+        : data['priority'] == 'high'
+            ? Colors.orange.shade700
+            : Colors.indigo.shade600;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        duration: const Duration(seconds: 10),
+        backgroundColor: priorityColor,
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.campaign, color: Colors.white, size: 16),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    title.isNotEmpty ? title : 'Admin Announcement',
+                    style: const TextStyle(
+                        fontWeight: FontWeight.bold, color: Colors.white),
+                  ),
+                ),
+              ],
+            ),
+            if (body.isNotEmpty) ...[
+              const SizedBox(height: 3),
+              Text(body,
+                  style: const TextStyle(fontSize: 12, color: Colors.white70),
+                  maxLines: 3,
+                  overflow: TextOverflow.ellipsis),
+            ],
+          ],
+        ),
+        action: actionUrl.isNotEmpty
+            ? SnackBarAction(
+                label: 'View / عرض',
+                textColor: Colors.yellow,
+                onPressed: () {},
+              )
+            : null,
+      ),
+    );
   }
 
   /// Handle fund_receipt_confirmation FCM message.

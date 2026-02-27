@@ -435,6 +435,24 @@ class BilingualNotificationService {
     );
   }
 
+  /// Show a notification with a raw (already-translated) title and body.
+  /// Used for broadcasts where the admin has already written the text.
+  static Future<void> showRawNotification({
+    required String title,
+    required String body,
+    String payload = 'broadcast',
+    int id = 700,
+  }) async {
+    await _showNotification(
+      id: id,
+      title: title,
+      body: body,
+      channelId: 'general',
+      channelName: _currentLocale == 'ar' ? 'عام' : 'General',
+      payload: payload,
+    );
+  }
+
   static Future<void> _showNotification({
     required int id,
     required String title,

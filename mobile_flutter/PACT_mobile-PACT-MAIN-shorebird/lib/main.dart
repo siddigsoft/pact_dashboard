@@ -90,6 +90,21 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
       return;
     }
 
+    // Admin broadcast — show notification with the actual title/body written by admin
+    if (type == 'broadcast') {
+      final fcmTitle = message.notification?.title ?? data['title']?.toString() ?? '';
+      final fcmBody  = message.notification?.body  ?? data['body']?.toString()  ?? '';
+      final actionUrl = data['action_url']?.toString() ?? '';
+      if (fcmTitle.isNotEmpty || fcmBody.isNotEmpty) {
+        await BilingualNotificationService.showRawNotification(
+          title: fcmTitle,
+          body: fcmBody,
+          payload: actionUrl.isNotEmpty ? 'broadcast:$actionUrl' : 'broadcast',
+        );
+      }
+      return;
+    }
+
     // Fund receipt confirmation — enumerator needs to acknowledge in-app
     if (type == 'fund_receipt_confirmation') {
       final amount = data['amount']?.toString() ?? '';
