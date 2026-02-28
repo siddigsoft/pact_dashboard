@@ -9,6 +9,7 @@ import '../../services/offline/offline_db.dart';
 import '../../services/offline/models.dart';
 import '../../screens/wallet_screen.dart';
 import '../../providers/offline_provider.dart';
+import '../notifications_panel.dart';
 import '../offline/sync_status_widget.dart'
     show SyncStatusBar, SyncProgressToast, OfflineBanner;
 
@@ -179,55 +180,37 @@ class _MobileAppShellState extends ConsumerState<MobileAppShell>
         provisional: false,
       );
 
-      debugPrint(
-        '[FCM] Notification permission: ${settings.authorizationStatus}',
-      );
+      debugPrint('[FCM] Notification permission: ${settings.authorizationStatus}');
 
+      // ── Foreground: app is open ──────────────────────────────────────────────
       FirebaseMessaging.onMessage.listen((RemoteMessage message) {
         debugPrint('[FCM] Foreground message: ${message.notification?.title}');
-        final msgType = message.data['type'] as String? ?? '';
-
-        if (msgType == 'sync') {
-          _handleSyncRequest();
-          return;
-        }
-
-        if (msgType == 'fund_receipt_confirmation') {
-          _handleFundReceiptNotification(message, openWallet: false);
-          return;
-        }
-
-        if (msgType == 'broadcast') {
-          _handleBroadcastNotification(message, openApp: false);
-          return;
-        }
-
-        if (message.notification != null) {
-          _showLocalNotification(
-            title: message.notification?.title ?? 'Notification',
-            body: message.notification?.body ?? '',
-          );
-        }
+        final msgType = _resolveType(message);
+        if (msgType == 'sync') { _handleSyncRequest(); return; }
+        _showForegroundBanner(message);
       });
 
+      // ── Background tap: app was in background, user tapped notification ──────
       FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
-        debugPrint('[FCM] Message opened app: ${message.notification?.title}');
-        final msgType = message.data['type'] as String? ?? '';
-
-        if (msgType == 'sync') {
-          _handleSyncRequest();
-          return;
-        }
-
-        if (msgType == 'fund_receipt_confirmation') {
-          _handleFundReceiptNotification(message, openWallet: true);
-          return;
-        }
-
-        if (msgType == 'broadcast') {
-          _handleBroadcastNotification(message, openApp: true);
-        }
+        debugPrint('[FCM] Opened from background: ${message.notification?.title}');
+        // Small delay so the navigator is fully mounted
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _routeFromFCMMessage(message);
+        });
       });
+
+      // ── Terminated tap: app was fully closed, user tapped notification ────────
+      // getInitialMessage() returns the message that launched the app from killed state.
+      final initialMessage = await FirebaseMessaging.instance.getInitialMessage();
+      if (initialMessage != null) {
+        debugPrint('[FCM] App launched from terminated state via notification');
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          // Give the app a bit more time to fully initialise routes
+          Future.delayed(const Duration(milliseconds: 500), () {
+            _routeFromFCMMessage(initialMessage);
+          });
+        });
+      }
 
       if (settings.authorizationStatus == AuthorizationStatus.authorized ||
           settings.authorizationStatus == AuthorizationStatus.provisional) {
@@ -249,6 +232,186 @@ class _MobileAppShellState extends ConsumerState<MobileAppShell>
     } catch (e) {
       debugPrint('[FCM] Setup error: $e');
     }
+  }
+
+  /// Resolve the notification type from FCM data — prefers `notification_type`, falls back to `type`.
+  String _resolveType(RemoteMessage message) {
+    final d = message.data;
+    return (d['notification_type'] as String? ?? d['type'] as String? ?? '').toLowerCase();
+  }
+
+  // ─── Unified deep-link router ────────────────────────────────────────────────
+  /// Called when the user taps a notification to open the app (background or terminated state).
+  /// Routes to the appropriate screen based on notification_type / data payload.
+  void _routeFromFCMMessage(RemoteMessage message) {
+    if (!mounted) return;
+    final data = message.data;
+    final type = _resolveType(message);
+    final navigator = Navigator.of(context, rootNavigator: true);
+
+    debugPrint('[FCM] Routing for type="$type" data=$data');
+
+    switch (type) {
+      // ── Sync ────────────────────────────────────────────────────────────────
+      case 'sync':
+        _handleSyncRequest();
+        return;
+
+      // ── Fund receipt / advance disbursed ────────────────────────────────────
+      case 'fund_receipt_confirmation':
+      case 'advance_disbursed':
+        navigator.push(MaterialPageRoute(
+          builder: (_) => const WalletScreen(initialTab: 3),
+        ));
+        return;
+
+      // ── Operational cost submissions ─────────────────────────────────────────
+      case 'cost_submission_approved':
+      case 'cost_submission_rejected':
+      case 'cost_submission_revision':
+        navigator.push(MaterialPageRoute(
+          builder: (_) => const WalletScreen(initialTab: 4),
+        ));
+        return;
+
+      // ── Wallet / advances ───────────────────────────────────────────────────
+      case 'wallet':
+      case 'withdrawal_approved':
+      case 'withdrawal_rejected':
+        navigator.push(MaterialPageRoute(
+          builder: (_) => const WalletScreen(initialTab: 3),
+        ));
+        return;
+
+      // ── Broadcast / admin announcement ─────────────────────────────────────
+      case 'broadcast':
+        // Open the notifications panel (bottom sheet) on the current screen
+        if (mounted) {
+          NotificationsPanel.show(context, initialTab: 'broadcasts');
+        }
+        return;
+
+      // ── Budget alert / MMP / site visit ────────────────────────────────────
+      case 'budget_alert':
+      case 'mmp_approved':
+      case 'mmp_rejected':
+      case 'mmp_status':
+      case 'site_visit':
+      case 'site_assigned':
+      case 'coverage_gap':
+        navigator.pushNamed('/main', arguments: {'tab': 'site_visits'});
+        return;
+
+      // ── Generic notification centre ─────────────────────────────────────────
+      default:
+        // Fall back to opening the notifications panel so nothing is silently lost
+        if (mounted) {
+          NotificationsPanel.show(context, initialTab: 'all');
+        }
+        return;
+    }
+  }
+
+  // ─── Foreground banner ────────────────────────────────────────────────────────
+  /// Shown when a push arrives while the app is in the foreground.
+  /// Displays a colour-coded SnackBar with title/body and a tap-action button.
+  void _showForegroundBanner(RemoteMessage message) {
+    if (!mounted) return;
+    final data = message.data;
+    final type = _resolveType(message);
+    final title = message.notification?.title ?? data['title']?.toString() ?? 'Notification';
+    final body  = message.notification?.body  ?? data['body']?.toString()  ?? '';
+    final priority = data['priority']?.toString() ?? 'normal';
+
+    // Choose banner colour based on type / priority
+    Color bannerColor;
+    IconData bannerIcon;
+    String actionLabel;
+
+    if (priority == 'urgent') {
+      bannerColor = Colors.red.shade700;
+      bannerIcon  = Icons.warning_rounded;
+      actionLabel = 'View / عرض';
+    } else {
+      switch (type) {
+        case 'broadcast':
+          bannerColor = Colors.indigo.shade700;
+          bannerIcon  = Icons.campaign;
+          actionLabel = 'View / عرض';
+          break;
+        case 'fund_receipt_confirmation':
+        case 'advance_disbursed':
+          bannerColor = Colors.green.shade700;
+          bannerIcon  = Icons.account_balance_wallet;
+          actionLabel = 'Confirm / تأكيد';
+          break;
+        case 'cost_submission_approved':
+        case 'cost_submission_rejected':
+        case 'cost_submission_revision':
+          bannerColor = Colors.blue.shade700;
+          bannerIcon  = Icons.receipt_long;
+          actionLabel = 'View / عرض';
+          break;
+        case 'withdrawal_approved':
+        case 'withdrawal_rejected':
+          bannerColor = Colors.teal.shade700;
+          bannerIcon  = Icons.payments;
+          actionLabel = 'View / عرض';
+          break;
+        default:
+          bannerColor = priority == 'high' ? Colors.orange.shade700 : Colors.blueGrey.shade700;
+          bannerIcon  = Icons.notifications;
+          actionLabel = 'View / عرض';
+      }
+    }
+
+    ScaffoldMessenger.of(context).clearSnackBars();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        duration: const Duration(seconds: 10),
+        backgroundColor: bannerColor,
+        behavior: SnackBarBehavior.floating,
+        margin: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        content: Row(
+          children: [
+            Icon(bannerIcon, color: Colors.white, size: 22),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 13),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  if (body.isNotEmpty) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      body,
+                      style: const TextStyle(fontSize: 12, color: Colors.white70),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        ),
+        action: SnackBarAction(
+          label: actionLabel,
+          textColor: Colors.yellow,
+          onPressed: () {
+            ScaffoldMessenger.of(context).hideCurrentSnackBar();
+            _routeFromFCMMessage(message);
+          },
+        ),
+      ),
+    );
   }
 
   /// Re-register FCM token when app resumes (in case it wasn't registered yet)
@@ -276,150 +439,6 @@ class _MobileAppShellState extends ConsumerState<MobileAppShell>
         const SnackBar(
           duration: Duration(seconds: 2),
           content: Text('Syncing updates...'),
-        ),
-      );
-    }
-  }
-
-  /// Handle an admin broadcast FCM message.
-  /// [openApp] = true when the user tapped the notification from the background.
-  void _handleBroadcastNotification(RemoteMessage message, {required bool openApp}) {
-    final data = message.data;
-    final title = message.notification?.title ?? data['title']?.toString() ?? '';
-    final body  = message.notification?.body  ?? data['body']?.toString()  ?? '';
-    final actionUrl = data['action_url']?.toString() ?? '';
-    debugPrint('[FCM] Broadcast: openApp=$openApp title=$title');
-
-    if (!mounted) return;
-
-    // When user taps the notification, just bring the app to the foreground.
-    // Action URLs are web paths (/settings, /admin/...) — no deep navigation on mobile.
-    if (openApp) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          duration: const Duration(seconds: 5),
-          backgroundColor: Colors.indigo.shade700,
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                title.isNotEmpty ? title : '📢 Admin Announcement',
-                style: const TextStyle(
-                    fontWeight: FontWeight.bold, color: Colors.white),
-              ),
-              if (body.isNotEmpty) ...[
-                const SizedBox(height: 3),
-                Text(body, style: const TextStyle(fontSize: 12, color: Colors.white70)),
-              ],
-            ],
-          ),
-        ),
-      );
-      return;
-    }
-
-    // App is in foreground — show an in-app banner
-    final priorityColor = data['priority'] == 'urgent'
-        ? Colors.red.shade700
-        : data['priority'] == 'high'
-            ? Colors.orange.shade700
-            : Colors.indigo.shade600;
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        duration: const Duration(seconds: 10),
-        backgroundColor: priorityColor,
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                const Icon(Icons.campaign, color: Colors.white, size: 16),
-                const SizedBox(width: 6),
-                Expanded(
-                  child: Text(
-                    title.isNotEmpty ? title : 'Admin Announcement',
-                    style: const TextStyle(
-                        fontWeight: FontWeight.bold, color: Colors.white),
-                  ),
-                ),
-              ],
-            ),
-            if (body.isNotEmpty) ...[
-              const SizedBox(height: 3),
-              Text(body,
-                  style: const TextStyle(fontSize: 12, color: Colors.white70),
-                  maxLines: 3,
-                  overflow: TextOverflow.ellipsis),
-            ],
-          ],
-        ),
-        action: actionUrl.isNotEmpty
-            ? SnackBarAction(
-                label: 'View / عرض',
-                textColor: Colors.yellow,
-                onPressed: () {},
-              )
-            : null,
-      ),
-    );
-  }
-
-  /// Handle fund_receipt_confirmation FCM message.
-  /// [openWallet] = true when the user tapped the notification (app opened from background).
-  void _handleFundReceiptNotification(RemoteMessage message, {required bool openWallet}) {
-    final data = message.data;
-    final amount = data['amount']?.toString() ?? '';
-    final siteName = data['siteName']?.toString() ?? data['site_name']?.toString() ?? '';
-    debugPrint('[FCM] Fund receipt confirmation: amount=$amount site=$siteName openWallet=$openWallet');
-
-    if (!mounted) return;
-
-    if (openWallet) {
-      // User tapped the notification → open Wallet → My Advances tab
-      Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (_) => const WalletScreen(initialTab: 3),
-        ),
-      );
-    } else {
-      // App is in foreground → show an action SnackBar
-      final amountLabel = amount.isNotEmpty ? ' ($amount SDG)' : '';
-      final siteLabel = siteName.isNotEmpty ? ' — $siteName' : '';
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          duration: const Duration(seconds: 8),
-          backgroundColor: Colors.green.shade700,
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                '💰 Transport Advance Disbursed$amountLabel$siteLabel',
-                style: const TextStyle(
-                    fontWeight: FontWeight.bold, color: Colors.white),
-              ),
-              const SizedBox(height: 2),
-              const Text(
-                'تم صرف سلفة المواصلات — اضغط لتأكيد الاستلام',
-                style: TextStyle(fontSize: 12, color: Colors.white70),
-              ),
-            ],
-          ),
-          action: SnackBarAction(
-            label: 'Confirm / تأكيد',
-            textColor: Colors.yellow,
-            onPressed: () {
-              if (!mounted) return;
-              Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => const WalletScreen(initialTab: 3),
-                ),
-              );
-            },
-          ),
         ),
       );
     }
