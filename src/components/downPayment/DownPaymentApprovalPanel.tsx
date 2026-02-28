@@ -716,6 +716,24 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
     });
   };
 
+  const handleDownloadBulkExcel = (reqs: DownPaymentRequest[], groupLabel?: string) => {
+    try {
+      const timestamp = new Date().toISOString().slice(0, 10);
+      const safeName = (groupLabel || 'All').replace(/[^a-zA-Z0-9]/g, '_');
+      exportToExcel(reqs, `PACT_Bulk_${safeName}_${timestamp}`, groupLabel || 'All');
+      toast({
+        title: 'Bulk Excel Downloaded / تم تحميل ملف Excel الجماعي',
+        description: `${reqs.length} request(s) exported to Excel. / تم تصدير ${reqs.length} طلب(ات) في ملف Excel.`,
+      });
+    } catch {
+      toast({
+        title: 'Export Error / خطأ في التصدير',
+        description: 'Failed to generate Excel file. / فشل في إنشاء ملف Excel.',
+        variant: 'destructive',
+      });
+    }
+  };
+
   const handleDownloadBulkPdf = async (reqs: DownPaymentRequest[], groupLabel?: string) => {
     try {
       const certDataList = await Promise.all(
@@ -2131,6 +2149,15 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
                     <FileText className="h-3.5 w-3.5 mr-1" />
                     Bulk PDF ({approvedForPayment.length})
                   </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => handleDownloadBulkExcel(approvedForPayment, 'All Approved')}
+                    data-testid="button-bulk-excel-all"
+                  >
+                    <FileSpreadsheet className="h-3.5 w-3.5 mr-1" />
+                    Bulk Excel ({approvedForPayment.length})
+                  </Button>
                   <span className="text-xs text-muted-foreground">
                     Total: SDG {approvedForPayment.reduce((s, r) => s + (r.approvedAmount || r.requestedAmount), 0).toLocaleString()}
                   </span>
@@ -2184,6 +2211,12 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
                   }} disabled={processing} data-testid="button-selected-bulk-pdf">
                     <FileText className="h-4 w-4 mr-1" />
                     PDF ({selectedIds.size})
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={() => {
+                    if (selectedProcessing.length > 0) handleDownloadBulkExcel(selectedProcessing, `${selectedProcessing.length} Selected`);
+                  }} disabled={processing} data-testid="button-selected-bulk-excel">
+                    <FileSpreadsheet className="h-4 w-4 mr-1" />
+                    Excel ({selectedIds.size})
                   </Button>
                   <Button size="sm" variant="outline" onClick={() => handleBulkRevert('pending_supervisor')} disabled={processing} data-testid="button-selected-revert-supervisor">
                     <Undo2 className="h-4 w-4 mr-1" />
