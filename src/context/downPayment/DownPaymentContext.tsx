@@ -130,6 +130,9 @@ function transformFromDB(data: any): DownPaymentRequest {
     createdAt: data.created_at,
     updatedAt: data.updated_at,
     metadata: data.metadata || {},
+    paymentProofUrl: data.payment_proof_url || null,
+    paymentProofNotes: data.payment_proof_notes || null,
+    paymentProofUploadedAt: data.payment_proof_uploaded_at || null,
   };
 }
 

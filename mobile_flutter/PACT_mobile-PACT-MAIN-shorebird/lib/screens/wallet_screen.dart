@@ -3109,6 +3109,16 @@ class _WalletScreenState extends State<WalletScreen> {
                 ),
               ),
             ] else if (status == 'paid' || status == 'reconciled') ...[
+              // Show payment receipt if attached by finance
+              if ((cost['payment_proof_url'] as String?) != null &&
+                  (cost['payment_proof_url'] as String).isNotEmpty) ...[
+                _buildPaymentReceiptCard(
+                  proofUrl: cost['payment_proof_url'] as String,
+                  proofNotes: cost['payment_proof_notes'] as String?,
+                  isAmber: false,
+                ),
+                const SizedBox(height: 8),
+              ],
               // Paid but receipt not yet confirmed — show confirm button
               Container(
                 width: double.infinity,
@@ -4355,6 +4365,107 @@ class _WalletScreenState extends State<WalletScreen> {
     );
   }
 
+  Widget _buildPaymentReceiptCard({
+    required String proofUrl,
+    String? proofNotes,
+    required bool isAmber,
+  }) {
+    final isImage = proofUrl.toLowerCase().contains('.jpg') ||
+        proofUrl.toLowerCase().contains('.jpeg') ||
+        proofUrl.toLowerCase().contains('.png') ||
+        proofUrl.toLowerCase().contains('.gif') ||
+        proofUrl.toLowerCase().contains('.webp');
+    final color = isAmber ? Colors.amber : Colors.purple;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: color.shade50,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: color.shade200),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.receipt_long, color: color.shade700, size: 14),
+              const SizedBox(width: 6),
+              Text(
+                widget.isArabic ? 'إيصال الدفع' : 'Payment Receipt',
+                style: GoogleFonts.poppins(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: color.shade700,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          if (isImage)
+            GestureDetector(
+              onTap: () async {
+                final uri = Uri.parse(proofUrl);
+                if (await canLaunchUrl(uri)) await launchUrl(uri, mode: LaunchMode.externalApplication);
+              },
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(6),
+                child: CachedNetworkImage(
+                  imageUrl: proofUrl,
+                  height: 140,
+                  width: double.infinity,
+                  fit: BoxFit.contain,
+                  placeholder: (_, __) => Container(
+                    height: 140,
+                    color: color.shade100,
+                    child: Center(child: CircularProgressIndicator(color: color.shade700, strokeWidth: 2)),
+                  ),
+                  errorWidget: (_, __, ___) => Container(
+                    height: 60,
+                    color: color.shade100,
+                    child: Center(child: Icon(Icons.broken_image_outlined, color: color.shade400)),
+                  ),
+                ),
+              ),
+            )
+          else
+            GestureDetector(
+              onTap: () async {
+                final uri = Uri.parse(proofUrl);
+                if (await canLaunchUrl(uri)) await launchUrl(uri, mode: LaunchMode.externalApplication);
+              },
+              child: Row(
+                children: [
+                  Icon(Icons.picture_as_pdf, color: color.shade700, size: 18),
+                  const SizedBox(width: 6),
+                  Text(
+                    widget.isArabic ? 'اضغط لعرض الإيصال (PDF)' : 'Tap to view receipt (PDF)',
+                    style: GoogleFonts.poppins(
+                      fontSize: 12,
+                      color: color.shade700,
+                      decoration: TextDecoration.underline,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          if (proofNotes != null && proofNotes.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Text(
+              '\u201c$proofNotes\u201d',
+              style: GoogleFonts.poppins(
+                fontSize: 11,
+                color: color.shade600,
+                fontStyle: FontStyle.italic,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
   Widget _buildAdvanceItem(Map<String, dynamic> advance) {
     final status = (advance['status'] as String? ?? 'pending').toLowerCase();
     final requestedAmount =
@@ -4571,6 +4682,16 @@ class _WalletScreenState extends State<WalletScreen> {
             ],
             // Confirm receipt banner + button
             if (isDisbursed && !receiptConfirmed) ...[
+              // Show payment receipt if attached by finance
+              if ((advance['payment_proof_url'] as String?) != null &&
+                  (advance['payment_proof_url'] as String).isNotEmpty) ...[
+                const SizedBox(height: 8),
+                _buildPaymentReceiptCard(
+                  proofUrl: advance['payment_proof_url'] as String,
+                  proofNotes: advance['payment_proof_notes'] as String?,
+                  isAmber: true,
+                ),
+              ],
               const SizedBox(height: 8),
               Container(
                 width: double.infinity,

@@ -2122,6 +2122,37 @@ const WalletPage = () => {
                           </div>
                         )}
 
+                        {/* Payment proof attached by finance */}
+                        {advance.paymentProofUrl && (
+                          <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 space-y-1.5">
+                            <p className="text-xs font-medium text-amber-300 flex items-center gap-1.5">
+                              <Receipt className="w-3.5 h-3.5" />
+                              Payment Receipt / إيصال الدفع
+                            </p>
+                            {advance.paymentProofUrl.match(/\.(jpg|jpeg|png|gif|webp)$/i) ? (
+                              <a href={advance.paymentProofUrl} target="_blank" rel="noopener noreferrer">
+                                <img
+                                  src={advance.paymentProofUrl}
+                                  alt="Payment receipt"
+                                  className="max-h-40 w-full rounded object-contain border border-amber-500/20 cursor-pointer hover:opacity-90 transition-opacity"
+                                />
+                              </a>
+                            ) : (
+                              <a
+                                href={advance.paymentProofUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1.5 text-xs text-amber-300 underline"
+                              >
+                                View Payment Receipt / عرض الإيصال
+                              </a>
+                            )}
+                            {advance.paymentProofNotes && (
+                              <p className="text-xs text-muted-foreground italic">"{advance.paymentProofNotes}"</p>
+                            )}
+                          </div>
+                        )}
+
                         {canConfirm && (
                           <div className="pt-1">
                             <div className="flex items-start gap-2 text-xs text-amber-300 bg-amber-500/10 rounded px-2 py-1 mb-2">

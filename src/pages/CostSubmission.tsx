@@ -842,6 +842,10 @@ const CostSubmission = () => {
   const handleConfirmMarkAsPaid = async () => {
     const { submission: oc, proofFile, notes } = markAsPaidDialog;
     if (!oc || !currentUser?.id) return;
+    if (!proofFile) {
+      toast({ title: "Receipt Required / الإيصال مطلوب", description: "Please attach a payment receipt before confirming. / يرجى إرفاق إيصال الدفع قبل التأكيد.", variant: "destructive" });
+      return;
+    }
     setMarkAsPaidDialog(prev => ({ ...prev, uploading: true }));
     setActionProcessing(true);
     try {
@@ -4156,7 +4160,7 @@ const CostSubmission = () => {
               Mark as Paid / تحديد كمدفوع
             </DialogTitle>
             <DialogDescription>
-              Optionally attach a payment receipt before confirming. / يمكنك إرفاق إيصال دفع قبل التأكيد.
+              Attach a payment receipt before confirming. A receipt is required. / أرفق إيصال الدفع قبل التأكيد. الإيصال مطلوب.
             </DialogDescription>
           </DialogHeader>
 
@@ -4174,7 +4178,7 @@ const CostSubmission = () => {
 
               <div className="space-y-2">
                 <Label className="text-sm font-medium">
-                  Payment Receipt / إيصال الدفع <span className="text-muted-foreground font-normal">(optional / اختياري)</span>
+                  Payment Receipt / إيصال الدفع <span className="text-red-500">*</span>
                 </Label>
                 <div className="border-2 border-dashed border-muted-foreground/30 rounded-lg p-4 text-center hover:border-green-400 transition-colors relative">
                   <input

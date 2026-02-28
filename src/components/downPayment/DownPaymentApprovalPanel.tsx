@@ -81,7 +81,7 @@ import { generateTransportAdvanceCertificatePdf, generateTransportAdvanceCertifi
 import { EmailNotificationService } from '@/services/email-notification.service';
 import { EmailCCInput } from '@/components/EmailCCInput';
 import { useToast } from '@/hooks/use-toast';
-import { Mail, Wallet } from 'lucide-react';
+import { Mail, Wallet, Upload, ImageIcon, RefreshCw } from 'lucide-react';
 
 interface DownPaymentApprovalPanelProps {
   userRole: 'supervisor' | 'admin';
@@ -224,6 +224,14 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
   }>({ open: false, request: null, bulkRequests: [], isBulk: false, availableRecipients: [], selectedRecipientIds: [], ccEmails: [], loading: false, sending: false, bulkGroupBy: '', bulkGroupValue: '', sendMode: 'pdf', showPreview: false, usdRate: '' });
   const [markPaidProcessing, setMarkPaidProcessing] = useState(false);
   const [bulkPaymentIds, setBulkPaymentIds] = useState<Set<string>>(new Set());
+  const [markAsPaidDialog, setMarkAsPaidDialog] = useState<{
+    open: boolean;
+    request: DownPaymentRequest | null;
+    proofFile: File | null;
+    proofPreviewUrl: string | null;
+    notes: string;
+    uploading: boolean;
+  }>({ open: false, request: null, proofFile: null, proofPreviewUrl: null, notes: '', uploading: false });
 
   const [editDialog, setEditDialog] = useState<{
     open: boolean;
@@ -1280,10 +1288,34 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
     }
   };
 
-  const handleMarkAsPaid = async (req: DownPaymentRequest) => {
-    if (!currentUser?.id) return;
+  const handleMarkAsPaidProofFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const previewUrl = file.type.startsWith('image/') ? URL.createObjectURL(file) : null;
+    setMarkAsPaidDialog(prev => ({ ...prev, proofFile: file, proofPreviewUrl: previewUrl }));
+  };
+
+  const handleConfirmAdvanceMarkAsPaid = async () => {
+    const { request: req, proofFile, notes } = markAsPaidDialog;
+    if (!req || !currentUser?.id) return;
+    if (!proofFile) {
+      toast({ title: "Receipt Required / الإيصال مطلوب", description: "Please attach a payment receipt before confirming. / يرجى إرفاق إيصال الدفع قبل التأكيد.", variant: "destructive" });
+      return;
+    }
+    setMarkAsPaidDialog(prev => ({ ...prev, uploading: true }));
     setMarkPaidProcessing(true);
     try {
+      let proofUrl: string | null = null;
+      const timestamp = Date.now();
+      const random = Math.random().toString(36).substring(2, 8);
+      const extension = proofFile.name.split('.').pop()?.toLowerCase() || 'file';
+      const filePath = `payment-proofs/advance_${timestamp}_${random}.${extension}`;
+      const { error: uploadErr } = await supabase.storage
+        .from('mmp-files')
+        .upload(filePath, proofFile, { cacheControl: '3600', upsert: false });
+      if (uploadErr) throw new Error(uploadErr.message);
+      proofUrl = supabase.storage.from('mmp-files').getPublicUrl(filePath).data.publicUrl;
+
       const now = new Date().toISOString();
       const { error } = await supabase
         .from('down_payment_requests')
@@ -1292,6 +1324,9 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
           total_paid_amount: req.approvedAmount || req.requestedAmount,
           remaining_amount: 0,
           updated_at: now,
+          payment_proof_url: proofUrl,
+          ...(notes.trim() ? { payment_proof_notes: notes.trim() } : {}),
+          payment_proof_uploaded_at: now,
         } as any)
         .eq('id', req.id);
 
@@ -1300,15 +1335,21 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
       } else {
         toast({
           title: "Marked as Paid / تم التحديد كمدفوع",
-          description: "The advance has been marked as fully paid. / تم تحديد السلفة كمدفوعة بالكامل.",
+          description: "The advance has been marked as fully paid with receipt. / تم تحديد السلفة كمدفوعة بالكامل مع الإيصال.",
         });
+        setMarkAsPaidDialog({ open: false, request: null, proofFile: null, proofPreviewUrl: null, notes: '', uploading: false });
         refreshRequests();
       }
-    } catch {
-      toast({ title: "Error / خطأ", description: "Failed to mark as paid. / فشل في التحديد كمدفوع.", variant: "destructive" });
+    } catch (err: any) {
+      toast({ title: "Error / خطأ", description: err.message || "Failed to mark as paid.", variant: "destructive" });
     } finally {
+      setMarkAsPaidDialog(prev => ({ ...prev, uploading: false }));
       setMarkPaidProcessing(false);
     }
+  };
+
+  const handleMarkAsPaid = (req: DownPaymentRequest) => {
+    setMarkAsPaidDialog({ open: true, request: req, proofFile: null, proofPreviewUrl: null, notes: '', uploading: false });
   };
 
   const isApprovedOrPaid = (status: string) => ['approved', 'partially_paid', 'fully_paid'].includes(status);
@@ -3436,6 +3477,124 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
                 <><RefreshCw className="h-4 w-4 mr-1 animate-spin" /> Saving...</>
               ) : (
                 <><Pencil className="h-4 w-4 mr-1" /> Save Changes / حفظ التغييرات</>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Mark Advance as Paid — mandatory receipt upload dialog */}
+      <Dialog
+        open={markAsPaidDialog.open}
+        onOpenChange={(open) => {
+          if (!open && !markAsPaidDialog.uploading) {
+            if (markAsPaidDialog.proofPreviewUrl) URL.revokeObjectURL(markAsPaidDialog.proofPreviewUrl);
+            setMarkAsPaidDialog({ open: false, request: null, proofFile: null, proofPreviewUrl: null, notes: '', uploading: false });
+          }
+        }}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Wallet className="h-5 w-5 text-green-600" />
+              Mark Advance as Paid / تحديد السلفة كمدفوعة
+            </DialogTitle>
+            <DialogDescription>
+              Attach a payment receipt before confirming. A receipt is required. / أرفق إيصال الدفع قبل التأكيد. الإيصال مطلوب.
+            </DialogDescription>
+          </DialogHeader>
+
+          {markAsPaidDialog.request && (
+            <div className="space-y-4">
+              <div className="rounded-lg bg-muted/50 p-3 text-sm space-y-1">
+                <p className="font-medium">{markAsPaidDialog.request.siteName}</p>
+                <p className="text-lg font-bold tabular-nums">
+                  {(markAsPaidDialog.request.approvedAmount || markAsPaidDialog.request.requestedAmount).toLocaleString()} SDG
+                </p>
+                {markAsPaidDialog.request.stateName && (
+                  <p className="text-muted-foreground text-xs">State: {markAsPaidDialog.request.stateName}</p>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">
+                  Payment Receipt / إيصال الدفع <span className="text-red-500">*</span>
+                </Label>
+                <div className="border-2 border-dashed border-muted-foreground/30 rounded-lg p-4 text-center hover:border-green-400 transition-colors relative">
+                  <input
+                    type="file"
+                    accept="image/*,application/pdf"
+                    className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                    onChange={handleMarkAsPaidProofFileChange}
+                    disabled={markAsPaidDialog.uploading}
+                    data-testid="input-advance-payment-proof"
+                  />
+                  {markAsPaidDialog.proofFile ? (
+                    <div className="space-y-2">
+                      {markAsPaidDialog.proofPreviewUrl ? (
+                        <img
+                          src={markAsPaidDialog.proofPreviewUrl}
+                          alt="Receipt preview"
+                          className="max-h-32 mx-auto rounded object-contain"
+                        />
+                      ) : (
+                        <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
+                          <FileText className="h-8 w-8 text-red-500" />
+                          <span>{markAsPaidDialog.proofFile.name}</span>
+                        </div>
+                      )}
+                      <p className="text-xs text-muted-foreground">Click to change / انقر للتغيير</p>
+                    </div>
+                  ) : (
+                    <div className="text-muted-foreground">
+                      <ImageIcon className="h-8 w-8 mx-auto mb-1 opacity-40" />
+                      <p className="text-sm">Upload receipt image or PDF / ارفع صورة أو PDF</p>
+                      <p className="text-xs opacity-60">Click to browse / انقر للتصفح</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">
+                  Notes / ملاحظات <span className="text-muted-foreground font-normal">(optional / اختياري)</span>
+                </Label>
+                <Textarea
+                  value={markAsPaidDialog.notes}
+                  onChange={(e) => setMarkAsPaidDialog(prev => ({ ...prev, notes: e.target.value }))}
+                  placeholder="e.g. Bank transfer ref: TXN123... / مثال: رقم التحويل: TXN123..."
+                  className="resize-none h-20 text-sm"
+                  disabled={markAsPaidDialog.uploading}
+                  data-testid="input-advance-payment-notes"
+                />
+              </div>
+            </div>
+          )}
+
+          <DialogFooter className="gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                if (markAsPaidDialog.proofPreviewUrl) URL.revokeObjectURL(markAsPaidDialog.proofPreviewUrl);
+                setMarkAsPaidDialog({ open: false, request: null, proofFile: null, proofPreviewUrl: null, notes: '', uploading: false });
+              }}
+              disabled={markAsPaidDialog.uploading}
+              data-testid="button-cancel-advance-mark-paid"
+            >
+              Cancel / إلغاء
+            </Button>
+            <Button
+              type="button"
+              onClick={handleConfirmAdvanceMarkAsPaid}
+              disabled={markAsPaidDialog.uploading || !markAsPaidDialog.proofFile}
+              className="bg-green-600 hover:bg-green-700 text-white"
+              data-testid="button-confirm-advance-mark-paid"
+            >
+              {markAsPaidDialog.uploading ? (
+                <><RefreshCw className="h-4 w-4 mr-1.5 animate-spin" /> Uploading...</>
+              ) : (
+                <><CheckCircle2 className="h-4 w-4 mr-1.5" /> Confirm Payment / تأكيد الدفع</>
               )}
             </Button>
           </DialogFooter>
