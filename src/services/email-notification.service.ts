@@ -278,7 +278,7 @@ function buildEnhancedPaymentEmailHTML(d: {
   <meta name="viewport" content="width=device-width,initial-scale=1.0">
   <title>Payment Request — ${d.requestId}</title>
 </head>
-<body style="margin:0;padding:0;background:#EAECF0;font-family:'Segoe UI',Arial,sans-serif;">
+<body style="margin:0;padding:0;background:#EAECF0;font-family:Georgia,'Times New Roman',Times,serif;">
 <table width="100%" cellpadding="0" cellspacing="0" style="background:#EAECF0;padding:32px 16px;">
 <tr><td align="center">
 <table width="640" cellpadding="0" cellspacing="0" style="max-width:640px;width:100%;background:#FFFFFF;border-radius:10px;overflow:hidden;box-shadow:0 6px 32px rgba(0,0,0,0.13);">
@@ -336,8 +336,8 @@ function buildEnhancedPaymentEmailHTML(d: {
   <tr>
     <td style="padding:38px 36px 32px;">
 
-      <p style="margin:0 0 6px 0;font-size:10.5px;color:#6B7280;text-transform:uppercase;letter-spacing:1.2px;font-weight:600;">Official Payment Request &nbsp;/&nbsp; طلب دفع رسمي</p>
-      <p style="margin:0 0 28px 0;font-size:16px;color:#111827;">Dear <strong>${d.recipientName}</strong>,</p>
+      <p style="margin:0 0 6px 0;font-size:10px;color:#6B7280;text-transform:uppercase;letter-spacing:1.5px;font-weight:700;font-family:Arial,Helvetica,sans-serif;">Official Payment Request &nbsp;/&nbsp; طلب دفع رسمي</p>
+      <p style="margin:0 0 24px 0;font-size:16px;color:#111827;font-family:Georgia,'Times New Roman',Times,serif;">Dear <strong>${d.recipientName}</strong>,</p>
 
       <!-- FINANCIAL HIGHLIGHT CARD -->
       <table width="100%" cellpadding="0" cellspacing="0" style="background:#F0F4FF;border:2px solid #2962FF;border-radius:8px;margin-bottom:26px;overflow:hidden;">
@@ -361,7 +361,7 @@ function buildEnhancedPaymentEmailHTML(d: {
       </table>
 
       <!-- INSTRUCTION -->
-      <p style="margin:0 0 16px 0;font-size:13px;color:#374151;line-height:1.65;">
+      <p style="margin:0 0 18px 0;font-size:13.5px;color:#1F2937;line-height:1.8;font-family:Georgia,'Times New Roman',Times,serif;">
         ${d.isBulk
           ? `Please find the attached report containing <strong>${d.count} approved transportation advance requests</strong> from <strong>${d.mmpLabel}</strong>. Kindly review the details, authorize the disbursements, and confirm receipt at your earliest convenience.`
           : `A transportation advance request has been fully approved and is ready for payment processing. Kindly review the details below and process the disbursement at your earliest convenience.`
@@ -369,7 +369,7 @@ function buildEnhancedPaymentEmailHTML(d: {
       </p>
 
       <!-- DETAILS TABLE -->
-      <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin:0 0 18px 0;font-size:12.5px;border-radius:6px;overflow:hidden;border:1px solid #D1D5DB;">
+      <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin:0 0 18px 0;font-size:12.5px;border-radius:6px;overflow:hidden;border:1px solid #D1D5DB;font-family:Arial,Helvetica,sans-serif;">
         <tr style="background:#0F2041;">
           <td style="padding:6px 12px;color:#FFFFFF;font-weight:700;font-size:11px;letter-spacing:0.5px;text-transform:uppercase;width:40%;line-height:1.2;">Field / الحقل</td>
           <td style="padding:6px 12px;color:#FFFFFF;font-weight:700;font-size:11px;letter-spacing:0.5px;text-transform:uppercase;line-height:1.2;">Detail / التفصيل</td>
@@ -440,7 +440,7 @@ function buildEnhancedPaymentEmailHTML(d: {
       <hr style="border:none;border-top:1px solid #E5E7EB;margin:26px 0;">
 
       <!-- ARABIC SECTION -->
-      <div dir="rtl" style="text-align:right;">
+      <div dir="rtl" style="text-align:right;font-family:'Segoe UI',Tahoma,Arial,sans-serif;">
         <p style="margin:0 0 6px 0;font-size:15px;color:#111827;">عزيزي <strong>${d.recipientName}</strong>،</p>
         <h3 style="margin:12px 0 8px 0;font-size:17px;font-weight:700;color:#0F2041;">طلب دفع رقم ${d.requestId} | ${d.groupLabel} | ${fundingLabelAr}</h3>
         <p style="margin:0;font-size:14px;color:#374151;line-height:1.85;">
@@ -458,15 +458,15 @@ function buildEnhancedPaymentEmailHTML(d: {
       <table width="100%" cellpadding="0" cellspacing="0">
         <tr>
           <td style="vertical-align:top;">
-            <p style="margin:0 0 3px 0;font-size:14px;color:#374151;">Yours faithfully,</p>
-            <p style="margin:6px 0 2px 0;font-size:15px;font-weight:700;color:#0F2041;">${d.approverName}</p>
-            <p style="margin:0 0 1px 0;font-size:12.5px;color:#6B7280;">Approving Officer — PACT Command Center</p>
-            <p style="margin:0;font-size:12.5px;color:#6B7280;">On behalf of the PACT Operations Team</p>
+            <p style="margin:0 0 3px 0;font-size:14px;color:#374151;font-family:Georgia,'Times New Roman',Times,serif;font-style:italic;">Yours faithfully,</p>
+            <p style="margin:8px 0 2px 0;font-size:15px;font-weight:700;color:#0F2041;font-family:Arial,Helvetica,sans-serif;">${d.approverName}</p>
+            <p style="margin:0 0 1px 0;font-size:11.5px;color:#6B7280;font-family:Arial,Helvetica,sans-serif;letter-spacing:0.3px;">Approving Officer — PACT Command Center</p>
+            <p style="margin:0;font-size:11.5px;color:#6B7280;font-family:Arial,Helvetica,sans-serif;letter-spacing:0.3px;">On behalf of the PACT Operations Team</p>
           </td>
           <td style="vertical-align:top;text-align:right;" dir="rtl">
-            <p style="margin:0 0 3px 0;font-size:14px;color:#374151;">مع خالص التقدير،</p>
-            <p style="margin:6px 0 2px 0;font-size:15px;font-weight:700;color:#0F2041;">${d.approverName}</p>
-            <p style="margin:0;font-size:12.5px;color:#6B7280;">مسؤول الموافقة — مركز قيادة باكت</p>
+            <p style="margin:0 0 3px 0;font-size:14px;color:#374151;font-family:'Segoe UI',Tahoma,Arial,sans-serif;font-style:italic;">مع خالص التقدير،</p>
+            <p style="margin:8px 0 2px 0;font-size:15px;font-weight:700;color:#0F2041;font-family:'Segoe UI',Tahoma,Arial,sans-serif;">${d.approverName}</p>
+            <p style="margin:0;font-size:11.5px;color:#6B7280;font-family:'Segoe UI',Tahoma,Arial,sans-serif;">مسؤول الموافقة — مركز قيادة باكت</p>
           </td>
         </tr>
       </table>
