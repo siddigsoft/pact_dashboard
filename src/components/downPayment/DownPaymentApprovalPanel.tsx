@@ -1933,7 +1933,7 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
               </CardHeader>
               <CardContent className="p-3 pt-0">
                 <p className="text-xs text-muted-foreground mb-3">Filter requests by location and send bulk payment emails. / تصفية الطلبات حسب الموقع وإرسال رسائل الدفع الجماعي.</p>
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2">
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-2">
                   <Select
                     value={filters.stateName || 'all'}
                     onValueChange={(val) => {
@@ -1965,6 +1965,23 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
                       {uniqueHubs.map(h => {
                         const count = requests.filter(r => r.hubName === h).length;
                         return count > 0 ? <SelectItem key={h} value={h!}>{h} ({count})</SelectItem> : null;
+                      })}
+                    </SelectContent>
+                  </Select>
+                  <Select
+                    value={filters.mmpName || 'all'}
+                    onValueChange={(val) => {
+                      setFilters(f => ({ ...f, mmpName: val === 'all' ? undefined : val }));
+                    }}
+                  >
+                    <SelectTrigger data-testid="select-bulk-mmp">
+                      <SelectValue placeholder="All MMPs" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All MMPs</SelectItem>
+                      {uniqueMMPs.map(mmp => {
+                        const count = requests.filter(r => r.mmpName === mmp).length;
+                        return count > 0 ? <SelectItem key={mmp} value={mmp!}>{mmp} ({count})</SelectItem> : null;
                       })}
                     </SelectContent>
                   </Select>
