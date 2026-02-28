@@ -51,6 +51,7 @@ import { EmailNotificationService } from '@/services/email-notification.service'
 import { EmailCCInput } from '@/components/EmailCCInput';
 import { generateFinancialStatementPdf, type StatementRow, type StatementConfig } from '@/utils/financialStatementPdf';
 import { generateFinancialStatementExcel } from '@/utils/financialStatementExcel';
+import { generateBulkCostPDFBase64, generateBulkCostExcelBase64, type BulkSubmission, type BulkUserMap, type BulkProjectMap } from '@/utils/bulkCostEmailAttachments';
 import { getStatesInHub, normalizeHubId } from '@/data/sudanStates';
 import { getHubAccessInfo, isStateInAnyHub } from '@/utils/hubAccessControl';
 
@@ -193,12 +194,13 @@ const CostSubmission = () => {
     usdRate: string;
     totalSdg: number;
     count: number;
+    approvedSubmissions: OperationalCostSubmission[];
     availableRecipients: Array<{ id: string; email: string; name: string; role: string }>;
     selectedRecipientIds: string[];
     ccEmails: string[];
     loading: boolean;
     sending: boolean;
-  }>({ step: 'rate', open: false, usdRate: '', totalSdg: 0, count: 0, availableRecipients: [], selectedRecipientIds: [], ccEmails: [], loading: false, sending: false });
+  }>({ step: 'rate', open: false, usdRate: '', totalSdg: 0, count: 0, approvedSubmissions: [], availableRecipients: [], selectedRecipientIds: [], ccEmails: [], loading: false, sending: false });
 
   const [editingSubmission, setEditingSubmission] = useState<OperationalCostSubmission | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<OperationalCostSubmission | null>(null);
@@ -942,13 +944,13 @@ const CostSubmission = () => {
   };
 
   const openBulkCostEmailDialog = () => {
-    const approvedSubs = filteredOperationalCosts.filter(o => getOperationalDerivedStatus(o) === 'approved');
+    const approvedSubs = operationalCosts.filter(o => getOperationalDerivedStatus(o) === 'approved');
     if (approvedSubs.length === 0) {
       toast({ title: "No Approved Submissions / لا توجد طلبات موافق عليها", description: "There are no approved submissions to send.", variant: "destructive" });
       return;
     }
     const totalSdg = approvedSubs.reduce((sum, oc) => sum + ((oc as any).amount_cents || 0) / 100, 0);
-    setBulkCostEmailDialog({ step: 'rate', open: true, usdRate: '', totalSdg, count: approvedSubs.length, availableRecipients: [], selectedRecipientIds: [], ccEmails: [], loading: false, sending: false });
+    setBulkCostEmailDialog({ step: 'rate', open: true, usdRate: '', totalSdg, count: approvedSubs.length, approvedSubmissions: approvedSubs, availableRecipients: [], selectedRecipientIds: [], ccEmails: [], loading: false, sending: false });
   };
 
   const proceedBulkToRecipients = async () => {
@@ -979,15 +981,69 @@ const CostSubmission = () => {
   };
 
   const handleBulkCostEmailSend = async () => {
-    const { selectedRecipientIds, availableRecipients, ccEmails, totalSdg, count, usdRate } = bulkCostEmailDialog;
+    const { selectedRecipientIds, availableRecipients, ccEmails, totalSdg, count, usdRate, approvedSubmissions } = bulkCostEmailDialog;
     if (!currentUser?.id || selectedRecipientIds.length === 0) return;
     const rate = parseFloat(usdRate);
+    const effectiveRate = !isNaN(rate) && rate > 0 ? rate : null;
     setBulkCostEmailDialog(prev => ({ ...prev, sending: true }));
     try {
       const selectedRecipients = availableRecipients.filter(r => selectedRecipientIds.includes(r.id)).map(r => ({ email: r.email, name: r.name }));
       const approverName = (currentUser as any).fullName || (currentUser as any).full_name || currentUser.email || 'Approver';
       const approverEmail = currentUser.email || '';
-      const bulkId = `BULK-${count}`;
+      const bulkId = `BULK-${count}-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}`;
+
+      const userMap: BulkUserMap = {};
+      (users || []).forEach((u: any) => {
+        if (u.id) userMap[u.id] = { name: u.fullName || u.full_name || u.name || u.email || '—', email: u.email || '—', role: u.role };
+      });
+
+      const projectMap: BulkProjectMap = {};
+      (allProjects || []).forEach((p: any) => {
+        if (p.id) projectMap[p.id] = p.name || p.id;
+      });
+
+      const bulkSubs: BulkSubmission[] = approvedSubmissions.map(s => ({
+        id: s.id,
+        expense_category: s.expense_category,
+        amount_cents: s.amount_cents,
+        currency: s.currency,
+        description: s.description,
+        expense_date: s.expense_date,
+        vendor: s.vendor,
+        submitted_by: s.submitted_by,
+        submitted_at: s.submitted_at,
+        status: s.status,
+        tier1_approved_at: s.tier1_approved_at,
+        tier2_approved_at: s.tier2_approved_at,
+        tier2_notes: s.tier2_notes,
+        project_id: s.project_id,
+        reference_number: s.reference_number,
+      }));
+
+      let pdfAttachment: { base64: string; filename: string } | undefined;
+      let excelAttachment: { base64: string; filename: string; mimeType: string } | undefined;
+
+      try {
+        const pdfBase64 = generateBulkCostPDFBase64(bulkSubs, approverName, totalSdg, effectiveRate, userMap, projectMap);
+        pdfAttachment = {
+          base64: pdfBase64,
+          filename: `PACT_Approved_Costs_${new Date().toISOString().slice(0, 10)}.pdf`,
+        };
+      } catch (pdfErr) {
+        console.warn('[BulkEmail] PDF generation failed:', pdfErr);
+      }
+
+      try {
+        const excelBase64 = generateBulkCostExcelBase64(bulkSubs, approverName, effectiveRate, userMap, projectMap);
+        excelAttachment = {
+          base64: excelBase64,
+          filename: `PACT_Approved_Costs_${new Date().toISOString().slice(0, 10)}.xlsx`,
+          mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        };
+      } catch (xlErr) {
+        console.warn('[BulkEmail] Excel generation failed:', xlErr);
+      }
+
       const result = await EmailNotificationService.sendPaymentRequestToFinanceWithRecipients(
         selectedRecipients,
         approverName,
@@ -1002,15 +1058,16 @@ const CostSubmission = () => {
         'SDG',
         '',
         '/cost-submission',
-        undefined,
-        undefined,
+        pdfAttachment,
+        excelAttachment ? [excelAttachment] : undefined,
         ccEmails.length > 0 ? ccEmails : undefined,
         'All Approved Submissions',
-        isNaN(rate) ? undefined : rate
+        effectiveRate ?? undefined
       );
       if (result.success) {
-        toast({ title: "Bulk Email Sent / تم إرسال البريد الجماعي", description: `Payment request for ${count} approved submissions sent to ${selectedRecipients.length} recipient(s).` });
-        setBulkCostEmailDialog({ step: 'rate', open: false, usdRate: '', totalSdg: 0, count: 0, availableRecipients: [], selectedRecipientIds: [], ccEmails: [], loading: false, sending: false });
+        const attachDesc = [pdfAttachment ? 'PDF report' : '', excelAttachment ? 'Excel workbook' : ''].filter(Boolean).join(' + ');
+        toast({ title: "Email Sent / تم الإرسال", description: `Payment request for ${count} submissions sent to ${selectedRecipients.length} recipient(s)${attachDesc ? ` with ${attachDesc} attached` : ''}.` });
+        setBulkCostEmailDialog({ step: 'rate', open: false, usdRate: '', totalSdg: 0, count: 0, approvedSubmissions: [], availableRecipients: [], selectedRecipientIds: [], ccEmails: [], loading: false, sending: false });
       } else {
         toast({ title: "Send Failed / فشل الإرسال", description: result.error || "Failed to send bulk email.", variant: "destructive" });
         setBulkCostEmailDialog(prev => ({ ...prev, sending: false }));
@@ -3348,7 +3405,7 @@ const CostSubmission = () => {
       {/* ── Bulk Cost Email Dialog (2-step: USD Rate → Recipients) ── */}
       <Dialog open={bulkCostEmailDialog.open} onOpenChange={(open) => {
         if (!open && !bulkCostEmailDialog.sending) {
-          setBulkCostEmailDialog({ step: 'rate', open: false, usdRate: '', totalSdg: 0, count: 0, availableRecipients: [], selectedRecipientIds: [], ccEmails: [], loading: false, sending: false });
+          setBulkCostEmailDialog({ step: 'rate', open: false, usdRate: '', totalSdg: 0, count: 0, approvedSubmissions: [], availableRecipients: [], selectedRecipientIds: [], ccEmails: [], loading: false, sending: false });
         }
       }}>
         <DialogContent className="max-w-md">
@@ -3425,6 +3482,7 @@ const CostSubmission = () => {
                 </DialogTitle>
                 <DialogDescription>
                   Sending payment request for <strong>{bulkCostEmailDialog.count} approved submissions</strong> — SDG {bulkCostEmailDialog.totalSdg.toLocaleString()} (≈ USD {(bulkCostEmailDialog.totalSdg / parseFloat(bulkCostEmailDialog.usdRate || '1')).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })})
+                  <span className="block mt-1 text-xs text-green-700 font-medium">📎 PDF report + Excel workbook will be auto-generated and attached</span>
                 </DialogDescription>
               </DialogHeader>
               <div className="space-y-3 py-2">
@@ -3490,7 +3548,7 @@ const CostSubmission = () => {
                   data-testid="button-bulk-cost-send"
                 >
                   <Mail className="h-3.5 w-3.5 mr-1" />
-                  {bulkCostEmailDialog.sending ? 'Sending...' : `Send to ${bulkCostEmailDialog.selectedRecipientIds.length} Recipient(s)`}
+                  {bulkCostEmailDialog.sending ? 'Generating & Sending...' : `Send with PDF + Excel (${bulkCostEmailDialog.selectedRecipientIds.length} recipient(s))`}
                 </Button>
               </DialogFooter>
             </>
