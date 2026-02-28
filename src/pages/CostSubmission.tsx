@@ -1328,11 +1328,12 @@ const CostSubmission = () => {
         </Button>
 
         <div className="flex flex-col gap-2">
-          <div className="flex items-center gap-3">
-            <div className="p-3 rounded-lg bg-gradient-to-br from-blue-500 to-blue-700">
-              <FileText className="h-8 w-8 text-white" />
-            </div>
-            <div>
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="p-3 rounded-lg bg-gradient-to-br from-blue-500 to-blue-700">
+                <FileText className="h-8 w-8 text-white" />
+              </div>
+              <div>
               <h1 className="text-3xl font-bold tracking-tight flex items-center gap-2">
                 {canViewTeamSubmissions ? "Cost Approval & Tracking" : "Cost Submission"}
                 {(isAdmin || isSuperAdmin) && (
@@ -1357,6 +1358,23 @@ const CostSubmission = () => {
                 }
               </p>
             </div>
+            </div>
+            {canViewTeamSubmissions && (
+              <Button
+                size="sm"
+                onClick={openBulkCostEmailDialog}
+                className="bg-[#0F2041] hover:bg-[#1D3461] text-white shrink-0 mt-1"
+                data-testid="button-bulk-cost-email"
+              >
+                <Mail className="h-4 w-4 mr-1.5" />
+                Send Approved Email
+                {operationalCosts.filter(o => getOperationalDerivedStatus(o) === 'approved').length > 0 && (
+                  <span className="ml-1.5 bg-white/20 text-white text-[10px] font-bold rounded-full px-1.5 py-0.5 leading-none">
+                    {operationalCosts.filter(o => getOperationalDerivedStatus(o) === 'approved').length}
+                  </span>
+                )}
+              </Button>
+            )}
           </div>
         </div>
       </div>
@@ -2350,22 +2368,6 @@ const CostSubmission = () => {
               <RefreshCw className={`h-4 w-4 mr-1 ${operationalCostsLoading ? 'animate-spin' : ''}`} />
               {operationalCostsLoading ? 'Loading...' : 'Refresh'}
             </Button>
-            {canViewTeamSubmissions && (
-              <Button
-                size="sm"
-                onClick={openBulkCostEmailDialog}
-                className="bg-[#0F2041] hover:bg-[#1D3461] text-white"
-                data-testid="button-bulk-cost-email"
-              >
-                <Mail className="h-4 w-4 mr-1.5" />
-                Send Approved Email
-                {filteredOperationalCosts.filter(o => getOperationalDerivedStatus(o) === 'approved').length > 0 && (
-                  <span className="ml-1.5 bg-white/20 text-white text-[10px] font-bold rounded-full px-1.5 py-0.5 leading-none">
-                    {filteredOperationalCosts.filter(o => getOperationalDerivedStatus(o) === 'approved').length}
-                  </span>
-                )}
-              </Button>
-            )}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="outline" size="sm" data-testid="button-export-history">
