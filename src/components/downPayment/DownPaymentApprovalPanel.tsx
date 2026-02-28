@@ -973,31 +973,15 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
 
         // ── EXCEL MODE ────────────────────────────────────────────────────
         if (sendMode === 'excel') {
-          const statementRows: StatementRow[] = bulkRequests.map(r => ({
-            refId: `PACT-TA-${r.id.slice(0, 8).toUpperCase()}`,
-            date: r.requestedAt,
-            description: r.siteName || '',
-            requester: r.requestedByName || 'Unknown',
-            site: r.siteName || '',
-            hub: r.hubName || '',
-            state: r.stateName || '',
-            status: r.status,
-            requestedAmount: r.requestedAmount,
-            approvedAmount: r.approvedAmount || 0,
-            paidAmount: r.totalPaidAmount || 0,
-            t1Approver: r.supervisorApprovedByName || r.supervisorApprovedBy || undefined,
-            t1Date: r.supervisorApprovedAt || undefined,
-            t1Status: r.supervisorStatus || undefined,
-            t2Approver: r.adminProcessedByName || r.adminProcessedBy || undefined,
-            t2Date: r.adminProcessedAt || undefined,
-            t2Status: r.adminStatus || undefined,
-            notes: r.justification || '',
-          }));
+          // Use same row mapping and config as the Bank Statement "Excel" button
+          const statementRows: StatementRow[] = bulkRequests.map(mapRequestToStatementRow);
 
           const config: StatementConfig = {
             title: 'Transportation Advance',
+            titleAr: 'سلفة النقل',
             statementType: 'transport_advance',
             statusFilter: groupLabel || 'All Approved',
+            statusFilterAr: groupLabel ? groupLabel : 'الكل',
             currency: 'SDG',
             generatedBy: approverName,
           };
