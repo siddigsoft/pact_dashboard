@@ -163,6 +163,8 @@ class _SiteVerificationScreenState extends State<SiteVerificationScreen> {
   // Sub-tab for New tab (State Permit vs Locality Permit)
   int _newSubTabIndex = 0; // 0 = State Permit, 1 = Locality Permit
   String _searchQuery = '';
+  String? _selectedMmpId; // null = All MMPs
+  List<Map<String, dynamic>> _availableMmps = []; // [{id, name, count}]
 
   @override
   void initState() {
@@ -570,8 +572,31 @@ class _SiteVerificationScreenState extends State<SiteVerificationScreen> {
         }
       }
 
+      // Build MMP filter options from all loaded sites
+      final mmpMap = <String, Map<String, dynamic>>{};
+      for (final site in sites) {
+        final id = site['mmp_file_id']?.toString();
+        if (id == null || id.isEmpty) continue;
+        final raw = site['mmp_files'];
+        String name = '';
+        if (raw is Map<String, dynamic>) {
+          name = raw['name']?.toString() ?? '';
+        }
+        if (!mmpMap.containsKey(id)) {
+          mmpMap[id] = {'id': id, 'name': name.isNotEmpty ? name : 'MMP ${id.substring(0, 6)}', 'count': 0};
+        }
+        mmpMap[id]!['count'] = (mmpMap[id]!['count'] as int) + 1;
+      }
+
       if (mounted) {
-        setState(() {});
+        setState(() {
+          _availableMmps = mmpMap.values.toList()
+            ..sort((a, b) => (a['name'] as String).compareTo(b['name'] as String));
+          // Reset MMP filter if the previously selected MMP is no longer present
+          if (_selectedMmpId != null && !mmpMap.containsKey(_selectedMmpId)) {
+            _selectedMmpId = null;
+          }
+        });
       }
     } catch (e) {
       debugPrint('Error fetching sites for verification: $e');
@@ -954,6 +979,60 @@ class _SiteVerificationScreenState extends State<SiteVerificationScreen> {
                 ),
               ),
             ),
+
+            // MMP Filter chips (only shown when multiple MMPs exist)
+            if (_availableMmps.length > 1) ...[
+              SizedBox(
+                height: 36,
+                child: ListView(
+                  scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  children: [
+                    // "All MMPs" chip
+                    Padding(
+                      padding: const EdgeInsets.only(right: 6),
+                      child: FilterChip(
+                        label: Text(
+                          'All MMPs',
+                          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
+                        ),
+                        selected: _selectedMmpId == null,
+                        onSelected: (_) => setState(() => _selectedMmpId = null),
+                        selectedColor: const Color(0xFF1E3A5F).withValues(alpha: 0.15),
+                        checkmarkColor: const Color(0xFF1E3A5F),
+                        labelPadding: const EdgeInsets.symmetric(horizontal: 4),
+                        padding: const EdgeInsets.symmetric(horizontal: 4),
+                        visualDensity: VisualDensity.compact,
+                      ),
+                    ),
+                    // One chip per MMP
+                    ..._availableMmps.map((mmp) {
+                      final id = mmp['id'] as String;
+                      final name = mmp['name'] as String;
+                      final count = mmp['count'] as int;
+                      final isSelected = _selectedMmpId == id;
+                      return Padding(
+                        padding: const EdgeInsets.only(right: 6),
+                        child: FilterChip(
+                          label: Text(
+                            '$name ($count)',
+                            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
+                          ),
+                          selected: isSelected,
+                          onSelected: (_) => setState(() => _selectedMmpId = isSelected ? null : id),
+                          selectedColor: const Color(0xFF1E3A5F).withValues(alpha: 0.15),
+                          checkmarkColor: const Color(0xFF1E3A5F),
+                          labelPadding: const EdgeInsets.symmetric(horizontal: 4),
+                          padding: const EdgeInsets.symmetric(horizontal: 4),
+                          visualDensity: VisualDensity.compact,
+                        ),
+                      );
+                    }),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 4),
+            ],
 
             // Content
             Expanded(
@@ -1802,13 +1881,17 @@ class _SiteVerificationScreenState extends State<SiteVerificationScreen> {
   List<Map<String, dynamic>> _applySearchFilter(
     List<Map<String, dynamic>> sites,
   ) {
-    if (_searchQuery.isEmpty) {
-      return sites;
+    var result = sites;
+
+    // Apply MMP filter
+    if (_selectedMmpId != null) {
+      result = result.where((site) => site['mmp_file_id']?.toString() == _selectedMmpId).toList();
     }
 
+    // Apply text search
+    if (_searchQuery.isEmpty) return result;
     final query = _searchQuery.toLowerCase();
-
-    return sites.where((site) {
+    return result.where((site) {
       final name = site['site_name']?.toString().toLowerCase() ?? '';
       final code = site['site_code']?.toString().toLowerCase() ?? '';
       final locality = site['locality']?.toString().toLowerCase() ?? '';

@@ -86,6 +86,7 @@ class _MMPScreenState extends State<MMPScreen> {
   // Search
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
+  String? _selectedMmpId; // null = All MMPs
 
   RealtimeChannel? _realtimeChannel;
 
@@ -3854,10 +3855,17 @@ class _MMPScreenState extends State<MMPScreen> {
   List<Map<String, dynamic>> _getFilteredSites(
     List<Map<String, dynamic>> sites,
   ) {
-    if (_searchQuery.isEmpty) return sites;
+    var result = sites;
+
+    // Apply MMP filter
+    if (_selectedMmpId != null) {
+      result = result.where((site) => site['mmp_file_id']?.toString() == _selectedMmpId).toList();
+    }
+
+    if (_searchQuery.isEmpty) return result;
 
     final query = _searchQuery.toLowerCase();
-    return sites.where((site) {
+    return result.where((site) {
       final siteName = (site['site_name'] ?? site['siteName'] ?? '')
           .toString()
           .toLowerCase();
@@ -3872,6 +3880,28 @@ class _MMPScreenState extends State<MMPScreen> {
           state.contains(query) ||
           locality.contains(query);
     }).toList();
+  }
+
+  /// Compute available MMP options from current site data (both lists combined)
+  List<Map<String, dynamic>> get _mmpFilterOptions {
+    final allSites = [..._availableSites, ..._smartAssignedSites];
+    final mmpMap = <String, Map<String, dynamic>>{};
+    for (final site in allSites) {
+      final id = site['mmp_file_id']?.toString();
+      if (id == null || id.isEmpty) continue;
+      final raw = site['mmp_files'];
+      String name = '';
+      if (raw is Map<String, dynamic>) {
+        name = raw['name']?.toString() ?? '';
+      }
+      if (!mmpMap.containsKey(id)) {
+        mmpMap[id] = {'id': id, 'name': name.isNotEmpty ? name : 'MMP \${id.substring(0, 6)}', 'count': 0};
+      }
+      mmpMap[id]!['count'] = (mmpMap[id]!['count'] as int) + 1;
+    }
+    final options = mmpMap.values.toList()
+      ..sort((a, b) => (a['name'] as String).compareTo(b['name'] as String));
+    return options;
   }
 
   @override
@@ -4044,6 +4074,59 @@ class _MMPScreenState extends State<MMPScreen> {
               fillColor: Colors.white,
             ),
           ),
+        ),
+
+        // MMP Filter chips (shown when multiple MMPs exist)
+        Builder(
+          builder: (context) {
+            final mmpOptions = _mmpFilterOptions;
+            if (mmpOptions.length <= 1) return const SizedBox.shrink();
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SizedBox(
+                  height: 38,
+                  child: ListView(
+                    scrollDirection: Axis.horizontal,
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.only(right: 6),
+                        child: FilterChip(
+                          label: const Text('All MMPs', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600)),
+                          selected: _selectedMmpId == null,
+                          onSelected: (_) => setState(() => _selectedMmpId = null),
+                          selectedColor: const Color(0xFF1E3A5F).withValues(alpha: 0.15),
+                          checkmarkColor: const Color(0xFF1E3A5F),
+                          visualDensity: VisualDensity.compact,
+                          padding: const EdgeInsets.symmetric(horizontal: 4),
+                        ),
+                      ),
+                      ...mmpOptions.map((mmp) {
+                        final id = mmp['id'] as String;
+                        final name = mmp['name'] as String;
+                        final count = mmp['count'] as int;
+                        final isSelected = _selectedMmpId == id;
+                        return Padding(
+                          padding: const EdgeInsets.only(right: 6),
+                          child: FilterChip(
+                            label: Text('\$name (\$count)', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600)),
+                            selected: isSelected,
+                            onSelected: (_) => setState(() => _selectedMmpId = isSelected ? null : id),
+                            selectedColor: const Color(0xFF1E3A5F).withValues(alpha: 0.15),
+                            checkmarkColor: const Color(0xFF1E3A5F),
+                            visualDensity: VisualDensity.compact,
+                            padding: const EdgeInsets.symmetric(horizontal: 4),
+                          ),
+                        );
+                      }),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 4),
+              ],
+            );
+          },
         ),
 
         // Tabs
