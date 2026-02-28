@@ -13,7 +13,8 @@ import {
   RefreshCw, Info, Bell, Link as LinkIcon, Shield, Eye, UserCheck,
   UserX, ChevronDown, ChevronUp, Download, RotateCcw, SendHorizonal,
   Smartphone, Rss, FileText, BarChart3, Globe, AlertTriangle,
-  CheckCheck, Radio, TrendingUp, MessageSquare, X
+  CheckCheck, Radio, TrendingUp, MessageSquare, X, CalendarClock,
+  FlaskConical, MapPin, Save, Trash2
 } from 'lucide-react';
 import { useUser } from '@/context/user/UserContext';
 import { useToast } from '@/hooks/use-toast';
@@ -29,7 +30,18 @@ const AUDIENCE_OPTIONS = [
   { value: 'supervisor', labelEn: 'Supervisors', labelAr: 'المشرفون', icon: '👁' },
   { value: 'admin', labelEn: 'Admins', labelAr: 'المدراء', icon: '⚙️' },
   { value: 'financialadmin', labelEn: 'Financial Admins', labelAr: 'المدراء الماليون', icon: '💰' },
+  { value: 'by_state', labelEn: 'By State (Sudan)', labelAr: 'حسب الولاية', icon: '📍' },
 ];
+
+const SUDAN_STATES = [
+  'Blue Nile', 'Central Darfur', 'East Darfur', 'Gedaref', 'Kassala',
+  'Khartoum', 'North Darfur', 'North Kordofan', 'Northern', 'Red Sea',
+  'River Nile', 'Sennar', 'South Darfur', 'South Kordofan', 'West Darfur',
+  'West Kordofan', 'White Nile',
+];
+
+const DRAFT_KEY = 'broadcast_draft_v1';
+const SCHEDULED_KEY = 'broadcast_scheduled_v1';
 
 const PRIORITY_OPTIONS = [
   { value: 'normal', labelEn: 'Normal', labelAr: 'عادي', color: 'bg-slate-100 text-slate-700', border: 'border-l-slate-400', badge: 'bg-slate-100 text-slate-600', dot: 'bg-slate-400' },
@@ -152,6 +164,14 @@ export default function AdminBroadcastPage() {
   const [userCount, setUserCount] = useState<number | null>(null);
   const [stats, setStats] = useState<{ total: number; avgRead: number } | null>(null);
 
+  const [stateFilter, setStateFilter] = useState<string>('');
+  const [scheduleAt, setScheduleAt] = useState<string>('');
+  const [testSending, setTestSending] = useState(false);
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [confirmTargetUsers, setConfirmTargetUsers] = useState<{ id: string; role: string }[]>([]);
+  const [draftRestored, setDraftRestored] = useState(false);
+  const [scheduledDrafts, setScheduledDrafts] = useState<any[]>([]);
+
   const role = (currentUser?.role || '').toLowerCase();
   const isAdmin = ['admin', 'superadmin', 'ict', 'financialadmin'].includes(role);
 
@@ -164,13 +184,83 @@ export default function AdminBroadcastPage() {
 
   useEffect(() => {
     loadUserCount();
-  }, [audience]);
+  }, [audience, stateFilter]);
+
+  // Draft auto-save
+  useEffect(() => {
+    if (!titleEn && !titleAr && !messageEn && !messageAr) return;
+    const draft = { titleEn, titleAr, messageEn, messageAr, audience, priority, actionLink, requireAck, sendEmail, stateFilter, scheduleAt };
+    localStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
+  }, [titleEn, titleAr, messageEn, messageAr, audience, priority, actionLink, requireAck, sendEmail, stateFilter, scheduleAt]);
+
+  // Draft load on mount
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(DRAFT_KEY);
+      if (saved) {
+        const d = JSON.parse(saved);
+        if (d.titleEn || d.messageEn) {
+          setTitleEn(d.titleEn || ''); setTitleAr(d.titleAr || '');
+          setMessageEn(d.messageEn || ''); setMessageAr(d.messageAr || '');
+          setAudience(d.audience || 'all'); setPriority(d.priority || 'normal');
+          setActionLink(d.actionLink || ''); setRequireAck(d.requireAck || false);
+          setSendEmail(d.sendEmail || false); setStateFilter(d.stateFilter || '');
+          setScheduleAt(d.scheduleAt || '');
+          setDraftRestored(true);
+        }
+      }
+    } catch {}
+    // Load scheduled drafts
+    try {
+      const s = localStorage.getItem(SCHEDULED_KEY);
+      if (s) setScheduledDrafts(JSON.parse(s));
+    } catch {}
+  }, []);
+
+  // Scheduled broadcast checker — runs every 30s
+  useEffect(() => {
+    const interval = setInterval(async () => {
+      try {
+        const s = localStorage.getItem(SCHEDULED_KEY);
+        if (!s) return;
+        const drafts: any[] = JSON.parse(s);
+        const now = new Date();
+        const due = drafts.filter(d => new Date(d.scheduleAt) <= now);
+        if (due.length === 0) return;
+        for (const d of due) {
+          await executeSend(d);
+        }
+        const remaining = drafts.filter(d => new Date(d.scheduleAt) > now);
+        localStorage.setItem(SCHEDULED_KEY, JSON.stringify(remaining));
+        setScheduledDrafts(remaining);
+        if (due.length > 0) {
+          toast({ title: `Scheduled broadcast sent / تم إرسال البث المجدول`, description: `"${due[0].titleEn}" was sent to ${due[0].audience}.` });
+          loadHistory();
+        }
+      } catch {}
+    }, 30000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const clearDraft = () => {
+    localStorage.removeItem(DRAFT_KEY);
+    setTitleEn(''); setTitleAr(''); setMessageEn(''); setMessageAr('');
+    setAudience('all'); setPriority('normal'); setActionLink('');
+    setRequireAck(false); setSendEmail(false); setStateFilter(''); setScheduleAt('');
+    setDraftRestored(false);
+  };
 
   const loadUserCount = async () => {
     try {
       let query = supabase.from('profiles').select('id', { count: 'exact', head: true });
       if (audience === 'no_bank_account') {
         const { count } = await supabase.from('profiles').select('id', { count: 'exact', head: true }).not('role', 'is', null);
+        setUserCount(count ?? 0);
+        return;
+      }
+      if (audience === 'by_state') {
+        if (!stateFilter) { setUserCount(null); return; }
+        const { count } = await supabase.from('profiles').select('id', { count: 'exact', head: true }).ilike('state', stateFilter).not('role', 'is', null);
         setUserCount(count ?? 0);
         return;
       }
@@ -387,127 +477,171 @@ export default function AdminBroadcastPage() {
     setPriority(t.priority);
   };
 
+  const getTargetUsers = async (aud: string, sf: string) => {
+    const { data: users } = await supabase
+      .from('profiles')
+      .select('id, bank_account, role, state, name, email')
+      .not('role', 'is', null);
+    if (!users) throw new Error('Could not load users');
+    if (aud === 'no_bank_account') {
+      return users.filter(u => { const ba = u.bank_account as any; return !ba?.accountNumber && !ba?.account_number; });
+    }
+    if (aud === 'by_state') {
+      return users.filter(u => (u as any).state?.toLowerCase() === sf.toLowerCase());
+    }
+    if (aud !== 'all') {
+      return users.filter(u => (u.role || '').toLowerCase() === aud);
+    }
+    return users;
+  };
+
+  const executeSend = async (params: { titleEn: string; titleAr: string; messageEn: string; messageAr: string; audience: string; stateFilter: string; priority: string; actionLink: string; sendEmail: boolean; targetUserIds: string[] }) => {
+    const { titleEn: tEn, titleAr: tAr, messageEn: mEn, messageAr: mAr, priority: pri, actionLink: al, sendEmail: se, targetUserIds } = params;
+    const titleText = tEn.trim();
+    const titleArText = tAr.trim() || titleText;
+    const messageText = mEn.trim();
+    const messageArText = mAr.trim() || messageText;
+    const notifType = pri === 'urgent' ? 'error' : pri === 'high' ? 'warning' : 'info';
+    const link = al?.trim() || null;
+    const now = new Date().toISOString();
+    const broadcastId = crypto.randomUUID();
+
+    const rows = targetUserIds.map(uid => ({
+      recipient_id: uid, user_id: uid,
+      title_en: titleText, title_ar: titleArText,
+      message_en: messageText, message_ar: messageArText,
+      priority: pri, action_url: link,
+      related_entity_id: broadcastId,
+      entity_type: 'broadcast_batch', event_type: 'broadcast',
+      status: 'pending', email_sent: false,
+      title: titleText, message: messageText, link,
+      type: notifType, is_read: false, created_at: now,
+    }));
+
+    const { error: insertError } = await supabase.from('notifications').insert(rows);
+    if (insertError) throw new Error(insertError.message);
+
+    let fcmResult: SendSummary['fcm'] | undefined;
+    try {
+      const fcmTitle = tAr.trim() ? `${titleText} | ${tAr.trim()}` : titleText;
+      const fcmBody = mAr.trim() ? `${messageText}\n${mAr.trim()}` : messageText;
+      const { data: fcmData, error: fcmError } = await supabase.functions.invoke('send-fcm-push', {
+        body: { user_ids: targetUserIds, title: fcmTitle, body: fcmBody, priority: pri, notification_type: 'broadcast', data: { type: 'broadcast', broadcast_id: broadcastId, action_url: link || '', priority: pri }, ...(link ? { action_url: link } : {}) },
+      });
+      fcmResult = fcmError ? { sent: 0, failed: 0, tokens: 0, error: fcmError.message } : { sent: fcmData?.sent ?? 0, failed: fcmData?.failed ?? 0, tokens: fcmData?.tokens_targeted ?? 0, error: fcmData?.error };
+    } catch (fcmEx: any) {
+      fcmResult = { sent: 0, failed: 0, tokens: 0, error: fcmEx?.message };
+    }
+
+    if (se) {
+      (async () => {
+        for (const uid of targetUserIds) {
+          try {
+            await NotificationTriggerService.send({ userId: uid, title: titleText, titleAr: titleArText, message: messageText, messageAr: messageArText, type: notifType as any, category: 'broadcast' as any, priority: pri as any, link: link || undefined, sendEmail: true });
+          } catch {}
+        }
+      })();
+    }
+
+    return { broadcastId, fcmResult, sent: targetUserIds.length };
+  };
+
+  // Step 1: Load users and show confirm modal
   const handleSend = async () => {
     if (!titleEn.trim() || !messageEn.trim()) {
       toast({ title: 'Missing fields / حقول مفقودة', description: 'Please fill in the English title and message.', variant: 'destructive' });
       return;
     }
+    if (audience === 'by_state' && !stateFilter) {
+      toast({ title: 'Select a state', description: 'Please choose a Sudan state to target.', variant: 'destructive' });
+      return;
+    }
     setSending(true);
-
     try {
-      const { data: users } = await supabase
-        .from('profiles')
-        .select('id, bank_account, role')
-        .not('role', 'is', null);
-
-      if (!users) throw new Error('Could not load users');
-
-      let targetUsers = users;
-      if (audience === 'no_bank_account') {
-        targetUsers = users.filter(u => {
-          const ba = u.bank_account as any;
-          return !ba?.accountNumber && !ba?.account_number;
-        });
-      } else if (audience !== 'all') {
-        targetUsers = users.filter(u => (u.role || '').toLowerCase() === audience);
-      }
-
-      if (targetUsers.length === 0) {
+      const users = await getTargetUsers(audience, stateFilter);
+      if (users.length === 0) {
         toast({ title: 'No recipients', description: 'No users match the selected audience.', variant: 'destructive' });
-        setSending(false);
         return;
       }
+      setConfirmTargetUsers(users);
+      setShowConfirmModal(true);
+    } catch (err: any) {
+      toast({ title: 'Error', description: err.message, variant: 'destructive' });
+    } finally {
+      setSending(false);
+    }
+  };
 
-      const now = new Date().toISOString();
-      const broadcastId = crypto.randomUUID();
-      const titleText = titleEn.trim();
-      const titleArText = titleAr.trim() || titleText;
-      const messageText = messageEn.trim();
-      const messageArText = messageAr.trim() || messageText;
-      const notifType = priority === 'urgent' ? 'error' : priority === 'high' ? 'warning' : 'info';
-      const link = actionLink.trim() || null;
-
-      const rows = targetUsers.map(u => ({
-        recipient_id: u.id,
-        user_id: u.id,
-        title_en: titleText,
-        title_ar: titleArText,
-        message_en: messageText,
-        message_ar: messageArText,
-        priority,
-        action_url: link,
-        related_entity_id: broadcastId,
-        entity_type: 'broadcast_batch',
-        event_type: 'broadcast',
-        status: 'pending',
-        email_sent: false,
-        title: titleText,
-        message: messageText,
-        link,
-        type: notifType,
-        is_read: false,
-        created_at: now,
-      }));
-
-      const { error: insertError } = await supabase.from('notifications').insert(rows);
-      if (insertError) throw new Error(insertError.message);
-
-      // FCM push
-      let fcmResult: SendSummary['fcm'] | undefined;
-      try {
-        const fcmTitle = titleAr.trim() ? `${titleText} | ${titleAr.trim()}` : titleText;
-        const fcmBody = messageAr.trim() ? `${messageText}\n${messageAr.trim()}` : messageText;
-        const { data: fcmData, error: fcmError } = await supabase.functions.invoke('send-fcm-push', {
-          body: {
-            user_ids: targetUsers.map(u => u.id),
-            title: fcmTitle,
-            body: fcmBody,
-            priority: priority,
-            notification_type: 'broadcast',
-            data: { type: 'broadcast', broadcast_id: broadcastId, action_url: link || '', priority },
-            ...(link ? { action_url: link } : {}),
-          },
-        });
-        if (fcmError) {
-          fcmResult = { sent: 0, failed: 0, tokens: 0, error: fcmError.message };
-        } else {
-          fcmResult = { sent: fcmData?.sent ?? 0, failed: fcmData?.failed ?? 0, tokens: fcmData?.tokens_targeted ?? 0, error: fcmData?.error };
-        }
-      } catch (fcmEx: any) {
-        fcmResult = { sent: 0, failed: 0, tokens: 0, error: fcmEx?.message };
-      }
-
-      if (sendEmail) {
-        (async () => {
-          for (const u of targetUsers) {
-            try {
-              await NotificationTriggerService.send({
-                userId: u.id,
-                title: titleText,
-                titleAr: titleArText,
-                message: messageText,
-                messageAr: messageArText,
-                type: notifType as any,
-                category: 'broadcast' as any,
-                priority: priority as any,
-                link: link || undefined,
-                sendEmail: true,
-              });
-            } catch { }
-          }
-        })();
-      }
-
-      setSendSummary({ sent: targetUsers.length, audience, titleEn: titleText, titleAr: titleArText, priority, fcm: fcmResult });
+  // Step 2: Confirmed — actually send
+  const handleConfirmedSend = async () => {
+    setSending(true);
+    setShowConfirmModal(false);
+    try {
+      const { fcmResult } = await executeSend({
+        titleEn, titleAr, messageEn, messageAr, audience, stateFilter, priority, actionLink, sendEmail,
+        targetUserIds: confirmTargetUsers.map(u => u.id),
+      });
+      setSendSummary({ sent: confirmTargetUsers.length, audience, titleEn: titleEn.trim(), titleAr: titleAr.trim() || titleEn.trim(), priority, fcm: fcmResult });
       setShowSuccessModal(true);
-      setTitleEn(''); setTitleAr('');
-      setMessageEn(''); setMessageAr('');
-      setActionLink('');
+      localStorage.removeItem(DRAFT_KEY);
+      setTitleEn(''); setTitleAr(''); setMessageEn(''); setMessageAr(''); setActionLink(''); setScheduleAt('');
+      setDraftRestored(false);
     } catch (err: any) {
       toast({ title: 'Error', description: err.message || 'Failed to send broadcast.', variant: 'destructive' });
     } finally {
       setSending(false);
     }
+  };
+
+  // Test send — only to self
+  const handleTestSend = async () => {
+    if (!titleEn.trim() || !messageEn.trim()) {
+      toast({ title: 'Missing fields', description: 'Please fill in the English title and message first.', variant: 'destructive' });
+      return;
+    }
+    if (!currentUser?.id) return;
+    setTestSending(true);
+    try {
+      await executeSend({ titleEn: `[TEST] ${titleEn}`, titleAr: titleAr ? `[TEST] ${titleAr}` : '', messageEn, messageAr, audience, stateFilter, priority, actionLink, sendEmail: false, targetUserIds: [currentUser.id] });
+      toast({ title: 'Test sent ✓', description: 'The broadcast was sent only to you. Check your notification bell.' });
+    } catch (err: any) {
+      toast({ title: 'Test send failed', description: err.message, variant: 'destructive' });
+    } finally {
+      setTestSending(false);
+    }
+  };
+
+  // Schedule — save to localStorage queue
+  const handleSchedule = () => {
+    if (!titleEn.trim() || !messageEn.trim()) {
+      toast({ title: 'Missing fields', description: 'Please fill in the English title and message.', variant: 'destructive' });
+      return;
+    }
+    if (!scheduleAt) {
+      toast({ title: 'No schedule time', description: 'Please pick a date and time to schedule.', variant: 'destructive' });
+      return;
+    }
+    if (new Date(scheduleAt) <= new Date()) {
+      toast({ title: 'Invalid time', description: 'Scheduled time must be in the future.', variant: 'destructive' });
+      return;
+    }
+    if (audience === 'by_state' && !stateFilter) {
+      toast({ title: 'Select a state', description: 'Please choose a Sudan state to target.', variant: 'destructive' });
+      return;
+    }
+    const draft = { id: crypto.randomUUID(), titleEn, titleAr, messageEn, messageAr, audience, stateFilter, priority, actionLink, sendEmail, scheduleAt };
+    const existing = scheduledDrafts;
+    const updated = [...existing, draft];
+    localStorage.setItem(SCHEDULED_KEY, JSON.stringify(updated));
+    setScheduledDrafts(updated);
+    setScheduleAt('');
+    toast({ title: 'Broadcast scheduled ✓ / تم جدولة البث', description: `Will send at ${format(new Date(scheduleAt), 'MMM dd, yyyy HH:mm')} — keep this tab open.` });
+  };
+
+  const removeScheduledDraft = (id: string) => {
+    const updated = scheduledDrafts.filter(d => d.id !== id);
+    localStorage.setItem(SCHEDULED_KEY, JSON.stringify(updated));
+    setScheduledDrafts(updated);
   };
 
   if (!isAdmin) {
@@ -591,6 +725,72 @@ export default function AdminBroadcastPage() {
               </div>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Confirmation / Preview Modal ─────────────────────────────── */}
+      <Dialog open={showConfirmModal} onOpenChange={setShowConfirmModal}>
+        <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Send className="w-5 h-5 text-violet-600" />
+              Confirm Broadcast / تأكيد الإرسال
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 pt-1">
+            {/* Notification preview */}
+            <div className={`rounded-xl border-l-4 ${getPriority(priority).border} bg-slate-50 dark:bg-slate-900 p-4 space-y-2`}>
+              <div className="flex items-start gap-3">
+                <div className="p-2 bg-violet-100 dark:bg-violet-900/40 rounded-lg shrink-0">
+                  <Megaphone className="w-4 h-4 text-violet-600 dark:text-violet-400" />
+                </div>
+                <div className="flex-1">
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <p className="font-bold text-sm">{titleEn}</p>
+                    <Badge className={`text-[10px] border-0 ${getPriority(priority).badge}`}>{priority.toUpperCase()}</Badge>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1 leading-relaxed">{messageEn}</p>
+                  {titleAr && <p className="text-sm font-semibold mt-2 text-right" dir="rtl">{titleAr}</p>}
+                  {messageAr && <p className="text-xs text-muted-foreground mt-1 text-right" dir="rtl">{messageAr}</p>}
+                  {actionLink && <p className="text-xs text-violet-500 mt-2 flex items-center gap-1"><LinkIcon className="w-3 h-3" />{actionLink}</p>}
+                </div>
+              </div>
+            </div>
+
+            {/* Recipients */}
+            <div className="rounded-xl border p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <p className="text-sm font-semibold flex items-center gap-2"><Users className="w-4 h-4 text-violet-500" />Recipients / المستلمون</p>
+                <Badge className="bg-violet-100 text-violet-700 border-0 text-base font-bold px-3">{confirmTargetUsers.length}</Badge>
+              </div>
+              <div className="text-xs text-muted-foreground">
+                {audience === 'by_state' ? `State: ${stateFilter}` : getAudience(audience).labelEn}
+                {sendEmail && <span className="ml-2 text-blue-500">· Email enabled</span>}
+              </div>
+              {/* Role breakdown */}
+              {(() => {
+                const byRole: Record<string, number> = {};
+                confirmTargetUsers.forEach(u => { byRole[u.role || 'unknown'] = (byRole[u.role || 'unknown'] || 0) + 1; });
+                return (
+                  <div className="flex flex-wrap gap-1.5">
+                    {Object.entries(byRole).map(([r, c]) => (
+                      <span key={r} className="text-[10px] bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 rounded-full px-2 py-0.5 font-medium capitalize">{r}: {c}</span>
+                    ))}
+                  </div>
+                );
+              })()}
+            </div>
+
+            <div className="flex gap-2">
+              <Button type="button" variant="outline" className="flex-1" onClick={() => setShowConfirmModal(false)}>
+                Cancel / إلغاء
+              </Button>
+              <Button type="button" className="flex-1 bg-violet-600 hover:bg-violet-700 text-white gap-2" onClick={handleConfirmedSend} disabled={sending}>
+                {sending ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                Send to {confirmTargetUsers.length} users
+              </Button>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
 
@@ -695,14 +895,14 @@ export default function AdminBroadcastPage() {
                       <span className="text-base">🇬🇧</span> Title (English) <span className="text-red-500">*</span>
                     </Label>
                     <Input value={titleEn} onChange={e => setTitleEn(e.target.value)} placeholder="Enter notification title..." maxLength={120} />
-                    <p className="text-xs text-muted-foreground text-right">{titleEn.length}/120</p>
+                    <p className={`text-xs text-right font-medium ${titleEn.length > 114 ? 'text-red-500' : titleEn.length > 96 ? 'text-amber-500' : 'text-muted-foreground'}`}>{titleEn.length}/120</p>
                   </div>
                   <div className="space-y-1.5">
                     <Label className="flex items-center gap-1.5">
                       <span className="text-base">🇸🇩</span> العنوان (عربي)
                     </Label>
                     <Input value={titleAr} onChange={e => setTitleAr(e.target.value)} placeholder="أدخل عنوان الإشعار..." dir="rtl" maxLength={120} />
-                    <p className="text-xs text-muted-foreground text-right">{titleAr.length}/120</p>
+                    <p className={`text-xs text-right font-medium ${titleAr.length > 114 ? 'text-red-500' : titleAr.length > 96 ? 'text-amber-500' : 'text-muted-foreground'}`}>{titleAr.length}/120</p>
                   </div>
                 </div>
 
@@ -713,14 +913,14 @@ export default function AdminBroadcastPage() {
                       <span className="text-base">🇬🇧</span> Message (English) <span className="text-red-500">*</span>
                     </Label>
                     <Textarea value={messageEn} onChange={e => setMessageEn(e.target.value)} placeholder="Enter your message..." rows={5} maxLength={600} />
-                    <p className="text-xs text-muted-foreground text-right">{messageEn.length}/600</p>
+                    <p className={`text-xs text-right font-medium ${messageEn.length > 570 ? 'text-red-500' : messageEn.length > 480 ? 'text-amber-500' : 'text-muted-foreground'}`}>{messageEn.length}/600</p>
                   </div>
                   <div className="space-y-1.5">
                     <Label className="flex items-center gap-1.5">
                       <span className="text-base">🇸🇩</span> الرسالة (عربي)
                     </Label>
                     <Textarea value={messageAr} onChange={e => setMessageAr(e.target.value)} placeholder="أدخل رسالتك..." rows={5} dir="rtl" maxLength={600} />
-                    <p className="text-xs text-muted-foreground text-right">{messageAr.length}/600</p>
+                    <p className={`text-xs text-right font-medium ${messageAr.length > 570 ? 'text-red-500' : messageAr.length > 480 ? 'text-amber-500' : 'text-muted-foreground'}`}>{messageAr.length}/600</p>
                   </div>
                 </div>
 
@@ -772,8 +972,26 @@ export default function AdminBroadcastPage() {
                         <Users className="w-3 h-3" />
                         {audience === 'no_bank_account'
                           ? `Up to ${userCount} users (filtered at send time)`
-                          : `~${userCount} user(s) will receive this`}
+                          : audience === 'by_state' && !stateFilter
+                            ? 'Select a state below'
+                            : `~${userCount} user(s) will receive this`}
                       </p>
+                    )}
+                    {audience === 'by_state' && (
+                      <div className="mt-2">
+                        <Select value={stateFilter} onValueChange={setStateFilter}>
+                          <SelectTrigger className="border-violet-300">
+                            <SelectValue placeholder="Select Sudan state / اختر الولاية..." />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {SUDAN_STATES.map(s => (
+                              <SelectItem key={s} value={s}>
+                                <span className="flex items-center gap-2"><MapPin className="w-3 h-3 text-violet-400" />{s}</span>
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
                     )}
                   </div>
 
@@ -817,6 +1035,44 @@ export default function AdminBroadcastPage() {
                     </div>
                     <Switch checked={requireAck} onCheckedChange={setRequireAck} />
                   </div>
+                </div>
+
+                {/* Schedule */}
+                <div className="rounded-xl border bg-muted/30 p-3.5 space-y-2">
+                  <div className="flex items-center gap-2">
+                    <CalendarClock className="w-4 h-4 text-violet-500" />
+                    <p className="text-sm font-medium">Schedule Broadcast / جدولة الإرسال</p>
+                    <span className="text-xs text-muted-foreground">(optional)</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground">Pick a future date & time — the broadcast fires automatically while this tab is open.</p>
+                  <div className="flex gap-2">
+                    <input
+                      type="datetime-local"
+                      value={scheduleAt}
+                      onChange={e => setScheduleAt(e.target.value)}
+                      min={new Date(Date.now() + 60000).toISOString().slice(0, 16)}
+                      className="flex-1 rounded-lg border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
+                    />
+                    {scheduleAt && (
+                      <Button type="button" variant="outline" size="sm" onClick={handleSchedule} className="gap-1.5 shrink-0 border-violet-300 text-violet-700 hover:bg-violet-50">
+                        <CalendarClock className="w-4 h-4" /> Queue
+                      </Button>
+                    )}
+                  </div>
+                  {scheduledDrafts.length > 0 && (
+                    <div className="space-y-1.5 mt-2 pt-2 border-t">
+                      <p className="text-xs font-semibold text-violet-600">Scheduled ({scheduledDrafts.length})</p>
+                      {scheduledDrafts.map(d => (
+                        <div key={d.id} className="flex items-center justify-between gap-2 text-xs bg-violet-50 dark:bg-violet-900/20 rounded-lg px-3 py-2">
+                          <span className="font-medium truncate flex-1">{d.titleEn}</span>
+                          <span className="text-muted-foreground shrink-0">{format(new Date(d.scheduleAt), 'MMM dd HH:mm')}</span>
+                          <button type="button" onClick={() => removeScheduledDraft(d.id)} className="text-red-400 hover:text-red-600 transition-colors shrink-0">
+                            <Trash2 className="w-3 h-3" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -868,27 +1124,53 @@ export default function AdminBroadcastPage() {
               </Card>
             )}
 
-            {/* Send Button */}
-            <button
-              type="button"
-              onClick={handleSend}
-              disabled={sending || !titleEn.trim() || !messageEn.trim()}
-              className={`w-full h-14 rounded-xl text-white font-bold text-base flex items-center justify-center gap-3 transition-all shadow-lg ${
-                sending || !titleEn.trim() || !messageEn.trim()
-                  ? 'bg-violet-400 cursor-not-allowed opacity-70'
-                  : 'bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-700 hover:to-purple-700 cursor-pointer shadow-violet-500/30'
-              }`}
-            >
-              {sending ? (
-                <><RefreshCw className="w-5 h-5 animate-spin" /> Sending broadcast... / جارٍ الإرسال</>
-              ) : (
-                <>
-                  <Send className="w-5 h-5" />
-                  Send to {selectedAudience.labelEn} · أرسل إلى {selectedAudience.labelAr}
-                  {userCount !== null && <span className="ml-1 bg-white/20 rounded-full px-2 py-0.5 text-sm font-normal">{userCount}</span>}
-                </>
-              )}
-            </button>
+            {/* Draft restored banner */}
+            {draftRestored && (
+              <div className="flex items-center justify-between gap-3 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 px-4 py-3">
+                <div className="flex items-center gap-2 text-amber-700 dark:text-amber-400 text-sm">
+                  <Save className="w-4 h-4 shrink-0" />
+                  <span>Draft restored from your last session / تم استعادة المسودة من جلستك السابقة</span>
+                </div>
+                <button type="button" onClick={clearDraft} className="flex items-center gap-1 text-xs text-amber-600 hover:text-red-600 font-semibold transition-colors shrink-0">
+                  <Trash2 className="w-3.5 h-3.5" /> Discard
+                </button>
+              </div>
+            )}
+
+            {/* Send actions */}
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={handleTestSend}
+                disabled={testSending || !titleEn.trim() || !messageEn.trim()}
+                className="flex items-center gap-2 px-5 h-14 rounded-xl font-semibold text-sm border-2 border-violet-300 text-violet-700 dark:text-violet-300 hover:bg-violet-50 dark:hover:bg-violet-900/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
+                title="Send only to yourself to preview before going live"
+              >
+                {testSending ? <RefreshCw className="w-4 h-4 animate-spin" /> : <FlaskConical className="w-4 h-4" />}
+                <span className="hidden sm:inline">Test Send</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleSend}
+                disabled={sending || !titleEn.trim() || !messageEn.trim()}
+                className={`flex-1 h-14 rounded-xl text-white font-bold text-base flex items-center justify-center gap-3 transition-all shadow-lg ${
+                  sending || !titleEn.trim() || !messageEn.trim()
+                    ? 'bg-violet-400 cursor-not-allowed opacity-70'
+                    : 'bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-700 hover:to-purple-700 cursor-pointer shadow-violet-500/30'
+                }`}
+              >
+                {sending ? (
+                  <><RefreshCw className="w-5 h-5 animate-spin" /> Loading... / جارٍ التحميل</>
+                ) : (
+                  <>
+                    <Send className="w-5 h-5" />
+                    Review & Send · مراجعة وإرسال
+                    {userCount !== null && <span className="ml-1 bg-white/20 rounded-full px-2 py-0.5 text-sm font-normal">{userCount}</span>}
+                  </>
+                )}
+              </button>
+            </div>
 
           </div>
         )}
