@@ -2827,8 +2827,32 @@ class _WalletScreenState extends State<WalletScreen> {
     final paidAt = cost['paid_at'] as String?;
     final createdAt = cost['created_at'] as String?;
     final description = cost['description'] as String?;
+    final vendor = cost['vendor'] as String?;
+    final referenceNumber = cost['reference_number'] as String?;
+    final expenseDate = cost['expense_date'] as String?;
+    final rejectionReason = cost['rejection_reason'] as String?;
+    final tier1Status = (cost['tier1_status'] as String? ?? '').toLowerCase();
+    final tier2Status = (cost['tier2_status'] as String? ?? '').toLowerCase();
+    final tier3Status = (cost['tier3_status'] as String? ?? '').toLowerCase();
     final costId = (cost['id'] as String? ?? '').substring(0, 8).toUpperCase();
     final displayDate = paidAt ?? createdAt;
+
+    // Determine which approval tier is currently pending
+    String tierPendingLabel;
+    String tierPendingLabelAr;
+    if (tier1Status.isEmpty || tier1Status == 'pending') {
+      tierPendingLabel = 'Awaiting Tier 1 (Supervisor) approval';
+      tierPendingLabelAr = 'بانتظار موافقة المستوى الأول (المشرف)';
+    } else if (tier1Status == 'approved' && (tier2Status.isEmpty || tier2Status == 'pending')) {
+      tierPendingLabel = 'Awaiting Tier 2 (Admin) approval';
+      tierPendingLabelAr = 'بانتظار موافقة المستوى الثاني (الإدارة)';
+    } else if (tier2Status == 'approved' && (tier3Status.isEmpty || tier3Status == 'pending')) {
+      tierPendingLabel = 'Awaiting Tier 3 (Finance) approval';
+      tierPendingLabelAr = 'بانتظار موافقة المستوى الثالث (المالية)';
+    } else {
+      tierPendingLabel = 'Under review by management';
+      tierPendingLabelAr = 'قيد المراجعة من الإدارة';
+    }
 
     // Status appearance config
     Color statusBg, statusBorder, statusText;
@@ -2991,6 +3015,42 @@ class _WalletScreenState extends State<WalletScreen> {
                 ),
               ],
             ),
+
+            // ── Extra detail rows ──────────────────────────────────────
+            if (expenseDate != null ||
+                (vendor != null && vendor.isNotEmpty) ||
+                (referenceNumber != null && referenceNumber.isNotEmpty)) ...[
+              const SizedBox(height: 8),
+              const Divider(height: 1, thickness: 0.5),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 12,
+                runSpacing: 6,
+                children: [
+                  if (expenseDate != null)
+                    _costDetailChip(
+                      Icons.calendar_today_outlined,
+                      widget.isArabic ? 'تاريخ الصرف' : 'Expense Date',
+                      DateFormat('dd MMM yyyy').format(
+                        DateTime.tryParse(expenseDate) ?? DateTime.now(),
+                      ),
+                    ),
+                  if (vendor != null && vendor.isNotEmpty)
+                    _costDetailChip(
+                      Icons.store_outlined,
+                      widget.isArabic ? 'المورد' : 'Vendor',
+                      vendor,
+                    ),
+                  if (referenceNumber != null && referenceNumber.isNotEmpty)
+                    _costDetailChip(
+                      Icons.tag_outlined,
+                      widget.isArabic ? 'المرجع' : 'Ref No.',
+                      referenceNumber,
+                    ),
+                ],
+              ),
+            ],
+
             const SizedBox(height: 10),
 
             // Receipt status
@@ -3108,23 +3168,45 @@ class _WalletScreenState extends State<WalletScreen> {
                   border: Border.all(color: statusBorder),
                 ),
                 child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Icon(statusIcon, color: statusText, size: 14),
+                    Padding(
+                      padding: const EdgeInsets.only(top: 2),
+                      child: Icon(statusIcon, color: statusText, size: 14),
+                    ),
                     const SizedBox(width: 6),
                     Expanded(
-                      child: Text(
-                        status == 'rejected'
-                            ? (widget.isArabic ? 'تم رفض هذا التقديم' : 'This submission was rejected')
-                            : status == 'approved'
-                                ? (widget.isArabic ? 'معتمد — بانتظار الصرف من المالية' : 'Approved — awaiting finance disbursement')
-                                : status == 'tier1_approved'
-                                    ? (widget.isArabic ? 'موافقة م١ — بانتظار الاعتماد النهائي' : 'Tier 1 approved — awaiting final approval')
-                                    : (widget.isArabic ? 'قيد المراجعة من الإدارة' : 'Under review by management'),
-                        style: GoogleFonts.poppins(
-                          fontSize: 11.5,
-                          fontWeight: FontWeight.w600,
-                          color: statusText,
-                        ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            status == 'rejected'
+                                ? (widget.isArabic ? 'تم رفض هذا التقديم' : 'This submission was rejected')
+                                : status == 'approved'
+                                    ? (widget.isArabic ? 'معتمد — بانتظار الصرف من المالية' : 'Approved — awaiting finance disbursement')
+                                    : status == 'tier1_approved'
+                                        ? (widget.isArabic ? 'موافقة م١ — بانتظار الاعتماد النهائي' : 'T1 Approved — awaiting final approval')
+                                        : (widget.isArabic ? tierPendingLabelAr : tierPendingLabel),
+                            style: GoogleFonts.poppins(
+                              fontSize: 11.5,
+                              fontWeight: FontWeight.w600,
+                              color: statusText,
+                            ),
+                          ),
+                          // Show rejection reason if available
+                          if (status == 'rejected' &&
+                              rejectionReason != null &&
+                              rejectionReason.isNotEmpty) ...[
+                            const SizedBox(height: 4),
+                            Text(
+                              '${widget.isArabic ? 'السبب' : 'Reason'}: $rejectionReason',
+                              style: GoogleFonts.poppins(
+                                fontSize: 11,
+                                color: statusText,
+                              ),
+                            ),
+                          ],
+                        ],
                       ),
                     ),
                   ],
@@ -3134,6 +3216,31 @@ class _WalletScreenState extends State<WalletScreen> {
           ],
         ),
       ),
+    );
+  }
+
+  Widget _costDetailChip(IconData icon, String label, String value) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 12, color: Colors.grey.shade500),
+        const SizedBox(width: 4),
+        Text(
+          '$label: ',
+          style: GoogleFonts.poppins(
+            fontSize: 10.5,
+            color: Colors.grey.shade500,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        Text(
+          value,
+          style: GoogleFonts.poppins(
+            fontSize: 10.5,
+            color: Colors.grey.shade700,
+          ),
+        ),
+      ],
     );
   }
 
