@@ -28,25 +28,28 @@ class _RequestAdvanceDialogState extends State<RequestAdvanceDialog> {
   String _paymentType = 'full_advance';
   bool _isSubmitting = false;
 
-  // Installment plan
   List<Map<String, dynamic>> _installments = [];
 
   @override
   void initState() {
     super.initState();
-    // Only pre-fill when a real budget exists; otherwise leave empty
     if (widget.transportationBudget > 0) {
-      _amountController.text = widget.transportationBudget.toStringAsFixed(0);
+      _amountController.text =
+          widget.transportationBudget.toStringAsFixed(0);
     }
     _installments = [
       {
-        'amount': widget.transportationBudget > 0 ? widget.transportationBudget * 0.6 : 0.0,
+        'amount': widget.transportationBudget > 0
+            ? widget.transportationBudget * 0.6
+            : 0.0,
         'stage': 'before_travel',
         'description': 'Initial down-payment',
         'paid': false,
       },
       {
-        'amount': widget.transportationBudget > 0 ? widget.transportationBudget * 0.4 : 0.0,
+        'amount': widget.transportationBudget > 0
+            ? widget.transportationBudget * 0.4
+            : 0.0,
         'stage': 'after_completion',
         'description': 'Final payment',
         'paid': false,
@@ -61,15 +64,19 @@ class _RequestAdvanceDialogState extends State<RequestAdvanceDialog> {
     super.dispose();
   }
 
-  double get _requestedAmount {
-    return double.tryParse(_amountController.text) ?? 0.0;
-  }
+  double get _requestedAmount =>
+      double.tryParse(_amountController.text) ?? 0.0;
 
-  double get _installmentTotal {
-    return _installments.fold<double>(
-      0.0,
-      (sum, inst) => sum + (inst['amount'] as num? ?? 0).toDouble(),
-    );
+  double get _installmentTotal => _installments.fold<double>(
+        0.0,
+        (sum, inst) => sum + (inst['amount'] as num? ?? 0).toDouble(),
+      );
+
+  void _setQuickAmount(double pct) {
+    if (widget.transportationBudget <= 0) return;
+    final val = (widget.transportationBudget * pct).floorToDouble();
+    _amountController.text = val.toStringAsFixed(0);
+    setState(() {});
   }
 
   void _addInstallment() {
@@ -84,24 +91,22 @@ class _RequestAdvanceDialogState extends State<RequestAdvanceDialog> {
   }
 
   void _removeInstallment(int index) {
-    setState(() {
-      _installments.removeAt(index);
-    });
+    setState(() => _installments.removeAt(index));
   }
 
   void _updateInstallment(int index, String field, dynamic value) {
-    setState(() {
-      _installments[index][field] = value;
-    });
+    setState(() => _installments[index][field] = value);
   }
 
-  Future<void> _submit() async {
-    if (!_formKey.currentState!.validate()) return;
-
+  Future<void> _submit(bool isArabic) async {
     if (_justificationController.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please provide justification for this request'),
+        SnackBar(
+          content: Text(
+            isArabic
+                ? 'يرجى إدخال مبرر للطلب'
+                : 'Please provide justification for this request',
+          ),
           backgroundColor: Colors.red,
         ),
       );
@@ -110,20 +115,26 @@ class _RequestAdvanceDialogState extends State<RequestAdvanceDialog> {
 
     if (_requestedAmount <= 0) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Requested amount must be greater than zero'),
+        SnackBar(
+          content: Text(
+            isArabic
+                ? 'يجب أن يكون المبلغ أكبر من صفر'
+                : 'Requested amount must be greater than zero',
+          ),
           backgroundColor: Colors.red,
         ),
       );
       return;
     }
 
-    // Only enforce the transport budget cap when a real budget exists
-    if (widget.transportationBudget > 0 && _requestedAmount > widget.transportationBudget) {
+    if (widget.transportationBudget > 0 &&
+        _requestedAmount > widget.transportationBudget) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            'Requested amount (${_requestedAmount.toStringAsFixed(0)} SDG) cannot exceed transportation budget (${widget.transportationBudget.toStringAsFixed(0)} SDG)',
+            isArabic
+                ? 'المبلغ يتجاوز الميزانية المحددة (${widget.transportationBudget.toStringAsFixed(0)} SDG)'
+                : 'Amount cannot exceed budget (${widget.transportationBudget.toStringAsFixed(0)} SDG)',
           ),
           backgroundColor: Colors.red,
         ),
@@ -131,39 +142,36 @@ class _RequestAdvanceDialogState extends State<RequestAdvanceDialog> {
       return;
     }
 
-    if (_paymentType == 'installments') {
-      if (_installmentTotal != _requestedAmount) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              'Installment total (${_installmentTotal.toStringAsFixed(0)} SDG) must equal requested amount (${_requestedAmount.toStringAsFixed(0)} SDG)',
-            ),
-            backgroundColor: Colors.red,
+    if (_paymentType == 'installments' &&
+        _installmentTotal != _requestedAmount) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            isArabic
+                ? 'مجموع الأقساط (${_installmentTotal.toStringAsFixed(0)} SDG) يجب أن يساوي المبلغ المطلوب'
+                : 'Installment total (${_installmentTotal.toStringAsFixed(0)} SDG) must equal requested amount',
           ),
-        );
-        return;
-      }
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
     }
 
     setState(() => _isSubmitting = true);
-
     try {
       Navigator.of(context).pop({
         'success': true,
         'requestedAmount': _requestedAmount,
         'paymentType': _paymentType,
         'justification': _justificationController.text.trim(),
-        'installmentPlan': _paymentType == 'installments' ? _installments : [],
+        'installmentPlan':
+            _paymentType == 'installments' ? _installments : [],
       });
     } catch (e) {
-      debugPrint('Error submitting advance request: $e');
       if (mounted) {
         setState(() => _isSubmitting = false);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error: ${e.toString()}'),
-            backgroundColor: Colors.red,
-          ),
+          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
         );
       }
     }
@@ -171,279 +179,430 @@ class _RequestAdvanceDialogState extends State<RequestAdvanceDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final isArabic =
+        Localizations.localeOf(context).languageCode == 'ar';
     final siteName =
         widget.site['site_name'] ?? widget.site['siteName'] ?? 'Unknown Site';
+    final siteCode =
+        widget.site['site_code'] ?? widget.site['siteCode'] ?? '';
+    final state = widget.site['state'] ?? '';
+    final locality = widget.site['locality'] ?? '';
+    final budget = widget.transportationBudget;
+    final fillPct =
+        budget > 0 ? (_requestedAmount / budget).clamp(0.0, 1.0) : 0.0;
 
     return Dialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      insetPadding:
+          const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+      backgroundColor: Colors.transparent,
       child: Container(
-        constraints: const BoxConstraints(maxHeight: 600),
+        constraints: const BoxConstraints(maxHeight: 680),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(24),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.18),
+              blurRadius: 32,
+              offset: const Offset(0, 12),
+            ),
+          ],
+        ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Header
+            // ── Gradient header ─────────────────────────────────────────
             Container(
-              padding: const EdgeInsets.all(20),
               decoration: const BoxDecoration(
-                color: AppColors.primaryBlue,
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [Color(0xFF7C3AED), Color(0xFF5B21B6)],
+                ),
                 borderRadius: BorderRadius.only(
-                  topLeft: Radius.circular(16),
-                  topRight: Radius.circular(16),
+                  topLeft: Radius.circular(24),
+                  topRight: Radius.circular(24),
                 ),
               ),
+              padding: const EdgeInsets.fromLTRB(20, 20, 16, 20),
               child: Row(
                 children: [
-                  const Icon(Icons.payment, color: Colors.white, size: 24),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      'Request Advance',
-                      style: GoogleFonts.poppins(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                      ),
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.2),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.account_balance_wallet_rounded,
+                      color: Colors.white,
+                      size: 22,
                     ),
                   ),
-                  IconButton(
-                    icon: const Icon(Icons.close, color: Colors.white),
-                    onPressed: () => Navigator.of(context).pop(),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          isArabic ? 'طلب سلفة' : 'Request Advance',
+                          style: GoogleFonts.poppins(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.white,
+                          ),
+                        ),
+                        Text(
+                          'طلب سلفة | Request Advance',
+                          style: GoogleFonts.poppins(
+                            fontSize: 11,
+                            color: Colors.white70,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  GestureDetector(
+                    onTap: () => Navigator.of(context).pop(),
+                    child: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.2),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.close,
+                        color: Colors.white,
+                        size: 18,
+                      ),
+                    ),
                   ),
                 ],
               ),
             ),
-            // Content
+
+            // ── Site info strip ──────────────────────────────────────────
+            Container(
+              color: const Color(0xFFF5F0FF),
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+              child: Row(
+                children: [
+                  Expanded(
+                    flex: 2,
+                    child: _infoTile(
+                      isArabic ? 'الموقع' : 'Site',
+                      siteName,
+                      siteCode.isNotEmpty ? siteCode : null,
+                      Icons.location_on_outlined,
+                      const Color(0xFF7C3AED),
+                    ),
+                  ),
+                  Container(
+                    width: 1,
+                    height: 44,
+                    color: Colors.purple[100],
+                  ),
+                  Expanded(
+                    child: _infoTile(
+                      isArabic ? 'الميزانية' : 'Budget',
+                      budget > 0
+                          ? '${budget.toStringAsFixed(0)} SDG'
+                          : (isArabic ? 'غير محدد' : 'Open'),
+                      null,
+                      Icons.payments_outlined,
+                      Colors.green,
+                    ),
+                  ),
+                  if (widget.hubName != null) ...[
+                    Container(
+                      width: 1,
+                      height: 44,
+                      color: Colors.purple[100],
+                    ),
+                    Expanded(
+                      child: _infoTile(
+                        isArabic ? 'المحور' : 'Hub',
+                        widget.hubName!,
+                        null,
+                        Icons.hub_outlined,
+                        Colors.orange,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+
+            // ── Form body ────────────────────────────────────────────────
             Expanded(
               child: Form(
                 key: _formKey,
                 child: SingleChildScrollView(
-                  padding: const EdgeInsets.all(20),
+                  padding: const EdgeInsets.fromLTRB(20, 18, 20, 0),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Site Info Card
-                      Container(
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: AppColors.backgroundGray,
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Column(
-                          children: [
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        'Site Name',
-                                        style: GoogleFonts.poppins(
-                                          fontSize: 12,
-                                          color: AppColors.textLight,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 4),
-                                      Text(
-                                        siteName,
-                                        style: GoogleFonts.poppins(
-                                          fontSize: 14,
-                                          fontWeight: FontWeight.w600,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
+                      // Location row
+                      if (state.isNotEmpty || locality.isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 16),
+                          child: Row(
+                            children: [
+                              const Icon(
+                                Icons.map_outlined,
+                                size: 14,
+                                color: Color(0xFF7C3AED),
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                [locality, state]
+                                    .where((s) => s.isNotEmpty)
+                                    .join(', '),
+                                style: GoogleFonts.poppins(
+                                  fontSize: 12,
+                                  color: Colors.grey.shade600,
                                 ),
-                                Column(
-                                  crossAxisAlignment: CrossAxisAlignment.end,
-                                  children: [
-                                    Text(
-                                      'Transport Budget',
-                                      style: GoogleFonts.poppins(
-                                        fontSize: 12,
-                                        color: AppColors.textLight,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      widget.transportationBudget > 0
-                                          ? '${widget.transportationBudget.toStringAsFixed(0)} SDG'
-                                          : 'No preset budget',
-                                      style: GoogleFonts.poppins(
-                                        fontSize: 16,
-                                        fontWeight: FontWeight.bold,
-                                        color: widget.transportationBudget > 0
-                                            ? AppColors.primaryBlue
-                                            : Colors.grey,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ],
-                            ),
-                            if (widget.hubName != null) ...[
-                              const Divider(height: 24),
-                              Row(
-                                children: [
-                                  Text(
-                                    'Hub: ',
-                                    style: GoogleFonts.poppins(
-                                      fontSize: 12,
-                                      color: AppColors.textLight,
-                                    ),
-                                  ),
-                                  Text(
-                                    widget.hubName!,
-                                    style: GoogleFonts.poppins(
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                ],
                               ),
                             ],
+                          ),
+                        ),
+
+                      // Quick-select %
+                      if (budget > 0) ...[
+                        Row(
+                          children: [
+                            Text(
+                              isArabic ? 'اختيار سريع:' : 'Quick select:',
+                              style: GoogleFonts.poppins(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.grey.shade500,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            ...[
+                              ('25%', 0.25),
+                              ('50%', 0.50),
+                              ('75%', 0.75),
+                              (isArabic ? 'الكل' : 'Max', 1.0),
+                            ].map((entry) {
+                              return Padding(
+                                padding: const EdgeInsets.only(right: 6),
+                                child: GestureDetector(
+                                  onTap: () => _setQuickAmount(entry.$2),
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 10,
+                                      vertical: 5,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: const Color(
+                                        0xFF7C3AED,
+                                      ).withValues(alpha: 0.08),
+                                      borderRadius: BorderRadius.circular(20),
+                                      border: Border.all(
+                                        color: const Color(
+                                          0xFF7C3AED,
+                                        ).withValues(alpha: 0.3),
+                                      ),
+                                    ),
+                                    child: Text(
+                                      entry.$1,
+                                      style: GoogleFonts.poppins(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w700,
+                                        color: const Color(0xFF7C3AED),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              );
+                            }),
                           ],
                         ),
-                      ),
-                      const SizedBox(height: 20),
+                        const SizedBox(height: 12),
+                      ],
 
-                      // Requested Amount
+                      // Amount label
                       Text(
-                        'Requested Amount (SDG) *',
+                        isArabic
+                            ? 'المبلغ المطلوب (SDG) *'
+                            : 'Requested Amount (SDG) *',
                         style: GoogleFonts.poppins(
-                          fontSize: 14,
+                          fontSize: 13,
                           fontWeight: FontWeight.w600,
                         ),
                       ),
                       const SizedBox(height: 8),
+
+                      // Amount input
                       TextFormField(
                         controller: _amountController,
                         keyboardType: TextInputType.number,
+                        style: GoogleFonts.poppins(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w700,
+                        ),
                         decoration: InputDecoration(
-                          hintText: 'Enter amount',
+                          hintText: isArabic ? 'أدخل المبلغ' : 'Enter amount',
                           border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
+                            borderRadius: BorderRadius.circular(14),
+                            borderSide: BorderSide(
+                              color: Colors.grey.shade300,
+                            ),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(14),
+                            borderSide: BorderSide(
+                              color: Colors.grey.shade300,
+                            ),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(14),
+                            borderSide: const BorderSide(
+                              color: Color(0xFF7C3AED),
+                              width: 2,
+                            ),
                           ),
                           filled: true,
                           fillColor: Colors.white,
-                          errorText: (widget.transportationBudget > 0 && _requestedAmount > widget.transportationBudget)
-                              ? 'Amount exceeds budget by ${(_requestedAmount - widget.transportationBudget).toStringAsFixed(0)} SDG'
-                              : _requestedAmount <= 0
-                                  ? 'Amount must be greater than zero'
-                                  : null,
                           suffixText: 'SDG',
+                          suffixStyle: GoogleFonts.poppins(
+                            color: Colors.grey.shade500,
+                            fontWeight: FontWeight.w600,
+                          ),
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 16,
+                          ),
                         ),
+                        onChanged: (_) => setState(() {}),
                         validator: (value) {
                           final amount = double.tryParse(value ?? '') ?? 0;
                           if (amount <= 0) {
-                            return 'Amount must be greater than zero';
+                            return isArabic
+                                ? 'يجب أن يكون المبلغ أكبر من صفر'
+                                : 'Amount must be greater than zero';
                           }
-                          if (widget.transportationBudget > 0 && amount > widget.transportationBudget) {
-                            return 'Amount cannot exceed ${widget.transportationBudget.toStringAsFixed(0)} SDG';
+                          if (budget > 0 && amount > budget) {
+                            return isArabic
+                                ? 'المبلغ يتجاوز الميزانية (${budget.toStringAsFixed(0)} SDG)'
+                                : 'Cannot exceed ${budget.toStringAsFixed(0)} SDG';
                           }
                           return null;
                         },
                       ),
                       const SizedBox(height: 8),
+
+                      // Budget cap hint + progress bar
                       Text(
-                        widget.transportationBudget > 0
-                            ? 'Maximum: ${widget.transportationBudget.toStringAsFixed(0)} SDG (total transportation budget)'
-                            : 'Enter the transport advance amount you need',
+                        budget > 0
+                            ? (isArabic
+                                ? 'الحد الأقصى: ${budget.toStringAsFixed(0)} SDG (إجمالي الميزانية)'
+                                : 'Maximum: ${budget.toStringAsFixed(0)} SDG (total budget)')
+                            : (isArabic
+                                ? 'أدخل مبلغ السلفة المطلوبة'
+                                : 'Enter the advance amount you need'),
                         style: GoogleFonts.poppins(
-                          fontSize: 12,
-                          color: AppColors.textLight,
+                          fontSize: 11.5,
+                          color: Colors.grey.shade500,
                         ),
                       ),
+
+                      if (budget > 0 && _requestedAmount > 0) ...[
+                        const SizedBox(height: 8),
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(4),
+                          child: LinearProgressIndicator(
+                            value: fillPct,
+                            minHeight: 6,
+                            backgroundColor: Colors.grey.shade200,
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                              fillPct > 1.0
+                                  ? Colors.red
+                                  : const Color(0xFF7C3AED),
+                            ),
+                          ),
+                        ),
+                      ],
                       const SizedBox(height: 20),
 
                       // Payment Type
                       Text(
-                        'Payment Type *',
+                        isArabic ? 'نوع الدفع *' : 'Payment Type *',
                         style: GoogleFonts.poppins(
-                          fontSize: 14,
+                          fontSize: 13,
                           fontWeight: FontWeight.w600,
                         ),
                       ),
-                      const SizedBox(height: 8),
+                      const SizedBox(height: 10),
                       Row(
                         children: [
                           Expanded(
-                            child: RadioListTile<String>(
-                              title: Text(
-                                'Full Advance',
-                                style: GoogleFonts.poppins(fontSize: 13),
-                              ),
-                              subtitle: Text(
-                                'Receive entire amount upfront',
-                                style: GoogleFonts.poppins(
-                                  fontSize: 11,
-                                  color: AppColors.textLight,
-                                ),
-                              ),
+                            child: _paymentTypeCard(
+                              label: isArabic ? 'سلفة كاملة' : 'Full Advance',
+                              sublabel: isArabic
+                                  ? 'استلام المبلغ كاملاً'
+                                  : 'Receive entire amount',
+                              icon: Icons.payments_rounded,
                               value: 'full_advance',
-                              groupValue: _paymentType,
-                              onChanged: (value) {
-                                setState(() =>
-                                    _paymentType = value ?? 'full_advance');
-                              },
-                              contentPadding: EdgeInsets.zero,
+                              isArabic: isArabic,
                             ),
                           ),
+                          const SizedBox(width: 10),
                           Expanded(
-                            child: RadioListTile<String>(
-                              title: Text(
-                                'Installments',
-                                style: GoogleFonts.poppins(fontSize: 13),
-                              ),
-                              subtitle: Text(
-                                'Receive payment in stages',
-                                style: GoogleFonts.poppins(
-                                  fontSize: 11,
-                                  color: AppColors.textLight,
-                                ),
-                              ),
+                            child: _paymentTypeCard(
+                              label: isArabic ? 'أقساط' : 'Installments',
+                              sublabel: isArabic
+                                  ? 'دفعات متعددة'
+                                  : 'Receive in stages',
+                              icon: Icons.schedule_rounded,
                               value: 'installments',
-                              groupValue: _paymentType,
-                              onChanged: (value) {
-                                setState(() =>
-                                    _paymentType = value ?? 'installments');
-                              },
-                              contentPadding: EdgeInsets.zero,
+                              isArabic: isArabic,
                             ),
                           ),
                         ],
                       ),
 
-                      // Installment Plan
+                      // Installment plan
                       if (_paymentType == 'installments') ...[
                         const SizedBox(height: 20),
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
                             Text(
-                              'Installment Plan',
+                              isArabic ? 'خطة الأقساط' : 'Installment Plan',
                               style: GoogleFonts.poppins(
-                                fontSize: 14,
+                                fontSize: 13,
                                 fontWeight: FontWeight.w600,
                               ),
                             ),
                             TextButton.icon(
                               onPressed: _addInstallment,
-                              icon: const Icon(Icons.add, size: 18),
-                              label: const Text('Add Installment'),
+                              icon: const Icon(Icons.add, size: 16),
+                              label: Text(
+                                isArabic ? 'إضافة قسط' : 'Add',
+                                style: GoogleFonts.poppins(fontSize: 12),
+                              ),
+                              style: TextButton.styleFrom(
+                                foregroundColor: const Color(0xFF7C3AED),
+                              ),
                             ),
                           ],
                         ),
-                        const SizedBox(height: 12),
+                        const SizedBox(height: 8),
                         ...List.generate(_installments.length, (index) {
                           return Container(
-                            margin: const EdgeInsets.only(bottom: 12),
-                            padding: const EdgeInsets.all(16),
+                            margin: const EdgeInsets.only(bottom: 10),
+                            padding: const EdgeInsets.all(14),
                             decoration: BoxDecoration(
-                              border:
-                                  Border.all(color: AppColors.backgroundGray),
+                              border: Border.all(
+                                color: const Color(0xFF7C3AED).withValues(
+                                  alpha: 0.2,
+                                ),
+                              ),
                               borderRadius: BorderRadius.circular(12),
+                              color: const Color(0xFFF5F0FF),
                             ),
                             child: Column(
                               children: [
@@ -452,33 +611,39 @@ class _RequestAdvanceDialogState extends State<RequestAdvanceDialog> {
                                       MainAxisAlignment.spaceBetween,
                                   children: [
                                     Text(
-                                      'Installment ${index + 1}',
+                                      '${isArabic ? 'القسط' : 'Installment'} ${index + 1}',
                                       style: GoogleFonts.poppins(
-                                        fontSize: 14,
+                                        fontSize: 13,
                                         fontWeight: FontWeight.w600,
                                       ),
                                     ),
                                     if (_installments.length > 1)
-                                      IconButton(
-                                        icon: const Icon(Icons.delete,
-                                            color: Colors.red, size: 20),
-                                        onPressed: () =>
+                                      GestureDetector(
+                                        onTap: () =>
                                             _removeInstallment(index),
+                                        child: const Icon(
+                                          Icons.remove_circle_outline,
+                                          color: Colors.red,
+                                          size: 20,
+                                        ),
                                       ),
                                   ],
                                 ),
-                                const SizedBox(height: 12),
+                                const SizedBox(height: 10),
                                 Row(
                                   children: [
                                     Expanded(
                                       child: TextFormField(
-                                        initialValue: (_installments[index]
-                                                    ['amount'] as num?)
-                                                ?.toStringAsFixed(0) ??
-                                            '0',
+                                        initialValue:
+                                            (_installments[index]['amount']
+                                                        as num?)
+                                                    ?.toStringAsFixed(0) ??
+                                                '0',
                                         keyboardType: TextInputType.number,
                                         decoration: InputDecoration(
-                                          labelText: 'Amount (SDG)',
+                                          labelText: isArabic
+                                              ? 'المبلغ (SDG)'
+                                              : 'Amount (SDG)',
                                           border: OutlineInputBorder(
                                             borderRadius:
                                                 BorderRadius.circular(8),
@@ -487,24 +652,24 @@ class _RequestAdvanceDialogState extends State<RequestAdvanceDialog> {
                                           fillColor: Colors.white,
                                           isDense: true,
                                         ),
-                                        onChanged: (value) {
-                                          _updateInstallment(
-                                            index,
-                                            'amount',
-                                            double.tryParse(value) ?? 0.0,
-                                          );
-                                        },
+                                        onChanged: (v) => _updateInstallment(
+                                          index,
+                                          'amount',
+                                          double.tryParse(v) ?? 0.0,
+                                        ),
                                       ),
                                     ),
                                     const SizedBox(width: 8),
                                     Expanded(
                                       child: TextFormField(
-                                        initialValue: _installments[index]
-                                                ['stage'] as String? ??
-                                            '',
+                                        initialValue:
+                                            _installments[index]['stage']
+                                                    as String? ??
+                                                '',
                                         decoration: InputDecoration(
-                                          labelText: 'Stage',
-                                          hintText: 'e.g., before_travel',
+                                          labelText:
+                                              isArabic ? 'المرحلة' : 'Stage',
+                                          hintText: 'e.g. before_travel',
                                           border: OutlineInputBorder(
                                             borderRadius:
                                                 BorderRadius.circular(8),
@@ -513,22 +678,24 @@ class _RequestAdvanceDialogState extends State<RequestAdvanceDialog> {
                                           fillColor: Colors.white,
                                           isDense: true,
                                         ),
-                                        onChanged: (value) {
-                                          _updateInstallment(
-                                              index, 'stage', value);
-                                        },
+                                        onChanged: (v) => _updateInstallment(
+                                            index, 'stage', v),
                                       ),
                                     ),
                                   ],
                                 ),
                                 const SizedBox(height: 8),
                                 TextFormField(
-                                  initialValue: _installments[index]
-                                          ['description'] as String? ??
-                                      '',
+                                  initialValue:
+                                      _installments[index]['description']
+                                              as String? ??
+                                          '',
                                   decoration: InputDecoration(
-                                    labelText: 'Description',
-                                    hintText: 'Describe this payment stage',
+                                    labelText:
+                                        isArabic ? 'الوصف' : 'Description',
+                                    hintText: isArabic
+                                        ? 'وصف مرحلة الدفع'
+                                        : 'Describe this payment stage',
                                     border: OutlineInputBorder(
                                       borderRadius: BorderRadius.circular(8),
                                     ),
@@ -536,128 +703,282 @@ class _RequestAdvanceDialogState extends State<RequestAdvanceDialog> {
                                     fillColor: Colors.white,
                                     isDense: true,
                                   ),
-                                  onChanged: (value) {
-                                    _updateInstallment(
-                                        index, 'description', value);
-                                  },
+                                  onChanged: (v) => _updateInstallment(
+                                      index, 'description', v),
                                 ),
                               ],
                             ),
                           );
                         }),
+
+                        // Installment total indicator
                         Container(
-                          padding: const EdgeInsets.all(16),
+                          padding: const EdgeInsets.all(12),
                           decoration: BoxDecoration(
-                            color: AppColors.backgroundGray,
-                            borderRadius: BorderRadius.circular(12),
+                            color: _installmentTotal == _requestedAmount &&
+                                    _requestedAmount > 0
+                                ? Colors.green.shade50
+                                : Colors.orange.shade50,
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(
+                              color: _installmentTotal == _requestedAmount &&
+                                      _requestedAmount > 0
+                                  ? Colors.green.shade200
+                                  : Colors.orange.shade200,
+                            ),
                           ),
                           child: Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              Text(
-                                'Total Installments:',
-                                style: GoogleFonts.poppins(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w600,
-                                ),
+                              Icon(
+                                _installmentTotal == _requestedAmount &&
+                                        _requestedAmount > 0
+                                    ? Icons.check_circle_outline
+                                    : Icons.warning_amber_outlined,
+                                size: 16,
+                                color: _installmentTotal == _requestedAmount &&
+                                        _requestedAmount > 0
+                                    ? Colors.green.shade700
+                                    : Colors.orange.shade700,
                               ),
+                              const SizedBox(width: 8),
                               Text(
-                                '${_installmentTotal.toStringAsFixed(0)} SDG',
+                                '${isArabic ? 'مجموع الأقساط' : 'Installment total'}: ${_installmentTotal.toStringAsFixed(0)} SDG',
                                 style: GoogleFonts.poppins(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.bold,
-                                  color: _installmentTotal == _requestedAmount
-                                      ? Colors.green
-                                      : Colors.red,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: _installmentTotal == _requestedAmount &&
+                                          _requestedAmount > 0
+                                      ? Colors.green.shade700
+                                      : Colors.orange.shade700,
                                 ),
                               ),
                             ],
                           ),
                         ),
-                        if (_installmentTotal != _requestedAmount) ...[
-                          const SizedBox(height: 8),
-                          Text(
-                            '⚠️ Installment total must equal requested amount',
-                            style: GoogleFonts.poppins(
-                              fontSize: 12,
-                              color: Colors.red,
-                            ),
-                          ),
-                        ],
                       ],
-
                       const SizedBox(height: 20),
 
                       // Justification
                       Text(
-                        'Justification *',
+                        isArabic ? 'المبرر / السبب *' : 'Justification *',
                         style: GoogleFonts.poppins(
-                          fontSize: 14,
+                          fontSize: 13,
                           fontWeight: FontWeight.w600,
                         ),
                       ),
                       const SizedBox(height: 8),
                       TextFormField(
                         controller: _justificationController,
-                        maxLines: 4,
+                        maxLines: 3,
                         decoration: InputDecoration(
-                          hintText:
-                              'Explain why you need this advance and how it will be used...',
+                          hintText: isArabic
+                              ? 'اذكر سبب طلب السلفة...'
+                              : 'Explain why you need this advance...',
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(12),
+                            borderSide:
+                                BorderSide(color: Colors.grey.shade300),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide:
+                                BorderSide(color: Colors.grey.shade300),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: const BorderSide(
+                              color: Color(0xFF7C3AED),
+                              width: 2,
+                            ),
                           ),
                           filled: true,
                           fillColor: Colors.white,
+                          contentPadding: const EdgeInsets.all(14),
                         ),
-                        validator: (value) {
-                          if (value == null || value.trim().isEmpty) {
-                            return 'Justification is required';
-                          }
-                          return null;
-                        },
                       ),
+                      const SizedBox(height: 24),
                     ],
                   ),
                 ),
               ),
             ),
-            // Footer
+
+            // ── Footer buttons ───────────────────────────────────────────
             Container(
-              padding: const EdgeInsets.all(20),
-              decoration: const BoxDecoration(
+              padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+              decoration: BoxDecoration(
+                color: Colors.grey.shade50,
+                borderRadius: const BorderRadius.only(
+                  bottomLeft: Radius.circular(24),
+                  bottomRight: Radius.circular(24),
+                ),
                 border: Border(
-                  top: BorderSide(color: AppColors.backgroundGray),
+                  top: BorderSide(color: Colors.grey.shade200),
                 ),
               ),
               child: Row(
-                mainAxisAlignment: MainAxisAlignment.end,
                 children: [
-                  TextButton(
-                    onPressed: _isSubmitting
-                        ? null
-                        : () => Navigator.of(context).pop(),
-                    child: const Text('Cancel'),
-                  ),
-                  const SizedBox(width: 8),
-                  ElevatedButton(
-                    onPressed: _isSubmitting ? null : _submit,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.green,
-                      foregroundColor: Colors.white,
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () => Navigator.of(context).pop(),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        side: const BorderSide(color: Color(0xFF7C3AED)),
+                      ),
+                      child: Text(
+                        isArabic ? 'إلغاء' : 'Cancel',
+                        style: GoogleFonts.poppins(
+                          fontWeight: FontWeight.w600,
+                          color: const Color(0xFF7C3AED),
+                        ),
+                      ),
                     ),
-                    child: _isSubmitting
-                        ? const SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              valueColor:
-                                  AlwaysStoppedAnimation<Color>(Colors.white),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    flex: 2,
+                    child: ElevatedButton(
+                      onPressed: _isSubmitting ? null : () => _submit(isArabic),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF7C3AED),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        elevation: 0,
+                      ),
+                      child: _isSubmitting
+                          ? const SizedBox(
+                              height: 18,
+                              width: 18,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white,
+                              ),
+                            )
+                          : Text(
+                              isArabic ? 'إرسال الطلب' : 'Submit Request',
+                              style: GoogleFonts.poppins(
+                                fontWeight: FontWeight.w700,
+                                fontSize: 14,
+                              ),
                             ),
-                          )
-                        : const Text('Submit Request'),
+                    ),
                   ),
                 ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _infoTile(
+    String label,
+    String value,
+    String? sub,
+    IconData icon,
+    Color color,
+  ) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, size: 12, color: color),
+              const SizedBox(width: 4),
+              Text(
+                label,
+                style: GoogleFonts.poppins(
+                  fontSize: 10,
+                  color: Colors.grey.shade500,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 2),
+          Text(
+            value,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: GoogleFonts.poppins(
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              color: color,
+            ),
+          ),
+          if (sub != null && sub.isNotEmpty)
+            Text(
+              sub,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: GoogleFonts.poppins(
+                fontSize: 10,
+                color: Colors.grey.shade500,
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _paymentTypeCard({
+    required String label,
+    required String sublabel,
+    required IconData icon,
+    required String value,
+    required bool isArabic,
+  }) {
+    final isSelected = _paymentType == value;
+    return GestureDetector(
+      onTap: () => setState(() => _paymentType = value),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 12),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? const Color(0xFF7C3AED).withValues(alpha: 0.08)
+              : Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: isSelected
+                ? const Color(0xFF7C3AED)
+                : Colors.grey.shade300,
+            width: isSelected ? 2 : 1,
+          ),
+        ),
+        child: Column(
+          children: [
+            Icon(
+              icon,
+              color: isSelected ? const Color(0xFF7C3AED) : Colors.grey,
+              size: 24,
+            ),
+            const SizedBox(height: 6),
+            Text(
+              label,
+              textAlign: TextAlign.center,
+              style: GoogleFonts.poppins(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color: isSelected
+                    ? const Color(0xFF7C3AED)
+                    : Colors.grey.shade700,
+              ),
+            ),
+            Text(
+              sublabel,
+              textAlign: TextAlign.center,
+              style: GoogleFonts.poppins(
+                fontSize: 10,
+                color: Colors.grey.shade500,
               ),
             ),
           ],
