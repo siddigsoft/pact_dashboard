@@ -1,4 +1,6 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { ArrowLeft } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 
@@ -258,6 +260,7 @@ function buildEnhancedPaymentEmailHTML(d: typeof SAMPLE): string {
 
 export default function EmailPreviewPage() {
   const [mode, setMode] = useState<'desktop' | 'mobile'>('desktop');
+  const navigate = useNavigate();
   const html = buildEnhancedPaymentEmailHTML(SAMPLE);
   const blob = new Blob([html], { type: 'text/html' });
   const src = URL.createObjectURL(blob);
@@ -266,6 +269,17 @@ export default function EmailPreviewPage() {
     <div className="min-h-screen bg-slate-100">
       <div className="sticky top-0 z-10 bg-white border-b px-6 py-3 flex items-center justify-between shadow-sm">
         <div className="flex items-center gap-3">
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() => navigate(-1)}
+            className="gap-1.5 text-slate-600 hover:text-slate-900"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Back
+          </Button>
+          <div className="h-4 w-px bg-slate-200" />
           <span className="font-bold text-slate-800 text-sm">Email Preview</span>
           <Badge variant="default" className="text-xs bg-green-600">Live Template</Badge>
         </div>
