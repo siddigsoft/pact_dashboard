@@ -2649,13 +2649,41 @@ const CostSubmission = () => {
                                 )}
                               </div>
                             </div>
-                            <div className="flex flex-col items-end gap-1 shrink-0">
+                            <div className="flex flex-col items-end gap-1.5 shrink-0">
                               <span className="font-bold text-lg tabular-nums" data-testid={`text-amount-${oc.id}`}>
                                 {oc.currency} {(oc.amount_cents / 100).toLocaleString()}
                               </span>
                               <Badge className={`text-xs border-0 ${statusColors[derivedStatus] || statusColors.pending}`}>
                                 {statusLabels[derivedStatus] || derivedStatus}
                               </Badge>
+                              {/* Quick action buttons — visible at top of card for admins */}
+                              {canMarkAsPaid(oc) && (
+                                <Button
+                                  size="sm"
+                                  type="button"
+                                  onClick={() => handleMarkAsPaid(oc)}
+                                  disabled={actionProcessing}
+                                  data-testid={`button-quick-mark-paid-${oc.id}`}
+                                  className="h-7 px-2.5 text-xs bg-green-600 hover:bg-green-700 text-white"
+                                >
+                                  <Wallet className="h-3 w-3 mr-1" />
+                                  Mark Paid
+                                </Button>
+                              )}
+                              {canRequestPayment(oc) && (
+                                <Button
+                                  size="sm"
+                                  type="button"
+                                  variant="outline"
+                                  onClick={() => openPaymentRequestDialog(oc)}
+                                  disabled={actionProcessing}
+                                  data-testid={`button-quick-request-payment-${oc.id}`}
+                                  className="h-7 px-2.5 text-xs border-blue-300 text-blue-700 hover:bg-blue-50"
+                                >
+                                  <Mail className="h-3 w-3 mr-1" />
+                                  Send to Finance
+                                </Button>
+                              )}
                             </div>
                           </div>
 
