@@ -49,7 +49,9 @@ import {
   Truck,
   MapPin,
   AlertTriangle,
-  Info
+  Info,
+  ClipboardCheck,
+  Tag
 } from 'lucide-react';
 import { format, startOfMonth, endOfMonth, subMonths, isWithinInterval } from 'date-fns';
 import { DEFAULT_CURRENCY } from '@/types/wallet';
@@ -96,6 +98,7 @@ const WalletPage = () => {
   useEffect(() => {
     if (currentUser?.id) {
       fetchPaymentMethods();
+      fetchMyCostPayments();
     }
   }, [currentUser?.id]);
 
@@ -122,6 +125,9 @@ const WalletPage = () => {
   
   const [signatureWithdrawalRequest, setSignatureWithdrawalRequest] = useState<typeof withdrawalRequests[0] | null>(null);
   const [signatureAdvanceRequest, setSignatureAdvanceRequest] = useState<typeof advanceRequests[0] | null>(null);
+  const [signatureCostPayment, setSignatureCostPayment] = useState<any | null>(null);
+  const [myCostPayments, setMyCostPayments] = useState<any[]>([]);
+  const [costPaymentsLoading, setCostPaymentsLoading] = useState(false);
 
   const [transactionTypeFilter, setTransactionTypeFilter] = useState<string>('all');
   const [dateRangeFilter, setDateRangeFilter] = useState<string>('all');
@@ -154,6 +160,55 @@ const WalletPage = () => {
     withdrawalRequests.filter(r => r.status === 'approved' && !r.fundReceiptConfirmed),
     [withdrawalRequests]
   );
+
+  const pendingCostPaymentConfirmations = useMemo(() =>
+    myCostPayments.filter(c => !c.fund_receipt_confirmed),
+    [myCostPayments]
+  );
+
+  const fetchMyCostPayments = async () => {
+    if (!currentUser?.id) return;
+    setCostPaymentsLoading(true);
+    try {
+      const { data } = await supabase
+        .from('operational_cost_submissions')
+        .select('*')
+        .eq('submitted_by', currentUser.id)
+        .eq('status', 'paid')
+        .order('paid_at', { ascending: false });
+      setMyCostPayments(data || []);
+    } catch {
+      setMyCostPayments([]);
+    } finally {
+      setCostPaymentsLoading(false);
+    }
+  };
+
+  const confirmCostPaymentReceipt = async (costId: string, signature: { signatureId?: string; signatureHash?: string; method?: string; signedAt?: string }) => {
+    try {
+      const now = new Date().toISOString();
+      const { error } = await supabase
+        .from('operational_cost_submissions')
+        .update({
+          fund_receipt_confirmed: true,
+          fund_receipt_confirmed_at: now,
+          fund_receipt_signature_url: signature.signatureId || null,
+          updated_at: now,
+        })
+        .eq('id', costId);
+
+      if (error?.message?.includes('fund_receipt_confirmed')) {
+        await supabase
+          .from('operational_cost_submissions')
+          .update({ status: 'reconciled', updated_at: now })
+          .eq('id', costId);
+      }
+
+      await fetchMyCostPayments();
+    } catch {
+      throw new Error('Failed to confirm cost payment receipt');
+    }
+  };
 
   const handleWithdrawalRequest = async () => {
     const amount = parseFloat(withdrawalAmount);
@@ -950,6 +1005,18 @@ const WalletPage = () => {
                     </span>
                   )}
                 </TabsTrigger>
+                <TabsTrigger
+                  value="cost-payments"
+                  data-testid="tab-cost-payments"
+                  className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-emerald-600 data-[state=active]:to-teal-600 data-[state=active]:text-white data-[state=active]:shadow-[0_0_15px_rgba(16,185,129,0.5)] text-blue-300 min-h-[44px] text-xs sm:text-sm flex-shrink-0 whitespace-nowrap relative"
+                >
+                  COST PAYMENTS
+                  {pendingCostPaymentConfirmations.length > 0 && (
+                    <span className="absolute -top-1 -right-1 w-4 h-4 bg-emerald-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">
+                      {pendingCostPaymentConfirmations.length}
+                    </span>
+                  )}
+                </TabsTrigger>
                 {isAdminUser && (
                   <TabsTrigger
                     value="all-advances"
@@ -978,7 +1045,7 @@ const WalletPage = () => {
         <TabsContent value="overview" className="space-y-4">
 
           {/* Pending Receipt Confirmation Alerts */}
-          {(pendingAdvanceConfirmations.length > 0 || pendingWithdrawalConfirmations.length > 0) && (
+          {(pendingAdvanceConfirmations.length > 0 || pendingWithdrawalConfirmations.length > 0 || pendingCostPaymentConfirmations.length > 0) && (
             <div className="rounded-lg border border-amber-500/50 bg-amber-500/10 p-4 flex items-start gap-3">
               <AlertTriangle className="w-5 h-5 text-amber-400 mt-0.5 flex-shrink-0" />
               <div className="flex-1 min-w-0">
@@ -992,10 +1059,13 @@ const WalletPage = () => {
                   {pendingWithdrawalConfirmations.length > 0 && (
                     <span>{pendingWithdrawalConfirmations.length} withdrawal{pendingWithdrawalConfirmations.length !== 1 ? 's' : ''} awaiting your receipt confirmation. </span>
                   )}
+                  {pendingCostPaymentConfirmations.length > 0 && (
+                    <span>{pendingCostPaymentConfirmations.length} cost payment{pendingCostPaymentConfirmations.length !== 1 ? 's' : ''} awaiting your receipt confirmation. </span>
+                  )}
                   Please confirm in the respective tab below.
                 </p>
               </div>
-              <div className="flex gap-2 flex-shrink-0">
+              <div className="flex gap-2 flex-wrap flex-shrink-0">
                 {pendingAdvanceConfirmations.length > 0 && (
                   <button
                     onClick={() => {
@@ -1016,6 +1086,17 @@ const WalletPage = () => {
                     className="text-xs text-amber-300 underline underline-offset-2 hover:text-amber-100"
                   >
                     View Withdrawals
+                  </button>
+                )}
+                {pendingCostPaymentConfirmations.length > 0 && (
+                  <button
+                    onClick={() => {
+                      const el = document.querySelector('[data-testid="tab-cost-payments"]') as HTMLButtonElement;
+                      el?.click();
+                    }}
+                    className="text-xs text-amber-300 underline underline-offset-2 hover:text-amber-100"
+                  >
+                    View Cost Payments
                   </button>
                 )}
               </div>
@@ -2065,6 +2146,122 @@ const WalletPage = () => {
           </Card>
         </TabsContent>
 
+        {/* COST PAYMENTS Tab */}
+        <TabsContent value="cost-payments" className="space-y-4">
+          <Card className="border-emerald-500/20">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <ClipboardCheck className="w-5 h-5 text-emerald-400" />
+                My Cost Payments / مدفوعات التكاليف الخاصة بي
+              </CardTitle>
+              <CardDescription>
+                Operational cost reimbursements paid by finance. Please confirm receipt for each paid item below. / تسديدات التكاليف التشغيلية المدفوعة من المالية. يرجى تأكيد الاستلام لكل بند مدفوع.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {costPaymentsLoading ? (
+                <div className="flex items-center justify-center py-12">
+                  <RefreshCw className="w-5 h-5 animate-spin text-muted-foreground" />
+                  <span className="ml-2 text-sm text-muted-foreground">Loading cost payments...</span>
+                </div>
+              ) : myCostPayments.length === 0 ? (
+                <div className="text-center py-12 text-muted-foreground">
+                  <ClipboardCheck className="w-8 h-8 mx-auto mb-3 opacity-40" />
+                  <p className="text-sm">No cost payments found.</p>
+                  <p className="text-xs mt-1 text-slate-500">When finance marks a cost submission as paid, it will appear here for your confirmation.</p>
+                  <p className="text-xs text-slate-500 mt-0.5">عند قيام المالية بتحديد تقديم تكلفة كمدفوع، سيظهر هنا لتأكيدك.</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {myCostPayments.map((cost) => {
+                    const receiptConfirmed = cost.fund_receipt_confirmed;
+                    const confirmedAt = cost.fund_receipt_confirmed_at;
+                    const canConfirm = !receiptConfirmed;
+                    const amountSdg = (cost.amount_cents || 0) / 100;
+                    const categoryLabels: Record<string, string> = {
+                      permits: 'Permits & Licenses', incentives: 'Incentives & Allowances',
+                      communications: 'Internet & Comms', training: 'Training',
+                      transport: 'Transportation', general_transport: 'Transportation',
+                      equipment: 'Equipment & Supplies', printing: 'Printing & Stationery',
+                      meetings: 'Meetings', office_admin: 'Office Admin', other: 'Other',
+                    };
+                    const categoryLabel = categoryLabels[cost.expense_category] || cost.expense_category || 'Cost Submission';
+
+                    return (
+                      <div
+                        key={cost.id}
+                        data-testid={`cost-payment-card-${cost.id}`}
+                        className={`rounded-lg border p-4 space-y-2 transition-all ${canConfirm ? 'border-emerald-500/50 bg-emerald-500/5' : 'border-border bg-card'}`}
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex items-start gap-2 min-w-0">
+                            <Receipt className="w-4 h-4 text-emerald-400 mt-0.5 flex-shrink-0" />
+                            <div className="min-w-0">
+                              <p className="text-sm font-medium truncate">{categoryLabel}</p>
+                              {cost.description && (
+                                <p className="text-xs text-muted-foreground truncate">{cost.description}</p>
+                              )}
+                              <div className="flex items-center gap-2 mt-0.5">
+                                <Tag className="w-3 h-3 text-muted-foreground" />
+                                <p className="text-xs text-muted-foreground font-mono">
+                                  REF: {cost.id.slice(0, 8).toUpperCase()}
+                                </p>
+                              </div>
+                              {cost.expense_date && (
+                                <p className="text-xs text-muted-foreground">
+                                  Date: {format(new Date(cost.expense_date), 'MMM dd, yyyy')}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                          <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                            <span className="text-xs font-semibold px-2 py-0.5 rounded-full border bg-purple-500/10 text-purple-400 border-purple-500/30">
+                              Paid / مدفوع
+                            </span>
+                            <span className="text-sm font-bold tabular-nums text-emerald-300">
+                              {formatCurrency(amountSdg)}
+                            </span>
+                            {cost.paid_at && (
+                              <span className="text-[10px] text-muted-foreground">
+                                Paid {format(new Date(cost.paid_at), 'MMM d, yyyy')}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Receipt status */}
+                        {receiptConfirmed && confirmedAt && (
+                          <div className="flex items-center gap-2 text-xs text-emerald-400 bg-emerald-500/10 rounded px-2 py-1">
+                            <CheckCircle2 className="w-3.5 h-3.5" />
+                            <span>تم تأكيد الاستلام / Receipt confirmed on {format(new Date(confirmedAt), 'MMM dd, yyyy HH:mm')}</span>
+                          </div>
+                        )}
+
+                        {canConfirm && (
+                          <div className="pt-1">
+                            <div className="flex items-start gap-2 text-xs text-emerald-300 bg-emerald-500/10 rounded px-2 py-1 mb-2">
+                              <Info className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
+                              <span>Finance has processed this payment. Please confirm you received the funds / قامت المالية بمعالجة هذه الدفعة. يرجى تأكيد استلام الأموال</span>
+                            </div>
+                            <button
+                              data-testid={`confirm-cost-receipt-${cost.id}`}
+                              type="button"
+                              onClick={() => setSignatureCostPayment(cost)}
+                              className="w-full py-2 px-4 rounded-md text-sm font-semibold bg-emerald-600 hover:bg-emerald-500 text-white transition-colors"
+                            >
+                              ✓ تأكيد الاستلام / Confirm Receipt
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
         {/* ALL ADVANCES — admin only */}
         {isAdminUser && (
           <TabsContent value="all-advances" className="space-y-4">
@@ -2281,6 +2478,39 @@ const WalletPage = () => {
             setSignatureAdvanceRequest(null);
           }}
           onCancel={() => setSignatureAdvanceRequest(null)}
+        />
+      )}
+
+      {signatureCostPayment && currentUser && (
+        <SignatureConfirmationModal
+          open={!!signatureCostPayment}
+          onOpenChange={(open) => { if (!open) setSignatureCostPayment(null); }}
+          transaction={{
+            id: signatureCostPayment.id,
+            type: 'payment',
+            title: 'تأكيد استلام دفعة التكاليف / Confirm Cost Payment Receipt',
+            description: `أؤكد أنني استلمت كامل مبلغ دفعة التكاليف. / I confirm that I have received the cost payment of ${formatCurrency((signatureCostPayment.amount_cents || 0) / 100)}.`,
+            amount: (signatureCostPayment.amount_cents || 0) / 100,
+            currency: DEFAULT_CURRENCY,
+            counterparty: 'Finance / المالية',
+            date: new Date().toISOString(),
+            reference: signatureCostPayment.id,
+          }}
+          userId={currentUser.id}
+          userName={currentUser.fullName || currentUser.email || ''}
+          userEmail={currentUser.email}
+          userRole={currentUser.role}
+          allowedMethods={['handwriting', 'uuid']}
+          onSignatureComplete={async (signature) => {
+            await confirmCostPaymentReceipt(signatureCostPayment.id, {
+              signatureId: signature.signatureId,
+              signatureHash: signature.signatureHash,
+              method: signature.method,
+              signedAt: signature.signedAt,
+            });
+            setSignatureCostPayment(null);
+          }}
+          onCancel={() => setSignatureCostPayment(null)}
         />
       )}
     </div>

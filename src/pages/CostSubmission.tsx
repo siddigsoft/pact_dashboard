@@ -107,6 +107,10 @@ interface OperationalCostSubmission {
   reconciliation_notes: string | null;
   created_at: string;
   updated_at: string;
+  fund_receipt_confirmed?: boolean | null;
+  fund_receipt_confirmed_at?: string | null;
+  fund_receipt_signature_url?: string | null;
+  fund_receipt_notes?: string | null;
 }
 
 const CostSubmission = () => {
@@ -844,8 +848,8 @@ const CostSubmission = () => {
         toast({ title: "Failed / فشل", description: error.message, variant: "destructive" });
       } else {
         toast({ 
-          title: "Marked as Paid / تم التحديد كمدفوع", 
-          description: "The payment has been recorded. The advance is now outstanding and awaiting reconciliation. / تم تسجيل الدفع. السلفة الآن معلقة وتنتظر التسوية." 
+          title: "Payment Sent / تم إرسال الدفعة", 
+          description: "Marked as paid. The recipient will now see a confirmation request in their Wallet → Cost Payments tab. / تم التحديد كمدفوع. سيظهر للمستلم طلب تأكيد في محفظته." 
         });
         fetchOperationalCosts();
       }
@@ -3714,6 +3718,31 @@ const CostSubmission = () => {
                       <p className="text-xs text-muted-foreground">
                         {format(new Date(oc.paid_at), 'MMM d, yyyy HH:mm')}
                       </p>
+                    </div>
+                  )}
+
+                  {oc.paid_at && (
+                    <div className={`rounded-lg border-l-2 pl-3 py-2 ${oc.fund_receipt_confirmed ? 'border-green-500 bg-green-50/50 dark:bg-green-950/20' : 'border-amber-500 bg-amber-50/50 dark:bg-amber-950/20'}`}>
+                      <div className="flex items-center gap-2 mb-1">
+                        {oc.fund_receipt_confirmed
+                          ? <CheckCircle className="h-4 w-4 text-green-500" />
+                          : <AlertCircle className="h-4 w-4 text-amber-500" />}
+                        <span className="font-medium text-sm">
+                          {oc.fund_receipt_confirmed
+                            ? 'Receipt Confirmed by Recipient / تم تأكيد الاستلام'
+                            : 'Awaiting Recipient Confirmation / بانتظار تأكيد المستلم'}
+                        </span>
+                      </div>
+                      {oc.fund_receipt_confirmed && oc.fund_receipt_confirmed_at && (
+                        <p className="text-xs text-muted-foreground">
+                          {format(new Date(oc.fund_receipt_confirmed_at), 'MMM d, yyyy HH:mm')}
+                        </p>
+                      )}
+                      {!oc.fund_receipt_confirmed && (
+                        <p className="text-xs text-muted-foreground">
+                          The recipient must confirm receipt in their Wallet → Cost Payments tab.
+                        </p>
+                      )}
                     </div>
                   )}
 
