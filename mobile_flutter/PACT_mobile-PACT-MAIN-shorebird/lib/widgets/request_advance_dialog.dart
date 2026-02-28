@@ -290,7 +290,7 @@ class _RequestAdvanceDialogState extends State<RequestAdvanceDialog> {
                   Expanded(
                     flex: 2,
                     child: _infoTile(
-                      isArabic ? 'الموقع' : 'Site',
+                      'الموقع / Site',
                       siteName,
                       siteCode.isNotEmpty ? siteCode : null,
                       Icons.location_on_outlined,
@@ -304,10 +304,10 @@ class _RequestAdvanceDialogState extends State<RequestAdvanceDialog> {
                   ),
                   Expanded(
                     child: _infoTile(
-                      isArabic ? 'الميزانية' : 'Budget',
+                      'ميزانية النقل\nTransport Budget',
                       budget > 0
                           ? '${budget.toStringAsFixed(0)} SDG'
-                          : (isArabic ? 'غير محدد' : 'Open'),
+                          : 'غير محدد / Open',
                       null,
                       Icons.payments_outlined,
                       Colors.green,
@@ -321,7 +321,7 @@ class _RequestAdvanceDialogState extends State<RequestAdvanceDialog> {
                     ),
                     Expanded(
                       child: _infoTile(
-                        isArabic ? 'المحور' : 'Hub',
+                        'المحور / Hub',
                         widget.hubName!,
                         null,
                         Icons.hub_outlined,
@@ -372,7 +372,7 @@ class _RequestAdvanceDialogState extends State<RequestAdvanceDialog> {
                         Row(
                           children: [
                             Text(
-                              isArabic ? 'اختيار سريع:' : 'Quick select:',
+                              'اختيار سريع / Quick select:',
                               style: GoogleFonts.poppins(
                                 fontSize: 12,
                                 fontWeight: FontWeight.w600,
@@ -384,7 +384,7 @@ class _RequestAdvanceDialogState extends State<RequestAdvanceDialog> {
                               ('25%', 0.25),
                               ('50%', 0.50),
                               ('75%', 0.75),
-                              (isArabic ? 'الكل' : 'Max', 1.0),
+                              ('الكل / Max', 1.0),
                             ].map((entry) {
                               return Padding(
                                 padding: const EdgeInsets.only(right: 6),
@@ -425,9 +425,7 @@ class _RequestAdvanceDialogState extends State<RequestAdvanceDialog> {
 
                       // Amount label
                       Text(
-                        isArabic
-                            ? 'المبلغ المطلوب (SDG) *'
-                            : 'Requested Amount (SDG) *',
+                        'المبلغ المطلوب (SDG) *\nRequested Amount (SDG) *',
                         style: GoogleFonts.poppins(
                           fontSize: 13,
                           fontWeight: FontWeight.w600,
@@ -444,7 +442,7 @@ class _RequestAdvanceDialogState extends State<RequestAdvanceDialog> {
                           fontWeight: FontWeight.w700,
                         ),
                         decoration: InputDecoration(
-                          hintText: isArabic ? 'أدخل المبلغ' : 'Enter amount',
+                          hintText: 'أدخل المبلغ / Enter amount',
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(14),
                             borderSide: BorderSide(
@@ -485,9 +483,7 @@ class _RequestAdvanceDialogState extends State<RequestAdvanceDialog> {
                                 : 'Amount must be greater than zero';
                           }
                           if (budget > 0 && amount > budget) {
-                            return isArabic
-                                ? 'المبلغ يتجاوز الميزانية (${budget.toStringAsFixed(0)} SDG)'
-                                : 'Cannot exceed ${budget.toStringAsFixed(0)} SDG';
+                            return 'المبلغ يتجاوز ميزانية النقل (\${budget.toStringAsFixed(0)} SDG)\nCannot exceed \${budget.toStringAsFixed(0)} SDG';
                           }
                           return null;
                         },
@@ -497,12 +493,8 @@ class _RequestAdvanceDialogState extends State<RequestAdvanceDialog> {
                       // Budget cap hint + progress bar
                       Text(
                         budget > 0
-                            ? (isArabic
-                                ? 'الحد الأقصى: ${budget.toStringAsFixed(0)} SDG (إجمالي الميزانية)'
-                                : 'Maximum: ${budget.toStringAsFixed(0)} SDG (total budget)')
-                            : (isArabic
-                                ? 'أدخل مبلغ السلفة المطلوبة'
-                                : 'Enter the advance amount you need'),
+                            ? 'الحد الأقصى: \${budget.toStringAsFixed(0)} SDG (ميزانية النقل)\nMaximum: \${budget.toStringAsFixed(0)} SDG (transport budget)'
+                            : 'أدخل مبلغ السلفة المطلوبة\nEnter the advance amount you need',
                         style: GoogleFonts.poppins(
                           fontSize: 11.5,
                           color: Colors.grey.shade500,
@@ -529,7 +521,7 @@ class _RequestAdvanceDialogState extends State<RequestAdvanceDialog> {
 
                       // Payment Type
                       Text(
-                        isArabic ? 'نوع الدفع *' : 'Payment Type *',
+                        'نوع الدفع / Payment Type *',
                         style: GoogleFonts.poppins(
                           fontSize: 13,
                           fontWeight: FontWeight.w600,
@@ -540,10 +532,8 @@ class _RequestAdvanceDialogState extends State<RequestAdvanceDialog> {
                         children: [
                           Expanded(
                             child: _paymentTypeCard(
-                              label: isArabic ? 'سلفة كاملة' : 'Full Advance',
-                              sublabel: isArabic
-                                  ? 'استلام المبلغ كاملاً'
-                                  : 'Receive entire amount',
+                              label: 'سلفة كاملة / Full Advance',
+                              sublabel: 'استلام المبلغ كاملاً\nReceive entire amount',
                               icon: Icons.payments_rounded,
                               value: 'full_advance',
                               isArabic: isArabic,
@@ -552,10 +542,8 @@ class _RequestAdvanceDialogState extends State<RequestAdvanceDialog> {
                           const SizedBox(width: 10),
                           Expanded(
                             child: _paymentTypeCard(
-                              label: isArabic ? 'أقساط' : 'Installments',
-                              sublabel: isArabic
-                                  ? 'دفعات متعددة'
-                                  : 'Receive in stages',
+                              label: 'أقساط / Installments',
+                              sublabel: 'دفعات متعددة\nReceive in stages',
                               icon: Icons.schedule_rounded,
                               value: 'installments',
                               isArabic: isArabic,
@@ -760,7 +748,7 @@ class _RequestAdvanceDialogState extends State<RequestAdvanceDialog> {
 
                       // Justification
                       Text(
-                        isArabic ? 'المبرر / السبب *' : 'Justification *',
+                        'المبرر / Justification *',
                         style: GoogleFonts.poppins(
                           fontSize: 13,
                           fontWeight: FontWeight.w600,
@@ -771,9 +759,7 @@ class _RequestAdvanceDialogState extends State<RequestAdvanceDialog> {
                         controller: _justificationController,
                         maxLines: 3,
                         decoration: InputDecoration(
-                          hintText: isArabic
-                              ? 'اذكر سبب طلب السلفة...'
-                              : 'Explain why you need this advance...',
+                          hintText: 'اذكر سبب طلب السلفة...\nExplain why you need this advance...',
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(12),
                             borderSide:

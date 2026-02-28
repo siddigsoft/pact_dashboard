@@ -2743,15 +2743,9 @@ class _MMPScreenState extends State<MMPScreen> {
     try {
       if (_userId == null) return;
 
-      // Total budget = enumerator fee + transport fee, used as the suggested
-      // ceiling in the advance dialog. If transport_fee is 0 (legacy sites),
-      // the enumerator fee alone is still shown so the user can request funds.
+      // Only the transport fee is used as the budget ceiling for advances.
+      // Enumerator fee is excluded — advances are for transportation costs only.
       final transportFee = (site['transport_fee'] as num?)?.toDouble() ?? 0.0;
-      final storedEnumeratorFee =
-          (site['enumerator_fee'] as num?)?.toDouble() ?? 0.0;
-      final enumeratorFee =
-          storedEnumeratorFee > 0 ? storedEnumeratorFee : _userEnumeratorFee;
-      final totalBudget = enumeratorFee + transportFee;
 
       // Check bank account before showing advance dialog
       final profileCheck = await Supabase.instance.client
@@ -2791,7 +2785,7 @@ class _MMPScreenState extends State<MMPScreen> {
         context: context,
         builder: (context) => RequestAdvanceDialog(
           site: site,
-          transportationBudget: totalBudget,
+          transportationBudget: transportFee,
           hubId: hubId,
           hubName: hubName,
         ),
