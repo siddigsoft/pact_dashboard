@@ -173,7 +173,17 @@ class OperationalCostSubmission {
   final DateTime? reconciledAt;
   final int? reconciledAmountCents;
   final String? reconciliationNotes;
-  
+
+  // Fund receipt confirmation (set by recipient after finance marks paid)
+  final bool fundReceiptConfirmed;
+  final DateTime? fundReceiptConfirmedAt;
+  final String? fundReceiptSignatureUrl;
+  final String? fundReceiptNotes;
+
+  // Payment info
+  final String? paidBy;
+  final DateTime? paidAt;
+
   final DateTime createdAt;
   final DateTime updatedAt;
   
@@ -219,6 +229,12 @@ class OperationalCostSubmission {
     this.reconciledAt,
     this.reconciledAmountCents,
     this.reconciliationNotes,
+    this.fundReceiptConfirmed = false,
+    this.fundReceiptConfirmedAt,
+    this.fundReceiptSignatureUrl,
+    this.fundReceiptNotes,
+    this.paidBy,
+    this.paidAt,
     required this.createdAt,
     required this.updatedAt,
     this.submitterName,
@@ -335,6 +351,12 @@ class OperationalCostSubmission {
       reconciledAt: _parseDateTime(json['reconciled_at']),
       reconciledAmountCents: json['reconciled_amount_cents'] is int ? json['reconciled_amount_cents'] : null,
       reconciliationNotes: json['reconciliation_notes']?.toString(),
+      fundReceiptConfirmed: json['fund_receipt_confirmed'] == true,
+      fundReceiptConfirmedAt: _parseDateTime(json['fund_receipt_confirmed_at']),
+      fundReceiptSignatureUrl: json['fund_receipt_signature_url']?.toString(),
+      fundReceiptNotes: json['fund_receipt_notes']?.toString(),
+      paidBy: json['paid_by']?.toString(),
+      paidAt: _parseDateTime(json['paid_at']),
       createdAt: _parseDateTime(json['created_at']) ?? DateTime.now(),
       updatedAt: _parseDateTime(json['updated_at']) ?? DateTime.now(),
       submitterName: json['submitter_name']?.toString() ?? 
@@ -404,6 +426,12 @@ class OperationalCostSubmission {
     'is_reconciled': isReconciled,
     'reconciled_amount_cents': reconciledAmountCents,
     'reconciliation_notes': reconciliationNotes,
+    'fund_receipt_confirmed': fundReceiptConfirmed,
+    'fund_receipt_confirmed_at': fundReceiptConfirmedAt?.toIso8601String(),
+    'fund_receipt_signature_url': fundReceiptSignatureUrl,
+    'fund_receipt_notes': fundReceiptNotes,
+    'paid_by': paidBy,
+    'paid_at': paidAt?.toIso8601String(),
   };
 
   OperationalCostSubmission copyWith({
@@ -439,6 +467,12 @@ class OperationalCostSubmission {
     DateTime? reconciledAt,
     int? reconciledAmountCents,
     String? reconciliationNotes,
+    bool? fundReceiptConfirmed,
+    DateTime? fundReceiptConfirmedAt,
+    String? fundReceiptSignatureUrl,
+    String? fundReceiptNotes,
+    String? paidBy,
+    DateTime? paidAt,
     DateTime? createdAt,
     DateTime? updatedAt,
     String? submitterName,
@@ -479,6 +513,12 @@ class OperationalCostSubmission {
       reconciledAt: reconciledAt ?? this.reconciledAt,
       reconciledAmountCents: reconciledAmountCents ?? this.reconciledAmountCents,
       reconciliationNotes: reconciliationNotes ?? this.reconciliationNotes,
+      fundReceiptConfirmed: fundReceiptConfirmed ?? this.fundReceiptConfirmed,
+      fundReceiptConfirmedAt: fundReceiptConfirmedAt ?? this.fundReceiptConfirmedAt,
+      fundReceiptSignatureUrl: fundReceiptSignatureUrl ?? this.fundReceiptSignatureUrl,
+      fundReceiptNotes: fundReceiptNotes ?? this.fundReceiptNotes,
+      paidBy: paidBy ?? this.paidBy,
+      paidAt: paidAt ?? this.paidAt,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       submitterName: submitterName ?? this.submitterName,

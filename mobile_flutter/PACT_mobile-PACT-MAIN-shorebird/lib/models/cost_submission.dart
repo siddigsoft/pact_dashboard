@@ -551,6 +551,9 @@ class OperationalCostSubmission {
   final String? paidAt;
   final int? paidAmountCents;
   final String? paymentNotes;
+  final bool fundReceiptConfirmed;
+  final String? fundReceiptConfirmedAt;
+  final String? fundReceiptNotes;
   final String createdAt;
   final String updatedAt;
 
@@ -583,6 +586,9 @@ class OperationalCostSubmission {
     this.paidAt,
     this.paidAmountCents,
     this.paymentNotes,
+    this.fundReceiptConfirmed = false,
+    this.fundReceiptConfirmedAt,
+    this.fundReceiptNotes,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -628,6 +634,9 @@ class OperationalCostSubmission {
       paidAt: json['paid_at'],
       paidAmountCents: json['paid_amount_cents'],
       paymentNotes: json['payment_notes'],
+      fundReceiptConfirmed: json['fund_receipt_confirmed'] == true,
+      fundReceiptConfirmedAt: json['fund_receipt_confirmed_at']?.toString(),
+      fundReceiptNotes: json['fund_receipt_notes']?.toString(),
       createdAt: json['created_at'] ?? '',
       updatedAt: json['updated_at'] ?? '',
     );

@@ -471,6 +471,77 @@ class _CostSubmissionScreenState extends State<CostSubmissionScreen> {
                 ),
               ),
             ],
+            // Fund receipt confirmation status for paid items
+            if (submission.status == CostSubmissionStatus.paid ||
+                submission.paidAt != null) ...[
+              const SizedBox(height: 10),
+              if (submission.fundReceiptConfirmed)
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                  decoration: BoxDecoration(
+                    color: Colors.green.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.green.shade200),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.verified, color: Colors.green.shade700, size: 15),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              isArabic ? 'تم تأكيد استلام الدفعة ✓' : 'Receipt confirmed ✓',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                                color: Colors.green.shade700,
+                              ),
+                            ),
+                            if (submission.fundReceiptConfirmedAt != null)
+                              Text(
+                                DateFormat('dd MMM yyyy, HH:mm').format(
+                                  DateTime.parse(submission.fundReceiptConfirmedAt!).toLocal(),
+                                ),
+                                style: TextStyle(fontSize: 11, color: Colors.green.shade600),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                )
+              else
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                  decoration: BoxDecoration(
+                    color: Colors.amber.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.amber.shade300),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.warning_amber_rounded, color: Colors.amber.shade700, size: 15),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          isArabic
+                              ? 'بانتظار تأكيد الاستلام من المستلم'
+                              : 'Awaiting receipt confirmation from recipient',
+                          style: TextStyle(
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.amber.shade800,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+            ],
           ],
         ),
       ),

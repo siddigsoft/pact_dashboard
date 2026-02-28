@@ -81,6 +81,8 @@ class _WalletScreenState extends State<WalletScreen> {
   List<Map<String, dynamic>> _transactions = [];
   List<Map<String, dynamic>> _withdrawalRequests = [];
   List<Map<String, dynamic>> _advances = [];
+  List<Map<String, dynamic>> _costPayments = [];
+  bool _costPaymentsLoading = false;
 
   String _activeTab = 'overview'; // set from initialTab in initState
   String _transactionFilter = 'all';
@@ -106,7 +108,7 @@ class _WalletScreenState extends State<WalletScreen> {
   @override
   void initState() {
     super.initState();
-    const tabNames = ['overview', 'transactions', 'withdrawals', 'advances'];
+    const tabNames = ['overview', 'transactions', 'withdrawals', 'advances', 'cost_payments'];
     if (widget.initialTab >= 0 && widget.initialTab < tabNames.length) {
       _activeTab = tabNames[widget.initialTab];
     }
@@ -157,6 +159,7 @@ class _WalletScreenState extends State<WalletScreen> {
           _loadWithdrawalRequests(),
           _loadPaymentMethods(),
           _loadAdvances(),
+          _loadCostPayments(),
         ]);
 
         // Cache wallet data for offline use
@@ -499,6 +502,199 @@ class _WalletScreenState extends State<WalletScreen> {
       if (mounted) setState(() {});
     } catch (e) {
       debugPrint('[Wallet] Error loading advances: $e');
+    }
+  }
+
+  Future<void> _loadCostPayments() async {
+    if (_userId == null) return;
+    setState(() => _costPaymentsLoading = true);
+    try {
+      final data = await Supabase.instance.client
+          .from('operational_cost_submissions')
+          .select('*')
+          .eq('submitted_by', _userId!)
+          .eq('status', 'paid')
+          .order('paid_at', ascending: false)
+          .limit(50);
+      _costPayments = List<Map<String, dynamic>>.from(data ?? []);
+      debugPrint('[Wallet] Loaded ${_costPayments.length} cost payments for user $_userId');
+      if (mounted) setState(() => _costPaymentsLoading = false);
+    } catch (e) {
+      debugPrint('[Wallet] Error loading cost payments: $e');
+      if (mounted) setState(() => _costPaymentsLoading = false);
+    }
+  }
+
+  Future<void> _confirmCostPaymentReceipt(Map<String, dynamic> cost) async {
+    final costId = cost['id'] as String?;
+    if (costId == null) return;
+
+    final amountCents = (cost['amount_cents'] as num?)?.toInt() ?? 0;
+    final amountSdg = amountCents / 100.0;
+    final category = cost['expense_category'] as String? ?? 'Cost Submission';
+    final categoryLabel = {
+      'permits': 'Permits & Licenses',
+      'incentives': 'Incentives & Allowances',
+      'communications': 'Internet & Comms',
+      'training': 'Training',
+      'transport': 'Transportation',
+      'general_transport': 'Transportation',
+      'equipment': 'Equipment & Supplies',
+      'printing': 'Printing & Stationery',
+      'meetings': 'Meetings',
+      'office_admin': 'Office Admin',
+      'other': 'Other',
+    }[category] ?? category;
+
+    final notesController = TextEditingController();
+    if (!mounted) return;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+        titlePadding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+        contentPadding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+        title: Row(
+          children: [
+            const Icon(Icons.receipt_long, color: Colors.teal, size: 22),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Confirm Cost Payment Receipt',
+                    style: GoogleFonts.poppins(fontWeight: FontWeight.w700, fontSize: 14),
+                  ),
+                  Text(
+                    'تأكيد استلام دفعة التكاليف',
+                    style: GoogleFonts.poppins(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 12,
+                      color: Colors.grey.shade600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const SizedBox(height: 10),
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: Colors.teal.shade50,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: Colors.teal.shade200),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(categoryLabel,
+                        style: GoogleFonts.poppins(fontWeight: FontWeight.w700, fontSize: 13)),
+                    const SizedBox(height: 4),
+                    Text(
+                      '${NumberFormat.currency(symbol: '', decimalDigits: 2).format(amountSdg)} SDG',
+                      style: GoogleFonts.poppins(
+                        fontWeight: FontWeight.w800,
+                        fontSize: 18,
+                        color: Colors.teal.shade700,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                'I confirm that I have received this cost payment in full.',
+                style: GoogleFonts.poppins(fontSize: 13),
+              ),
+              Text(
+                'أؤكد أنني استلمت كامل مبلغ دفعة التكاليف هذه.',
+                style: GoogleFonts.poppins(
+                  fontSize: 12,
+                  color: Colors.grey.shade600,
+                ),
+                textDirection: ui.TextDirection.rtl,
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: notesController,
+                maxLines: 2,
+                decoration: InputDecoration(
+                  labelText: 'Notes (optional) / ملاحظات (اختياري)',
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                ),
+              ),
+              const SizedBox(height: 8),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text(widget.isArabic ? 'إلغاء' : 'Cancel',
+                style: TextStyle(color: Colors.grey.shade600)),
+          ),
+          ElevatedButton.icon(
+            onPressed: () => Navigator.pop(ctx, true),
+            icon: const Icon(Icons.verified, size: 16),
+            label: Text(widget.isArabic ? 'تأكيد الاستلام' : 'Confirm Receipt'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.teal.shade600,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    try {
+      final now = DateTime.now().toIso8601String();
+      final notes = notesController.text.trim();
+      await Supabase.instance.client
+          .from('operational_cost_submissions')
+          .update({
+            'fund_receipt_confirmed': true,
+            'fund_receipt_confirmed_at': now,
+            if (notes.isNotEmpty) 'fund_receipt_notes': notes,
+            'updated_at': now,
+          })
+          .eq('id', costId);
+
+      await _loadCostPayments();
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(widget.isArabic
+                ? 'تم تأكيد استلام الدفعة بنجاح ✓'
+                : 'Cost payment receipt confirmed ✓'),
+            backgroundColor: Colors.teal.shade600,
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint('[Wallet] Error confirming cost payment receipt: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(widget.isArabic ? 'فشل التأكيد' : 'Confirmation failed'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 
@@ -967,45 +1163,47 @@ class _WalletScreenState extends State<WalletScreen> {
                                         Container(
                                           padding: const EdgeInsets.all(8),
                                           color: Colors.grey.shade50,
-                                          child: Row(
-                                            children: [
-                                              Expanded(
-                                                child: _buildTabButton(
+                                          child: SingleChildScrollView(
+                                            scrollDirection: Axis.horizontal,
+                                            child: Row(
+                                              children: [
+                                                _buildTabButton(
                                                   'overview',
                                                   'Overview',
                                                   'نظرة عامة',
                                                   Icons.dashboard_outlined,
                                                 ),
-                                              ),
-                                              const SizedBox(width: 6),
-                                              Expanded(
-                                                child: _buildTabButton(
+                                                const SizedBox(width: 6),
+                                                _buildTabButton(
                                                   'transactions',
                                                   'History',
                                                   'المعاملات',
                                                   Icons.receipt_long_outlined,
                                                 ),
-                                              ),
-                                              const SizedBox(width: 6),
-                                              Expanded(
-                                                child: _buildTabButton(
+                                                const SizedBox(width: 6),
+                                                _buildTabButton(
                                                   'withdrawals',
                                                   'Withdraw',
                                                   'السحوبات',
-                                                  Icons
-                                                      .arrow_circle_down_outlined,
+                                                  Icons.arrow_circle_down_outlined,
                                                 ),
-                                              ),
-                                              const SizedBox(width: 6),
-                                              Expanded(
-                                                child: _buildTabButton(
+                                                const SizedBox(width: 6),
+                                                _buildTabButton(
                                                   'advances',
                                                   'Advances',
                                                   'السلف',
                                                   Icons.directions_car_outlined,
                                                 ),
-                                              ),
-                                            ],
+                                                const SizedBox(width: 6),
+                                                _buildTabButtonWithBadge(
+                                                  'cost_payments',
+                                                  'Costs',
+                                                  'التكاليف',
+                                                  Icons.receipt_outlined,
+                                                  badge: _costPayments.where((c) => c['fund_receipt_confirmed'] != true).length,
+                                                ),
+                                              ],
+                                            ),
                                           ),
                                         ),
                                         // Tab Content
@@ -1747,6 +1945,44 @@ class _WalletScreenState extends State<WalletScreen> {
     );
   }
 
+  Widget _buildTabButtonWithBadge(
+    String tab,
+    String labelEn,
+    String labelAr,
+    IconData icon, {
+    int badge = 0,
+  }) {
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        _buildTabButton(tab, labelEn, labelAr, icon),
+        if (badge > 0)
+          Positioned(
+            top: -4,
+            right: -4,
+            child: Container(
+              width: 18,
+              height: 18,
+              decoration: const BoxDecoration(
+                color: Colors.teal,
+                shape: BoxShape.circle,
+              ),
+              child: Center(
+                child: Text(
+                  badge > 9 ? '9+' : badge.toString(),
+                  style: GoogleFonts.poppins(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w800,
+                    color: Colors.white,
+                  ),
+                ),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
   Widget _buildTabContent() {
     switch (_activeTab) {
       case 'overview':
@@ -1757,6 +1993,8 @@ class _WalletScreenState extends State<WalletScreen> {
         return _buildWithdrawalsTab();
       case 'advances':
         return _buildAdvancesTab();
+      case 'cost_payments':
+        return _buildCostPaymentsTab();
       default:
         return const SizedBox();
     }
@@ -2273,6 +2511,340 @@ class _WalletScreenState extends State<WalletScreen> {
         const SizedBox(height: 12),
         ..._advances.map((advance) => _buildAdvanceItem(advance)),
       ],
+    );
+  }
+
+  Widget _buildCostPaymentsTab() {
+    if (_costPaymentsLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    if (_costPayments.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.receipt_outlined, size: 48, color: AppColors.textLight),
+              const SizedBox(height: 12),
+              Text(
+                widget.isArabic
+                    ? 'لا توجد دفعات تكاليف بعد'
+                    : 'No cost payments yet',
+                style: GoogleFonts.poppins(
+                  color: AppColors.textLight,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                widget.isArabic
+                    ? 'ستظهر هنا دفعات التكاليف المدفوعة من المالية'
+                    : 'Paid cost submissions will appear here for your confirmation',
+                textAlign: TextAlign.center,
+                style: GoogleFonts.poppins(
+                  fontSize: 12,
+                  color: AppColors.textLight,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    final pending = _costPayments.where((c) => c['fund_receipt_confirmed'] != true).length;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Header + pending alert
+        Text(
+          widget.isArabic ? 'دفعات التكاليف المدفوعة' : 'My Cost Payments',
+          style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.w600),
+        ),
+        const SizedBox(height: 8),
+        if (pending > 0)
+          Container(
+            width: double.infinity,
+            margin: const EdgeInsets.only(bottom: 12),
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: Colors.teal.shade50,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: Colors.teal.shade200),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.info_outline, color: Colors.teal.shade700, size: 16),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    widget.isArabic
+                        ? '$pending دفعة تنتظر تأكيد الاستلام منك'
+                        : '$pending payment${pending != 1 ? 's' : ''} awaiting your receipt confirmation',
+                    style: GoogleFonts.poppins(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.teal.shade800,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ..._costPayments.map((cost) => _buildCostPaymentItem(cost)),
+      ],
+    );
+  }
+
+  Widget _buildCostPaymentItem(Map<String, dynamic> cost) {
+    final amountCents = (cost['amount_cents'] as num?)?.toInt() ?? 0;
+    final amountSdg = amountCents / 100.0;
+    final category = cost['expense_category'] as String? ?? 'other';
+    final categoryLabel = {
+      'permits': 'Permits & Licenses',
+      'incentives': 'Incentives & Allowances',
+      'communications': 'Internet & Comms',
+      'training': 'Training',
+      'transport': 'Transportation',
+      'general_transport': 'Transportation',
+      'equipment': 'Equipment & Supplies',
+      'printing': 'Printing & Stationery',
+      'meetings': 'Meetings',
+      'office_admin': 'Office Admin',
+      'other': 'Other',
+    }[category] ?? category;
+    final categoryLabelAr = {
+      'permits': 'تصاريح ورخص',
+      'incentives': 'حوافز وبدلات',
+      'communications': 'انترنت واتصالات',
+      'training': 'تدريب',
+      'transport': 'نقل وسفر',
+      'general_transport': 'نقل وسفر',
+      'equipment': 'معدات ولوازم',
+      'printing': 'طباعة وقرطاسية',
+      'meetings': 'اجتماعات',
+      'office_admin': 'مكتب وادارة',
+      'other': 'أخرى',
+    }[category] ?? category;
+
+    final receiptConfirmed = cost['fund_receipt_confirmed'] == true;
+    final confirmedAt = cost['fund_receipt_confirmed_at'] as String?;
+    final paidAt = cost['paid_at'] as String?;
+    final description = cost['description'] as String?;
+    final costId = (cost['id'] as String? ?? '').substring(0, 8).toUpperCase();
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: receiptConfirmed ? Colors.green.shade200 : Colors.teal.shade200,
+          width: 1.5,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Header row
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.teal.shade50,
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(Icons.receipt_long, color: Colors.teal.shade600, size: 16),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        widget.isArabic ? categoryLabelAr : categoryLabel,
+                        style: GoogleFonts.poppins(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 13,
+                        ),
+                      ),
+                      if (description != null && description.isNotEmpty)
+                        Text(
+                          description,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: GoogleFonts.poppins(
+                            fontSize: 11,
+                            color: Colors.grey.shade600,
+                          ),
+                        ),
+                      Text(
+                        'REF: $costId',
+                        style: GoogleFonts.poppins(
+                          fontSize: 10,
+                          color: Colors.grey.shade500,
+                          fontFamily: 'monospace',
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: Colors.purple.shade50,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.purple.shade200),
+                      ),
+                      child: Text(
+                        widget.isArabic ? 'مدفوع' : 'Paid',
+                        style: GoogleFonts.poppins(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.purple.shade700,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '${NumberFormat.currency(symbol: '', decimalDigits: 2).format(amountSdg)} SDG',
+                      style: GoogleFonts.poppins(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w800,
+                        color: Colors.teal.shade700,
+                      ),
+                    ),
+                    if (paidAt != null)
+                      Text(
+                        DateFormat('dd MMM yyyy').format(DateTime.parse(paidAt).toLocal()),
+                        style: GoogleFonts.poppins(
+                          fontSize: 10,
+                          color: Colors.grey.shade500,
+                        ),
+                      ),
+                  ],
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+
+            // Receipt status
+            if (receiptConfirmed) ...[
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.green.shade50,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.green.shade200),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.verified, color: Colors.green.shade700, size: 15),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            widget.isArabic
+                                ? 'تم تأكيد الاستلام ✓'
+                                : 'Receipt confirmed ✓',
+                            style: GoogleFonts.poppins(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                              color: Colors.green.shade700,
+                            ),
+                          ),
+                          if (confirmedAt != null)
+                            Text(
+                              DateFormat('dd MMM yyyy, HH:mm').format(
+                                DateTime.parse(confirmedAt).toLocal(),
+                              ),
+                              style: GoogleFonts.poppins(
+                                fontSize: 11,
+                                color: Colors.green.shade600,
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ] else ...[
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.amber.shade50,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.amber.shade300),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.warning_amber, color: Colors.amber.shade700, size: 15),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        widget.isArabic
+                            ? 'لم يتم تأكيد استلام الدفعة بعد'
+                            : 'Receipt not yet confirmed',
+                        style: GoogleFonts.poppins(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.amber.shade800,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 8),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: () => _confirmCostPaymentReceipt(cost),
+                  icon: const Icon(Icons.verified, size: 16),
+                  label: Text(
+                    widget.isArabic
+                        ? 'تأكيد استلام الدفعة'
+                        : 'Confirm Receipt',
+                    style: GoogleFonts.poppins(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.teal.shade600,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
     );
   }
 
