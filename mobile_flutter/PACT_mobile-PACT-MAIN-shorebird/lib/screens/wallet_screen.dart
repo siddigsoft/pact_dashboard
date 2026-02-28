@@ -2693,7 +2693,7 @@ class _WalletScreenState extends State<WalletScreen> {
                         ),
                       Text(
                         'REF: $costId',
-                        style: GoogleFonts.poppins(
+                        style: TextStyle(
                           fontSize: 10,
                           color: Colors.grey.shade500,
                           fontFamily: 'monospace',
