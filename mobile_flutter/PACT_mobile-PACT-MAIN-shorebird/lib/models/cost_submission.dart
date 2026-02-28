@@ -554,6 +554,9 @@ class OperationalCostSubmission {
   final bool fundReceiptConfirmed;
   final String? fundReceiptConfirmedAt;
   final String? fundReceiptNotes;
+  final String? paymentProofUrl;
+  final String? paymentProofNotes;
+  final String? paymentProofUploadedAt;
   final String createdAt;
   final String updatedAt;
 
@@ -589,6 +592,9 @@ class OperationalCostSubmission {
     this.fundReceiptConfirmed = false,
     this.fundReceiptConfirmedAt,
     this.fundReceiptNotes,
+    this.paymentProofUrl,
+    this.paymentProofNotes,
+    this.paymentProofUploadedAt,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -623,12 +629,12 @@ class OperationalCostSubmission {
       supportingDocuments: docs,
       status: CostSubmissionStatusExtension.fromString(json['status']),
       tier1Status: TierApprovalStatusExtension.fromString(json['tier1_status']),
-      tier1ReviewedBy: json['tier1_reviewed_by'],
-      tier1ReviewedAt: json['tier1_reviewed_at'],
+      tier1ReviewedBy: json['tier1_approved_by'] ?? json['tier1_reviewed_by'],
+      tier1ReviewedAt: json['tier1_approved_at'] ?? json['tier1_reviewed_at'],
       tier1Notes: json['tier1_notes'],
       tier2Status: TierApprovalStatusExtension.fromString(json['tier2_status']),
-      tier2ReviewedBy: json['tier2_reviewed_by'],
-      tier2ReviewedAt: json['tier2_reviewed_at'],
+      tier2ReviewedBy: json['tier2_approved_by'] ?? json['tier2_reviewed_by'],
+      tier2ReviewedAt: json['tier2_approved_at'] ?? json['tier2_reviewed_at'],
       tier2Notes: json['tier2_notes'],
       walletTransactionId: json['wallet_transaction_id'],
       paidAt: json['paid_at'],
@@ -637,6 +643,9 @@ class OperationalCostSubmission {
       fundReceiptConfirmed: json['fund_receipt_confirmed'] == true,
       fundReceiptConfirmedAt: json['fund_receipt_confirmed_at']?.toString(),
       fundReceiptNotes: json['fund_receipt_notes']?.toString(),
+      paymentProofUrl: json['payment_proof_url']?.toString(),
+      paymentProofNotes: json['payment_proof_notes']?.toString(),
+      paymentProofUploadedAt: json['payment_proof_uploaded_at']?.toString(),
       createdAt: json['created_at'] ?? '',
       updatedAt: json['updated_at'] ?? '',
     );

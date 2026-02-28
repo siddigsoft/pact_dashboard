@@ -3,6 +3,8 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import '../models/cost_submission.dart';
 import '../services/cost_submission_service.dart';
 import '../theme/app_colors.dart';
@@ -773,11 +775,40 @@ class _CostSubmissionScreenState extends State<CostSubmissionScreen>
                       // Approval stepper
                       _buildApprovalStepper(sub),
 
+                      // Payment receipt proof (when admin has uploaded receipt)
+                      if (sub.paymentProofUrl != null &&
+                          sub.paymentProofUrl!.isNotEmpty) ...[
+                        const SizedBox(height: 10),
+                        _buildPaymentProofCard(sub),
+                      ],
+
                       // Fund receipt confirmation badge (for paid submissions)
                       if (sub.status == CostSubmissionStatus.paid ||
                           sub.paidAt != null) ...[
                         const SizedBox(height: 10),
                         _buildReceiptConfirmationBadge(sub),
+                        if (!sub.fundReceiptConfirmed) ...[
+                          const SizedBox(height: 8),
+                          SizedBox(
+                            width: double.infinity,
+                            child: ElevatedButton.icon(
+                              onPressed: () => _confirmReceipt(sub),
+                              icon: const Icon(Icons.check_circle_outline, size: 16),
+                              label: Text(
+                                _isArabic ? 'تأكيد استلام الدفعة' : 'Confirm Receipt',
+                                style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
+                              ),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFF10B981),
+                                foregroundColor: Colors.white,
+                                elevation: 0,
+                                padding: const EdgeInsets.symmetric(vertical: 10),
+                                shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(10)),
+                              ),
+                            ),
+                          ),
+                        ],
                       ],
 
                       // Reconcile button
@@ -936,6 +967,131 @@ class _CostSubmissionScreenState extends State<CostSubmissionScreen>
       (t) => t.toString().split('.').last.toLowerCase() == s,
       orElse: () => TierApprovalStatus.pending,
     );
+  }
+
+  // ── Payment Proof Card ────────────────────────────────────────────────────
+
+  Widget _buildPaymentProofCard(OperationalCostSubmission sub) {
+    final url = sub.paymentProofUrl!;
+    final isPdf = url.toLowerCase().contains('.pdf');
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF0FDF4),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: const Color(0xFF6EE7B7)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.receipt_long_rounded, size: 14, color: Color(0xFF059669)),
+              const SizedBox(width: 6),
+              Text(
+                _isArabic ? 'إيصال الدفع' : 'Payment Receipt',
+                style: GoogleFonts.poppins(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: const Color(0xFF059669)),
+              ),
+              const Spacer(),
+              GestureDetector(
+                onTap: () async {
+                  final uri = Uri.parse(url);
+                  if (await canLaunchUrl(uri)) {
+                    await launchUrl(uri, mode: LaunchMode.externalApplication);
+                  }
+                },
+                child: Text(
+                  _isArabic ? 'فتح' : 'Open',
+                  style: GoogleFonts.poppins(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: const Color(0xFF2563EB),
+                      decoration: TextDecoration.underline),
+                ),
+              ),
+            ],
+          ),
+          if (!isPdf) ...[
+            const SizedBox(height: 8),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: CachedNetworkImage(
+                imageUrl: url,
+                height: 100,
+                width: double.infinity,
+                fit: BoxFit.cover,
+                placeholder: (ctx, u) => Container(
+                  height: 100,
+                  color: const Color(0xFFE2E8F0),
+                  child: const Center(child: CircularProgressIndicator(strokeWidth: 2)),
+                ),
+                errorWidget: (ctx, u, e) => Container(
+                  height: 100,
+                  color: const Color(0xFFE2E8F0),
+                  child: const Center(
+                      child: Icon(Icons.broken_image_outlined, color: Color(0xFF94A3B8))),
+                ),
+              ),
+            ),
+          ] else ...[
+            const SizedBox(height: 6),
+            Row(children: [
+              const Icon(Icons.picture_as_pdf_rounded, size: 16, color: Color(0xFFEF4444)),
+              const SizedBox(width: 6),
+              Text(
+                _isArabic ? 'ملف PDF — اضغط فتح للعرض' : 'PDF file — tap Open to view',
+                style: GoogleFonts.poppins(fontSize: 11, color: const Color(0xFF64748B)),
+              ),
+            ]),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Future<void> _confirmReceipt(OperationalCostSubmission sub) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(_isArabic ? 'تأكيد الاستلام' : 'Confirm Receipt',
+            style: GoogleFonts.poppins(fontWeight: FontWeight.w700)),
+        content: Text(
+          _isArabic
+              ? 'هل تؤكد أنك استلمت الدفعة بنجاح؟'
+              : 'Do you confirm that you have received the payment?',
+          style: GoogleFonts.poppins(fontSize: 13),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text(_isArabic ? 'إلغاء' : 'Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF10B981)),
+            child: Text(_isArabic ? 'تأكيد' : 'Confirm',
+                style: const TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      await Supabase.instance.client
+          .from('operational_cost_submissions')
+          .update({
+            'fund_receipt_confirmed': true,
+            'fund_receipt_confirmed_at': DateTime.now().toIso8601String(),
+          })
+          .eq('id', sub.id);
+      _showSnack(_isArabic ? 'تم تأكيد الاستلام بنجاح' : 'Receipt confirmed successfully');
+      _loadData();
+    } catch (e) {
+      _showSnack(_isArabic ? 'فشل التأكيد' : 'Confirmation failed', isError: true);
+    }
   }
 
   // ── Receipt Confirmation Badge ─────────────────────────────────────────────
