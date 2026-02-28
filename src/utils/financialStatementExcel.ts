@@ -159,7 +159,7 @@ function buildStatementWorkbook(
     cell.border = thinBorder();
   }
   summSectionRow.height = 22;
-  ws.mergeCells(summSectionRow.number, 1, summSectionRow.number, 2);
+  ws.mergeCells(summSectionRow.number, 1, summSectionRow.number, totalCols);
 
   const summaryPairs: [string, string | number][] = [
     ['Transactions', rows.length],
@@ -168,18 +168,25 @@ function buildStatementWorkbook(
     [`Total Paid (${cur})`, fmtCurrency(totalPaid, cur)],
   ];
 
+  // Label spans cols 1-4 (wide enough for long text); value spans cols 5-6 (right-aligned)
+  const SUMM_LABEL_END = 4;
+  const SUMM_VAL_START = 5;
+  const SUMM_VAL_END = 6;
   summaryPairs.forEach(([label, value], i) => {
-    const row = ws.addRow([label, value]);
+    const rowData: (string | number)[] = [label, '', '', ''];
+    for (let c = SUMM_VAL_START; c <= totalCols; c++) rowData.push(c === SUMM_VAL_START ? value : '');
+    const row = ws.addRow(rowData);
+    ws.mergeCells(row.number, 1, row.number, SUMM_LABEL_END);
+    ws.mergeCells(row.number, SUMM_VAL_START, row.number, SUMM_VAL_END);
+    const bg = i % 2 === 1 ? altFill() : undefined;
     row.getCell(1).font = { bold: true, size: 10, name: 'Calibri', color: { argb: DARK } };
     row.getCell(1).border = thinBorder();
-    row.getCell(1).alignment = { vertical: 'middle' };
-    row.getCell(2).font = bodyFont(10);
-    row.getCell(2).border = thinBorder();
-    row.getCell(2).alignment = { horizontal: 'right', vertical: 'middle' };
-    if (i % 2 === 1) {
-      row.getCell(1).fill = altFill();
-      row.getCell(2).fill = altFill();
-    }
+    row.getCell(1).alignment = { vertical: 'middle', indent: 1 };
+    if (bg) row.getCell(1).fill = bg;
+    row.getCell(SUMM_VAL_START).font = { bold: true, size: 10, name: 'Calibri', color: { argb: DARK } };
+    row.getCell(SUMM_VAL_START).border = thinBorder();
+    row.getCell(SUMM_VAL_START).alignment = { horizontal: 'right', vertical: 'middle' };
+    if (bg) row.getCell(SUMM_VAL_START).fill = bg;
     row.height = 18;
   });
 
@@ -261,7 +268,7 @@ function buildStatementWorkbook(
       cell.border = thinBorder();
     }
     appSectionRow.height = 20;
-    ws.mergeCells(appSectionRow.number, 1, appSectionRow.number, 2);
+    ws.mergeCells(appSectionRow.number, 1, appSectionRow.number, totalCols);
 
     const appPairs: [string, string][] = [
       ['Tier 1 Approved', `${approvedByT1} of ${rows.length}`],
@@ -270,16 +277,20 @@ function buildStatementWorkbook(
     if (rejectedCount > 0) appPairs.push(['Rejected', String(rejectedCount)]);
 
     appPairs.forEach(([label, value], i) => {
-      const row = ws.addRow([label, value]);
+      const rowData: (string | number)[] = [label, '', '', ''];
+      for (let c = SUMM_VAL_START; c <= totalCols; c++) rowData.push(c === SUMM_VAL_START ? value : '');
+      const row = ws.addRow(rowData);
+      ws.mergeCells(row.number, 1, row.number, SUMM_LABEL_END);
+      ws.mergeCells(row.number, SUMM_VAL_START, row.number, SUMM_VAL_END);
+      const bg = i % 2 === 1 ? altFill() : undefined;
       row.getCell(1).font = { bold: true, size: 10, name: 'Calibri', color: { argb: DARK } };
       row.getCell(1).border = thinBorder();
-      row.getCell(2).font = bodyFont(10);
-      row.getCell(2).border = thinBorder();
-      row.getCell(2).alignment = { horizontal: 'right', vertical: 'middle' };
-      if (i % 2 === 1) {
-        row.getCell(1).fill = altFill();
-        row.getCell(2).fill = altFill();
-      }
+      row.getCell(1).alignment = { vertical: 'middle', indent: 1 };
+      if (bg) row.getCell(1).fill = bg;
+      row.getCell(SUMM_VAL_START).font = bodyFont(10);
+      row.getCell(SUMM_VAL_START).border = thinBorder();
+      row.getCell(SUMM_VAL_START).alignment = { horizontal: 'right', vertical: 'middle' };
+      if (bg) row.getCell(SUMM_VAL_START).fill = bg;
       row.height = 18;
     });
   }
