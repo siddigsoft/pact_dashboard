@@ -335,18 +335,14 @@ export const EmailNotificationService = {
       
       console.log(`[EMAIL] Sending notification to ${email}: ${subject} (attempt ${retryCount + 1}/${MAX_RETRIES + 1})`);
 
+      const renderedHtml = generateNotificationEmailHTML(recipientName || 'User', options);
       const emailBody: Record<string, unknown> = {
         to: email,
         subject,
-        type: 'notification',
+        html: renderedHtml,
+        type: 'general',
         recipientName: recipientName || 'User',
-        title_en: options.title,
-        title_ar: options.titleAr || options.title,
-        message_en: options.message,
-        message_ar: options.messageAr || options.message,
-        actionUrl: options.actionUrl,
         priority: options.type === 'error' ? 'urgent' : options.type === 'warning' ? 'high' : 'normal',
-        details: options.details,
         cc: retryCount === 0 ? (options as any).cc : undefined,
       };
       if (options.attachments?.length) {
@@ -2058,18 +2054,14 @@ PACT Workflow Platform`;
                             options.type === 'warning' ? '[HIGH PRIORITY | أولوية عالية] ' : '';
       const subject = priorityPrefix + options.title;
       
+      const renderedHtml = generateNotificationEmailHTML(primaryRecipient.name || 'User', options);
       const emailBody: Record<string, unknown> = {
         to: primaryRecipient.email,
         subject,
-        type: 'notification',
+        html: renderedHtml,
+        type: 'general',
         recipientName: primaryRecipient.name,
-        title_en: options.title,
-        title_ar: options.titleAr || options.title,
-        message_en: options.message,
-        message_ar: options.messageAr || options.message,
-        actionUrl: options.actionUrl,
         priority: options.type === 'error' ? 'urgent' : options.type === 'warning' ? 'high' : 'normal',
-        details: options.details,
         cc: ccRecipients,
       };
       if (options.attachments?.length) {
