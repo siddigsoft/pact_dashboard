@@ -3427,14 +3427,23 @@ const CostSubmission = () => {
                     <span className="text-muted-foreground">Total Amount (SDG)</span>
                     <span className="font-bold text-green-700">SDG {bulkCostEmailDialog.totalSdg.toLocaleString()}</span>
                   </div>
-                  {bulkCostEmailDialog.usdRate && !isNaN(parseFloat(bulkCostEmailDialog.usdRate)) && parseFloat(bulkCostEmailDialog.usdRate) > 0 && (
-                    <div className="flex justify-between text-sm border-t pt-2 mt-1">
-                      <span className="text-muted-foreground">Equivalent in USD</span>
-                      <span className="font-bold text-blue-700">
-                        USD {(bulkCostEmailDialog.totalSdg / parseFloat(bulkCostEmailDialog.usdRate)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                      </span>
-                    </div>
-                  )}
+                  {bulkCostEmailDialog.usdRate && !isNaN(parseFloat(bulkCostEmailDialog.usdRate)) && parseFloat(bulkCostEmailDialog.usdRate) > 0 && (() => {
+                    const rate = parseFloat(bulkCostEmailDialog.usdRate);
+                    const totalUsd = bulkCostEmailDialog.totalSdg / rate;
+                    const perSub = bulkCostEmailDialog.count > 0 ? totalUsd / bulkCostEmailDialog.count : 0;
+                    return (
+                      <div className="border-t pt-2 mt-1 space-y-0.5">
+                        <div className="flex justify-between text-sm">
+                          <span className="text-muted-foreground">Equivalent in USD</span>
+                          <span className="font-bold text-blue-700">USD {totalUsd.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                        </div>
+                        <div className="flex justify-between text-xs text-muted-foreground">
+                          <span>Per submission (avg)</span>
+                          <span>~USD {perSub.toFixed(2)}</span>
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </div>
                 <div className="space-y-1.5">
                   <Label htmlFor="usd-rate-input">USD Exchange Rate (1 USD = ? SDG) <span className="text-muted-foreground font-normal text-xs">— optional / اختياري</span></Label>
@@ -3443,7 +3452,7 @@ const CostSubmission = () => {
                     type="number"
                     min="1"
                     step="0.01"
-                    placeholder="e.g. 1900 — leave blank to skip"
+                    placeholder="e.g. 3500 — leave blank to skip"
                     value={bulkCostEmailDialog.usdRate}
                     onChange={(e) => setBulkCostEmailDialog(prev => ({ ...prev, usdRate: e.target.value }))}
                     data-testid="input-bulk-usd-rate"

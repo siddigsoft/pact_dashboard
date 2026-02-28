@@ -3080,17 +3080,24 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
                           type="number"
                           min="1"
                           step="0.01"
-                          placeholder="e.g. 1900"
+                          placeholder="e.g. 3500"
                           value={paymentRequestDialog.usdRate}
                           onChange={(e) => setPaymentRequestDialog(prev => ({ ...prev, usdRate: e.target.value }))}
                           data-testid="input-dp-usd-rate"
                           className="h-8 text-sm font-semibold w-36"
                         />
-                        {paymentRequestDialog.usdRate && !isNaN(parseFloat(paymentRequestDialog.usdRate)) && parseFloat(paymentRequestDialog.usdRate) > 0 && (
-                          <span className="text-xs font-semibold text-blue-700">
-                            ≈ USD {(paymentRequestDialog.bulkRequests.reduce((s, r) => s + (r.approvedAmount || r.requestedAmount), 0) / parseFloat(paymentRequestDialog.usdRate)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                          </span>
-                        )}
+                        {paymentRequestDialog.usdRate && !isNaN(parseFloat(paymentRequestDialog.usdRate)) && parseFloat(paymentRequestDialog.usdRate) > 0 && (() => {
+                          const rate = parseFloat(paymentRequestDialog.usdRate);
+                          const totalSdg = paymentRequestDialog.bulkRequests.reduce((s, r) => s + (r.approvedAmount || r.requestedAmount), 0);
+                          const totalUsd = totalSdg / rate;
+                          const perReq = paymentRequestDialog.bulkRequests.length > 0 ? totalUsd / paymentRequestDialog.bulkRequests.length : 0;
+                          return (
+                            <div className="flex flex-col">
+                              <span className="text-xs font-bold text-blue-700">≈ USD {totalUsd.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                              <span className="text-[10px] text-muted-foreground">~USD {perReq.toFixed(2)} / request</span>
+                            </div>
+                          );
+                        })()}
                       </div>
                       <p className="text-[11px] text-muted-foreground">If provided, the USD equivalent will appear in the email and attached files / إذا أُدخل، سيظهر المعادل بالدولار في البريد والمرفقات</p>
                     </div>
