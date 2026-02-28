@@ -352,26 +352,25 @@ function buildStatementWorkbook(
 const GROUP_BAND = 'FF1E3A5F'; // slightly lighter navy for group bands
 const SUBTOTAL_BG = 'FFD6E4F7'; // light blue for subtotal rows
 
-function buildGroupedStatementWorkbook(
+function addGroupedSheet(
+  wb: ExcelJS.Workbook,
   rows: StatementRow[],
   config: StatementConfig,
   groupBy: 'state' | 'enumerator'
-): { wb: ExcelJS.Workbook; filename: string } | null {
-  if (rows.length === 0) return null;
+): void {
+  if (rows.length === 0) return;
 
   const cur = config.currency || 'SDG';
   const isTransport = config.statementType === 'transport_advance';
-  const typeLabel = isTransport ? 'Transport-Advance' : 'Operational-Cost';
-  const refNum = `STMT-${format(new Date(), 'yyyyMMdd-HHmm')}`;
   const totalCols = isTransport ? 11 : 10;
+  const refNum = `STMT-${format(new Date(), 'yyyyMMdd-HHmm')}`;
 
-  const groupLabel = groupBy === 'state' ? 'State' : 'Enumerator';
+  const groupLabel = groupBy === 'state' ? 'By State' : 'By Enumerator';
   const groupKey = (r: StatementRow): string =>
     groupBy === 'state'
-      ? (r.state || (r as any).stateName || 'Unknown State')
+      ? (r.state || 'Unknown State')
       : (r.requester || 'Unknown Enumerator');
 
-  // Build ordered groups preserving insertion order
   const groupMap = new Map<string, StatementRow[]>();
   rows.forEach(r => {
     const k = groupKey(r);
@@ -381,22 +380,18 @@ function buildGroupedStatementWorkbook(
   const groups = Array.from(groupMap.entries()).sort(([a], [b]) => a.localeCompare(b));
 
   const totalRequested = rows.reduce((s, r) => s + r.requestedAmount, 0);
-  const totalApproved = rows.reduce((s, r) => s + r.approvedAmount, 0);
-  const totalPaid = rows.reduce((s, r) => s + r.paidAmount, 0);
+  const totalApproved  = rows.reduce((s, r) => s + r.approvedAmount, 0);
+  const totalPaid      = rows.reduce((s, r) => s + r.paidAmount, 0);
 
-  const wb = new ExcelJS.Workbook();
-  wb.creator = 'PACT Command Center';
-  wb.created = new Date();
-
-  const ws = wb.addWorksheet(`By ${groupLabel}`);
+  const ws = wb.addWorksheet(groupLabel);
 
   // ── Title block ──────────────────────────────────────────────────────────
-  const titleRow = ws.addRow([`PACT Command Center  |  Financial Statement — By ${groupLabel}`]);
+  const titleRow = ws.addRow([`PACT Command Center  |  Financial Statement — ${groupLabel}`]);
   titleRow.font = { bold: true, size: 16, name: 'Calibri', color: { argb: NAVY } };
   titleRow.height = 30;
   ws.mergeCells(titleRow.number, 1, titleRow.number, totalCols);
 
-  const subtitleRow = ws.addRow([`${config.title}  —  ${fmtStatus(config.statusFilter)} Statement (Grouped by ${groupLabel})`]);
+  const subtitleRow = ws.addRow([`${config.title}  —  ${fmtStatus(config.statusFilter)} Statement (${groupLabel})`]);
   subtitleRow.font = { bold: true, size: 13, name: 'Calibri', color: { argb: BLUE } };
   subtitleRow.height = 22;
   ws.mergeCells(subtitleRow.number, 1, subtitleRow.number, totalCols);
@@ -408,7 +403,7 @@ function buildGroupedStatementWorkbook(
   ws.addRow([]).height = 6;
 
   // ── Overall summary ──────────────────────────────────────────────────────
-  const summSectionRow = ws.addRow([`OVERALL SUMMARY  (${groups.length} ${groupLabel}s)`]);
+  const summSectionRow = ws.addRow([`OVERALL SUMMARY  (${groups.length} ${groupLabel === 'By State' ? 'state' : 'enumerator'}s)`]);
   for (let c = 1; c <= totalCols; c++) {
     const cell = summSectionRow.getCell(c);
     cell.fill = sectionFill(); cell.font = headerFont(12); cell.border = thinBorder();
@@ -420,8 +415,8 @@ function buildGroupedStatementWorkbook(
   const summaryPairs: [string, string | number][] = [
     ['Total Transactions', rows.length],
     [`Total Requested (${cur})`, fmtCurrency(totalRequested, cur)],
-    [`Total Approved (${cur})`, fmtCurrency(totalApproved, cur)],
-    [`Total Paid (${cur})`, fmtCurrency(totalPaid, cur)],
+    [`Total Approved (${cur})`,  fmtCurrency(totalApproved, cur)],
+    [`Total Paid (${cur})`,      fmtCurrency(totalPaid, cur)],
   ];
   summaryPairs.forEach(([label, value], i) => {
     const rowData: (string | number)[] = [label, '', '', ''];
@@ -442,7 +437,6 @@ function buildGroupedStatementWorkbook(
   });
   ws.addRow([]).height = 8;
 
-  // ── Column header (reused per group) ────────────────────────────────────
   const tableHead = isTransport
     ? ['#', 'Ref ID', 'Date', 'Requester', 'Site', `Requested (${cur})`, `Approved (${cur})`, `Paid (${cur})`, 'T1 Approver', 'T2 Approver', 'Status']
     : ['#', 'Ref ID', 'Date', 'Requester', 'Category', `Amount (${cur})`, `Approved (${cur})`, 'T1 Approver', 'T2 Approver', 'Status'];
@@ -453,8 +447,7 @@ function buildGroupedStatementWorkbook(
     const gApp  = groupRows.reduce((s, r) => s + r.approvedAmount, 0);
     const gPaid = groupRows.reduce((s, r) => s + r.paidAmount, 0);
 
-    // Group header band
-    const groupHeaderRow = ws.addRow([`${groupLabel}: ${groupName}   (${groupRows.length} request${groupRows.length !== 1 ? 's' : ''})`]);
+    const groupHeaderRow = ws.addRow([`${groupLabel === 'By State' ? 'State' : 'Enumerator'}: ${groupName}   (${groupRows.length} request${groupRows.length !== 1 ? 's' : ''})`]);
     for (let c = 1; c <= totalCols; c++) {
       const cell = groupHeaderRow.getCell(c);
       cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: GROUP_BAND } };
@@ -464,17 +457,13 @@ function buildGroupedStatementWorkbook(
     groupHeaderRow.height = 20;
     ws.mergeCells(groupHeaderRow.number, 1, groupHeaderRow.number, totalCols);
 
-    // Column headers
     const hdrRow = ws.addRow(tableHead);
     hdrRow.eachCell((cell, ci) => {
-      cell.fill = subHeaderFill();
-      cell.font = headerFont(9);
-      cell.border = thinBorder();
+      cell.fill = subHeaderFill(); cell.font = headerFont(9); cell.border = thinBorder();
       cell.alignment = { horizontal: ci <= 4 ? 'left' : 'center', vertical: 'middle', wrapText: false };
     });
     hdrRow.height = 20;
 
-    // Data rows
     groupRows.forEach((r, idx) => {
       const rowData: (string | number)[] = [idx + 1, r.refId, fmtDate(r.date), r.requester || ''];
       if (isTransport) {
@@ -497,7 +486,6 @@ function buildGroupedStatementWorkbook(
       dataRow.height = 17;
     });
 
-    // Group subtotal row
     const subtotalData: (string | number)[] = isTransport
       ? ['', '', '', '', `Subtotal — ${groupName}`, fmtCurrency(gReq, cur), fmtCurrency(gApp, cur), fmtCurrency(gPaid, cur), '', '', '']
       : ['', '', '', '', `Subtotal — ${groupName}`, fmtCurrency(gReq, cur), fmtCurrency(gApp, cur), '', '', ''];
@@ -526,19 +514,28 @@ function buildGroupedStatementWorkbook(
   grandRow.height = 20;
 
   applyColWidths(ws, isTransport ? TRANSPORT_WIDTHS_SUMMARY : OPCOST_WIDTHS_SUMMARY);
-
-  const statusClean = config.statusFilter.replace(/\s+/g, '_');
-  const filename = `${typeLabel}-By-${groupLabel}-${statusClean}-${format(new Date(), 'yyyy-MM-dd')}.xlsx`;
-
-  return { wb, filename };
 }
 
-export async function generateGroupedStatementExcelBase64(
+function buildAllSheetsWorkbook(
   rows: StatementRow[],
-  config: StatementConfig,
-  groupBy: 'state' | 'enumerator'
+  config: StatementConfig
+): { wb: ExcelJS.Workbook; filename: string } | null {
+  const base = buildStatementWorkbook(rows, config);
+  if (!base) return null;
+  addGroupedSheet(base.wb, rows, config, 'state');
+  addGroupedSheet(base.wb, rows, config, 'enumerator');
+  const isTransport = config.statementType === 'transport_advance';
+  const typeLabel = isTransport ? 'Transport-Advance' : 'Operational-Cost';
+  const statusClean = config.statusFilter.replace(/\s+/g, '_');
+  const filename = `${typeLabel}-Full-Report-${statusClean}-${format(new Date(), 'yyyy-MM-dd')}.xlsx`;
+  return { wb: base.wb, filename };
+}
+
+export async function generateAllSheetsStatementExcelBase64(
+  rows: StatementRow[],
+  config: StatementConfig
 ): Promise<{ base64: string; filename: string } | null> {
-  const result = buildGroupedStatementWorkbook(rows, config, groupBy);
+  const result = buildAllSheetsWorkbook(rows, config);
   if (!result) return null;
   const buffer = await result.wb.xlsx.writeBuffer();
   const bytes = new Uint8Array(buffer as ArrayBuffer);
