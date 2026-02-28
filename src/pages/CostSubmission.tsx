@@ -463,7 +463,8 @@ const CostSubmission = () => {
 
   const canTier3Approve = (oc: OperationalCostSubmission): boolean => {
     if (!hasThreeTiers(oc)) return false;
-    if (oc.tier2_status !== 'approved' || oc.tier3_status !== 'pending') return false;
+    if (oc.tier2_status !== 'approved') return false;
+    if (oc.tier3_status !== 'pending' && oc.tier3_status !== null) return false;
     if (isSuperAdmin) return true;
     return isAdmin;
   };
@@ -541,6 +542,7 @@ const CostSubmission = () => {
             updates.status = 'approved';
           } else {
             updates.status = 'under_review';
+            updates.tier3_status = 'pending';
           }
         } else {
           updates.status = 'rejected';
