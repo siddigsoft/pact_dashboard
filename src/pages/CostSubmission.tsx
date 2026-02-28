@@ -948,12 +948,10 @@ const CostSubmission = () => {
     }));
   };
 
-  const openBulkCostEmailDialog = () => {
-    const approvedSubs = operationalCosts.filter(o => getOperationalDerivedStatus(o) === 'approved');
-    if (approvedSubs.length === 0) {
-      toast({ title: "No Approved Submissions / لا توجد طلبات موافق عليها", description: "There are no approved submissions to send.", variant: "destructive" });
-      return;
-    }
+  const openBulkCostEmailDialog = (forceSubmission?: OperationalCostSubmission) => {
+    const approvedSubs = forceSubmission
+      ? [forceSubmission]
+      : operationalCosts.filter(o => getOperationalDerivedStatus(o) === 'approved');
     const totalSdg = approvedSubs.reduce((sum, oc) => sum + ((oc as any).amount_cents || 0) / 100, 0);
     setBulkCostEmailDialog({ step: 'rate', open: true, usdRate: '', totalSdg, count: approvedSubs.length, approvedSubmissions: approvedSubs, availableRecipients: [], selectedRecipientIds: [], ccEmails: [], loading: false, sending: false });
   };
@@ -1739,11 +1737,13 @@ const CostSubmission = () => {
             data-testid="button-bulk-cost-email-bar"
           >
             <Mail className="h-3.5 w-3.5 mr-1.5" />
-            Send Approved Email
-            {operationalCosts.filter(o => getOperationalDerivedStatus(o) === 'approved').length > 0 && (
+            Send to Finance
+            {operationalCosts.filter(o => getOperationalDerivedStatus(o) === 'approved').length > 0 ? (
               <span className="ml-1.5 bg-white/25 text-white text-[10px] font-bold rounded-full px-1.5 py-0.5 leading-none">
                 {operationalCosts.filter(o => getOperationalDerivedStatus(o) === 'approved').length}
               </span>
+            ) : (
+              <span className="ml-1.5 bg-white/15 text-white/70 text-[10px] rounded-full px-1.5 py-0.5 leading-none">0</span>
             )}
           </Button>
         </div>
@@ -2921,6 +2921,18 @@ const CostSubmission = () => {
                                 Reconcile
                               </Button>
                             )}
+                            {(isSuperAdmin || isAdmin || isFinanceAdmin) && !['rejected', 'cancelled', 'reconciled'].includes(derivedStatus) && !canRequestPayment(oc) && !canMarkAsPaid(oc) && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => openBulkCostEmailDialog(oc)}
+                                data-testid={`button-send-finance-${oc.id}`}
+                                className="border-blue-300 text-blue-700 hover:bg-blue-50 dark:border-blue-700 dark:text-blue-400 dark:hover:bg-blue-950/40"
+                              >
+                                <Mail className="h-3.5 w-3.5 mr-1" />
+                                Send to Finance
+                              </Button>
+                            )}
                             <div className="flex-1" />
                             {canEditSubmission(oc) && (
                               <Button
@@ -3569,6 +3581,15 @@ const CostSubmission = () => {
                 </DialogDescription>
               </DialogHeader>
               <div className="space-y-4 py-2">
+                {bulkCostEmailDialog.count === 0 && (
+                  <div className="rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-950/30 px-4 py-3 flex items-start gap-2">
+                    <AlertCircle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+                    <p className="text-sm text-amber-800 dark:text-amber-300">
+                      No approved submissions found. You can still send a notification email to finance, but no payment details will be included.
+                      <span className="block mt-0.5 text-xs opacity-70">لا توجد طلبات موافق عليها. يمكنك إرسال إشعار بدون تفاصيل دفع.</span>
+                    </p>
+                  </div>
+                )}
                 <div className="rounded-lg border bg-slate-50 dark:bg-slate-900 p-4 space-y-2">
                   <div className="flex justify-between text-sm">
                     <span className="text-muted-foreground">Approved Submissions</span>
