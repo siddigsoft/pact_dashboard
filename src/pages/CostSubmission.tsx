@@ -458,6 +458,10 @@ const CostSubmission = () => {
     if (oc.status === 'reconciled') return 'reconciled';
     if (oc.status === 'paid') return 'paid';
     if (oc.tier1_status === 'rejected' || oc.tier2_status === 'rejected' || oc.tier3_status === 'rejected' || oc.status === 'rejected') return 'rejected';
+    // Authoritative: the approval handler only sets status='approved' once all required tiers pass.
+    // Catch coordinator submissions (3-tier flow) that completed tier1+tier2 but have tier3_status=null,
+    // and any other case where the DB status is already 'approved'.
+    if (oc.status === 'approved') return 'approved';
     if (hasThreeTiers(oc)) {
       if (oc.tier1_status === 'approved' && oc.tier2_status === 'approved' && oc.tier3_status === 'approved') return 'approved';
       if (oc.tier1_status === 'approved' && (oc.tier2_status === 'pending' || oc.tier3_status === 'pending')) return 'under_review';
