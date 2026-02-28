@@ -243,7 +243,7 @@ export default function EmailPreviewPage() {
       <div className="sticky top-0 z-10 bg-white border-b px-6 py-3 flex items-center justify-between shadow-sm">
         <div className="flex items-center gap-3">
           <span className="font-bold text-slate-800 text-sm">Email Preview</span>
-          <Badge variant="secondary" className="text-xs">Enhanced Template — Not Live Yet</Badge>
+          <Badge variant="default" className="text-xs bg-green-600">Live Template</Badge>
         </div>
         <div className="flex items-center gap-2">
           <Button
@@ -264,7 +264,7 @@ export default function EmailPreviewPage() {
           </Button>
         </div>
         <div className="text-xs text-muted-foreground hidden md:block">
-          Confirm this looks good, then tell me to apply it to the real emails.
+          This template is now used for all payment request emails.
         </div>
       </div>
 
