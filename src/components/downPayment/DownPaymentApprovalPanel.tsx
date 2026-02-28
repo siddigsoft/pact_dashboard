@@ -135,6 +135,7 @@ function BulkSummaryTable({ requests, users }: {
         {tabs.map(t => (
           <button
             key={t.key}
+            type="button"
             onClick={() => setActiveTab(t.key)}
             className={`flex-1 text-[11px] font-medium py-1.5 px-1 transition-colors ${
               activeTab === t.key
