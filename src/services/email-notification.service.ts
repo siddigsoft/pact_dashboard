@@ -361,62 +361,62 @@ function buildEnhancedPaymentEmailHTML(d: {
       </table>
 
       <!-- INSTRUCTION -->
-      <p style="margin:0 0 22px 0;font-size:14.5px;color:#374151;line-height:1.75;">
+      <p style="margin:0 0 16px 0;font-size:13px;color:#374151;line-height:1.65;">
         ${d.isBulk
-          ? `Please find the attached report containing <strong>${d.count} approved transportation advance requests</strong> from <strong>${d.groupLabel}</strong>. Kindly review the details, authorize the disbursements, and confirm receipt at your earliest convenience.`
+          ? `Please find the attached report containing <strong>${d.count} approved transportation advance requests</strong> from <strong>${d.mmpLabel}</strong>. Kindly review the details, authorize the disbursements, and confirm receipt at your earliest convenience.`
           : `A transportation advance request has been fully approved and is ready for payment processing. Kindly review the details below and process the disbursement at your earliest convenience.`
         }
       </p>
 
       <!-- DETAILS TABLE -->
-      <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin:0 0 22px 0;font-size:12.5px;border-radius:6px;overflow:hidden;border:1px solid #E5E7EB;">
+      <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin:0 0 18px 0;font-size:12.5px;border-radius:6px;overflow:hidden;border:1px solid #D1D5DB;">
         <tr style="background:#0F2041;">
-          <td style="padding:7px 12px;color:#FFFFFF;font-weight:700;font-size:10.5px;letter-spacing:0.8px;text-transform:uppercase;width:42%;">Field &nbsp;/&nbsp; الحقل</td>
-          <td style="padding:7px 12px;color:#FFFFFF;font-weight:700;font-size:10.5px;letter-spacing:0.8px;text-transform:uppercase;">Detail &nbsp;/&nbsp; التفصيل</td>
+          <td style="padding:6px 12px;color:#FFFFFF;font-weight:700;font-size:11px;letter-spacing:0.5px;text-transform:uppercase;width:40%;line-height:1.2;">Field / الحقل</td>
+          <td style="padding:6px 12px;color:#FFFFFF;font-weight:700;font-size:11px;letter-spacing:0.5px;text-transform:uppercase;line-height:1.2;">Detail / التفصيل</td>
         </tr>
         <tr style="background:#F8FAFC;">
-          <td style="padding:6px 12px;font-weight:600;color:#374151;border-bottom:1px solid #E5E7EB;border-right:1px solid #E5E7EB;">Reference No / رقم المرجع</td>
-          <td style="padding:6px 12px;color:#1F2937;border-bottom:1px solid #E5E7EB;">${d.requestId}</td>
+          <td style="padding:5px 12px;font-weight:600;color:#4B5563;border-bottom:1px solid #E5E7EB;border-right:1px solid #E5E7EB;font-size:12.5px;line-height:1.3;">Reference No / رقم المرجع</td>
+          <td style="padding:5px 12px;color:#111827;border-bottom:1px solid #E5E7EB;font-size:12.5px;line-height:1.3;">${d.requestId}</td>
         </tr>
         <tr style="background:#FFFFFF;">
-          <td style="padding:6px 12px;font-weight:600;color:#374151;border-bottom:1px solid #E5E7EB;border-right:1px solid #E5E7EB;">MMP / الخطة الشهرية</td>
-          <td style="padding:6px 12px;color:#1F2937;border-bottom:1px solid #E5E7EB;font-weight:600;">${d.mmpLabel}</td>
+          <td style="padding:5px 12px;font-weight:600;color:#4B5563;border-bottom:1px solid #E5E7EB;border-right:1px solid #E5E7EB;font-size:12.5px;line-height:1.3;">MMP / الخطة الشهرية</td>
+          <td style="padding:5px 12px;color:#0F2041;border-bottom:1px solid #E5E7EB;font-weight:700;font-size:14px;line-height:1.3;">${d.mmpLabel}</td>
         </tr>
         <tr style="background:#F8FAFC;">
-          <td style="padding:6px 12px;font-weight:600;color:#374151;border-bottom:1px solid #E5E7EB;border-right:1px solid #E5E7EB;">Type / النوع</td>
-          <td style="padding:6px 12px;color:#1F2937;border-bottom:1px solid #E5E7EB;">${fundingLabel} / ${fundingLabelAr}</td>
+          <td style="padding:5px 12px;font-weight:600;color:#4B5563;border-bottom:1px solid #E5E7EB;border-right:1px solid #E5E7EB;font-size:12.5px;line-height:1.3;">Type / النوع</td>
+          <td style="padding:5px 12px;color:#111827;border-bottom:1px solid #E5E7EB;font-size:12.5px;line-height:1.3;">${fundingLabel} / ${fundingLabelAr}</td>
         </tr>
         <tr style="background:#FFFFFF;">
-          <td style="padding:6px 12px;font-weight:600;color:#374151;border-bottom:1px solid #E5E7EB;border-right:1px solid #E5E7EB;">Category / الفئة</td>
-          <td style="padding:6px 12px;color:#1F2937;border-bottom:1px solid #E5E7EB;">${d.category}</td>
+          <td style="padding:5px 12px;font-weight:600;color:#4B5563;border-bottom:1px solid #E5E7EB;border-right:1px solid #E5E7EB;font-size:12.5px;line-height:1.3;">Category / الفئة</td>
+          <td style="padding:5px 12px;color:#111827;border-bottom:1px solid #E5E7EB;font-size:12.5px;line-height:1.3;">${d.category}</td>
         </tr>
         <tr style="background:#F8FAFC;">
-          <td style="padding:6px 12px;font-weight:600;color:#374151;border-bottom:1px solid #E5E7EB;border-right:1px solid #E5E7EB;">Total Amount / المبلغ الإجمالي</td>
-          <td style="padding:6px 12px;color:#065F46;font-weight:700;border-bottom:1px solid #E5E7EB;font-size:14px;">${fmt(d.totalAmount)}</td>
+          <td style="padding:5px 12px;font-weight:600;color:#4B5563;border-bottom:1px solid #E5E7EB;border-right:1px solid #E5E7EB;font-size:12.5px;line-height:1.3;">Total Amount / المبلغ الإجمالي</td>
+          <td style="padding:5px 12px;color:#065F46;font-weight:700;border-bottom:1px solid #E5E7EB;font-size:14px;line-height:1.3;">${fmt(d.totalAmount)}</td>
         </tr>
         <tr style="background:#FFFFFF;">
-          <td style="padding:6px 12px;font-weight:600;color:#374151;border-bottom:1px solid #E5E7EB;border-right:1px solid #E5E7EB;">Project / المشروع</td>
-          <td style="padding:6px 12px;color:#1F2937;border-bottom:1px solid #E5E7EB;">${d.project}</td>
+          <td style="padding:5px 12px;font-weight:600;color:#4B5563;border-bottom:1px solid #E5E7EB;border-right:1px solid #E5E7EB;font-size:12.5px;line-height:1.3;">Project / المشروع</td>
+          <td style="padding:5px 12px;color:#111827;border-bottom:1px solid #E5E7EB;font-size:12.5px;line-height:1.3;">${d.project}</td>
         </tr>
         <tr style="background:#F8FAFC;">
-          <td style="padding:6px 12px;font-weight:600;color:#374151;border-right:1px solid #E5E7EB;">Approved By / تمت الموافقة من</td>
-          <td style="padding:6px 12px;color:#1F2937;">${d.approverName}</td>
+          <td style="padding:5px 12px;font-weight:600;color:#4B5563;border-right:1px solid #E5E7EB;font-size:12.5px;line-height:1.3;">Approved By / تمت الموافقة من</td>
+          <td style="padding:5px 12px;color:#111827;font-size:12.5px;line-height:1.3;">${d.approverName}</td>
         </tr>
       </table>
 
       <!-- ACTION BUTTONS -->
-      <table width="100%" cellpadding="0" cellspacing="0" style="margin:28px 0 30px 0;">
+      <table width="100%" cellpadding="0" cellspacing="0" style="margin:20px 0 24px 0;">
         <tr>
-          <td style="padding:0 6px 0 0;width:50%;">
-            <a href="${fullActionUrl}" style="display:block;padding:15px 20px;background:#0F2041;color:#FFFFFF;text-decoration:none;border-radius:7px;font-weight:700;font-size:14px;text-align:center;line-height:1.4;">
+          <td style="padding:0 5px 0 0;width:50%;">
+            <a href="${fullActionUrl}" style="display:block;padding:12px 16px;background:#0F2041;color:#FFFFFF;text-decoration:none;border-radius:6px;font-weight:700;font-size:13px;text-align:center;line-height:1.35;">
               View &amp; Process Payment
-              <span style="display:block;font-size:11.5px;font-weight:400;opacity:0.8;margin-top:3px;">عرض ومعالجة الدفع</span>
+              <span style="display:block;font-size:11px;font-weight:400;opacity:0.85;margin-top:2px;">عرض ومعالجة الدفع</span>
             </a>
           </td>
-          <td style="padding:0 0 0 6px;width:50%;">
-            <a href="${fullActionUrl}" style="display:block;padding:14px 20px;background:#FFFFFF;color:#0F2041;text-decoration:none;border-radius:7px;font-weight:700;font-size:14px;border:2px solid #0F2041;text-align:center;line-height:1.4;">
+          <td style="padding:0 0 0 5px;width:50%;">
+            <a href="${fullActionUrl}" style="display:block;padding:12px 16px;background:#1D3461;color:#FFFFFF;text-decoration:none;border-radius:6px;font-weight:700;font-size:13px;text-align:center;line-height:1.35;">
               Download Report
-              <span style="display:block;font-size:11.5px;font-weight:400;opacity:0.65;margin-top:3px;">تحميل التقرير</span>
+              <span style="display:block;font-size:11px;font-weight:400;opacity:0.85;margin-top:2px;">تحميل التقرير</span>
             </a>
           </td>
         </tr>
