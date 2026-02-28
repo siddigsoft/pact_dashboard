@@ -1002,40 +1002,14 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
             generatedBy: approverName,
           };
 
-          const EXCEL_ATTACH_LIMIT = 30;
-          const excelTooLarge = bulkRequests.length > EXCEL_ATTACH_LIMIT;
+          // Excel is a single compact table file — always attach directly, no size limit needed.
           let summaryExcel: { base64: string; filename: string } | undefined;
-          let excelDownloadUrl: string | undefined;
-
           try {
             const generated = await generateFinancialStatementExcelBase64(statementRows, config);
-            if (generated) {
-              if (!excelTooLarge) {
-                summaryExcel = generated;
-              } else {
-                const excelBlob = new Blob(
-                  [Uint8Array.from(atob(generated.base64), c => c.charCodeAt(0))],
-                  { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }
-                );
-                const uploadPath = `bulk-payment-excels/${generated.filename}`;
-                const { error: uploadError } = await supabase.storage
-                  .from('mmp-files')
-                  .upload(uploadPath, excelBlob, { contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', upsert: true });
-                if (!uploadError) {
-                  const { data: signedData } = await supabase.storage
-                    .from('mmp-files')
-                    .createSignedUrl(uploadPath, 60 * 60 * 24 * 7);
-                  if (signedData?.signedUrl) excelDownloadUrl = signedData.signedUrl;
-                }
-              }
-            }
-          } catch { /* continue without Excel attachment */ }
+            if (generated) summaryExcel = generated;
+          } catch { /* continue without attachment */ }
 
-          const excelNote = excelTooLarge
-            ? excelDownloadUrl
-              ? `\n\nBULK EXCEL DOWNLOAD: The full Excel report (${bulkRequests.length} rows) is available here (valid 7 days):\n${excelDownloadUrl}\n\nتنزيل Excel: التقرير الكامل متاح عبر الرابط أعلاه (صالح 7 أيام).`
-              : `\n\nNOTE: Batch too large to attach. Log in to PACT → Processing → "Bulk Excel" to download.\nملاحظة: يرجى تنزيل ملف Excel من PACT مباشرة.`
-            : '';
+          const excelNote = '';
 
           const result = await EmailNotificationService.sendPaymentRequestToFinanceWithRecipients(
             selectedRecipients,
@@ -1062,11 +1036,7 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
           if (result.success && !result.error) {
             toast({
               title: 'Bulk Excel Sent / تم إرسال Excel الجماعي',
-              description: excelTooLarge
-                ? excelDownloadUrl
-                  ? `${bulkRequests.length} requests sent. Excel report uploaded — download link included in the email (valid 7 days). / تم الإرسال. رابط تنزيل Excel مرفق في البريد.`
-                  : `${bulkRequests.length} requests sent. Use "Bulk Excel" button to download the file. / تم الإرسال. استخدم زر Excel لتنزيل الملف.`
-                : `${bulkRequests.length} requests sent to ${selectedRecipients.length} recipient(s) with formatted Excel attached. / تم إرسال ${bulkRequests.length} طلب مع ملف Excel.`,
+              description: `${bulkRequests.length} requests sent to ${selectedRecipients.length} recipient(s) with the formatted Excel report attached. / تم إرسال ${bulkRequests.length} طلب إلى ${selectedRecipients.length} مستلم مع ملف Excel المنسق.`,
             });
           } else if (result.success && result.error) {
             toast({
@@ -3054,7 +3024,7 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
                   <div className="flex items-center gap-2 text-xs text-muted-foreground">
                     {paymentRequestDialog.sendMode === 'excel' ? <FileSpreadsheet className="h-3.5 w-3.5" /> : <FileText className="h-3.5 w-3.5" />}
                     <span>{paymentRequestDialog.sendMode === 'excel'
-                      ? 'A formatted Excel report (matching the Bank Statement style) will be generated and attached.'
+                      ? `A formatted Excel report (all ${paymentRequestDialog.bulkRequests.length} rows, Bank Statement style) will be attached directly to the email.`
                       : 'A single summary PDF with all requests will be generated and attached to the email.'}</span>
                   </div>
                 </div>
