@@ -878,26 +878,53 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
         }))].join(', ');
         const groupLabel = bulkGroupBy ? `${bulkGroupBy}: ${bulkGroupValue}` : '';
 
-        // Only attach PDF for small batches — large PDFs (> 30 requests) exceed email size limits.
-        // For large batches, include a note to download the PDF from the platform instead.
+        // Always generate the full PDF (all requests as pages in one file).
+        // For large batches the PDF is uploaded to storage and shared as a download link
+        // instead of being attached directly (which would exceed email size limits).
         const PDF_ATTACH_LIMIT = 30;
         const pdfTooLarge = bulkRequests.length > PDF_ATTACH_LIMIT;
 
         let summaryPdf: { base64: string; filename: string } | undefined;
-        if (!pdfTooLarge) {
-          try {
-            const certDataList = await Promise.all(
-              bulkRequests.map(async (bReq) => {
-                const sig = await getSignatureImageData(bReq);
-                return buildCertData(bReq, sig);
-              })
+        let pdfDownloadUrl: string | undefined;
+
+        try {
+          const certDataList = await Promise.all(
+            bulkRequests.map(async (bReq) => {
+              const sig = await getSignatureImageData(bReq);
+              return buildCertData(bReq, sig);
+            })
+          );
+          const generated = await generateBulkPaymentPdfBase64(certDataList, groupLabel || 'All Approved');
+
+          if (!pdfTooLarge) {
+            summaryPdf = generated;
+          } else {
+            // Upload to storage and get a signed download link (expires in 7 days)
+            const batchFileName = generated.filename;
+            const pdfBlob = new Blob(
+              [Uint8Array.from(atob(generated.base64), c => c.charCodeAt(0))],
+              { type: 'application/pdf' }
             );
-            summaryPdf = await generateBulkPaymentPdfBase64(certDataList, groupLabel || 'All Approved');
-          } catch { /* continue without PDF */ }
-        }
+            const uploadPath = `bulk-payment-pdfs/${batchFileName}`;
+            const { error: uploadError } = await supabase.storage
+              .from('mmp-files')
+              .upload(uploadPath, pdfBlob, { contentType: 'application/pdf', upsert: true });
+
+            if (!uploadError) {
+              const { data: signedData } = await supabase.storage
+                .from('mmp-files')
+                .createSignedUrl(uploadPath, 60 * 60 * 24 * 7); // 7 days
+              if (signedData?.signedUrl) {
+                pdfDownloadUrl = signedData.signedUrl;
+              }
+            }
+          }
+        } catch { /* continue without PDF */ }
 
         const pdfNote = pdfTooLarge
-          ? `\n\nNOTE: This batch contains ${bulkRequests.length} requests. The summary PDF is too large to attach via email. Please log in to PACT Command Center → Processing tab → "Bulk PDF" to download it directly.\nملاحظة: يحتوي هذا الدفعة على ${bulkRequests.length} طلباً. ملف PDF أكبر من أن يُرفق عبر البريد الإلكتروني. يرجى تسجيل الدخول إلى PACT وتنزيله من تبويب المعالجة.`
+          ? pdfDownloadUrl
+            ? `\n\nBULK PDF DOWNLOAD: This batch contains ${bulkRequests.length} requests. The full PDF (all ${bulkRequests.length} pages) is available for download here (link valid for 7 days):\n${pdfDownloadUrl}\n\nتنزيل PDF: الملف الكامل (${bulkRequests.length} صفحة) متاح للتنزيل عبر الرابط أعلاه (صالح لمدة 7 أيام).`
+            : `\n\nNOTE: This batch contains ${bulkRequests.length} requests. Please log in to PACT Command Center → Processing tab → "Bulk PDF" to download the full PDF.\nملاحظة: يرجى تسجيل الدخول إلى PACT وتنزيل ملف PDF الكامل من تبويب المعالجة.`
           : '';
 
         const result = await EmailNotificationService.sendPaymentRequestToFinanceWithRecipients(
@@ -926,8 +953,10 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
           toast({
             title: "Bulk Payment Request Sent / تم إرسال طلبات الدفع الجماعية",
             description: pdfTooLarge
-              ? `${bulkRequests.length} requests sent to ${selectedRecipients.length} recipient(s). PDF not attached (batch too large — use "Bulk PDF" button to download). / تم إرسال ${bulkRequests.length} طلب. استخدم زر PDF لتنزيل الملف.`
-              : `${bulkRequests.length} requests sent to ${selectedRecipients.length} recipient(s) with summary PDF attached. / تم إرسال ${bulkRequests.length} طلب إلى ${selectedRecipients.length} مستلم(ين) مع ملف PDF.`,
+              ? pdfDownloadUrl
+                ? `${bulkRequests.length} requests sent. Full PDF (all ${bulkRequests.length} pages) uploaded — download link included in the email (valid 7 days). / تم الإرسال. رابط تنزيل PDF مرفق في البريد.`
+                : `${bulkRequests.length} requests sent to ${selectedRecipients.length} recipient(s). Use "Bulk PDF" button to download the full PDF. / تم الإرسال. استخدم زر PDF لتنزيل الملف الكامل.`
+              : `${bulkRequests.length} requests sent to ${selectedRecipients.length} recipient(s) with full PDF attached. / تم إرسال ${bulkRequests.length} طلب مع ملف PDF كامل.`,
           });
         } else if (result.success && result.error) {
           toast({
