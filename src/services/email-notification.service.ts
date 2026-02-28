@@ -263,8 +263,10 @@ function buildEnhancedPaymentEmailHTML(d: {
   category: string;
   isBulk: boolean;
   currency: string;
+  usdRate?: number;
 }): string {
   const fmt = (n: number) => `${d.currency} ${n.toLocaleString()}`;
+  const totalUsd = d.usdRate && d.usdRate > 0 ? d.totalAmount / d.usdRate : null;
   const fundingLabel = d.fundingType === 'advance' ? 'Advance Request' : 'Reimbursement';
   const fundingLabelAr = d.fundingType === 'advance' ? 'طلب سلفة' : 'طلب تعويض';
   const showPriorityRibbon = d.fundingType === 'advance';
@@ -394,7 +396,11 @@ function buildEnhancedPaymentEmailHTML(d: {
           <td style="padding:5px 12px;font-weight:600;color:#4B5563;border-bottom:1px solid #E5E7EB;border-right:1px solid #E5E7EB;font-size:12.5px;line-height:1.3;">Total Amount / المبلغ الإجمالي</td>
           <td style="padding:5px 12px;color:#065F46;font-weight:700;border-bottom:1px solid #E5E7EB;font-size:14px;line-height:1.3;">${fmt(d.totalAmount)}</td>
         </tr>
-        <tr style="background:#FFFFFF;">
+        ${totalUsd !== null ? `<tr style="background:#FFFFFF;">
+          <td style="padding:5px 12px;font-weight:600;color:#4B5563;border-bottom:1px solid #E5E7EB;border-right:1px solid #E5E7EB;font-size:12.5px;line-height:1.3;">USD Equivalent / المعادل بالدولار<br><span style="font-weight:400;font-size:11px;color:#9CA3AF;">Rate: 1 USD = ${d.usdRate?.toLocaleString()} ${d.currency}</span></td>
+          <td style="padding:5px 12px;color:#1D4ED8;font-weight:700;border-bottom:1px solid #E5E7EB;font-size:14px;line-height:1.3;">USD ${totalUsd.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+        </tr>` : ''}
+        <tr style="background:${totalUsd !== null ? '#F8FAFC' : '#FFFFFF'};">
           <td style="padding:5px 12px;font-weight:600;color:#4B5563;border-bottom:1px solid #E5E7EB;border-right:1px solid #E5E7EB;font-size:12.5px;line-height:1.3;">Project / المشروع</td>
           <td style="padding:5px 12px;color:#111827;border-bottom:1px solid #E5E7EB;font-size:12.5px;line-height:1.3;">${d.project}</td>
         </tr>
@@ -1781,7 +1787,8 @@ PACT Command Center | مركز قيادة باكت`;
     pdfAttachment?: { base64: string; filename: string },
     additionalAttachments?: Array<{ base64: string; filename: string; mimeType?: string }>,
     extraCcEmails?: string[],
-    mmpNames?: string
+    mmpNames?: string,
+    usdRate?: number
   ): Promise<EmailNotificationResult> {
     try {
       if (!recipients || recipients.length === 0) {
@@ -1836,6 +1843,7 @@ PACT Command Center | مركز قيادة باكت`;
         category,
         isBulk,
         currency,
+        usdRate,
       });
 
       const emailBody: Record<string, unknown> = {

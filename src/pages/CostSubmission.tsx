@@ -187,6 +187,19 @@ const CostSubmission = () => {
     sending: boolean;
   }>({ open: false, submission: null, availableRecipients: [], selectedRecipientIds: [], ccEmails: [], loading: false, sending: false });
 
+  const [bulkCostEmailDialog, setBulkCostEmailDialog] = useState<{
+    step: 'rate' | 'recipients';
+    open: boolean;
+    usdRate: string;
+    totalSdg: number;
+    count: number;
+    availableRecipients: Array<{ id: string; email: string; name: string; role: string }>;
+    selectedRecipientIds: string[];
+    ccEmails: string[];
+    loading: boolean;
+    sending: boolean;
+  }>({ step: 'rate', open: false, usdRate: '', totalSdg: 0, count: 0, availableRecipients: [], selectedRecipientIds: [], ccEmails: [], loading: false, sending: false });
+
   const [editingSubmission, setEditingSubmission] = useState<OperationalCostSubmission | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<OperationalCostSubmission | null>(null);
   const [recallConfirm, setRecallConfirm] = useState<OperationalCostSubmission | null>(null);
@@ -926,6 +939,86 @@ const CostSubmission = () => {
         ? []
         : prev.availableRecipients.map(r => r.id),
     }));
+  };
+
+  const openBulkCostEmailDialog = () => {
+    const approvedSubs = filteredOperationalCosts.filter(o => getOperationalDerivedStatus(o) === 'approved');
+    if (approvedSubs.length === 0) {
+      toast({ title: "No Approved Submissions / لا توجد طلبات موافق عليها", description: "There are no approved submissions to send.", variant: "destructive" });
+      return;
+    }
+    const totalSdg = approvedSubs.reduce((sum, oc) => sum + ((oc as any).amount_cents || 0) / 100, 0);
+    setBulkCostEmailDialog({ step: 'rate', open: true, usdRate: '', totalSdg, count: approvedSubs.length, availableRecipients: [], selectedRecipientIds: [], ccEmails: [], loading: false, sending: false });
+  };
+
+  const proceedBulkToRecipients = async () => {
+    const rate = parseFloat(bulkCostEmailDialog.usdRate);
+    if (!bulkCostEmailDialog.usdRate || isNaN(rate) || rate <= 0) {
+      toast({ title: "Invalid Rate / معدل غير صالح", description: "Please enter a valid USD exchange rate.", variant: "destructive" });
+      return;
+    }
+    setBulkCostEmailDialog(prev => ({ ...prev, step: 'recipients', loading: true }));
+    try {
+      const cached = cachedRecipientsRef.current;
+      if (cached.length > 0) {
+        setBulkCostEmailDialog(prev => ({ ...prev, availableRecipients: cached, selectedRecipientIds: cached.map(r => r.id), loading: false }));
+        return;
+      }
+      const { data: financeUsers } = await supabase
+        .from('profiles')
+        .select('id, email, full_name, role')
+        .in('role', ['finance_admin', 'Finance Admin', 'superAdmin', 'SuperAdmin', 'super_admin', 'admin', 'Admin', 'Administrator'])
+        .eq('status', 'approved');
+      const recipients = (financeUsers || []).filter((u: any) => u.email).map((u: any) => ({ id: u.id, email: u.email, name: u.full_name || u.email, role: u.role }));
+      cachedRecipientsRef.current = recipients;
+      setBulkCostEmailDialog(prev => ({ ...prev, availableRecipients: recipients, selectedRecipientIds: recipients.map((r: any) => r.id), loading: false }));
+    } catch {
+      setBulkCostEmailDialog(prev => ({ ...prev, loading: false }));
+      toast({ title: "Error / خطأ", description: "Failed to load recipients.", variant: "destructive" });
+    }
+  };
+
+  const handleBulkCostEmailSend = async () => {
+    const { selectedRecipientIds, availableRecipients, ccEmails, totalSdg, count, usdRate } = bulkCostEmailDialog;
+    if (!currentUser?.id || selectedRecipientIds.length === 0) return;
+    const rate = parseFloat(usdRate);
+    setBulkCostEmailDialog(prev => ({ ...prev, sending: true }));
+    try {
+      const selectedRecipients = availableRecipients.filter(r => selectedRecipientIds.includes(r.id)).map(r => ({ email: r.email, name: r.name }));
+      const approverName = (currentUser as any).fullName || (currentUser as any).full_name || currentUser.email || 'Approver';
+      const approverEmail = currentUser.email || '';
+      const bulkId = `BULK-${count}`;
+      const result = await EmailNotificationService.sendPaymentRequestToFinanceWithRecipients(
+        selectedRecipients,
+        approverName,
+        approverEmail,
+        'Multiple Submitters',
+        'All Approved Operational Cost Submissions',
+        bulkId,
+        'Operational Costs (Bulk)',
+        totalSdg,
+        'advance',
+        'WFP TPM',
+        'SDG',
+        '',
+        '/cost-submission',
+        undefined,
+        undefined,
+        ccEmails.length > 0 ? ccEmails : undefined,
+        'All Approved Submissions',
+        isNaN(rate) ? undefined : rate
+      );
+      if (result.success) {
+        toast({ title: "Bulk Email Sent / تم إرسال البريد الجماعي", description: `Payment request for ${count} approved submissions sent to ${selectedRecipients.length} recipient(s).` });
+        setBulkCostEmailDialog({ step: 'rate', open: false, usdRate: '', totalSdg: 0, count: 0, availableRecipients: [], selectedRecipientIds: [], ccEmails: [], loading: false, sending: false });
+      } else {
+        toast({ title: "Send Failed / فشل الإرسال", description: result.error || "Failed to send bulk email.", variant: "destructive" });
+        setBulkCostEmailDialog(prev => ({ ...prev, sending: false }));
+      }
+    } catch (err: any) {
+      toast({ title: "Error / خطأ", description: err?.message || "Unexpected error sending bulk email.", variant: "destructive" });
+      setBulkCostEmailDialog(prev => ({ ...prev, sending: false }));
+    }
   };
 
   const handleSendPaymentRequest = async () => {
@@ -2257,6 +2350,22 @@ const CostSubmission = () => {
               <RefreshCw className={`h-4 w-4 mr-1 ${operationalCostsLoading ? 'animate-spin' : ''}`} />
               {operationalCostsLoading ? 'Loading...' : 'Refresh'}
             </Button>
+            {canViewTeamSubmissions && (
+              <Button
+                size="sm"
+                onClick={openBulkCostEmailDialog}
+                className="bg-[#0F2041] hover:bg-[#1D3461] text-white"
+                data-testid="button-bulk-cost-email"
+              >
+                <Mail className="h-4 w-4 mr-1.5" />
+                Send Approved Email
+                {filteredOperationalCosts.filter(o => getOperationalDerivedStatus(o) === 'approved').length > 0 && (
+                  <span className="ml-1.5 bg-white/20 text-white text-[10px] font-bold rounded-full px-1.5 py-0.5 leading-none">
+                    {filteredOperationalCosts.filter(o => getOperationalDerivedStatus(o) === 'approved').length}
+                  </span>
+                )}
+              </Button>
+            )}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="outline" size="sm" data-testid="button-export-history">
@@ -3200,6 +3309,159 @@ const CostSubmission = () => {
                 : `Send to ${paymentRequestDialog.selectedRecipientIds.length} Recipient(s) / إرسال`}
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Bulk Cost Email Dialog (2-step: USD Rate → Recipients) ── */}
+      <Dialog open={bulkCostEmailDialog.open} onOpenChange={(open) => {
+        if (!open && !bulkCostEmailDialog.sending) {
+          setBulkCostEmailDialog({ step: 'rate', open: false, usdRate: '', totalSdg: 0, count: 0, availableRecipients: [], selectedRecipientIds: [], ccEmails: [], loading: false, sending: false });
+        }
+      }}>
+        <DialogContent className="max-w-md">
+          {bulkCostEmailDialog.step === 'rate' ? (
+            <>
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2">
+                  <DollarSign className="h-5 w-5 text-[#0F2041]" />
+                  Bulk Payment Email — USD Rate
+                  <span dir="rtl" className="text-sm font-normal text-muted-foreground">/ معدل الدولار</span>
+                </DialogTitle>
+                <DialogDescription>
+                  Enter today's USD exchange rate to include the USD equivalent in the email.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4 py-2">
+                <div className="rounded-lg border bg-slate-50 dark:bg-slate-900 p-4 space-y-2">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Approved Submissions</span>
+                    <span className="font-bold text-[#0F2041]">{bulkCostEmailDialog.count}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Total Amount (SDG)</span>
+                    <span className="font-bold text-green-700">SDG {bulkCostEmailDialog.totalSdg.toLocaleString()}</span>
+                  </div>
+                  {bulkCostEmailDialog.usdRate && !isNaN(parseFloat(bulkCostEmailDialog.usdRate)) && parseFloat(bulkCostEmailDialog.usdRate) > 0 && (
+                    <div className="flex justify-between text-sm border-t pt-2 mt-1">
+                      <span className="text-muted-foreground">Equivalent in USD</span>
+                      <span className="font-bold text-blue-700">
+                        USD {(bulkCostEmailDialog.totalSdg / parseFloat(bulkCostEmailDialog.usdRate)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </span>
+                    </div>
+                  )}
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="usd-rate-input">USD Exchange Rate (1 USD = ? SDG) <span className="text-red-500">*</span></Label>
+                  <Input
+                    id="usd-rate-input"
+                    type="number"
+                    min="1"
+                    step="0.01"
+                    placeholder="e.g. 1900"
+                    value={bulkCostEmailDialog.usdRate}
+                    onChange={(e) => setBulkCostEmailDialog(prev => ({ ...prev, usdRate: e.target.value }))}
+                    data-testid="input-bulk-usd-rate"
+                    className="text-lg font-semibold"
+                    onKeyDown={(e) => { if (e.key === 'Enter') proceedBulkToRecipients(); }}
+                  />
+                  <p className="text-xs text-muted-foreground">The email will show: SDG total ÷ rate = USD equivalent</p>
+                </div>
+              </div>
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={() => setBulkCostEmailDialog(prev => ({ ...prev, open: false }))}>
+                  Cancel / إلغاء
+                </Button>
+                <Button
+                  type="button"
+                  onClick={proceedBulkToRecipients}
+                  disabled={!bulkCostEmailDialog.usdRate || isNaN(parseFloat(bulkCostEmailDialog.usdRate)) || parseFloat(bulkCostEmailDialog.usdRate) <= 0}
+                  className="bg-[#0F2041] hover:bg-[#1D3461] text-white"
+                  data-testid="button-bulk-next-recipients"
+                >
+                  Next: Select Recipients →
+                </Button>
+              </DialogFooter>
+            </>
+          ) : (
+            <>
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2">
+                  <Mail className="h-5 w-5 text-[#0F2041]" />
+                  Send Bulk Payment Email
+                  <span dir="rtl" className="text-sm font-normal text-muted-foreground">/ إرسال جماعي</span>
+                </DialogTitle>
+                <DialogDescription>
+                  Sending payment request for <strong>{bulkCostEmailDialog.count} approved submissions</strong> — SDG {bulkCostEmailDialog.totalSdg.toLocaleString()} (≈ USD {(bulkCostEmailDialog.totalSdg / parseFloat(bulkCostEmailDialog.usdRate || '1')).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })})
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-3 py-2">
+                {bulkCostEmailDialog.loading ? (
+                  <Skeleton className="h-24 w-full" />
+                ) : bulkCostEmailDialog.availableRecipients.length === 0 ? (
+                  <p className="text-sm text-muted-foreground text-center py-4">No finance/admin recipients found.</p>
+                ) : (
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2 pb-1 border-b">
+                      <Checkbox
+                        id="bulk-select-all"
+                        checked={bulkCostEmailDialog.selectedRecipientIds.length === bulkCostEmailDialog.availableRecipients.length}
+                        onCheckedChange={() => setBulkCostEmailDialog(prev => ({
+                          ...prev,
+                          selectedRecipientIds: prev.selectedRecipientIds.length === prev.availableRecipients.length ? [] : prev.availableRecipients.map(r => r.id),
+                        }))}
+                        data-testid="checkbox-bulk-select-all"
+                      />
+                      <label htmlFor="bulk-select-all" className="text-sm font-medium cursor-pointer">
+                        Select All ({bulkCostEmailDialog.availableRecipients.length})
+                      </label>
+                    </div>
+                    {bulkCostEmailDialog.availableRecipients.map(recipient => (
+                      <div key={recipient.id} className="flex items-center gap-2">
+                        <Checkbox
+                          id={`bulk-r-${recipient.id}`}
+                          checked={bulkCostEmailDialog.selectedRecipientIds.includes(recipient.id)}
+                          onCheckedChange={() => setBulkCostEmailDialog(prev => ({
+                            ...prev,
+                            selectedRecipientIds: prev.selectedRecipientIds.includes(recipient.id)
+                              ? prev.selectedRecipientIds.filter(id => id !== recipient.id)
+                              : [...prev.selectedRecipientIds, recipient.id],
+                          }))}
+                          data-testid={`checkbox-bulk-recipient-${recipient.id}`}
+                        />
+                        <label htmlFor={`bulk-r-${recipient.id}`} className="text-sm cursor-pointer flex-1">
+                          <span className="font-medium">{recipient.name}</span>
+                          <span className="text-muted-foreground ml-1">— {recipient.email}</span>
+                        </label>
+                        <Badge variant="outline" className="text-[10px]">{recipient.role}</Badge>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {!bulkCostEmailDialog.loading && bulkCostEmailDialog.availableRecipients.length > 0 && (
+                  <EmailCCInput
+                    ccEmails={bulkCostEmailDialog.ccEmails}
+                    onChange={(emails) => setBulkCostEmailDialog(prev => ({ ...prev, ccEmails: emails }))}
+                    contacts={ccContacts.filter(c => !bulkCostEmailDialog.selectedRecipientIds.includes(c.id))}
+                  />
+                )}
+              </div>
+              <DialogFooter className="gap-2">
+                <Button type="button" variant="outline" onClick={() => setBulkCostEmailDialog(prev => ({ ...prev, step: 'rate' }))} disabled={bulkCostEmailDialog.sending}>
+                  ← Back
+                </Button>
+                <Button
+                  type="button"
+                  onClick={handleBulkCostEmailSend}
+                  disabled={bulkCostEmailDialog.sending || bulkCostEmailDialog.selectedRecipientIds.length === 0}
+                  className="bg-[#0F2041] hover:bg-[#1D3461] text-white"
+                  data-testid="button-bulk-cost-send"
+                >
+                  <Mail className="h-3.5 w-3.5 mr-1" />
+                  {bulkCostEmailDialog.sending ? 'Sending...' : `Send to ${bulkCostEmailDialog.selectedRecipientIds.length} Recipient(s)`}
+                </Button>
+              </DialogFooter>
+            </>
+          )}
         </DialogContent>
       </Dialog>
 
