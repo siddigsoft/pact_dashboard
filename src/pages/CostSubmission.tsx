@@ -1735,6 +1735,37 @@ const CostSubmission = () => {
           </TabsList>
         </div>
 
+        {/* ── Finance Email Action Bar ── visible to admins/supervisors on all tabs ── */}
+        {canViewTeamSubmissions && (
+          <div className="flex items-center justify-between gap-4 bg-[#0F2041]/5 border border-[#0F2041]/20 rounded-lg px-4 py-2.5">
+            <div className="flex items-center gap-2 min-w-0">
+              <Mail className="h-4 w-4 text-[#0F2041] shrink-0" />
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-[#0F2041] leading-tight">Send Payment Email to Finance</p>
+                <p className="text-xs text-muted-foreground leading-tight truncate">
+                  {operationalCosts.filter(o => getOperationalDerivedStatus(o) === 'approved').length > 0
+                    ? `${operationalCosts.filter(o => getOperationalDerivedStatus(o) === 'approved').length} approved submission(s) ready to send`
+                    : 'No approved submissions at this time'}
+                </p>
+              </div>
+            </div>
+            <Button
+              size="sm"
+              onClick={openBulkCostEmailDialog}
+              className="bg-[#0F2041] hover:bg-[#1D3461] text-white shrink-0"
+              data-testid="button-bulk-cost-email-bar"
+            >
+              <Mail className="h-3.5 w-3.5 mr-1.5" />
+              Send Approved Email
+              {operationalCosts.filter(o => getOperationalDerivedStatus(o) === 'approved').length > 0 && (
+                <span className="ml-1.5 bg-white/25 text-white text-[10px] font-bold rounded-full px-1.5 py-0.5 leading-none">
+                  {operationalCosts.filter(o => getOperationalDerivedStatus(o) === 'approved').length}
+                </span>
+              )}
+            </Button>
+          </div>
+        )}
+
         {/* Submit Request Tab - Unified form for all field costs */}
         {canSubmitOperationalCosts && (
           <TabsContent value="submit" className="space-y-4">
