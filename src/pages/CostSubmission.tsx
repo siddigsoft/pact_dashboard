@@ -822,20 +822,21 @@ const CostSubmission = () => {
     setActionProcessing(true);
     try {
       const now = new Date().toISOString();
+      const amountSdg = ((oc as any).amount_cents || 0) / 100 || (oc as any).total_amount || (oc as any).amount || 0;
+      const currency = oc.currency || 'SDG';
+
       const updatePayload: Record<string, unknown> = {
         status: 'paid',
         paid_at: now,
         updated_at: now,
       };
-      try {
-        updatePayload.paid_by = currentUser.id;
-      } catch { /* field may not exist in schema cache */ }
+      try { updatePayload.paid_by = currentUser.id; } catch { /* field may not exist */ }
 
       let { error } = await supabase
         .from('operational_cost_submissions')
         .update(updatePayload)
         .eq('id', oc.id);
-      
+
       if (error?.message?.includes('paid_by')) {
         const { paid_by, ...safePayload } = updatePayload as any;
         const fallback = await supabase
@@ -844,16 +845,73 @@ const CostSubmission = () => {
           .eq('id', oc.id);
         error = fallback.error;
       }
-      
+
       if (error) {
         toast({ title: "Failed / فشل", description: error.message, variant: "destructive" });
-      } else {
-        toast({ 
-          title: "Payment Sent / تم إرسال الدفعة", 
-          description: "Marked as paid. The recipient will now see a confirmation request in their Wallet → Cost Payments tab. / تم التحديد كمدفوع. سيظهر للمستلم طلب تأكيد في محفظته." 
-        });
-        fetchOperationalCosts();
+        return;
       }
+
+      // ── Credit the recipient's wallet ──────────────────────────────────
+      if (amountSdg > 0 && oc.submitted_by) {
+        try {
+          // Find or create wallet for the recipient
+          let { data: wallet } = await supabase
+            .from('wallets')
+            .select('id, balances, total_earned')
+            .eq('user_id', oc.submitted_by)
+            .maybeSingle();
+
+          if (!wallet) {
+            const { data: newWallet } = await supabase
+              .from('wallets')
+              .insert({ user_id: oc.submitted_by, balances: {}, total_earned: 0, total_withdrawn: 0 })
+              .select('id, balances, total_earned')
+              .single();
+            wallet = newWallet;
+          }
+
+          if (wallet) {
+            const currentBalance = (wallet.balances?.[currency] || 0);
+            const newBalance = currentBalance + amountSdg;
+            const newTotalEarned = parseFloat(wallet.total_earned || '0') + amountSdg;
+
+            // Insert wallet transaction
+            await supabase.from('wallet_transactions').insert({
+              wallet_id: wallet.id,
+              user_id: oc.submitted_by,
+              type: 'cost_reimbursement',
+              amount: amountSdg,
+              currency,
+              description: `Cost reimbursement: ${oc.expense_category || 'Operational expense'}${oc.reference_number ? ` · ${oc.reference_number}` : ''}`,
+              balance_before: currentBalance,
+              balance_after: newBalance,
+              created_by: currentUser.id,
+              metadata: {
+                cost_submission_id: oc.id,
+                expense_category: oc.expense_category,
+                reference_number: oc.reference_number,
+                paid_by: currentUser.id,
+                paid_at: now,
+              },
+            });
+
+            // Update wallet balance
+            await supabase.from('wallets').update({
+              balances: { ...wallet.balances, [currency]: newBalance },
+              total_earned: newTotalEarned,
+              updated_at: now,
+            }).eq('id', wallet.id);
+          }
+        } catch (walletErr) {
+          console.error('[CostSubmission] Wallet credit failed (non-fatal):', walletErr);
+        }
+      }
+
+      toast({
+        title: "Payment Sent / تم إرسال الدفعة",
+        description: `Marked as paid${amountSdg > 0 ? ` · ${amountSdg.toLocaleString()} ${currency} credited to recipient's wallet` : ''}. Recipient will see a confirmation request in their Wallet → Cost Payments tab. / تم التحديد كمدفوع وإضافة المبلغ للمحفظة.`,
+      });
+      fetchOperationalCosts();
     } catch {
       toast({ title: "Error / خطأ", description: "Failed to mark as paid. / فشل في التحديد كمدفوع.", variant: "destructive" });
     } finally {
