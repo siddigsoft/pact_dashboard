@@ -878,16 +878,27 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
         }))].join(', ');
         const groupLabel = bulkGroupBy ? `${bulkGroupBy}: ${bulkGroupValue}` : '';
 
+        // Only attach PDF for small batches — large PDFs (> 30 requests) exceed email size limits.
+        // For large batches, include a note to download the PDF from the platform instead.
+        const PDF_ATTACH_LIMIT = 30;
+        const pdfTooLarge = bulkRequests.length > PDF_ATTACH_LIMIT;
+
         let summaryPdf: { base64: string; filename: string } | undefined;
-        try {
-          const certDataList = await Promise.all(
-            bulkRequests.map(async (bReq) => {
-              const sig = await getSignatureImageData(bReq);
-              return buildCertData(bReq, sig);
-            })
-          );
-          summaryPdf = await generateBulkPaymentPdfBase64(certDataList, groupLabel || 'All Approved');
-        } catch { /* continue without PDF */ }
+        if (!pdfTooLarge) {
+          try {
+            const certDataList = await Promise.all(
+              bulkRequests.map(async (bReq) => {
+                const sig = await getSignatureImageData(bReq);
+                return buildCertData(bReq, sig);
+              })
+            );
+            summaryPdf = await generateBulkPaymentPdfBase64(certDataList, groupLabel || 'All Approved');
+          } catch { /* continue without PDF */ }
+        }
+
+        const pdfNote = pdfTooLarge
+          ? `\n\nNOTE: This batch contains ${bulkRequests.length} requests. The summary PDF is too large to attach via email. Please log in to PACT Command Center → Processing tab → "Bulk PDF" to download it directly.\nملاحظة: يحتوي هذا الدفعة على ${bulkRequests.length} طلباً. ملف PDF أكبر من أن يُرفق عبر البريد الإلكتروني. يرجى تسجيل الدخول إلى PACT وتنزيله من تبويب المعالجة.`
+          : '';
 
         const result = await EmailNotificationService.sendPaymentRequestToFinanceWithRecipients(
           selectedRecipients,
@@ -901,7 +912,7 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
           'advance',
           bulkRequests[0]?.projectName || 'N/A',
           'SDG',
-          `Bulk payment request for ${bulkRequests.length} approved advances${groupLabel ? ` grouped by ${groupLabel}` : ''}. Total: SDG ${totalAmount.toLocaleString()}. Individual requests: ${bulkRequests.map(r => `${r.siteName} (SDG ${(r.approvedAmount || r.requestedAmount).toLocaleString()})`).join('; ')}.\n\nRECONCILIATION NOTICE: All recipients must submit receipts and return any unused funds within 5 working days.\nملاحظة تسوية: يجب على جميع المستلمين تقديم الإيصالات وإرجاع أي أموال غير مستخدمة خلال 5 أيام عمل.`,
+          `Bulk payment request for ${bulkRequests.length} approved advances${groupLabel ? ` grouped by ${groupLabel}` : ''}. Total: SDG ${totalAmount.toLocaleString()}. Individual requests: ${bulkRequests.map(r => `${r.siteName} (SDG ${(r.approvedAmount || r.requestedAmount).toLocaleString()})`).join('; ')}.\n\nRECONCILIATION NOTICE: All recipients must submit receipts and return any unused funds within 5 working days.\nملاحظة تسوية: يجب على جميع المستلمين تقديم الإيصالات وإرجاع أي أموال غير مستخدمة خلال 5 أيام عمل.${pdfNote}`,
           '/down-payment-approval',
           summaryPdf,
           undefined,
@@ -914,7 +925,9 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
         if (result.success && !result.error) {
           toast({
             title: "Bulk Payment Request Sent / تم إرسال طلبات الدفع الجماعية",
-            description: `${bulkRequests.length} requests sent to ${selectedRecipients.length} recipient(s) with summary PDF attached. / تم إرسال ${bulkRequests.length} طلب إلى ${selectedRecipients.length} مستلم(ين).`,
+            description: pdfTooLarge
+              ? `${bulkRequests.length} requests sent to ${selectedRecipients.length} recipient(s). PDF not attached (batch too large — use "Bulk PDF" button to download). / تم إرسال ${bulkRequests.length} طلب. استخدم زر PDF لتنزيل الملف.`
+              : `${bulkRequests.length} requests sent to ${selectedRecipients.length} recipient(s) with summary PDF attached. / تم إرسال ${bulkRequests.length} طلب إلى ${selectedRecipients.length} مستلم(ين) مع ملف PDF.`,
           });
         } else if (result.success && result.error) {
           toast({
