@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { PACT_LOGO_B64 } from '@/services/pact-logo-b64';
 
 const SAMPLE = {
   recipientName: 'Finance Team',
@@ -39,7 +40,7 @@ function buildEnhancedPaymentEmailHTML(d: typeof SAMPLE): string {
           <td style="padding:26px 36px 22px;">
             <table cellpadding="0" cellspacing="0"><tr>
               <td style="vertical-align:middle;padding-right:14px;">
-                <img src="https://app.pactorg.com/pact-logo.png" alt="PACT" width="44" height="44" style="display:block;border-radius:8px;border:0;" />
+                <img src="${PACT_LOGO_B64}" alt="PACT" width="44" height="44" style="display:block;border-radius:8px;border:0;" />
               </td>
               <td style="vertical-align:middle;">
                 <p style="margin:0;font-size:26px;font-weight:900;color:#FFFFFF;letter-spacing:0.5px;line-height:1;">PACT</p>
@@ -238,7 +239,7 @@ function buildEnhancedPaymentEmailHTML(d: typeof SAMPLE): string {
       <table width="100%" cellpadding="0" cellspacing="0">
         <tr>
           <td align="center" style="padding-bottom:8px;">
-            <img src="https://app.pactorg.com/pact-logo.png" alt="PACT" width="28" height="28" style="display:inline-block;vertical-align:middle;border-radius:5px;border:0;margin-right:7px;" />
+            <img src="${PACT_LOGO_B64}" alt="PACT" width="28" height="28" style="display:inline-block;vertical-align:middle;border-radius:5px;border:0;margin-right:7px;" />
             <span style="font-size:13px;font-weight:700;color:#475569;vertical-align:middle;">PACT</span>
           </td>
         </tr>
