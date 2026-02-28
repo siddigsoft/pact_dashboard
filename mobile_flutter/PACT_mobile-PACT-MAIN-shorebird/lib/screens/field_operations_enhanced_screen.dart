@@ -2703,19 +2703,8 @@ class _MMPScreenState extends State<MMPScreen> {
       if (_userId == null) return;
 
       final transportFee = (site['transport_fee'] as num?)?.toDouble() ?? 0.0;
-      if (transportFee <= 0) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text(
-                'No transport fee set for this site / لا توجد رسوم نقل لهذا الموقع',
-              ),
-              backgroundColor: Colors.orange,
-            ),
-          );
-        }
-        return;
-      }
+      final enumeratorFee = (site['enumerator_fee'] as num?)?.toDouble() ?? 0.0;
+      final totalBudget = transportFee + enumeratorFee;
 
       // Check bank account before showing advance dialog
       final profileCheck = await Supabase.instance.client
@@ -2754,7 +2743,7 @@ class _MMPScreenState extends State<MMPScreen> {
         context: context,
         builder: (context) => RequestAdvanceDialog(
           site: site,
-          transportationBudget: transportFee,
+          transportationBudget: totalBudget,
           hubId: hubId,
           hubName: hubName,
         ),
@@ -2804,7 +2793,7 @@ class _MMPScreenState extends State<MMPScreen> {
             'requester_role': requesterRole,
             'hub_id': finalHubId,
             'hub_name': hubName,
-            'total_transportation_budget': transportFee,
+            'total_transportation_budget': totalBudget,
             'requested_amount': requestedAmount,
             'payment_type': paymentType,
             'installment_plan': installmentPlan,
@@ -2845,9 +2834,8 @@ class _MMPScreenState extends State<MMPScreen> {
   }
 
   bool _shouldShowRequestAdvance(Map<String, dynamic> site) {
-    // Only show for accepted/in-progress sites owned by the current user
-    // AND that have a transport fee set — if the site has no transport cost,
-    // the advance button should not appear at all.
+    // Show for accepted/in-progress sites owned by the current user
+    // when there is any cost (transport fee OR enumerator fee > 0).
     final status = (site['status'] as String? ?? '').toLowerCase();
     final isAcceptedOrOngoing =
         status == 'accepted' ||
@@ -2857,8 +2845,10 @@ class _MMPScreenState extends State<MMPScreen> {
         status == 'ongoing';
     final isOwner = site['accepted_by'] == _userId;
     final transportFee = (site['transport_fee'] as num?)?.toDouble() ?? 0.0;
+    final enumeratorFee = (site['enumerator_fee'] as num?)?.toDouble() ?? 0.0;
+    final totalCost = transportFee + enumeratorFee;
 
-    return isAcceptedOrOngoing && isOwner && transportFee > 0;
+    return isAcceptedOrOngoing && isOwner && totalCost > 0;
   }
 
   Widget _buildRequestAdvanceWidget(Map<String, dynamic> site) {
