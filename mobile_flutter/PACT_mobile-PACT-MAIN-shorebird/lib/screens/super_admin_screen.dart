@@ -1179,49 +1179,8 @@ class _SuperAdminScreenState extends State<SuperAdminScreen> {
   void _showBroadcastMessage() {
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text(
-          'Broadcast Message',
-          style: GoogleFonts.poppins(fontWeight: FontWeight.bold),
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              decoration: const InputDecoration(
-                labelText: 'Message Title',
-                border: OutlineInputBorder(),
-              ),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              maxLines: 4,
-              decoration: const InputDecoration(
-                labelText: 'Message Content',
-                border: OutlineInputBorder(),
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Message broadcast sent'),
-                  backgroundColor: Colors.green,
-                ),
-              );
-            },
-            child: const Text('Send'),
-          ),
-        ],
-      ),
+      barrierDismissible: false,
+      builder: (ctx) => _BroadcastDialog(supabase: _supabase),
     );
   }
 
@@ -1349,5 +1308,496 @@ class _SuperAdminScreenState extends State<SuperAdminScreen> {
         }
       }
     }
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Full Broadcast Center dialog — matches web /admin/broadcast feature set
+// ─────────────────────────────────────────────────────────────────────────────
+class _BroadcastDialog extends StatefulWidget {
+  final dynamic supabase;
+  const _BroadcastDialog({required this.supabase});
+
+  @override
+  State<_BroadcastDialog> createState() => _BroadcastDialogState();
+}
+
+class _BroadcastDialogState extends State<_BroadcastDialog> {
+  final _titleEnCtrl   = TextEditingController();
+  final _titleArCtrl   = TextEditingController();
+  final _msgEnCtrl     = TextEditingController();
+  final _msgArCtrl     = TextEditingController();
+  final _linkCtrl      = TextEditingController();
+
+  String _audience  = 'all';
+  String _priority  = 'normal';
+  bool   _sending   = false;
+  Map<String, dynamic>? _result;
+
+  static const _audiences = [
+    {'value': 'all',             'label': 'All Users / كل المستخدمين',           'icon': Icons.group},
+    {'value': 'no_bank_account', 'label': 'No Bank Account / بدون حساب بنكي',   'icon': Icons.account_balance},
+    {'value': 'data_collector',  'label': 'Data Collectors / جامعو البيانات',   'icon': Icons.assignment_ind},
+    {'value': 'coordinator',     'label': 'Coordinators / المنسقون',             'icon': Icons.manage_accounts},
+  ];
+
+  static const _priorities = [
+    {'value': 'normal', 'label': 'Normal / عادي',   'color': 0xFF64748B},
+    {'value': 'high',   'label': 'High / عالي',     'color': 0xFFD97706},
+    {'value': 'urgent', 'label': 'Urgent / عاجل',   'color': 0xFFDC2626},
+  ];
+
+  static const _templates = [
+    {
+      'label':      'Bank Account Reminder',
+      'labelAr':    'تذكير بالحساب البنكي',
+      'titleEn':    'Action Required: Add Bank Account',
+      'titleAr':    'إجراء مطلوب: أضف حسابك البنكي',
+      'msgEn':      'Please update your bank account details in your profile settings to receive payments.',
+      'msgAr':      'يرجى تحديث بيانات حسابك البنكي في إعدادات ملفك الشخصي لاستلام المدفوعات.',
+      'audience':   'no_bank_account',
+      'priority':   'high',
+    },
+    {
+      'label':      'System Maintenance',
+      'labelAr':    'صيانة النظام',
+      'titleEn':    'Scheduled Maintenance',
+      'titleAr':    'صيانة مجدولة',
+      'msgEn':      'The system will be under maintenance. Please save your work before the maintenance window.',
+      'msgAr':      'سيكون النظام تحت الصيانة. يرجى حفظ عملك قبل فترة الصيانة.',
+      'audience':   'all',
+      'priority':   'high',
+    },
+    {
+      'label':      'New Feature',
+      'labelAr':    'ميزة جديدة',
+      'titleEn':    'New Feature Available',
+      'titleAr':    'ميزة جديدة متاحة',
+      'msgEn':      'A new feature has been added to improve your workflow. Check it out in the app.',
+      'msgAr':      'تمت إضافة ميزة جديدة لتحسين سير عملك. تحقق منها في التطبيق.',
+      'audience':   'all',
+      'priority':   'normal',
+    },
+  ];
+
+  void _applyTemplate(Map t) {
+    _titleEnCtrl.text = t['titleEn'] as String;
+    _titleArCtrl.text = t['titleAr'] as String;
+    _msgEnCtrl.text   = t['msgEn']   as String;
+    _msgArCtrl.text   = t['msgAr']   as String;
+    setState(() {
+      _audience = t['audience'] as String;
+      _priority = t['priority'] as String;
+    });
+  }
+
+  Future<void> _send() async {
+    if (_titleEnCtrl.text.trim().isEmpty || _msgEnCtrl.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Please fill in English title and message / يرجى ملء العنوان والرسالة بالإنجليزية'),
+        backgroundColor: Colors.red,
+      ));
+      return;
+    }
+    setState(() => _sending = true);
+
+    try {
+      // 1. Load target users
+      var query = widget.supabase.from('profiles').select('id, bank_account, role').not('role', 'is', null);
+      final List users = await query;
+
+      List targetUsers = users;
+      if (_audience == 'no_bank_account') {
+        targetUsers = users.where((u) {
+          final ba = u['bank_account'] as Map?;
+          final acct = ba?['accountNumber'] ?? ba?['account_number'];
+          return acct == null || (acct as String).isEmpty;
+        }).toList();
+      } else if (_audience != 'all') {
+        targetUsers = users.where((u) =>
+          (u['role'] as String? ?? '').toLowerCase() == _audience
+        ).toList();
+      }
+
+      if (targetUsers.isEmpty) {
+        if (mounted) setState(() => _sending = false);
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('No users match the selected audience'),
+          backgroundColor: Colors.orange,
+        ));
+        return;
+      }
+
+      // 2. Build notification rows
+      final now          = DateTime.now().toUtc().toIso8601String();
+      final broadcastId  = 'bc_${DateTime.now().millisecondsSinceEpoch}';
+      final titleEn      = _titleEnCtrl.text.trim();
+      final titleAr      = _titleArCtrl.text.trim().isNotEmpty ? _titleArCtrl.text.trim() : titleEn;
+      final msgEn        = _msgEnCtrl.text.trim();
+      final msgAr        = _msgArCtrl.text.trim().isNotEmpty ? _msgArCtrl.text.trim() : msgEn;
+      final link         = _linkCtrl.text.trim().isNotEmpty ? _linkCtrl.text.trim() : null;
+      final notifType    = _priority == 'urgent' ? 'error' : _priority == 'high' ? 'warning' : 'info';
+
+      final rows = targetUsers.map((u) => {
+        'recipient_id':      u['id'],
+        'user_id':           u['id'],
+        'title_en':          titleEn,
+        'title_ar':          titleAr,
+        'message_en':        msgEn,
+        'message_ar':        msgAr,
+        'priority':          _priority,
+        'action_url':        link,
+        'related_entity_id': broadcastId,
+        'entity_type':       'broadcast_batch',
+        'event_type':        'broadcast',
+        'status':            'pending',
+        'email_sent':        false,
+        'title':             titleEn,
+        'message':           msgEn,
+        'link':              link,
+        'type':              notifType,
+        'is_read':           false,
+        'created_at':        now,
+      }).toList();
+
+      await widget.supabase.from('notifications').insert(rows);
+
+      // 3. FCM push (fire-and-forget, don't fail if unavailable)
+      try {
+        await widget.supabase.functions.invoke('send-fcm-push', body: {
+          'user_ids':          targetUsers.map((u) => u['id']).toList(),
+          'title':             titleAr.isNotEmpty ? '$titleEn | $titleAr' : titleEn,
+          'body':              msgAr.isNotEmpty   ? '$msgEn\n$msgAr'    : msgEn,
+          'priority':          _priority,
+          'notification_type': 'broadcast',
+          'data': {
+            'type':         'broadcast',
+            'broadcast_id': broadcastId,
+            'action_url':   link ?? '',
+            'priority':     _priority,
+          },
+          if (link != null) 'action_url': link,
+        });
+      } catch (_) {}
+
+      if (mounted) {
+        setState(() {
+          _sending = true;
+          _result  = {
+            'sent':     targetUsers.length,
+            'audience': _audience,
+            'priority': _priority,
+          };
+          _sending = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _sending = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _titleEnCtrl.dispose();
+    _titleArCtrl.dispose();
+    _msgEnCtrl.dispose();
+    _msgArCtrl.dispose();
+    _linkCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      insetPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 24),
+      backgroundColor: Colors.transparent,
+      child: Container(
+        constraints: const BoxConstraints(maxWidth: 520, maxHeight: 680),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(24),
+          boxShadow: [BoxShadow(
+            color: Colors.black.withValues(alpha: 0.18),
+            blurRadius: 32, offset: const Offset(0, 12),
+          )],
+        ),
+        child: Column(
+          children: [
+            // ── Header ──────────────────────────────────────────────────
+            Container(
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [Color(0xFF7C3AED), Color(0xFF5B21B6)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+              ),
+              padding: const EdgeInsets.fromLTRB(20, 18, 16, 18),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.2),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.campaign_rounded, color: Colors.white, size: 22),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Broadcast Center / مركز البث',
+                          style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.w700, color: Colors.white)),
+                        Text('Send to all users or a filtered group',
+                          style: GoogleFonts.poppins(fontSize: 11, color: Colors.white70)),
+                      ],
+                    ),
+                  ),
+                  GestureDetector(
+                    onTap: () => Navigator.pop(context),
+                    child: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.2),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(Icons.close, color: Colors.white, size: 18),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            // ── Body ────────────────────────────────────────────────────
+            Expanded(
+              child: _result != null
+                  ? _buildSuccess()
+                  : SingleChildScrollView(
+                      padding: const EdgeInsets.all(20),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // Quick templates
+                          Text('Quick Templates / قوالب سريعة',
+                            style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.w700, color: Colors.grey.shade600)),
+                          const SizedBox(height: 8),
+                          Wrap(
+                            spacing: 8, runSpacing: 8,
+                            children: _templates.map((t) => GestureDetector(
+                              onTap: () => _applyTemplate(t),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFF5F0FF),
+                                  borderRadius: BorderRadius.circular(20),
+                                  border: Border.all(color: const Color(0xFF7C3AED).withValues(alpha: 0.3)),
+                                ),
+                                child: Text(t['label'] as String,
+                                  style: GoogleFonts.poppins(fontSize: 11, color: const Color(0xFF7C3AED), fontWeight: FontWeight.w600)),
+                              ),
+                            )).toList(),
+                          ),
+                          const SizedBox(height: 16),
+
+                          // Audience
+                          Text('Audience / الجمهور المستهدف',
+                            style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.w700, color: Colors.grey.shade600)),
+                          const SizedBox(height: 8),
+                          Wrap(
+                            spacing: 8, runSpacing: 8,
+                            children: _audiences.map((a) {
+                              final sel = _audience == a['value'];
+                              return GestureDetector(
+                                onTap: () => setState(() => _audience = a['value'] as String),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                  decoration: BoxDecoration(
+                                    color: sel ? const Color(0xFF7C3AED) : Colors.grey.shade100,
+                                    borderRadius: BorderRadius.circular(20),
+                                    border: Border.all(color: sel ? const Color(0xFF7C3AED) : Colors.grey.shade300),
+                                  ),
+                                  child: Row(mainAxisSize: MainAxisSize.min, children: [
+                                    Icon(a['icon'] as IconData, size: 13, color: sel ? Colors.white : Colors.grey.shade600),
+                                    const SizedBox(width: 5),
+                                    Text((a['label'] as String).split(' / ').first,
+                                      style: GoogleFonts.poppins(fontSize: 11, color: sel ? Colors.white : Colors.grey.shade700, fontWeight: FontWeight.w600)),
+                                  ]),
+                                ),
+                              );
+                            }).toList(),
+                          ),
+                          const SizedBox(height: 16),
+
+                          // Priority
+                          Text('Priority / الأولوية',
+                            style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.w700, color: Colors.grey.shade600)),
+                          const SizedBox(height: 8),
+                          Row(
+                            children: _priorities.map((p) {
+                              final sel = _priority == p['value'];
+                              final col = Color(p['color'] as int);
+                              return Expanded(
+                                child: GestureDetector(
+                                  onTap: () => setState(() => _priority = p['value'] as String),
+                                  child: Container(
+                                    margin: const EdgeInsets.only(right: 8),
+                                    padding: const EdgeInsets.symmetric(vertical: 8),
+                                    decoration: BoxDecoration(
+                                      color: sel ? col.withValues(alpha: 0.12) : Colors.grey.shade50,
+                                      borderRadius: BorderRadius.circular(10),
+                                      border: Border.all(color: sel ? col : Colors.grey.shade200, width: sel ? 2 : 1),
+                                    ),
+                                    child: Text(
+                                      (p['label'] as String).split(' / ').first,
+                                      textAlign: TextAlign.center,
+                                      style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.w700,
+                                        color: sel ? col : Colors.grey.shade600),
+                                    ),
+                                  ),
+                                ),
+                              );
+                            }).toList(),
+                          ),
+                          const SizedBox(height: 16),
+
+                          // EN Title
+                          _field(_titleEnCtrl, 'Title (English) *', maxLines: 1),
+                          const SizedBox(height: 10),
+                          // AR Title
+                          _field(_titleArCtrl, 'العنوان (عربي)', maxLines: 1, rtl: true),
+                          const SizedBox(height: 10),
+                          // EN Message
+                          _field(_msgEnCtrl, 'Message (English) *', maxLines: 3),
+                          const SizedBox(height: 10),
+                          // AR Message
+                          _field(_msgArCtrl, 'الرسالة (عربي)', maxLines: 3, rtl: true),
+                          const SizedBox(height: 10),
+                          // Action link
+                          _field(_linkCtrl, 'Action Link (optional)', maxLines: 1,
+                            hint: 'e.g. /profile/bank-account'),
+                          const SizedBox(height: 20),
+
+                          // Send button
+                          SizedBox(
+                            width: double.infinity,
+                            child: ElevatedButton.icon(
+                              onPressed: _sending ? null : _send,
+                              icon: _sending
+                                  ? const SizedBox(width: 16, height: 16,
+                                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                                  : const Icon(Icons.send_rounded, size: 18),
+                              label: Text(
+                                _sending ? 'Sending... / جاري الإرسال...' : 'Send Broadcast / إرسال البث',
+                                style: GoogleFonts.poppins(fontWeight: FontWeight.w700, fontSize: 14),
+                              ),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFF7C3AED),
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(vertical: 14),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSuccess() {
+    final sent     = _result!['sent'] as int;
+    final audience = _result!['audience'] as String;
+    final priority = _result!['priority'] as String;
+    final col      = priority == 'urgent' ? Colors.red : priority == 'high' ? Colors.orange : Colors.green;
+
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(color: Colors.green.shade50, shape: BoxShape.circle),
+              child: Icon(Icons.check_circle_rounded, color: Colors.green.shade600, size: 48),
+            ),
+            const SizedBox(height: 16),
+            Text('Broadcast Sent! / تم الإرسال!',
+              style: GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.w700)),
+            const SizedBox(height: 8),
+            Text('$sent recipients notified',
+              style: GoogleFonts.poppins(fontSize: 14, color: Colors.grey.shade600)),
+            const SizedBox(height: 12),
+            Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+              _badge(audience, Colors.purple),
+              const SizedBox(width: 8),
+              _badge(priority, col),
+            ]),
+            const SizedBox(height: 24),
+            Row(children: [
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: () => setState(() => _result = null),
+                  child: Text('Send Another / أرسل آخر',
+                    style: GoogleFonts.poppins(fontWeight: FontWeight.w600)),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: ElevatedButton(
+                  onPressed: () => Navigator.pop(context),
+                  style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF7C3AED), foregroundColor: Colors.white),
+                  child: Text('Done / تم', style: GoogleFonts.poppins(fontWeight: FontWeight.w600)),
+                ),
+              ),
+            ]),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _field(TextEditingController ctrl, String label, {int maxLines = 1, bool rtl = false, String? hint}) {
+    return TextField(
+      controller: ctrl,
+      maxLines: maxLines,
+      textDirection: rtl ? TextDirection.rtl : TextDirection.ltr,
+      style: GoogleFonts.poppins(fontSize: 13),
+      decoration: InputDecoration(
+        labelText: label,
+        hintText: hint,
+        labelStyle: GoogleFonts.poppins(fontSize: 12, color: Colors.grey.shade600),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: const BorderSide(color: Color(0xFF7C3AED), width: 2),
+        ),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      ),
+    );
+  }
+
+  Widget _badge(String label, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
+      ),
+      child: Text(label, style: GoogleFonts.poppins(fontSize: 11, color: color, fontWeight: FontWeight.w600)),
+    );
   }
 }
