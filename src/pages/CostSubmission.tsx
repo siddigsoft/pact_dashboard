@@ -1386,13 +1386,13 @@ const CostSubmission = () => {
         </Button>
 
         <div className="flex flex-col gap-2">
-          <div className="flex items-start justify-between gap-3">
+          <div className="flex items-start justify-between gap-3 flex-wrap">
             <div className="flex items-center gap-3">
               <div className="p-3 rounded-lg bg-gradient-to-br from-blue-500 to-blue-700">
                 <FileText className="h-8 w-8 text-white" />
               </div>
               <div>
-              <h1 className="text-3xl font-bold tracking-tight flex items-center gap-2">
+              <h1 className="text-3xl font-bold tracking-tight flex items-center flex-wrap gap-2">
                 {canViewTeamSubmissions ? "Cost Approval & Tracking" : "Cost Submission"}
                 {(isAdmin || isSuperAdmin) && (
                   <Badge variant="outline" className="bg-purple-100 dark:bg-purple-900 text-purple-800 dark:text-purple-200 border-purple-300">
@@ -1419,15 +1419,15 @@ const CostSubmission = () => {
             </div>
             {canViewTeamSubmissions && (
               <Button
-                size="sm"
+                size="default"
                 onClick={openBulkCostEmailDialog}
-                className="bg-[#0F2041] hover:bg-[#1D3461] text-white shrink-0 mt-1"
+                className="bg-[#0F2041] hover:bg-[#1D3461] text-white shrink-0 font-semibold shadow-md"
                 data-testid="button-bulk-cost-email"
               >
-                <Mail className="h-4 w-4 mr-1.5" />
+                <Mail className="h-4 w-4 mr-2" />
                 Send Approved Email
                 {operationalCosts.filter(o => getOperationalDerivedStatus(o) === 'approved').length > 0 && (
-                  <span className="ml-1.5 bg-white/20 text-white text-[10px] font-bold rounded-full px-1.5 py-0.5 leading-none">
+                  <span className="ml-2 bg-amber-400 text-amber-900 text-xs font-bold rounded-full px-2 py-0.5 leading-none">
                     {operationalCosts.filter(o => getOperationalDerivedStatus(o) === 'approved').length}
                   </span>
                 )}
