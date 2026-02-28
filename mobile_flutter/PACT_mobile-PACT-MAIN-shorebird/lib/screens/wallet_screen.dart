@@ -1246,9 +1246,10 @@ class _WalletScreenState extends State<WalletScreen> {
                                                   badge: _costPayments
                                                       .where(
                                                         (c) =>
-                                                            c['status'] == 'paid' &&
+                                                            c['status'] ==
+                                                                'paid' &&
                                                             c['fund_receipt_confirmed'] !=
-                                                            true,
+                                                                true,
                                                       )
                                                       .length,
                                                 ),
@@ -2740,7 +2741,9 @@ class _WalletScreenState extends State<WalletScreen> {
 
     // Only paid submissions awaiting your receipt confirmation need action
     final pending = _costPayments
-        .where((c) => c['status'] == 'paid' && c['fund_receipt_confirmed'] != true)
+        .where(
+          (c) => c['status'] == 'paid' && c['fund_receipt_confirmed'] != true,
+        )
         .length;
 
     return Column(
@@ -2843,10 +2846,12 @@ class _WalletScreenState extends State<WalletScreen> {
     if (tier1Status.isEmpty || tier1Status == 'pending') {
       tierPendingLabel = 'Awaiting Tier 1 (Supervisor) approval';
       tierPendingLabelAr = 'بانتظار موافقة المستوى الأول (المشرف)';
-    } else if (tier1Status == 'approved' && (tier2Status.isEmpty || tier2Status == 'pending')) {
+    } else if (tier1Status == 'approved' &&
+        (tier2Status.isEmpty || tier2Status == 'pending')) {
       tierPendingLabel = 'Awaiting Tier 2 (Admin) approval';
       tierPendingLabelAr = 'بانتظار موافقة المستوى الثاني (الإدارة)';
-    } else if (tier2Status == 'approved' && (tier3Status.isEmpty || tier3Status == 'pending')) {
+    } else if (tier2Status == 'approved' &&
+        (tier3Status.isEmpty || tier3Status == 'pending')) {
       tierPendingLabel = 'Awaiting Tier 3 (Finance) approval';
       tierPendingLabelAr = 'بانتظار موافقة المستوى الثالث (المالية)';
     } else {
@@ -2897,7 +2902,9 @@ class _WalletScreenState extends State<WalletScreen> {
     // Card border colour based on status
     Color cardBorder;
     if (status == 'paid' || status == 'reconciled') {
-      cardBorder = receiptConfirmed ? Colors.green.shade200 : Colors.purple.shade200;
+      cardBorder = receiptConfirmed
+          ? Colors.green.shade200
+          : Colors.purple.shade200;
     } else if (status == 'rejected') {
       cardBorder = Colors.red.shade200;
     } else if (status == 'approved' || status == 'tier1_approved') {
@@ -3161,7 +3168,10 @@ class _WalletScreenState extends State<WalletScreen> {
               // Not yet paid — show informational status message
               Container(
                 width: double.infinity,
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 8,
+                ),
                 decoration: BoxDecoration(
                   color: statusBg,
                   borderRadius: BorderRadius.circular(8),
@@ -3181,12 +3191,20 @@ class _WalletScreenState extends State<WalletScreen> {
                         children: [
                           Text(
                             status == 'rejected'
-                                ? (widget.isArabic ? 'تم رفض هذا التقديم' : 'This submission was rejected')
+                                ? (widget.isArabic
+                                      ? 'تم رفض هذا التقديم'
+                                      : 'This submission was rejected')
                                 : status == 'approved'
-                                    ? (widget.isArabic ? 'معتمد — بانتظار الصرف من المالية' : 'Approved — awaiting finance disbursement')
-                                    : status == 'tier1_approved'
-                                        ? (widget.isArabic ? 'موافقة م١ — بانتظار الاعتماد النهائي' : 'T1 Approved — awaiting final approval')
-                                        : (widget.isArabic ? tierPendingLabelAr : tierPendingLabel),
+                                ? (widget.isArabic
+                                      ? 'معتمد — بانتظار الصرف من المالية'
+                                      : 'Approved — awaiting finance disbursement')
+                                : status == 'tier1_approved'
+                                ? (widget.isArabic
+                                      ? 'موافقة م١ — بانتظار الاعتماد النهائي'
+                                      : 'T1 Approved — awaiting final approval')
+                                : (widget.isArabic
+                                      ? tierPendingLabelAr
+                                      : tierPendingLabel),
                             style: GoogleFonts.poppins(
                               fontSize: 11.5,
                               fontWeight: FontWeight.w600,
