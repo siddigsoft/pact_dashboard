@@ -205,7 +205,7 @@ const generateNotificationEmailHTML = (
 </html>`;
 };
 
-export { generateNotificationEmailHTML };
+export { generateNotificationEmailHTML, buildEnhancedPaymentEmailHTML };
 
 const generatePlainText = (
   recipientName: string,

@@ -72,7 +72,7 @@ import { format } from 'date-fns';
 import { filterDownPayments, exportToCSV, exportToExcel, exportToPDF, getDownPaymentStats } from '@/utils/downPaymentExport';
 import { generateFinancialStatementPdf, type StatementRow, type StatementConfig } from '@/utils/financialStatementPdf';
 import { generateFinancialStatementExcel, generateFinancialStatementExcelBase64, generateAllSheetsStatementExcelBase64 } from '@/utils/financialStatementExcel';
-import { generateNotificationEmailHTML } from '@/services/email-notification.service';
+import { buildEnhancedPaymentEmailHTML } from '@/services/email-notification.service';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { SignatureConfirmationModal } from '@/components/signatures/SignatureConfirmationModal';
@@ -984,49 +984,50 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
     const approverName = (currentUser as any)?.fullName || (currentUser as any)?.full_name || currentUser?.email || 'Approver';
     const firstRecipient = availableRecipients.find(r => selectedRecipientIds.includes(r.id));
     const recipientName = firstRecipient?.name || 'Finance Team';
-    const selectedCount = selectedRecipientIds.length;
+    const now = new Date();
+    const dateStr = now.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
 
     if (isBulk && bulkRequests.length > 0) {
       const totalAmount = bulkRequests.reduce((s, r) => s + (r.approvedAmount || r.requestedAmount), 0);
       const groupLabel = bulkGroupBy ? `${bulkGroupBy}: ${bulkGroupValue}` : 'All Approved';
-      const fileType = sendMode === 'excel' ? 'Excel report' : 'summary PDF';
-      return generateNotificationEmailHTML(recipientName, {
-        title: sendMode === 'excel'
-          ? `Bulk Transport Advance — Excel Report (${bulkRequests.length} Requests)`
-          : `Bulk Transport Advance Payment Request (${bulkRequests.length} Requests)`,
-        titleAr: sendMode === 'excel'
-          ? `طلبات السلفة الجماعية — تقرير Excel (${bulkRequests.length} طلب)`
-          : `طلب دفع السلفة الجماعية (${bulkRequests.length} طلب)`,
-        message: `Please find attached the ${fileType} for ${bulkRequests.length} approved transport advance request(s) from ${groupLabel}.\n\nTotal Approved Amount: SDG ${totalAmount.toLocaleString()}\nPrepared by: ${approverName}\nSent to: ${selectedCount} recipient(s)\n\nKindly review and process the payments at your earliest convenience.`,
-        messageAr: `يرجى مراجعة ${fileType === 'Excel report' ? 'تقرير Excel' : 'ملف PDF'} المرفق لـ ${bulkRequests.length} طلب سلفة نقل معتمد من ${groupLabel}.\n\nإجمالي المبلغ المعتمد: SDG ${totalAmount.toLocaleString()}\nأعده: ${approverName}`,
-        type: 'info',
+      const bulkMmps = [...new Set(bulkRequests.map(r => r.mmpName).filter(Boolean))];
+      const mmpLabel = bulkMmps.length > 0 ? bulkMmps.join(', ') : groupLabel;
+      const projectLabel = bulkRequests[0]?.wfpProjectName || bulkRequests[0]?.projectName || 'WFP TPM';
+      return buildEnhancedPaymentEmailHTML({
+        recipientName,
+        approverName,
+        requestId: `BULK-${bulkRequests.length}`,
+        groupLabel,
+        mmpLabel,
+        totalAmount,
+        count: bulkRequests.length,
+        date: dateStr,
+        project: projectLabel,
         actionUrl: '/down-payment-approval',
-        actionLabel: 'View Down-Payment Approval',
-        details: [
-          { label: 'Group / المجموعة', value: groupLabel },
-          { label: 'Total Requests / إجمالي الطلبات', value: String(bulkRequests.length) },
-          { label: 'Total Amount / إجمالي المبلغ', value: `SDG ${totalAmount.toLocaleString()}` },
-          { label: 'Prepared By / أعده', value: approverName },
-          { label: 'Attachment / المرفق', value: sendMode === 'excel' ? 'Formatted Excel Report (.xlsx)' : 'Bulk Payment Certificate PDF' },
-          { label: 'Recipients / المستلمون', value: `${selectedCount} recipient(s)` },
-        ],
+        fundingType: 'advance',
+        category: sendMode === 'excel' ? 'Transportation Advance (Bulk — Excel)' : 'Transportation Advance (Bulk — PDF)',
+        isBulk: true,
+        currency: 'SDG',
       });
     } else if (req) {
       const amount = req.approvedAmount || req.requestedAmount;
-      return generateNotificationEmailHTML(recipientName, {
-        title: `Transport Advance Payment Request — ${req.requestedByName || 'Unknown'}`,
-        titleAr: `طلب دفع سلفة النقل — ${req.requestedByName || 'Unknown'}`,
-        message: `Please process the transport advance payment for the above request.\n\nPrepared by: ${approverName}`,
-        messageAr: `يرجى معالجة دفع سلفة النقل للطلب المذكور أعلاه.\nأعده: ${approverName}`,
-        type: 'info',
+      const mmpLabel = req.mmpName || req.projectName || req.siteName || 'WFP TPM';
+      const projectLabel = req.wfpProjectName || req.projectName || 'WFP TPM';
+      return buildEnhancedPaymentEmailHTML({
+        recipientName,
+        approverName,
+        requestId: req.id?.slice(0, 8)?.toUpperCase() || 'N/A',
+        groupLabel: req.siteName || 'N/A',
+        mmpLabel,
+        totalAmount: amount,
+        count: 1,
+        date: dateStr,
+        project: projectLabel,
         actionUrl: '/down-payment-approval',
-        actionLabel: 'View Down-Payment Approval',
-        details: [
-          { label: 'Requester / مقدم الطلب', value: req.requestedByName || 'Unknown' },
-          { label: 'Site / الموقع', value: req.siteName || 'N/A' },
-          { label: 'Amount / المبلغ', value: `SDG ${amount.toLocaleString()}` },
-          { label: 'Prepared By / أعده', value: approverName },
-        ],
+        fundingType: 'advance',
+        category: 'Transportation Advance',
+        isBulk: false,
+        currency: 'SDG',
       });
     }
     return '';
