@@ -384,6 +384,14 @@ export default function DownPaymentApproval() {
   const [mmpFilter, setMmpFilter] = useState('all');
   const debouncedSearch = useDebouncedValue(search, 300);
 
+  // ── disbursement tracker specific filters ─────────────────────────────────
+  const [disbState, setDisbState] = useState('all');
+  const [disbHub, setDisbHub] = useState('all');
+  const [disbLocality, setDisbLocality] = useState('all');
+  const [disbMmp, setDisbMmp] = useState('all');
+  const [disbEnumerator, setDisbEnumerator] = useState('all');
+  const [disbGroupBy, setDisbGroupBy] = useState('none');
+
   const userMap = useMemo(() => {
     const map = new Map<string, string>();
     users.forEach(u => map.set(u.id, u.fullName || u.email || 'Unknown'));
@@ -679,12 +687,98 @@ export default function DownPaymentApproval() {
             const disbursed = filteredRequests.filter(r =>
               r.status === 'fully_paid' || r.status === 'partially_paid' || r.status === 'approved'
             );
-            const totalApproved = disbursed.reduce((s, r) => s + (r.approvedAmount ?? r.requestedAmount), 0);
-            const totalPaid = disbursed.reduce((s, r) => s + r.totalPaidAmount, 0);
-            const totalRemaining = disbursed.reduce((s, r) => s + r.remainingAmount, 0);
-            const fullyPaid = disbursed.filter(r => r.status === 'fully_paid').length;
-            const partiallyPaid = disbursed.filter(r => r.status === 'partially_paid').length;
-            const pendingDisburse = disbursed.filter(r => r.status === 'approved').length;
+
+            // Unique option lists for filter dropdowns
+            const uStates = [...new Set(disbursed.map(r => r.stateName).filter(Boolean))].sort() as string[];
+            const uHubs = [...new Set(disbursed.map(r => r.hubName).filter(Boolean))].sort() as string[];
+            const uLocalities = [...new Set(disbursed.map(r => r.localityName).filter(Boolean))].sort() as string[];
+            const uMmps = [...new Set(disbursed.map(r => r.mmpName).filter(Boolean))].sort() as string[];
+            const uEnumerators = [...new Set(disbursed.map(r => r.requestedByName || getProfileName(r.requestedBy)).filter(Boolean))].sort() as string[];
+
+            // Apply disbursement-specific filters
+            const filtered = disbursed.filter(r => {
+              if (disbState !== 'all' && r.stateName !== disbState) return false;
+              if (disbHub !== 'all' && r.hubName !== disbHub) return false;
+              if (disbLocality !== 'all' && r.localityName !== disbLocality) return false;
+              if (disbMmp !== 'all' && r.mmpName !== disbMmp) return false;
+              if (disbEnumerator !== 'all' && (r.requestedByName || getProfileName(r.requestedBy)) !== disbEnumerator) return false;
+              return true;
+            });
+
+            const activeDisbFilters = [disbState, disbHub, disbLocality, disbMmp, disbEnumerator].filter(v => v !== 'all').length;
+
+            const totalApproved = filtered.reduce((s, r) => s + (r.approvedAmount ?? r.requestedAmount), 0);
+            const totalPaid = filtered.reduce((s, r) => s + r.totalPaidAmount, 0);
+            const totalRemaining = filtered.reduce((s, r) => s + r.remainingAmount, 0);
+            const fullyPaid = filtered.filter(r => r.status === 'fully_paid').length;
+            const partiallyPaid = filtered.filter(r => r.status === 'partially_paid').length;
+            const pendingDisburse = filtered.filter(r => r.status === 'approved').length;
+
+            // Group by helper
+            const getGroupKey = (r: DownPaymentRequest): string => {
+              switch (disbGroupBy) {
+                case 'enumerator': return r.requestedByName || getProfileName(r.requestedBy) || 'Unknown';
+                case 'state': return r.stateName || 'Unknown';
+                case 'hub': return r.hubName || 'Unknown';
+                case 'locality': return r.localityName || 'Unknown';
+                case 'mmp': return r.mmpName || 'Unknown';
+                default: return '';
+              }
+            };
+
+            const groups = disbGroupBy !== 'none'
+              ? filtered.reduce((acc, r) => {
+                  const k = getGroupKey(r);
+                  if (!acc[k]) acc[k] = [];
+                  acc[k].push(r);
+                  return acc;
+                }, {} as Record<string, DownPaymentRequest[]>)
+              : {};
+            const groupKeys = Object.keys(groups).sort();
+
+            const renderRow = (req: DownPaymentRequest) => {
+              const approved = req.approvedAmount ?? req.requestedAmount;
+              const pctPaid = approved > 0 ? Math.round((req.totalPaidAmount / approved) * 100) : 0;
+              return (
+                <TableRow key={req.id} data-testid={`row-disbursement-${req.id}`}>
+                  <TableCell className="font-medium text-sm">{req.requestedByName || getProfileName(req.requestedBy)}</TableCell>
+                  <TableCell className="max-w-[120px] truncate text-sm" title={req.siteName}>{req.siteName}</TableCell>
+                  <TableCell className="text-xs text-muted-foreground">{req.stateName || '—'}</TableCell>
+                  <TableCell className="text-xs text-muted-foreground">{req.hubName || '—'}</TableCell>
+                  <TableCell className="text-xs text-muted-foreground max-w-[90px] truncate" title={req.localityName}>{req.localityName || '—'}</TableCell>
+                  <TableCell className="text-xs text-muted-foreground max-w-[90px] truncate" title={req.mmpName}>{req.mmpName || '—'}</TableCell>
+                  <TableCell className="text-right font-mono text-sm">{(req.approvedAmount ?? req.requestedAmount).toLocaleString()}</TableCell>
+                  <TableCell className="text-right">
+                    <div className="flex flex-col items-end gap-0.5">
+                      <span className="font-mono text-sm">{req.totalPaidAmount.toLocaleString()}</span>
+                      {pctPaid > 0 && <span className="text-xs text-muted-foreground">{pctPaid}%</span>}
+                    </div>
+                  </TableCell>
+                  <TableCell className="text-right font-mono text-sm text-amber-600 dark:text-amber-400">
+                    {req.remainingAmount > 0 ? req.remainingAmount.toLocaleString() : '—'}
+                  </TableCell>
+                  <TableCell>
+                    {req.status === 'fully_paid' ? (
+                      <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200 border-green-200 gap-1 text-[10px]">
+                        <CheckCircle2 className="h-3 w-3" />Paid
+                      </Badge>
+                    ) : req.status === 'partially_paid' ? (
+                      <Badge className="bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200 border-amber-200 gap-1 text-[10px]">
+                        <TrendingUp className="h-3 w-3" />Partial
+                      </Badge>
+                    ) : (
+                      <Badge className="bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200 border-blue-200 gap-1 text-[10px]">
+                        <DollarSign className="h-3 w-3" />Approved
+                      </Badge>
+                    )}
+                  </TableCell>
+                  <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
+                    {req.updatedAt ? format(parseISO(req.updatedAt), 'dd/MM/yy') : '—'}
+                  </TableCell>
+                </TableRow>
+              );
+            };
+
             return (
               <>
                 {/* Summary cards */}
@@ -693,7 +787,7 @@ export default function DownPaymentApproval() {
                     <CardContent className="pt-4 pb-3">
                       <p className="text-xs text-muted-foreground mb-1">Total Approved</p>
                       <p className="text-xl font-bold text-blue-700 dark:text-blue-300">{totalApproved.toLocaleString()} SDG</p>
-                      <p className="text-xs text-muted-foreground">{disbursed.length} request{disbursed.length !== 1 ? 's' : ''}</p>
+                      <p className="text-xs text-muted-foreground">{filtered.length} request{filtered.length !== 1 ? 's' : ''}</p>
                     </CardContent>
                   </Card>
                   <Card className="border-green-200 bg-green-50 dark:bg-green-950/30">
@@ -719,29 +813,176 @@ export default function DownPaymentApproval() {
                   </Card>
                 </div>
 
+                {/* Filter + Group By bar */}
                 <Card>
-                  <CardHeader>
+                  <CardContent className="pt-4 pb-4">
+                    <div className="flex flex-wrap gap-2 items-center">
+                      <Select value={disbEnumerator} onValueChange={setDisbEnumerator}>
+                        <SelectTrigger className="h-8 text-xs w-[160px]" data-testid="select-disb-enumerator">
+                          <User className="h-3 w-3 mr-1 shrink-0" />
+                          <SelectValue placeholder="Enumerator" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">All Enumerators</SelectItem>
+                          {uEnumerators.map(e => <SelectItem key={e} value={e}>{e}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+
+                      <Select value={disbState} onValueChange={setDisbState}>
+                        <SelectTrigger className="h-8 text-xs w-[140px]" data-testid="select-disb-state">
+                          <MapPin className="h-3 w-3 mr-1 shrink-0" />
+                          <SelectValue placeholder="State" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">All States</SelectItem>
+                          {uStates.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+
+                      <Select value={disbHub} onValueChange={setDisbHub}>
+                        <SelectTrigger className="h-8 text-xs w-[140px]" data-testid="select-disb-hub">
+                          <Building2 className="h-3 w-3 mr-1 shrink-0" />
+                          <SelectValue placeholder="Hub" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">All Hubs</SelectItem>
+                          {uHubs.map(h => <SelectItem key={h} value={h}>{h}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+
+                      <Select value={disbLocality} onValueChange={setDisbLocality}>
+                        <SelectTrigger className="h-8 text-xs w-[140px]" data-testid="select-disb-locality">
+                          <MapPin className="h-3 w-3 mr-1 shrink-0" />
+                          <SelectValue placeholder="Locality" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">All Localities</SelectItem>
+                          {uLocalities.map(l => <SelectItem key={l} value={l}>{l}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+
+                      <Select value={disbMmp} onValueChange={setDisbMmp}>
+                        <SelectTrigger className="h-8 text-xs w-[140px]" data-testid="select-disb-mmp">
+                          <ClipboardList className="h-3 w-3 mr-1 shrink-0" />
+                          <SelectValue placeholder="MMP" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">All MMPs</SelectItem>
+                          {uMmps.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+
+                      <div className="flex items-center gap-1 ml-auto">
+                        <span className="text-xs text-muted-foreground whitespace-nowrap">Group by:</span>
+                        <Select value={disbGroupBy} onValueChange={setDisbGroupBy}>
+                          <SelectTrigger className="h-8 text-xs w-[130px]" data-testid="select-disb-groupby">
+                            <SelectValue placeholder="Group by" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="none">No Grouping</SelectItem>
+                            <SelectItem value="enumerator">Enumerator</SelectItem>
+                            <SelectItem value="state">State</SelectItem>
+                            <SelectItem value="hub">Hub</SelectItem>
+                            <SelectItem value="locality">Locality</SelectItem>
+                            <SelectItem value="mmp">MMP</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        {activeDisbFilters > 0 && (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 text-xs text-muted-foreground hover:text-destructive"
+                            onClick={() => { setDisbState('all'); setDisbHub('all'); setDisbLocality('all'); setDisbMmp('all'); setDisbEnumerator('all'); }}
+                            data-testid="button-disb-clear-filters"
+                          >
+                            Clear ({activeDisbFilters})
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                    {activeDisbFilters > 0 && (
+                      <p className="text-xs text-muted-foreground mt-2">
+                        Showing {filtered.length} of {disbursed.length} records
+                      </p>
+                    )}
+                  </CardContent>
+                </Card>
+
+                {/* Table */}
+                <Card>
+                  <CardHeader className="pb-3">
                     <CardTitle className="flex items-center gap-2">
                       <BarChart3 className="h-5 w-5" />
                       Disbursement Tracker
+                      {activeDisbFilters > 0 && (
+                        <Badge variant="secondary" className="text-[10px]">{activeDisbFilters} filter{activeDisbFilters !== 1 ? 's' : ''} active</Badge>
+                      )}
                     </CardTitle>
                     <CardDescription>
-                      All approved / paid transport advance requests with disbursement status
+                      Approved / paid transport advance requests with disbursement status
                     </CardDescription>
                   </CardHeader>
                   <CardContent className="p-0">
                     {loading ? (
                       <div className="p-6 space-y-2">{Array(5).fill(0).map((_, i) => <Skeleton key={i} className="h-10 w-full" />)}</div>
-                    ) : disbursed.length === 0 ? (
-                      <div className="p-12 text-center text-muted-foreground">No approved or paid advances found / لا توجد سلف معتمدة</div>
+                    ) : filtered.length === 0 ? (
+                      <div className="p-12 text-center text-muted-foreground">No records match the selected filters / لا توجد سجلات</div>
+                    ) : disbGroupBy !== 'none' ? (
+                      // Grouped view
+                      <div className="divide-y">
+                        {groupKeys.map(gk => {
+                          const rows = groups[gk];
+                          const gTotal = rows.reduce((s, r) => s + (r.approvedAmount ?? r.requestedAmount), 0);
+                          const gPaid = rows.reduce((s, r) => s + r.totalPaidAmount, 0);
+                          const gRemaining = rows.reduce((s, r) => s + r.remainingAmount, 0);
+                          return (
+                            <div key={gk}>
+                              <div className="px-4 py-2 bg-muted/40 flex items-center justify-between gap-4 flex-wrap">
+                                <span className="font-semibold text-sm">{gk}</span>
+                                <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                                  <span>{rows.length} request{rows.length !== 1 ? 's' : ''}</span>
+                                  <span>Approved: <span className="font-mono text-foreground">{gTotal.toLocaleString()}</span></span>
+                                  <span>Paid: <span className="font-mono text-green-700 dark:text-green-400">{gPaid.toLocaleString()}</span></span>
+                                  <span>Remaining: <span className="font-mono text-amber-600">{gRemaining.toLocaleString()}</span></span>
+                                </div>
+                              </div>
+                              <div className="overflow-x-auto">
+                                <Table>
+                                  <TableHeader>
+                                    <TableRow>
+                                      <TableHead>Enumerator</TableHead>
+                                      <TableHead>Site</TableHead>
+                                      <TableHead>State</TableHead>
+                                      <TableHead>Hub</TableHead>
+                                      <TableHead>Locality</TableHead>
+                                      <TableHead>MMP</TableHead>
+                                      <TableHead className="text-right">Approved</TableHead>
+                                      <TableHead className="text-right">Paid</TableHead>
+                                      <TableHead className="text-right">Remaining</TableHead>
+                                      <TableHead>Status</TableHead>
+                                      <TableHead>Updated</TableHead>
+                                    </TableRow>
+                                  </TableHeader>
+                                  <TableBody>{rows.map(renderRow)}</TableBody>
+                                </Table>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
                     ) : (
+                      // Flat view
                       <div className="overflow-x-auto">
                         <Table>
                           <TableHeader>
                             <TableRow>
-                              <TableHead>Requester</TableHead>
+                              <TableHead>Enumerator</TableHead>
                               <TableHead>Site</TableHead>
                               <TableHead>State</TableHead>
+                              <TableHead>Hub</TableHead>
+                              <TableHead>Locality</TableHead>
+                              <TableHead>MMP</TableHead>
                               <TableHead className="text-right">Approved</TableHead>
                               <TableHead className="text-right">Paid</TableHead>
                               <TableHead className="text-right">Remaining</TableHead>
@@ -749,49 +990,7 @@ export default function DownPaymentApproval() {
                               <TableHead>Updated</TableHead>
                             </TableRow>
                           </TableHeader>
-                          <TableBody>
-                            {disbursed.map(req => {
-                              const approved = req.approvedAmount ?? req.requestedAmount;
-                              const pctPaid = approved > 0 ? Math.round((req.totalPaidAmount / approved) * 100) : 0;
-                              return (
-                                <TableRow key={req.id} data-testid={`row-disbursement-${req.id}`}>
-                                  <TableCell className="font-medium">{getProfileName(req.requestedBy)}</TableCell>
-                                  <TableCell className="max-w-[140px] truncate" title={req.siteName}>{req.siteName}</TableCell>
-                                  <TableCell>{req.stateName || '—'}</TableCell>
-                                  <TableCell className="text-right font-mono">{approved.toLocaleString()}</TableCell>
-                                  <TableCell className="text-right">
-                                    <div className="flex flex-col items-end gap-0.5">
-                                      <span className="font-mono">{req.totalPaidAmount.toLocaleString()}</span>
-                                      {pctPaid > 0 && (
-                                        <span className="text-xs text-muted-foreground">{pctPaid}%</span>
-                                      )}
-                                    </div>
-                                  </TableCell>
-                                  <TableCell className="text-right font-mono text-amber-600 dark:text-amber-400">
-                                    {req.remainingAmount > 0 ? req.remainingAmount.toLocaleString() : '—'}
-                                  </TableCell>
-                                  <TableCell>
-                                    {req.status === 'fully_paid' ? (
-                                      <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200 border-green-200 gap-1">
-                                        <CheckCircle2 className="h-3 w-3" />Fully Paid
-                                      </Badge>
-                                    ) : req.status === 'partially_paid' ? (
-                                      <Badge className="bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200 border-amber-200 gap-1">
-                                        <TrendingUp className="h-3 w-3" />Partial
-                                      </Badge>
-                                    ) : (
-                                      <Badge className="bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200 border-blue-200 gap-1">
-                                        <DollarSign className="h-3 w-3" />Approved
-                                      </Badge>
-                                    )}
-                                  </TableCell>
-                                  <TableCell className="text-xs text-muted-foreground">
-                                    {req.updatedAt ? format(parseISO(req.updatedAt), 'dd/MM/yyyy') : '—'}
-                                  </TableCell>
-                                </TableRow>
-                              );
-                            })}
-                          </TableBody>
+                          <TableBody>{filtered.map(renderRow)}</TableBody>
                         </Table>
                       </div>
                     )}

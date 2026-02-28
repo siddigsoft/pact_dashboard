@@ -3539,7 +3539,10 @@ class _WalletScreenState extends State<WalletScreen> {
     }
 
     // 2. Transport advances that have been (partially or fully) paid
+    // Skip rejected or cancelled advances — they don't represent real disbursements
     for (final advance in _advances) {
+      final status = (advance['status'] as String? ?? '').toLowerCase();
+      if (status == 'rejected' || status == 'cancelled') continue;
       final totalPaid = (advance['total_paid_amount'] as num?)?.toDouble() ??
           (advance['disbursed_amount'] as num?)?.toDouble() ??
           0.0;
