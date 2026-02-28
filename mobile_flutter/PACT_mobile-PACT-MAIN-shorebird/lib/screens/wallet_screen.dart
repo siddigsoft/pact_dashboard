@@ -4002,13 +4002,16 @@ class _WalletScreenState extends State<WalletScreen> {
 
     if (isOffline) {
       try {
+        final savedAt = DateTime.now().toIso8601String();
         final box = await Hive.openBox<String>('pending_confirmations');
         await box.put(
           advanceId,
           jsonEncode({
             'advanceId': advanceId,
             'metadata': existingMeta,
-            'savedAt': DateTime.now().toIso8601String(),
+            'fund_receipt_confirmed': true,
+            'fund_receipt_confirmed_at': savedAt,
+            'savedAt': savedAt,
           }),
         );
         if (mounted) {
@@ -4032,9 +4035,14 @@ class _WalletScreenState extends State<WalletScreen> {
 
     // Step 6: Online — submit immediately
     try {
+      final confirmedAt = DateTime.now().toIso8601String();
       await Supabase.instance.client
           .from('down_payment_requests')
-          .update({'metadata': existingMeta})
+          .update({
+            'metadata': existingMeta,
+            'fund_receipt_confirmed': true,
+            'fund_receipt_confirmed_at': confirmedAt,
+          })
           .eq('id', advanceId);
 
       await _syncPendingConfirmations();
@@ -4084,7 +4092,12 @@ class _WalletScreenState extends State<WalletScreen> {
           if (advanceId == null || metadata == null) continue;
           await Supabase.instance.client
               .from('down_payment_requests')
-              .update({'metadata': metadata})
+              .update({
+                'metadata': metadata,
+                'fund_receipt_confirmed': pending['fund_receipt_confirmed'] ?? true,
+                'fund_receipt_confirmed_at':
+                    pending['fund_receipt_confirmed_at'] ?? pending['savedAt'],
+              })
               .eq('id', advanceId);
           await box.delete(key);
           debugPrint('[Wallet] Synced offline confirmation: $advanceId');
