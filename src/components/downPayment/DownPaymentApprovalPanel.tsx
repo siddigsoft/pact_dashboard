@@ -3106,16 +3106,26 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
           )}
           {paymentRequestDialog.showPreview && !paymentRequestDialog.loading && (
             <div className="border rounded-lg overflow-hidden" style={{ height: '420px' }}>
-              <div className="bg-muted/60 px-3 py-2 flex items-center gap-2 border-b">
-                <Eye className="h-3.5 w-3.5 text-muted-foreground" />
-                <span className="text-xs font-medium text-muted-foreground">Email Preview — as the recipient will see it</span>
+              <div className="bg-muted/60 px-3 py-2 flex items-center justify-between gap-2 border-b">
+                <div className="flex items-center gap-2">
+                  <Eye className="h-3.5 w-3.5 text-muted-foreground" />
+                  <span className="text-xs font-medium text-muted-foreground">Email Preview — as the recipient will see it</span>
+                </div>
+                <div className="flex items-center gap-1.5 bg-green-50 dark:bg-green-950 border border-green-200 dark:border-green-800 rounded px-2 py-0.5">
+                  {paymentRequestDialog.sendMode === 'excel'
+                    ? <FileSpreadsheet className="h-3 w-3 text-green-700 dark:text-green-400" />
+                    : <FileText className="h-3 w-3 text-green-700 dark:text-green-400" />}
+                  <span className="text-xs font-medium text-green-700 dark:text-green-400">
+                    Attached: {paymentRequestDialog.sendMode === 'excel' ? 'Excel Report (.xlsx)' : 'PDF Certificate (.pdf)'}
+                  </span>
+                </div>
               </div>
               <iframe
                 srcDoc={buildEmailPreviewHtml()}
                 title="Email Preview"
                 sandbox="allow-same-origin"
                 className="w-full h-full border-0"
-                style={{ height: 'calc(420px - 33px)' }}
+                style={{ height: 'calc(420px - 37px)' }}
               />
             </div>
           )}
