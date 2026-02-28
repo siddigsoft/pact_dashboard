@@ -952,7 +952,11 @@ const CostSubmission = () => {
     const approvedSubs = forceSubmission
       ? [forceSubmission]
       : operationalCosts.filter(o => getOperationalDerivedStatus(o) === 'approved');
-    const totalSdg = approvedSubs.reduce((sum, oc) => sum + ((oc as any).amount_cents || 0) / 100, 0);
+    const totalSdg = approvedSubs.reduce((sum, oc) => {
+      const cents = (oc as any).amount_cents || 0;
+      const direct = (oc as any).total_amount || (oc as any).amount || 0;
+      return sum + (cents > 0 ? cents / 100 : direct);
+    }, 0);
     setBulkCostEmailDialog({ step: 'rate', open: true, usdRate: '', totalSdg, count: approvedSubs.length, approvedSubmissions: approvedSubs, availableRecipients: [], selectedRecipientIds: [], ccEmails: [], loading: false, sending: false });
   };
 
@@ -3630,6 +3634,26 @@ const CostSubmission = () => {
                     <span className="text-muted-foreground">Total Amount (SDG)</span>
                     <span className="font-bold text-green-700">SDG {bulkCostEmailDialog.totalSdg.toLocaleString()}</span>
                   </div>
+                  {bulkCostEmailDialog.approvedSubmissions.length > 0 && (
+                    <div className="border-t pt-2 mt-1 space-y-1">
+                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Submission Breakdown</p>
+                      {bulkCostEmailDialog.approvedSubmissions.map((sub, idx) => {
+                        const amtCents = (sub as any).amount_cents || 0;
+                        const amtDirect = (sub as any).total_amount || (sub as any).amount || 0;
+                        const amtSdg = amtCents > 0 ? amtCents / 100 : amtDirect;
+                        return (
+                          <div key={sub.id || idx} className="flex justify-between items-center text-xs py-0.5">
+                            <span className="text-muted-foreground truncate max-w-[55%]">
+                              {sub.expense_category || 'N/A'}{sub.reference_number ? ` · ${sub.reference_number}` : ''}
+                            </span>
+                            <span className="font-semibold text-[#0F2041]">
+                              {amtSdg > 0 ? `SDG ${amtSdg.toLocaleString()}` : <span className="text-amber-600">No amount</span>}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                   {bulkCostEmailDialog.usdRate && !isNaN(parseFloat(bulkCostEmailDialog.usdRate)) && parseFloat(bulkCostEmailDialog.usdRate) > 0 && (() => {
                     const rate = parseFloat(bulkCostEmailDialog.usdRate);
                     const totalUsd = bulkCostEmailDialog.totalSdg / rate;
