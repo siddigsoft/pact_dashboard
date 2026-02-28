@@ -349,6 +349,204 @@ function buildStatementWorkbook(
   return { wb, filename };
 }
 
+const GROUP_BAND = 'FF1E3A5F'; // slightly lighter navy for group bands
+const SUBTOTAL_BG = 'FFD6E4F7'; // light blue for subtotal rows
+
+function buildGroupedStatementWorkbook(
+  rows: StatementRow[],
+  config: StatementConfig,
+  groupBy: 'state' | 'enumerator'
+): { wb: ExcelJS.Workbook; filename: string } | null {
+  if (rows.length === 0) return null;
+
+  const cur = config.currency || 'SDG';
+  const isTransport = config.statementType === 'transport_advance';
+  const typeLabel = isTransport ? 'Transport-Advance' : 'Operational-Cost';
+  const refNum = `STMT-${format(new Date(), 'yyyyMMdd-HHmm')}`;
+  const totalCols = isTransport ? 11 : 10;
+
+  const groupLabel = groupBy === 'state' ? 'State' : 'Enumerator';
+  const groupKey = (r: StatementRow): string =>
+    groupBy === 'state'
+      ? (r.state || (r as any).stateName || 'Unknown State')
+      : (r.requester || 'Unknown Enumerator');
+
+  // Build ordered groups preserving insertion order
+  const groupMap = new Map<string, StatementRow[]>();
+  rows.forEach(r => {
+    const k = groupKey(r);
+    if (!groupMap.has(k)) groupMap.set(k, []);
+    groupMap.get(k)!.push(r);
+  });
+  const groups = Array.from(groupMap.entries()).sort(([a], [b]) => a.localeCompare(b));
+
+  const totalRequested = rows.reduce((s, r) => s + r.requestedAmount, 0);
+  const totalApproved = rows.reduce((s, r) => s + r.approvedAmount, 0);
+  const totalPaid = rows.reduce((s, r) => s + r.paidAmount, 0);
+
+  const wb = new ExcelJS.Workbook();
+  wb.creator = 'PACT Command Center';
+  wb.created = new Date();
+
+  const ws = wb.addWorksheet(`By ${groupLabel}`);
+
+  // ── Title block ──────────────────────────────────────────────────────────
+  const titleRow = ws.addRow([`PACT Command Center  |  Financial Statement — By ${groupLabel}`]);
+  titleRow.font = { bold: true, size: 16, name: 'Calibri', color: { argb: NAVY } };
+  titleRow.height = 30;
+  ws.mergeCells(titleRow.number, 1, titleRow.number, totalCols);
+
+  const subtitleRow = ws.addRow([`${config.title}  —  ${fmtStatus(config.statusFilter)} Statement (Grouped by ${groupLabel})`]);
+  subtitleRow.font = { bold: true, size: 13, name: 'Calibri', color: { argb: BLUE } };
+  subtitleRow.height = 22;
+  ws.mergeCells(subtitleRow.number, 1, subtitleRow.number, totalCols);
+
+  const refRow = ws.addRow([`Reference: ${refNum}   |   Generated: ${format(new Date(), 'MMM d, yyyy HH:mm')}${config.generatedBy ? `   |   By: ${config.generatedBy}` : ''}`]);
+  refRow.font = bodyFont(10, 'FF5A5F6E');
+  refRow.height = 16;
+  ws.mergeCells(refRow.number, 1, refRow.number, totalCols);
+  ws.addRow([]).height = 6;
+
+  // ── Overall summary ──────────────────────────────────────────────────────
+  const summSectionRow = ws.addRow([`OVERALL SUMMARY  (${groups.length} ${groupLabel}s)`]);
+  for (let c = 1; c <= totalCols; c++) {
+    const cell = summSectionRow.getCell(c);
+    cell.fill = sectionFill(); cell.font = headerFont(12); cell.border = thinBorder();
+  }
+  summSectionRow.height = 22;
+  ws.mergeCells(summSectionRow.number, 1, summSectionRow.number, totalCols);
+
+  const SUMM_LABEL_END = 4; const SUMM_VAL_START = 5; const SUMM_VAL_END = 6;
+  const summaryPairs: [string, string | number][] = [
+    ['Total Transactions', rows.length],
+    [`Total Requested (${cur})`, fmtCurrency(totalRequested, cur)],
+    [`Total Approved (${cur})`, fmtCurrency(totalApproved, cur)],
+    [`Total Paid (${cur})`, fmtCurrency(totalPaid, cur)],
+  ];
+  summaryPairs.forEach(([label, value], i) => {
+    const rowData: (string | number)[] = [label, '', '', ''];
+    for (let c = SUMM_VAL_START; c <= totalCols; c++) rowData.push(c === SUMM_VAL_START ? value : '');
+    const row = ws.addRow(rowData);
+    ws.mergeCells(row.number, 1, row.number, SUMM_LABEL_END);
+    ws.mergeCells(row.number, SUMM_VAL_START, row.number, SUMM_VAL_END);
+    const bg = i % 2 === 1 ? altFill() : undefined;
+    row.getCell(1).font = { bold: true, size: 10, name: 'Calibri', color: { argb: DARK } };
+    row.getCell(1).border = thinBorder();
+    row.getCell(1).alignment = { vertical: 'middle', indent: 1 };
+    if (bg) row.getCell(1).fill = bg;
+    row.getCell(SUMM_VAL_START).font = { bold: true, size: 10, name: 'Calibri', color: { argb: DARK } };
+    row.getCell(SUMM_VAL_START).border = thinBorder();
+    row.getCell(SUMM_VAL_START).alignment = { horizontal: 'right', vertical: 'middle' };
+    if (bg) row.getCell(SUMM_VAL_START).fill = bg;
+    row.height = 18;
+  });
+  ws.addRow([]).height = 8;
+
+  // ── Column header (reused per group) ────────────────────────────────────
+  const tableHead = isTransport
+    ? ['#', 'Ref ID', 'Date', 'Requester', 'Site', `Requested (${cur})`, `Approved (${cur})`, `Paid (${cur})`, 'T1 Approver', 'T2 Approver', 'Status']
+    : ['#', 'Ref ID', 'Date', 'Requester', 'Category', `Amount (${cur})`, `Approved (${cur})`, 'T1 Approver', 'T2 Approver', 'Status'];
+
+  // ── Groups ───────────────────────────────────────────────────────────────
+  groups.forEach(([groupName, groupRows]) => {
+    const gReq  = groupRows.reduce((s, r) => s + r.requestedAmount, 0);
+    const gApp  = groupRows.reduce((s, r) => s + r.approvedAmount, 0);
+    const gPaid = groupRows.reduce((s, r) => s + r.paidAmount, 0);
+
+    // Group header band
+    const groupHeaderRow = ws.addRow([`${groupLabel}: ${groupName}   (${groupRows.length} request${groupRows.length !== 1 ? 's' : ''})`]);
+    for (let c = 1; c <= totalCols; c++) {
+      const cell = groupHeaderRow.getCell(c);
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: GROUP_BAND } };
+      cell.font = { bold: true, color: { argb: WHITE }, size: 11, name: 'Calibri' };
+      cell.border = thinBorder();
+    }
+    groupHeaderRow.height = 20;
+    ws.mergeCells(groupHeaderRow.number, 1, groupHeaderRow.number, totalCols);
+
+    // Column headers
+    const hdrRow = ws.addRow(tableHead);
+    hdrRow.eachCell((cell, ci) => {
+      cell.fill = subHeaderFill();
+      cell.font = headerFont(9);
+      cell.border = thinBorder();
+      cell.alignment = { horizontal: ci <= 4 ? 'left' : 'center', vertical: 'middle', wrapText: false };
+    });
+    hdrRow.height = 20;
+
+    // Data rows
+    groupRows.forEach((r, idx) => {
+      const rowData: (string | number)[] = [idx + 1, r.refId, fmtDate(r.date), r.requester || ''];
+      if (isTransport) {
+        rowData.push(r.site || r.description || '', fmtCurrency(r.requestedAmount, cur), fmtCurrency(r.approvedAmount, cur), fmtCurrency(r.paidAmount, cur));
+      } else {
+        rowData.push(r.category || r.description || '', fmtCurrency(r.requestedAmount, cur), fmtCurrency(r.approvedAmount, cur));
+      }
+      rowData.push(r.t1Approver || 'N/A', r.t2Approver || 'N/A', fmtStatus(r.status));
+      const dataRow = ws.addRow(rowData);
+      dataRow.eachCell((cell, ci) => {
+        cell.border = thinBorder();
+        cell.alignment = { horizontal: ci <= 4 ? 'left' : 'center', vertical: 'middle', wrapText: false };
+        cell.font = bodyFont(9);
+        if (idx % 2 === 1) cell.fill = altFill();
+      });
+      const statusCell = dataRow.getCell(rowData.length);
+      const sc = getStatusColor(fmtStatus(r.status));
+      statusCell.font = { bold: true, size: 9, name: 'Calibri', color: { argb: sc.font } };
+      statusCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: sc.bg } };
+      dataRow.height = 17;
+    });
+
+    // Group subtotal row
+    const subtotalData: (string | number)[] = isTransport
+      ? ['', '', '', '', `Subtotal — ${groupName}`, fmtCurrency(gReq, cur), fmtCurrency(gApp, cur), fmtCurrency(gPaid, cur), '', '', '']
+      : ['', '', '', '', `Subtotal — ${groupName}`, fmtCurrency(gReq, cur), fmtCurrency(gApp, cur), '', '', ''];
+    const subTotRow = ws.addRow(subtotalData);
+    subTotRow.eachCell((cell, ci) => {
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: SUBTOTAL_BG } };
+      cell.font = { bold: true, size: 9, name: 'Calibri', color: { argb: NAVY } };
+      cell.border = thinBorder();
+      cell.alignment = { horizontal: ci <= 4 ? 'left' : 'center', vertical: 'middle' };
+    });
+    subTotRow.height = 18;
+    ws.addRow([]).height = 4;
+  });
+
+  // ── Grand total ──────────────────────────────────────────────────────────
+  const grandData: (string | number)[] = isTransport
+    ? ['', '', '', '', 'GRAND TOTAL', fmtCurrency(totalRequested, cur), fmtCurrency(totalApproved, cur), fmtCurrency(totalPaid, cur), '', '', '']
+    : ['', '', '', '', 'GRAND TOTAL', fmtCurrency(totalRequested, cur), fmtCurrency(totalApproved, cur), '', '', ''];
+  const grandRow = ws.addRow(grandData);
+  grandRow.eachCell((cell, ci) => {
+    cell.fill = sectionFill();
+    cell.font = { bold: true, size: 10, name: 'Calibri', color: { argb: WHITE } };
+    cell.border = thinBorder();
+    cell.alignment = { horizontal: ci <= 4 ? 'left' : 'center', vertical: 'middle' };
+  });
+  grandRow.height = 20;
+
+  applyColWidths(ws, isTransport ? TRANSPORT_WIDTHS_SUMMARY : OPCOST_WIDTHS_SUMMARY);
+
+  const statusClean = config.statusFilter.replace(/\s+/g, '_');
+  const filename = `${typeLabel}-By-${groupLabel}-${statusClean}-${format(new Date(), 'yyyy-MM-dd')}.xlsx`;
+
+  return { wb, filename };
+}
+
+export async function generateGroupedStatementExcelBase64(
+  rows: StatementRow[],
+  config: StatementConfig,
+  groupBy: 'state' | 'enumerator'
+): Promise<{ base64: string; filename: string } | null> {
+  const result = buildGroupedStatementWorkbook(rows, config, groupBy);
+  if (!result) return null;
+  const buffer = await result.wb.xlsx.writeBuffer();
+  const bytes = new Uint8Array(buffer as ArrayBuffer);
+  let binary = '';
+  bytes.forEach(b => { binary += String.fromCharCode(b); });
+  return { base64: btoa(binary), filename: result.filename };
+}
+
 export function generateFinancialStatementExcel(
   rows: StatementRow[],
   config: StatementConfig

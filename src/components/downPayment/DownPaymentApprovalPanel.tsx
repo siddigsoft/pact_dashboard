@@ -71,7 +71,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { format } from 'date-fns';
 import { filterDownPayments, exportToCSV, exportToExcel, exportToPDF, getDownPaymentStats } from '@/utils/downPaymentExport';
 import { generateFinancialStatementPdf, type StatementRow, type StatementConfig } from '@/utils/financialStatementPdf';
-import { generateFinancialStatementExcel, generateFinancialStatementExcelBase64 } from '@/utils/financialStatementExcel';
+import { generateFinancialStatementExcel, generateFinancialStatementExcelBase64, generateGroupedStatementExcelBase64 } from '@/utils/financialStatementExcel';
 import { generateNotificationEmailHTML } from '@/services/email-notification.service';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
@@ -986,14 +986,24 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
             generatedBy: approverName,
           };
 
-          // Excel is a single compact table file — always attach directly, no size limit needed.
-          let summaryExcel: { base64: string; filename: string } | undefined;
-          try {
-            const generated = await generateFinancialStatementExcelBase64(statementRows, config);
-            if (generated) summaryExcel = generated;
-          } catch { /* continue without attachment */ }
+          // Generate all three Excel files in parallel and attach them all.
+          const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+          const [summaryExcel, byStateExcel, byEnumeratorExcel] = await Promise.allSettled([
+            generateFinancialStatementExcelBase64(statementRows, config),
+            generateGroupedStatementExcelBase64(statementRows, config, 'state'),
+            generateGroupedStatementExcelBase64(statementRows, config, 'enumerator'),
+          ]);
 
-          const excelNote = '';
+          const excelAttachments: Array<{ base64: string; filename: string; mimeType: string }> = [];
+          if (summaryExcel.status === 'fulfilled' && summaryExcel.value) {
+            excelAttachments.push({ ...summaryExcel.value, mimeType: XLSX_MIME });
+          }
+          if (byStateExcel.status === 'fulfilled' && byStateExcel.value) {
+            excelAttachments.push({ ...byStateExcel.value, mimeType: XLSX_MIME });
+          }
+          if (byEnumeratorExcel.status === 'fulfilled' && byEnumeratorExcel.value) {
+            excelAttachments.push({ ...byEnumeratorExcel.value, mimeType: XLSX_MIME });
+          }
 
           const result = await EmailNotificationService.sendPaymentRequestToFinanceWithRecipients(
             selectedRecipients,
@@ -1010,7 +1020,7 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
             '',
             '/down-payment-approval',
             undefined,
-            summaryExcel ? [{ base64: summaryExcel.base64, filename: summaryExcel.filename, mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }] : undefined,
+            excelAttachments.length > 0 ? excelAttachments : undefined,
             ccEmails
           );
 
@@ -3008,7 +3018,7 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
                   <div className="flex items-center gap-2 text-xs text-muted-foreground">
                     {paymentRequestDialog.sendMode === 'excel' ? <FileSpreadsheet className="h-3.5 w-3.5" /> : <FileText className="h-3.5 w-3.5" />}
                     <span>{paymentRequestDialog.sendMode === 'excel'
-                      ? `A formatted Excel report (all ${paymentRequestDialog.bulkRequests.length} rows, Bank Statement style) will be attached directly to the email.`
+                      ? `3 Excel files will be attached: Summary (all ${paymentRequestDialog.bulkRequests.length} rows), By State (with subtotals), and By Enumerator (with subtotals).`
                       : 'A single summary PDF with all requests will be generated and attached to the email.'}</span>
                   </div>
                 </div>
@@ -3116,7 +3126,7 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
                     ? <FileSpreadsheet className="h-3 w-3 text-green-700 dark:text-green-400" />
                     : <FileText className="h-3 w-3 text-green-700 dark:text-green-400" />}
                   <span className="text-xs font-medium text-green-700 dark:text-green-400">
-                    Attached: {paymentRequestDialog.sendMode === 'excel' ? 'Excel Report (.xlsx)' : 'PDF Certificate (.pdf)'}
+                    Attached: {paymentRequestDialog.sendMode === 'excel' ? '3 Excel files: Summary + By State + By Enumerator' : 'PDF Certificate (.pdf)'}
                   </span>
                 </div>
               </div>
