@@ -25,10 +25,11 @@ import CostDocumentUpload from "@/components/cost-submission/CostDocumentUpload"
 import OutstandingAdvances from "@/components/cost-submission/OutstandingAdvances";
 import type { SupportingDocument } from "@/types/cost-submission";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { supabase } from "@/integrations/supabase/client";
-import { format } from "date-fns";
+import { format, parseISO } from "date-fns";
 import { SignatureConfirmationModal } from "@/components/signatures/SignatureConfirmationModal";
 import type { SignatureMethod } from "@/types/signature";
 import { generateApprovalCertificatePdf, generateApprovalCertificateBase64 } from "@/utils/approvalCertificatePdf";
@@ -160,7 +161,7 @@ const CostSubmission = () => {
   const canViewTeamSubmissions = isAdmin || isSupervisor || isSuperAdmin || isFinanceAdmin || isAdminOrSuperUser;
 
   // Default to Submit Request tab for all users
-  const [activeTab, setActiveTab] = useState<"submit" | "reconciliation" | "outstanding" | "history">("submit");
+  const [activeTab, setActiveTab] = useState<"submit" | "reconciliation" | "outstanding" | "history" | "payment_audit">("submit");
   const [statusFilter, setStatusFilter] = useState<"all" | "pending" | "under_review" | "approved" | "rejected" | "paid" | "reconciled">("all");
   const [showGuide, setShowGuide] = useState(false);
   const [operationalCosts, setOperationalCosts] = useState<OperationalCostSubmission[]>([]);
@@ -1820,6 +1821,27 @@ const CostSubmission = () => {
                 </Badge>
               )}
             </TabsTrigger>
+
+            {/* Confirmation Audit — admins & supervisors only */}
+            {canViewTeamSubmissions && (
+              <TabsTrigger
+                value="payment_audit"
+                data-testid="tab-payment-audit"
+                className="relative flex-1 min-w-[150px] gap-2 py-3 px-4 rounded-lg font-medium transition-all duration-300 data-[state=active]:bg-gradient-to-r data-[state=active]:from-violet-600 data-[state=active]:to-purple-700 data-[state=active]:text-white data-[state=active]:shadow-lg data-[state=active]:shadow-violet-500/25 data-[state=inactive]:text-slate-600 data-[state=inactive]:dark:text-slate-400 data-[state=inactive]:hover:bg-slate-200/50 data-[state=inactive]:dark:hover:bg-slate-700/50"
+              >
+                <Shield className="h-4 w-4" />
+                <span className="hidden sm:inline">Confirmation Audit</span>
+                <span className="sm:hidden">Audit</span>
+                {(() => {
+                  const unconfirmed = submissions.filter(s => s.status === 'paid' && !s.fund_receipt_confirmed).length;
+                  return unconfirmed > 0 && activeTab !== 'payment_audit' ? (
+                    <Badge variant="secondary" className="ml-1 h-5 px-1.5 text-xs bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-300 border-0">
+                      {unconfirmed}
+                    </Badge>
+                  ) : null;
+                })()}
+              </TabsTrigger>
+            )}
           </TabsList>
         </div>
 
@@ -2987,6 +3009,131 @@ const CostSubmission = () => {
             </Card>
           ) : null}
         </TabsContent>
+
+        {/* ─── Confirmation Audit ─── */}
+        {canViewTeamSubmissions && (
+          <TabsContent value="payment_audit" className="space-y-4">
+            {(() => {
+              const paidSubs = submissions.filter(s => s.status === 'paid');
+              const confirmed = paidSubs.filter(s => s.fund_receipt_confirmed === true);
+              const unconfirmed = paidSubs.filter(s => !s.fund_receipt_confirmed);
+              const totalPaidCents = paidSubs.reduce((s, sub) => s + (sub.amount_cents ?? 0), 0);
+              const confirmedCents = confirmed.reduce((s, sub) => s + (sub.amount_cents ?? 0), 0);
+              return (
+                <>
+                  {/* Summary */}
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                    <Card className="border-violet-200 bg-violet-50 dark:bg-violet-950/30">
+                      <CardContent className="pt-4 pb-3">
+                        <p className="text-xs text-muted-foreground mb-1">Total Paid Out</p>
+                        <p className="text-xl font-bold text-violet-700 dark:text-violet-300">
+                          {(totalPaidCents / 100).toLocaleString(undefined, { maximumFractionDigits: 0 })} SDG
+                        </p>
+                        <p className="text-xs text-muted-foreground">{paidSubs.length} submission{paidSubs.length !== 1 ? 's' : ''}</p>
+                      </CardContent>
+                    </Card>
+                    <Card className="border-green-200 bg-green-50 dark:bg-green-950/30">
+                      <CardContent className="pt-4 pb-3">
+                        <p className="text-xs text-muted-foreground mb-1">Receipt Confirmed</p>
+                        <p className="text-xl font-bold text-green-700 dark:text-green-300">
+                          {(confirmedCents / 100).toLocaleString(undefined, { maximumFractionDigits: 0 })} SDG
+                        </p>
+                        <p className="text-xs text-muted-foreground">{confirmed.length} submission{confirmed.length !== 1 ? 's' : ''}</p>
+                      </CardContent>
+                    </Card>
+                    <Card className="border-orange-200 bg-orange-50 dark:bg-orange-950/30">
+                      <CardContent className="pt-4 pb-3">
+                        <p className="text-xs text-muted-foreground mb-1">Awaiting Confirmation</p>
+                        <p className="text-xl font-bold text-orange-700 dark:text-orange-300">
+                          {((totalPaidCents - confirmedCents) / 100).toLocaleString(undefined, { maximumFractionDigits: 0 })} SDG
+                        </p>
+                        <p className="text-xs text-muted-foreground">{unconfirmed.length} pending</p>
+                      </CardContent>
+                    </Card>
+                  </div>
+
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2">
+                        <Shield className="h-5 w-5" />
+                        Fund Receipt Confirmation Audit
+                      </CardTitle>
+                      <CardDescription>
+                        All paid cost submissions — shows whether the field staff member has confirmed receiving the funds
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="p-0">
+                      {isLoading ? (
+                        <div className="p-6 space-y-2">{Array(5).fill(0).map((_, i) => <Skeleton key={i} className="h-10 w-full" />)}</div>
+                      ) : paidSubs.length === 0 ? (
+                        <div className="p-12 text-center text-muted-foreground">No paid submissions found</div>
+                      ) : (
+                        <div className="overflow-x-auto">
+                          <Table>
+                            <TableHeader>
+                              <TableRow>
+                                <TableHead>Submitted By</TableHead>
+                                <TableHead>Category</TableHead>
+                                <TableHead className="text-right">Amount (SDG)</TableHead>
+                                <TableHead>Paid At</TableHead>
+                                <TableHead>Receipt Confirmed</TableHead>
+                                <TableHead>Confirmed At</TableHead>
+                                <TableHead>Notes</TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {paidSubs.map(sub => {
+                                const submitterName = users.find(u => u.id === sub.submitted_by)?.name || sub.submitted_by;
+                                const amountSdg = (sub.amount_cents ?? 0) / 100;
+                                const categoryLabel: Record<string, string> = {
+                                  permits: 'Permits', incentives: 'Incentives', communications: 'Comms',
+                                  training: 'Training', transport: 'Transport', general_transport: 'Transport',
+                                  equipment: 'Equipment', printing: 'Printing', meetings: 'Meetings',
+                                  office_admin: 'Office Admin', other: 'Other',
+                                };
+                                return (
+                                  <TableRow key={sub.id} data-testid={`row-audit-${sub.id}`}>
+                                    <TableCell className="font-medium">{submitterName}</TableCell>
+                                    <TableCell>{categoryLabel[sub.expense_category] ?? sub.expense_category}</TableCell>
+                                    <TableCell className="text-right font-mono">
+                                      {amountSdg.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                                    </TableCell>
+                                    <TableCell className="text-xs text-muted-foreground">
+                                      {sub.paid_at ? format(parseISO(sub.paid_at), 'dd/MM/yyyy') : '—'}
+                                    </TableCell>
+                                    <TableCell>
+                                      {sub.fund_receipt_confirmed ? (
+                                        <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200 border-green-200 gap-1">
+                                          <CheckCircle className="h-3 w-3" />Confirmed
+                                        </Badge>
+                                      ) : (
+                                        <Badge className="bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200 border-orange-200 gap-1">
+                                          <Clock className="h-3 w-3" />Pending
+                                        </Badge>
+                                      )}
+                                    </TableCell>
+                                    <TableCell className="text-xs text-muted-foreground">
+                                      {sub.fund_receipt_confirmed_at
+                                        ? format(parseISO(sub.fund_receipt_confirmed_at), 'dd/MM/yyyy HH:mm')
+                                        : '—'}
+                                    </TableCell>
+                                    <TableCell className="text-xs max-w-[180px] truncate" title={sub.fund_receipt_notes ?? ''}>
+                                      {sub.fund_receipt_notes || '—'}
+                                    </TableCell>
+                                  </TableRow>
+                                );
+                              })}
+                            </TableBody>
+                          </Table>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                </>
+              );
+            })()}
+          </TabsContent>
+        )}
       </Tabs>
 
       <Dialog open={approvalDialog.open} onOpenChange={(open) => {

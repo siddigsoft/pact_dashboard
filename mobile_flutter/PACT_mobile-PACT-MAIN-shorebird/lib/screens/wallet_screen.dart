@@ -87,6 +87,7 @@ class _WalletScreenState extends State<WalletScreen> {
   String _activeTab = 'overview'; // set from initialTab in initState
   String _transactionFilter = 'all';
   String _withdrawalFilter = 'all';
+  String _statementPeriod = 'this_month'; // 'this_month' | 'last_month' | 'all'
 
   // Net balance = gross balance minus all advance disbursements.
   // This is what's truly available for withdrawal.
@@ -108,7 +109,7 @@ class _WalletScreenState extends State<WalletScreen> {
   @override
   void initState() {
     super.initState();
-    const tabNames = ['overview', 'transactions', 'withdrawals', 'advances', 'cost_payments'];
+    const tabNames = ['overview', 'transactions', 'withdrawals', 'advances', 'cost_payments', 'statement'];
     if (widget.initialTab >= 0 && widget.initialTab < tabNames.length) {
       _activeTab = tabNames[widget.initialTab];
     }
@@ -1202,6 +1203,13 @@ class _WalletScreenState extends State<WalletScreen> {
                                                   Icons.receipt_outlined,
                                                   badge: _costPayments.where((c) => c['fund_receipt_confirmed'] != true).length,
                                                 ),
+                                                const SizedBox(width: 6),
+                                                _buildTabButton(
+                                                  'statement',
+                                                  'Statement',
+                                                  'الكشف',
+                                                  Icons.summarize_outlined,
+                                                ),
                                               ],
                                             ),
                                           ),
@@ -1995,6 +2003,8 @@ class _WalletScreenState extends State<WalletScreen> {
         return _buildAdvancesTab();
       case 'cost_payments':
         return _buildCostPaymentsTab();
+      case 'statement':
+        return _buildStatementTab();
       default:
         return const SizedBox();
     }
@@ -3495,6 +3505,389 @@ class _WalletScreenState extends State<WalletScreen> {
                 color: Colors.green.shade900,
               ),
               textDirection: rtl ? ui.TextDirection.rtl : ui.TextDirection.ltr,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ─── Statement Tab ──────────────────────────────────────────────────────────
+
+  Widget _buildStatementTab() {
+    final entries = <Map<String, dynamic>>[];
+
+    // 1. Site visit fees (credits from wallet_transactions)
+    for (final tx in _transactions) {
+      final type = (tx['type'] as String? ?? '').toLowerCase();
+      if (type == 'site_visit_fee' || type == 'fee' || type == 'credit') {
+        final amount = (tx['amount'] as num?)?.toDouble() ?? 0;
+        if (amount > 0) {
+          entries.add({
+            'entry_type': 'site_fee',
+            'label_en': 'Site Visit Fee',
+            'label_ar': 'رسوم الزيارة الميدانية',
+            'date': tx['created_at'] as String? ?? '',
+            'amount_sdg': amount,
+            'site': _siteNameFromTx(tx),
+            'confirmed': true,
+            'color': 0xFF2E7D32,
+            'icon': Icons.check_circle_outline,
+          });
+        }
+      }
+    }
+
+    // 2. Transport advances that have been (partially or fully) paid
+    for (final advance in _advances) {
+      final totalPaid = (advance['total_paid_amount'] as num?)?.toDouble() ??
+          (advance['disbursed_amount'] as num?)?.toDouble() ??
+          0.0;
+      if (totalPaid > 0) {
+        entries.add({
+          'entry_type': 'advance',
+          'label_en': 'Transport Advance',
+          'label_ar': 'سلفة مواصلات',
+          'date': advance['updated_at'] as String? ??
+              advance['created_at'] as String? ?? '',
+          'amount_sdg': totalPaid,
+          'site': advance['site_name'] as String? ?? '',
+          'confirmed': advance['fund_receipt_confirmed'] == true,
+          'color': 0xFF1565C0,
+          'icon': Icons.directions_car_outlined,
+        });
+      }
+    }
+
+    // 3. Operational cost reimbursements (status == 'paid')
+    for (final cost in _costPayments) {
+      final amountCents = (cost['amount_cents'] as num?)?.toInt() ?? 0;
+      final amountSdg = amountCents / 100.0;
+      if (amountSdg > 0) {
+        entries.add({
+          'entry_type': 'cost',
+          'label_en': 'Cost Reimbursement',
+          'label_ar': 'تعويض التكاليف',
+          'date': cost['paid_at'] as String? ??
+              cost['updated_at'] as String? ??
+              cost['created_at'] as String? ?? '',
+          'amount_sdg': amountSdg,
+          'site': cost['site_name'] as String? ?? '',
+          'category': cost['expense_category'] as String? ?? '',
+          'confirmed': cost['fund_receipt_confirmed'] == true,
+          'color': 0xFF00796B,
+          'icon': Icons.receipt_outlined,
+        });
+      }
+    }
+
+    // Filter by selected period
+    final now = DateTime.now();
+    final filtered = entries.where((e) {
+      if (_statementPeriod == 'all') return true;
+      final dateStr = e['date'] as String? ?? '';
+      if (dateStr.isEmpty) return true;
+      try {
+        final dt = DateTime.parse(dateStr).toLocal();
+        if (_statementPeriod == 'this_month') {
+          return dt.year == now.year && dt.month == now.month;
+        } else if (_statementPeriod == 'last_month') {
+          final lm = DateTime(now.year, now.month - 1);
+          return dt.year == lm.year && dt.month == lm.month;
+        }
+      } catch (_) {}
+      return true;
+    }).toList()
+      ..sort((a, b) {
+        final da = DateTime.tryParse(a['date'] as String? ?? '') ?? DateTime(2000);
+        final db = DateTime.tryParse(b['date'] as String? ?? '') ?? DateTime(2000);
+        return db.compareTo(da);
+      });
+
+    final total = filtered.fold<double>(
+        0, (s, e) => s + ((e['amount_sdg'] as num?)?.toDouble() ?? 0));
+    final confirmedTotal = filtered
+        .where((e) => e['confirmed'] == true)
+        .fold<double>(0, (s, e) => s + ((e['amount_sdg'] as num?)?.toDouble() ?? 0));
+    final pendingCount = filtered.where((e) => e['confirmed'] != true).length;
+
+    final ar = widget.isArabic;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          ar ? 'كشف الأموال المستلمة' : 'Funds Received Statement',
+          style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.w600),
+        ),
+        const SizedBox(height: 12),
+
+        // Period chips
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: [
+              _buildPeriodChip('this_month', ar ? 'هذا الشهر' : 'This Month'),
+              const SizedBox(width: 8),
+              _buildPeriodChip('last_month', ar ? 'الشهر الماضي' : 'Last Month'),
+              const SizedBox(width: 8),
+              _buildPeriodChip('all', ar ? 'الكل' : 'All Time'),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+
+        // Summary card
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [Colors.indigo.shade700, Colors.indigo.shade500],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            borderRadius: BorderRadius.circular(14),
+          ),
+          child: Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      ar ? 'إجمالي مستلم' : 'Total Received',
+                      style: GoogleFonts.poppins(color: Colors.white60, fontSize: 11),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      '${total.toStringAsFixed(0)} SDG',
+                      style: GoogleFonts.poppins(
+                          color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
+                    ),
+                    Text(
+                      '${filtered.length} ${ar ? 'معاملة' : 'transaction${filtered.length != 1 ? 's' : ''}'}',
+                      style: GoogleFonts.poppins(color: Colors.white60, fontSize: 11),
+                    ),
+                  ],
+                ),
+              ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    ar ? 'مؤكد' : 'Confirmed',
+                    style: GoogleFonts.poppins(color: Colors.white60, fontSize: 11),
+                  ),
+                  Text(
+                    '${confirmedTotal.toStringAsFixed(0)} SDG',
+                    style: GoogleFonts.poppins(
+                        color: Colors.greenAccent, fontSize: 15, fontWeight: FontWeight.bold),
+                  ),
+                  if (pendingCount > 0) ...[
+                    const SizedBox(height: 6),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: Colors.orange.shade400,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        ar ? '$pendingCount غير مؤكد' : '$pendingCount unconfirmed',
+                        style: GoogleFonts.poppins(
+                            color: Colors.white, fontSize: 10, fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+
+        if (filtered.isEmpty)
+          Center(
+            child: Padding(
+              padding: const EdgeInsets.all(32),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.summarize_outlined, size: 48, color: AppColors.textLight),
+                  const SizedBox(height: 12),
+                  Text(
+                    ar
+                        ? 'لا توجد أموال مستلمة في هذه الفترة'
+                        : 'No funds received in this period',
+                    textAlign: TextAlign.center,
+                    style: GoogleFonts.poppins(
+                        color: AppColors.textLight, fontWeight: FontWeight.w500),
+                  ),
+                ],
+              ),
+            ),
+          )
+        else
+          ...filtered.map((e) => _buildStatementEntry(e)),
+      ],
+    );
+  }
+
+  Widget _buildPeriodChip(String period, String label) {
+    final isActive = _statementPeriod == period;
+    return GestureDetector(
+      onTap: () => setState(() => _statementPeriod = period),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+        decoration: BoxDecoration(
+          color: isActive ? AppColors.primaryOrange : Colors.grey.shade100,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: isActive ? AppColors.primaryOrange : Colors.grey.shade300,
+          ),
+        ),
+        child: Text(
+          label,
+          style: GoogleFonts.poppins(
+            fontSize: 12,
+            fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
+            color: isActive ? Colors.white : Colors.grey.shade700,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStatementEntry(Map<String, dynamic> entry) {
+    final amountSdg = (entry['amount_sdg'] as num?)?.toDouble() ?? 0;
+    final dateStr = entry['date'] as String? ?? '';
+    final confirmed = entry['confirmed'] == true;
+    final color = Color(entry['color'] as int? ?? 0xFF607D8B);
+    final iconData = entry['icon'] as IconData? ?? Icons.payments_outlined;
+    final site = entry['site'] as String? ?? '';
+    final ar = widget.isArabic;
+
+    String formattedDate = '';
+    try {
+      if (dateStr.isNotEmpty) {
+        final dt = DateTime.parse(dateStr).toLocal();
+        formattedDate =
+            '${dt.day.toString().padLeft(2, '0')}/${dt.month.toString().padLeft(2, '0')}/${dt.year}';
+      }
+    } catch (_) {}
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.grey.shade200),
+        boxShadow: [
+          BoxShadow(
+              color: Colors.black.withOpacity(0.04),
+              blurRadius: 6,
+              offset: const Offset(0, 2)),
+        ],
+      ),
+      child: Row(
+        children: [
+          // Left colour accent bar
+          Container(
+            width: 4,
+            height: 70,
+            decoration: BoxDecoration(
+              color: color,
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(12),
+                bottomLeft: Radius.circular(12),
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          // Type icon
+          Container(
+            width: 36,
+            height: 36,
+            decoration: BoxDecoration(
+              color: color.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(iconData, size: 18, color: color),
+          ),
+          const SizedBox(width: 10),
+          // Label + site + date
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    ar
+                        ? (entry['label_ar'] as String? ?? '')
+                        : (entry['label_en'] as String? ?? ''),
+                    style: GoogleFonts.poppins(
+                        fontWeight: FontWeight.w600, fontSize: 13),
+                  ),
+                  if (site.isNotEmpty)
+                    Text(
+                      site,
+                      style: GoogleFonts.poppins(
+                          fontSize: 11, color: Colors.grey.shade600),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  Text(
+                    formattedDate,
+                    style: GoogleFonts.poppins(
+                        fontSize: 11, color: Colors.grey.shade500),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          // Amount + confirmation badge
+          Padding(
+            padding: const EdgeInsets.only(right: 12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text(
+                  '+${amountSdg.toStringAsFixed(0)} SDG',
+                  style: GoogleFonts.poppins(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 13,
+                      color: color),
+                ),
+                const SizedBox(height: 4),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      confirmed
+                          ? Icons.verified_outlined
+                          : Icons.pending_outlined,
+                      size: 12,
+                      color: confirmed
+                          ? Colors.green.shade600
+                          : Colors.orange.shade600,
+                    ),
+                    const SizedBox(width: 3),
+                    Text(
+                      confirmed
+                          ? (ar ? 'مؤكد' : 'Confirmed')
+                          : (ar ? 'معلق' : 'Pending'),
+                      style: GoogleFonts.poppins(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w600,
+                        color: confirmed
+                            ? Colors.green.shade600
+                            : Colors.orange.shade600,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
             ),
           ),
         ],

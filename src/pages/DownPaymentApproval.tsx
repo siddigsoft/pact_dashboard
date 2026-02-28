@@ -19,7 +19,7 @@ import {
   DollarSign, Shield, AlertTriangle, Info, Users, UserCheck,
   TrendingUp, Receipt, Wallet, MapPin, FolderKanban, ClipboardList,
   ClipboardCheck, FileText, Search, ChevronDown, ChevronRight,
-  Calendar, Building2, User,
+  Calendar, Building2, User, CheckCircle2, XCircle, BarChart3,
 } from 'lucide-react';
 import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
 import { format, parseISO } from 'date-fns';
@@ -587,6 +587,9 @@ export default function DownPaymentApproval() {
           <TabsTrigger value="allRequests" className="gap-1.5" data-testid="tab-down-all-requests">
             <FileText className="h-4 w-4" />All Requests
           </TabsTrigger>
+          <TabsTrigger value="disbursement" className="gap-1.5" data-testid="tab-down-disbursement">
+            <BarChart3 className="h-4 w-4" />Disbursement Tracker
+          </TabsTrigger>
         </TabsList>
 
         {/* ─── Approval (default) ─── */}
@@ -668,6 +671,135 @@ export default function DownPaymentApproval() {
               <AllRequestsTable requests={filteredRequests} getProfileName={getProfileName} loading={loading} />
             </CardContent>
           </Card>
+        </TabsContent>
+
+        {/* ─── Disbursement Tracker ─── */}
+        <TabsContent value="disbursement" className="space-y-4">
+          {(() => {
+            const disbursed = filteredRequests.filter(r =>
+              r.status === 'fully_paid' || r.status === 'partially_paid' || r.status === 'approved'
+            );
+            const totalApproved = disbursed.reduce((s, r) => s + (r.approvedAmount ?? r.requestedAmount), 0);
+            const totalPaid = disbursed.reduce((s, r) => s + r.totalPaidAmount, 0);
+            const totalRemaining = disbursed.reduce((s, r) => s + r.remainingAmount, 0);
+            const fullyPaid = disbursed.filter(r => r.status === 'fully_paid').length;
+            const partiallyPaid = disbursed.filter(r => r.status === 'partially_paid').length;
+            const pendingDisburse = disbursed.filter(r => r.status === 'approved').length;
+            return (
+              <>
+                {/* Summary cards */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  <Card className="border-blue-200 bg-blue-50 dark:bg-blue-950/30">
+                    <CardContent className="pt-4 pb-3">
+                      <p className="text-xs text-muted-foreground mb-1">Total Approved</p>
+                      <p className="text-xl font-bold text-blue-700 dark:text-blue-300">{totalApproved.toLocaleString()} SDG</p>
+                      <p className="text-xs text-muted-foreground">{disbursed.length} request{disbursed.length !== 1 ? 's' : ''}</p>
+                    </CardContent>
+                  </Card>
+                  <Card className="border-green-200 bg-green-50 dark:bg-green-950/30">
+                    <CardContent className="pt-4 pb-3">
+                      <p className="text-xs text-muted-foreground mb-1">Total Disbursed</p>
+                      <p className="text-xl font-bold text-green-700 dark:text-green-300">{totalPaid.toLocaleString()} SDG</p>
+                      <p className="text-xs text-muted-foreground">{fullyPaid} fully paid</p>
+                    </CardContent>
+                  </Card>
+                  <Card className="border-amber-200 bg-amber-50 dark:bg-amber-950/30">
+                    <CardContent className="pt-4 pb-3">
+                      <p className="text-xs text-muted-foreground mb-1">Remaining</p>
+                      <p className="text-xl font-bold text-amber-700 dark:text-amber-300">{totalRemaining.toLocaleString()} SDG</p>
+                      <p className="text-xs text-muted-foreground">{partiallyPaid} partial</p>
+                    </CardContent>
+                  </Card>
+                  <Card className="border-orange-200 bg-orange-50 dark:bg-orange-950/30">
+                    <CardContent className="pt-4 pb-3">
+                      <p className="text-xs text-muted-foreground mb-1">Pending Payment</p>
+                      <p className="text-xl font-bold text-orange-700 dark:text-orange-300">{pendingDisburse}</p>
+                      <p className="text-xs text-muted-foreground">approved, not yet paid</p>
+                    </CardContent>
+                  </Card>
+                </div>
+
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <BarChart3 className="h-5 w-5" />
+                      Disbursement Tracker
+                    </CardTitle>
+                    <CardDescription>
+                      All approved / paid transport advance requests with disbursement status
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="p-0">
+                    {loading ? (
+                      <div className="p-6 space-y-2">{Array(5).fill(0).map((_, i) => <Skeleton key={i} className="h-10 w-full" />)}</div>
+                    ) : disbursed.length === 0 ? (
+                      <div className="p-12 text-center text-muted-foreground">No approved or paid advances found / لا توجد سلف معتمدة</div>
+                    ) : (
+                      <div className="overflow-x-auto">
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>Requester</TableHead>
+                              <TableHead>Site</TableHead>
+                              <TableHead>State</TableHead>
+                              <TableHead className="text-right">Approved</TableHead>
+                              <TableHead className="text-right">Paid</TableHead>
+                              <TableHead className="text-right">Remaining</TableHead>
+                              <TableHead>Status</TableHead>
+                              <TableHead>Updated</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {disbursed.map(req => {
+                              const approved = req.approvedAmount ?? req.requestedAmount;
+                              const pctPaid = approved > 0 ? Math.round((req.totalPaidAmount / approved) * 100) : 0;
+                              return (
+                                <TableRow key={req.id} data-testid={`row-disbursement-${req.id}`}>
+                                  <TableCell className="font-medium">{getProfileName(req.requestedBy)}</TableCell>
+                                  <TableCell className="max-w-[140px] truncate" title={req.siteName}>{req.siteName}</TableCell>
+                                  <TableCell>{req.stateName || '—'}</TableCell>
+                                  <TableCell className="text-right font-mono">{approved.toLocaleString()}</TableCell>
+                                  <TableCell className="text-right">
+                                    <div className="flex flex-col items-end gap-0.5">
+                                      <span className="font-mono">{req.totalPaidAmount.toLocaleString()}</span>
+                                      {pctPaid > 0 && (
+                                        <span className="text-xs text-muted-foreground">{pctPaid}%</span>
+                                      )}
+                                    </div>
+                                  </TableCell>
+                                  <TableCell className="text-right font-mono text-amber-600 dark:text-amber-400">
+                                    {req.remainingAmount > 0 ? req.remainingAmount.toLocaleString() : '—'}
+                                  </TableCell>
+                                  <TableCell>
+                                    {req.status === 'fully_paid' ? (
+                                      <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200 border-green-200 gap-1">
+                                        <CheckCircle2 className="h-3 w-3" />Fully Paid
+                                      </Badge>
+                                    ) : req.status === 'partially_paid' ? (
+                                      <Badge className="bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200 border-amber-200 gap-1">
+                                        <TrendingUp className="h-3 w-3" />Partial
+                                      </Badge>
+                                    ) : (
+                                      <Badge className="bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200 border-blue-200 gap-1">
+                                        <DollarSign className="h-3 w-3" />Approved
+                                      </Badge>
+                                    )}
+                                  </TableCell>
+                                  <TableCell className="text-xs text-muted-foreground">
+                                    {req.updatedAt ? format(parseISO(req.updatedAt), 'dd/MM/yyyy') : '—'}
+                                  </TableCell>
+                                </TableRow>
+                              );
+                            })}
+                          </TableBody>
+                        </Table>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              </>
+            );
+          })()}
         </TabsContent>
       </Tabs>
     </div>
