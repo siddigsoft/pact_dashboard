@@ -462,6 +462,9 @@
       if (!isHidden('/email-management')) {
         superAdminItems.push({ id: 'email-management', title: "Email Management", url: "/email-management", icon: Mail, priority: 6, isPinned: isPinned('/email-management') });
       }
+      if (!isHidden('/email-preview')) {
+        superAdminItems.push({ id: 'email-preview', title: "Email Preview", url: "/email-preview", icon: Eye, priority: 6.5, isPinned: isPinned('/email-preview') });
+      }
       if (!isHidden('/admin/broadcast')) {
         superAdminItems.push({ id: 'admin-broadcast', title: "Broadcast Center", url: "/admin/broadcast", icon: Megaphone, priority: 7, isPinned: isPinned('/admin/broadcast') });
       }
