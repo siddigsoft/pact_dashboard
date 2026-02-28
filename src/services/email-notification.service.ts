@@ -1547,8 +1547,8 @@ PACT Command Center | مركز قيادة باكت`;
       }
 
       const options: NotificationEmailOptions = {
-        title: `Payment Request: ${requestTitle} - ${fundingLabel}`,
-        titleAr: `طلب دفع: ${requestTitle} - ${fundingLabelAr}`,
+        title: `Payment Request No. ${requestId} | ${requestTitle} | ${fundingLabel}`,
+        titleAr: `طلب دفع رقم ${requestId} | ${requestTitle} | ${fundingLabelAr}`,
         message: `A cost submission has been fully approved and is ready for payment processing. ${approverName} is requesting the finance team to process the payment.\n\nPlease review and process this payment at your earliest convenience.${fundingType === 'advance' ? '\n\nIMPORTANT - RECONCILIATION REQUIRED: This advance payment must be reconciled after the field activity is completed. The recipient must submit receipts/supporting documents and return any unused funds within the reconciliation period. Please ensure reconciliation is tracked.' : ''}`,
         messageAr: `تمت الموافقة الكاملة على طلب تكلفة تشغيلية وهو جاهز لمعالجة الدفع. يطلب ${approverName} من فريق المالية معالجة الدفع.\n\nيرجى مراجعة هذا الدفع ومعالجته في أقرب وقت.${fundingType === 'advance' ? '\n\nهام - التسوية مطلوبة: يجب تسوية هذه السلفة بعد اكتمال النشاط الميداني. يجب على المستلم تقديم الإيصالات/المستندات الداعمة وإعادة أي أموال غير مستخدمة خلال فترة التسوية.' : ''}`,
         type: 'warning',

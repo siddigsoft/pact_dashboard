@@ -1000,8 +1000,8 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
             approverName,
             approverEmail,
             requesterNames,
-            `Bulk Transport Advance - ${bulkRequests.length} Requests${groupLabel ? ` (${groupLabel})` : ''}${excelNote}`,
-            requestIds,
+            groupLabel || 'All Approved',
+            `BULK-${bulkRequests.length}`,
             'Transportation Advance (Bulk)',
             totalAmount,
             'advance',
@@ -1093,8 +1093,8 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
           approverName,
           approverEmail,
           requesterNames.length > 60 ? requesterNames.slice(0, 57) + '...' : requesterNames,
-          `Bulk Transport Advance (${bulkRequests.length} requests)${groupLabel ? ` - ${groupLabel}` : ''}`,
-          requestIds.length > 40 ? requestIds.slice(0, 37) + '...' : requestIds,
+          groupLabel || 'All Approved',
+          `BULK-${bulkRequests.length}`,
           'Transportation Advance (Bulk)',
           totalAmount,
           'advance',
@@ -1145,7 +1145,7 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
 
         const result = await EmailNotificationService.sendPaymentRequestToFinanceWithRecipients(
           selectedRecipients, approverName, approverEmail, requesterName,
-          `Transport Advance - ${req.siteName}`, requestId, 'Transportation Advance',
+          (req as any).mmpName || req.projectName || req.siteName || 'WFP TPM', requestId, 'Transportation Advance',
           req.approvedAmount || req.requestedAmount, 'advance', req.projectName || 'N/A',
           'SDG', '', '/down-payment-approval', pdfAttachment,
           undefined, ccEmails.length > 0 ? ccEmails : undefined
