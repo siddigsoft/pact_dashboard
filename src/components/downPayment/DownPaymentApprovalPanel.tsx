@@ -97,6 +97,88 @@ const STATUS_OPTIONS: { value: DownPaymentStatus; label: string }[] = [
   { value: 'cancelled', label: 'Cancelled' },
 ];
 
+type BulkSummaryEntry = { count: number; requested: number; approved: number };
+
+function BulkSummaryTable({ requests, users }: {
+  requests: Array<{ requestedBy?: string; requestedAmount: number; approvedAmount?: number; stateName?: string; hubName?: string; [key: string]: unknown }>;
+  users?: Array<{ id: string; email?: string; [key: string]: unknown }>;
+}) {
+  const [activeTab, setActiveTab] = React.useState<'state' | 'hub' | 'locality' | 'requester'>('state');
+
+  const buildGroups = (keyFn: (r: typeof requests[0]) => string): [string, BulkSummaryEntry][] => {
+    const m = new Map<string, BulkSummaryEntry>();
+    requests.forEach(r => {
+      const k = keyFn(r) || 'Unknown';
+      const e = m.get(k) || { count: 0, requested: 0, approved: 0 };
+      m.set(k, { count: e.count + 1, requested: e.requested + r.requestedAmount, approved: e.approved + (r.approvedAmount || r.requestedAmount) });
+    });
+    return Array.from(m.entries()).sort(([a], [b]) => a.localeCompare(b));
+  };
+
+  const tabs = [
+    { key: 'state'     as const, label: 'By State',     groups: buildGroups(r => (r.stateName as string) || '-') },
+    { key: 'hub'       as const, label: 'By Hub',       groups: buildGroups(r => (r.hubName as string) || '-') },
+    { key: 'locality'  as const, label: 'By Locality',  groups: buildGroups(r => (r.localityName as string) || '-') },
+    { key: 'requester' as const, label: 'By Requester', groups: buildGroups(r => {
+      const u = users?.find(u => u.id === r.requestedBy);
+      return (u as any)?.fullName || (u as any)?.full_name || u?.email || 'Unknown';
+    }) },
+  ];
+
+  const active = tabs.find(t => t.key === activeTab)!;
+  const totalReq = requests.reduce((s, r) => s + r.requestedAmount, 0);
+  const totalApp = requests.reduce((s, r) => s + (r.approvedAmount || r.requestedAmount), 0);
+
+  return (
+    <div className="border rounded-md overflow-hidden text-xs">
+      <div className="flex bg-muted/60 border-b">
+        {tabs.map(t => (
+          <button
+            key={t.key}
+            onClick={() => setActiveTab(t.key)}
+            className={`flex-1 text-[11px] font-medium py-1.5 px-1 transition-colors ${
+              activeTab === t.key
+                ? 'bg-background text-primary border-b-2 border-primary'
+                : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+            }`}
+          >
+            {t.label} <span className="opacity-50">({t.groups.length})</span>
+          </button>
+        ))}
+      </div>
+      <ScrollArea className="h-[180px]">
+        <Table>
+          <TableHeader>
+            <TableRow className="bg-muted/30">
+              <TableHead className="text-[11px] py-1.5 font-semibold">{active.label.replace('By ', '')}</TableHead>
+              <TableHead className="text-[11px] py-1.5 text-center font-semibold w-10">#</TableHead>
+              <TableHead className="text-[11px] py-1.5 text-right font-semibold">Requested</TableHead>
+              <TableHead className="text-[11px] py-1.5 text-right font-semibold">Approved</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {active.groups.map(([name, g], i) => (
+              <TableRow key={name} className={i % 2 === 1 ? 'bg-muted/20' : ''}>
+                <TableCell className="py-1 font-medium truncate max-w-[160px]">{name}</TableCell>
+                <TableCell className="py-1 text-center text-muted-foreground">{g.count}</TableCell>
+                <TableCell className="py-1 text-right font-mono text-muted-foreground">SDG {g.requested.toLocaleString()}</TableCell>
+                <TableCell className="py-1 text-right font-mono font-semibold text-green-700 dark:text-green-400">SDG {g.approved.toLocaleString()}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </ScrollArea>
+      <div className="flex items-center justify-between bg-muted/40 border-t px-3 py-1.5 text-[11px] font-semibold">
+        <span className="text-muted-foreground">Grand Total — {requests.length} requests</span>
+        <div className="flex gap-4">
+          <span className="text-muted-foreground">SDG {totalReq.toLocaleString()}</span>
+          <span className="text-green-700 dark:text-green-400">SDG {totalApp.toLocaleString()}</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelProps) {
   const { currentUser, users } = useUser();
   const { isSuperAdmin } = useSuperAdmin();
@@ -2966,36 +3048,7 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
                       </div>
                     </div>
                   </div>
-                  <ScrollArea className="h-[200px] border rounded-md">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead className="text-xs py-1.5">Requester</TableHead>
-                          <TableHead className="text-xs py-1.5">Site</TableHead>
-                          <TableHead className="text-xs py-1.5">Hub</TableHead>
-                          <TableHead className="text-xs py-1.5">State</TableHead>
-                          <TableHead className="text-xs py-1.5 text-right">Requested</TableHead>
-                          <TableHead className="text-xs py-1.5 text-right">Approved</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {paymentRequestDialog.bulkRequests.map(r => {
-                          const requester = users?.find(u => u.id === r.requestedBy);
-                          const rName = (requester as any)?.fullName || (requester as any)?.full_name || requester?.email || 'Unknown';
-                          return (
-                            <TableRow key={r.id} className="text-xs">
-                              <TableCell className="py-1.5 max-w-[120px] truncate">{rName}</TableCell>
-                              <TableCell className="py-1.5 max-w-[100px] truncate">{r.siteName}</TableCell>
-                              <TableCell className="py-1.5 max-w-[80px] truncate">{r.hubName || '-'}</TableCell>
-                              <TableCell className="py-1.5 max-w-[80px] truncate">{r.stateName || '-'}</TableCell>
-                              <TableCell className="py-1.5 text-right font-mono">SDG {r.requestedAmount.toLocaleString()}</TableCell>
-                              <TableCell className="py-1.5 text-right font-mono font-semibold">SDG {(r.approvedAmount || r.requestedAmount).toLocaleString()}</TableCell>
-                            </TableRow>
-                          );
-                        })}
-                      </TableBody>
-                    </Table>
-                  </ScrollArea>
+                  <BulkSummaryTable requests={paymentRequestDialog.bulkRequests} users={users} />
                   <div className="p-2 bg-destructive/10 rounded text-xs text-destructive flex items-start gap-2">
                     <AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
                     <div>
