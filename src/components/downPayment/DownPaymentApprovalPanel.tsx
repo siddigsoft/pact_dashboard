@@ -81,7 +81,7 @@ import { generateTransportAdvanceCertificatePdf, generateTransportAdvanceCertifi
 import { EmailNotificationService } from '@/services/email-notification.service';
 import { EmailCCInput } from '@/components/EmailCCInput';
 import { useToast } from '@/hooks/use-toast';
-import { Mail, Wallet, Upload, ImageIcon, RefreshCw } from 'lucide-react';
+import { Mail, Wallet, Upload, ImageIcon } from 'lucide-react';
 
 interface DownPaymentApprovalPanelProps {
   userRole: 'supervisor' | 'admin';
