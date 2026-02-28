@@ -1576,7 +1576,7 @@ PACT Command Center | مركز قيادة باكت`;
       };
 
       const result = await this.sendBulk(recipients, options);
-      console.log(`[EMAIL] Payment request notification: sent to ${result.successful}/${result.total} selected recipients${allAttachments.length > 0 ? ` (with ${allAttachments.length} PDF attachment(s))` : ''}`);
+      console.log(`[EMAIL] Payment request notification: sent to ${result.successful}/${result.total} selected recipients${allAttachments.length > 0 ? ` (with ${allAttachments.length} attachment(s))` : ''}`);
 
       const primaryEmail = recipients[0]?.email || 'unknown';
       return {
@@ -1585,7 +1585,7 @@ PACT Command Center | مركز قيادة باكت`;
         error: result.failed > 0
           ? result.successful > 0
             ? `${result.failed} recipient(s) did not receive the email`
-            : `Delivery failed to ${primaryEmail} — verify the email address is valid`
+            : result.error || `Delivery failed to ${primaryEmail}`
           : undefined,
       };
     } catch (err: any) {
@@ -2031,7 +2031,7 @@ PACT Workflow Platform`;
   async sendBulk(
     recipients: Array<{ email: string; name: string }>,
     options: NotificationEmailOptions
-  ): Promise<{ total: number; successful: number; failed: number }> {
+  ): Promise<{ total: number; successful: number; failed: number; error?: string }> {
     if (recipients.length === 0) {
       return { total: 0, successful: 0, failed: 0 };
     }
@@ -2043,6 +2043,7 @@ PACT Workflow Platform`;
         total: 1,
         successful: result.success ? 1 : 0,
         failed: result.success ? 0 : 1,
+        error: result.success ? undefined : result.error,
       };
     }
     
@@ -2081,13 +2082,14 @@ PACT Workflow Platform`;
       if (error) {
         console.error('[EMAIL] Bulk email with CC failed:', error);
         await logEmailSend(primaryRecipient.email, subject, 'notification', false, undefined, error.message);
-        return { total: recipients.length, successful: 0, failed: recipients.length };
+        return { total: recipients.length, successful: 0, failed: recipients.length, error: error.message };
       }
 
       if (data && !data.success) {
-        console.error('[EMAIL] Bulk email with CC returned error:', data.error);
-        await logEmailSend(primaryRecipient.email, subject, 'notification', false, undefined, data.error);
-        return { total: recipients.length, successful: 0, failed: recipients.length };
+        const smtpError: string = data.error || 'Send failed';
+        console.error('[EMAIL] Bulk email with CC returned error:', smtpError);
+        await logEmailSend(primaryRecipient.email, subject, 'notification', false, undefined, smtpError);
+        return { total: recipients.length, successful: 0, failed: recipients.length, error: smtpError };
       }
 
       console.log(`[EMAIL] Bulk email sent successfully to ${primaryRecipient.email} + ${ccRecipients.length} CC`);
@@ -2108,7 +2110,7 @@ PACT Workflow Platform`;
       };
     } catch (error: any) {
       console.error('[EMAIL] Bulk email exception:', error);
-      return { total: recipients.length, successful: 0, failed: recipients.length };
+      return { total: recipients.length, successful: 0, failed: recipients.length, error: error.message };
     }
   },
 
