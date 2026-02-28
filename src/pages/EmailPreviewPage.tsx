@@ -7,11 +7,11 @@ const SAMPLE = {
   approverName: 'ELSIDDIG IBRAHIM',
   requestId: 'BULK-135',
   groupLabel: 'All Approved',
-  mmpLabel: 'MMP-Sudan-Feb-2026',
+  mmpLabel: 'FEBRUARY MMP',
   totalAmount: 9602000,
   count: 135,
   date: 'Feb 28, 2026',
-  project: 'WFP Sudan TPM',
+  project: 'WFP TPM',
   actionUrl: '/down-payment-approval',
 };
 
@@ -308,12 +308,12 @@ export default function EmailPreviewPage() {
             </div>
             <div className="flex items-start gap-2 text-xs text-slate-700">
               <span className="font-semibold w-12 shrink-0 mt-0.5">Subject:</span>
-              <span className="font-medium">[HIGH PRIORITY | أولوية عالية] Payment Request No. BULK-135 | For MMP: MMP-Sudan-Feb-2026 | Advance Request</span>
+              <span className="font-medium">[HIGH PRIORITY | أولوية عالية] Payment Request No. BULK-135 | For MMP: FEBRUARY MMP | Advance Request</span>
             </div>
             <div className="flex items-center gap-2 text-xs text-slate-400 mt-1">
               <span className="w-12 shrink-0"></span>
               <span className="inline-flex items-center gap-1 bg-green-50 text-green-700 border border-green-200 rounded px-2 py-0.5">
-                📎 Transport-Advance-Full-Report-MMP-Sudan-Feb-2026-2026-02-28.xlsx &nbsp; 46 KB
+                📎 Transport-Advance-Full-Report-FEBRUARY_MMP-2026-02-28.xlsx &nbsp; 46 KB
               </span>
             </div>
           </div>

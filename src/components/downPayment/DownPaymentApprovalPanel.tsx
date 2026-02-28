@@ -1236,12 +1236,12 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
 
         const result = await EmailNotificationService.sendPaymentRequestToFinanceWithRecipients(
           selectedRecipients, approverName, approverEmail, requesterName,
-          (req as any).mmpName || req.projectName || req.siteName || 'WFP TPM', requestId, 'Transportation Advance',
+          req.mmpName || req.projectName || req.siteName || 'WFP TPM', requestId, 'Transportation Advance',
           req.approvedAmount || req.requestedAmount, 'advance',
-          (req as any).wfpProjectName || req.projectName || 'WFP TPM',
+          req.wfpProjectName || req.projectName || 'WFP TPM',
           'SDG', '', '/down-payment-approval', pdfAttachment,
           undefined, ccEmails.length > 0 ? ccEmails : undefined,
-          (req as any).mmpName || undefined
+          req.mmpName || undefined
         );
 
         if (result.success && !result.error) {
