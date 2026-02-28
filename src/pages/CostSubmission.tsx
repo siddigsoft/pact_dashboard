@@ -1042,6 +1042,9 @@ const CostSubmission = () => {
         console.warn('[BulkEmail] Excel generation failed:', xlErr);
       }
 
+      const recalcTotalSdg = approvedSubmissions.reduce((sum, s) => sum + (s.amount_cents || 0) / 100, 0);
+      const effectiveTotalSdg = recalcTotalSdg > 0 ? recalcTotalSdg : totalSdg;
+
       const result = await EmailNotificationService.sendPaymentRequestToFinanceWithRecipients(
         selectedRecipients,
         approverName,
@@ -1050,9 +1053,9 @@ const CostSubmission = () => {
         'All Approved Operational Cost Submissions',
         bulkId,
         'Operational Costs (Bulk)',
-        totalSdg,
-        'advance',
-        'WFP TPM',
+        effectiveTotalSdg,
+        'operational_cost',
+        (allProjects.find(p => approvedSubmissions[0]?.project_id === p.id)?.name) || 'WFP TPM',
         'SDG',
         '',
         '/cost-submission',

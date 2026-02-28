@@ -267,8 +267,8 @@ function buildEnhancedPaymentEmailHTML(d: {
 }): string {
   const fmt = (n: number) => `${d.currency} ${n.toLocaleString()}`;
   const totalUsd = d.usdRate && d.usdRate > 0 ? d.totalAmount / d.usdRate : null;
-  const fundingLabel = d.fundingType === 'advance' ? 'Advance Request' : 'Reimbursement';
-  const fundingLabelAr = d.fundingType === 'advance' ? 'طلب سلفة' : 'طلب تعويض';
+  const fundingLabel = d.fundingType === 'advance' ? 'Advance Request' : d.fundingType === 'operational_cost' ? 'Operational Cost Submission' : 'Reimbursement';
+  const fundingLabelAr = d.fundingType === 'advance' ? 'طلب سلفة' : d.fundingType === 'operational_cost' ? 'تقديم تكاليف تشغيلية' : 'طلب تعويض';
   const showPriorityRibbon = d.fundingType === 'advance';
   const ribbonBg = '#B45309';
   const fullActionUrl = d.actionUrl.startsWith('http') ? d.actionUrl : APP_URL + d.actionUrl;
@@ -283,7 +283,7 @@ function buildEnhancedPaymentEmailHTML(d: {
 <body style="margin:0;padding:0;background:#EAECF0;font-family:Georgia,'Times New Roman',Times,serif;">
 <table width="100%" cellpadding="0" cellspacing="0" style="background:#EAECF0;padding:32px 16px;">
 <tr><td align="center">
-<table width="640" cellpadding="0" cellspacing="0" style="max-width:640px;width:100%;background:#FFFFFF;border-radius:10px;overflow:hidden;box-shadow:0 6px 32px rgba(0,0,0,0.13);">
+<table width="100%" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:#FFFFFF;border-radius:10px;overflow:hidden;box-shadow:0 6px 32px rgba(0,0,0,0.13);">
 
   <!-- LETTERHEAD HEADER -->
   <tr>
@@ -294,11 +294,15 @@ function buildEnhancedPaymentEmailHTML(d: {
             <table cellpadding="0" cellspacing="0">
               <tr>
                 <td style="vertical-align:middle;padding-right:14px;">
-                  <img src="${PACT_LOGO_B64}" alt="PACT" width="44" height="44" style="display:block;border-radius:8px;border:0;" />
+                  <table cellpadding="0" cellspacing="0" style="background:#E87722;border-radius:10px;width:44px;height:44px;">
+                    <tr><td align="center" valign="middle" style="padding:0;">
+                      <span style="font-size:18px;font-weight:900;color:#FFFFFF;font-family:Arial,Helvetica,sans-serif;letter-spacing:-0.5px;line-height:1;display:block;padding:12px 0;">P</span>
+                    </td></tr>
+                  </table>
                 </td>
                 <td style="vertical-align:middle;">
-                  <p style="margin:0;font-size:26px;font-weight:900;color:#FFFFFF;letter-spacing:0.5px;line-height:1;">PACT</p>
-                  <p style="margin:3px 0 0 0;font-size:10.5px;color:#7FA5CC;letter-spacing:2px;text-transform:uppercase;">Command Center &nbsp;·&nbsp; Field Operations Platform</p>
+                  <p style="margin:0;font-size:26px;font-weight:900;color:#FFFFFF;letter-spacing:0.5px;line-height:1;font-family:Arial,Helvetica,sans-serif;">PACT</p>
+                  <p style="margin:3px 0 0 0;font-size:10.5px;color:#7FA5CC;letter-spacing:2px;text-transform:uppercase;font-family:Arial,Helvetica,sans-serif;">Command Center &nbsp;·&nbsp; Field Operations Platform</p>
                 </td>
               </tr>
             </table>
@@ -365,8 +369,12 @@ function buildEnhancedPaymentEmailHTML(d: {
       <!-- INSTRUCTION -->
       <p style="margin:0 0 18px 0;font-size:13.5px;color:#1F2937;line-height:1.8;font-family:Georgia,'Times New Roman',Times,serif;">
         ${d.isBulk
-          ? `Please find the attached report containing <strong>${d.count} approved transportation advance requests</strong> from <strong>${d.mmpLabel}</strong>. Kindly review the details, authorize the disbursements, and confirm receipt at your earliest convenience.`
-          : `A transportation advance request has been fully approved and is ready for payment processing. Kindly review the details below and process the disbursement at your earliest convenience.`
+          ? d.fundingType === 'operational_cost'
+            ? `Please find the attached report containing <strong>${d.count} approved operational cost submission${d.count !== 1 ? 's' : ''}</strong>. Kindly review the details, authorize the payments, and confirm disbursement at your earliest convenience.`
+            : `Please find the attached report containing <strong>${d.count} approved transportation advance request${d.count !== 1 ? 's' : ''}</strong> from <strong>${d.mmpLabel}</strong>. Kindly review the details, authorize the disbursements, and confirm receipt at your earliest convenience.`
+          : d.fundingType === 'operational_cost'
+            ? `An operational cost submission has been fully approved and is ready for payment processing. Kindly review the details below and process the payment at your earliest convenience.`
+            : `A transportation advance request has been fully approved and is ready for payment processing. Kindly review the details below and process the disbursement at your earliest convenience.`
         }
       </p>
 
@@ -451,8 +459,12 @@ function buildEnhancedPaymentEmailHTML(d: {
         <h3 style="margin:12px 0 8px 0;font-size:17px;font-weight:700;color:#0F2041;">طلب دفع رقم ${d.requestId} | ${d.groupLabel} | ${fundingLabelAr}</h3>
         <p style="margin:0;font-size:14px;color:#374151;line-height:1.85;">
           ${d.isBulk
-            ? `تمت الموافقة الكاملة على طلبات السلفة المرفقة وهي جاهزة للمعالجة المالية. يرجى مراجعة التقرير المرفق واعتماد الصرف وتأكيد الاستلام في أقرب وقت ممكن.`
-            : `تمت الموافقة الكاملة على هذا الطلب وهو جاهز لمعالجة الدفع. يرجى مراجعة التفاصيل واعتماد الصرف في أقرب وقت ممكن.`
+            ? d.fundingType === 'operational_cost'
+              ? `يرجى مراجعة التقرير المرفق الذي يحتوي على <strong>${d.count} تقديم تكاليف تشغيلية معتمد</strong>. يُرجى مراجعة التفاصيل واعتماد المدفوعات وتأكيد الصرف في أقرب وقت ممكن.`
+              : `تمت الموافقة الكاملة على طلبات السلفة المرفقة وهي جاهزة للمعالجة المالية. يرجى مراجعة التقرير المرفق واعتماد الصرف وتأكيد الاستلام في أقرب وقت ممكن.`
+            : d.fundingType === 'operational_cost'
+              ? `تمت الموافقة الكاملة على تقديم التكاليف التشغيلية وهو جاهز لمعالجة الدفع. يرجى مراجعة التفاصيل أدناه وإتمام الدفع في أقرب وقت ممكن.`
+              : `تمت الموافقة الكاملة على هذا الطلب وهو جاهز لمعالجة الدفع. يرجى مراجعة التفاصيل واعتماد الصرف في أقرب وقت ممكن.`
           }
           ${d.fundingType === 'advance' ? '<br><br><strong>ملاحظة:</strong> يجب على المستلمين تقديم الإيصالات وإعادة أي أموال غير مستخدمة خلال فترة التسوية المحددة.' : ''}
         </p>
