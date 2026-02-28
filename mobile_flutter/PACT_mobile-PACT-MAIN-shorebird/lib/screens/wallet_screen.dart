@@ -3784,7 +3784,7 @@ class _WalletScreenState extends State<WalletScreen> {
         border: Border.all(color: Colors.grey.shade200),
         boxShadow: [
           BoxShadow(
-              color: Colors.black.withOpacity(0.04),
+              color: Colors.black.withValues(alpha: 0.04),
               blurRadius: 6,
               offset: const Offset(0, 2)),
         ],
@@ -3809,13 +3809,12 @@ class _WalletScreenState extends State<WalletScreen> {
             width: 36,
             height: 36,
             decoration: BoxDecoration(
-              color: color.withOpacity(0.1),
+              color: color.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(8),
             ),
             child: Icon(iconData, size: 18, color: color),
           ),
           const SizedBox(width: 10),
-          // Label + site + date
           Expanded(
             child: Padding(
               padding: const EdgeInsets.symmetric(vertical: 12),
