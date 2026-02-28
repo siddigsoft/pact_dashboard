@@ -103,7 +103,7 @@ function BulkSummaryTable({ requests, users }: {
   requests: Array<{ requestedBy?: string; requestedAmount: number; approvedAmount?: number; stateName?: string; hubName?: string; [key: string]: unknown }>;
   users?: Array<{ id: string; email?: string; [key: string]: unknown }>;
 }) {
-  const [activeTab, setActiveTab] = React.useState<'state' | 'hub' | 'locality' | 'requester'>('state');
+  const [activeTab, setActiveTab] = useState<'state' | 'hub' | 'locality' | 'requester'>('state');
 
   const buildGroups = (keyFn: (r: typeof requests[0]) => string): [string, BulkSummaryEntry][] => {
     const m = new Map<string, BulkSummaryEntry>();
@@ -131,44 +131,45 @@ function BulkSummaryTable({ requests, users }: {
 
   return (
     <div className="border rounded-md overflow-hidden text-xs">
-      <div className="flex bg-muted/60 border-b">
+      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as typeof activeTab)}>
+        <TabsList className="w-full rounded-none h-auto p-0 bg-muted/60 border-b gap-0">
+          {tabs.map(t => (
+            <TabsTrigger
+              key={t.key}
+              value={t.key}
+              className="flex-1 text-[11px] rounded-none py-1.5 data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary"
+            >
+              {t.label} <span className="ml-1 opacity-50">({t.groups.length})</span>
+            </TabsTrigger>
+          ))}
+        </TabsList>
         {tabs.map(t => (
-          <button
-            key={t.key}
-            type="button"
-            onClick={() => setActiveTab(t.key)}
-            className={`flex-1 text-[11px] font-medium py-1.5 px-1 transition-colors ${
-              activeTab === t.key
-                ? 'bg-background text-primary border-b-2 border-primary'
-                : 'text-muted-foreground hover:text-foreground hover:bg-muted'
-            }`}
-          >
-            {t.label} <span className="opacity-50">({t.groups.length})</span>
-          </button>
+          <TabsContent key={t.key} value={t.key} className="mt-0">
+            <ScrollArea className="h-[180px]">
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-muted/30">
+                    <TableHead className="text-[11px] py-1.5 font-semibold">{t.label.replace('By ', '')}</TableHead>
+                    <TableHead className="text-[11px] py-1.5 text-center font-semibold w-10">#</TableHead>
+                    <TableHead className="text-[11px] py-1.5 text-right font-semibold">Requested</TableHead>
+                    <TableHead className="text-[11px] py-1.5 text-right font-semibold">Approved</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {t.groups.map(([name, g], i) => (
+                    <TableRow key={name} className={i % 2 === 1 ? 'bg-muted/20' : ''}>
+                      <TableCell className="py-1 font-medium truncate max-w-[160px]">{name}</TableCell>
+                      <TableCell className="py-1 text-center text-muted-foreground">{g.count}</TableCell>
+                      <TableCell className="py-1 text-right font-mono text-muted-foreground">SDG {g.requested.toLocaleString()}</TableCell>
+                      <TableCell className="py-1 text-right font-mono font-semibold text-green-700 dark:text-green-400">SDG {g.approved.toLocaleString()}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </ScrollArea>
+          </TabsContent>
         ))}
-      </div>
-      <ScrollArea className="h-[180px]">
-        <Table>
-          <TableHeader>
-            <TableRow className="bg-muted/30">
-              <TableHead className="text-[11px] py-1.5 font-semibold">{active.label.replace('By ', '')}</TableHead>
-              <TableHead className="text-[11px] py-1.5 text-center font-semibold w-10">#</TableHead>
-              <TableHead className="text-[11px] py-1.5 text-right font-semibold">Requested</TableHead>
-              <TableHead className="text-[11px] py-1.5 text-right font-semibold">Approved</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {active.groups.map(([name, g], i) => (
-              <TableRow key={name} className={i % 2 === 1 ? 'bg-muted/20' : ''}>
-                <TableCell className="py-1 font-medium truncate max-w-[160px]">{name}</TableCell>
-                <TableCell className="py-1 text-center text-muted-foreground">{g.count}</TableCell>
-                <TableCell className="py-1 text-right font-mono text-muted-foreground">SDG {g.requested.toLocaleString()}</TableCell>
-                <TableCell className="py-1 text-right font-mono font-semibold text-green-700 dark:text-green-400">SDG {g.approved.toLocaleString()}</TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </ScrollArea>
+      </Tabs>
       <div className="flex items-center justify-between bg-muted/40 border-t px-3 py-1.5 text-[11px] font-semibold">
         <span className="text-muted-foreground">Grand Total — {requests.length} requests</span>
         <div className="flex gap-4">
