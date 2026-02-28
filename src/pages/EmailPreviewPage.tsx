@@ -7,10 +7,11 @@ const SAMPLE = {
   approverName: 'ELSIDDIG IBRAHIM',
   requestId: 'BULK-135',
   groupLabel: 'All Approved',
+  mmpLabel: 'MMP-Sudan-Feb-2026',
   totalAmount: 9602000,
   count: 135,
   date: 'Feb 28, 2026',
-  project: 'PACT',
+  project: 'WFP Sudan TPM',
   actionUrl: '/down-payment-approval',
 };
 
@@ -35,8 +36,8 @@ function buildEnhancedPaymentEmailHTML(d: typeof SAMPLE): string {
         <tr>
           <td style="padding:26px 36px 22px;">
             <table cellpadding="0" cellspacing="0"><tr>
-              <td style="vertical-align:middle;padding-right:12px;">
-                <div style="width:38px;height:38px;background:#2962FF;border-radius:8px;text-align:center;line-height:38px;font-size:20px;font-weight:900;color:#FFFFFF;font-family:'Segoe UI',Arial,sans-serif;">P</div>
+              <td style="vertical-align:middle;padding-right:14px;">
+                <img src="https://app.pactorg.com/pact-logo.png" alt="PACT" width="44" height="44" style="display:block;border-radius:8px;border:0;" />
               </td>
               <td style="vertical-align:middle;">
                 <p style="margin:0;font-size:26px;font-weight:900;color:#FFFFFF;letter-spacing:0.5px;line-height:1;">PACT</p>
@@ -107,7 +108,7 @@ function buildEnhancedPaymentEmailHTML(d: typeof SAMPLE): string {
       <!-- ── INSTRUCTION ──────────────────────────────────────── -->
       <p style="margin:0 0 22px 0;font-size:14.5px;color:#374151;line-height:1.75;">
         Please find the attached Excel report containing <strong>${d.count} approved transportation advance requests</strong>
-        from <strong>${d.groupLabel}</strong>. Kindly review the details, authorize the disbursements, and
+        from <strong>${d.mmpLabel}</strong>. Kindly review the details, authorize the disbursements, and
         confirm receipt at your earliest convenience.
       </p>
 
@@ -123,7 +124,7 @@ function buildEnhancedPaymentEmailHTML(d: typeof SAMPLE): string {
         </tr>
         <tr style="background:#FFFFFF;">
           <td style="padding:11px 14px;font-weight:600;color:#374151;border-bottom:1px solid #E5E7EB;border-right:1px solid #E5E7EB;">MMP / الخطة الشهرية</td>
-          <td style="padding:11px 14px;color:#1F2937;border-bottom:1px solid #E5E7EB;font-weight:600;">${d.groupLabel} Advance Request</td>
+          <td style="padding:11px 14px;color:#1F2937;border-bottom:1px solid #E5E7EB;font-weight:600;">${d.mmpLabel} Advance Request</td>
         </tr>
         <tr style="background:#F8FAFC;">
           <td style="padding:11px 14px;font-weight:600;color:#374151;border-bottom:1px solid #E5E7EB;border-right:1px solid #E5E7EB;">Type / النوع</td>
@@ -190,7 +191,7 @@ function buildEnhancedPaymentEmailHTML(d: typeof SAMPLE): string {
       <!-- ── ARABIC SECTION ───────────────────────────────────── -->
       <div dir="rtl" style="text-align:right;">
         <p style="margin:0 0 6px 0;font-size:15px;color:#111827;">عزيزي <strong>فريق المالية</strong>،</p>
-        <h3 style="margin:12px 0 8px 0;font-size:17px;font-weight:700;color:#0F2041;">طلب دفع رقم ${d.requestId} | ${d.groupLabel} | طلب سلفة</h3>
+        <h3 style="margin:12px 0 8px 0;font-size:17px;font-weight:700;color:#0F2041;">طلب دفع رقم ${d.requestId} | ${d.mmpLabel} | طلب سلفة</h3>
         <p style="margin:0;font-size:14px;color:#374151;line-height:1.85;">
           تمت الموافقة الكاملة على طلبات السلفة المرفقة وهي جاهزة للمعالجة المالية. يرجى مراجعة التقرير المرفق
           واعتماد الصرف وتأكيد الاستلام في أقرب وقت ممكن.<br><br>
@@ -235,7 +236,7 @@ function buildEnhancedPaymentEmailHTML(d: typeof SAMPLE): string {
       <table width="100%" cellpadding="0" cellspacing="0">
         <tr>
           <td align="center" style="padding-bottom:8px;">
-            <div style="display:inline-block;width:24px;height:24px;background:#0F2041;border-radius:5px;text-align:center;line-height:24px;font-size:13px;font-weight:900;color:#FFFFFF;font-family:'Segoe UI',Arial,sans-serif;vertical-align:middle;margin-right:7px;">P</div>
+            <img src="https://app.pactorg.com/pact-logo.png" alt="PACT" width="28" height="28" style="display:inline-block;vertical-align:middle;border-radius:5px;border:0;margin-right:7px;" />
             <span style="font-size:13px;font-weight:700;color:#475569;vertical-align:middle;">PACT</span>
           </td>
         </tr>
@@ -263,7 +264,6 @@ export default function EmailPreviewPage() {
 
   return (
     <div className="min-h-screen bg-slate-100">
-      {/* ── Preview toolbar ── */}
       <div className="sticky top-0 z-10 bg-white border-b px-6 py-3 flex items-center justify-between shadow-sm">
         <div className="flex items-center gap-3">
           <span className="font-bold text-slate-800 text-sm">Email Preview</span>
@@ -292,13 +292,11 @@ export default function EmailPreviewPage() {
         </div>
       </div>
 
-      {/* ── Email frame ── */}
       <div className="flex justify-center py-8 px-4">
         <div
           className="bg-white rounded-lg shadow-lg overflow-hidden transition-all duration-300"
           style={{ width: mode === 'mobile' ? 390 : 700 }}
         >
-          {/* Fake email client chrome */}
           <div className="bg-slate-50 border-b px-4 py-3 space-y-1">
             <div className="flex items-center gap-2 text-xs text-slate-500">
               <span className="font-semibold w-12 shrink-0">From:</span>
@@ -310,17 +308,16 @@ export default function EmailPreviewPage() {
             </div>
             <div className="flex items-start gap-2 text-xs text-slate-700">
               <span className="font-semibold w-12 shrink-0 mt-0.5">Subject:</span>
-              <span className="font-medium">[HIGH PRIORITY | أولوية عالية] Payment Request No. BULK-135 | For MMP: All Approved | Advance Request</span>
+              <span className="font-medium">[HIGH PRIORITY | أولوية عالية] Payment Request No. BULK-135 | For MMP: MMP-Sudan-Feb-2026 | Advance Request</span>
             </div>
             <div className="flex items-center gap-2 text-xs text-slate-400 mt-1">
               <span className="w-12 shrink-0"></span>
               <span className="inline-flex items-center gap-1 bg-green-50 text-green-700 border border-green-200 rounded px-2 py-0.5">
-                📎 Transport-Advance-Full-Report-All_Approved-2026-02-28.xlsx &nbsp; 46 KB
+                📎 Transport-Advance-Full-Report-MMP-Sudan-Feb-2026-2026-02-28.xlsx &nbsp; 46 KB
               </span>
             </div>
           </div>
 
-          {/* Email body in iframe */}
           <iframe
             srcDoc={html}
             title="Email Preview"

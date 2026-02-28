@@ -1078,6 +1078,9 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
             if (generated) excelAttachments = [{ ...generated, mimeType: XLSX_MIME }];
           } catch { /* continue without attachment */ }
 
+          const bulkMmps1 = [...new Set(bulkRequests.map(r => r.mmpName).filter(Boolean))];
+          const mmpLabel1 = bulkMmps1.length > 0 ? bulkMmps1.join(', ') : groupLabel || 'All Approved';
+          const projectLabel1 = bulkRequests[0]?.wfpProjectName || bulkRequests[0]?.projectName || 'WFP TPM';
           const result = await EmailNotificationService.sendPaymentRequestToFinanceWithRecipients(
             selectedRecipients,
             approverName,
@@ -1088,13 +1091,14 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
             'Transportation Advance (Bulk)',
             totalAmount,
             'advance',
-            'PACT',
+            projectLabel1,
             'SDG',
             '',
             '/down-payment-approval',
             undefined,
             excelAttachments.length > 0 ? excelAttachments : undefined,
-            ccEmails
+            ccEmails,
+            mmpLabel1
           );
 
           const sentCount = result.success ? selectedRecipients.length - (result.error ? parseInt(result.error) || 0 : 0) : 0;
@@ -1171,6 +1175,9 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
             : `\n\nNOTE: This batch contains ${bulkRequests.length} requests. Please log in to PACT Command Center → Processing tab → "Bulk PDF" to download the full PDF.\nملاحظة: يرجى تسجيل الدخول إلى PACT وتنزيل ملف PDF الكامل من تبويب المعالجة.`
           : '';
 
+        const bulkMmps2 = [...new Set(bulkRequests.map(r => r.mmpName).filter(Boolean))];
+        const mmpLabel2 = bulkMmps2.length > 0 ? bulkMmps2.join(', ') : groupLabel || 'All Approved';
+        const projectLabel2 = bulkRequests[0]?.wfpProjectName || bulkRequests[0]?.projectName || 'WFP TPM';
         const result = await EmailNotificationService.sendPaymentRequestToFinanceWithRecipients(
           selectedRecipients,
           approverName,
@@ -1181,13 +1188,14 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
           'Transportation Advance (Bulk)',
           totalAmount,
           'advance',
-          bulkRequests[0]?.projectName || 'N/A',
+          projectLabel2,
           'SDG',
           `Bulk payment request for ${bulkRequests.length} approved advances${groupLabel ? ` grouped by ${groupLabel}` : ''}. Total: SDG ${totalAmount.toLocaleString()}. Individual requests: ${bulkRequests.map(r => `${r.siteName} (SDG ${(r.approvedAmount || r.requestedAmount).toLocaleString()})`).join('; ')}.\n\nRECONCILIATION NOTICE: All recipients must submit receipts and return any unused funds within 5 working days.\nملاحظة تسوية: يجب على جميع المستلمين تقديم الإيصالات وإرجاع أي أموال غير مستخدمة خلال 5 أيام عمل.${pdfNote}`,
           '/down-payment-approval',
           summaryPdf,
           undefined,
-          ccEmails.length > 0 ? ccEmails : undefined
+          ccEmails.length > 0 ? ccEmails : undefined,
+          mmpLabel2
         );
 
         const sentCount = result.success ? selectedRecipients.length - (result.error ? parseInt(result.error) || 0 : 0) : 0;
@@ -1229,9 +1237,11 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
         const result = await EmailNotificationService.sendPaymentRequestToFinanceWithRecipients(
           selectedRecipients, approverName, approverEmail, requesterName,
           (req as any).mmpName || req.projectName || req.siteName || 'WFP TPM', requestId, 'Transportation Advance',
-          req.approvedAmount || req.requestedAmount, 'advance', req.projectName || 'N/A',
+          req.approvedAmount || req.requestedAmount, 'advance',
+          (req as any).wfpProjectName || req.projectName || 'WFP TPM',
           'SDG', '', '/down-payment-approval', pdfAttachment,
-          undefined, ccEmails.length > 0 ? ccEmails : undefined
+          undefined, ccEmails.length > 0 ? ccEmails : undefined,
+          (req as any).mmpName || undefined
         );
 
         if (result.success && !result.error) {

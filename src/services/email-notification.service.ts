@@ -252,6 +252,7 @@ function buildEnhancedPaymentEmailHTML(d: {
   approverName: string;
   requestId: string;
   groupLabel: string;
+  mmpLabel: string;
   totalAmount: number;
   count: number;
   date: string;
@@ -289,8 +290,8 @@ function buildEnhancedPaymentEmailHTML(d: {
           <td style="padding:26px 36px 22px;">
             <table cellpadding="0" cellspacing="0">
               <tr>
-                <td style="vertical-align:middle;padding-right:12px;">
-                  <div style="width:38px;height:38px;background:#2962FF;border-radius:8px;text-align:center;line-height:38px;font-size:20px;font-weight:900;color:#FFFFFF;font-family:'Segoe UI',Arial,sans-serif;">P</div>
+                <td style="vertical-align:middle;padding-right:14px;">
+                  <img src="https://app.pactorg.com/pact-logo.png" alt="PACT" width="44" height="44" style="display:block;border-radius:8px;border:0;" />
                 </td>
                 <td style="vertical-align:middle;">
                   <p style="margin:0;font-size:26px;font-weight:900;color:#FFFFFF;letter-spacing:0.5px;line-height:1;">PACT</p>
@@ -378,7 +379,7 @@ function buildEnhancedPaymentEmailHTML(d: {
         </tr>
         <tr style="background:#FFFFFF;">
           <td style="padding:11px 14px;font-weight:600;color:#374151;border-bottom:1px solid #E5E7EB;border-right:1px solid #E5E7EB;">MMP / الخطة الشهرية</td>
-          <td style="padding:11px 14px;color:#1F2937;border-bottom:1px solid #E5E7EB;font-weight:600;">${d.groupLabel} ${fundingLabel}</td>
+          <td style="padding:11px 14px;color:#1F2937;border-bottom:1px solid #E5E7EB;font-weight:600;">${d.mmpLabel} ${fundingLabel}</td>
         </tr>
         <tr style="background:#F8FAFC;">
           <td style="padding:11px 14px;font-weight:600;color:#374151;border-bottom:1px solid #E5E7EB;border-right:1px solid #E5E7EB;">Type / النوع</td>
@@ -486,7 +487,7 @@ function buildEnhancedPaymentEmailHTML(d: {
       <table width="100%" cellpadding="0" cellspacing="0">
         <tr>
           <td align="center" style="padding-bottom:8px;">
-            <div style="display:inline-block;width:24px;height:24px;background:#0F2041;border-radius:5px;text-align:center;line-height:24px;font-size:13px;font-weight:900;color:#FFFFFF;font-family:'Segoe UI',Arial,sans-serif;vertical-align:middle;margin-right:7px;">P</div>
+            <img src="https://app.pactorg.com/pact-logo.png" alt="PACT" width="28" height="28" style="display:inline-block;vertical-align:middle;border-radius:5px;border:0;margin-right:7px;" />
             <span style="font-size:13px;font-weight:700;color:#475569;vertical-align:middle;">PACT</span>
           </td>
         </tr>
@@ -1778,7 +1779,8 @@ PACT Command Center | مركز قيادة باكت`;
     costSubmissionUrl: string = '/cost-submission',
     pdfAttachment?: { base64: string; filename: string },
     additionalAttachments?: Array<{ base64: string; filename: string; mimeType?: string }>,
-    extraCcEmails?: string[]
+    extraCcEmails?: string[],
+    mmpNames?: string
   ): Promise<EmailNotificationResult> {
     try {
       if (!recipients || recipients.length === 0) {
@@ -1808,7 +1810,8 @@ PACT Command Center | مركز قيادة باكت`;
       }
 
       const priorityPrefix = fundingType === 'advance' ? '[HIGH PRIORITY | أولوية عالية] ' : '';
-      const subject = `${priorityPrefix}Payment Request No. ${requestId} | For MMP: ${requestTitle} | ${fundingLabel}`;
+      const effectiveMmpLabel = mmpNames || requestTitle;
+      const subject = `${priorityPrefix}Payment Request No. ${requestId} | For MMP: ${effectiveMmpLabel} | ${fundingLabel}`;
 
       const now = new Date();
       const dateStr = now.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
@@ -1822,10 +1825,11 @@ PACT Command Center | مركز قيادة باكت`;
         approverName,
         requestId,
         groupLabel: requestTitle,
+        mmpLabel: effectiveMmpLabel,
         totalAmount,
         count,
         date: dateStr,
-        project: projectName || 'PACT',
+        project: projectName || 'WFP TPM',
         actionUrl: costSubmissionUrl,
         fundingType,
         category,
