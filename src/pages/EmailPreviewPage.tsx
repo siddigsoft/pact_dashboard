@@ -34,8 +34,15 @@ function buildEnhancedPaymentEmailHTML(d: typeof SAMPLE): string {
       <table width="100%" cellpadding="0" cellspacing="0">
         <tr>
           <td style="padding:26px 36px 22px;">
-            <p style="margin:0;font-size:26px;font-weight:900;color:#FFFFFF;letter-spacing:0.5px;line-height:1;">PACT</p>
-            <p style="margin:3px 0 0 0;font-size:10.5px;color:#7FA5CC;letter-spacing:2px;text-transform:uppercase;">Command Center &nbsp;·&nbsp; Field Operations Platform</p>
+            <table cellpadding="0" cellspacing="0"><tr>
+              <td style="vertical-align:middle;padding-right:12px;">
+                <div style="width:38px;height:38px;background:#2962FF;border-radius:8px;text-align:center;line-height:38px;font-size:20px;font-weight:900;color:#FFFFFF;font-family:'Segoe UI',Arial,sans-serif;">P</div>
+              </td>
+              <td style="vertical-align:middle;">
+                <p style="margin:0;font-size:26px;font-weight:900;color:#FFFFFF;letter-spacing:0.5px;line-height:1;">PACT</p>
+                <p style="margin:3px 0 0 0;font-size:10.5px;color:#7FA5CC;letter-spacing:2px;text-transform:uppercase;">Command Center &nbsp;·&nbsp; Field Operations Platform</p>
+              </td>
+            </tr></table>
           </td>
           <td style="padding:22px 36px 22px;text-align:right;vertical-align:top;">
             <table cellpadding="0" cellspacing="0" style="margin-left:auto;">
@@ -109,6 +116,14 @@ function buildEnhancedPaymentEmailHTML(d: typeof SAMPLE): string {
         <tr style="background:#0F2041;">
           <td style="padding:10px 14px;color:#FFFFFF;font-weight:700;font-size:11px;letter-spacing:0.8px;text-transform:uppercase;width:42%;">Field &nbsp;/&nbsp; الحقل</td>
           <td style="padding:10px 14px;color:#FFFFFF;font-weight:700;font-size:11px;letter-spacing:0.8px;text-transform:uppercase;">Detail &nbsp;/&nbsp; التفصيل</td>
+        </tr>
+        <tr style="background:#F8FAFC;">
+          <td style="padding:11px 14px;font-weight:600;color:#374151;border-bottom:1px solid #E5E7EB;border-right:1px solid #E5E7EB;">Reference No / رقم المرجع</td>
+          <td style="padding:11px 14px;color:#1F2937;border-bottom:1px solid #E5E7EB;">${d.requestId}</td>
+        </tr>
+        <tr style="background:#FFFFFF;">
+          <td style="padding:11px 14px;font-weight:600;color:#374151;border-bottom:1px solid #E5E7EB;border-right:1px solid #E5E7EB;">MMP / الخطة الشهرية</td>
+          <td style="padding:11px 14px;color:#1F2937;border-bottom:1px solid #E5E7EB;font-weight:600;">${d.groupLabel} Advance Request</td>
         </tr>
         <tr style="background:#F8FAFC;">
           <td style="padding:11px 14px;font-weight:600;color:#374151;border-bottom:1px solid #E5E7EB;border-right:1px solid #E5E7EB;">Type / النوع</td>
@@ -217,10 +232,19 @@ function buildEnhancedPaymentEmailHTML(d: typeof SAMPLE): string {
         <strong style="color:#64748B;">سري:</strong> هذه الرسالة ومرفقاتها سرية وموجهة حصراً للمستلم المحدد. إذا وصلت إليك بالخطأ، يرجى إخطار المُرسِل فوراً وحذف الرسالة.
       </p>
       <hr style="border:none;border-top:1px solid #E2E8F0;margin:10px 0;">
-      <p style="margin:0;font-size:10.5px;color:#94A3B8;text-align:center;line-height:1.5;">
+      <table width="100%" cellpadding="0" cellspacing="0">
+        <tr>
+          <td align="center" style="padding-bottom:8px;">
+            <div style="display:inline-block;width:24px;height:24px;background:#0F2041;border-radius:5px;text-align:center;line-height:24px;font-size:13px;font-weight:900;color:#FFFFFF;font-family:'Segoe UI',Arial,sans-serif;vertical-align:middle;margin-right:7px;">P</div>
+            <span style="font-size:13px;font-weight:700;color:#475569;vertical-align:middle;">PACT</span>
+          </td>
+        </tr>
+      </table>
+      <p style="margin:0 0 4px 0;font-size:10.5px;color:#94A3B8;text-align:center;line-height:1.5;">
         Automated notification &nbsp;·&nbsp; PACT Command Center Platform &nbsp;·&nbsp; <strong>PACT Platform v2</strong><br>
         مركز قيادة باكت — رسالة آلية
       </p>
+      <p style="margin:0;font-size:10px;color:#94A3B8;text-align:center;">© 2026 PACT. All rights reserved.</p>
     </td>
   </tr>
 
@@ -286,7 +310,7 @@ export default function EmailPreviewPage() {
             </div>
             <div className="flex items-start gap-2 text-xs text-slate-700">
               <span className="font-semibold w-12 shrink-0 mt-0.5">Subject:</span>
-              <span className="font-medium">[HIGH PRIORITY | أولوية عالية] Payment Request No. BULK-135 | All Approved | Advance Request</span>
+              <span className="font-medium">[HIGH PRIORITY | أولوية عالية] Payment Request No. BULK-135 | For MMP: All Approved | Advance Request</span>
             </div>
             <div className="flex items-center gap-2 text-xs text-slate-400 mt-1">
               <span className="w-12 shrink-0"></span>
