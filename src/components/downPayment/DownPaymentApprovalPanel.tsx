@@ -220,7 +220,8 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
     bulkGroupValue: string;
     sendMode: 'pdf' | 'excel';
     showPreview: boolean;
-  }>({ open: false, request: null, bulkRequests: [], isBulk: false, availableRecipients: [], selectedRecipientIds: [], ccEmails: [], loading: false, sending: false, bulkGroupBy: '', bulkGroupValue: '', sendMode: 'pdf', showPreview: false });
+    usdRate: string;
+  }>({ open: false, request: null, bulkRequests: [], isBulk: false, availableRecipients: [], selectedRecipientIds: [], ccEmails: [], loading: false, sending: false, bulkGroupBy: '', bulkGroupValue: '', sendMode: 'pdf', showPreview: false, usdRate: '' });
   const [markPaidProcessing, setMarkPaidProcessing] = useState(false);
   const [bulkPaymentIds, setBulkPaymentIds] = useState<Set<string>>(new Set());
 
@@ -980,12 +981,14 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
   };
 
   const buildEmailPreviewHtml = (): string => {
-    const { request: req, bulkRequests, isBulk, availableRecipients, selectedRecipientIds, bulkGroupBy, bulkGroupValue, sendMode } = paymentRequestDialog;
+    const { request: req, bulkRequests, isBulk, availableRecipients, selectedRecipientIds, bulkGroupBy, bulkGroupValue, sendMode, usdRate } = paymentRequestDialog;
     const approverName = (currentUser as any)?.fullName || (currentUser as any)?.full_name || currentUser?.email || 'Approver';
     const firstRecipient = availableRecipients.find(r => selectedRecipientIds.includes(r.id));
     const recipientName = firstRecipient?.name || 'Finance Team';
     const now = new Date();
     const dateStr = now.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+    const parsedRate = parseFloat(usdRate);
+    const effectiveRate = !isNaN(parsedRate) && parsedRate > 0 ? parsedRate : undefined;
 
     if (isBulk && bulkRequests.length > 0) {
       const totalAmount = bulkRequests.reduce((s, r) => s + (r.approvedAmount || r.requestedAmount), 0);
@@ -1008,6 +1011,7 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
         category: sendMode === 'excel' ? 'Transportation Advance (Bulk — Excel)' : 'Transportation Advance (Bulk — PDF)',
         isBulk: true,
         currency: 'SDG',
+        usdRate: effectiveRate,
       });
     } else if (req) {
       const amount = req.approvedAmount || req.requestedAmount;
@@ -1028,15 +1032,18 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
         category: 'Transportation Advance',
         isBulk: false,
         currency: 'SDG',
+        usdRate: effectiveRate,
       });
     }
     return '';
   };
 
   const handleSendPaymentRequest = async () => {
-    const { request: req, bulkRequests, isBulk, selectedRecipientIds, availableRecipients, ccEmails, bulkGroupBy, bulkGroupValue, sendMode } = paymentRequestDialog;
+    const { request: req, bulkRequests, isBulk, selectedRecipientIds, availableRecipients, ccEmails, bulkGroupBy, bulkGroupValue, sendMode, usdRate } = paymentRequestDialog;
     if (!currentUser?.id || selectedRecipientIds.length === 0) return;
     if (!isBulk && !req) return;
+    const parsedRate = parseFloat(usdRate);
+    const effectiveRate = !isNaN(parsedRate) && parsedRate > 0 ? parsedRate : undefined;
 
     setPaymentRequestDialog(prev => ({ ...prev, sending: true }));
     try {
@@ -1099,7 +1106,8 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
             undefined,
             excelAttachments.length > 0 ? excelAttachments : undefined,
             ccEmails,
-            mmpLabel1
+            mmpLabel1,
+            effectiveRate
           );
 
           const sentCount = result.success ? selectedRecipients.length - (result.error ? parseInt(result.error) || 0 : 0) : 0;
@@ -1196,7 +1204,8 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
           summaryPdf,
           undefined,
           ccEmails.length > 0 ? ccEmails : undefined,
-          mmpLabel2
+          mmpLabel2,
+          effectiveRate
         );
 
         const sentCount = result.success ? selectedRecipients.length - (result.error ? parseInt(result.error) || 0 : 0) : 0;
@@ -1267,7 +1276,7 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
     } catch {
       toast({ title: "Error / خطأ", description: "Failed to send payment request. / فشل في إرسال طلب الدفع.", variant: "destructive" });
     } finally {
-      setPaymentRequestDialog({ open: false, request: null, bulkRequests: [], isBulk: false, availableRecipients: [], selectedRecipientIds: [], ccEmails: [], loading: false, sending: false, bulkGroupBy: '', bulkGroupValue: '', sendMode: 'pdf' as const, showPreview: false });
+      setPaymentRequestDialog({ open: false, request: null, bulkRequests: [], isBulk: false, availableRecipients: [], selectedRecipientIds: [], ccEmails: [], loading: false, sending: false, bulkGroupBy: '', bulkGroupValue: '', sendMode: 'pdf' as const, showPreview: false, usdRate: '' });
     }
   };
 
@@ -3007,7 +3016,7 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
         />
       )}
 
-      <Dialog open={paymentRequestDialog.open} onOpenChange={(open) => { if (!open) setPaymentRequestDialog({ open: false, request: null, bulkRequests: [], isBulk: false, availableRecipients: [], selectedRecipientIds: [], ccEmails: [], loading: false, sending: false, bulkGroupBy: '', bulkGroupValue: '', sendMode: 'pdf' as const, showPreview: false }); }}>
+      <Dialog open={paymentRequestDialog.open} onOpenChange={(open) => { if (!open) setPaymentRequestDialog({ open: false, request: null, bulkRequests: [], isBulk: false, availableRecipients: [], selectedRecipientIds: [], ccEmails: [], loading: false, sending: false, bulkGroupBy: '', bulkGroupValue: '', sendMode: 'pdf' as const, showPreview: false, usdRate: '' }); }}>
         <DialogContent className={paymentRequestDialog.isBulk ? "max-w-2xl max-h-[90vh] overflow-y-auto" : "max-w-lg max-h-[90vh] overflow-y-auto"}>
           <DialogHeader>
             <DialogTitle>
@@ -3059,6 +3068,31 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
                         <p className="text-xs text-muted-foreground">Total Amount</p>
                         <p className="font-semibold">SDG {paymentRequestDialog.bulkRequests.reduce((s, r) => s + (r.approvedAmount || r.requestedAmount), 0).toLocaleString()}</p>
                       </div>
+                    </div>
+                    {/* USD Rate input */}
+                    <div className="pt-2 border-t border-border/50 space-y-1.5">
+                      <Label htmlFor="dp-usd-rate" className="text-xs font-semibold text-[#0F2041]">
+                        USD Exchange Rate (1 USD = ? SDG) <span className="text-muted-foreground font-normal">— optional / اختياري</span>
+                      </Label>
+                      <div className="flex items-center gap-2">
+                        <Input
+                          id="dp-usd-rate"
+                          type="number"
+                          min="1"
+                          step="0.01"
+                          placeholder="e.g. 1900"
+                          value={paymentRequestDialog.usdRate}
+                          onChange={(e) => setPaymentRequestDialog(prev => ({ ...prev, usdRate: e.target.value }))}
+                          data-testid="input-dp-usd-rate"
+                          className="h-8 text-sm font-semibold w-36"
+                        />
+                        {paymentRequestDialog.usdRate && !isNaN(parseFloat(paymentRequestDialog.usdRate)) && parseFloat(paymentRequestDialog.usdRate) > 0 && (
+                          <span className="text-xs font-semibold text-blue-700">
+                            ≈ USD {(paymentRequestDialog.bulkRequests.reduce((s, r) => s + (r.approvedAmount || r.requestedAmount), 0) / parseFloat(paymentRequestDialog.usdRate)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-[11px] text-muted-foreground">If provided, the USD equivalent will appear in the email and attached files / إذا أُدخل، سيظهر المعادل بالدولار في البريد والمرفقات</p>
                     </div>
                   </div>
                   <BulkSummaryTable requests={paymentRequestDialog.bulkRequests} users={users} />
@@ -3221,7 +3255,7 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
               <>
                 <Button
                   variant="outline"
-                  onClick={() => setPaymentRequestDialog({ open: false, request: null, bulkRequests: [], isBulk: false, availableRecipients: [], selectedRecipientIds: [], ccEmails: [], loading: false, sending: false, bulkGroupBy: '', bulkGroupValue: '', sendMode: 'pdf' as const, showPreview: false })}
+                  onClick={() => setPaymentRequestDialog({ open: false, request: null, bulkRequests: [], isBulk: false, availableRecipients: [], selectedRecipientIds: [], ccEmails: [], loading: false, sending: false, bulkGroupBy: '', bulkGroupValue: '', sendMode: 'pdf' as const, showPreview: false, usdRate: '' })}
                   data-testid="button-cancel-payment-request"
                 >
                   Cancel
