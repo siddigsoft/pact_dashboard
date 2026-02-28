@@ -71,7 +71,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { format } from 'date-fns';
 import { filterDownPayments, exportToCSV, exportToExcel, exportToPDF, getDownPaymentStats } from '@/utils/downPaymentExport';
 import { generateFinancialStatementPdf, type StatementRow, type StatementConfig } from '@/utils/financialStatementPdf';
-import { generateFinancialStatementExcel } from '@/utils/financialStatementExcel';
+import { generateFinancialStatementExcel, generateFinancialStatementExcelBase64 } from '@/utils/financialStatementExcel';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { SignatureConfirmationModal } from '@/components/signatures/SignatureConfirmationModal';
@@ -133,7 +133,8 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
     sending: boolean;
     bulkGroupBy: string;
     bulkGroupValue: string;
-  }>({ open: false, request: null, bulkRequests: [], isBulk: false, availableRecipients: [], selectedRecipientIds: [], ccEmails: [], loading: false, sending: false, bulkGroupBy: '', bulkGroupValue: '' });
+    sendMode: 'pdf' | 'excel';
+  }>({ open: false, request: null, bulkRequests: [], isBulk: false, availableRecipients: [], selectedRecipientIds: [], ccEmails: [], loading: false, sending: false, bulkGroupBy: '', bulkGroupValue: '', sendMode: 'pdf' });
   const [markPaidProcessing, setMarkPaidProcessing] = useState(false);
   const [bulkPaymentIds, setBulkPaymentIds] = useState<Set<string>>(new Set());
 
@@ -849,6 +850,25 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
     }
   };
 
+  const openBulkExcelRequestDialog = async (reqs: DownPaymentRequest[], groupBy: string, groupValue: string) => {
+    const cached = cachedRecipientsRef.current;
+    if (cached && cached.length > 0) {
+      setPaymentRequestDialog(prev => ({ ...prev, open: true, request: null, bulkRequests: reqs, isBulk: true, loading: false, selectedRecipientIds: cached.map(r => r.id), availableRecipients: cached, ccEmails: [], bulkGroupBy: groupBy, bulkGroupValue: groupValue, sendMode: 'excel' }));
+      loadFinanceRecipients(true).then(fresh => {
+        setPaymentRequestDialog(prev => ({ ...prev, availableRecipients: fresh, selectedRecipientIds: fresh.map(r => r.id) }));
+      }).catch(() => {});
+    } else {
+      setPaymentRequestDialog(prev => ({ ...prev, open: true, request: null, bulkRequests: reqs, isBulk: true, loading: true, selectedRecipientIds: [], availableRecipients: [], ccEmails: [], bulkGroupBy: groupBy, bulkGroupValue: groupValue, sendMode: 'excel' }));
+      try {
+        const recipients = await loadFinanceRecipients();
+        setPaymentRequestDialog(prev => ({ ...prev, availableRecipients: recipients, selectedRecipientIds: recipients.map(r => r.id), loading: false }));
+      } catch {
+        setPaymentRequestDialog(prev => ({ ...prev, loading: false }));
+        toast({ title: "Error / خطأ", description: "Failed to load recipients. / فشل في تحميل المستلمين.", variant: "destructive" });
+      }
+    }
+  };
+
   const openPaymentRequestDialog = async (req: DownPaymentRequest) => {
     const cached = cachedRecipientsRef.current;
     if (cached && cached.length > 0) {
@@ -874,7 +894,7 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
   };
 
   const handleSendPaymentRequest = async () => {
-    const { request: req, bulkRequests, isBulk, selectedRecipientIds, availableRecipients, ccEmails, bulkGroupBy, bulkGroupValue } = paymentRequestDialog;
+    const { request: req, bulkRequests, isBulk, selectedRecipientIds, availableRecipients, ccEmails, bulkGroupBy, bulkGroupValue, sendMode } = paymentRequestDialog;
     if (!currentUser?.id || selectedRecipientIds.length === 0) return;
     if (!isBulk && !req) return;
 
@@ -896,6 +916,120 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
         }))].join(', ');
         const groupLabel = bulkGroupBy ? `${bulkGroupBy}: ${bulkGroupValue}` : '';
 
+        // ── EXCEL MODE ────────────────────────────────────────────────────
+        if (sendMode === 'excel') {
+          const statementRows: StatementRow[] = bulkRequests.map(r => ({
+            refId: `PACT-TA-${r.id.slice(0, 8).toUpperCase()}`,
+            date: r.requestedAt,
+            description: r.siteName || '',
+            requester: r.requestedByName || 'Unknown',
+            site: r.siteName || '',
+            hub: r.hubName || '',
+            state: r.stateName || '',
+            status: r.status,
+            requestedAmount: r.requestedAmount,
+            approvedAmount: r.approvedAmount || 0,
+            paidAmount: r.totalPaidAmount || 0,
+            t1Approver: r.supervisorApprovedByName || r.supervisorApprovedBy || undefined,
+            t1Date: r.supervisorApprovedAt || undefined,
+            t1Status: r.supervisorStatus || undefined,
+            t2Approver: r.adminProcessedByName || r.adminProcessedBy || undefined,
+            t2Date: r.adminProcessedAt || undefined,
+            t2Status: r.adminStatus || undefined,
+            notes: r.justification || '',
+          }));
+
+          const config: StatementConfig = {
+            title: 'Transportation Advance',
+            statementType: 'transport_advance',
+            statusFilter: groupLabel || 'All Approved',
+            currency: 'SDG',
+            generatedBy: approverName,
+          };
+
+          const EXCEL_ATTACH_LIMIT = 30;
+          const excelTooLarge = bulkRequests.length > EXCEL_ATTACH_LIMIT;
+          let summaryExcel: { base64: string; filename: string } | undefined;
+          let excelDownloadUrl: string | undefined;
+
+          try {
+            const generated = await generateFinancialStatementExcelBase64(statementRows, config);
+            if (generated) {
+              if (!excelTooLarge) {
+                summaryExcel = generated;
+              } else {
+                const excelBlob = new Blob(
+                  [Uint8Array.from(atob(generated.base64), c => c.charCodeAt(0))],
+                  { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }
+                );
+                const uploadPath = `bulk-payment-excels/${generated.filename}`;
+                const { error: uploadError } = await supabase.storage
+                  .from('mmp-files')
+                  .upload(uploadPath, excelBlob, { contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', upsert: true });
+                if (!uploadError) {
+                  const { data: signedData } = await supabase.storage
+                    .from('mmp-files')
+                    .createSignedUrl(uploadPath, 60 * 60 * 24 * 7);
+                  if (signedData?.signedUrl) excelDownloadUrl = signedData.signedUrl;
+                }
+              }
+            }
+          } catch { /* continue without Excel attachment */ }
+
+          const excelNote = excelTooLarge
+            ? excelDownloadUrl
+              ? `\n\nBULK EXCEL DOWNLOAD: The full Excel report (${bulkRequests.length} rows) is available here (valid 7 days):\n${excelDownloadUrl}\n\nتنزيل Excel: التقرير الكامل متاح عبر الرابط أعلاه (صالح 7 أيام).`
+              : `\n\nNOTE: Batch too large to attach. Log in to PACT → Processing → "Bulk Excel" to download.\nملاحظة: يرجى تنزيل ملف Excel من PACT مباشرة.`
+            : '';
+
+          const result = await EmailNotificationService.sendPaymentRequestToFinanceWithRecipients(
+            selectedRecipients,
+            approverName,
+            approverEmail,
+            requesterNames,
+            `Bulk Transport Advance - ${bulkRequests.length} Requests${groupLabel ? ` (${groupLabel})` : ''}${excelNote}`,
+            requestIds,
+            'Transportation Advance (Bulk)',
+            totalAmount,
+            'advance',
+            'PACT',
+            'SDG',
+            '',
+            '/down-payment-approval',
+            undefined,
+            summaryExcel ? [{ base64: summaryExcel.base64, filename: summaryExcel.filename, mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }] : undefined,
+            ccEmails
+          );
+
+          const sentCount = result.success ? selectedRecipients.length - (result.error ? parseInt(result.error) || 0 : 0) : 0;
+          const failedCount = result.error ? (parseInt(result.error) || (result.success ? 0 : selectedRecipients.length)) : 0;
+
+          if (result.success && !result.error) {
+            toast({
+              title: 'Bulk Excel Sent / تم إرسال Excel الجماعي',
+              description: excelTooLarge
+                ? excelDownloadUrl
+                  ? `${bulkRequests.length} requests sent. Excel report uploaded — download link included in the email (valid 7 days). / تم الإرسال. رابط تنزيل Excel مرفق في البريد.`
+                  : `${bulkRequests.length} requests sent. Use "Bulk Excel" button to download the file. / تم الإرسال. استخدم زر Excel لتنزيل الملف.`
+                : `${bulkRequests.length} requests sent to ${selectedRecipients.length} recipient(s) with formatted Excel attached. / تم إرسال ${bulkRequests.length} طلب مع ملف Excel.`,
+            });
+          } else if (result.success && result.error) {
+            toast({
+              title: 'Partially Sent / تم الإرسال جزئياً',
+              description: `${sentCount} of ${selectedRecipients.length} recipient(s) received the email. ${failedCount} failed.`,
+              variant: 'destructive',
+            });
+          } else {
+            toast({
+              title: 'Send Failed / فشل الإرسال',
+              description: result.error || 'Could not deliver to the selected recipients.',
+              variant: 'destructive',
+            });
+          }
+          return;
+        }
+
+        // ── PDF MODE (default) ─────────────────────────────────────────────
         // Always generate the full PDF (all requests as pages in one file).
         // For large batches the PDF is uploaded to storage and shared as a download link
         // instead of being attached directly (which would exceed email size limits).
@@ -1030,7 +1164,7 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
     } catch {
       toast({ title: "Error / خطأ", description: "Failed to send payment request. / فشل في إرسال طلب الدفع.", variant: "destructive" });
     } finally {
-      setPaymentRequestDialog({ open: false, request: null, bulkRequests: [], isBulk: false, availableRecipients: [], selectedRecipientIds: [], ccEmails: [], loading: false, sending: false, bulkGroupBy: '', bulkGroupValue: '' });
+      setPaymentRequestDialog({ open: false, request: null, bulkRequests: [], isBulk: false, availableRecipients: [], selectedRecipientIds: [], ccEmails: [], loading: false, sending: false, bulkGroupBy: '', bulkGroupValue: '', sendMode: 'pdf' as const });
     }
   };
 
@@ -2152,7 +2286,7 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
                   <Button
                     size="sm"
                     variant="outline"
-                    onClick={() => handleDownloadBulkExcel(approvedForPayment, 'All Approved')}
+                    onClick={() => openBulkExcelRequestDialog(approvedForPayment, '', 'All Approved')}
                     data-testid="button-bulk-excel-all"
                   >
                     <FileSpreadsheet className="h-3.5 w-3.5 mr-1" />
@@ -2213,7 +2347,7 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
                     PDF ({selectedIds.size})
                   </Button>
                   <Button size="sm" variant="outline" onClick={() => {
-                    if (selectedProcessing.length > 0) handleDownloadBulkExcel(selectedProcessing, `${selectedProcessing.length} Selected`);
+                    if (selectedProcessing.length > 0) openBulkExcelRequestDialog(selectedProcessing, '', `${selectedProcessing.length} Selected`);
                   }} disabled={processing} data-testid="button-selected-bulk-excel">
                     <FileSpreadsheet className="h-4 w-4 mr-1" />
                     Excel ({selectedIds.size})
@@ -2770,13 +2904,21 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
         />
       )}
 
-      <Dialog open={paymentRequestDialog.open} onOpenChange={(open) => { if (!open) setPaymentRequestDialog({ open: false, request: null, bulkRequests: [], isBulk: false, availableRecipients: [], selectedRecipientIds: [], ccEmails: [], loading: false, sending: false, bulkGroupBy: '', bulkGroupValue: '' }); }}>
+      <Dialog open={paymentRequestDialog.open} onOpenChange={(open) => { if (!open) setPaymentRequestDialog({ open: false, request: null, bulkRequests: [], isBulk: false, availableRecipients: [], selectedRecipientIds: [], ccEmails: [], loading: false, sending: false, bulkGroupBy: '', bulkGroupValue: '', sendMode: 'pdf' as const }); }}>
         <DialogContent className={paymentRequestDialog.isBulk ? "max-w-2xl max-h-[90vh] overflow-y-auto" : "max-w-lg max-h-[90vh] overflow-y-auto"}>
           <DialogHeader>
-            <DialogTitle>{paymentRequestDialog.isBulk ? 'Bulk Payment Request / طلب دفع جماعي' : 'Request Payment / طلب دفع'}</DialogTitle>
+            <DialogTitle>
+              {paymentRequestDialog.isBulk
+                ? paymentRequestDialog.sendMode === 'excel'
+                  ? 'Send Bulk Excel / إرسال Excel الجماعي'
+                  : 'Bulk Payment Request / طلب دفع جماعي'
+                : 'Request Payment / طلب دفع'}
+            </DialogTitle>
             <DialogDescription>
               {paymentRequestDialog.isBulk
-                ? `Send one email with a summary PDF for ${paymentRequestDialog.bulkRequests.length} approved advance(s) to finance team.`
+                ? paymentRequestDialog.sendMode === 'excel'
+                  ? `Send a formatted Excel report for ${paymentRequestDialog.bulkRequests.length} advance(s) to the finance team. / إرسال تقرير Excel منسق لـ ${paymentRequestDialog.bulkRequests.length} سلفة إلى فريق المالية.`
+                  : `Send one email with a summary PDF for ${paymentRequestDialog.bulkRequests.length} approved advance(s) to finance team.`
                 : 'Send payment request email to finance team with the approval certificate attached.'}
             </DialogDescription>
             {paymentRequestDialog.isBulk && paymentRequestDialog.bulkRequests.length > 0 && (
@@ -2954,7 +3096,7 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
           <DialogFooter>
             <Button
               variant="outline"
-              onClick={() => setPaymentRequestDialog({ open: false, request: null, bulkRequests: [], isBulk: false, availableRecipients: [], selectedRecipientIds: [], ccEmails: [], loading: false, sending: false, bulkGroupBy: '', bulkGroupValue: '' })}
+              onClick={() => setPaymentRequestDialog({ open: false, request: null, bulkRequests: [], isBulk: false, availableRecipients: [], selectedRecipientIds: [], ccEmails: [], loading: false, sending: false, bulkGroupBy: '', bulkGroupValue: '', sendMode: 'pdf' as const })}
               data-testid="button-cancel-payment-request"
             >
               Cancel
@@ -2966,6 +3108,8 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
             >
               {paymentRequestDialog.sending ? (
                 <><RefreshCw className="h-4 w-4 mr-1 animate-spin" /> Sending...</>
+              ) : paymentRequestDialog.sendMode === 'excel' ? (
+                <><FileSpreadsheet className="h-4 w-4 mr-1" /> Send Excel</>
               ) : (
                 <><Mail className="h-4 w-4 mr-1" /> Send Request</>
               )}

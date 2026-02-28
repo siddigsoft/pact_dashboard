@@ -1516,7 +1516,7 @@ PACT Command Center | مركز قيادة باكت`;
     approvalNotes: string = '',
     costSubmissionUrl: string = '/cost-submission',
     pdfAttachment?: { base64: string; filename: string },
-    additionalAttachments?: Array<{ base64: string; filename: string }>,
+    additionalAttachments?: Array<{ base64: string; filename: string; mimeType?: string }>,
     extraCcEmails?: string[]
   ): Promise<EmailNotificationResult> {
     try {
@@ -1533,7 +1533,7 @@ PACT Command Center | مركز قيادة باكت`;
       }
       if (additionalAttachments?.length) {
         additionalAttachments.forEach(att => {
-          allAttachments.push({ filename: att.filename, content: att.base64, type: 'application/pdf' });
+          allAttachments.push({ filename: att.filename, content: att.base64, type: att.mimeType || 'application/pdf' });
         });
       }
 

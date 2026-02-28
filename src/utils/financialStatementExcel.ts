@@ -90,11 +90,11 @@ function fmtCurrency(amount: number, cur: string = 'SDG'): string {
   return `${cur} ${amount.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
 }
 
-export function generateFinancialStatementExcel(
+function buildStatementWorkbook(
   rows: StatementRow[],
   config: StatementConfig
-): void {
-  if (rows.length === 0) return;
+): { wb: ExcelJS.Workbook; filename: string } | null {
+  if (rows.length === 0) return null;
 
   const cur = config.currency || 'SDG';
   const isTransport = config.statementType === 'transport_advance';
@@ -333,8 +333,31 @@ export function generateFinancialStatementExcel(
   }
 
   const statusClean = config.statusFilter.replace(/\s+/g, '_');
+  const filename = `${typeLabel}-Statement-${statusClean}-${format(new Date(), 'yyyy-MM-dd')}.xlsx`;
 
-  wb.xlsx.writeBuffer().then(buffer => {
-    saveAs(new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), `${typeLabel}-Statement-${statusClean}-${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
+  return { wb, filename };
+}
+
+export function generateFinancialStatementExcel(
+  rows: StatementRow[],
+  config: StatementConfig
+): void {
+  const result = buildStatementWorkbook(rows, config);
+  if (!result) return;
+  result.wb.xlsx.writeBuffer().then(buffer => {
+    saveAs(new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), result.filename);
   });
+}
+
+export async function generateFinancialStatementExcelBase64(
+  rows: StatementRow[],
+  config: StatementConfig
+): Promise<{ base64: string; filename: string } | null> {
+  const result = buildStatementWorkbook(rows, config);
+  if (!result) return null;
+  const buffer = await result.wb.xlsx.writeBuffer();
+  const bytes = new Uint8Array(buffer as ArrayBuffer);
+  let binary = '';
+  bytes.forEach(b => { binary += String.fromCharCode(b); });
+  return { base64: btoa(binary), filename: result.filename };
 }
