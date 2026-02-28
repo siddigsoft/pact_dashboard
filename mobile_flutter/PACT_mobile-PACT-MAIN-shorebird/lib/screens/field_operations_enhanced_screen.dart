@@ -257,7 +257,9 @@ class _MMPScreenState extends State<MMPScreen> {
         try {
           cachedProfile = Map<String, dynamic>.from(cachedItem!.data);
         } catch (e) {
-          debugPrint('[_initializeFromCache] Error converting cached profile: $e');
+          debugPrint(
+            '[_initializeFromCache] Error converting cached profile: $e',
+          );
         }
       }
 
@@ -265,14 +267,18 @@ class _MMPScreenState extends State<MMPScreen> {
         _applyProfileData(cachedProfile);
         debugPrint('[_initializeFromCache] Loaded cached profile: $_userRole');
       } else {
-        debugPrint('[_initializeFromCache] No cached profile found, trying fallback methods');
+        debugPrint(
+          '[_initializeFromCache] No cached profile found, trying fallback methods',
+        );
 
         // FALLBACK 1: Try to load role from Hive cache
         try {
           final box = await Hive.openBox('user_profile_cache');
           final cachedRole = box.get('user_role') as String?;
           if (cachedRole != null) {
-            debugPrint('[_initializeFromCache] Found role in Hive cache: $cachedRole');
+            debugPrint(
+              '[_initializeFromCache] Found role in Hive cache: $cachedRole',
+            );
             final role = cachedRole.toLowerCase();
             _userRole = role;
             _isCoordinator =
@@ -290,7 +296,9 @@ class _MMPScreenState extends State<MMPScreen> {
                 role == 'fom';
           }
         } catch (e) {
-          debugPrint('[_initializeFromCache] Error loading role from Hive cache: $e');
+          debugPrint(
+            '[_initializeFromCache] Error loading role from Hive cache: $e',
+          );
         }
 
         // FALLBACK 2: Try to get role from user metadata (if available)
@@ -318,7 +326,9 @@ class _MMPScreenState extends State<MMPScreen> {
               }
             }
           } catch (e) {
-            debugPrint('[_initializeFromCache] Error loading role from metadata: $e');
+            debugPrint(
+              '[_initializeFromCache] Error loading role from metadata: $e',
+            );
           }
         }
       }
@@ -1020,13 +1030,16 @@ class _MMPScreenState extends State<MMPScreen> {
         final data = cachedItem.data;
         final sites = data['sites'] as List?;
         if (sites != null) {
-          _availableSites = sites.map((e) {
-            try {
-              return Map<String, dynamic>.from(e as Map);
-            } catch (_) {
-              return <String, dynamic>{};
-            }
-          }).where((e) => e.isNotEmpty).toList();
+          _availableSites = sites
+              .map((e) {
+                try {
+                  return Map<String, dynamic>.from(e as Map);
+                } catch (_) {
+                  return <String, dynamic>{};
+                }
+              })
+              .where((e) => e.isNotEmpty)
+              .toList();
           debugPrint(
             '[_loadAvailableSitesFromCache] Loaded ${_availableSites.length} sites from cache',
           );
@@ -1192,13 +1205,16 @@ class _MMPScreenState extends State<MMPScreen> {
         final data = cachedItem.data;
         final sites = data['sites'] as List?;
         if (sites != null) {
-          _smartAssignedSites = sites.map((e) {
-            try {
-              return Map<String, dynamic>.from(e as Map);
-            } catch (_) {
-              return <String, dynamic>{};
-            }
-          }).where((e) => e.isNotEmpty).toList();
+          _smartAssignedSites = sites
+              .map((e) {
+                try {
+                  return Map<String, dynamic>.from(e as Map);
+                } catch (_) {
+                  return <String, dynamic>{};
+                }
+              })
+              .where((e) => e.isNotEmpty)
+              .toList();
           debugPrint(
             '[_loadSmartAssignedSitesFromCache] Loaded ${_smartAssignedSites.length} sites from cache',
           );
@@ -1342,13 +1358,16 @@ class _MMPScreenState extends State<MMPScreen> {
         final data = cachedItem.data;
         final sites = data['sites'] as List?;
         if (sites != null) {
-          final cachedSites = sites.map((e) {
-            try {
-              return Map<String, dynamic>.from(e as Map);
-            } catch (_) {
-              return <String, dynamic>{};
-            }
-          }).where((e) => e.isNotEmpty).toList();
+          final cachedSites = sites
+              .map((e) {
+                try {
+                  return Map<String, dynamic>.from(e as Map);
+                } catch (_) {
+                  return <String, dynamic>{};
+                }
+              })
+              .where((e) => e.isNotEmpty)
+              .toList();
           // Merge with offline data when loading from cache
           _mySites = await _mergeWithOfflineData(cachedSites);
           debugPrint(
@@ -1382,10 +1401,13 @@ class _MMPScreenState extends State<MMPScreen> {
       final bySite = <String, OfflineSiteVisit>{};
       for (final v in allVisits) {
         final existing = bySite[v.siteEntryId];
-        final keepNew = existing == null ||
-            _offlineVisitPriority(v.status) > _offlineVisitPriority(existing.status) ||
+        final keepNew =
+            existing == null ||
+            _offlineVisitPriority(v.status) >
+                _offlineVisitPriority(existing.status) ||
             (v.startedAt.isAfter(existing.startedAt) &&
-                _offlineVisitPriority(v.status) == _offlineVisitPriority(existing.status));
+                _offlineVisitPriority(v.status) ==
+                    _offlineVisitPriority(existing.status));
         if (keepNew) {
           bySite[v.siteEntryId] = v;
         }
@@ -1461,9 +1483,7 @@ class _MMPScreenState extends State<MMPScreen> {
     if (data is String) {
       try {
         final decoded = jsonDecode(data);
-        return decoded is Map
-            ? Map<String, dynamic>.from(decoded as Map)
-            : {};
+        return decoded is Map ? Map<String, dynamic>.from(decoded as Map) : {};
       } catch (_) {
         return {};
       }
@@ -1476,7 +1496,9 @@ class _MMPScreenState extends State<MMPScreen> {
   }
 
   /// Safely get a nested map (e.g. start_location) from additional_data.
-  Map<String, dynamic>? _safeStartLocation(Map<String, dynamic> additionalData) {
+  Map<String, dynamic>? _safeStartLocation(
+    Map<String, dynamic> additionalData,
+  ) {
     final raw = additionalData['start_location'];
     if (raw == null) return null;
     if (raw is Map) return Map<String, dynamic>.from(raw as Map);
@@ -1806,7 +1828,9 @@ class _MMPScreenState extends State<MMPScreen> {
   }
 
   Future<void> _claimSite(Map<String, dynamic> site) async {
-    debugPrint('[Claim] _claimSite called for site ${site['id']} (${site['site_name'] ?? site['siteName']})');
+    debugPrint(
+      '[Claim] _claimSite called for site ${site['id']} (${site['site_name'] ?? site['siteName']})',
+    );
     try {
       if (_userId == null) return;
 
@@ -1948,8 +1972,11 @@ class _MMPScreenState extends State<MMPScreen> {
         );
         final transportFee = (site['transport_fee'] as num?)?.toDouble() ?? 0.0;
         final enumeratorFee = breakdown?.enumeratorFee ?? _userEnumeratorFee;
-        final totalPayout = (breakdown?.totalPayout) ?? (enumeratorFee + transportFee);
-        final roleScope = ClaimFeeService.normalizeRoleScopeForEnum(breakdown?.roleScope);
+        final totalPayout =
+            (breakdown?.totalPayout) ?? (enumeratorFee + transportFee);
+        final roleScope = ClaimFeeService.normalizeRoleScopeForEnum(
+          breakdown?.roleScope,
+        );
 
         final params = {
           'p_site_id': site['id'],
@@ -2190,7 +2217,9 @@ class _MMPScreenState extends State<MMPScreen> {
                               Container(
                                 padding: const EdgeInsets.all(8),
                                 decoration: BoxDecoration(
-                                  color: AppColors.primaryBlue.withValues(alpha: 0.1),
+                                  color: AppColors.primaryBlue.withValues(
+                                    alpha: 0.1,
+                                  ),
                                   borderRadius: BorderRadius.circular(8),
                                 ),
                                 child: Icon(
@@ -2309,7 +2338,9 @@ class _MMPScreenState extends State<MMPScreen> {
                                   children: [
                                     Icon(
                                       Icons.payments_rounded,
-                                      color: Colors.white.withValues(alpha: 0.9),
+                                      color: Colors.white.withValues(
+                                        alpha: 0.9,
+                                      ),
                                       size: 24,
                                     ),
                                     const SizedBox(width: 8),
@@ -2317,7 +2348,9 @@ class _MMPScreenState extends State<MMPScreen> {
                                       'Total Payment',
                                       style: GoogleFonts.poppins(
                                         fontSize: 15,
-                                        color: Colors.white.withValues(alpha: 0.95),
+                                        color: Colors.white.withValues(
+                                          alpha: 0.95,
+                                        ),
                                         fontWeight: FontWeight.w600,
                                         letterSpacing: 0.5,
                                       ),
@@ -2336,7 +2369,9 @@ class _MMPScreenState extends State<MMPScreen> {
                                         style: GoogleFonts.poppins(
                                           fontSize: 18,
                                           fontWeight: FontWeight.w600,
-                                          color: Colors.white.withValues(alpha: 0.9),
+                                          color: Colors.white.withValues(
+                                            alpha: 0.9,
+                                          ),
                                         ),
                                       ),
                                     ),
@@ -2368,14 +2403,18 @@ class _MMPScreenState extends State<MMPScreen> {
                                       Icon(
                                         Icons.check_circle_rounded,
                                         size: 14,
-                                        color: Colors.white.withValues(alpha: 0.9),
+                                        color: Colors.white.withValues(
+                                          alpha: 0.9,
+                                        ),
                                       ),
                                       const SizedBox(width: 6),
                                       Text(
                                         'Upon visit completion',
                                         style: GoogleFonts.poppins(
                                           fontSize: 11,
-                                          color: Colors.white.withValues(alpha: 0.9),
+                                          color: Colors.white.withValues(
+                                            alpha: 0.9,
+                                          ),
                                           fontWeight: FontWeight.w500,
                                         ),
                                       ),
@@ -2470,7 +2509,9 @@ class _MMPScreenState extends State<MMPScreen> {
                             backgroundColor: AppColors.primaryBlue,
                             foregroundColor: Colors.white,
                             elevation: 2,
-                            shadowColor: AppColors.primaryBlue.withValues(alpha: 0.5),
+                            shadowColor: AppColors.primaryBlue.withValues(
+                              alpha: 0.5,
+                            ),
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(12),
                             ),
@@ -2702,9 +2743,9 @@ class _MMPScreenState extends State<MMPScreen> {
     try {
       if (_userId == null) return;
 
+      // Transport fee from the site is used as a suggested budget in the dialog.
+      // If 0 or missing, the dialog still opens and the user enters any amount.
       final transportFee = (site['transport_fee'] as num?)?.toDouble() ?? 0.0;
-      final enumeratorFee = (site['enumerator_fee'] as num?)?.toDouble() ?? 0.0;
-      final totalBudget = transportFee + enumeratorFee;
 
       // Check bank account before showing advance dialog
       final profileCheck = await Supabase.instance.client
@@ -2713,7 +2754,8 @@ class _MMPScreenState extends State<MMPScreen> {
           .eq('id', _userId!)
           .maybeSingle();
       final bankAccount = profileCheck?['bank_account'];
-      final bankAccountNumber = bankAccount?['accountNumber'] ?? bankAccount?['account_number'];
+      final bankAccountNumber =
+          bankAccount?['accountNumber'] ?? bankAccount?['account_number'];
       if (bankAccountNumber == null || (bankAccountNumber as String).isEmpty) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -2743,7 +2785,7 @@ class _MMPScreenState extends State<MMPScreen> {
         context: context,
         builder: (context) => RequestAdvanceDialog(
           site: site,
-          transportationBudget: totalBudget,
+          transportationBudget: transportFee,
           hubId: hubId,
           hubName: hubName,
         ),
@@ -2793,7 +2835,7 @@ class _MMPScreenState extends State<MMPScreen> {
             'requester_role': requesterRole,
             'hub_id': finalHubId,
             'hub_name': hubName,
-            'total_transportation_budget': totalBudget,
+            'total_transportation_budget': transportFee,
             'requested_amount': requestedAmount,
             'payment_type': paymentType,
             'installment_plan': installmentPlan,
@@ -2834,8 +2876,9 @@ class _MMPScreenState extends State<MMPScreen> {
   }
 
   bool _shouldShowRequestAdvance(Map<String, dynamic> site) {
-    // Show for accepted/in-progress sites owned by the current user
-    // when there is any cost (transport fee OR enumerator fee > 0).
+    // Show for any accepted/in-progress site owned by the current user.
+    // Transport fee being 0 or missing does NOT hide the button — the
+    // enumerator enters their own requested amount in the dialog.
     final status = (site['status'] as String? ?? '').toLowerCase();
     final isAcceptedOrOngoing =
         status == 'accepted' ||
@@ -2844,11 +2887,8 @@ class _MMPScreenState extends State<MMPScreen> {
         status == 'in_progress' ||
         status == 'ongoing';
     final isOwner = site['accepted_by'] == _userId;
-    final transportFee = (site['transport_fee'] as num?)?.toDouble() ?? 0.0;
-    final enumeratorFee = (site['enumerator_fee'] as num?)?.toDouble() ?? 0.0;
-    final totalCost = transportFee + enumeratorFee;
 
-    return isAcceptedOrOngoing && isOwner && totalCost > 0;
+    return isAcceptedOrOngoing && isOwner;
   }
 
   Widget _buildRequestAdvanceWidget(Map<String, dynamic> site) {
@@ -3368,7 +3408,9 @@ class _MMPScreenState extends State<MMPScreen> {
       final now = DateTime.now();
 
       final siteName =
-          site['site_name']?.toString() ?? site['siteName']?.toString() ?? 'Unknown Site';
+          site['site_name']?.toString() ??
+          site['siteName']?.toString() ??
+          'Unknown Site';
       final siteCode =
           site['site_code']?.toString() ?? site['siteCode']?.toString() ?? '';
       final state = site['state']?.toString() ?? '';
@@ -4090,7 +4132,12 @@ class _MMPScreenState extends State<MMPScreen> {
   }
 
   Widget _buildTabButton(
-      String tab, String labelEn, String labelAr, IconData icon, int count) {
+    String tab,
+    String labelEn,
+    String labelAr,
+    IconData icon,
+    int count,
+  ) {
     final isActive = _enumeratorSubTab == tab;
     return GestureDetector(
       onTap: () => setState(() => _enumeratorSubTab = tab),
@@ -4149,8 +4196,7 @@ class _MMPScreenState extends State<MMPScreen> {
             ),
             const SizedBox(height: 2),
             Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
               decoration: BoxDecoration(
                 color: isActive
                     ? Colors.white.withValues(alpha: 0.3)
