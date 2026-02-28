@@ -954,11 +954,6 @@ const CostSubmission = () => {
   };
 
   const proceedBulkToRecipients = async () => {
-    const rate = parseFloat(bulkCostEmailDialog.usdRate);
-    if (!bulkCostEmailDialog.usdRate || isNaN(rate) || rate <= 0) {
-      toast({ title: "Invalid Rate / معدل غير صالح", description: "Please enter a valid USD exchange rate.", variant: "destructive" });
-      return;
-    }
     setBulkCostEmailDialog(prev => ({ ...prev, step: 'recipients', loading: true }));
     try {
       const cached = cachedRecipientsRef.current;
@@ -3441,20 +3436,20 @@ const CostSubmission = () => {
                   )}
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="usd-rate-input">USD Exchange Rate (1 USD = ? SDG) <span className="text-red-500">*</span></Label>
+                  <Label htmlFor="usd-rate-input">USD Exchange Rate (1 USD = ? SDG) <span className="text-muted-foreground font-normal text-xs">— optional / اختياري</span></Label>
                   <Input
                     id="usd-rate-input"
                     type="number"
                     min="1"
                     step="0.01"
-                    placeholder="e.g. 1900"
+                    placeholder="e.g. 1900 — leave blank to skip"
                     value={bulkCostEmailDialog.usdRate}
                     onChange={(e) => setBulkCostEmailDialog(prev => ({ ...prev, usdRate: e.target.value }))}
                     data-testid="input-bulk-usd-rate"
                     className="text-lg font-semibold"
                     onKeyDown={(e) => { if (e.key === 'Enter') proceedBulkToRecipients(); }}
                   />
-                  <p className="text-xs text-muted-foreground">The email will show: SDG total ÷ rate = USD equivalent</p>
+                  <p className="text-xs text-muted-foreground">If provided, the email will include a USD equivalent row. Leave blank to send SDG-only.</p>
                 </div>
               </div>
               <DialogFooter>
@@ -3464,7 +3459,6 @@ const CostSubmission = () => {
                 <Button
                   type="button"
                   onClick={proceedBulkToRecipients}
-                  disabled={!bulkCostEmailDialog.usdRate || isNaN(parseFloat(bulkCostEmailDialog.usdRate)) || parseFloat(bulkCostEmailDialog.usdRate) <= 0}
                   className="bg-[#0F2041] hover:bg-[#1D3461] text-white"
                   data-testid="button-bulk-next-recipients"
                 >
