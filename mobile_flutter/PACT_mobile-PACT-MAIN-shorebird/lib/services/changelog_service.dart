@@ -143,33 +143,52 @@ class ChangelogService {
   }
 
   static const List<String> _currentFeatures = [
-    'File attachments in chat - send images and documents',
-    'Voice message recording with hold-to-record',
-    'Role-based calling restrictions for field staff',
-    'Camera and gallery integration for photo sharing',
+    'Cost Payment Receipt Confirmation — new "Cost Payments" section in Wallet shows all paid cost submissions and lets you confirm receipt with a digital signature / تأكيد استلام دفعات التكاليف — قسم جديد في المحفظة يعرض التسديدات المدفوعة ويتيح تأكيد الاستلام بتوقيع رقمي',
+    'Wallet pending-confirmation banner now covers transport advances, withdrawals, AND cost payments in a single alert / تنبيه بانتظار التأكيد يشمل الآن سلف النقل والسحوبات ودفعات التكاليف معاً',
+    'Bank account validation before withdrawal — app now blocks withdrawal request if no bank account is on file / التحقق من الحساب البنكي قبل السحب — يمنع التطبيق الآن تقديم طلب سحب إذا لم يكن هناك حساب مسجل',
   ];
 
   static const List<String> _currentFixes = [
-    'Fixed microphone and camera permissions for calls',
-    'Fixed chat message input layout',
-    'Improved presence sync with state and hub fields',
+    'Finance "Mark Paid" action now correctly notifies the recipient to confirm receipt in their Wallet / إجراء "تحديد كمدفوع" من المالية يُرسل الآن إشعاراً صحيحاً للمستلم لتأكيد الاستلام في محفظته',
+    'Approval timeline for cost submissions now shows live receipt-confirmation status (confirmed ✓ or awaiting ⚠) / مخطط الاعتماد لتقديمات التكاليف يعرض الآن حالة تأكيد الاستلام مباشرةً',
   ];
 
   static const List<String> _currentImprovements = [
-    'WhatsApp-style attachment picker',
-    'Recording indicator with duration timer',
-    'Smoother message input toggle between mic and send',
+    'Digital signature flow for cost payments mirrors the existing transport advance confirmation UX / تدفق التوقيع الرقمي لدفعات التكاليف يطابق تجربة تأكيد سلف النقل الحالية',
+    'Cost Payments tab badge shows count of items pending your confirmation / شارة تبويب دفعات التكاليف تعرض عدد البنود التي تنتظر تأكيدك',
+    'Per-request USD equivalent shown in bulk payment email dialogs to catch rate typos / مكافئ USD لكل طلب يظهر في نوافذ البريد الجماعي للكشف عن أخطاء سعر الصرف',
   ];
 
   static final List<ChangelogEntry> _changelogs = [
+    ChangelogEntry(
+      version: '1.0.6',
+      buildNumber: '9',
+      releaseDate: DateTime(2026, 2, 28),
+      features: _currentFeatures,
+      fixes: _currentFixes,
+      improvements: _currentImprovements,
+    ),
     ChangelogEntry(
       version: '1.0.5',
       buildNumber: '8',
       patchNumber: 9,
       releaseDate: DateTime(2026, 1, 23),
-      features: _currentFeatures,
-      fixes: _currentFixes,
-      improvements: _currentImprovements,
+      features: [
+        'File attachments in chat - send images and documents',
+        'Voice message recording with hold-to-record',
+        'Role-based calling restrictions for field staff',
+        'Camera and gallery integration for photo sharing',
+      ],
+      fixes: [
+        'Fixed microphone and camera permissions for calls',
+        'Fixed chat message input layout',
+        'Improved presence sync with state and hub fields',
+      ],
+      improvements: [
+        'WhatsApp-style attachment picker',
+        'Recording indicator with duration timer',
+        'Smoother message input toggle between mic and send',
+      ],
     ),
     ChangelogEntry(
       version: '1.0.4',
