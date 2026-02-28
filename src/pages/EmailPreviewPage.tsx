@@ -116,42 +116,42 @@ function buildEnhancedPaymentEmailHTML(d: typeof SAMPLE): string {
       </p>
 
       <!-- ── DETAILS TABLE ────────────────────────────────────── -->
-      <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin:0 0 26px 0;font-size:13.5px;border-radius:6px;overflow:hidden;border:1px solid #E5E7EB;">
+      <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin:0 0 22px 0;font-size:12.5px;border-radius:6px;overflow:hidden;border:1px solid #E5E7EB;">
         <tr style="background:#0F2041;">
-          <td style="padding:10px 14px;color:#FFFFFF;font-weight:700;font-size:11px;letter-spacing:0.8px;text-transform:uppercase;width:42%;">Field &nbsp;/&nbsp; الحقل</td>
-          <td style="padding:10px 14px;color:#FFFFFF;font-weight:700;font-size:11px;letter-spacing:0.8px;text-transform:uppercase;">Detail &nbsp;/&nbsp; التفصيل</td>
+          <td style="padding:7px 12px;color:#FFFFFF;font-weight:700;font-size:10.5px;letter-spacing:0.8px;text-transform:uppercase;width:42%;">Field &nbsp;/&nbsp; الحقل</td>
+          <td style="padding:7px 12px;color:#FFFFFF;font-weight:700;font-size:10.5px;letter-spacing:0.8px;text-transform:uppercase;">Detail &nbsp;/&nbsp; التفصيل</td>
         </tr>
         <tr style="background:#F8FAFC;">
-          <td style="padding:11px 14px;font-weight:600;color:#374151;border-bottom:1px solid #E5E7EB;border-right:1px solid #E5E7EB;">Reference No / رقم المرجع</td>
-          <td style="padding:11px 14px;color:#1F2937;border-bottom:1px solid #E5E7EB;">${d.requestId}</td>
+          <td style="padding:6px 12px;font-weight:600;color:#374151;border-bottom:1px solid #E5E7EB;border-right:1px solid #E5E7EB;">Reference No / رقم المرجع</td>
+          <td style="padding:6px 12px;color:#1F2937;border-bottom:1px solid #E5E7EB;">${d.requestId}</td>
         </tr>
         <tr style="background:#FFFFFF;">
-          <td style="padding:11px 14px;font-weight:600;color:#374151;border-bottom:1px solid #E5E7EB;border-right:1px solid #E5E7EB;">MMP / الخطة الشهرية</td>
-          <td style="padding:11px 14px;color:#1F2937;border-bottom:1px solid #E5E7EB;font-weight:600;">${d.mmpLabel} Advance Request</td>
+          <td style="padding:6px 12px;font-weight:600;color:#374151;border-bottom:1px solid #E5E7EB;border-right:1px solid #E5E7EB;">MMP / الخطة الشهرية</td>
+          <td style="padding:6px 12px;color:#1F2937;border-bottom:1px solid #E5E7EB;font-weight:600;">${d.mmpLabel}</td>
         </tr>
         <tr style="background:#F8FAFC;">
-          <td style="padding:11px 14px;font-weight:600;color:#374151;border-bottom:1px solid #E5E7EB;border-right:1px solid #E5E7EB;">Type / النوع</td>
-          <td style="padding:11px 14px;color:#1F2937;border-bottom:1px solid #E5E7EB;">Advance Request / طلب سلفة</td>
+          <td style="padding:6px 12px;font-weight:600;color:#374151;border-bottom:1px solid #E5E7EB;border-right:1px solid #E5E7EB;">Type / النوع</td>
+          <td style="padding:6px 12px;color:#1F2937;border-bottom:1px solid #E5E7EB;">Advance Request / طلب سلفة</td>
         </tr>
         <tr style="background:#FFFFFF;">
-          <td style="padding:11px 14px;font-weight:600;color:#374151;border-bottom:1px solid #E5E7EB;border-right:1px solid #E5E7EB;">Category / الفئة</td>
-          <td style="padding:11px 14px;color:#1F2937;border-bottom:1px solid #E5E7EB;">Transportation Advance (Bulk)</td>
+          <td style="padding:6px 12px;font-weight:600;color:#374151;border-bottom:1px solid #E5E7EB;border-right:1px solid #E5E7EB;">Category / الفئة</td>
+          <td style="padding:6px 12px;color:#1F2937;border-bottom:1px solid #E5E7EB;">Transportation Advance (Bulk)</td>
         </tr>
         <tr style="background:#F8FAFC;">
-          <td style="padding:11px 14px;font-weight:600;color:#374151;border-bottom:1px solid #E5E7EB;border-right:1px solid #E5E7EB;">Total Amount / المبلغ الإجمالي</td>
-          <td style="padding:11px 14px;color:#065F46;font-weight:700;border-bottom:1px solid #E5E7EB;font-size:15px;">${fmt(d.totalAmount)}</td>
+          <td style="padding:6px 12px;font-weight:600;color:#374151;border-bottom:1px solid #E5E7EB;border-right:1px solid #E5E7EB;">Total Amount / المبلغ الإجمالي</td>
+          <td style="padding:6px 12px;color:#065F46;font-weight:700;border-bottom:1px solid #E5E7EB;font-size:14px;">${fmt(d.totalAmount)}</td>
         </tr>
         <tr style="background:#FFFFFF;">
-          <td style="padding:11px 14px;font-weight:600;color:#374151;border-bottom:1px solid #E5E7EB;border-right:1px solid #E5E7EB;">Project / المشروع</td>
-          <td style="padding:11px 14px;color:#1F2937;border-bottom:1px solid #E5E7EB;">${d.project}</td>
+          <td style="padding:6px 12px;font-weight:600;color:#374151;border-bottom:1px solid #E5E7EB;border-right:1px solid #E5E7EB;">Project / المشروع</td>
+          <td style="padding:6px 12px;color:#1F2937;border-bottom:1px solid #E5E7EB;">${d.project}</td>
         </tr>
         <tr style="background:#F8FAFC;">
-          <td style="padding:11px 14px;font-weight:600;color:#374151;border-bottom:1px solid #E5E7EB;border-right:1px solid #E5E7EB;">Approved By / تمت الموافقة من</td>
-          <td style="padding:11px 14px;color:#1F2937;border-bottom:1px solid #E5E7EB;">${d.approverName}</td>
+          <td style="padding:6px 12px;font-weight:600;color:#374151;border-bottom:1px solid #E5E7EB;border-right:1px solid #E5E7EB;">Approved By / تمت الموافقة من</td>
+          <td style="padding:6px 12px;color:#1F2937;border-bottom:1px solid #E5E7EB;">${d.approverName}</td>
         </tr>
         <tr style="background:#FFFFFF;">
-          <td style="padding:11px 14px;font-weight:600;color:#374151;border-right:1px solid #E5E7EB;">Attachment / المرفق</td>
-          <td style="padding:11px 14px;color:#1F2937;">Excel Report (4 sheets: Statement · Full Details · By State · By Enumerator)</td>
+          <td style="padding:6px 12px;font-weight:600;color:#374151;border-right:1px solid #E5E7EB;">Attachment / المرفق</td>
+          <td style="padding:6px 12px;color:#1F2937;">Excel Report (4 sheets: Statement · Full Details · By State · By Enumerator)</td>
         </tr>
       </table>
 
