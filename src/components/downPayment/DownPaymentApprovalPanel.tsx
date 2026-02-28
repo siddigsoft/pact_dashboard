@@ -72,6 +72,7 @@ import { format } from 'date-fns';
 import { filterDownPayments, exportToCSV, exportToExcel, exportToPDF, getDownPaymentStats } from '@/utils/downPaymentExport';
 import { generateFinancialStatementPdf, type StatementRow, type StatementConfig } from '@/utils/financialStatementPdf';
 import { generateFinancialStatementExcel, generateFinancialStatementExcelBase64 } from '@/utils/financialStatementExcel';
+import { generateNotificationEmailHTML } from '@/services/email-notification.service';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { SignatureConfirmationModal } from '@/components/signatures/SignatureConfirmationModal';
@@ -134,7 +135,8 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
     bulkGroupBy: string;
     bulkGroupValue: string;
     sendMode: 'pdf' | 'excel';
-  }>({ open: false, request: null, bulkRequests: [], isBulk: false, availableRecipients: [], selectedRecipientIds: [], ccEmails: [], loading: false, sending: false, bulkGroupBy: '', bulkGroupValue: '', sendMode: 'pdf' });
+    showPreview: boolean;
+  }>({ open: false, request: null, bulkRequests: [], isBulk: false, availableRecipients: [], selectedRecipientIds: [], ccEmails: [], loading: false, sending: false, bulkGroupBy: '', bulkGroupValue: '', sendMode: 'pdf', showPreview: false });
   const [markPaidProcessing, setMarkPaidProcessing] = useState(false);
   const [bulkPaymentIds, setBulkPaymentIds] = useState<Set<string>>(new Set());
 
@@ -893,6 +895,59 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
     }
   };
 
+  const buildEmailPreviewHtml = (): string => {
+    const { request: req, bulkRequests, isBulk, availableRecipients, selectedRecipientIds, bulkGroupBy, bulkGroupValue, sendMode } = paymentRequestDialog;
+    const approverName = (currentUser as any)?.fullName || (currentUser as any)?.full_name || currentUser?.email || 'Approver';
+    const firstRecipient = availableRecipients.find(r => selectedRecipientIds.includes(r.id));
+    const recipientName = firstRecipient?.name || 'Finance Team';
+    const selectedCount = selectedRecipientIds.length;
+
+    if (isBulk && bulkRequests.length > 0) {
+      const totalAmount = bulkRequests.reduce((s, r) => s + (r.approvedAmount || r.requestedAmount), 0);
+      const groupLabel = bulkGroupBy ? `${bulkGroupBy}: ${bulkGroupValue}` : 'All Approved';
+      const fileType = sendMode === 'excel' ? 'Excel report' : 'summary PDF';
+      return generateNotificationEmailHTML(recipientName, {
+        title: sendMode === 'excel'
+          ? `Bulk Transport Advance — Excel Report (${bulkRequests.length} Requests)`
+          : `Bulk Transport Advance Payment Request (${bulkRequests.length} Requests)`,
+        titleAr: sendMode === 'excel'
+          ? `طلبات السلفة الجماعية — تقرير Excel (${bulkRequests.length} طلب)`
+          : `طلب دفع السلفة الجماعية (${bulkRequests.length} طلب)`,
+        message: `Please find attached the ${fileType} for ${bulkRequests.length} approved transport advance request(s) from ${groupLabel}.\n\nTotal Approved Amount: SDG ${totalAmount.toLocaleString()}\nPrepared by: ${approverName}\nSent to: ${selectedCount} recipient(s)\n\nKindly review and process the payments at your earliest convenience.`,
+        messageAr: `يرجى مراجعة ${fileType === 'Excel report' ? 'تقرير Excel' : 'ملف PDF'} المرفق لـ ${bulkRequests.length} طلب سلفة نقل معتمد من ${groupLabel}.\n\nإجمالي المبلغ المعتمد: SDG ${totalAmount.toLocaleString()}\nأعده: ${approverName}`,
+        type: 'info',
+        actionUrl: '/down-payment-approval',
+        actionLabel: 'View Down-Payment Approval',
+        details: [
+          { label: 'Group / المجموعة', value: groupLabel },
+          { label: 'Total Requests / إجمالي الطلبات', value: String(bulkRequests.length) },
+          { label: 'Total Amount / إجمالي المبلغ', value: `SDG ${totalAmount.toLocaleString()}` },
+          { label: 'Prepared By / أعده', value: approverName },
+          { label: 'Attachment / المرفق', value: sendMode === 'excel' ? 'Formatted Excel Report (.xlsx)' : 'Bulk Payment Certificate PDF' },
+          { label: 'Recipients / المستلمون', value: `${selectedCount} recipient(s)` },
+        ],
+      });
+    } else if (req) {
+      const amount = req.approvedAmount || req.requestedAmount;
+      return generateNotificationEmailHTML(recipientName, {
+        title: `Transport Advance Payment Request — ${req.requestedByName || 'Unknown'}`,
+        titleAr: `طلب دفع سلفة النقل — ${req.requestedByName || 'Unknown'}`,
+        message: `Please process the transport advance payment for the above request.\n\nPrepared by: ${approverName}`,
+        messageAr: `يرجى معالجة دفع سلفة النقل للطلب المذكور أعلاه.\nأعده: ${approverName}`,
+        type: 'info',
+        actionUrl: '/down-payment-approval',
+        actionLabel: 'View Down-Payment Approval',
+        details: [
+          { label: 'Requester / مقدم الطلب', value: req.requestedByName || 'Unknown' },
+          { label: 'Site / الموقع', value: req.siteName || 'N/A' },
+          { label: 'Amount / المبلغ', value: `SDG ${amount.toLocaleString()}` },
+          { label: 'Prepared By / أعده', value: approverName },
+        ],
+      });
+    }
+    return '';
+  };
+
   const handleSendPaymentRequest = async () => {
     const { request: req, bulkRequests, isBulk, selectedRecipientIds, availableRecipients, ccEmails, bulkGroupBy, bulkGroupValue, sendMode } = paymentRequestDialog;
     if (!currentUser?.id || selectedRecipientIds.length === 0) return;
@@ -1164,7 +1219,7 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
     } catch {
       toast({ title: "Error / خطأ", description: "Failed to send payment request. / فشل في إرسال طلب الدفع.", variant: "destructive" });
     } finally {
-      setPaymentRequestDialog({ open: false, request: null, bulkRequests: [], isBulk: false, availableRecipients: [], selectedRecipientIds: [], ccEmails: [], loading: false, sending: false, bulkGroupBy: '', bulkGroupValue: '', sendMode: 'pdf' as const });
+      setPaymentRequestDialog({ open: false, request: null, bulkRequests: [], isBulk: false, availableRecipients: [], selectedRecipientIds: [], ccEmails: [], loading: false, sending: false, bulkGroupBy: '', bulkGroupValue: '', sendMode: 'pdf' as const, showPreview: false });
     }
   };
 
@@ -2904,7 +2959,7 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
         />
       )}
 
-      <Dialog open={paymentRequestDialog.open} onOpenChange={(open) => { if (!open) setPaymentRequestDialog({ open: false, request: null, bulkRequests: [], isBulk: false, availableRecipients: [], selectedRecipientIds: [], ccEmails: [], loading: false, sending: false, bulkGroupBy: '', bulkGroupValue: '', sendMode: 'pdf' as const }); }}>
+      <Dialog open={paymentRequestDialog.open} onOpenChange={(open) => { if (!open) setPaymentRequestDialog({ open: false, request: null, bulkRequests: [], isBulk: false, availableRecipients: [], selectedRecipientIds: [], ccEmails: [], loading: false, sending: false, bulkGroupBy: '', bulkGroupValue: '', sendMode: 'pdf' as const, showPreview: false }); }}>
         <DialogContent className={paymentRequestDialog.isBulk ? "max-w-2xl max-h-[90vh] overflow-y-auto" : "max-w-lg max-h-[90vh] overflow-y-auto"}>
           <DialogHeader>
             <DialogTitle>
@@ -2997,8 +3052,10 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
                     </div>
                   </div>
                   <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                    <FileText className="h-3.5 w-3.5" />
-                    <span>A single summary PDF with all requests will be generated and attached to the email.</span>
+                    {paymentRequestDialog.sendMode === 'excel' ? <FileSpreadsheet className="h-3.5 w-3.5" /> : <FileText className="h-3.5 w-3.5" />}
+                    <span>{paymentRequestDialog.sendMode === 'excel'
+                      ? 'A formatted Excel report (matching the Bank Statement style) will be generated and attached.'
+                      : 'A single summary PDF with all requests will be generated and attached to the email.'}</span>
                   </div>
                 </div>
               )}
@@ -3093,27 +3150,76 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
               </div>
             </div>
           )}
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setPaymentRequestDialog({ open: false, request: null, bulkRequests: [], isBulk: false, availableRecipients: [], selectedRecipientIds: [], ccEmails: [], loading: false, sending: false, bulkGroupBy: '', bulkGroupValue: '', sendMode: 'pdf' as const })}
-              data-testid="button-cancel-payment-request"
-            >
-              Cancel
-            </Button>
-            <Button
-              onClick={handleSendPaymentRequest}
-              disabled={paymentRequestDialog.sending || paymentRequestDialog.selectedRecipientIds.length === 0}
-              data-testid="button-send-payment-request"
-            >
-              {paymentRequestDialog.sending ? (
-                <><RefreshCw className="h-4 w-4 mr-1 animate-spin" /> Sending...</>
-              ) : paymentRequestDialog.sendMode === 'excel' ? (
-                <><FileSpreadsheet className="h-4 w-4 mr-1" /> Send Excel</>
-              ) : (
-                <><Mail className="h-4 w-4 mr-1" /> Send Request</>
-              )}
-            </Button>
+          {paymentRequestDialog.showPreview && !paymentRequestDialog.loading && (
+            <div className="border rounded-lg overflow-hidden" style={{ height: '420px' }}>
+              <div className="bg-muted/60 px-3 py-2 flex items-center gap-2 border-b">
+                <Eye className="h-3.5 w-3.5 text-muted-foreground" />
+                <span className="text-xs font-medium text-muted-foreground">Email Preview — as the recipient will see it</span>
+              </div>
+              <iframe
+                srcDoc={buildEmailPreviewHtml()}
+                title="Email Preview"
+                sandbox="allow-same-origin"
+                className="w-full h-full border-0"
+                style={{ height: 'calc(420px - 33px)' }}
+              />
+            </div>
+          )}
+          <DialogFooter className="flex-wrap gap-2">
+            {paymentRequestDialog.showPreview ? (
+              <>
+                <Button
+                  variant="outline"
+                  onClick={() => setPaymentRequestDialog(prev => ({ ...prev, showPreview: false }))}
+                  data-testid="button-back-from-preview"
+                >
+                  ← Back / رجوع
+                </Button>
+                <Button
+                  onClick={handleSendPaymentRequest}
+                  disabled={paymentRequestDialog.sending || paymentRequestDialog.selectedRecipientIds.length === 0}
+                  data-testid="button-confirm-send-payment-request"
+                  className="bg-green-700 hover:bg-green-800 text-white"
+                >
+                  {paymentRequestDialog.sending ? (
+                    <><RefreshCw className="h-4 w-4 mr-1 animate-spin" /> Sending...</>
+                  ) : (
+                    <><Mail className="h-4 w-4 mr-1" /> Confirm & Send</>
+                  )}
+                </Button>
+              </>
+            ) : (
+              <>
+                <Button
+                  variant="outline"
+                  onClick={() => setPaymentRequestDialog({ open: false, request: null, bulkRequests: [], isBulk: false, availableRecipients: [], selectedRecipientIds: [], ccEmails: [], loading: false, sending: false, bulkGroupBy: '', bulkGroupValue: '', sendMode: 'pdf' as const, showPreview: false })}
+                  data-testid="button-cancel-payment-request"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => setPaymentRequestDialog(prev => ({ ...prev, showPreview: true }))}
+                  disabled={paymentRequestDialog.selectedRecipientIds.length === 0 || paymentRequestDialog.loading}
+                  data-testid="button-preview-email"
+                >
+                  <Eye className="h-4 w-4 mr-1" /> Preview Email
+                </Button>
+                <Button
+                  onClick={handleSendPaymentRequest}
+                  disabled={paymentRequestDialog.sending || paymentRequestDialog.selectedRecipientIds.length === 0}
+                  data-testid="button-send-payment-request"
+                >
+                  {paymentRequestDialog.sending ? (
+                    <><RefreshCw className="h-4 w-4 mr-1 animate-spin" /> Sending...</>
+                  ) : paymentRequestDialog.sendMode === 'excel' ? (
+                    <><FileSpreadsheet className="h-4 w-4 mr-1" /> Send Excel</>
+                  ) : (
+                    <><Mail className="h-4 w-4 mr-1" /> Send Request</>
+                  )}
+                </Button>
+              </>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>

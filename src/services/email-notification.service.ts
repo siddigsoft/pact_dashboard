@@ -88,119 +88,124 @@ const generateNotificationEmailHTML = (
   options: NotificationEmailOptions
 ): string => {
   const { title, message, titleAr, messageAr, type = 'info', actionUrl, actionLabel, details, recipientRole } = options;
-  
-  const typeColors: Record<string, { bg: string; border: string }> = {
-    info: { bg: '#e3f2fd', border: '#2196f3' },
-    success: { bg: '#e8f5e9', border: '#4caf50' },
-    warning: { bg: '#fff3e0', border: '#ff9800' },
-    error: { bg: '#ffebee', border: '#f44336' },
+
+  const typeColors: Record<string, { bg: string; border: string; accent: string }> = {
+    info:    { bg: '#EEF4FF', border: '#3B82F6', accent: '#1D4ED8' },
+    success: { bg: '#ECFDF5', border: '#10B981', accent: '#065F46' },
+    warning: { bg: '#FFFBEB', border: '#F59E0B', accent: '#92400E' },
+    error:   { bg: '#FEF2F2', border: '#EF4444', accent: '#991B1B' },
   };
-  
-  const colors = typeColors[type];
+
+  const colors = typeColors[type] || typeColors.info;
   const fullUrl = actionUrl ? (actionUrl.startsWith('http') ? actionUrl : APP_URL + actionUrl) : '';
-  
-  // Role-based greeting
+
   const roleEn = recipientRole?.en || '';
   const roleAr = recipientRole?.ar || '';
-  const greetingEn = roleEn ? `Dear ${recipientName} (${roleEn}),` : `Hello ${recipientName},`;
-  const greetingAr = roleAr ? `عزيزي ${recipientName} (${roleAr})،` : `مرحباً ${recipientName}،`;
-  
-  // Arabic content (use provided or fallback)
+  const greetingEn = `Dear ${recipientName}${roleEn ? ` (${roleEn})` : ''},`;
+  const greetingAr = `عزيزي ${recipientName}${roleAr ? ` (${roleAr})` : ''}،`;
+
   const titleArText = titleAr || title;
   const messageArText = messageAr || message;
-  
+
   const detailsHtml = details?.length ? `
-    <div style="background-color: ${colors.bg}; border-left: 4px solid ${colors.border}; border-radius: 4px; padding: 16px; margin: 20px 0;">
-      ${details.map(d => `<p style="margin: 5px 0;"><strong>${d.label}:</strong> ${d.value}</p>`).join('')}
-    </div>
+    <table style="width:100%; border-collapse:collapse; margin:18px 0; font-size:13.5px;">
+      ${details.map((d, i) => `
+        <tr style="background:${i % 2 === 0 ? '#F8FAFC' : '#FFFFFF'};">
+          <td style="padding:9px 12px; font-weight:600; color:#374151; width:42%; border:1px solid #E5E7EB;">${d.label}</td>
+          <td style="padding:9px 12px; color:#1F2937; border:1px solid #E5E7EB;">${d.value}</td>
+        </tr>`).join('')}
+    </table>
   ` : '';
-  
+
   const actionButton = fullUrl ? `
-    <div style="text-align: center; margin: 25px 0;">
-      <a href="${fullUrl}" 
-         style="display: inline-block; padding: 14px 30px; background-color: #9b87f5; color: white; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 16px;">
-        ${actionLabel || 'View Details'} | عرض التفاصيل
+    <div style="text-align:center; margin:28px 0;">
+      <a href="${fullUrl}"
+         style="display:inline-block; padding:13px 32px; background-color:#0F2041; color:#ffffff; text-decoration:none; border-radius:6px; font-weight:700; font-size:15px; letter-spacing:0.3px;">
+        ${actionLabel || 'View Details'} &nbsp;|&nbsp; عرض التفاصيل
       </a>
     </div>
   ` : '';
-  
-  // Role notice for footer
-  const roleNoticeEn = roleEn 
-    ? `You are receiving this notification as a ${roleEn}.`
-    : 'You are receiving this notification as part of the PACT team.';
-  const roleNoticeAr = roleAr
-    ? `أنت تتلقى هذا الإشعار بصفتك ${roleAr}.`
-    : 'أنت تتلقى هذا الإشعار كجزء من فريق باكت.';
 
-  return `
-    <!DOCTYPE html>
-    <html dir="ltr">
-    <head>
-      <meta charset="utf-8">
-      <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <title>${title} | ${titleArText}</title>
-    </head>
-    <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f5f5f5;">
-      <div style="background-color: white; border-radius: 8px; padding: 40px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
-        <div style="text-align: center; margin-bottom: 30px; border-bottom: 2px solid ${colors.border}; padding-bottom: 20px;">
-          <h1 style="color: #1a1a2e; margin: 0; font-size: 24px;">PACT Command Center</h1>
-          <p style="color: #666; margin: 5px 0 0 0; font-size: 14px;">مركز قيادة باكت</p>
-        </div>
-        
-        <!-- English Section -->
-        <div style="margin-bottom: 25px; padding-bottom: 25px; border-bottom: 1px solid #eee;">
-          <p style="color: #333; font-size: 16px; line-height: 1.5;">${greetingEn}</p>
-          
-          ${detailsHtml || `
-          <div style="background-color: ${colors.bg}; border-left: 4px solid ${colors.border}; border-radius: 4px; padding: 16px; margin: 20px 0;">
-            <h2 style="color: #333; margin: 0 0 10px 0; font-size: 18px;">${title}</h2>
-            <p style="color: #555; margin: 0; font-size: 14px; line-height: 1.5;">${message}</p>
-          </div>
-          `}
-          
-          ${!detailsHtml ? '' : `<p style="color: #555; font-size: 14px; line-height: 1.5;">${message}</p>`}
-        </div>
-        
-        <!-- Arabic Section -->
-        <div dir="rtl" style="margin-top: 25px; padding-top: 25px; border-top: 1px solid #eee; text-align: right;">
-          <p style="color: #333; font-size: 16px; line-height: 1.8;">${greetingAr}</p>
-          
-          <div style="background-color: ${colors.bg}; border-right: 4px solid ${colors.border}; border-radius: 4px; padding: 16px; margin: 20px 0;">
-            <h2 style="color: #333; margin: 0 0 10px 0; font-size: 18px;">${titleArText}</h2>
-            <p style="color: #555; margin: 0; font-size: 14px; line-height: 1.8;">${messageArText}</p>
-          </div>
-        </div>
-        
-        ${actionButton}
-        
-        <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;">
-        
-        <!-- Role Notice -->
-        <p style="color: #666; font-size: 12px; text-align: center; margin-bottom: 15px;">
-          ${roleNoticeEn}<br>
-          <span style="direction: rtl; display: inline-block;">${roleNoticeAr}</span>
-        </p>
-        
-        <!-- Management Oversight Notice -->
-        <div style="background-color: #f8f9fa; border-radius: 6px; padding: 12px; margin-bottom: 20px;">
-          <p style="color: #555; font-size: 11px; text-align: center; margin: 0; line-height: 1.6;">
-            This notification has been sent to relevant management for oversight and accountability.<br>
-            <span style="direction: rtl; display: inline-block;">تم إرسال هذا الإشعار إلى الإدارة المعنية للإشراف والمساءلة.</span>
-          </p>
-        </div>
-        
-        <!-- Platform Footer -->
-        <p style="color: #999; font-size: 12px; text-align: center;">
-          This is an automated message from PACT Workflow Platform.<br>
-          هذه رسالة آلية من منصة باكت للعمليات الميدانية.<br>
-          ICT Team - PACT Command Center Platform<br>
-          فريق تكنولوجيا المعلومات - منصة مركز قيادة باكت
-        </p>
-      </div>
-    </body>
-    </html>
-  `;
+  return `<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${title}</title>
+</head>
+<body style="margin:0; padding:0; background-color:#F3F4F6; font-family:'Segoe UI', Arial, sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#F3F4F6; padding:32px 16px;">
+    <tr><td align="center">
+      <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px; width:100%; background:#FFFFFF; border-radius:10px; overflow:hidden; box-shadow:0 2px 12px rgba(0,0,0,0.09);">
+
+        <!-- Header bar -->
+        <tr>
+          <td style="background:#0F2041; padding:22px 36px 18px 36px;">
+            <p style="margin:0; font-size:22px; font-weight:800; color:#FFFFFF; letter-spacing:0.5px;">PACT Command Center</p>
+            <p style="margin:4px 0 0 0; font-size:12px; color:#8FADD4; letter-spacing:0.3px;">مركز قيادة باكت &nbsp;|&nbsp; ICT Team Platform</p>
+          </td>
+        </tr>
+
+        <!-- Accent line -->
+        <tr><td style="height:4px; background:linear-gradient(90deg,#2962FF,#00C6FF);"></td></tr>
+
+        <!-- Body -->
+        <tr>
+          <td style="padding:36px 36px 28px 36px;">
+
+            <!-- Greeting -->
+            <p style="margin:0 0 6px 0; font-size:16px; color:#111827;">${greetingEn}</p>
+
+            <!-- Subject line -->
+            <h2 style="margin:18px 0 10px 0; font-size:20px; font-weight:700; color:#0F2041; line-height:1.3;">${title}</h2>
+
+            <!-- Message body -->
+            <p style="margin:0 0 18px 0; font-size:14.5px; color:#374151; line-height:1.7;">${message.replace(/\n/g, '<br>')}</p>
+
+            ${detailsHtml}
+
+            ${actionButton}
+
+            <!-- Divider -->
+            <hr style="border:none; border-top:1px solid #E5E7EB; margin:28px 0 20px 0;">
+
+            <!-- Arabic section -->
+            <div dir="rtl" style="text-align:right;">
+              <p style="margin:0 0 6px 0; font-size:15px; color:#111827;">${greetingAr}</p>
+              <h3 style="margin:14px 0 8px 0; font-size:17px; font-weight:700; color:#0F2041;">${titleArText}</h3>
+              <p style="margin:0; font-size:14px; color:#374151; line-height:1.8;">${messageArText.replace(/\n/g, '<br>')}</p>
+            </div>
+
+            <!-- Divider -->
+            <hr style="border:none; border-top:1px solid #E5E7EB; margin:28px 0 20px 0;">
+
+            <!-- Sign-off -->
+            <p style="margin:0 0 4px 0; font-size:14px; color:#374151;">Kind regards,</p>
+            <p style="margin:0 0 2px 0; font-size:15px; font-weight:700; color:#0F2041;">PACT Command Center</p>
+            <p style="margin:0; font-size:13px; color:#6B7280;">ICT Team &nbsp;|&nbsp; فريق تكنولوجيا المعلومات</p>
+            <p style="margin:6px 0 0 0; font-size:12px; color:#9CA3AF; font-style:italic;">On behalf of the PACT Operations Team &nbsp;|&nbsp; نيابةً عن فريق عمليات باكت</p>
+
+          </td>
+        </tr>
+
+        <!-- Footer -->
+        <tr>
+          <td style="background:#F8FAFC; border-top:1px solid #E5E7EB; padding:14px 36px; text-align:center;">
+            <p style="margin:0; font-size:11px; color:#9CA3AF; line-height:1.6;">
+              This is an automated notification from the PACT Command Center Platform.<br>
+              هذه رسالة آلية من منصة مركز قيادة باكت &nbsp;|&nbsp; <strong>PACT Platform v2</strong>
+            </p>
+          </td>
+        </tr>
+
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`;
 };
+
+export { generateNotificationEmailHTML };
 
 const generatePlainText = (
   recipientName: string,
