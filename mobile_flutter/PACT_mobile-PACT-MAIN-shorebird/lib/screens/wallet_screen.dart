@@ -553,162 +553,359 @@ class _WalletScreenState extends State<WalletScreen> {
     final amountCents = (cost['amount_cents'] as num?)?.toInt() ?? 0;
     final amountSdg = amountCents / 100.0;
     final category = cost['expense_category'] as String? ?? 'Cost Submission';
-    final categoryLabel =
-        {
-          'permits': 'Permits & Licenses',
-          'incentives': 'Incentives & Allowances',
-          'communications': 'Internet & Comms',
-          'training': 'Training',
-          'transport': 'Transportation',
-          'general_transport': 'Transportation',
-          'equipment': 'Equipment & Supplies',
-          'printing': 'Printing & Stationery',
-          'meetings': 'Meetings',
-          'office_admin': 'Office Admin',
-          'other': 'Other',
-        }[category] ??
-        category;
+    final proofUrl = cost['payment_proof_url'] as String?;
+    final categoryLabel = {
+      'permits': 'Permits & Licenses',
+      'incentives': 'Incentives & Allowances',
+      'communications': 'Internet & Comms',
+      'training': 'Training',
+      'transport': 'Transportation',
+      'general_transport': 'Transportation',
+      'equipment': 'Equipment & Supplies',
+      'printing': 'Printing & Stationery',
+      'meetings': 'Meetings',
+      'office_admin': 'Office Admin',
+      'other': 'Other',
+    }[category] ?? category;
+
+    // Step 1: Load saved signature from profile (non-blocking)
+    String? savedSignatureBase64;
+    try {
+      final profileData = await Supabase.instance.client
+          .from('profiles')
+          .select('signature_base64')
+          .eq('id', _userId ?? '')
+          .maybeSingle();
+      savedSignatureBase64 = profileData?['signature_base64'] as String?;
+    } catch (_) {}
 
     final notesController = TextEditingController();
+    final signatureStrokes = <List<Offset>>[];
+    bool useSaved = savedSignatureBase64 != null;
+
     if (!mounted) return;
 
+    // Step 2: Show dialog with receipt preview + signature
     final confirmed = await showDialog<bool>(
       context: context,
       barrierDismissible: false,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-        titlePadding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-        contentPadding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
-        title: Row(
-          children: [
-            const Icon(Icons.receipt_long, color: Colors.teal, size: 22),
-            const SizedBox(width: 8),
-            Expanded(
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) {
+          final hasSig = useSaved ? savedSignatureBase64 != null : signatureStrokes.isNotEmpty;
+          final isImage = proofUrl != null &&
+              RegExp(r'\.(jpg|jpeg|png|gif|webp)$', caseSensitive: false).hasMatch(proofUrl);
+
+          return AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+            titlePadding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+            contentPadding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+            title: Row(
+              children: [
+                const Icon(Icons.receipt_long, color: Colors.teal, size: 22),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Confirm Cost Payment Receipt',
+                          style: GoogleFonts.poppins(fontWeight: FontWeight.w700, fontSize: 14)),
+                      Text('\u062a\u0623\u0643\u064a\u062f \u0627\u0633\u062a\u0644\u0627\u0645 \u062f\u0641\u0639\u0629 \u0627\u0644\u062a\u0643\u0627\u0644\u064a\u0641',
+                          style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 12, color: Colors.grey.shade600)),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            content: SingleChildScrollView(
               child: Column(
+                mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    'Confirm Cost Payment Receipt',
-                    style: GoogleFonts.poppins(
-                      fontWeight: FontWeight.w700,
-                      fontSize: 14,
+                  const SizedBox(height: 10),
+
+                  // Payment receipt preview
+                  if (proofUrl != null && proofUrl.isNotEmpty) ...[
+                    Text('Payment Receipt / \u0625\u064a\u0635\u0627\u0644 \u0627\u0644\u062f\u0641\u0639:',
+                        style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.w600, color: Colors.teal.shade700)),
+                    const SizedBox(height: 6),
+                    if (isImage)
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(8),
+                        child: CachedNetworkImage(
+                          imageUrl: proofUrl,
+                          height: 140,
+                          width: double.infinity,
+                          fit: BoxFit.contain,
+                          placeholder: (_, __) => Container(
+                            height: 140,
+                            color: Colors.grey.shade100,
+                            child: const Center(child: CircularProgressIndicator(strokeWidth: 2)),
+                          ),
+                          errorWidget: (_, __, ___) => Container(
+                            height: 60,
+                            decoration: BoxDecoration(
+                              color: Colors.grey.shade100,
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: Colors.grey.shade300),
+                            ),
+                            child: const Center(child: Icon(Icons.broken_image, color: Colors.grey)),
+                          ),
+                        ),
+                      )
+                    else
+                      InkWell(
+                        onTap: () async {
+                          final uri = Uri.tryParse(proofUrl);
+                          if (uri != null && await canLaunchUrl(uri)) {
+                            await launchUrl(uri, mode: LaunchMode.externalApplication);
+                          }
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                          decoration: BoxDecoration(
+                            color: Colors.teal.shade50,
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: Colors.teal.shade200),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(Icons.insert_drive_file, color: Colors.teal.shade600, size: 18),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text('View Payment Receipt / \u0639\u0631\u0636 \u0627\u0644\u0625\u064a\u0635\u0627\u0644',
+                                    style: GoogleFonts.poppins(fontSize: 12, color: Colors.teal.shade700, fontWeight: FontWeight.w600)),
+                              ),
+                              Icon(Icons.open_in_new, size: 14, color: Colors.teal.shade500),
+                            ],
+                          ),
+                        ),
+                      ),
+                    const SizedBox(height: 12),
+                  ],
+
+                  // Amount card
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: Colors.teal.shade50,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: Colors.teal.shade200),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(categoryLabel, style: GoogleFonts.poppins(fontWeight: FontWeight.w700, fontSize: 13)),
+                        const SizedBox(height: 4),
+                        Text(
+                          '${NumberFormat.currency(symbol: '', decimalDigits: 2).format(amountSdg)} SDG',
+                          style: GoogleFonts.poppins(fontWeight: FontWeight.w800, fontSize: 18, color: Colors.teal.shade700),
+                        ),
+                      ],
                     ),
                   ),
-                  Text(
-                    'تأكيد استلام دفعة التكاليف',
-                    style: GoogleFonts.poppins(
-                      fontWeight: FontWeight.w600,
-                      fontSize: 12,
-                      color: Colors.grey.shade600,
+                  const SizedBox(height: 12),
+
+                  // Confirmation statement
+                  Text('I confirm that I have received this cost payment in full.',
+                      style: GoogleFonts.poppins(fontSize: 13)),
+                  Text('\u0623\u0624\u0643\u062f \u0623\u0646\u0646\u064a \u0627\u0633\u062a\u0644\u0645\u062a \u0643\u0627\u0645\u0644 \u0645\u0628\u0644\u063a \u062f\u0641\u0639\u0629 \u0627\u0644\u062a\u0643\u0627\u0644\u064a\u0641 \u0647\u0630\u0647.',
+                      style: GoogleFonts.poppins(fontSize: 12, color: Colors.grey.shade600),
+                      textDirection: ui.TextDirection.rtl),
+                  const SizedBox(height: 14),
+
+                  // Signature section
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text('Signature / \u0627\u0644\u062a\u0648\u0642\u064a\u0639',
+                          style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.w700)),
+                      if (savedSignatureBase64 != null)
+                        Row(
+                          children: [
+                            GestureDetector(
+                              onTap: () => setDialogState(() => useSaved = true),
+                              child: Text('Use Saved',
+                                  style: GoogleFonts.poppins(
+                                    fontSize: 11,
+                                    color: useSaved ? Colors.teal : Colors.grey.shade500,
+                                    fontWeight: useSaved ? FontWeight.w700 : FontWeight.w400,
+                                    decoration: useSaved ? TextDecoration.underline : TextDecoration.none,
+                                  )),
+                            ),
+                            const SizedBox(width: 10),
+                            GestureDetector(
+                              onTap: () => setDialogState(() {
+                                useSaved = false;
+                                signatureStrokes.clear();
+                              }),
+                              child: Text('Draw New',
+                                  style: GoogleFonts.poppins(
+                                    fontSize: 11,
+                                    color: !useSaved ? Colors.teal : Colors.grey.shade500,
+                                    fontWeight: !useSaved ? FontWeight.w700 : FontWeight.w400,
+                                    decoration: !useSaved ? TextDecoration.underline : TextDecoration.none,
+                                  )),
+                            ),
+                          ],
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+
+                  if (useSaved && savedSignatureBase64 != null)
+                    Container(
+                      height: 100,
+                      width: double.infinity,
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade50,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.teal.shade300),
+                      ),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(8),
+                        child: Image.memory(base64Decode(savedSignatureBase64), fit: BoxFit.contain),
+                      ),
+                    )
+                  else
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Container(
+                          height: 110,
+                          width: double.infinity,
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: Colors.teal.shade300, width: 1.5),
+                          ),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(8),
+                            child: GestureDetector(
+                              onPanStart: (d) {
+                                setDialogState(() => signatureStrokes.add([d.localPosition]));
+                              },
+                              onPanUpdate: (d) {
+                                setDialogState(() => signatureStrokes.last.add(d.localPosition));
+                              },
+                              child: CustomPaint(
+                                painter: _SignaturePainter(signatureStrokes),
+                                child: Container(),
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        TextButton.icon(
+                          onPressed: () => setDialogState(() => signatureStrokes.clear()),
+                          icon: const Icon(Icons.refresh, size: 13),
+                          label: Text('Clear / \u0645\u0633\u062d', style: GoogleFonts.poppins(fontSize: 11)),
+                          style: TextButton.styleFrom(
+                            foregroundColor: Colors.grey.shade600,
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                            minimumSize: Size.zero,
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          ),
+                        ),
+                      ],
+                    ),
+                  const SizedBox(height: 10),
+
+                  // Notes
+                  TextField(
+                    controller: notesController,
+                    maxLines: 2,
+                    decoration: InputDecoration(
+                      labelText: 'Notes (optional) / \u0645\u0644\u0627\u062d\u0638\u0627\u062a (\u0627\u062e\u062a\u064a\u0627\u0631\u064a)',
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                     ),
                   ),
+                  const SizedBox(height: 8),
                 ],
               ),
             ),
-          ],
-        ),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const SizedBox(height: 10),
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: Colors.teal.shade50,
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: Colors.teal.shade200),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      categoryLabel,
-                      style: GoogleFonts.poppins(
-                        fontWeight: FontWeight.w700,
-                        fontSize: 13,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      '${NumberFormat.currency(symbol: '', decimalDigits: 2).format(amountSdg)} SDG',
-                      style: GoogleFonts.poppins(
-                        fontWeight: FontWeight.w800,
-                        fontSize: 18,
-                        color: Colors.teal.shade700,
-                      ),
-                    ),
-                  ],
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: Text(widget.isArabic ? '\u0625\u0644\u063a\u0627\u0621' : 'Cancel',
+                    style: TextStyle(color: Colors.grey.shade600)),
+              ),
+              ElevatedButton.icon(
+                onPressed: hasSig ? () => Navigator.pop(ctx, true) : null,
+                icon: const Icon(Icons.verified, size: 16),
+                label: Text(widget.isArabic ? '\u062a\u0623\u0643\u064a\u062f \u0627\u0644\u0627\u0633\u062a\u0644\u0627\u0645' : 'Confirm Receipt'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.teal.shade600,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                 ),
               ),
-              const SizedBox(height: 12),
-              Text(
-                'I confirm that I have received this cost payment in full.',
-                style: GoogleFonts.poppins(fontSize: 13),
-              ),
-              Text(
-                'أؤكد أنني استلمت كامل مبلغ دفعة التكاليف هذه.',
-                style: GoogleFonts.poppins(
-                  fontSize: 12,
-                  color: Colors.grey.shade600,
-                ),
-                textDirection: ui.TextDirection.rtl,
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: notesController,
-                maxLines: 2,
-                decoration: InputDecoration(
-                  labelText: 'Notes (optional) / ملاحظات (اختياري)',
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 8,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 8),
             ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: Text(
-              widget.isArabic ? 'إلغاء' : 'Cancel',
-              style: TextStyle(color: Colors.grey.shade600),
-            ),
-          ),
-          ElevatedButton.icon(
-            onPressed: () => Navigator.pop(ctx, true),
-            icon: const Icon(Icons.verified, size: 16),
-            label: Text(widget.isArabic ? 'تأكيد الاستلام' : 'Confirm Receipt'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.teal.shade600,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
-              ),
-            ),
-          ),
-        ],
+          );
+        },
       ),
     );
 
     if (confirmed != true) return;
 
+    // Step 3: Encode signature
+    String? signatureBase64;
+    if (useSaved && savedSignatureBase64 != null) {
+      signatureBase64 = savedSignatureBase64;
+    } else {
+      try {
+        final recorder = ui.PictureRecorder();
+        final uiCanvas = ui.Canvas(recorder, ui.Rect.fromLTWH(0, 0, 320, 110));
+        uiCanvas.drawRect(
+          ui.Rect.fromLTWH(0, 0, 320, 110),
+          ui.Paint()..color = const ui.Color(0xFFFFFFFF),
+        );
+        final sigPaint = ui.Paint()
+          ..color = const ui.Color(0xFF000000)
+          ..strokeWidth = 2.5
+          ..strokeCap = ui.StrokeCap.round
+          ..strokeJoin = ui.StrokeJoin.round
+          ..style = ui.PaintingStyle.stroke;
+        for (final stroke in signatureStrokes) {
+          if (stroke.length < 2) continue;
+          final path = ui.Path()..moveTo(stroke[0].dx, stroke[0].dy);
+          for (int i = 1; i < stroke.length; i++) {
+            path.lineTo(stroke[i].dx, stroke[i].dy);
+          }
+          uiCanvas.drawPath(path, sigPaint);
+        }
+        final picture = recorder.endRecording();
+        final img = await picture.toImage(320, 110);
+        final byteData = await img.toByteData(format: ui.ImageByteFormat.png);
+        if (byteData != null) signatureBase64 = base64Encode(byteData.buffer.asUint8List());
+      } catch (e) {
+        debugPrint('[CostReceipt] Signature encode error: $e');
+      }
+    }
+
+    // Step 4: Save to database
     try {
       final now = DateTime.now().toIso8601String();
       final notes = notesController.text.trim();
+      final existingMeta = Map<String, dynamic>.from(
+        (cost['metadata'] as Map?)?.cast<String, dynamic>() ?? {},
+      );
+      existingMeta['receipt_confirmation'] = {
+        'confirmed': true,
+        'confirmedAt': now,
+        'confirmedBy': _userId,
+        'notes': notes,
+        'signatureSource': useSaved ? 'profile_saved' : 'drawn',
+        if (signatureBase64 != null) 'signatureBase64': signatureBase64,
+      };
+
       await Supabase.instance.client
           .from('operational_cost_submissions')
           .update({
             'fund_receipt_confirmed': true,
             'fund_receipt_confirmed_at': now,
             if (notes.isNotEmpty) 'fund_receipt_notes': notes,
+            'metadata': existingMeta,
             'updated_at': now,
           })
           .eq('id', costId);
@@ -718,11 +915,7 @@ class _WalletScreenState extends State<WalletScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(
-              widget.isArabic
-                  ? 'تم تأكيد استلام الدفعة بنجاح ✓'
-                  : 'Cost payment receipt confirmed ✓',
-            ),
+            content: Text(widget.isArabic ? '\u062a\u0645 \u062a\u0623\u0643\u064a\u062f \u0627\u0633\u062a\u0644\u0627\u0645 \u0627\u0644\u062f\u0641\u0639\u0629 \u0628\u0646\u062c\u0627\u062d \u2713' : 'Cost payment receipt confirmed \u2713'),
             backgroundColor: Colors.teal.shade600,
           ),
         );
@@ -732,15 +925,14 @@ class _WalletScreenState extends State<WalletScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(
-              widget.isArabic ? 'فشل التأكيد' : 'Confirmation failed',
-            ),
+            content: Text(widget.isArabic ? '\u0641\u0634\u0644 \u0627\u0644\u062a\u0623\u0643\u064a\u062f' : 'Confirmation failed'),
             backgroundColor: Colors.red,
           ),
         );
       }
     }
   }
+
 
   Future<void> _requestWithdrawal() async {
     final amount = double.tryParse(_withdrawalAmountController.text);
