@@ -508,6 +508,35 @@ class _NotificationsPanelContentState
     if (mounted) setState(() => _markingAll = false);
   }
 
+  // For updates tab: flat list with String date headers interspersed
+  List<dynamic> get _groupedItems {
+    final items = _filtered;
+    if (_activeTab != 'updates') return items;
+    final result = <dynamic>[];
+    String? lastHeader;
+    for (final n in items) {
+      final header = _dateGroupLabel(n.createdAt);
+      if (header != lastHeader) {
+        result.add(header);
+        lastHeader = header;
+      }
+      result.add(n);
+    }
+    return result;
+  }
+
+  String _dateGroupLabel(DateTime dt) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final yesterday = today.subtract(const Duration(days: 1));
+    final date = DateTime(dt.year, dt.month, dt.day);
+    if (date == today) return 'Today · اليوم';
+    if (date == yesterday) return 'Yesterday · أمس';
+    final diff = today.difference(date).inDays;
+    if (diff < 7) return 'This Week · هذا الأسبوع';
+    return 'Earlier · سابقاً';
+  }
+
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -674,11 +703,37 @@ class _NotificationsPanelContentState
                 ? _buildEmpty()
                 : ListView.builder(
                     controller: widget.scrollController,
-                    padding: const EdgeInsets.symmetric(
-                        vertical: 12, horizontal: 12),
-                    itemCount: _filtered.length,
+                    padding: const EdgeInsets.fromLTRB(12, 12, 12, 24),
+                    itemCount: _groupedItems.length,
                     itemBuilder: (ctx, i) {
-                      final n = _filtered[i];
+                      final item = _groupedItems[i];
+                      // Date section header (updates tab only)
+                      if (item is String) {
+                        return Padding(
+                          padding: const EdgeInsets.fromLTRB(4, 8, 4, 6),
+                          child: Row(
+                            children: [
+                              Text(
+                                item,
+                                style: GoogleFonts.poppins(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w700,
+                                  color: Colors.grey[500],
+                                  letterSpacing: 0.3,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Container(
+                                  height: 1,
+                                  color: Colors.grey.withValues(alpha: 0.15),
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      }
+                      final n = item as UserNotification;
                       if (n.isBroadcast) {
                         return _BroadcastCard(
                           notification: n,
@@ -690,10 +745,8 @@ class _NotificationsPanelContentState
                         notification: n,
                         onTap: () async {
                           if (!n.isRead) {
-                            await widget.notificationService
-                                .markAsRead(n.id);
+                            await widget.notificationService.markAsRead(n.id);
                           }
-                          if (context.mounted) Navigator.pop(context);
                         },
                       );
                     },
@@ -1352,115 +1405,173 @@ class _SwipeToConfirmState extends State<_SwipeToConfirm> {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Regular update card
+// Regular update card — improved with smart category detection
 // ─────────────────────────────────────────────────────────────────────────────
-class _UpdateCard extends StatelessWidget {
+class _UpdateCard extends StatefulWidget {
   final UserNotification notification;
   final VoidCallback onTap;
 
   const _UpdateCard({required this.notification, required this.onTap});
 
-  Color _iconColor(String type) {
-    switch (type.toLowerCase()) {
-      case 'warning':
-        return AppColors.accentYellow;
-      case 'error':
-        return AppColors.accentRed;
-      case 'success':
-        return AppColors.accentGreen;
-      default:
-        return AppColors.primaryBlue;
-    }
-  }
+  @override
+  State<_UpdateCard> createState() => _UpdateCardState();
+}
 
-  IconData _icon(String type) {
-    switch (type.toLowerCase()) {
-      case 'warning':
-        return Icons.warning_rounded;
-      case 'error':
-        return Icons.error_rounded;
-      case 'success':
-        return Icons.check_circle_rounded;
-      default:
-        return Icons.info_rounded;
-    }
-  }
+class _UpdateCardState extends State<_UpdateCard> {
+  bool _expanded = false;
 
   @override
   Widget build(BuildContext context) {
-    final n = notification;
+    final n = widget.notification;
     final isUnread = !n.isRead;
-    final color = _iconColor(n.type);
+    final cat = _detectCategory(n.title, n.type);
 
     return GestureDetector(
-      onTap: onTap,
+      onTap: () {
+        widget.onTap();
+        setState(() => _expanded = !_expanded);
+      },
       child: Container(
-        margin: const EdgeInsets.only(bottom: 8),
+        margin: const EdgeInsets.only(bottom: 9),
         decoration: BoxDecoration(
-          color: isUnread ? color.withValues(alpha: 0.04) : Colors.white,
+          color: isUnread
+              ? cat.color.withValues(alpha: 0.035)
+              : Colors.white,
           borderRadius: BorderRadius.circular(14),
-          border: Border.all(
-            color: isUnread
-                ? color.withValues(alpha: 0.15)
-                : Colors.grey.withValues(alpha: 0.1),
+          border: Border(
+            left: BorderSide(
+                color: isUnread ? cat.color : cat.color.withValues(alpha: 0.35),
+                width: 4),
+            top: BorderSide(
+                color: isUnread
+                    ? cat.color.withValues(alpha: 0.12)
+                    : Colors.grey.withValues(alpha: 0.08)),
+            right: BorderSide(
+                color: isUnread
+                    ? cat.color.withValues(alpha: 0.12)
+                    : Colors.grey.withValues(alpha: 0.08)),
+            bottom: BorderSide(
+                color: isUnread
+                    ? cat.color.withValues(alpha: 0.12)
+                    : Colors.grey.withValues(alpha: 0.08)),
           ),
+          boxShadow: isUnread
+              ? [
+                  BoxShadow(
+                    color: cat.color.withValues(alpha: 0.07),
+                    blurRadius: 8,
+                    offset: const Offset(0, 2),
+                  )
+                ]
+              : null,
         ),
         child: Padding(
-          padding: const EdgeInsets.all(12),
+          padding: const EdgeInsets.fromLTRB(12, 11, 12, 11),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // Icon
               Container(
-                padding: const EdgeInsets.all(8),
+                padding: const EdgeInsets.all(9),
                 decoration: BoxDecoration(
-                  color: color.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(10),
+                  color: cat.color.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(11),
                 ),
-                child: Icon(_icon(n.type), color: color, size: 18),
+                child: Icon(cat.icon, color: cat.color, size: 19),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: 11),
+              // Content
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    // Title row + unread dot
                     Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Expanded(
                           child: Text(
                             n.title,
                             style: GoogleFonts.poppins(
-                              fontSize: 13,
+                              fontSize: 13.5,
                               fontWeight: isUnread
                                   ? FontWeight.w700
                                   : FontWeight.w500,
-                              color: AppColors.textDark,
+                              color: const Color(0xFF0F172A),
+                              height: 1.3,
                             ),
                           ),
                         ),
+                        const SizedBox(width: 6),
                         if (isUnread)
-                          Container(
-                            width: 8,
-                            height: 8,
-                            decoration: BoxDecoration(
-                                color: color, shape: BoxShape.circle),
+                          Padding(
+                            padding: const EdgeInsets.only(top: 4),
+                            child: Container(
+                              width: 8,
+                              height: 8,
+                              decoration: BoxDecoration(
+                                  color: cat.color, shape: BoxShape.circle),
+                            ),
                           ),
                       ],
                     ),
-                    const SizedBox(height: 3),
-                    Text(
-                      n.message,
-                      style: GoogleFonts.poppins(
-                          fontSize: 12,
-                          color: AppColors.textLight,
-                          height: 1.4),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
                     const SizedBox(height: 4),
-                    Text(
-                      _formatTime(n.createdAt),
-                      style: GoogleFonts.poppins(
-                          fontSize: 11, color: Colors.grey[500]),
+                    // Message
+                    AnimatedCrossFade(
+                      duration: const Duration(milliseconds: 200),
+                      crossFadeState: _expanded
+                          ? CrossFadeState.showSecond
+                          : CrossFadeState.showFirst,
+                      firstChild: Text(
+                        n.message,
+                        style: GoogleFonts.poppins(
+                          fontSize: 12.5,
+                          color: const Color(0xFF475569),
+                          height: 1.45,
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      secondChild: Text(
+                        n.message,
+                        style: GoogleFonts.poppins(
+                          fontSize: 12.5,
+                          color: const Color(0xFF475569),
+                          height: 1.45,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 7),
+                    // Bottom row: category chip + time
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 7, vertical: 2.5),
+                          decoration: BoxDecoration(
+                            color: cat.color.withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(5),
+                          ),
+                          child: Text(
+                            cat.label,
+                            style: GoogleFonts.poppins(
+                              fontSize: 9.5,
+                              fontWeight: FontWeight.w700,
+                              color: cat.color,
+                              letterSpacing: 0.4,
+                            ),
+                          ),
+                        ),
+                        const Spacer(),
+                        Icon(Icons.access_time_rounded,
+                            size: 11, color: Colors.grey[400]),
+                        const SizedBox(width: 3),
+                        Text(
+                          _formatTimeRich(n.createdAt),
+                          style: GoogleFonts.poppins(
+                              fontSize: 11, color: Colors.grey[500]),
+                        ),
+                      ],
                     ),
                   ],
                 ),
@@ -1474,7 +1585,7 @@ class _UpdateCard extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Shared helper
+// Shared helpers
 // ─────────────────────────────────────────────────────────────────────────────
 String _formatTime(DateTime dt) {
   final diff = DateTime.now().difference(dt);
@@ -1483,4 +1594,133 @@ String _formatTime(DateTime dt) {
   if (diff.inHours > 0) return '${diff.inHours}h ago';
   if (diff.inMinutes > 0) return '${diff.inMinutes}m ago';
   return 'Just now';
+}
+
+String _formatTimeRich(DateTime dt) {
+  final now = DateTime.now();
+  final diff = now.difference(dt);
+  final h = dt.hour.toString().padLeft(2, '0');
+  final m = dt.minute.toString().padLeft(2, '0');
+  final today = DateTime(now.year, now.month, now.day);
+  final date = DateTime(dt.year, dt.month, dt.day);
+  if (date == today) return 'Today $h:$m';
+  if (date == today.subtract(const Duration(days: 1))) return 'Yesterday $h:$m';
+  if (diff.inDays < 7) {
+    const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    return '${days[dt.weekday - 1]} $h:$m';
+  }
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  return '${months[dt.month - 1]} ${dt.day}';
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Notification category detection
+// ─────────────────────────────────────────────────────────────────────────────
+class _NotifCategory {
+  final String label;
+  final Color color;
+  final IconData icon;
+  const _NotifCategory(
+      {required this.label, required this.color, required this.icon});
+}
+
+_NotifCategory _detectCategory(String title, String type) {
+  final t = title.toLowerCase();
+
+  if (t.contains('reclaim')) {
+    return const _NotifCategory(
+        label: 'RECLAIM',
+        color: Color(0xFFEF4444),
+        icon: Icons.location_off_rounded);
+  }
+  if (t.contains('site') && (t.contains('claim') || t.contains('dispatch') || t.contains('assign'))) {
+    return const _NotifCategory(
+        label: 'SITE CLAIM',
+        color: Color(0xFF3B82F6),
+        icon: Icons.flag_rounded);
+  }
+  if (t.contains('site') || t.contains('visit')) {
+    return const _NotifCategory(
+        label: 'SITE VISIT',
+        color: Color(0xFF0284C7),
+        icon: Icons.place_rounded);
+  }
+  if (t.contains('wallet') || t.contains('transaction')) {
+    return const _NotifCategory(
+        label: 'WALLET',
+        color: Color(0xFF059669),
+        icon: Icons.account_balance_wallet_rounded);
+  }
+  if (t.contains('withdrawal') || t.contains('withdraw')) {
+    return const _NotifCategory(
+        label: 'WITHDRAWAL',
+        color: Color(0xFF10B981),
+        icon: Icons.savings_rounded);
+  }
+  if (t.contains('advance') || t.contains('transport')) {
+    return const _NotifCategory(
+        label: 'ADVANCE',
+        color: Color(0xFFF59E0B),
+        icon: Icons.directions_car_rounded);
+  }
+  if (t.contains('mmp') || t.contains('monitoring plan')) {
+    return const _NotifCategory(
+        label: 'MMP',
+        color: Color(0xFF6366F1),
+        icon: Icons.assignment_rounded);
+  }
+  if (t.contains('cost') || t.contains('expense') || t.contains('operational')) {
+    return const _NotifCategory(
+        label: 'COST',
+        color: Color(0xFF8B5CF6),
+        icon: Icons.receipt_long_rounded);
+  }
+  if (t.contains('approved') || t.contains('approval')) {
+    return const _NotifCategory(
+        label: 'APPROVAL',
+        color: Color(0xFF16A34A),
+        icon: Icons.verified_rounded);
+  }
+  if (t.contains('rejected') || t.contains('denied') || t.contains('declined')) {
+    return const _NotifCategory(
+        label: 'REJECTED',
+        color: Color(0xFFDC2626),
+        icon: Icons.cancel_rounded);
+  }
+  if (t.contains('password') || t.contains('account') || t.contains('profile') || t.contains('login')) {
+    return const _NotifCategory(
+        label: 'ACCOUNT',
+        color: Color(0xFF0369A1),
+        icon: Icons.manage_accounts_rounded);
+  }
+  if (t.contains('removed') || t.contains('deleted')) {
+    return const _NotifCategory(
+        label: 'REMOVED',
+        color: Color(0xFFB45309),
+        icon: Icons.delete_sweep_rounded);
+  }
+  // Fall back to type-based
+  switch (type.toLowerCase()) {
+    case 'warning':
+      return const _NotifCategory(
+          label: 'WARNING',
+          color: Color(0xFFF59E0B),
+          icon: Icons.warning_rounded);
+    case 'error':
+      return const _NotifCategory(
+          label: 'ERROR',
+          color: Color(0xFFEF4444),
+          icon: Icons.error_rounded);
+    case 'success':
+      return const _NotifCategory(
+          label: 'SUCCESS',
+          color: Color(0xFF10B981),
+          icon: Icons.check_circle_rounded);
+    default:
+      return const _NotifCategory(
+          label: 'UPDATE',
+          color: Color(0xFF6366F1),
+          icon: Icons.notifications_rounded);
+  }
 }
