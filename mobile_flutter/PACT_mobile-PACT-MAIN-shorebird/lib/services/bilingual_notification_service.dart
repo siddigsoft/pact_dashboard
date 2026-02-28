@@ -1,5 +1,6 @@
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:hive_flutter/hive_flutter.dart';
+import 'dart:io' show Platform;
 
 class BilingualNotificationService {
   static final FlutterLocalNotificationsPlugin _notifications =
@@ -7,6 +8,62 @@ class BilingualNotificationService {
   static bool _initialized = false;
 
   static String _currentLocale = 'en';
+
+  // ── PACT Android notification channel definitions ──────────────────────────
+  // These IDs must match the channel_id values sent from the send-fcm-push edge function.
+  static const String _channelUrgent    = 'pact_urgent';
+  static const String _channelBroadcast = 'pact_broadcast';
+  static const String _channelApprovals = 'pact_approvals';
+  static const String _channelFinance   = 'pact_finance';
+  static const String _channelDefault   = 'pact_default';
+
+  static final List<AndroidNotificationChannel> _pactChannels = [
+    AndroidNotificationChannel(
+      _channelUrgent,
+      'Urgent Alerts / تنبيهات عاجلة',
+      description: 'High-priority system alerts that require immediate attention',
+      importance: Importance.max,
+      playSound: true,
+      enableVibration: true,
+      showBadge: true,
+    ),
+    AndroidNotificationChannel(
+      _channelBroadcast,
+      'Admin Announcements / إعلانات الإدارة',
+      description: 'Broadcast messages from administrators',
+      importance: Importance.high,
+      playSound: true,
+      enableVibration: true,
+      showBadge: true,
+    ),
+    AndroidNotificationChannel(
+      _channelApprovals,
+      'Approvals / الموافقات',
+      description: 'Approval decisions for submissions and requests',
+      importance: Importance.high,
+      playSound: true,
+      enableVibration: true,
+      showBadge: true,
+    ),
+    AndroidNotificationChannel(
+      _channelFinance,
+      'Finance / المالية',
+      description: 'Payment and advance notifications',
+      importance: Importance.high,
+      playSound: true,
+      enableVibration: true,
+      showBadge: true,
+    ),
+    AndroidNotificationChannel(
+      _channelDefault,
+      'General / عام',
+      description: 'General app notifications',
+      importance: Importance.defaultImportance,
+      playSound: true,
+      enableVibration: false,
+      showBadge: true,
+    ),
+  ];
 
   static const Map<String, Map<String, String>> _translations = {
     'new_message': {'en': 'New Message', 'ar': 'رسالة جديدة'},
@@ -156,6 +213,22 @@ class BilingualNotificationService {
     );
 
     await _notifications.initialize(initializationSettings);
+
+    // Register all PACT channels on Android (required on API 26+).
+    // Without this, FCM cannot deliver heads-up notifications on the custom channels.
+    try {
+      if (Platform.isAndroid) {
+        final androidPlugin = _notifications
+            .resolvePlatformSpecificImplementation<
+                AndroidFlutterLocalNotificationsPlugin>();
+        if (androidPlugin != null) {
+          for (final channel in _pactChannels) {
+            await androidPlugin.createNotificationChannel(channel);
+          }
+        }
+      }
+    } catch (_) {}
+
     await _loadLocale();
     _initialized = true;
   }
@@ -436,21 +509,59 @@ class BilingualNotificationService {
   }
 
   /// Show a notification with a raw (already-translated) title and body.
-  /// Used for broadcasts where the admin has already written the text.
+  /// Used for broadcasts and approval updates where the text is already composed.
+  /// [channelId] should be one of the PACT channel IDs defined in [_pactChannels].
   static Future<void> showRawNotification({
     required String title,
     required String body,
-    String payload = 'broadcast',
-    int id = 700,
+    String payload = 'notifications',
+    int? id,
+    String channelId = _channelBroadcast,
+    Importance importance = Importance.high,
+    Priority priority = Priority.high,
   }) async {
-    await _showNotification(
-      id: id,
-      title: title,
-      body: body,
-      channelId: 'general',
-      channelName: _currentLocale == 'ar' ? 'عام' : 'General',
+    await initialize();
+
+    final resolvedId = id ?? DateTime.now().millisecondsSinceEpoch.remainder(100000);
+
+    final AndroidNotificationDetails androidDetails = AndroidNotificationDetails(
+      channelId,
+      _channelDisplayName(channelId),
+      importance: importance,
+      priority: priority,
+      icon: '@mipmap/ic_launcher',
+      enableVibration: importance.index >= Importance.high.index,
+      playSound: true,
+      showWhen: true,
+      visibility: importance == Importance.max
+          ? NotificationVisibility.public
+          : NotificationVisibility.private,
+    );
+
+    const DarwinNotificationDetails iosDetails = DarwinNotificationDetails(
+      presentAlert: true,
+      presentBadge: true,
+      presentSound: true,
+    );
+
+    await _notifications.show(
+      resolvedId,
+      title,
+      body,
+      NotificationDetails(android: androidDetails, iOS: iosDetails),
       payload: payload,
     );
+  }
+
+  /// Returns the human-readable display name for a PACT channel ID.
+  static String _channelDisplayName(String channelId) {
+    switch (channelId) {
+      case _channelUrgent:    return _currentLocale == 'ar' ? 'تنبيهات عاجلة' : 'Urgent Alerts';
+      case _channelBroadcast: return _currentLocale == 'ar' ? 'إعلانات الإدارة' : 'Admin Announcements';
+      case _channelApprovals: return _currentLocale == 'ar' ? 'الموافقات' : 'Approvals';
+      case _channelFinance:   return _currentLocale == 'ar' ? 'المالية' : 'Finance';
+      default:                return _currentLocale == 'ar' ? 'عام' : 'General';
+    }
   }
 
   static Future<void> _showNotification({

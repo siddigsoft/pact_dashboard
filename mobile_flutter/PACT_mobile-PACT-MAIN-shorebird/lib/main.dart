@@ -131,6 +131,7 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
         title: fcmTitle.isNotEmpty ? fcmTitle : 'Cost Submission Update',
         body: fcmBody,
         payload: 'wallet:cost_payments',
+        channelId: 'pact_approvals',
       );
       return;
     }
@@ -143,6 +144,7 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
         title: fcmTitle.isNotEmpty ? fcmTitle : 'Payment Update',
         body: fcmBody,
         payload: 'wallet:advances',
+        channelId: 'pact_finance',
       );
       return;
     }
