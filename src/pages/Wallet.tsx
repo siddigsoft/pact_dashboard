@@ -2237,6 +2237,37 @@ const WalletPage = () => {
                           </div>
                         )}
 
+                        {/* Payment proof attached by finance */}
+                        {cost.payment_proof_url && (
+                          <div className="rounded-lg border border-purple-500/30 bg-purple-500/10 px-3 py-2 space-y-1.5">
+                            <p className="text-xs font-medium text-purple-300 flex items-center gap-1.5">
+                              <Receipt className="w-3.5 h-3.5" />
+                              Payment Receipt / إيصال الدفع
+                            </p>
+                            {cost.payment_proof_url.match(/\.(jpg|jpeg|png|gif|webp)$/i) ? (
+                              <a href={cost.payment_proof_url} target="_blank" rel="noopener noreferrer">
+                                <img
+                                  src={cost.payment_proof_url}
+                                  alt="Payment receipt"
+                                  className="max-h-40 w-full rounded object-contain border border-purple-500/20 cursor-pointer hover:opacity-90 transition-opacity"
+                                />
+                              </a>
+                            ) : (
+                              <a
+                                href={cost.payment_proof_url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1.5 text-xs text-purple-300 underline"
+                              >
+                                View Payment Receipt / عرض الإيصال
+                              </a>
+                            )}
+                            {cost.payment_proof_notes && (
+                              <p className="text-xs text-muted-foreground italic">"{cost.payment_proof_notes}"</p>
+                            )}
+                          </div>
+                        )}
+
                         {canConfirm && (
                           <div className="pt-1">
                             <div className="flex items-start gap-2 text-xs text-emerald-300 bg-emerald-500/10 rounded px-2 py-1 mb-2">

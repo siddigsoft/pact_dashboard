@@ -4,7 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ChevronLeft, Clock, CheckCircle, XCircle, AlertCircle, Sparkles, DollarSign, FileText, Users, Shield, Receipt, ThumbsUp, ThumbsDown, ArrowRight, Calendar, MapPin, Building2, FolderOpen, Hash, Paperclip, Download, Pencil, Trash2, RotateCcw, SendHorizonal, FileSpreadsheet, FileDown, Info, RefreshCw, CircleDollarSign, ClipboardCheck, HelpCircle, Wallet, Ticket, Gift, Wifi, GraduationCap, Car, Package, Printer, Coffee, MoreHorizontal, Briefcase, Mail } from "lucide-react";
+import { ChevronLeft, Clock, CheckCircle, XCircle, AlertCircle, Sparkles, DollarSign, FileText, Users, Shield, Receipt, ThumbsUp, ThumbsDown, ArrowRight, Calendar, MapPin, Building2, FolderOpen, Hash, Paperclip, Download, Pencil, Trash2, RotateCcw, SendHorizonal, FileSpreadsheet, FileDown, Info, RefreshCw, CircleDollarSign, ClipboardCheck, HelpCircle, Wallet, Ticket, Gift, Wifi, GraduationCap, Car, Package, Printer, Coffee, MoreHorizontal, Briefcase, Mail, Upload, Eye, ImageIcon } from "lucide-react";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
@@ -112,6 +112,9 @@ interface OperationalCostSubmission {
   fund_receipt_confirmed_at?: string | null;
   fund_receipt_signature_url?: string | null;
   fund_receipt_notes?: string | null;
+  payment_proof_url?: string | null;
+  payment_proof_notes?: string | null;
+  payment_proof_uploaded_at?: string | null;
 }
 
 const CostSubmission = () => {
@@ -211,6 +214,14 @@ const CostSubmission = () => {
   const [deleteConfirm, setDeleteConfirm] = useState<OperationalCostSubmission | null>(null);
   const [recallConfirm, setRecallConfirm] = useState<OperationalCostSubmission | null>(null);
   const [actionProcessing, setActionProcessing] = useState(false);
+  const [markAsPaidDialog, setMarkAsPaidDialog] = useState<{
+    open: boolean;
+    submission: OperationalCostSubmission | null;
+    proofFile: File | null;
+    proofPreviewUrl: string | null;
+    notes: string;
+    uploading: boolean;
+  }>({ open: false, submission: null, proofFile: null, proofPreviewUrl: null, notes: '', uploading: false });
   const [viewAdvanceDetails, setViewAdvanceDetails] = useState<OperationalCostSubmission | null>(null);
   const [activeReconciliation, setActiveReconciliation] = useState<OperationalCostSubmission | null>(null);
   const [reconcileNotes, setReconcileNotes] = useState('');
@@ -817,49 +828,71 @@ const CostSubmission = () => {
     return isSuperAdmin || isAdmin || isFinanceAdmin;
   };
 
-  const handleMarkAsPaid = async (oc: OperationalCostSubmission) => {
-    if (!currentUser?.id) return;
+  const openMarkAsPaidDialog = (oc: OperationalCostSubmission) => {
+    setMarkAsPaidDialog({ open: true, submission: oc, proofFile: null, proofPreviewUrl: null, notes: '', uploading: false });
+  };
+
+  const handleMarkAsPaidProofFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const previewUrl = file.type.startsWith('image/') ? URL.createObjectURL(file) : null;
+    setMarkAsPaidDialog(prev => ({ ...prev, proofFile: file, proofPreviewUrl: previewUrl }));
+  };
+
+  const handleConfirmMarkAsPaid = async () => {
+    const { submission: oc, proofFile, notes } = markAsPaidDialog;
+    if (!oc || !currentUser?.id) return;
+    setMarkAsPaidDialog(prev => ({ ...prev, uploading: true }));
     setActionProcessing(true);
     try {
+      let proofUrl: string | null = null;
+
+      if (proofFile) {
+        const timestamp = Date.now();
+        const random = Math.random().toString(36).substring(2, 8);
+        const extension = proofFile.name.split('.').pop()?.toLowerCase() || 'file';
+        const filePath = `payment-proofs/${timestamp}_${random}.${extension}`;
+        const { error: uploadErr } = await supabase.storage
+          .from('mmp-files')
+          .upload(filePath, proofFile, { cacheControl: '3600', upsert: false });
+        if (uploadErr) throw new Error(uploadErr.message);
+        proofUrl = supabase.storage.from('mmp-files').getPublicUrl(filePath).data.publicUrl;
+      }
+
       const now = new Date().toISOString();
       const updatePayload: Record<string, unknown> = {
         status: 'paid',
         paid_at: now,
+        paid_by: currentUser.id,
         updated_at: now,
+        ...(proofUrl ? { payment_proof_url: proofUrl, payment_proof_uploaded_at: now } : {}),
+        ...(notes.trim() ? { payment_proof_notes: notes.trim() } : {}),
       };
-      try {
-        updatePayload.paid_by = currentUser.id;
-      } catch { /* field may not exist in schema cache */ }
 
-      let { error } = await supabase
+      const { error } = await supabase
         .from('operational_cost_submissions')
         .update(updatePayload)
         .eq('id', oc.id);
-      
-      if (error?.message?.includes('paid_by')) {
-        const { paid_by, ...safePayload } = updatePayload as any;
-        const fallback = await supabase
-          .from('operational_cost_submissions')
-          .update({ ...safePayload, description: `${oc.description || ''}\n[Paid by: ${currentUser.id}]` })
-          .eq('id', oc.id);
-        error = fallback.error;
-      }
-      
+
       if (error) {
         toast({ title: "Failed / فشل", description: error.message, variant: "destructive" });
       } else {
-        toast({ 
-          title: "Payment Sent / تم إرسال الدفعة", 
-          description: "Marked as paid. The recipient will now see a confirmation request in their Cost Submissions tab. / تم التحديد كمدفوع. سيظهر للمستلم طلب تأكيد في تبويب تقديم التكاليف." 
+        toast({
+          title: "Payment Sent / تم إرسال الدفعة",
+          description: "Marked as paid. The recipient can now view the receipt and confirm in their Cost Submissions tab. / تم التحديد كمدفوع. يمكن للمستلم الآن الاطلاع على الإيصال والتأكيد."
         });
+        setMarkAsPaidDialog({ open: false, submission: null, proofFile: null, proofPreviewUrl: null, notes: '', uploading: false });
         fetchOperationalCosts();
       }
-    } catch {
-      toast({ title: "Error / خطأ", description: "Failed to mark as paid. / فشل في التحديد كمدفوع.", variant: "destructive" });
+    } catch (err: any) {
+      toast({ title: "Error / خطأ", description: err.message || "Failed to mark as paid.", variant: "destructive" });
     } finally {
+      setMarkAsPaidDialog(prev => ({ ...prev, uploading: false }));
       setActionProcessing(false);
     }
   };
+
+  const handleMarkAsPaid = (oc: OperationalCostSubmission) => openMarkAsPaidDialog(oc);
 
   const canRequestPayment = (oc: OperationalCostSubmission): boolean => {
     const derivedStatus = getOperationalDerivedStatus(oc);
@@ -3123,6 +3156,7 @@ const CostSubmission = () => {
                                 <TableHead>Category</TableHead>
                                 <TableHead className="text-right">Amount (SDG)</TableHead>
                                 <TableHead>Paid At</TableHead>
+                                <TableHead>Payment Receipt</TableHead>
                                 <TableHead>Receipt Confirmed</TableHead>
                                 <TableHead>Confirmed At</TableHead>
                                 <TableHead>Notes</TableHead>
@@ -3147,6 +3181,20 @@ const CostSubmission = () => {
                                     </TableCell>
                                     <TableCell className="text-xs text-muted-foreground">
                                       {sub.paid_at ? format(parseISO(sub.paid_at), 'dd/MM/yyyy') : '—'}
+                                    </TableCell>
+                                    <TableCell>
+                                      {sub.payment_proof_url ? (
+                                        <a
+                                          href={sub.payment_proof_url}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className="inline-flex items-center gap-1 text-xs text-blue-600 hover:underline"
+                                        >
+                                          <Eye className="h-3 w-3" />View
+                                        </a>
+                                      ) : (
+                                        <span className="text-xs text-muted-foreground">—</span>
+                                      )}
                                     </TableCell>
                                     <TableCell>
                                       {sub.fund_receipt_confirmed ? (
@@ -3941,6 +3989,35 @@ const CostSubmission = () => {
                       <p className="text-xs text-muted-foreground">
                         {format(new Date(oc.paid_at), 'MMM d, yyyy HH:mm')}
                       </p>
+                      {oc.payment_proof_url && (
+                        <div className="mt-2 space-y-1">
+                          <p className="text-xs font-medium text-purple-700 dark:text-purple-300">
+                            Payment Receipt / إيصال الدفع:
+                          </p>
+                          {oc.payment_proof_url.match(/\.(jpg|jpeg|png|gif|webp)$/i) ? (
+                            <a href={oc.payment_proof_url} target="_blank" rel="noopener noreferrer">
+                              <img
+                                src={oc.payment_proof_url}
+                                alt="Payment receipt"
+                                className="max-h-32 rounded border border-purple-200 object-contain cursor-pointer hover:opacity-90 transition-opacity"
+                              />
+                            </a>
+                          ) : (
+                            <a
+                              href={oc.payment_proof_url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1.5 text-xs text-purple-700 dark:text-purple-300 underline hover:no-underline"
+                            >
+                              <FileText className="h-3.5 w-3.5" />
+                              View Payment Receipt / عرض الإيصال
+                            </a>
+                          )}
+                          {oc.payment_proof_notes && (
+                            <p className="text-xs text-muted-foreground italic">"{oc.payment_proof_notes}"</p>
+                          )}
+                        </div>
+                      )}
                     </div>
                   )}
 
@@ -3963,7 +4040,7 @@ const CostSubmission = () => {
                       )}
                       {!oc.fund_receipt_confirmed && (
                         <p className="text-xs text-muted-foreground">
-                          The recipient must confirm receipt in their Wallet → Cost Payments tab.
+                          The recipient must confirm receipt in their Cost Submissions tab. / على المستلم تأكيد الاستلام في تبويب تقديم التكاليف.
                         </p>
                       )}
                     </div>
@@ -4061,6 +4138,124 @@ const CostSubmission = () => {
           }}
         />
       )}
+
+      {/* Mark as Paid dialog with optional payment proof upload */}
+      <Dialog
+        open={markAsPaidDialog.open}
+        onOpenChange={(open) => {
+          if (!open && !markAsPaidDialog.uploading) {
+            if (markAsPaidDialog.proofPreviewUrl) URL.revokeObjectURL(markAsPaidDialog.proofPreviewUrl);
+            setMarkAsPaidDialog({ open: false, submission: null, proofFile: null, proofPreviewUrl: null, notes: '', uploading: false });
+          }
+        }}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Wallet className="h-5 w-5 text-green-600" />
+              Mark as Paid / تحديد كمدفوع
+            </DialogTitle>
+            <DialogDescription>
+              Optionally attach a payment receipt before confirming. / يمكنك إرفاق إيصال دفع قبل التأكيد.
+            </DialogDescription>
+          </DialogHeader>
+
+          {markAsPaidDialog.submission && (
+            <div className="space-y-4">
+              <div className="rounded-lg bg-muted/50 p-3 text-sm space-y-1">
+                <p className="font-medium">{markAsPaidDialog.submission.expense_category.replace(/_/g, ' ')}</p>
+                <p className="text-lg font-bold tabular-nums">
+                  {markAsPaidDialog.submission.currency} {(markAsPaidDialog.submission.amount_cents / 100).toLocaleString()}
+                </p>
+                {markAsPaidDialog.submission.vendor && (
+                  <p className="text-muted-foreground text-xs">Vendor: {markAsPaidDialog.submission.vendor}</p>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">
+                  Payment Receipt / إيصال الدفع <span className="text-muted-foreground font-normal">(optional / اختياري)</span>
+                </Label>
+                <div className="border-2 border-dashed border-muted-foreground/30 rounded-lg p-4 text-center hover:border-green-400 transition-colors relative">
+                  <input
+                    type="file"
+                    accept="image/*,application/pdf"
+                    className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                    onChange={handleMarkAsPaidProofFileChange}
+                    disabled={markAsPaidDialog.uploading}
+                    data-testid="input-payment-proof"
+                  />
+                  {markAsPaidDialog.proofFile ? (
+                    <div className="space-y-2">
+                      {markAsPaidDialog.proofPreviewUrl ? (
+                        <img
+                          src={markAsPaidDialog.proofPreviewUrl}
+                          alt="Receipt preview"
+                          className="max-h-32 mx-auto rounded object-contain"
+                        />
+                      ) : (
+                        <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
+                          <FileText className="h-8 w-8 text-red-500" />
+                          <span>{markAsPaidDialog.proofFile.name}</span>
+                        </div>
+                      )}
+                      <p className="text-xs text-muted-foreground">Click to change / انقر للتغيير</p>
+                    </div>
+                  ) : (
+                    <div className="text-muted-foreground">
+                      <ImageIcon className="h-8 w-8 mx-auto mb-1 opacity-40" />
+                      <p className="text-sm">Upload receipt image or PDF / ارفع صورة أو PDF</p>
+                      <p className="text-xs opacity-60">Click to browse / انقر للتصفح</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">
+                  Payment Notes / ملاحظات الدفع <span className="text-muted-foreground font-normal">(optional / اختياري)</span>
+                </Label>
+                <Textarea
+                  value={markAsPaidDialog.notes}
+                  onChange={(e) => setMarkAsPaidDialog(prev => ({ ...prev, notes: e.target.value }))}
+                  placeholder="e.g. Bank transfer ref: TXN123... / مثال: رقم التحويل: TXN123..."
+                  className="resize-none h-20 text-sm"
+                  disabled={markAsPaidDialog.uploading}
+                  data-testid="input-payment-notes"
+                />
+              </div>
+            </div>
+          )}
+
+          <DialogFooter className="gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                if (markAsPaidDialog.proofPreviewUrl) URL.revokeObjectURL(markAsPaidDialog.proofPreviewUrl);
+                setMarkAsPaidDialog({ open: false, submission: null, proofFile: null, proofPreviewUrl: null, notes: '', uploading: false });
+              }}
+              disabled={markAsPaidDialog.uploading}
+              data-testid="button-cancel-mark-paid"
+            >
+              Cancel / إلغاء
+            </Button>
+            <Button
+              type="button"
+              onClick={handleConfirmMarkAsPaid}
+              disabled={markAsPaidDialog.uploading}
+              className="bg-green-600 hover:bg-green-700 text-white"
+              data-testid="button-confirm-mark-paid"
+            >
+              {markAsPaidDialog.uploading ? (
+                <><RefreshCw className="h-4 w-4 mr-1.5 animate-spin" /> {markAsPaidDialog.proofFile ? 'Uploading...' : 'Saving...'}</>
+              ) : (
+                <><CheckCircle className="h-4 w-4 mr-1.5" /> Confirm Payment / تأكيد الدفع</>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
