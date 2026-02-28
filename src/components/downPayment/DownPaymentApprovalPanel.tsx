@@ -908,13 +908,26 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
           ccEmails.length > 0 ? ccEmails : undefined
         );
 
-        if (result.success) {
+        const sentCount = result.success ? selectedRecipients.length - (result.error ? parseInt(result.error) || 0 : 0) : 0;
+        const failedCount = result.error ? (parseInt(result.error) || (result.success ? 0 : selectedRecipients.length)) : 0;
+
+        if (result.success && !result.error) {
           toast({
             title: "Bulk Payment Request Sent / تم إرسال طلبات الدفع الجماعية",
-            description: `${bulkRequests.length} requests sent to ${selectedRecipients.length} recipient(s) with summary PDF attached. / تم إرسال ${bulkRequests.length} طلب إلى ${selectedRecipients.length} مستلم(ين) مع ملف PDF ملخص مرفق.`,
+            description: `${bulkRequests.length} requests sent to ${selectedRecipients.length} recipient(s) with summary PDF attached. / تم إرسال ${bulkRequests.length} طلب إلى ${selectedRecipients.length} مستلم(ين).`,
+          });
+        } else if (result.success && result.error) {
+          toast({
+            title: `Partially Sent / تم الإرسال جزئياً`,
+            description: `${sentCount} of ${selectedRecipients.length} recipient(s) received the email. ${failedCount} failed — check that all recipient email addresses are valid. / تم الإرسال إلى ${sentCount} من ${selectedRecipients.length}. فشل ${failedCount} — تحقق من صحة عناوين البريد.`,
+            variant: "destructive",
           });
         } else {
-          toast({ title: "Email Failed / فشل الإرسال", description: result.error || "Could not send. / تعذر الإرسال.", variant: "destructive" });
+          toast({
+            title: "Email Failed / فشل الإرسال",
+            description: `Could not send to ${selectedRecipients.length} recipient(s). Please verify email addresses are valid and try again. / تعذر الإرسال. تحقق من عناوين البريد الإلكتروني وأعد المحاولة.`,
+            variant: "destructive",
+          });
         }
       } else if (req) {
         const requester = users?.find(u => u.id === req.requestedBy);
@@ -935,13 +948,23 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
           undefined, ccEmails.length > 0 ? ccEmails : undefined
         );
 
-        if (result.success) {
+        if (result.success && !result.error) {
           toast({
             title: "Payment Request Sent / تم إرسال طلب الدفع",
             description: `Email sent to ${selectedRecipients.length} recipient(s). / تم إرسال البريد إلى ${selectedRecipients.length} مستلم(ين).`,
           });
+        } else if (result.success && result.error) {
+          toast({
+            title: "Partially Sent / تم الإرسال جزئياً",
+            description: `Some recipients did not receive the email. ${result.error}. Check that all email addresses are valid. / بعض المستلمين لم يستلموا البريد. تحقق من عناوين البريد الإلكتروني.`,
+            variant: "destructive",
+          });
         } else {
-          toast({ title: "Email Failed / فشل الإرسال", description: result.error || "Could not send. / تعذر الإرسال.", variant: "destructive" });
+          toast({
+            title: "Email Failed / فشل الإرسال",
+            description: `Could not deliver to the selected recipient. Please check the email address is valid and the inbox is reachable. / تعذر الإرسال. تحقق من عنوان البريد الإلكتروني وأعد المحاولة.`,
+            variant: "destructive",
+          });
         }
       }
     } catch {

@@ -1573,10 +1573,15 @@ PACT Command Center | مركز قيادة باكت`;
       const result = await this.sendBulk(recipients, options);
       console.log(`[EMAIL] Payment request notification: sent to ${result.successful}/${result.total} selected recipients${allAttachments.length > 0 ? ` (with ${allAttachments.length} PDF attachment(s))` : ''}`);
 
+      const primaryEmail = recipients[0]?.email || 'unknown';
       return {
         success: result.successful > 0,
         messageId: result.successful > 0 ? `payment-request-${Date.now()}` : undefined,
-        error: result.failed > 0 ? `${result.failed} emails failed` : undefined,
+        error: result.failed > 0
+          ? result.successful > 0
+            ? `${result.failed} recipient(s) did not receive the email`
+            : `Delivery failed to ${primaryEmail} — verify the email address is valid`
+          : undefined,
       };
     } catch (err: any) {
       console.error('[EMAIL] Error in sendPaymentRequestToFinanceWithRecipients:', err);
