@@ -510,18 +510,19 @@ class _WalletScreenState extends State<WalletScreen> {
     if (_userId == null) return;
     setState(() => _costPaymentsLoading = true);
     try {
+      // Load ALL submissions for this user — not just 'paid' — so approved/pending
+      // submissions also appear in the Costs tab with their current status.
       final data = await Supabase.instance.client
           .from('operational_cost_submissions')
           .select('*')
           .eq('submitted_by', _userId!)
-          .eq('status', 'paid')
-          .order('paid_at', ascending: false)
-          .limit(50);
+          .order('created_at', ascending: false)
+          .limit(100);
       _costPayments = List<Map<String, dynamic>>.from(data ?? []);
-      debugPrint('[Wallet] Loaded ${_costPayments.length} cost payments for user $_userId');
+      debugPrint('[Wallet] Loaded ${_costPayments.length} cost submissions for user $_userId');
       if (mounted) setState(() => _costPaymentsLoading = false);
     } catch (e) {
-      debugPrint('[Wallet] Error loading cost payments: $e');
+      debugPrint('[Wallet] Error loading cost submissions: $e');
       if (mounted) setState(() => _costPaymentsLoading = false);
     }
   }
@@ -1201,7 +1202,7 @@ class _WalletScreenState extends State<WalletScreen> {
                                                   'Costs',
                                                   'التكاليف',
                                                   Icons.receipt_outlined,
-                                                  badge: _costPayments.where((c) => c['fund_receipt_confirmed'] != true).length,
+                                                  badge: _costPayments.where((c) => c['status'] == 'paid' && c['fund_receipt_confirmed'] != true).length,
                                                 ),
                                                 const SizedBox(width: 6),
                                                 _buildTabButton(
@@ -2540,8 +2541,8 @@ class _WalletScreenState extends State<WalletScreen> {
               const SizedBox(height: 12),
               Text(
                 widget.isArabic
-                    ? 'لا توجد دفعات تكاليف بعد'
-                    : 'No cost payments yet',
+                    ? 'لا توجد تقديمات تكاليف بعد'
+                    : 'No cost submissions yet',
                 style: GoogleFonts.poppins(
                   color: AppColors.textLight,
                   fontWeight: FontWeight.w600,
@@ -2550,8 +2551,8 @@ class _WalletScreenState extends State<WalletScreen> {
               const SizedBox(height: 6),
               Text(
                 widget.isArabic
-                    ? 'ستظهر هنا دفعات التكاليف المدفوعة من المالية'
-                    : 'Paid cost submissions will appear here for your confirmation',
+                    ? 'ستظهر هنا جميع تقديمات التكاليف مع حالاتها'
+                    : 'All your cost submissions will appear here with their current status',
                 textAlign: TextAlign.center,
                 style: GoogleFonts.poppins(
                   fontSize: 12,
@@ -2564,7 +2565,8 @@ class _WalletScreenState extends State<WalletScreen> {
       );
     }
 
-    final pending = _costPayments.where((c) => c['fund_receipt_confirmed'] != true).length;
+    // Only paid submissions awaiting your receipt confirmation need action
+    final pending = _costPayments.where((c) => c['status'] == 'paid' && c['fund_receipt_confirmed'] != true).length;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -2640,21 +2642,74 @@ class _WalletScreenState extends State<WalletScreen> {
       'other': 'أخرى',
     }[category] ?? category;
 
+    final status = (cost['status'] as String? ?? 'pending').toLowerCase();
     final receiptConfirmed = cost['fund_receipt_confirmed'] == true;
     final confirmedAt = cost['fund_receipt_confirmed_at'] as String?;
     final paidAt = cost['paid_at'] as String?;
+    final createdAt = cost['created_at'] as String?;
     final description = cost['description'] as String?;
     final costId = (cost['id'] as String? ?? '').substring(0, 8).toUpperCase();
+
+    // Status appearance config
+    Color statusBg, statusBorder, statusText;
+    String statusLabelEn, statusLabelAr;
+    IconData statusIcon;
+    switch (status) {
+      case 'paid':
+      case 'reconciled':
+        statusBg = Colors.purple.shade50;
+        statusBorder = Colors.purple.shade200;
+        statusText = Colors.purple.shade700;
+        statusLabelEn = status == 'reconciled' ? 'Reconciled' : 'Paid';
+        statusLabelAr = status == 'reconciled' ? 'مسوّى' : 'مدفوع';
+        statusIcon = Icons.payments_outlined;
+        break;
+      case 'approved':
+      case 'tier1_approved':
+        statusBg = Colors.green.shade50;
+        statusBorder = Colors.green.shade200;
+        statusText = Colors.green.shade700;
+        statusLabelEn = status == 'tier1_approved' ? 'T1 Approved' : 'Approved';
+        statusLabelAr = status == 'tier1_approved' ? 'موافقة م١' : 'موافق عليه';
+        statusIcon = Icons.check_circle_outline;
+        break;
+      case 'rejected':
+        statusBg = Colors.red.shade50;
+        statusBorder = Colors.red.shade200;
+        statusText = Colors.red.shade700;
+        statusLabelEn = 'Rejected';
+        statusLabelAr = 'مرفوض';
+        statusIcon = Icons.cancel_outlined;
+        break;
+      default:
+        statusBg = Colors.orange.shade50;
+        statusBorder = Colors.orange.shade200;
+        statusText = Colors.orange.shade700;
+        statusLabelEn = 'Pending';
+        statusLabelAr = 'قيد المراجعة';
+        statusIcon = Icons.hourglass_empty;
+    }
+
+    // Card border colour based on status
+    Color cardBorder;
+    if (status == 'paid' || status == 'reconciled') {
+      cardBorder = receiptConfirmed ? Colors.green.shade200 : Colors.purple.shade200;
+    } else if (status == 'rejected') {
+      cardBorder = Colors.red.shade200;
+    } else if (status == 'approved' || status == 'tier1_approved') {
+      cardBorder = Colors.green.shade200;
+    } else {
+      cardBorder = Colors.orange.shade200;
+    }
+
+    final displayDate = paidAt ?? createdAt;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(
-          color: receiptConfirmed ? Colors.green.shade200 : Colors.teal.shade200,
-          width: 1.5,
-        ),
+        border: Border.all(color: cardBorder, width: 1.5),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.04),
@@ -2674,10 +2729,10 @@ class _WalletScreenState extends State<WalletScreen> {
                 Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: Colors.teal.shade50,
+                    color: statusBg,
                     shape: BoxShape.circle,
                   ),
-                  child: Icon(Icons.receipt_long, color: Colors.teal.shade600, size: 16),
+                  child: Icon(statusIcon, color: statusText, size: 16),
                 ),
                 const SizedBox(width: 10),
                 Expanded(
@@ -2715,19 +2770,20 @@ class _WalletScreenState extends State<WalletScreen> {
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
+                    // Dynamic status badge
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                       decoration: BoxDecoration(
-                        color: Colors.purple.shade50,
+                        color: statusBg,
                         borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: Colors.purple.shade200),
+                        border: Border.all(color: statusBorder),
                       ),
                       child: Text(
-                        widget.isArabic ? 'مدفوع' : 'Paid',
+                        widget.isArabic ? statusLabelAr : statusLabelEn,
                         style: GoogleFonts.poppins(
                           fontSize: 11,
                           fontWeight: FontWeight.w600,
-                          color: Colors.purple.shade700,
+                          color: statusText,
                         ),
                       ),
                     ),
@@ -2740,9 +2796,9 @@ class _WalletScreenState extends State<WalletScreen> {
                         color: Colors.teal.shade700,
                       ),
                     ),
-                    if (paidAt != null)
+                    if (displayDate != null)
                       Text(
-                        DateFormat('dd MMM yyyy').format(DateTime.parse(paidAt).toLocal()),
+                        DateFormat('dd MMM yyyy').format(DateTime.parse(displayDate).toLocal()),
                         style: GoogleFonts.poppins(
                           fontSize: 10,
                           color: Colors.grey.shade500,
@@ -2798,7 +2854,8 @@ class _WalletScreenState extends State<WalletScreen> {
                   ],
                 ),
               ),
-            ] else ...[
+            ] else if (status == 'paid' || status == 'reconciled') ...[
+              // Paid but receipt not yet confirmed — show confirm button
               Container(
                 width: double.infinity,
                 padding: const EdgeInsets.all(8),
@@ -2849,6 +2906,39 @@ class _WalletScreenState extends State<WalletScreen> {
                       borderRadius: BorderRadius.circular(8),
                     ),
                   ),
+                ),
+              ),
+            ] else ...[
+              // Not yet paid — show informational status message
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                decoration: BoxDecoration(
+                  color: statusBg,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: statusBorder),
+                ),
+                child: Row(
+                  children: [
+                    Icon(statusIcon, color: statusText, size: 14),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        status == 'rejected'
+                            ? (widget.isArabic ? 'تم رفض هذا التقديم' : 'This submission was rejected')
+                            : status == 'approved'
+                                ? (widget.isArabic ? 'معتمد — بانتظار الصرف من المالية' : 'Approved — awaiting finance disbursement')
+                                : status == 'tier1_approved'
+                                    ? (widget.isArabic ? 'موافقة م١ — بانتظار الاعتماد النهائي' : 'Tier 1 approved — awaiting final approval')
+                                    : (widget.isArabic ? 'قيد المراجعة من الإدارة' : 'Under review by management'),
+                        style: GoogleFonts.poppins(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w600,
+                          color: statusText,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ],
@@ -3562,8 +3652,10 @@ class _WalletScreenState extends State<WalletScreen> {
       }
     }
 
-    // 3. Operational cost reimbursements (status == 'paid')
+    // 3. Operational cost reimbursements — only include paid/reconciled records
     for (final cost in _costPayments) {
+      final costStatus = (cost['status'] as String? ?? '').toLowerCase();
+      if (costStatus != 'paid' && costStatus != 'reconciled') continue;
       final amountCents = (cost['amount_cents'] as num?)?.toInt() ?? 0;
       final amountSdg = amountCents / 100.0;
       if (amountSdg > 0) {
