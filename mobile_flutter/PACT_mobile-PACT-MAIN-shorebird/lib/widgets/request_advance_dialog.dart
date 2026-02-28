@@ -34,16 +34,19 @@ class _RequestAdvanceDialogState extends State<RequestAdvanceDialog> {
   @override
   void initState() {
     super.initState();
-    _amountController.text = widget.transportationBudget.toStringAsFixed(0);
+    // Only pre-fill when a real budget exists; otherwise leave empty
+    if (widget.transportationBudget > 0) {
+      _amountController.text = widget.transportationBudget.toStringAsFixed(0);
+    }
     _installments = [
       {
-        'amount': widget.transportationBudget * 0.6,
+        'amount': widget.transportationBudget > 0 ? widget.transportationBudget * 0.6 : 0.0,
         'stage': 'before_travel',
         'description': 'Initial down-payment',
         'paid': false,
       },
       {
-        'amount': widget.transportationBudget * 0.4,
+        'amount': widget.transportationBudget > 0 ? widget.transportationBudget * 0.4 : 0.0,
         'stage': 'after_completion',
         'description': 'Final payment',
         'paid': false,
@@ -115,7 +118,8 @@ class _RequestAdvanceDialogState extends State<RequestAdvanceDialog> {
       return;
     }
 
-    if (_requestedAmount > widget.transportationBudget) {
+    // Only enforce the transport budget cap when a real budget exists
+    if (widget.transportationBudget > 0 && _requestedAmount > widget.transportationBudget) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
@@ -263,11 +267,15 @@ class _RequestAdvanceDialogState extends State<RequestAdvanceDialog> {
                                     ),
                                     const SizedBox(height: 4),
                                     Text(
-                                      '${widget.transportationBudget.toStringAsFixed(0)} SDG',
+                                      widget.transportationBudget > 0
+                                          ? '${widget.transportationBudget.toStringAsFixed(0)} SDG'
+                                          : 'No preset budget',
                                       style: GoogleFonts.poppins(
                                         fontSize: 16,
                                         fontWeight: FontWeight.bold,
-                                        color: AppColors.primaryBlue,
+                                        color: widget.transportationBudget > 0
+                                            ? AppColors.primaryBlue
+                                            : Colors.grey,
                                       ),
                                     ),
                                   ],
@@ -319,8 +327,7 @@ class _RequestAdvanceDialogState extends State<RequestAdvanceDialog> {
                           ),
                           filled: true,
                           fillColor: Colors.white,
-                          errorText: _requestedAmount >
-                                  widget.transportationBudget
+                          errorText: (widget.transportationBudget > 0 && _requestedAmount > widget.transportationBudget)
                               ? 'Amount exceeds budget by ${(_requestedAmount - widget.transportationBudget).toStringAsFixed(0)} SDG'
                               : _requestedAmount <= 0
                                   ? 'Amount must be greater than zero'
@@ -332,7 +339,7 @@ class _RequestAdvanceDialogState extends State<RequestAdvanceDialog> {
                           if (amount <= 0) {
                             return 'Amount must be greater than zero';
                           }
-                          if (amount > widget.transportationBudget) {
+                          if (widget.transportationBudget > 0 && amount > widget.transportationBudget) {
                             return 'Amount cannot exceed ${widget.transportationBudget.toStringAsFixed(0)} SDG';
                           }
                           return null;
@@ -340,7 +347,9 @@ class _RequestAdvanceDialogState extends State<RequestAdvanceDialog> {
                       ),
                       const SizedBox(height: 8),
                       Text(
-                        'Maximum: ${widget.transportationBudget.toStringAsFixed(0)} SDG (total transportation budget)',
+                        widget.transportationBudget > 0
+                            ? 'Maximum: ${widget.transportationBudget.toStringAsFixed(0)} SDG (total transportation budget)'
+                            : 'Enter the transport advance amount you need',
                         style: GoogleFonts.poppins(
                           fontSize: 12,
                           color: AppColors.textLight,

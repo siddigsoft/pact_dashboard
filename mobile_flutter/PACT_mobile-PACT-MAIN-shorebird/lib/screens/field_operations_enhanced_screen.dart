@@ -2702,18 +2702,9 @@ class _MMPScreenState extends State<MMPScreen> {
     try {
       if (_userId == null) return;
 
+      // Transport fee from the site is used as a suggested budget in the dialog.
+      // If 0 or missing, the dialog still opens and the user enters any amount.
       final transportFee = (site['transport_fee'] as num?)?.toDouble() ?? 0.0;
-      if (transportFee <= 0) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('This site has no transport fee'),
-              backgroundColor: Colors.orange,
-            ),
-          );
-        }
-        return;
-      }
 
       // Check bank account before showing advance dialog
       final profileCheck = await Supabase.instance.client
@@ -2843,7 +2834,9 @@ class _MMPScreenState extends State<MMPScreen> {
   }
 
   bool _shouldShowRequestAdvance(Map<String, dynamic> site) {
-    // Only show for accepted or in-progress sites owned by current user
+    // Show for any accepted/in-progress site owned by the current user.
+    // Transport fee being 0 or missing does NOT hide the button — the
+    // enumerator enters their own requested amount in the dialog.
     final status = (site['status'] as String? ?? '').toLowerCase();
     final isAcceptedOrOngoing =
         status == 'accepted' ||
@@ -2852,10 +2845,8 @@ class _MMPScreenState extends State<MMPScreen> {
         status == 'in_progress' ||
         status == 'ongoing';
     final isOwner = site['accepted_by'] == _userId;
-    final transportFee = (site['transport_fee'] as num?)?.toDouble() ?? 0.0;
-    final hasTransportBudget = transportFee > 0;
 
-    return isAcceptedOrOngoing && isOwner && hasTransportBudget;
+    return isAcceptedOrOngoing && isOwner;
   }
 
   Widget _buildRequestAdvanceWidget(Map<String, dynamic> site) {
