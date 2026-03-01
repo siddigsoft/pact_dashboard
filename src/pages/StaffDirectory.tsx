@@ -20,7 +20,7 @@ import {
   FileText, FileDown, GitBranch, UserCheck, UserX
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
-import { hubs, sudanStates, getLocalitiesByState, getStatesInHub } from "@/data/sudanStates";
+import { sudanStates, getLocalitiesByState } from "@/data/sudanStates";
 import { useToast } from "@/hooks/use-toast";
 import { format, parseISO, formatDistanceToNow } from "date-fns";
 import { PageInfoBanner } from "@/components/financial/PageInfoBanner";
@@ -86,9 +86,9 @@ function lastActive(d: string | null, fallback?: string): string {
 }
 
 /* ─── Build ExportProfile array ─────────────────────────── */
-function toExportProfiles(profiles: StaffProfile[]): ExportProfile[] {
+function toExportProfiles(profiles: StaffProfile[], hubList: { id: string; name: string }[]): ExportProfile[] {
   return profiles.map(p => {
-    const hub      = hubs.find(h => h.id === p.hub_id);
+    const hub      = hubList.find(h => h.id === p.hub_id);
     const state    = sudanStates.find(s => s.id === p.state_id);
     const locality = state?.localities?.find((l: any) => l.id === p.locality_id);
     return {
@@ -133,7 +133,7 @@ function RoleBadge({ role }: { role: string | null }) {
 /* ─── Profile Detail Modal ───────────────────────────────── */
 function ProfileDetail({ profile, onClose }: { profile: StaffProfile; onClose: () => void }) {
   const { toast } = useToast();
-  const hub      = hubs.find(h => h.id === profile.hub_id);
+  const hub      = dbHubs.find(h => h.id === profile.hub_id);
   const state    = sudanStates.find(s => s.id === profile.state_id);
   const locality = state?.localities?.find((l: any) => l.id === profile.locality_id);
   const av       = avBadge(profile.availability);
@@ -299,7 +299,7 @@ function ExportMenu({ profiles, tab, label }: { profiles: StaffProfile[]; tab: s
     if (!profiles.length) { toast({ title: 'No data to export', variant: 'destructive' }); return; }
     setBusy(true);
     try {
-      const ep = toExportProfiles(profiles);
+      const ep = toExportProfiles(profiles, dbHubs);
       const pdfTab = tab === 'bank_accounts' ? 'bank_accounts' : tab === 'capacity' ? 'capacity' : 'directory';
       if (type === 'excel') await exportStaffToExcel(ep, label);
       else if (type === 'pdf') exportStaffToPDF(ep, pdfTab, label);
@@ -367,6 +367,7 @@ function CapRow({ label, total, online, withBank, max }: { label: string; total:
 export default function StaffDirectory() {
   const { toast } = useToast();
   const [profiles, setProfiles]          = useState<StaffProfile[]>([]);
+  const [dbHubs, setDbHubs]              = useState<{ id: string; name: string }[]>([]);
   const [loading, setLoading]            = useState(true);
   const [refreshing, setRefreshing]      = useState(false);
   const [selected, setSelected]          = useState<StaffProfile | null>(null);
@@ -382,9 +383,10 @@ export default function StaffDirectory() {
   const [viewMode, setViewMode]          = useState<'cards' | 'table'>('cards');
   const [activeTab, setActiveTab]        = useState('directory');
 
-  /* Derived filter options */
-  const availableStates = useMemo(() =>
-    hubFilter === 'all' ? sudanStates : getStatesInHub(hubFilter), [hubFilter]);
+  /* Derived filter options — states per hub require hub_states table join;
+     for now, when a hub is selected we show all states (the hub→state mapping
+     is stored in DB, not in the local sudanStates file's hub objects).         */
+  const availableStates = sudanStates;
 
   const availableLocalities = useMemo(() =>
     stateFilter === 'all' ? [] : getLocalitiesByState(stateFilter), [stateFilter]);
@@ -393,6 +395,13 @@ export default function StaffDirectory() {
   const load = useCallback(async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true); else setLoading(true);
     try {
+      /* Load hubs from DB (same source as Hub Management page) */
+      const { data: hubsData } = await (supabase as any)
+        .from('hubs')
+        .select('id, name')
+        .order('name');
+      if (hubsData?.length) setDbHubs(hubsData);
+
       const { data: pData, error: pErr } = await (supabase as any)
         .from('profiles')
         .select('id, full_name, email, phone, role, employee_id, hub_id, state_id, locality_id, availability, status, location, location_sharing, updated_at, created_at, bank_account')
@@ -474,7 +483,7 @@ export default function StaffDirectory() {
     });
     return Object.entries(m).map(([name, v]) => ({ name, ...v })).sort((a, b) => b.total - a.total);
   };
-  const capHub   = useMemo(() => mkMap(p => hubs.find(h => h.id === p.hub_id)?.name || 'Unassigned'), [filtered]);
+  const capHub   = useMemo(() => mkMap(p => dbHubs.find(h => h.id === p.hub_id)?.name || 'Unassigned'), [filtered]);
   const capRole  = useMemo(() => mkMap(p => ROLE_LABELS[p.role || ''] || p.role || 'Unknown'), [filtered]);
   const capState = useMemo(() => mkMap(p => sudanStates.find(s => s.id === p.state_id)?.name || 'Unassigned'), [filtered]);
 
@@ -483,7 +492,7 @@ export default function StaffDirectory() {
 
   const exportLabel = useMemo(() => {
     const parts: string[] = [];
-    if (hubFilter !== 'all') parts.push(hubs.find(h => h.id === hubFilter)?.name || '');
+    if (hubFilter !== 'all') parts.push(dbHubs.find(h => h.id === hubFilter)?.name || '');
     if (stateFilter !== 'all') parts.push(sudanStates.find(s => s.id === stateFilter)?.name || '');
     if (roleFilter !== 'all') parts.push(ROLE_LABELS[roleFilter] || roleFilter);
     if (statusFilter !== 'all') parts.push(statusFilter);
@@ -515,7 +524,7 @@ export default function StaffDirectory() {
 
   /* ── Profile card ── */
   const ProfileCard = ({ p }: { p: StaffProfile }) => {
-    const hub   = hubs.find(h => h.id === p.hub_id);
+    const hub   = dbHubs.find(h => h.id === p.hub_id);
     const state = sudanStates.find(s => s.id === p.state_id);
     const av    = avBadge(p.availability);
     const hasBank = !!(p.bank_account?.accountNumber || p.bank_account?.accountName);
@@ -640,7 +649,7 @@ export default function StaffDirectory() {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All Hubs</SelectItem>
-            {hubs.map(h => <SelectItem key={h.id} value={h.id}>{h.name}</SelectItem>)}
+            {dbHubs.map(h => <SelectItem key={h.id} value={h.id}>{h.name}</SelectItem>)}
           </SelectContent>
         </Select>
 
@@ -862,7 +871,7 @@ export default function StaffDirectory() {
                     </TableHeader>
                     <TableBody>
                       {filtered.map(p => {
-                        const hub   = hubs.find(h => h.id === p.hub_id);
+                        const hub   = dbHubs.find(h => h.id === p.hub_id);
                         const state = sudanStates.find(s => s.id === p.state_id);
                         const av    = avBadge(p.availability);
                         const hasBank = !!(p.bank_account?.accountNumber || p.bank_account?.accountName);
@@ -972,7 +981,7 @@ export default function StaffDirectory() {
                         <TableCell colSpan={8} className="text-center py-10 text-muted-foreground">No profiles match your filters</TableCell>
                       </TableRow>
                     ) : filtered.map(p => {
-                      const hub   = hubs.find(h => h.id === p.hub_id);
+                      const hub   = dbHubs.find(h => h.id === p.hub_id);
                       const state = sudanStates.find(s => s.id === p.state_id);
                       const hasBank = !!(p.bank_account?.accountNumber || p.bank_account?.accountName);
                       return (
