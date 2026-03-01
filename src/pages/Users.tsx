@@ -44,7 +44,10 @@ import {
   Settings,
   AlertCircle,
   FolderPlus,
-  Briefcase
+  Briefcase,
+  Copy,
+  Info,
+  TriangleAlert
 } from 'lucide-react';
 import {
   Dialog,
@@ -166,6 +169,28 @@ const Users = () => {
       admins: admins.length
     };
   }, [users]);
+
+  // Detect duplicate emails — group users that share the same email address
+  const duplicateGroups = useMemo(() => {
+    const emailMap: Record<string, User[]> = {};
+    users.forEach(u => {
+      if (!u.email) return;
+      const key = u.email.toLowerCase().trim();
+      if (!emailMap[key]) emailMap[key] = [];
+      emailMap[key].push(u);
+    });
+    return Object.entries(emailMap)
+      .filter(([, group]) => group.length > 1)
+      .map(([email, group]) => ({ email, users: group }))
+      .sort((a, b) => b.users.length - a.users.length);
+  }, [users]);
+
+  // Set of all IDs that are part of a duplicate group — used to highlight rows
+  const duplicateIds = useMemo(() => {
+    const ids = new Set<string>();
+    duplicateGroups.forEach(g => g.users.forEach(u => ids.add(u.id)));
+    return ids;
+  }, [duplicateGroups]);
 
   // Filtered users based on tab and filters
   const filteredUsers = useMemo(() => {
@@ -454,13 +479,17 @@ const Users = () => {
     return `${Math.round(minutes / 1440)}d ago`;
   };
 
-  const UserRow = ({ user }: { user: User }) => {
+  const UserRow = ({ user, highlightDuplicate = false }: { user: User; highlightDuplicate?: boolean }) => {
     const canManageRolesUI = canManageRoles();
     const activeStatus = getActiveStatus(user);
     const isOnline = activeStatus === 'Online';
+    const isDupe = highlightDuplicate || duplicateIds.has(user.id);
 
     return (
-      <TableRow className="group hover:bg-muted/40 transition-colors" data-testid={`row-user-${user.id}`}>
+      <TableRow
+        className={`group hover:bg-muted/40 transition-colors ${isDupe ? 'bg-orange-50/60 dark:bg-orange-950/20' : ''}`}
+        data-testid={`row-user-${user.id}`}
+      >
         <TableCell className="py-3">
           <div className="flex items-center gap-3">
             <div className="relative">
@@ -475,7 +504,14 @@ const Users = () => {
               )}
             </div>
             <div className="min-w-0">
-              <p className="font-semibold text-sm truncate leading-tight">{user.name || 'Unnamed User'}</p>
+              <div className="flex items-center gap-1.5">
+                <p className="font-semibold text-sm truncate leading-tight">{user.name || 'Unnamed User'}</p>
+                {isDupe && (
+                  <span title="Duplicate email" className="shrink-0">
+                    <TriangleAlert className="h-3.5 w-3.5 text-orange-500" />
+                  </span>
+                )}
+              </div>
               <p className="text-xs text-muted-foreground truncate mt-0.5">{user.email}</p>
             </div>
           </div>
@@ -686,7 +722,7 @@ const Users = () => {
       <div className="px-4 sm:px-6">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 mb-4">
-            <TabsList className="h-10 p-1 bg-muted/60 rounded-lg">
+            <TabsList className="h-10 p-1 bg-muted/60 rounded-lg flex-wrap">
               <TabsTrigger value="all" className="text-xs sm:text-sm px-3 sm:px-4 rounded-md data-[state=active]:shadow-sm" data-testid="tab-all">
                 All Users
               </TabsTrigger>
@@ -701,6 +737,13 @@ const Users = () => {
               </TabsTrigger>
               <TabsTrigger value="admins" className="text-xs sm:text-sm px-3 sm:px-4 rounded-md data-[state=active]:shadow-sm" data-testid="tab-admins">
                 Admins
+              </TabsTrigger>
+              <TabsTrigger value="duplicates" className="text-xs sm:text-sm px-3 sm:px-4 rounded-md data-[state=active]:shadow-sm data-[state=active]:bg-orange-600 data-[state=active]:text-white" data-testid="tab-duplicates">
+                <TriangleAlert className="h-3.5 w-3.5 mr-1" />
+                Duplicates
+                {duplicateGroups.length > 0 && (
+                  <Badge className="ml-1.5 h-5 min-w-[20px] px-1.5 text-[10px] rounded-full bg-orange-500 hover:bg-orange-500">{duplicateGroups.length}</Badge>
+                )}
               </TabsTrigger>
             </TabsList>
 
@@ -743,8 +786,128 @@ const Users = () => {
             </div>
           </div>
 
-          {/* Users Table */}
-          <TabsContent value={activeTab} className="mt-0">
+          {/* ── Duplicates Tab Content ── */}
+          <TabsContent value="duplicates" className="mt-0">
+            {/* Prevention guidance banner */}
+            <div className="rounded-lg border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950/30 px-4 py-3 mb-4 flex gap-3">
+              <Info className="h-4 w-4 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
+              <div className="space-y-1 text-sm">
+                <p className="font-semibold text-blue-800 dark:text-blue-300">How to prevent future duplicates</p>
+                <ul className="text-blue-700 dark:text-blue-400 space-y-1 text-xs list-disc pl-4">
+                  <li>Supabase Auth already enforces unique emails at sign-up — most duplicates in this list come from profiles created via direct database inserts or data migrations.</li>
+                  <li>Enable <strong>Email Confirmation</strong> in your Supabase Auth settings so every new sign-up must verify their email before a profile is created.</li>
+                  <li>Never insert rows directly into the <code className="bg-blue-100 dark:bg-blue-900 rounded px-1">profiles</code> table without a matching auth user — use the Admin API or the registration flow.</li>
+                  <li>To clean up: keep the account the user actively logs in with, then delete the other one below.</li>
+                </ul>
+              </div>
+            </div>
+
+            {duplicateGroups.length === 0 ? (
+              <Card className="p-10">
+                <div className="flex flex-col items-center justify-center text-center gap-3">
+                  <div className="rounded-full bg-green-100 dark:bg-green-900/30 p-4">
+                    <CheckCircle className="h-8 w-8 text-green-600 dark:text-green-400" />
+                  </div>
+                  <h3 className="font-semibold text-base">No duplicate emails found</h3>
+                  <p className="text-sm text-muted-foreground">Every email address in the system is unique.</p>
+                </div>
+              </Card>
+            ) : (
+              <div className="space-y-4">
+                <p className="text-sm text-muted-foreground">
+                  <span className="font-semibold text-orange-600 dark:text-orange-400">{duplicateGroups.length} email address{duplicateGroups.length !== 1 ? 'es' : ''}</span> shared by multiple accounts.
+                  Delete the account you do not need — the other will remain intact.
+                </p>
+                {duplicateGroups.map(({ email, users: groupUsers }) => (
+                  <Card key={email} className="overflow-hidden border-orange-200 dark:border-orange-800">
+                    {/* Group header */}
+                    <div className="flex items-center gap-3 px-4 py-3 bg-orange-50 dark:bg-orange-950/30 border-b border-orange-200 dark:border-orange-800">
+                      <TriangleAlert className="h-4 w-4 text-orange-500 shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold text-orange-800 dark:text-orange-300 truncate">{email}</p>
+                        <p className="text-xs text-orange-600 dark:text-orange-400">{groupUsers.length} accounts share this email</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => { navigator.clipboard.writeText(email); toast({ title: 'Email copied' }); }}
+                        className="text-orange-400 hover:text-orange-600 dark:hover:text-orange-300 transition-colors"
+                        title="Copy email"
+                      >
+                        <Copy className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                    {/* Accounts in this group */}
+                    <div className="divide-y dark:divide-border">
+                      {groupUsers.map((u, idx) => {
+                        const activeStatus = getActiveStatus(u);
+                        const isOnline = activeStatus === 'Online';
+                        return (
+                          <div key={u.id} className="flex items-center gap-4 px-4 py-3 hover:bg-muted/30 transition-colors" data-testid={`row-dupe-${u.id}`}>
+                            {/* Index indicator */}
+                            <span className="shrink-0 w-6 h-6 rounded-full bg-orange-100 dark:bg-orange-900/50 text-orange-700 dark:text-orange-300 text-[11px] font-bold flex items-center justify-center">
+                              {idx + 1}
+                            </span>
+                            {/* Avatar */}
+                            <div className="relative shrink-0">
+                              <Avatar className="h-9 w-9">
+                                <AvatarImage src={u.avatar} />
+                                <AvatarFallback className="bg-gradient-to-br from-primary/20 to-primary/5 text-primary text-xs font-semibold">
+                                  {getInitials(u.name)}
+                                </AvatarFallback>
+                              </Avatar>
+                              {isOnline && <span className="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full bg-green-500 border-2 border-background" />}
+                            </div>
+                            {/* Info */}
+                            <div className="flex-1 min-w-0 grid grid-cols-1 sm:grid-cols-3 gap-1">
+                              <div className="min-w-0">
+                                <p className="text-sm font-medium truncate">{u.name || 'Unnamed'}</p>
+                                <p className="text-[10px] text-muted-foreground font-mono truncate">{u.id.slice(0, 8)}…</p>
+                              </div>
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <RoleBadge role={getPrimaryRoleLabel(u)} size="sm" />
+                                {u.isApproved
+                                  ? <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200 dark:bg-green-900/20 dark:text-green-400 text-[10px] px-1.5 py-0"><CheckCircle className="h-2.5 w-2.5 mr-1" />Active</Badge>
+                                  : <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-900/20 dark:text-amber-400 text-[10px] px-1.5 py-0"><Clock className="h-2.5 w-2.5 mr-1" />Pending</Badge>}
+                              </div>
+                              <div className="text-xs text-muted-foreground">
+                                <span className={isOnline ? 'text-green-600 dark:text-green-400 font-medium' : ''}>{activeStatus}</span>
+                                <span className="text-muted-foreground/40 mx-1">·</span>
+                                <span>{getAuthMethod(u) === 'google' ? 'Google Auth' : 'Email/Password'}</span>
+                              </div>
+                            </div>
+                            {/* Actions */}
+                            <div className="flex items-center gap-1 shrink-0">
+                              <Button variant="ghost" size="icon" className="h-7 w-7" asChild title="View profile">
+                                <Link to={`/users/${u.id}`}><Eye className="h-4 w-4" /></Link>
+                              </Button>
+                              {isAdminOrICT && (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-7 px-2 border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30"
+                                  onClick={() => handleDelete(u.id)}
+                                  disabled={deletingUserId === u.id}
+                                  title="Delete this account"
+                                  data-testid={`button-delete-dupe-${u.id}`}
+                                >
+                                  {deletingUserId === u.id
+                                    ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                    : <Trash2 className="h-3.5 w-3.5" />}
+                                </Button>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </Card>
+                ))}
+              </div>
+            )}
+          </TabsContent>
+
+          {/* Users Table — rendered for all tabs except duplicates */}
+          <TabsContent value={activeTab} className="mt-0" hidden={activeTab === 'duplicates'}>
             {isInitialLoad && users.length === 0 ? (
               <TableSkeleton rows={8} columns={5} />
             ) : users.length === 0 ? (
