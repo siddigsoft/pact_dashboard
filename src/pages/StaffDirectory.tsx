@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useLayoutEffect, useRef, useMemo, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -493,6 +493,13 @@ export default function StaffDirectory() {
   const [refreshing, setRefreshing]      = useState(false);
   const [selected, setSelected]          = useState<StaffProfile | null>(null);
 
+  /* Scroll to top when this page mounts — the MainLayout content area retains
+     scroll position between page navigations, which can hide the blue header. */
+  const pageTopRef = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    pageTopRef.current?.scrollIntoView({ behavior: 'instant', block: 'start' });
+  }, []);
+
   /* Filters */
   const [search, setSearch]              = useState('');
   const [hubFilter, setHubFilter]        = useState('all');
@@ -516,7 +523,7 @@ export default function StaffDirectory() {
    * Merge DB profiles with LIVE WebSocket presence from GlobalPresenceContext.
    * `isUserOnline(id)` returns true only when a WebSocket connection is open
    * right now for that user — it auto-updates on join/leave events.
-   * "Away" is the fallback for recently active (< 30 min) but not connected.
+   * "Away" is the fallback for recently active (< 60 min) but not connected.
    */
   const enrichedProfiles = useMemo<StaffProfile[]>(() =>
     profiles.map(p => ({
@@ -909,7 +916,7 @@ export default function StaffDirectory() {
           <SelectContent>
             <SelectItem value="all">All Status</SelectItem>
             <SelectItem value="online">Online now</SelectItem>
-            <SelectItem value="away">Away (30 min)</SelectItem>
+            <SelectItem value="away">Away (60 min)</SelectItem>
             <SelectItem value="offline">Offline</SelectItem>
           </SelectContent>
         </Select>
@@ -966,7 +973,7 @@ export default function StaffDirectory() {
   );
 
   return (
-    <div className="min-h-screen bg-background">
+    <div ref={pageTopRef} className="min-h-screen bg-background">
       {/* ── Page Header Banner ── */}
       <div className="bg-gradient-to-r from-[#0F2041] via-[#1a3260] to-[#1D3461] px-6 py-6 md:py-8">
         <div className="max-w-7xl mx-auto flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -1025,7 +1032,7 @@ export default function StaffDirectory() {
             onClick={() => setStatusFilter('online')}
           />
           <StatCard
-            label="Away (< 30 min)"
+            label="Away (< 60 min)"
             value={stats.busy}
             icon={Activity}
             accent={{ border: 'bg-amber-400', iconBg: 'bg-amber-100 dark:bg-amber-900/40', iconColor: 'text-amber-600 dark:text-amber-400', numColor: 'text-amber-700 dark:text-amber-400' }}
@@ -1333,7 +1340,7 @@ export default function StaffDirectory() {
                     <>
                       <span className="text-muted-foreground/40">·</span>
                       <span className="font-semibold text-amber-600 dark:text-amber-400">
-                        {enrichedProfiles.filter(p => p.presence === 'away').length} away (&lt;30 min)
+                        {enrichedProfiles.filter(p => p.presence === 'away').length} away (&lt;60 min)
                       </span>
                     </>
                   )}
