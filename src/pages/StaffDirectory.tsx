@@ -51,6 +51,8 @@ interface StaffProfile {
   id: string; full_name: string | null; email: string | null; phone: string | null;
   role: string | null; employee_id: string | null; hub_id: string | null;
   state_id: string | null; locality_id: string | null; availability: string | null;
+  /** Computed from last_activity — NOT from the static `availability` DB column */
+  presence: 'online' | 'away' | 'offline';
   status: string | null; location: any; location_sharing: boolean | null;
   updated_at: string; created_at: string; bank_account: BankAccount | null;
   last_activity: string | null; device_info: string | null; app_version: string | null;
@@ -73,10 +75,30 @@ const ROLE_COLORS: Record<string, string> = {
   enumerator: 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 border-slate-200 dark:border-slate-700',
 };
 
-function avBadge(av: string | null) {
-  if (av === 'online') return { dot: 'bg-green-500', label: 'Online', labelColor: 'text-green-700 dark:text-green-400', ring: 'ring-green-400' };
-  if (av === 'busy')   return { dot: 'bg-amber-500',  label: 'Busy',   labelColor: 'text-amber-700 dark:text-amber-400',  ring: 'ring-amber-400'  };
-  return { dot: 'bg-slate-300 dark:bg-slate-600', label: 'Offline', labelColor: 'text-slate-500', ring: 'ring-slate-300' };
+/**
+ * Derive real presence from the last_activity timestamp.
+ * - online : last activity within 5 minutes  → truly connected right now
+ * - away   : last activity within 30 minutes → recently active
+ * - offline: everything else
+ *
+ * The `availability` column in the database is a static field that never
+ * auto-resets, so we intentionally ignore it for presence display.
+ */
+function presenceFromActivity(lastActivityIso: string | null, updatedAt?: string): 'online' | 'away' | 'offline' {
+  const ts = lastActivityIso || updatedAt;
+  if (!ts) return 'offline';
+  try {
+    const mins = (Date.now() - parseISO(ts).getTime()) / 60_000;
+    if (mins < 5)  return 'online';
+    if (mins < 30) return 'away';
+    return 'offline';
+  } catch { return 'offline'; }
+}
+
+function avBadge(presence: 'online' | 'away' | 'offline') {
+  if (presence === 'online') return { dot: 'bg-green-500', label: 'Online', labelColor: 'text-green-700 dark:text-green-400', ring: 'ring-green-400' };
+  if (presence === 'away')   return { dot: 'bg-amber-500',  label: 'Away',   labelColor: 'text-amber-700 dark:text-amber-400',  ring: 'ring-amber-400'  };
+  return { dot: 'bg-slate-300 dark:bg-slate-600', label: 'Offline', labelColor: 'text-slate-500 dark:text-slate-400', ring: 'ring-slate-300' };
 }
 function maskAcc(n?: string) { if (!n) return '—'; return n.length <= 4 ? n : '•••• ' + n.slice(-4); }
 function initials(name: string | null) { if (!name) return '?'; return name.split(' ').filter(Boolean).map(n => n[0]).join('').slice(0, 2).toUpperCase(); }
@@ -105,8 +127,9 @@ function toExportProfiles(profiles: StaffProfile[], hubList: { id: string; name:
 }
 
 /* ─── Avatar ──────────────────────────────────────────────── */
-function Avatar({ name, size = 'md', availability }: { name: string | null; size?: 'sm' | 'md' | 'lg'; availability?: string | null }) {
-  const av = avBadge(availability ?? null);
+function Avatar({ name, size = 'md', availability }: { name: string | null; size?: 'sm' | 'md' | 'lg'; availability?: 'online' | 'away' | 'offline' | null }) {
+  const presence: 'online' | 'away' | 'offline' = (availability === 'online' || availability === 'away') ? availability : 'offline';
+  const av = avBadge(presence);
   const sz = size === 'sm' ? 'w-7 h-7 text-[10px]' : size === 'lg' ? 'w-14 h-14 text-xl' : 'w-10 h-10 text-sm';
   const dotSz = size === 'sm' ? 'w-2 h-2' : size === 'lg' ? 'w-3.5 h-3.5' : 'w-2.5 h-2.5';
   return (
@@ -136,7 +159,7 @@ function ProfileDetail({ profile, onClose }: { profile: StaffProfile; onClose: (
   const hub      = dbHubs.find(h => h.id === profile.hub_id);
   const state    = sudanStates.find(s => s.id === profile.state_id);
   const locality = state?.localities?.find((l: any) => l.id === profile.locality_id);
-  const av       = avBadge(profile.availability);
+  const av       = avBadge(profile.presence);
   const ba       = profile.bank_account;
   const hasBank  = !!(ba?.accountNumber || ba?.accountName);
 
@@ -149,7 +172,7 @@ function ProfileDetail({ profile, onClose }: { profile: StaffProfile; onClose: (
         <div className="bg-gradient-to-r from-[#0F2041] to-[#1D3461] px-6 py-6 rounded-t-lg">
           <DialogHeader>
             <div className="flex items-center gap-4">
-              <Avatar name={profile.full_name} size="lg" availability={profile.availability} />
+              <Avatar name={profile.full_name} size="lg" availability={profile.presence} />
               <div className="min-w-0 flex-1">
                 <DialogTitle className="text-white text-lg font-bold leading-tight truncate">
                   {profile.full_name || 'Unknown'}
@@ -432,7 +455,9 @@ export default function StaffDirectory() {
         if (act?.metadata?.appVersion || act?.metadata?.app_version) {
           app_version = String(act.metadata.appVersion || act.metadata.app_version);
         }
-        return { ...p, bank_account: ba, last_activity: act?.created_at || null, device_info, app_version };
+        const last_activity = act?.created_at || null;
+        const presence = presenceFromActivity(last_activity, p.updated_at);
+        return { ...p, bank_account: ba, last_activity, device_info, app_version, presence };
       });
 
       setProfiles(merged);
@@ -453,9 +478,9 @@ export default function StaffDirectory() {
       if (stateFilter !== 'all' && p.state_id !== stateFilter) return false;
       if (localityFilter !== 'all' && p.locality_id !== localityFilter) return false;
       if (roleFilter !== 'all' && p.role !== roleFilter) return false;
-      if (statusFilter === 'online'  && p.availability !== 'online')  return false;
-      if (statusFilter === 'busy'    && p.availability !== 'busy')    return false;
-      if (statusFilter === 'offline' && p.availability === 'online')  return false;
+      if (statusFilter === 'online'  && p.presence !== 'online')  return false;
+      if (statusFilter === 'away'    && p.presence !== 'away')    return false;
+      if (statusFilter === 'offline' && p.presence !== 'offline') return false;
       if (bankFilter === 'has'     && !(p.bank_account?.accountNumber || p.bank_account?.accountName)) return false;
       if (bankFilter === 'missing' &&  (p.bank_account?.accountNumber || p.bank_account?.accountName)) return false;
       return true;
@@ -465,8 +490,8 @@ export default function StaffDirectory() {
   /* ── Summary stats ── */
   const stats = useMemo(() => ({
     total:       profiles.length,
-    online:      profiles.filter(p => p.availability === 'online').length,
-    busy:        profiles.filter(p => p.availability === 'busy').length,
+    online:      profiles.filter(p => p.presence === 'online').length,
+    busy:        profiles.filter(p => p.presence === 'away').length,
     withBank:    profiles.filter(p => !!(p.bank_account?.accountNumber || p.bank_account?.accountName)).length,
     missingBank: profiles.filter(p => !(p.bank_account?.accountNumber || p.bank_account?.accountName)).length,
   }), [profiles]);
@@ -478,7 +503,7 @@ export default function StaffDirectory() {
       const k = key(p);
       if (!m[k]) m[k] = { total: 0, online: 0, withBank: 0 };
       m[k].total++;
-      if (p.availability === 'online') m[k].online++;
+      if (p.presence === 'online') m[k].online++;
       if (p.bank_account?.accountNumber || p.bank_account?.accountName) m[k].withBank++;
     });
     return Object.entries(m).map(([name, v]) => ({ name, ...v })).sort((a, b) => b.total - a.total);
@@ -526,7 +551,7 @@ export default function StaffDirectory() {
   const ProfileCard = ({ p }: { p: StaffProfile }) => {
     const hub   = dbHubs.find(h => h.id === p.hub_id);
     const state = sudanStates.find(s => s.id === p.state_id);
-    const av    = avBadge(p.availability);
+    const av    = avBadge(p.presence);
     const hasBank = !!(p.bank_account?.accountNumber || p.bank_account?.accountName);
     return (
       <Card
@@ -536,12 +561,12 @@ export default function StaffDirectory() {
       >
         <CardContent className="p-0">
           {/* Card top bar — availability color strip */}
-          <div className={`h-1 w-full ${p.availability === 'online' ? 'bg-green-500' : p.availability === 'busy' ? 'bg-amber-500' : 'bg-slate-200 dark:bg-slate-700'}`} />
+          <div className={`h-1 w-full ${p.presence === 'online' ? 'bg-green-500' : p.presence === 'away' ? 'bg-amber-500' : 'bg-slate-200 dark:bg-slate-700'}`} />
 
           <div className="p-4 space-y-3">
             {/* Header row */}
             <div className="flex items-start gap-3">
-              <Avatar name={p.full_name} size="md" availability={p.availability} />
+              <Avatar name={p.full_name} size="md" availability={p.presence} />
               <div className="flex-1 min-w-0">
                 <div className="flex items-center justify-between gap-1">
                   <p className="font-semibold text-sm text-foreground truncate group-hover:text-blue-700 dark:group-hover:text-blue-400 transition-colors">
@@ -693,8 +718,8 @@ export default function StaffDirectory() {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All Status</SelectItem>
-            <SelectItem value="online">Online</SelectItem>
-            <SelectItem value="busy">Busy</SelectItem>
+            <SelectItem value="online">Online now</SelectItem>
+            <SelectItem value="away">Away (30 min)</SelectItem>
             <SelectItem value="offline">Offline</SelectItem>
           </SelectContent>
         </Select>
@@ -798,7 +823,7 @@ export default function StaffDirectory() {
         <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
           <StatCard label="Total Staff"       value={stats.total}       icon={Users}       color="text-[#0F2041] dark:text-blue-300"  bg="bg-background border-border"                             />
           <StatCard label="Online"            value={stats.online}      icon={Wifi}        color="text-green-700 dark:text-green-400" bg="bg-green-50 dark:bg-green-950/30 border-green-200 dark:border-green-800" onClick={() => setStatusFilter('online')} />
-          <StatCard label="Busy"              value={stats.busy}        icon={Activity}    color="text-amber-700 dark:text-amber-400" bg="bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800"  onClick={() => setStatusFilter('busy')}   />
+          <StatCard label="Away (< 30 min)"    value={stats.busy}        icon={Activity}    color="text-amber-700 dark:text-amber-400" bg="bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800"  onClick={() => setStatusFilter('away')}   />
           <StatCard label="With Bank Account" value={stats.withBank}    icon={UserCheck}   color="text-blue-700 dark:text-blue-400"   bg="bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-800"    onClick={() => setBankFilter('has')}      />
           <StatCard label="Missing Account"   value={stats.missingBank} icon={UserX}       color="text-red-700 dark:text-red-400"     bg="bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-800"        onClick={() => setBankFilter('missing')}  />
         </div>
@@ -873,7 +898,7 @@ export default function StaffDirectory() {
                       {filtered.map(p => {
                         const hub   = dbHubs.find(h => h.id === p.hub_id);
                         const state = sudanStates.find(s => s.id === p.state_id);
-                        const av    = avBadge(p.availability);
+                        const av    = avBadge(p.presence);
                         const hasBank = !!(p.bank_account?.accountNumber || p.bank_account?.accountName);
                         return (
                           <TableRow
@@ -884,7 +909,7 @@ export default function StaffDirectory() {
                           >
                             <TableCell>
                               <div className="flex items-center gap-2.5">
-                                <Avatar name={p.full_name} size="sm" availability={p.availability} />
+                                <Avatar name={p.full_name} size="sm" availability={p.presence} />
                                 <div className="min-w-0">
                                   <p className="text-sm font-medium truncate">{p.full_name || '—'}</p>
                                   <p className="text-[10px] text-muted-foreground truncate">{p.email}</p>
@@ -993,7 +1018,7 @@ export default function StaffDirectory() {
                         >
                           <TableCell>
                             <div className="flex items-center gap-2.5">
-                              <Avatar name={p.full_name} size="sm" availability={p.availability} />
+                              <Avatar name={p.full_name} size="sm" availability={p.presence} />
                               <div className="min-w-0">
                                 <p className="text-sm font-medium truncate">{p.full_name || '—'}</p>
                                 <p className="text-[10px] text-muted-foreground truncate">{p.email}</p>
@@ -1063,7 +1088,7 @@ export default function StaffDirectory() {
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
                 {Array(4).fill(0).map((_, i) => <Skeleton key={i} className="h-52" />)}
               </div>
-            ) : profiles.filter(p => p.availability === 'online' || p.availability === 'busy').length === 0 ? (
+            ) : profiles.filter(p => p.presence === 'online' || p.presence === 'away').length === 0 ? (
               <div className="flex flex-col items-center justify-center py-20 text-muted-foreground space-y-3">
                 <div className="rounded-full bg-muted p-4">
                   <WifiOff className="h-8 w-8 opacity-40" />
@@ -1075,21 +1100,21 @@ export default function StaffDirectory() {
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
                   <span className="inline-flex items-center gap-1.5 font-semibold text-green-700 dark:text-green-400">
                     <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-                    {profiles.filter(p => p.availability === 'online').length} online
+                    {profiles.filter(p => p.presence === 'online').length} online
                   </span>
-                  {profiles.filter(p => p.availability === 'busy').length > 0 && (
+                  {profiles.filter(p => p.presence === 'away').length > 0 && (
                     <>
                       <span className="text-muted-foreground/40">·</span>
                       <span className="font-semibold text-amber-600 dark:text-amber-400">
-                        {profiles.filter(p => p.availability === 'busy').length} busy
+                        {profiles.filter(p => p.presence === 'away').length} away
                       </span>
                     </>
                   )}
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
                   {profiles
-                    .filter(p => p.availability === 'online' || p.availability === 'busy')
-                    .sort((a, b) => (a.availability === 'online' ? -1 : 1))
+                    .filter(p => p.presence === 'online' || p.presence === 'away')
+                    .sort((a, b) => (a.presence === 'online' ? -1 : 1))
                     .map(p => <ProfileCard key={p.id} p={p} />)}
                 </div>
               </div>
