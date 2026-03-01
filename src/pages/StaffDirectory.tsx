@@ -90,9 +90,9 @@ function presenceFromActivity(lastActivityIso: string | null, updatedAt?: string
   if (!ts) return 'offline';
   try {
     const mins = (Date.now() - parseISO(ts).getTime()) / 60_000;
-    // Mobile heartbeat runs every 5 min — use 10 min window so users appear
+    // Mobile heartbeat runs every 3 min — use 6 min window so users appear
     // "online" even if their last ping was just before the heartbeat fired.
-    if (mins < 10) return 'online';
+    if (mins < 6) return 'online';
     if (mins < 60) return 'away';
     return 'offline';
   } catch { return 'offline'; }

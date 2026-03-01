@@ -101,7 +101,7 @@ class _MainScreenState extends State<MainScreen> {
     _writeActivityToProfile(); // Immediate write on app open
     _activityHeartbeatTimer?.cancel();
     _activityHeartbeatTimer = Timer.periodic(
-      const Duration(minutes: 5),
+      const Duration(minutes: 3),
       (_) => _writeActivityToProfile(),
     );
   }

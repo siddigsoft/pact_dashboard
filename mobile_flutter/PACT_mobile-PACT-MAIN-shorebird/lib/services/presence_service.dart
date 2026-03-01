@@ -472,12 +472,12 @@ class PresenceService {
 
       await _trackPresence();
 
-      // Write last_activity to profiles every 5 minutes (every 10th tick).
+      // Write last_activity to profiles every 3 minutes (every 6th tick).
       // This makes mobile users visible as "online" on the web Staff Directory
       // even though mobile uses a different Realtime channel than the web app.
       _heartbeatCount++;
-      if (_heartbeatCount % 10 == 1) {
-        // tick 1, 11, 21 … → immediately on connect, then every 5 min
+      if (_heartbeatCount % 6 == 1) {
+        // tick 1, 7, 13 … → immediately on connect, then every 3 min
         await _writeLastActivityToProfile();
       }
     });
