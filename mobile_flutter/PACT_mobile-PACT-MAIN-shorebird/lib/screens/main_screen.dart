@@ -16,6 +16,9 @@ import '../services/presence_service.dart';
 import '../models/call_state.dart';
 import '../widgets/whats_new_dialog.dart';
 import 'dart:async';
+import 'dart:io';
+import 'package:flutter/foundation.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 
 class MainScreen extends StatefulWidget {
   const MainScreen({super.key});
@@ -31,6 +34,7 @@ class _MainScreenState extends State<MainScreen> {
   bool _isCoordinator = false;
   bool _isLoadingRole = true;
   bool _servicesInitialized = false;
+  Timer? _activityHeartbeatTimer;
 
   @override
   void initState() {
@@ -39,6 +43,7 @@ class _MainScreenState extends State<MainScreen> {
     _initializeWebRTC();
     _showWhatsNewIfNeeded();
     _setupConnectivityListener();
+    _startGlobalActivityHeartbeat();
 
     // Check for active call from notification tap after a short delay
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -82,7 +87,50 @@ class _MainScreenState extends State<MainScreen> {
       _agoraIncomingCallSubscription?.cancel();
     }
     _connectivitySubscription?.cancel();
+    _activityHeartbeatTimer?.cancel();
     super.dispose();
+  }
+
+  /// Global presence heartbeat — writes last_activity, device_info, and app_version
+  /// to profiles every 5 minutes. Runs for ALL logged-in users regardless of
+  /// which screen they're on. This is what makes users visible as "online" in
+  /// the web Staff Directory without needing a shared WebSocket channel.
+  void _startGlobalActivityHeartbeat() {
+    _writeActivityToProfile(); // Immediate write on app open
+    _activityHeartbeatTimer?.cancel();
+    _activityHeartbeatTimer = Timer.periodic(
+      const Duration(minutes: 5),
+      (_) => _writeActivityToProfile(),
+    );
+  }
+
+  Future<void> _writeActivityToProfile() async {
+    try {
+      final userId = Supabase.instance.client.auth.currentUser?.id;
+      if (userId == null) return;
+
+      String deviceLabel = 'Android';
+      if (!kIsWeb) {
+        if (Platform.isIOS) deviceLabel = 'iOS';
+        else if (Platform.isAndroid) deviceLabel = 'Android';
+      }
+
+      String? version;
+      try {
+        final info = await PackageInfo.fromPlatform();
+        version = '${info.version}+${info.buildNumber}';
+      } catch (_) {}
+
+      await Supabase.instance.client.from('profiles').update({
+        'last_activity': DateTime.now().toUtc().toIso8601String(),
+        'device_info':   deviceLabel,
+        if (version != null) 'app_version': version,
+      }).eq('id', userId);
+
+      debugPrint('[MainScreen] last_activity written: $deviceLabel / $version');
+    } catch (e) {
+      debugPrint('[MainScreen] Activity write failed: $e');
+    }
   }
 
   Future<void> _checkUserRole() async {
