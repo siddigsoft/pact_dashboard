@@ -155,7 +155,13 @@ function RoleBadge({ role }: { role: string | null }) {
 }
 
 /* ─── Profile Detail Modal ───────────────────────────────── */
-function ProfileDetail({ profile, onClose }: { profile: StaffProfile; onClose: () => void }) {
+function ProfileDetail({
+  profile, onClose, dbHubs,
+}: {
+  profile: StaffProfile;
+  onClose: () => void;
+  dbHubs: { id: string; name: string }[];
+}) {
   const { toast } = useToast();
   const hub      = dbHubs.find(h => h.id === profile.hub_id);
   const state    = sudanStates.find(s => s.id === profile.state_id);
@@ -315,7 +321,14 @@ function ProfileDetail({ profile, onClose }: { profile: StaffProfile; onClose: (
 }
 
 /* ─── Export Dropdown ────────────────────────────────────── */
-function ExportMenu({ profiles, tab, label }: { profiles: StaffProfile[]; tab: string; label: string }) {
+function ExportMenu({
+  profiles, tab, label, dbHubs,
+}: {
+  profiles: StaffProfile[];
+  tab: string;
+  label: string;
+  dbHubs: { id: string; name: string }[];
+}) {
   const { toast } = useToast();
   const [busy, setBusy] = useState(false);
 
@@ -830,7 +843,7 @@ export default function StaffDirectory() {
             </p>
           </div>
           <div className="flex items-center gap-2 shrink-0">
-            <ExportMenu profiles={filtered} tab={activeTab} label={exportLabel} />
+            <ExportMenu profiles={filtered} tab={activeTab} label={exportLabel} dbHubs={dbHubs} />
             <Button
               variant="outline"
               size="sm"
@@ -1196,7 +1209,7 @@ export default function StaffDirectory() {
       </div>
 
       {/* Profile detail modal */}
-      {selected && <ProfileDetail profile={selected} onClose={() => setSelected(null)} />}
+      {selected && <ProfileDetail profile={selected} onClose={() => setSelected(null)} dbHubs={dbHubs} />}
     </div>
   );
 }
