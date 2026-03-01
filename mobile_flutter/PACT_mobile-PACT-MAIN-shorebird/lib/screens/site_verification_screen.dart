@@ -15,6 +15,7 @@ import 'package:pact_mobile/l10n/app_localizations.dart';
 import '../widgets/custom_drawer_menu.dart';
 import '../widgets/reusable_app_bar.dart';
 import '../widgets/modern_app_header.dart';
+import '../widgets/mmp_filter_bar.dart';
 
 /// Permit decision structure for state and locality permits
 class PermitDecision {
@@ -980,59 +981,23 @@ class _SiteVerificationScreenState extends State<SiteVerificationScreen> {
               ),
             ),
 
-            // MMP Filter chips (only shown when multiple MMPs exist)
-            if (_availableMmps.length > 1) ...[
-              SizedBox(
-                height: 36,
-                child: ListView(
-                  scrollDirection: Axis.horizontal,
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  children: [
-                    // "All MMPs" chip
-                    Padding(
-                      padding: const EdgeInsets.only(right: 6),
-                      child: FilterChip(
-                        label: Text(
-                          'All MMPs',
-                          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
-                        ),
-                        selected: _selectedMmpId == null,
-                        onSelected: (_) => setState(() => _selectedMmpId = null),
-                        selectedColor: const Color(0xFF1E3A5F).withValues(alpha: 0.15),
-                        checkmarkColor: const Color(0xFF1E3A5F),
-                        labelPadding: const EdgeInsets.symmetric(horizontal: 4),
-                        padding: const EdgeInsets.symmetric(horizontal: 4),
-                        visualDensity: VisualDensity.compact,
-                      ),
-                    ),
-                    // One chip per MMP
-                    ..._availableMmps.map((mmp) {
-                      final id = mmp['id'] as String;
-                      final name = mmp['name'] as String;
-                      final count = mmp['count'] as int;
-                      final isSelected = _selectedMmpId == id;
-                      return Padding(
-                        padding: const EdgeInsets.only(right: 6),
-                        child: FilterChip(
-                          label: Text(
-                            '$name ($count)',
-                            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
-                          ),
-                          selected: isSelected,
-                          onSelected: (_) => setState(() => _selectedMmpId = isSelected ? null : id),
-                          selectedColor: const Color(0xFF1E3A5F).withValues(alpha: 0.15),
-                          checkmarkColor: const Color(0xFF1E3A5F),
-                          labelPadding: const EdgeInsets.symmetric(horizontal: 4),
-                          padding: const EdgeInsets.symmetric(horizontal: 4),
-                          visualDensity: VisualDensity.compact,
-                        ),
-                      );
-                    }),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 4),
-            ],
+            // MMP Filter bar
+            MmpFilterBar(
+              mmpOptions: _availableMmps,
+              selectedMmpId: _selectedMmpId,
+              onChanged: (id) => setState(() => _selectedMmpId = id),
+              totalCount: _availableMmps.fold(
+                  0, (sum, m) => sum + (m['count'] as int)),
+              filteredCount: _selectedMmpId == null
+                  ? _availableMmps.fold(
+                      0, (sum, m) => sum + (m['count'] as int))
+                  : (_availableMmps
+                          .where((m) => m['id'] == _selectedMmpId)
+                          .isNotEmpty
+                      ? _availableMmps.firstWhere(
+                          (m) => m['id'] == _selectedMmpId)['count'] as int
+                      : 0),
+            ),
 
             // Content
             Expanded(

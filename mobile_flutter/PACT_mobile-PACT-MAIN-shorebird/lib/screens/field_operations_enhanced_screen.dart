@@ -8,6 +8,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../widgets/reusable_app_bar.dart';
+import '../widgets/mmp_filter_bar.dart';
 import '../services/webrtc_service.dart';
 import '../services/agora_call_service.dart';
 import '../models/call_state.dart';
@@ -4076,55 +4077,26 @@ class _MMPScreenState extends State<MMPScreen> {
           ),
         ),
 
-        // MMP Filter chips (shown when multiple MMPs exist)
+        // MMP Filter bar
         Builder(
           builder: (context) {
             final mmpOptions = _mmpFilterOptions;
-            if (mmpOptions.length <= 1) return const SizedBox.shrink();
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                SizedBox(
-                  height: 38,
-                  child: ListView(
-                    scrollDirection: Axis.horizontal,
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    children: [
-                      Padding(
-                        padding: const EdgeInsets.only(right: 6),
-                        child: FilterChip(
-                          label: const Text('All MMPs', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600)),
-                          selected: _selectedMmpId == null,
-                          onSelected: (_) => setState(() => _selectedMmpId = null),
-                          selectedColor: const Color(0xFF1E3A5F).withValues(alpha: 0.15),
-                          checkmarkColor: const Color(0xFF1E3A5F),
-                          visualDensity: VisualDensity.compact,
-                          padding: const EdgeInsets.symmetric(horizontal: 4),
-                        ),
-                      ),
-                      ...mmpOptions.map((mmp) {
-                        final id = mmp['id'] as String;
-                        final name = mmp['name'] as String;
-                        final count = mmp['count'] as int;
-                        final isSelected = _selectedMmpId == id;
-                        return Padding(
-                          padding: const EdgeInsets.only(right: 6),
-                          child: FilterChip(
-                            label: Text('\$name (\$count)', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600)),
-                            selected: isSelected,
-                            onSelected: (_) => setState(() => _selectedMmpId = isSelected ? null : id),
-                            selectedColor: const Color(0xFF1E3A5F).withValues(alpha: 0.15),
-                            checkmarkColor: const Color(0xFF1E3A5F),
-                            visualDensity: VisualDensity.compact,
-                            padding: const EdgeInsets.symmetric(horizontal: 4),
-                          ),
-                        );
-                      }),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 4),
-              ],
+            final total =
+                mmpOptions.fold(0, (sum, m) => sum + (m['count'] as int));
+            final filtered = _selectedMmpId == null
+                ? total
+                : (mmpOptions
+                        .where((m) => m['id'] == _selectedMmpId)
+                        .isNotEmpty
+                    ? mmpOptions.firstWhere(
+                        (m) => m['id'] == _selectedMmpId)['count'] as int
+                    : 0);
+            return MmpFilterBar(
+              mmpOptions: mmpOptions,
+              selectedMmpId: _selectedMmpId,
+              onChanged: (id) => setState(() => _selectedMmpId = id),
+              totalCount: total,
+              filteredCount: filtered,
             );
           },
         ),
