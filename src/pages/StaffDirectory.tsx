@@ -189,7 +189,10 @@ function ProfileDetail({
                 <div className="flex flex-wrap gap-1.5 mt-2.5">
                   <RoleBadge role={profile.role} />
                   <span className={`inline-flex items-center gap-1 rounded-md border border-white/20 bg-white/10 px-1.5 py-0.5 text-[10px] font-semibold text-white`}>
-                    <span className={`w-1.5 h-1.5 rounded-full ${av.dot}`} />{av.label}
+                    <span className={`w-1.5 h-1.5 rounded-full ${av.dot} ${profile.presence === 'online' ? 'animate-pulse' : ''}`} />
+                    {profile.presence === 'online'
+                      ? 'Online now'
+                      : `Last seen ${lastActive(profile.last_activity, profile.updated_at)}`}
                   </span>
                   {profile.employee_id && (
                     <span className="inline-flex items-center gap-1 rounded-md border border-white/20 bg-white/10 px-1.5 py-0.5 text-[10px] font-mono text-white/80">
@@ -629,7 +632,18 @@ export default function StaffDirectory() {
             {/* Role + status row */}
             <div className="flex items-center gap-1.5 flex-wrap">
               <RoleBadge role={p.role} />
-              <span className={`text-[10px] font-medium ${av.labelColor}`}>{av.label}</span>
+              {/* WhatsApp-style inline status dot + label */}
+              <span className="inline-flex items-center gap-1">
+                <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${
+                  p.presence === 'online' ? 'bg-green-500 animate-pulse' :
+                  p.presence === 'away'   ? 'bg-amber-400' : 'bg-slate-300 dark:bg-slate-600'
+                }`} />
+                <span className={`text-[10px] font-semibold ${av.labelColor}`}>
+                  {p.presence === 'online' ? 'Online now' :
+                   p.presence === 'away'   ? `Last seen ${lastActive(p.last_activity, p.updated_at)}` :
+                                            `Last seen ${lastActive(p.last_activity, p.updated_at)}`}
+                </span>
+              </span>
             </div>
 
             {/* Location */}
@@ -666,19 +680,15 @@ export default function StaffDirectory() {
                   ? <CheckCircle className="h-3.5 w-3.5 text-green-500 shrink-0" />
                   : <XCircle className="h-3.5 w-3.5 text-red-400 shrink-0" />}
               </div>
-              <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
-                <Clock className="h-3 w-3 shrink-0" />
-                <span>{lastActive(p.last_activity, p.updated_at)}</span>
-                {p.device_info && (
-                  <>
-                    <span className="text-muted-foreground/30">·</span>
-                    {(p.device_info === 'Android' || p.device_info === 'iPhone' || p.device_info === 'Mobile')
-                      ? <Smartphone className="h-3 w-3 shrink-0" />
-                      : <Monitor className="h-3 w-3 shrink-0" />}
-                    <span>{p.device_info}</span>
-                  </>
-                )}
-              </div>
+              {/* Device info row — "last seen" already shown above in status */}
+              {p.device_info && (
+                <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+                  {(p.device_info.includes('Android') || p.device_info.includes('iPhone') || p.device_info.toLowerCase().includes('mobile'))
+                    ? <Smartphone className="h-3 w-3 shrink-0" />
+                    : <Monitor className="h-3 w-3 shrink-0" />}
+                  <span className="truncate">{p.device_info}</span>
+                </div>
+              )}
             </div>
           </div>
         </CardContent>
