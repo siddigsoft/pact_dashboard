@@ -29,6 +29,24 @@ import {
 
 /* ─── Types ─────────────────────────────────────────────── */
 interface BankAccount { accountName?: string; accountNumber?: string; branch?: string; bankName?: string; }
+
+/**
+ * Normalize bank account — handles both web (camelCase) and mobile (snake_case) stored formats:
+ * Web:    { accountName, accountNumber, branch, bankName }
+ * Mobile: { account_name, account_number, bank_name, branch_code }
+ */
+function normalizeBA(raw: any): BankAccount | null {
+  if (!raw) return null;
+  const ba: BankAccount = {
+    accountName:   raw.accountName   || raw.account_name   || undefined,
+    accountNumber: raw.accountNumber || raw.account_number || undefined,
+    bankName:      raw.bankName      || raw.bank_name      || undefined,
+    branch:        raw.branch        || raw.branch_code    || undefined,
+  };
+  /* Only return if at least one field has data */
+  return (ba.accountName || ba.accountNumber || ba.bankName || ba.branch) ? ba : null;
+}
+
 interface StaffProfile {
   id: string; full_name: string | null; email: string | null; phone: string | null;
   role: string | null; employee_id: string | null; hub_id: string | null;
@@ -336,10 +354,10 @@ export default function StaffDirectory() {
       /* 3 — Merge */
       const merged: StaffProfile[] = (pData || []).map((p: any) => {
         const act = actMap[p.id];
-        let ba: BankAccount | null = null;
-        if (p.bank_account) {
-          ba = typeof p.bank_account === 'string' ? JSON.parse(p.bank_account) : p.bank_account;
-        }
+        /* Normalize bank account — handles both web (camelCase) and mobile (snake_case) keys */
+        let raw = p.bank_account;
+        if (typeof raw === 'string') { try { raw = JSON.parse(raw); } catch { raw = null; } }
+        const ba: BankAccount | null = normalizeBA(raw);
         let device_info: string | null = null;
         let app_version: string | null = null;
         if (act?.metadata?.deviceInfo?.userAgent) {
