@@ -546,20 +546,37 @@ export default function StaffDirectory() {
   }, [hubFilter, stateFilter, roleFilter, statusFilter, bankFilter, search]);
 
   /* ── Stat card ── */
-  const StatCard = ({ label, value, icon: Icon, color, bg, onClick }: any) => (
+  /**
+   * Stat card — prominent design with a coloured top strip, icon circle, and
+   * large number.  `accent` drives all colour: border, icon bg, number text.
+   * Mirrors the card style used on Down Payment Approval and similar pages.
+   */
+  const StatCard = ({
+    label, value, icon: Icon, accent, onClick,
+  }: {
+    label: string; value: number | string; icon: any;
+    accent: { border: string; iconBg: string; iconColor: string; numColor: string };
+    onClick?: () => void;
+  }) => (
     <button
       type="button"
       onClick={onClick}
-      className={`rounded-lg border p-4 text-left transition-all hover:shadow-sm hover:-translate-y-0.5 ${bg} ${onClick ? 'cursor-pointer' : 'cursor-default'}`}
-      data-testid={`stat-${label.toLowerCase().replace(/\s+/g, '-')}`}
+      className={`group relative overflow-hidden rounded-xl border bg-card text-left shadow-sm transition-all duration-150
+        hover:shadow-md hover:-translate-y-0.5 active:translate-y-0
+        ${onClick ? 'cursor-pointer' : 'cursor-default'}`}
+      data-testid={`stat-${String(label).toLowerCase().replace(/\s+/g, '-')}`}
     >
-      <div className="flex items-start justify-between gap-2">
-        <div>
-          <p className="text-xs text-muted-foreground mb-1">{label}</p>
-          <p className={`text-3xl font-bold tracking-tight ${color}`}>{loading ? '—' : value}</p>
+      {/* Coloured top accent bar */}
+      <div className={`h-1 w-full ${accent.border}`} />
+      <div className="flex items-center justify-between gap-3 px-4 py-3">
+        <div className="min-w-0">
+          <p className="text-[11px] font-medium text-muted-foreground leading-tight truncate">{label}</p>
+          <p className={`text-2xl font-extrabold tracking-tight mt-0.5 ${accent.numColor}`}>
+            {loading ? <span className="text-muted-foreground/40">—</span> : value}
+          </p>
         </div>
-        <div className={`rounded-full p-2 ${bg} border`}>
-          <Icon className={`h-4 w-4 ${color}`} />
+        <div className={`shrink-0 rounded-xl p-2.5 ${accent.iconBg}`}>
+          <Icon className={`h-5 w-5 ${accent.iconColor}`} />
         </div>
       </div>
     </button>
@@ -839,11 +856,40 @@ export default function StaffDirectory() {
 
         {/* ── Stats row ── */}
         <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-          <StatCard label="Total Staff"       value={stats.total}       icon={Users}       color="text-[#0F2041] dark:text-blue-300"  bg="bg-background border-border"                             />
-          <StatCard label="Online"            value={stats.online}      icon={Wifi}        color="text-green-700 dark:text-green-400" bg="bg-green-50 dark:bg-green-950/30 border-green-200 dark:border-green-800" onClick={() => setStatusFilter('online')} />
-          <StatCard label="Away (< 30 min)"    value={stats.busy}        icon={Activity}    color="text-amber-700 dark:text-amber-400" bg="bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800"  onClick={() => setStatusFilter('away')}   />
-          <StatCard label="With Bank Account" value={stats.withBank}    icon={UserCheck}   color="text-blue-700 dark:text-blue-400"   bg="bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-800"    onClick={() => setBankFilter('has')}      />
-          <StatCard label="Missing Account"   value={stats.missingBank} icon={UserX}       color="text-red-700 dark:text-red-400"     bg="bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-800"        onClick={() => setBankFilter('missing')}  />
+          <StatCard
+            label="Total Staff"
+            value={stats.total}
+            icon={Users}
+            accent={{ border: 'bg-[#1D3461]', iconBg: 'bg-blue-100 dark:bg-blue-900/40', iconColor: 'text-[#1D3461] dark:text-blue-300', numColor: 'text-[#0F2041] dark:text-blue-300' }}
+          />
+          <StatCard
+            label="Online Now"
+            value={stats.online}
+            icon={Wifi}
+            accent={{ border: 'bg-green-500', iconBg: 'bg-green-100 dark:bg-green-900/40', iconColor: 'text-green-600 dark:text-green-400', numColor: 'text-green-700 dark:text-green-400' }}
+            onClick={() => setStatusFilter('online')}
+          />
+          <StatCard
+            label="Away (< 30 min)"
+            value={stats.busy}
+            icon={Activity}
+            accent={{ border: 'bg-amber-400', iconBg: 'bg-amber-100 dark:bg-amber-900/40', iconColor: 'text-amber-600 dark:text-amber-400', numColor: 'text-amber-700 dark:text-amber-400' }}
+            onClick={() => setStatusFilter('away')}
+          />
+          <StatCard
+            label="With Bank Account"
+            value={stats.withBank}
+            icon={UserCheck}
+            accent={{ border: 'bg-blue-500', iconBg: 'bg-blue-100 dark:bg-blue-900/40', iconColor: 'text-blue-600 dark:text-blue-400', numColor: 'text-blue-700 dark:text-blue-400' }}
+            onClick={() => setBankFilter('has')}
+          />
+          <StatCard
+            label="Missing Account"
+            value={stats.missingBank}
+            icon={UserX}
+            accent={{ border: 'bg-red-500', iconBg: 'bg-red-100 dark:bg-red-900/40', iconColor: 'text-red-600 dark:text-red-400', numColor: 'text-red-700 dark:text-red-400' }}
+            onClick={() => setBankFilter('missing')}
+          />
         </div>
 
         {/* ── Tabs ── */}
