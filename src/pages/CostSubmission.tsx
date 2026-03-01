@@ -1763,45 +1763,6 @@ const CostSubmission = () => {
       </Card>
 
       {/* Main Content */}
-      {/* ── Finance Email Action Bar ── */}
-      {canViewTeamSubmissions && (() => {
-        const approvedCount = operationalCosts.filter(o => getOperationalDerivedStatus(o) === 'approved').length;
-        const approvedTotal = operationalCosts.filter(o => getOperationalDerivedStatus(o) === 'approved').reduce((sum, o) => sum + (o.amount_cents || 0) / 100, 0);
-        return (
-          <div className={`rounded-xl border-2 px-5 py-3.5 flex items-center justify-between gap-4 transition-all ${approvedCount > 0 ? 'bg-gradient-to-r from-[#0F2041] to-[#1D3461] border-[#0F2041]' : 'bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700'}`}>
-            <div className="flex items-center gap-3 min-w-0">
-              <div className={`shrink-0 w-9 h-9 rounded-lg flex items-center justify-center ${approvedCount > 0 ? 'bg-white/15' : 'bg-slate-200 dark:bg-slate-800'}`}>
-                <Mail className={`h-4.5 w-4.5 ${approvedCount > 0 ? 'text-white' : 'text-slate-500'}`} />
-              </div>
-              <div className="min-w-0">
-                <p className={`text-sm font-bold leading-tight ${approvedCount > 0 ? 'text-white' : 'text-slate-700 dark:text-slate-200'}`}>
-                  Send Payment Email to Finance
-                  <span className="font-normal text-xs opacity-60 mr-1"> / إرسال بريد الدفع للمالية</span>
-                </p>
-                <p className={`text-xs leading-tight mt-0.5 ${approvedCount > 0 ? 'text-white/75' : 'text-muted-foreground'}`}>
-                  {approvedCount > 0
-                    ? `${approvedCount} approved submission${approvedCount !== 1 ? 's' : ''} ready · SDG ${approvedTotal.toLocaleString(undefined, { maximumFractionDigits: 0 })}`
-                    : 'No approved submissions pending — check back after approvals'}
-                </p>
-              </div>
-            </div>
-            <Button
-              size="sm"
-              type="button"
-              onClick={openBulkCostEmailDialog}
-              className={`shrink-0 font-semibold gap-1.5 ${approvedCount > 0 ? 'bg-white text-[#0F2041] hover:bg-white/90 shadow-lg shadow-black/20' : 'bg-slate-200 text-slate-600 hover:bg-slate-300 dark:bg-slate-700 dark:text-slate-300'}`}
-              data-testid="button-bulk-cost-email-bar"
-            >
-              <Mail className="h-3.5 w-3.5" />
-              Send to Finance
-              {approvedCount > 0 && (
-                <span className="bg-[#0F2041] text-white text-[10px] font-bold rounded-full px-1.5 py-0.5 leading-none">{approvedCount}</span>
-              )}
-            </Button>
-          </div>
-        );
-      })()}
-
       <Tabs value={activeTab} onValueChange={(v) => {
         if (v !== 'reconciliation') {
           setActiveReconciliation(null);
@@ -2474,6 +2435,46 @@ const CostSubmission = () => {
 
         {/* Submissions History Tab */}
         <TabsContent value="history" className="space-y-4">
+          {/* ── Finance Email Action Bar — only in All Submissions tab ── */}
+          {canViewTeamSubmissions && (() => {
+            const approvedCount = operationalCosts.filter(o => getOperationalDerivedStatus(o) === 'approved').length;
+            const approvedTotal = operationalCosts.filter(o => getOperationalDerivedStatus(o) === 'approved').reduce((sum, o) => sum + (o.amount_cents || 0) / 100, 0);
+            return (
+              <div className={`rounded-xl border-2 px-5 py-3.5 flex items-center justify-between gap-4 transition-all ${approvedCount > 0 ? 'bg-gradient-to-r from-[#0F2041] to-[#1D3461] border-[#0F2041]' : 'bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700'}`}>
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className={`shrink-0 w-9 h-9 rounded-lg flex items-center justify-center ${approvedCount > 0 ? 'bg-white/15' : 'bg-slate-200 dark:bg-slate-800'}`}>
+                    <Mail className={`h-4 w-4 ${approvedCount > 0 ? 'text-white' : 'text-slate-500'}`} />
+                  </div>
+                  <div className="min-w-0">
+                    <p className={`text-sm font-bold leading-tight ${approvedCount > 0 ? 'text-white' : 'text-slate-700 dark:text-slate-200'}`}>
+                      Send Payment Email to Finance
+                      <span className="font-normal text-xs opacity-60 mr-1"> / إرسال بريد الدفع للمالية</span>
+                    </p>
+                    <p className={`text-xs leading-tight mt-0.5 ${approvedCount > 0 ? 'text-white/75' : 'text-muted-foreground'}`}>
+                      {approvedCount > 0
+                        ? `${approvedCount} approved submission${approvedCount !== 1 ? 's' : ''} · SDG ${approvedTotal.toLocaleString(undefined, { maximumFractionDigits: 0 })} ready to send`
+                        : 'No approved submissions — check back after tier approvals are complete'}
+                    </p>
+                  </div>
+                </div>
+                <Button
+                  size="sm"
+                  type="button"
+                  onClick={openBulkCostEmailDialog}
+                  disabled={approvedCount === 0}
+                  className={`shrink-0 font-semibold gap-1.5 ${approvedCount > 0 ? 'bg-white text-[#0F2041] hover:bg-white/90 shadow-lg shadow-black/20' : 'bg-slate-200 text-slate-500 cursor-not-allowed'}`}
+                  data-testid="button-bulk-cost-email-bar"
+                >
+                  <Mail className="h-3.5 w-3.5" />
+                  Send to Finance
+                  {approvedCount > 0 && (
+                    <span className="bg-[#0F2041] text-white text-[10px] font-bold rounded-full px-1.5 py-0.5 leading-none">{approvedCount}</span>
+                  )}
+                </Button>
+              </div>
+            );
+          })()}
+
           <Card>
             <CardHeader className="pb-3">
               <div className="flex items-center gap-2">
