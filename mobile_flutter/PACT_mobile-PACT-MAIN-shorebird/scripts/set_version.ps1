@@ -1,40 +1,51 @@
-param(
-    [string]$Target = ""
-)
+param([string]$Target = "")
 
-$VERSION_NAME = "1.01.0"
-$PUBSPEC = Join-Path $PSScriptRoot "..\pubspec.yaml"
+# Paths (script lives in scripts\, config lives one level up in project root)
+$ROOT    = Join-Path $PSScriptRoot ".."
+$PUBSPEC = Join-Path $ROOT "pubspec.yaml"
+$VFILE   = Join-Path $ROOT "version.json"
 
-# Auto build number from git commit count
-$BUILD_NUMBER = & git rev-list --count HEAD 2>$null
-if (-not $BUILD_NUMBER) { $BUILD_NUMBER = "1" }
-$BUILD_NUMBER = $BUILD_NUMBER.Trim()
+# ── Read version.json ──────────────────────────────────────────────────────
+$v = Get-Content $VFILE -Raw | ConvertFrom-Json
 
-# Stamp pubspec.yaml
-$content = Get-Content $PUBSPEC -Raw
-$content = $content -replace '(?m)^version: .*', "version: ${VERSION_NAME}+${BUILD_NUMBER}"
-Set-Content $PUBSPEC $content -NoNewline
+$major          = [int]$v.major
+$minor          = $v.minor          # e.g. "01"
+$build          = [int]$v.build
+$buildsPerVer   = [int]$v.buildsPerVersion   # default 9
 
-Write-Host "[OK] Version set to PACT v$VERSION_NAME (build $BUILD_NUMBER)" -ForegroundColor Green
+# ── Auto-increment build ───────────────────────────────────────────────────
+$build++
 
+# ── Auto-bump major version every N builds ────────────────────────────────
+if ($build -gt $buildsPerVer) {
+    $major++
+    $build = 1
+    Write-Host "" 
+    Write-Host "*** VERSION BUMPED → PACT v${major}.${minor} ***" -ForegroundColor Magenta
+    Write-Host ""
+}
+
+# ── Save updated counters back to version.json ────────────────────────────
+$v.major = $major
+$v.build = $build
+$v | ConvertTo-Json | Set-Content $VFILE
+
+# ── Stamp pubspec.yaml ────────────────────────────────────────────────────
+$versionName   = "${major}.${minor}.0"
+$fullVersion   = "${versionName}+${build}"
+$pubContent    = Get-Content $PUBSPEC -Raw
+$pubContent    = $pubContent -replace '(?m)^version: .*', "version: $fullVersion"
+Set-Content $PUBSPEC $pubContent -NoNewline
+
+# ── Summary ───────────────────────────────────────────────────────────────
+$remaining = $buildsPerVer - $build
+Write-Host "[OK] PACT v${major}.${minor}  |  Build $build of $buildsPerVer  |  $remaining build(s) until v$($major+1).${minor}" -ForegroundColor Green
+
+# ── Optional build target ─────────────────────────────────────────────────
 switch ($Target.ToLower()) {
-    "android" {
-        Write-Host "[->] Building Android APK..." -ForegroundColor Cyan
-        flutter build apk --release
-    }
-    "bundle" {
-        Write-Host "[->] Building Android App Bundle..." -ForegroundColor Cyan
-        flutter build appbundle --release
-    }
-    "ios" {
-        Write-Host "[->] Building iOS IPA..." -ForegroundColor Cyan
-        flutter build ipa --release
-    }
-    "shorebird" {
-        Write-Host "[->] Shorebird patch release..." -ForegroundColor Cyan
-        shorebird patch android
-    }
-    default {
-        Write-Host "Usage: .\scripts\set_version.ps1 [android|bundle|ios|shorebird]" -ForegroundColor Yellow
-    }
+    "android"   { Write-Host "[->] Building Android APK..."         -ForegroundColor Cyan; flutter build apk --release }
+    "bundle"    { Write-Host "[->] Building Android App Bundle..."  -ForegroundColor Cyan; flutter build appbundle --release }
+    "ios"       { Write-Host "[->] Building iOS IPA..."             -ForegroundColor Cyan; flutter build ipa --release }
+    "shorebird" { Write-Host "[->] Shorebird patch release..."      -ForegroundColor Cyan; shorebird patch android }
+    default     { Write-Host "Tip: add android | bundle | ios | shorebird to also build" -ForegroundColor Yellow }
 }
