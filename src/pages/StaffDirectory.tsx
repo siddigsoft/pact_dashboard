@@ -527,14 +527,14 @@ export default function StaffDirectory() {
 
       const { data: pData, error: pErr } = await (supabase as any)
         .from('profiles')
-        .select('id, full_name, email, phone, role, employee_id, hub_id, state_id, locality_id, availability, status, location, location_sharing, updated_at, created_at, bank_account')
+        .select('id, full_name, email, phone, role, employee_id, hub_id, state_id, locality_id, availability, status, location, location_sharing, updated_at, created_at, bank_account, last_activity, device_info, app_version')
         .order('full_name');
       if (pErr) throw pErr;
 
       /* Latest activity per user — one batch query */
       const { data: actData } = await (supabase as any)
         .from('user_activity_logs')
-        .select('user_id, created_at, metadata')
+        .select('user_id, created_at, metadata, device_info')
         .order('created_at', { ascending: false })
         .limit(500);
 
@@ -546,24 +546,39 @@ export default function StaffDirectory() {
         let raw = p.bank_account;
         if (typeof raw === 'string') { try { raw = JSON.parse(raw); } catch { raw = null; } }
         const ba = normalizeBA(raw);
-        let device_info: string | null = null;
-        let app_version: string | null = null;
-        if (act?.metadata?.deviceInfo?.userAgent) {
-          const ua = act.metadata.deviceInfo.userAgent as string;
-          device_info = ua.includes('Android') ? 'Android' : ua.includes('iPhone') ? 'iPhone' : ua.includes('Mobile') ? 'Mobile' : 'Desktop';
+
+        /* ── Device info: prefer profiles.device_info (written by Flutter heartbeat),
+           fall back to user_activity_logs.device_info (JSONB col), then metadata ── */
+        let device_info: string | null = p.device_info || null;
+        if (!device_info) {
+          // act.device_info is a JSONB object {userAgent, isMobile, ...}
+          const ua: string =
+            act?.device_info?.userAgent ||
+            act?.metadata?.deviceInfo?.userAgent ||
+            act?.metadata?.device_info?.userAgent || '';
+          if (ua) {
+            if (ua.includes('Android') || ua.toLowerCase().includes('flutter')) device_info = 'Android';
+            else if (ua.includes('iPhone') || ua.includes('iPad'))               device_info = 'iOS';
+            else if (ua.includes('Mobile'))                                       device_info = 'Mobile';
+            else if (ua)                                                          device_info = 'Desktop';
+          }
         }
-        if (act?.metadata?.appVersion || act?.metadata?.app_version) {
-          app_version = String(act.metadata.appVersion || act.metadata.app_version);
+
+        /* ── App version: prefer profiles.app_version (Flutter), then metadata ── */
+        let app_version: string | null = p.app_version || null;
+        if (!app_version) {
+          const mv = act?.metadata?.appVersion || act?.metadata?.app_version;
+          if (mv) app_version = String(mv);
         }
-        /* Use the most recent of: profiles.last_activity (written by web AND mobile
-           heartbeats) vs user_activity_logs.created_at (written by auth events).
-           This ensures mobile users show as online/away without needing the
-           web WebSocket channel. */
+
+        /* ── Last activity: prefer profiles.last_activity (web + mobile heartbeat),
+           then activity log timestamp — take whichever is more recent ── */
         const profileTs = p.last_activity || null;
-        const actTs     = act?.created_at   || null;
+        const actTs     = act?.created_at  || null;
         const last_activity = (profileTs && actTs)
           ? (new Date(profileTs) > new Date(actTs) ? profileTs : actTs)
           : (profileTs || actTs);
+
         const presence = presenceFromActivity(last_activity, p.updated_at);
         return { ...p, bank_account: ba, last_activity, device_info, app_version, presence };
       });
@@ -592,10 +607,11 @@ export default function StaffDirectory() {
         setProfiles(prev => prev.map(p =>
           p.id === updated.id
             ? { ...p,
-                location: updated.location ?? p.location,
-                location_sharing: updated.location_sharing ?? p.location_sharing,
-                // last_activity: only patch if the column exists on the payload
+                location:         updated.location          ?? p.location,
+                location_sharing: updated.location_sharing  ?? p.location_sharing,
                 ...(updated.last_activity ? { last_activity: updated.last_activity } : {}),
+                ...(updated.device_info   ? { device_info:   updated.device_info   } : {}),
+                ...(updated.app_version   ? { app_version:   updated.app_version   } : {}),
               }
             : p
         ));

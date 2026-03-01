@@ -1,10 +1,12 @@
 // lib/services/presence_service.dart
 
 import 'dart:async';
+import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:hive_flutter/hive_flutter.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 
 /// User presence data model
 class UserPresence {
@@ -486,12 +488,29 @@ class PresenceService {
   Future<void> _writeLastActivityToProfile() async {
     if (_currentUserId == null) return;
     try {
+      // Detect device type
+      String deviceLabel = 'Android';
+      if (!kIsWeb) {
+        if (Platform.isIOS) deviceLabel = 'iOS';
+        else if (Platform.isAndroid) deviceLabel = 'Android';
+        else if (Platform.isWindows || Platform.isMacOS || Platform.isLinux) deviceLabel = 'Desktop';
+      }
+
+      // Get app version
+      String? version;
+      try {
+        final info = await PackageInfo.fromPlatform();
+        version = '${info.version}+${info.buildNumber}';
+      } catch (_) {}
+
       await _supabase.from('profiles').update({
         'last_activity': DateTime.now().toUtc().toIso8601String(),
+        'device_info':   deviceLabel,
+        if (version != null) 'app_version': version,
       }).eq('id', _currentUserId!);
-      debugPrint('[PresenceService] last_activity written to profiles');
+      debugPrint('[PresenceService] Wrote last_activity/$deviceLabel/$version to profiles');
     } catch (e) {
-      debugPrint('[PresenceService] Failed to write last_activity: $e');
+      debugPrint('[PresenceService] Failed to write activity to profiles: $e');
     }
   }
 
