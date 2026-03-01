@@ -206,33 +206,82 @@ function ProfileDetail({
         </div>
 
         <div className="divide-y divide-border">
-          {/* ── Assignment ── */}
+          {/* ── Assignment Location ── */}
           <div className="px-6 py-4">
-            <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-3">Assignment Location</p>
-            <div className="grid grid-cols-3 gap-2">
-              {[
-                { label: 'Hub', value: hub?.name, icon: Building2 },
-                { label: 'State', value: state?.name, icon: MapPin },
-                { label: 'Locality', value: (locality as any)?.name, icon: MapPin },
-              ].map(({ label, value, icon: Icon }) => (
-                <div key={label} className="rounded-md bg-muted/50 p-2.5">
-                  <div className="flex items-center gap-1 mb-1">
-                    <Icon className="h-3 w-3 text-muted-foreground" />
-                    <p className="text-[10px] text-muted-foreground">{label}</p>
+            <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-3 flex items-center gap-1.5">
+              <MapPin className="h-3 w-3" />Assignment Location
+            </p>
+            {(hub?.name || state?.name || (locality as any)?.name) ? (
+              <div className="grid grid-cols-3 gap-2">
+                {[
+                  { label: 'Hub',      value: hub?.name,             icon: Building2 },
+                  { label: 'State',    value: state?.name,           icon: MapPin    },
+                  { label: 'Locality', value: (locality as any)?.name, icon: MapPin  },
+                ].map(({ label, value, icon: Icon }) => value ? (
+                  <div key={label} className="rounded-md bg-muted/50 p-2.5">
+                    <div className="flex items-center gap-1 mb-1">
+                      <Icon className="h-3 w-3 text-muted-foreground" />
+                      <p className="text-[10px] text-muted-foreground">{label}</p>
+                    </div>
+                    <p className="text-xs font-semibold text-foreground truncate">{value}</p>
                   </div>
-                  <p className="text-xs font-semibold text-foreground truncate">{value || '—'}</p>
-                </div>
-              ))}
-            </div>
-            {profile.location_sharing && profile.location && (
-              <div className="mt-2.5 flex items-center gap-2 rounded-md border border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-950/30 px-3 py-2">
-                <Globe className="h-3.5 w-3.5 text-green-600 dark:text-green-400 shrink-0" />
-                <span className="text-xs text-green-700 dark:text-green-400 font-medium">GPS sharing active</span>
-                {profile.location?.lat && (
-                  <span className="text-xs text-green-600/70 dark:text-green-500/70 font-mono ml-auto">
-                    {Number(profile.location.lat).toFixed(4)}, {Number(profile.location.lng).toFixed(4)}
+                ) : null)}
+              </div>
+            ) : (
+              <p className="text-xs text-muted-foreground italic">No location assignment — may be a system-level role</p>
+            )}
+
+            {/* ── GPS Location ── */}
+            {profile.location_sharing ? (
+              <div className="mt-3 rounded-lg border border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-950/30 overflow-hidden">
+                {/* GPS header row */}
+                <div className="flex items-center gap-2 px-3 py-2.5 border-b border-green-200/50 dark:border-green-800/50">
+                  <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse shrink-0" />
+                  <span className="text-xs font-semibold text-green-700 dark:text-green-400 flex-1">
+                    GPS Sharing Active — موقع مباشر
                   </span>
+                  <Globe className="h-3.5 w-3.5 text-green-600 dark:text-green-400 shrink-0" />
+                </div>
+                {profile.location?.lat ? (
+                  <div className="px-3 py-2.5 space-y-2">
+                    {/* Coordinates */}
+                    <div className="flex items-center gap-2">
+                      <div className="flex-1 rounded-md bg-white dark:bg-green-950/60 border border-green-200 dark:border-green-700 px-3 py-2">
+                        <p className="text-[10px] text-green-600 dark:text-green-500 mb-0.5">Coordinates / الإحداثيات</p>
+                        <p className="font-mono text-xs font-bold text-green-800 dark:text-green-300">
+                          {Number(profile.location.lat).toFixed(6)}, {Number(profile.location.lng).toFixed(6)}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => copy(`${profile.location!.lat}, ${profile.location!.lng}`, 'Coordinates')}
+                        className="p-2 rounded-md border border-green-200 dark:border-green-700 bg-white dark:bg-green-950/60 hover:bg-green-100 dark:hover:bg-green-900/50 text-green-600 transition-colors"
+                        title="Copy coordinates"
+                      >
+                        <Copy className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                    {/* View on Map button */}
+                    <a
+                      href={`https://www.google.com/maps?q=${profile.location.lat},${profile.location.lng}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center justify-center gap-2 w-full rounded-md bg-green-600 hover:bg-green-700 text-white text-xs font-semibold py-2 transition-colors"
+                    >
+                      <Globe className="h-3.5 w-3.5" />
+                      View on Map / عرض على الخريطة
+                    </a>
+                  </div>
+                ) : (
+                  <div className="px-3 py-2.5 text-xs text-green-700 dark:text-green-400">
+                    GPS sharing enabled — waiting for first location ping
+                  </div>
                 )}
+              </div>
+            ) : (
+              <div className="mt-3 flex items-center gap-2 rounded-md border border-slate-200 dark:border-slate-700 bg-muted/40 px-3 py-2">
+                <Globe className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                <span className="text-xs text-muted-foreground">GPS sharing off</span>
               </div>
             )}
           </div>
@@ -294,10 +343,11 @@ function ProfileDetail({
             </p>
             <div className="grid grid-cols-2 gap-2">
               {([
-                [Clock, 'Last Active', lastActive(profile.last_activity, profile.updated_at)],
-                [profile.device_info?.includes('Android') || profile.device_info?.includes('iPhone') ? Smartphone : Monitor, 'Device', profile.device_info || '—'],
+                [Clock,    'Last Active',  lastActive(profile.last_activity, profile.updated_at)],
+                [profile.device_info?.toLowerCase().includes('android') || profile.device_info?.toLowerCase().includes('iphone')
+                  ? Smartphone : Monitor,  'Device',      profile.device_info || '—'],
                 [GitBranch, 'App Version', profile.app_version || '—'],
-                [Hash, 'Profile ID', profile.id.slice(0, 8) + '…'],
+                [Hash,      'Profile ID',  profile.id.slice(0, 8) + '…'],
               ] as [any, string, string][]).map(([Icon, label, val]) => (
                 <div key={label} className="rounded-md bg-muted/50 p-2.5">
                   <div className="flex items-center gap-1 mb-1">
@@ -308,6 +358,22 @@ function ProfileDetail({
                 </div>
               ))}
             </div>
+            {/* Phone (shown here if not in header) */}
+            {profile.phone && (
+              <div className="mt-2 flex items-center justify-between rounded-md bg-muted/50 px-3 py-2">
+                <div className="flex items-center gap-2 text-xs">
+                  <Smartphone className="h-3 w-3 text-muted-foreground" />
+                  <span className="font-mono font-medium">{profile.phone}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => copy(profile.phone!, 'Phone')}
+                  className="text-muted-foreground hover:text-foreground"
+                >
+                  <Copy className="h-3 w-3" />
+                </button>
+              </div>
+            )}
           </div>
 
           {/* ── Timestamps ── */}
