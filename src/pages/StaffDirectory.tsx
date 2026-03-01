@@ -253,6 +253,11 @@ function ProfileDetail({
                         <p className="font-mono text-xs font-bold text-green-800 dark:text-green-300">
                           {Number(profile.location.lat).toFixed(6)}, {Number(profile.location.lng).toFixed(6)}
                         </p>
+                        {profile.location.accuracy != null && (
+                          <p className="text-[10px] text-green-500 dark:text-green-600 mt-0.5">
+                            ±{Math.round(profile.location.accuracy)}m accuracy
+                          </p>
+                        )}
                       </div>
                       <button
                         type="button"
@@ -263,6 +268,13 @@ function ProfileDetail({
                         <Copy className="h-3.5 w-3.5" />
                       </button>
                     </div>
+                    {/* Last captured timestamp */}
+                    {profile.location.captured_at && (
+                      <p className="text-[10px] text-green-600 dark:text-green-500 flex items-center gap-1">
+                        <span className="w-1.5 h-1.5 rounded-full bg-green-400 inline-block" />
+                        Updated {formatDistanceToNow(parseISO(profile.location.captured_at), { addSuffix: true })}
+                      </p>
+                    )}
                     {/* View on Map button */}
                     <a
                       href={`https://www.google.com/maps?q=${profile.location.lat},${profile.location.lng}`}

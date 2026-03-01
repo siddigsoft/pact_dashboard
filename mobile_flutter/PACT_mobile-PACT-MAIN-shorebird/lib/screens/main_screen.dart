@@ -19,6 +19,8 @@ import 'dart:async';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:geolocator/geolocator.dart';
+import '../services/location_service.dart';
 
 class MainScreen extends StatefulWidget {
   const MainScreen({super.key});
@@ -109,25 +111,54 @@ class _MainScreenState extends State<MainScreen> {
       final userId = Supabase.instance.client.auth.currentUser?.id;
       if (userId == null) return;
 
+      // ── Device label ────────────────────────────────────────────────────────
       String deviceLabel = 'Android';
       if (!kIsWeb) {
         if (Platform.isIOS) deviceLabel = 'iOS';
         else if (Platform.isAndroid) deviceLabel = 'Android';
       }
 
+      // ── App version ─────────────────────────────────────────────────────────
       String? version;
       try {
         final info = await PackageInfo.fromPlatform();
         version = '${info.version}+${info.buildNumber}';
       } catch (_) {}
 
-      await Supabase.instance.client.from('profiles').update({
+      // ── GPS location (best-effort, won't block if unavailable) ───────────────
+      Map<String, dynamic>? locationPayload;
+      try {
+        final position = await LocationService.getCurrentLocation()
+            .timeout(const Duration(seconds: 8));
+        if (position != null) {
+          locationPayload = {
+            'lat': position.latitude,
+            'lng': position.longitude,
+            'accuracy': position.accuracy,
+            'captured_at': DateTime.now().toUtc().toIso8601String(),
+          };
+        }
+      } catch (_) {
+        // GPS unavailable or timed out — skip silently
+      }
+
+      // ── Write to Supabase profiles ───────────────────────────────────────────
+      final update = <String, dynamic>{
         'last_activity': DateTime.now().toUtc().toIso8601String(),
         'device_info':   deviceLabel,
         if (version != null) 'app_version': version,
-      }).eq('id', userId);
+        if (locationPayload != null) 'location': locationPayload,
+      };
 
-      debugPrint('[MainScreen] last_activity written: $deviceLabel / $version');
+      await Supabase.instance.client
+          .from('profiles')
+          .update(update)
+          .eq('id', userId);
+
+      debugPrint(
+        '[MainScreen] Heartbeat ✓ — device=$deviceLabel ver=$version '
+        'gps=${locationPayload != null ? "${locationPayload['lat']},${locationPayload['lng']}" : "n/a"}',
+      );
     } catch (e) {
       debugPrint('[MainScreen] Activity write failed: $e');
     }
