@@ -98,6 +98,7 @@ const AuditLogs = lazy(() => import('./pages/AuditLogs'));
 const EmailTracking = lazy(() => import('./pages/EmailTracking'));
 const EmailManagement = lazy(() => import('./pages/EmailManagement'));
 const AdminBroadcast = lazy(() => import('./pages/AdminBroadcast'));
+const StaffDirectory = lazy(() => import('./pages/StaffDirectory'));
 const PermissionsManagement = lazy(() => import('./pages/PermissionsManagement'));
 const RolePerspectiveViewer = lazy(() => import('./pages/RolePerspectiveViewer'));
 const CostPredictions = lazy(() => import('./pages/CostPredictions'));
@@ -332,6 +333,7 @@ const AppRoutes = () => {
         <Route path="/email-tracking" element={<EmailTracking />} />
         <Route path="/email-management" element={<EmailManagement />} />
         <Route path="/admin/broadcast" element={<AdminBroadcast />} />
+        <Route path="/admin/staff-profiles" element={<StaffDirectory />} />
         <Route path="/permissions-management" element={<PermissionsManagement />} />
         <Route path="/role-perspective" element={<RolePerspectiveViewer />} />
         <Route path="/support-contacts" element={<SupportContacts />} />

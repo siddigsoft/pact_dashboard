@@ -94,6 +94,7 @@ const ALL_PAGES: PageEntry[] = [
   { title: 'Super Admin Management', url: '/super-admin-management', icon: ShieldCheck, group: 'Super Admin', keywords: ['admin'] },
   { title: 'Data Management', url: '/super-admin-data', icon: Database, group: 'Super Admin', keywords: ['data'] },
   { title: 'Audit Logs', url: '/audit-logs', icon: ScrollText, group: 'Super Admin', keywords: ['audit', 'log'] },
+  { title: 'Staff Directory', url: '/admin/staff-profiles', icon: Users, group: 'Administration', keywords: ['staff', 'profiles', 'directory', 'team', 'bank', 'account', 'online'] },
   { title: 'Email Tracking', url: '/email-tracking', icon: Mail, group: 'Super Admin', keywords: ['email'] },
   { title: 'Email Management', url: '/email-management', icon: Mail, group: 'Super Admin', keywords: ['email'] },
   { title: 'Mobile Support Tickets', url: '/mobile-support-tickets', icon: Smartphone, group: 'Super Admin', keywords: ['ticket'] },
