@@ -527,7 +527,7 @@ export default function StaffDirectory() {
 
       const { data: pData, error: pErr } = await (supabase as any)
         .from('profiles')
-        .select('id, full_name, email, phone, role, employee_id, hub_id, state_id, locality_id, availability, status, location, location_sharing, updated_at, created_at, bank_account, last_activity')
+        .select('id, full_name, email, phone, role, employee_id, hub_id, state_id, locality_id, availability, status, location, location_sharing, updated_at, created_at, bank_account')
         .order('full_name');
       if (pErr) throw pErr;
 
@@ -588,13 +588,14 @@ export default function StaffDirectory() {
         table: 'profiles',
       }, (payload: any) => {
         const updated = payload.new;
-        if (!updated?.id || !updated?.last_activity) return;
+        if (!updated?.id) return;
         setProfiles(prev => prev.map(p =>
           p.id === updated.id
             ? { ...p,
-                last_activity: updated.last_activity,
                 location: updated.location ?? p.location,
                 location_sharing: updated.location_sharing ?? p.location_sharing,
+                // last_activity: only patch if the column exists on the payload
+                ...(updated.last_activity ? { last_activity: updated.last_activity } : {}),
               }
             : p
         ));
