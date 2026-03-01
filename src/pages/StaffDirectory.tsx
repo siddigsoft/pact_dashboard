@@ -14,15 +14,16 @@ import {
 } from "@/components/ui/dropdown-menu";
 import {
   Users, Wifi, WifiOff, Search, Building2, MapPin, Landmark,
-  Phone, Mail, Shield, RefreshCw, LayoutGrid, List, ChevronRight,
+  Shield, RefreshCw, LayoutGrid, List, ChevronRight,
   Smartphone, Monitor, Clock, AlertCircle, CheckCircle, XCircle,
   Hash, Globe, Activity, BarChart3, Copy, Download, FileSpreadsheet,
-  FileText, FileDown, GitBranch
+  FileText, FileDown, GitBranch, UserCheck, UserX
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { hubs, sudanStates, getLocalitiesByState, getStatesInHub } from "@/data/sudanStates";
 import { useToast } from "@/hooks/use-toast";
 import { format, parseISO, formatDistanceToNow } from "date-fns";
+import { PageInfoBanner } from "@/components/financial/PageInfoBanner";
 import {
   exportStaffToExcel, exportStaffToPDF, exportStaffToCSV, type ExportProfile,
 } from "@/utils/staffDirectoryExport";
@@ -31,9 +32,9 @@ import {
 interface BankAccount { accountName?: string; accountNumber?: string; branch?: string; bankName?: string; }
 
 /**
- * Normalize bank account — handles both web (camelCase) and mobile (snake_case) stored formats:
- * Web:    { accountName, accountNumber, branch, bankName }
- * Mobile: { account_name, account_number, bank_name, branch_code }
+ * Normalizes bank account — handles both:
+ * Web (camelCase):   { accountName, accountNumber, branch, bankName }
+ * Mobile (snake_case): { account_name, account_number, bank_name, branch_code }
  */
 function normalizeBA(raw: any): BankAccount | null {
   if (!raw) return null;
@@ -43,7 +44,6 @@ function normalizeBA(raw: any): BankAccount | null {
     bankName:      raw.bankName      || raw.bank_name      || undefined,
     branch:        raw.branch        || raw.branch_code    || undefined,
   };
-  /* Only return if at least one field has data */
   return (ba.accountName || ba.accountNumber || ba.bankName || ba.branch) ? ba : null;
 }
 
@@ -62,27 +62,27 @@ const ROLE_LABELS: Record<string, string> = {
   data_team: 'Data Team', financial_auditor: 'Financial Auditor', enumerator: 'Enumerator',
 };
 const ROLE_COLORS: Record<string, string> = {
-  super_admin: 'bg-purple-100 text-purple-800 dark:bg-purple-900/50 dark:text-purple-200',
-  admin: 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900/50 dark:text-indigo-200',
-  country_director: 'bg-blue-100 text-blue-800 dark:bg-blue-900/50 dark:text-blue-200',
-  fom: 'bg-cyan-100 text-cyan-800 dark:bg-cyan-900/50 dark:text-cyan-200',
-  supervisor: 'bg-teal-100 text-teal-800 dark:bg-teal-900/50 dark:text-teal-200',
-  coordinator: 'bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-200',
-  data_team: 'bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-200',
-  financial_auditor: 'bg-orange-100 text-orange-800 dark:bg-orange-900/50 dark:text-orange-200',
-  enumerator: 'bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-200',
+  super_admin: 'bg-purple-100 text-purple-800 dark:bg-purple-900/40 dark:text-purple-200 border-purple-200 dark:border-purple-800',
+  admin: 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900/40 dark:text-indigo-200 border-indigo-200 dark:border-indigo-800',
+  country_director: 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-200 border-blue-200 dark:border-blue-800',
+  fom: 'bg-cyan-100 text-cyan-800 dark:bg-cyan-900/40 dark:text-cyan-200 border-cyan-200 dark:border-cyan-800',
+  supervisor: 'bg-teal-100 text-teal-800 dark:bg-teal-900/40 dark:text-teal-200 border-teal-200 dark:border-teal-800',
+  coordinator: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200 border-emerald-200 dark:border-emerald-800',
+  data_team: 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200 border-amber-200 dark:border-amber-800',
+  financial_auditor: 'bg-orange-100 text-orange-800 dark:bg-orange-900/40 dark:text-orange-200 border-orange-200 dark:border-orange-800',
+  enumerator: 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 border-slate-200 dark:border-slate-700',
 };
 
 function avBadge(av: string | null) {
-  if (av === 'online') return { dot: 'bg-green-500', text: 'text-green-700 dark:text-green-400', label: 'Online' };
-  if (av === 'busy')   return { dot: 'bg-amber-500',  text: 'text-amber-700 dark:text-amber-400',  label: 'Busy'   };
-  return { dot: 'bg-slate-400', text: 'text-slate-500', label: 'Offline' };
+  if (av === 'online') return { dot: 'bg-green-500', label: 'Online', labelColor: 'text-green-700 dark:text-green-400', ring: 'ring-green-400' };
+  if (av === 'busy')   return { dot: 'bg-amber-500',  label: 'Busy',   labelColor: 'text-amber-700 dark:text-amber-400',  ring: 'ring-amber-400'  };
+  return { dot: 'bg-slate-300 dark:bg-slate-600', label: 'Offline', labelColor: 'text-slate-500', ring: 'ring-slate-300' };
 }
 function maskAcc(n?: string) { if (!n) return '—'; return n.length <= 4 ? n : '•••• ' + n.slice(-4); }
-function initials(name: string | null) { if (!name) return '?'; return name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase(); }
+function initials(name: string | null) { if (!name) return '?'; return name.split(' ').filter(Boolean).map(n => n[0]).join('').slice(0, 2).toUpperCase(); }
 function lastActive(d: string | null, fallback?: string): string {
   const s = d || fallback; if (!s) return 'Unknown';
-  try { return formatDistanceToNow(parseISO(s), { addSuffix: true }); } catch { return s; }
+  try { return formatDistanceToNow(parseISO(s), { addSuffix: true }); } catch { return '—'; }
 }
 
 /* ─── Build ExportProfile array ─────────────────────────── */
@@ -94,14 +94,40 @@ function toExportProfiles(profiles: StaffProfile[]): ExportProfile[] {
     return {
       id: p.id, full_name: p.full_name, email: p.email, phone: p.phone,
       role: p.role, employee_id: p.employee_id,
-      hub_name:      hub?.name      || 'Unassigned',
-      state_name:    state?.name    || 'Unassigned',
+      hub_name: hub?.name || 'Unassigned',
+      state_name: state?.name || 'Unassigned',
       locality_name: (locality as any)?.name || '—',
       availability: p.availability, bank_account: p.bank_account,
       last_activity: p.last_activity, device_info: p.device_info,
       app_version: p.app_version, location_sharing: p.location_sharing,
     };
   });
+}
+
+/* ─── Avatar ──────────────────────────────────────────────── */
+function Avatar({ name, size = 'md', availability }: { name: string | null; size?: 'sm' | 'md' | 'lg'; availability?: string | null }) {
+  const av = avBadge(availability ?? null);
+  const sz = size === 'sm' ? 'w-7 h-7 text-[10px]' : size === 'lg' ? 'w-14 h-14 text-xl' : 'w-10 h-10 text-sm';
+  const dotSz = size === 'sm' ? 'w-2 h-2' : size === 'lg' ? 'w-3.5 h-3.5' : 'w-2.5 h-2.5';
+  return (
+    <div className="relative inline-flex shrink-0">
+      <div className={`${sz} rounded-full bg-gradient-to-br from-[#0F2041] to-[#2563EB] flex items-center justify-center font-bold text-white`}>
+        {initials(name)}
+      </div>
+      {availability !== undefined && (
+        <span className={`absolute bottom-0 right-0 ${dotSz} rounded-full border-2 border-white dark:border-slate-900 ${av.dot}`} />
+      )}
+    </div>
+  );
+}
+
+/* ─── Role Badge ──────────────────────────────────────────── */
+function RoleBadge({ role }: { role: string | null }) {
+  return (
+    <span className={`inline-flex items-center rounded-md border px-1.5 py-0.5 text-[10px] font-semibold ${ROLE_COLORS[role || ''] || 'bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700'}`}>
+      {ROLE_LABELS[role || ''] || role || 'No role'}
+    </span>
+  );
 }
 
 /* ─── Profile Detail Modal ───────────────────────────────── */
@@ -112,122 +138,152 @@ function ProfileDetail({ profile, onClose }: { profile: StaffProfile; onClose: (
   const locality = state?.localities?.find((l: any) => l.id === profile.locality_id);
   const av       = avBadge(profile.availability);
   const ba       = profile.bank_account;
-  const hasBank  = !!(ba?.accountNumber);
+  const hasBank  = !!(ba?.accountNumber || ba?.accountName);
 
-  const copy = (t: string, l: string) => { navigator.clipboard.writeText(t); toast({ title: `${l} copied`, description: t }); };
+  const copy = (t: string, l: string) => { navigator.clipboard.writeText(t); toast({ title: `${l} copied` }); };
 
   return (
     <Dialog open onOpenChange={() => onClose()}>
-      <DialogContent className="max-w-xl max-h-[88vh] overflow-y-auto p-0">
-        {/* Header */}
-        <div className="bg-gradient-to-r from-[#0F2041] to-[#1D3461] px-6 py-5">
+      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto p-0 gap-0">
+        {/* ── Branded header ── */}
+        <div className="bg-gradient-to-r from-[#0F2041] to-[#1D3461] px-6 py-6 rounded-t-lg">
           <DialogHeader>
-            <div className="flex items-start gap-4">
-              <div className="w-14 h-14 rounded-full bg-white/20 flex items-center justify-center text-white text-xl font-bold shrink-0">
-                {initials(profile.full_name)}
-              </div>
-              <div className="min-w-0">
-                <DialogTitle className="text-white text-lg font-bold leading-tight">{profile.full_name || 'Unknown'}</DialogTitle>
-                <p className="text-white/70 text-xs mt-0.5">{profile.email}</p>
-                <div className="flex flex-wrap gap-1.5 mt-2">
-                  <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold ${ROLE_COLORS[profile.role || ''] || 'bg-slate-100 text-slate-700'}`}>
-                    {ROLE_LABELS[profile.role || ''] || profile.role || 'Unknown'}
-                  </span>
-                  <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold bg-white/20 text-white">
+            <div className="flex items-center gap-4">
+              <Avatar name={profile.full_name} size="lg" availability={profile.availability} />
+              <div className="min-w-0 flex-1">
+                <DialogTitle className="text-white text-lg font-bold leading-tight truncate">
+                  {profile.full_name || 'Unknown'}
+                </DialogTitle>
+                <p className="text-white/60 text-xs mt-0.5 truncate">{profile.email}</p>
+                {profile.phone && <p className="text-white/60 text-xs">{profile.phone}</p>}
+                <div className="flex flex-wrap gap-1.5 mt-2.5">
+                  <RoleBadge role={profile.role} />
+                  <span className={`inline-flex items-center gap-1 rounded-md border border-white/20 bg-white/10 px-1.5 py-0.5 text-[10px] font-semibold text-white`}>
                     <span className={`w-1.5 h-1.5 rounded-full ${av.dot}`} />{av.label}
                   </span>
+                  {profile.employee_id && (
+                    <span className="inline-flex items-center gap-1 rounded-md border border-white/20 bg-white/10 px-1.5 py-0.5 text-[10px] font-mono text-white/80">
+                      ID: {profile.employee_id}
+                    </span>
+                  )}
                 </div>
               </div>
             </div>
           </DialogHeader>
         </div>
 
-        <div className="px-6 py-4 space-y-4">
-          {/* Contact */}
-          <section>
-            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-2">Contact</p>
-            <div className="grid grid-cols-2 gap-3">
-              <div><p className="text-[10px] text-muted-foreground">Phone</p><p className="text-sm font-medium">{profile.phone || '—'}</p></div>
-              <div><p className="text-[10px] text-muted-foreground">Employee ID</p><p className="text-sm font-mono font-medium">{profile.employee_id || '—'}</p></div>
-            </div>
-          </section>
-          <Separator />
-
-          {/* Location */}
-          <section>
-            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-2">Assignment</p>
+        <div className="divide-y divide-border">
+          {/* ── Assignment ── */}
+          <div className="px-6 py-4">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-3">Assignment Location</p>
             <div className="grid grid-cols-3 gap-2">
-              {[['Hub', hub?.name], ['State', state?.name], ['Locality', (locality as any)?.name]].map(([l, v]) => (
-                <div key={l} className="rounded-lg bg-slate-50 dark:bg-slate-900 p-2.5">
-                  <p className="text-[10px] text-muted-foreground mb-0.5">{l}</p>
-                  <p className="text-sm font-semibold">{v || '—'}</p>
+              {[
+                { label: 'Hub', value: hub?.name, icon: Building2 },
+                { label: 'State', value: state?.name, icon: MapPin },
+                { label: 'Locality', value: (locality as any)?.name, icon: MapPin },
+              ].map(({ label, value, icon: Icon }) => (
+                <div key={label} className="rounded-md bg-muted/50 p-2.5">
+                  <div className="flex items-center gap-1 mb-1">
+                    <Icon className="h-3 w-3 text-muted-foreground" />
+                    <p className="text-[10px] text-muted-foreground">{label}</p>
+                  </div>
+                  <p className="text-xs font-semibold text-foreground truncate">{value || '—'}</p>
                 </div>
               ))}
             </div>
-            {profile.location && profile.location_sharing && (
-              <div className="mt-2 rounded-lg border border-green-200 bg-green-50 dark:bg-green-950/30 px-3 py-2 flex items-center gap-2 text-xs text-green-700 dark:text-green-400">
-                <Globe className="h-3.5 w-3.5 shrink-0" />
-                GPS sharing active {profile.location?.lat ? `· ${profile.location.lat?.toFixed(4)}, ${profile.location.lng?.toFixed(4)}` : ''}
+            {profile.location_sharing && profile.location && (
+              <div className="mt-2.5 flex items-center gap-2 rounded-md border border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-950/30 px-3 py-2">
+                <Globe className="h-3.5 w-3.5 text-green-600 dark:text-green-400 shrink-0" />
+                <span className="text-xs text-green-700 dark:text-green-400 font-medium">GPS sharing active</span>
+                {profile.location?.lat && (
+                  <span className="text-xs text-green-600/70 dark:text-green-500/70 font-mono ml-auto">
+                    {Number(profile.location.lat).toFixed(4)}, {Number(profile.location.lng).toFixed(4)}
+                  </span>
+                )}
               </div>
             )}
-          </section>
-          <Separator />
+          </div>
 
-          {/* Bank Account */}
-          <section>
-            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-2 flex items-center gap-1.5">
-              <Landmark className="h-3 w-3" />Bank Account
-              {hasBank ? <CheckCircle className="h-3 w-3 text-green-600" /> : <XCircle className="h-3 w-3 text-red-500" />}
-            </p>
+          {/* ── Bank Account ── */}
+          <div className="px-6 py-4">
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground flex items-center gap-1.5">
+                <Landmark className="h-3 w-3" />Bank Account
+              </p>
+              {hasBank
+                ? <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-green-700 dark:text-green-400"><CheckCircle className="h-3 w-3" />Registered</span>
+                : <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-red-600"><XCircle className="h-3 w-3" />Missing</span>}
+            </div>
             {hasBank ? (
-              <div className="rounded-xl border-2 border-[#0F2041]/20 bg-gradient-to-br from-[#0F2041]/5 to-transparent p-4 grid grid-cols-2 gap-3">
-                {[
-                  ['Account Name', ba?.accountName],
-                  ['Account Number', ba?.accountNumber, true],
-                  ['Bank Name', ba?.bankName],
-                  ['Branch', ba?.branch],
-                ].map(([label, val, mono]) => (
-                  <div key={label as string}>
-                    <p className="text-[10px] text-muted-foreground mb-0.5">{label as string}</p>
-                    <div className="flex items-center gap-1.5">
-                      <p className={`text-sm font-${mono ? 'mono font-bold' : 'semibold'}`}>{val as string || '—'}</p>
-                      {val && <button onClick={() => copy(val as string, label as string)} className="text-muted-foreground hover:text-foreground"><Copy className="h-3 w-3" /></button>}
+              <div className="rounded-md border bg-gradient-to-br from-slate-50 to-slate-50/0 dark:from-slate-900 dark:to-slate-900/0 p-4">
+                <div className="grid grid-cols-2 gap-x-4 gap-y-3">
+                  {([
+                    ['Account Name', ba?.accountName],
+                    ['Account Number', ba?.accountNumber, true],
+                    ['Bank Name', ba?.bankName],
+                    ['Branch', ba?.branch],
+                  ] as [string, string | undefined, boolean?][]).map(([label, val, mono]) => (
+                    <div key={label}>
+                      <p className="text-[10px] text-muted-foreground mb-0.5">{label}</p>
+                      <div className="flex items-center gap-1.5 group">
+                        <p className={`text-sm ${mono ? 'font-mono font-bold text-[#0F2041] dark:text-blue-300' : 'font-medium'} truncate`}>
+                          {val || <span className="text-muted-foreground font-normal text-xs">—</span>}
+                        </p>
+                        {val && (
+                          <button
+                            type="button"
+                            onClick={() => copy(val, label)}
+                            className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-foreground transition-all"
+                          >
+                            <Copy className="h-3 w-3" />
+                          </button>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
             ) : (
-              <div className="rounded-lg border border-red-200 bg-red-50 dark:bg-red-950/30 px-4 py-3 flex items-center gap-2 text-sm text-red-700 dark:text-red-400">
-                <AlertCircle className="h-4 w-4 shrink-0" />No bank account — payments cannot be processed.
+              <div className="flex items-center gap-3 rounded-md border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/30 px-4 py-3">
+                <AlertCircle className="h-4 w-4 text-red-500 shrink-0" />
+                <div>
+                  <p className="text-sm font-medium text-red-800 dark:text-red-300">No bank account registered</p>
+                  <p className="text-xs text-red-600/70 dark:text-red-400/70">Payments cannot be processed for this staff member.</p>
+                </div>
               </div>
             )}
-          </section>
-          <Separator />
+          </div>
 
-          {/* Activity */}
-          <section>
-            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-2 flex items-center gap-1.5">
+          {/* ── Activity & Device ── */}
+          <div className="px-6 py-4">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-3 flex items-center gap-1.5">
               <Activity className="h-3 w-3" />Activity & Device
             </p>
             <div className="grid grid-cols-2 gap-2">
-              {[
-                [<Clock className="h-3 w-3" />, 'Last Active', lastActive(profile.last_activity, profile.updated_at)],
-                [<Smartphone className="h-3 w-3" />, 'Device', profile.device_info || 'Unknown'],
-                [<GitBranch className="h-3 w-3" />, 'App Version', profile.app_version || 'Unknown'],
-                [<Hash className="h-3 w-3" />, 'Profile ID', profile.id.slice(0, 8) + '…'],
-              ].map(([icon, label, val]) => (
-                <div key={label as string} className="rounded-lg bg-slate-50 dark:bg-slate-900 p-2.5">
-                  <p className="text-[10px] text-muted-foreground mb-1 flex items-center gap-1">{icon as any}{label as string}</p>
-                  <p className="text-xs font-medium truncate">{val as string}</p>
+              {([
+                [Clock, 'Last Active', lastActive(profile.last_activity, profile.updated_at)],
+                [profile.device_info?.includes('Android') || profile.device_info?.includes('iPhone') ? Smartphone : Monitor, 'Device', profile.device_info || '—'],
+                [GitBranch, 'App Version', profile.app_version || '—'],
+                [Hash, 'Profile ID', profile.id.slice(0, 8) + '…'],
+              ] as [any, string, string][]).map(([Icon, label, val]) => (
+                <div key={label} className="rounded-md bg-muted/50 p-2.5">
+                  <div className="flex items-center gap-1 mb-1">
+                    <Icon className="h-3 w-3 text-muted-foreground" />
+                    <p className="text-[10px] text-muted-foreground">{label}</p>
+                  </div>
+                  <p className="text-xs font-medium truncate">{val}</p>
                 </div>
               ))}
             </div>
-          </section>
-          <Separator />
-          <section className="text-xs text-muted-foreground space-y-1">
-            <div className="flex justify-between"><span>Created</span><span>{profile.created_at ? format(parseISO(profile.created_at), 'dd MMM yyyy') : '—'}</span></div>
-            <div className="flex justify-between"><span>Last Updated</span><span>{profile.updated_at ? format(parseISO(profile.updated_at), 'dd MMM yyyy HH:mm') : '—'}</span></div>
-          </section>
+          </div>
+
+          {/* ── Timestamps ── */}
+          <div className="px-6 py-3">
+            <div className="flex items-center justify-between text-xs text-muted-foreground">
+              <span>Joined {profile.created_at ? format(parseISO(profile.created_at), 'dd MMM yyyy') : '—'}</span>
+              <span>Updated {profile.updated_at ? format(parseISO(profile.updated_at), 'dd MMM yyyy') : '—'}</span>
+            </div>
+          </div>
         </div>
       </DialogContent>
     </Dialog>
@@ -257,45 +313,49 @@ function ExportMenu({ profiles, tab, label }: { profiles: StaffProfile[]; tab: s
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="outline" size="sm" disabled={busy} className="gap-1.5 border-[#0F2041]/30 text-[#0F2041] dark:text-blue-300 hover:bg-[#0F2041]/5" data-testid="button-export-menu">
+        <Button variant="outline" size="sm" disabled={busy || !profiles.length} className="gap-1.5" data-testid="button-export-menu">
           <Download className="h-3.5 w-3.5" />
           {busy ? 'Exporting…' : 'Export'}
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-48">
-        <DropdownMenuItem onClick={() => exp('excel')} data-testid="menu-export-excel" className="gap-2">
-          <FileSpreadsheet className="h-4 w-4 text-green-700" />
-          <span>Export to Excel</span>
+      <DropdownMenuContent align="end" className="w-44">
+        <DropdownMenuItem onClick={() => exp('excel')} className="gap-2 cursor-pointer" data-testid="menu-export-excel">
+          <FileSpreadsheet className="h-4 w-4 text-green-700" />Excel (.xlsx)
         </DropdownMenuItem>
-        <DropdownMenuItem onClick={() => exp('pdf')} data-testid="menu-export-pdf" className="gap-2">
-          <FileText className="h-4 w-4 text-red-600" />
-          <span>Export to PDF</span>
+        <DropdownMenuItem onClick={() => exp('pdf')} className="gap-2 cursor-pointer" data-testid="menu-export-pdf">
+          <FileText className="h-4 w-4 text-red-600" />PDF
         </DropdownMenuItem>
         <DropdownMenuSeparator />
-        <DropdownMenuItem onClick={() => exp('csv')} data-testid="menu-export-csv" className="gap-2">
-          <FileDown className="h-4 w-4 text-blue-600" />
-          <span>Export to CSV</span>
+        <DropdownMenuItem onClick={() => exp('csv')} className="gap-2 cursor-pointer" data-testid="menu-export-csv">
+          <FileDown className="h-4 w-4 text-blue-600" />CSV
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
   );
 }
 
-/* ─── Capacity Row ───────────────────────────────────────── */
-function CapRow({ label, total, online, withBank, max }: any) {
+/* ─── Capacity Bar Row ───────────────────────────────────── */
+function CapRow({ label, total, online, withBank, max }: { label: string; total: number; online: number; withBank: number; max: number }) {
+  const pct = max > 0 ? Math.round((total / max) * 100) : 0;
   return (
-    <div className="space-y-1">
-      <div className="flex items-center justify-between text-xs">
-        <span className="font-medium truncate max-w-[50%]">{label}</span>
-        <div className="flex items-center gap-2 shrink-0">
-          <span className="text-muted-foreground">{total}</span>
-          <span className="text-green-600 font-semibold">{online} online</span>
-          <span className={`font-semibold ${withBank < total ? 'text-amber-600' : 'text-blue-600'}`}>{withBank} banked</span>
+    <div className="space-y-1.5">
+      <div className="flex items-center justify-between gap-2 text-xs">
+        <span className="font-medium text-foreground truncate max-w-[45%]" title={label}>{label}</span>
+        <div className="flex items-center gap-2.5 shrink-0 text-muted-foreground">
+          <span className="font-semibold text-foreground">{total}</span>
+          <span className="inline-flex items-center gap-1 text-green-600 dark:text-green-400">
+            <Wifi className="h-2.5 w-2.5" />{online}
+          </span>
+          <span className={`inline-flex items-center gap-1 ${withBank < total ? 'text-amber-600 dark:text-amber-400' : 'text-blue-600 dark:text-blue-400'}`}>
+            <Landmark className="h-2.5 w-2.5" />{withBank}
+          </span>
         </div>
       </div>
-      <div className="h-1.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
-        <div className="h-full bg-gradient-to-r from-[#0F2041] to-[#1D3461] rounded-full transition-all"
-          style={{ width: max > 0 ? `${(total / max) * 100}%` : '0%' }} />
+      <div className="h-1.5 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
+        <div
+          className="h-full rounded-full bg-gradient-to-r from-[#0F2041] to-[#2563EB] transition-all duration-500"
+          style={{ width: `${pct}%` }}
+        />
       </div>
     </div>
   );
@@ -306,58 +366,54 @@ function CapRow({ label, total, online, withBank, max }: any) {
 ══════════════════════════════════════════════════════════════ */
 export default function StaffDirectory() {
   const { toast } = useToast();
-  const [profiles, setProfiles]           = useState<StaffProfile[]>([]);
-  const [loading, setLoading]             = useState(true);
-  const [refreshing, setRefreshing]       = useState(false);
-  const [selected, setSelected]           = useState<StaffProfile | null>(null);
-  const [search, setSearch]               = useState('');
-  const [hubFilter, setHubFilter]         = useState('all');
-  const [stateFilter, setStateFilter]     = useState('all');
-  const [localityFilter, setLocalFilter]  = useState('all');
-  const [roleFilter, setRoleFilter]       = useState('all');
-  const [statusFilter, setStatusFilter]   = useState('all');
-  const [bankFilter, setBankFilter]       = useState('all');
-  const [viewMode, setViewMode]           = useState<'cards' | 'table'>('cards');
-  const [activeTab, setActiveTab]         = useState('directory');
+  const [profiles, setProfiles]          = useState<StaffProfile[]>([]);
+  const [loading, setLoading]            = useState(true);
+  const [refreshing, setRefreshing]      = useState(false);
+  const [selected, setSelected]          = useState<StaffProfile | null>(null);
 
-  /* ── Derived filter options ── */
+  /* Filters */
+  const [search, setSearch]              = useState('');
+  const [hubFilter, setHubFilter]        = useState('all');
+  const [stateFilter, setStateFilter]    = useState('all');
+  const [localityFilter, setLocalFilter] = useState('all');
+  const [roleFilter, setRoleFilter]      = useState('all');
+  const [statusFilter, setStatusFilter]  = useState('all');
+  const [bankFilter, setBankFilter]      = useState('all');
+  const [viewMode, setViewMode]          = useState<'cards' | 'table'>('cards');
+  const [activeTab, setActiveTab]        = useState('directory');
+
+  /* Derived filter options */
   const availableStates = useMemo(() =>
     hubFilter === 'all' ? sudanStates : getStatesInHub(hubFilter), [hubFilter]);
 
   const availableLocalities = useMemo(() =>
     stateFilter === 'all' ? [] : getLocalitiesByState(stateFilter), [stateFilter]);
 
-  /* ── FAST batch data load ─────────────────────────────── */
+  /* ── Fast batch data load ── */
   const load = useCallback(async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true); else setLoading(true);
     try {
-      /* 1 — All profiles including bank_account JSON (one query) */
       const { data: pData, error: pErr } = await (supabase as any)
         .from('profiles')
         .select('id, full_name, email, phone, role, employee_id, hub_id, state_id, locality_id, availability, status, location, location_sharing, updated_at, created_at, bank_account')
         .order('full_name');
       if (pErr) throw pErr;
 
-      /* 2 — Latest activity per user (one batch query, limit 500) */
+      /* Latest activity per user — one batch query */
       const { data: actData } = await (supabase as any)
         .from('user_activity_logs')
         .select('user_id, created_at, metadata')
         .order('created_at', { ascending: false })
         .limit(500);
 
-      /* Build activity map: user_id → latest record */
       const actMap: Record<string, { created_at: string; metadata: any }> = {};
-      (actData || []).forEach((a: any) => {
-        if (!actMap[a.user_id]) actMap[a.user_id] = a;
-      });
+      (actData || []).forEach((a: any) => { if (!actMap[a.user_id]) actMap[a.user_id] = a; });
 
-      /* 3 — Merge */
       const merged: StaffProfile[] = (pData || []).map((p: any) => {
         const act = actMap[p.id];
-        /* Normalize bank account — handles both web (camelCase) and mobile (snake_case) keys */
         let raw = p.bank_account;
         if (typeof raw === 'string') { try { raw = JSON.parse(raw); } catch { raw = null; } }
-        const ba: BankAccount | null = normalizeBA(raw);
+        const ba = normalizeBA(raw);
         let device_info: string | null = null;
         let app_version: string | null = null;
         if (act?.metadata?.deviceInfo?.userAgent) {
@@ -367,55 +423,46 @@ export default function StaffDirectory() {
         if (act?.metadata?.appVersion || act?.metadata?.app_version) {
           app_version = String(act.metadata.appVersion || act.metadata.app_version);
         }
-        return {
-          ...p,
-          bank_account: ba,
-          last_activity: act?.created_at || null,
-          device_info,
-          app_version,
-        };
+        return { ...p, bank_account: ba, last_activity: act?.created_at || null, device_info, app_version };
       });
 
       setProfiles(merged);
     } catch (err: any) {
       toast({ title: 'Error loading staff', description: err?.message, variant: 'destructive' });
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
+    } finally { setLoading(false); setRefreshing(false); }
   }, [toast]);
 
   useEffect(() => { load(); }, [load]);
 
-  /* ── Filters ─────────────────────────────────────────── */
+  /* ── Filtered list ── */
   const filtered = useMemo(() => {
     const q = search.toLowerCase();
     return profiles.filter(p => {
       if (q && !p.full_name?.toLowerCase().includes(q) && !p.email?.toLowerCase().includes(q) &&
-          !p.phone?.toLowerCase().includes(q) && !p.employee_id?.toLowerCase().includes(q)) return false;
+        !p.phone?.toLowerCase().includes(q) && !p.employee_id?.toLowerCase().includes(q)) return false;
       if (hubFilter !== 'all' && p.hub_id !== hubFilter) return false;
       if (stateFilter !== 'all' && p.state_id !== stateFilter) return false;
       if (localityFilter !== 'all' && p.locality_id !== localityFilter) return false;
       if (roleFilter !== 'all' && p.role !== roleFilter) return false;
-      if (statusFilter === 'online' && p.availability !== 'online') return false;
-      if (statusFilter === 'busy'   && p.availability !== 'busy')   return false;
-      if (statusFilter === 'offline' && p.availability === 'online') return false;
-      if (bankFilter === 'has'     && !p.bank_account?.accountNumber) return false;
-      if (bankFilter === 'missing' && p.bank_account?.accountNumber) return false;
+      if (statusFilter === 'online'  && p.availability !== 'online')  return false;
+      if (statusFilter === 'busy'    && p.availability !== 'busy')    return false;
+      if (statusFilter === 'offline' && p.availability === 'online')  return false;
+      if (bankFilter === 'has'     && !(p.bank_account?.accountNumber || p.bank_account?.accountName)) return false;
+      if (bankFilter === 'missing' &&  (p.bank_account?.accountNumber || p.bank_account?.accountName)) return false;
       return true;
     });
   }, [profiles, search, hubFilter, stateFilter, localityFilter, roleFilter, statusFilter, bankFilter]);
 
-  /* ── Stats ─────────────────────────────────────────── */
+  /* ── Summary stats ── */
   const stats = useMemo(() => ({
     total:       profiles.length,
     online:      profiles.filter(p => p.availability === 'online').length,
     busy:        profiles.filter(p => p.availability === 'busy').length,
-    withBank:    profiles.filter(p => !!p.bank_account?.accountNumber).length,
-    missingBank: profiles.filter(p => !p.bank_account?.accountNumber).length,
+    withBank:    profiles.filter(p => !!(p.bank_account?.accountNumber || p.bank_account?.accountName)).length,
+    missingBank: profiles.filter(p => !(p.bank_account?.accountNumber || p.bank_account?.accountName)).length,
   }), [profiles]);
 
-  /* ── Capacity maps ─────────────────────────────────── */
+  /* ── Capacity groups ── */
   const mkMap = (key: (p: StaffProfile) => string) => {
     const m: Record<string, { total: number; online: number; withBank: number }> = {};
     filtered.forEach(p => {
@@ -423,7 +470,7 @@ export default function StaffDirectory() {
       if (!m[k]) m[k] = { total: 0, online: 0, withBank: 0 };
       m[k].total++;
       if (p.availability === 'online') m[k].online++;
-      if (p.bank_account?.accountNumber) m[k].withBank++;
+      if (p.bank_account?.accountNumber || p.bank_account?.accountName) m[k].withBank++;
     });
     return Object.entries(m).map(([name, v]) => ({ name, ...v })).sort((a, b) => b.total - a.total);
   };
@@ -434,103 +481,207 @@ export default function StaffDirectory() {
   const clearFilters = () => { setSearch(''); setHubFilter('all'); setStateFilter('all'); setLocalFilter('all'); setRoleFilter('all'); setStatusFilter('all'); setBankFilter('all'); };
   const hasFilters = !!(search || hubFilter !== 'all' || stateFilter !== 'all' || localityFilter !== 'all' || roleFilter !== 'all' || statusFilter !== 'all' || bankFilter !== 'all');
 
-  /* ── Filter label for export ── */
   const exportLabel = useMemo(() => {
-    const parts = [];
-    if (hubFilter !== 'all') parts.push(hubs.find(h => h.id === hubFilter)?.name);
-    if (stateFilter !== 'all') parts.push(sudanStates.find(s => s.id === stateFilter)?.name);
+    const parts: string[] = [];
+    if (hubFilter !== 'all') parts.push(hubs.find(h => h.id === hubFilter)?.name || '');
+    if (stateFilter !== 'all') parts.push(sudanStates.find(s => s.id === stateFilter)?.name || '');
     if (roleFilter !== 'all') parts.push(ROLE_LABELS[roleFilter] || roleFilter);
     if (statusFilter !== 'all') parts.push(statusFilter);
-    if (bankFilter !== 'all') parts.push(bankFilter === 'has' ? 'With Bank' : 'Missing Bank');
+    if (bankFilter === 'has') parts.push('With Bank Account');
+    if (bankFilter === 'missing') parts.push('Missing Bank Account');
     if (search) parts.push(`"${search}"`);
     return parts.filter(Boolean).join(', ');
   }, [hubFilter, stateFilter, roleFilter, statusFilter, bankFilter, search]);
 
-  /* ── Profile Card ─────────────────────────────────── */
+  /* ── Stat card ── */
+  const StatCard = ({ label, value, icon: Icon, color, bg, onClick }: any) => (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`rounded-lg border p-4 text-left transition-all hover:shadow-sm hover:-translate-y-0.5 ${bg} ${onClick ? 'cursor-pointer' : 'cursor-default'}`}
+      data-testid={`stat-${label.toLowerCase().replace(/\s+/g, '-')}`}
+    >
+      <div className="flex items-start justify-between gap-2">
+        <div>
+          <p className="text-xs text-muted-foreground mb-1">{label}</p>
+          <p className={`text-3xl font-bold tracking-tight ${color}`}>{loading ? '—' : value}</p>
+        </div>
+        <div className={`rounded-full p-2 ${bg} border`}>
+          <Icon className={`h-4 w-4 ${color}`} />
+        </div>
+      </div>
+    </button>
+  );
+
+  /* ── Profile card ── */
   const ProfileCard = ({ p }: { p: StaffProfile }) => {
     const hub   = hubs.find(h => h.id === p.hub_id);
     const state = sudanStates.find(s => s.id === p.state_id);
     const av    = avBadge(p.availability);
-    const hasBank = !!p.bank_account?.accountNumber;
+    const hasBank = !!(p.bank_account?.accountNumber || p.bank_account?.accountName);
     return (
       <Card
-        className="cursor-pointer hover:shadow-md hover:-translate-y-0.5 transition-all border hover:border-[#0F2041]/30 group"
+        className="cursor-pointer hover:shadow-md hover:-translate-y-0.5 transition-all duration-150 border hover:border-blue-200 dark:hover:border-blue-800 group overflow-hidden"
         onClick={() => setSelected(p)}
         data-testid={`card-profile-${p.id}`}
       >
-        <CardContent className="p-4">
-          <div className="flex items-start gap-3">
-            <div className="relative shrink-0">
-              <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#0F2041]/20 to-[#1D3461]/10 flex items-center justify-center font-bold text-sm text-[#0F2041] dark:text-blue-300">
-                {initials(p.full_name)}
+        <CardContent className="p-0">
+          {/* Card top bar — availability color strip */}
+          <div className={`h-1 w-full ${p.availability === 'online' ? 'bg-green-500' : p.availability === 'busy' ? 'bg-amber-500' : 'bg-slate-200 dark:bg-slate-700'}`} />
+
+          <div className="p-4 space-y-3">
+            {/* Header row */}
+            <div className="flex items-start gap-3">
+              <Avatar name={p.full_name} size="md" availability={p.availability} />
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center justify-between gap-1">
+                  <p className="font-semibold text-sm text-foreground truncate group-hover:text-blue-700 dark:group-hover:text-blue-400 transition-colors">
+                    {p.full_name || 'Unknown'}
+                  </p>
+                  <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0 invisible group-hover:visible" />
+                </div>
+                <p className="text-[11px] text-muted-foreground truncate">{p.email}</p>
               </div>
-              <span className={`absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-white dark:border-slate-900 ${av.dot}`} title={av.label} />
             </div>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center justify-between gap-1">
-                <p className="font-semibold text-sm truncate group-hover:text-[#0F2041] dark:group-hover:text-blue-300 transition-colors">{p.full_name || 'Unknown'}</p>
-                <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />
+
+            {/* Role + status row */}
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <RoleBadge role={p.role} />
+              <span className={`text-[10px] font-medium ${av.labelColor}`}>{av.label}</span>
+            </div>
+
+            {/* Location */}
+            {(hub || state) && (
+              <div className="space-y-0.5">
+                {hub && (
+                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <Building2 className="h-3 w-3 shrink-0" />
+                    <span className="font-medium text-foreground">{hub.name}</span>
+                  </div>
+                )}
+                {state && (
+                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <MapPin className="h-3 w-3 shrink-0" />
+                    <span>{state.name}</span>
+                  </div>
+                )}
               </div>
-              <p className="text-[10px] text-muted-foreground truncate">{p.email}</p>
-              <span className={`inline-flex mt-1 rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${ROLE_COLORS[p.role || ''] || 'bg-slate-100 text-slate-700'}`}>
-                {ROLE_LABELS[p.role || ''] || p.role || 'No role'}
-              </span>
-            </div>
-          </div>
-          <Separator className="my-2.5" />
-          <div className="space-y-1">
-            {hub   && <div className="flex items-center gap-1.5 text-[11px]"><Building2 className="h-3 w-3 text-muted-foreground shrink-0" /><span className="font-medium">{hub.name}</span></div>}
-            {state && <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground"><MapPin className="h-3 w-3 shrink-0" />{state.name}</div>}
-          </div>
-          <Separator className="my-2.5" />
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-1.5 text-[11px]">
-              <Landmark className="h-3 w-3 text-muted-foreground shrink-0" />
-              {hasBank ? <span className="font-mono">{maskAcc(p.bank_account?.accountNumber)}</span> : <span className="text-red-500 font-medium">No account</span>}
-            </div>
-            {hasBank ? <CheckCircle className="h-3.5 w-3.5 text-green-500" /> : <XCircle className="h-3.5 w-3.5 text-red-400" />}
-          </div>
-          <div className="mt-1.5 flex items-center gap-1.5 text-[10px] text-muted-foreground">
-            <Clock className="h-3 w-3 shrink-0" />
-            {lastActive(p.last_activity, p.updated_at)}
-            {p.device_info && (
-              <><span className="opacity-40">·</span>
-              {p.device_info.includes('Android') || p.device_info.includes('iPhone') ? <Smartphone className="h-3 w-3" /> : <Monitor className="h-3 w-3" />}
-              <span>{p.device_info}</span></>
             )}
+
+            {/* Divider */}
+            <Separator />
+
+            {/* Bank + last active footer */}
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5 text-xs">
+                  <Landmark className="h-3 w-3 text-muted-foreground shrink-0" />
+                  {hasBank
+                    ? <span className="font-mono text-foreground">{maskAcc(p.bank_account?.accountNumber)}</span>
+                    : <span className="text-red-500 font-medium">No account</span>}
+                </div>
+                {hasBank
+                  ? <CheckCircle className="h-3.5 w-3.5 text-green-500 shrink-0" />
+                  : <XCircle className="h-3.5 w-3.5 text-red-400 shrink-0" />}
+              </div>
+              <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+                <Clock className="h-3 w-3 shrink-0" />
+                <span>{lastActive(p.last_activity, p.updated_at)}</span>
+                {p.device_info && (
+                  <>
+                    <span className="text-muted-foreground/30">·</span>
+                    {(p.device_info === 'Android' || p.device_info === 'iPhone' || p.device_info === 'Mobile')
+                      ? <Smartphone className="h-3 w-3 shrink-0" />
+                      : <Monitor className="h-3 w-3 shrink-0" />}
+                    <span>{p.device_info}</span>
+                  </>
+                )}
+              </div>
+            </div>
           </div>
         </CardContent>
       </Card>
     );
   };
 
-  /* ── Filter bar (shared) ──────────────────────────── */
+  /* ── Empty state ── */
+  const EmptyState = ({ message }: { message: string }) => (
+    <div className="flex flex-col items-center justify-center py-20 text-muted-foreground space-y-3">
+      <div className="rounded-full bg-muted p-4">
+        <Users className="h-8 w-8 opacity-40" />
+      </div>
+      <p className="font-medium text-sm">{message}</p>
+      {hasFilters && (
+        <Button variant="outline" size="sm" onClick={clearFilters}>Clear all filters</Button>
+      )}
+    </div>
+  );
+
+  /* ── Shared filter bar ── */
   const FilterBar = (
-    <div className="rounded-xl border bg-slate-50 dark:bg-slate-900/50 p-3 space-y-2">
-      <div className="flex flex-wrap gap-2 items-center">
-        <div className="relative flex-1 min-w-[180px]">
-          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-          <Input placeholder="Search name, email, employee ID…" value={search} onChange={e => setSearch(e.target.value)}
-            className="pl-8 h-8 text-sm" data-testid="input-staff-search" />
+    <Card className="p-3">
+      <div className="flex flex-wrap items-center gap-2">
+        {/* Search */}
+        <div className="relative flex-1 min-w-[200px]">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+          <Input
+            placeholder="Search name, email, employee ID…"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            className="pl-9 h-8 text-sm"
+            data-testid="input-staff-search"
+          />
         </div>
+
+        {/* Hub */}
         <Select value={hubFilter} onValueChange={v => { setHubFilter(v); setStateFilter('all'); setLocalFilter('all'); }}>
-          <SelectTrigger className="h-8 w-[135px] text-xs" data-testid="select-hub"><SelectValue placeholder="All Hubs" /></SelectTrigger>
-          <SelectContent><SelectItem value="all">All Hubs</SelectItem>{hubs.map(h => <SelectItem key={h.id} value={h.id}>{h.name}</SelectItem>)}</SelectContent>
+          <SelectTrigger className="h-8 w-[130px] text-xs" data-testid="select-hub">
+            <SelectValue placeholder="All Hubs" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Hubs</SelectItem>
+            {hubs.map(h => <SelectItem key={h.id} value={h.id}>{h.name}</SelectItem>)}
+          </SelectContent>
         </Select>
+
+        {/* State */}
         <Select value={stateFilter} onValueChange={v => { setStateFilter(v); setLocalFilter('all'); }}>
-          <SelectTrigger className="h-8 w-[135px] text-xs" data-testid="select-state"><SelectValue placeholder="All States" /></SelectTrigger>
-          <SelectContent><SelectItem value="all">All States</SelectItem>{availableStates.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}</SelectContent>
+          <SelectTrigger className="h-8 w-[130px] text-xs" data-testid="select-state">
+            <SelectValue placeholder="All States" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All States</SelectItem>
+            {availableStates.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
+          </SelectContent>
         </Select>
+
+        {/* Locality */}
         <Select value={localityFilter} onValueChange={setLocalFilter} disabled={stateFilter === 'all'}>
-          <SelectTrigger className="h-8 w-[135px] text-xs" data-testid="select-locality"><SelectValue placeholder={stateFilter === 'all' ? 'Select State' : 'All Localities'} /></SelectTrigger>
-          <SelectContent><SelectItem value="all">All Localities</SelectItem>{availableLocalities.map((l: any) => <SelectItem key={l.id} value={l.id}>{l.name}</SelectItem>)}</SelectContent>
+          <SelectTrigger className="h-8 w-[130px] text-xs" data-testid="select-locality">
+            <SelectValue placeholder={stateFilter === 'all' ? 'Select state' : 'All Localities'} />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Localities</SelectItem>
+            {availableLocalities.map((l: any) => <SelectItem key={l.id} value={l.id}>{l.name}</SelectItem>)}
+          </SelectContent>
         </Select>
+
+        {/* Role */}
         <Select value={roleFilter} onValueChange={setRoleFilter}>
-          <SelectTrigger className="h-8 w-[125px] text-xs" data-testid="select-role"><SelectValue placeholder="All Roles" /></SelectTrigger>
-          <SelectContent><SelectItem value="all">All Roles</SelectItem>{Object.entries(ROLE_LABELS).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}</SelectContent>
+          <SelectTrigger className="h-8 w-[120px] text-xs" data-testid="select-role">
+            <SelectValue placeholder="All Roles" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Roles</SelectItem>
+            {Object.entries(ROLE_LABELS).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
+          </SelectContent>
         </Select>
+
+        {/* Status */}
         <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="h-8 w-[115px] text-xs" data-testid="select-status"><SelectValue placeholder="All Status" /></SelectTrigger>
+          <SelectTrigger className="h-8 w-[110px] text-xs" data-testid="select-status">
+            <SelectValue placeholder="All Status" />
+          </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All Status</SelectItem>
             <SelectItem value="online">Online</SelectItem>
@@ -538,286 +689,407 @@ export default function StaffDirectory() {
             <SelectItem value="offline">Offline</SelectItem>
           </SelectContent>
         </Select>
+
+        {/* Bank */}
         <Select value={bankFilter} onValueChange={setBankFilter}>
-          <SelectTrigger className="h-8 w-[125px] text-xs" data-testid="select-bank"><SelectValue placeholder="All Accounts" /></SelectTrigger>
+          <SelectTrigger className="h-8 w-[125px] text-xs" data-testid="select-bank">
+            <SelectValue placeholder="All Accounts" />
+          </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All Accounts</SelectItem>
             <SelectItem value="has">Has Account</SelectItem>
             <SelectItem value="missing">Missing</SelectItem>
           </SelectContent>
         </Select>
+
+        {/* Clear */}
         {hasFilters && (
           <Button variant="ghost" size="sm" onClick={clearFilters} className="h-8 text-xs gap-1 text-muted-foreground" data-testid="button-clear-filters">
             <XCircle className="h-3.5 w-3.5" />Clear
           </Button>
         )}
-        <div className="flex gap-1 ml-auto">
-          <Button variant={viewMode === 'cards' ? 'default' : 'outline'} size="sm" className="h-8 w-8 p-0" onClick={() => setViewMode('cards')} data-testid="button-view-cards"><LayoutGrid className="h-3.5 w-3.5" /></Button>
-          <Button variant={viewMode === 'table' ? 'default' : 'outline'} size="sm" className="h-8 w-8 p-0" onClick={() => setViewMode('table')} data-testid="button-view-table"><List className="h-3.5 w-3.5" /></Button>
+
+        {/* Right side: count badge + view toggle */}
+        <div className="flex items-center gap-1.5 ml-auto">
+          {hasFilters && (
+            <Badge variant="secondary" className="text-xs font-medium">
+              {filtered.length} of {profiles.length}
+            </Badge>
+          )}
+          <div className="flex border rounded-md overflow-hidden">
+            <button
+              type="button"
+              onClick={() => setViewMode('cards')}
+              className={`px-2 py-1.5 transition-colors ${viewMode === 'cards' ? 'bg-[#0F2041] text-white' : 'bg-background text-muted-foreground hover:bg-muted'}`}
+              data-testid="button-view-cards"
+              title="Card view"
+            >
+              <LayoutGrid className="h-3.5 w-3.5" />
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode('table')}
+              className={`px-2 py-1.5 transition-colors ${viewMode === 'table' ? 'bg-[#0F2041] text-white' : 'bg-background text-muted-foreground hover:bg-muted'}`}
+              data-testid="button-view-table"
+              title="Table view"
+            >
+              <List className="h-3.5 w-3.5" />
+            </button>
+          </div>
         </div>
       </div>
-      {hasFilters && (
-        <p className="text-xs text-muted-foreground">Showing <strong className="text-foreground">{filtered.length}</strong> of {profiles.length} profiles</p>
-      )}
-    </div>
+    </Card>
   );
 
   return (
-    <div className="min-h-screen bg-background p-4 md:p-6 space-y-5">
-      {/* Page Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2">
-            <Users className="h-6 w-6 text-[#0F2041]" />
-            Staff Directory
-            <span className="text-sm font-normal text-muted-foreground">/ دليل الموظفين</span>
-          </h1>
-          <p className="text-sm text-muted-foreground mt-0.5">Profiles, bank accounts, online presence, and capacity overview</p>
-        </div>
-        <div className="flex gap-2">
-          <ExportMenu profiles={filtered} tab={activeTab} label={exportLabel} />
-          <Button variant="outline" size="sm" onClick={() => load(true)} disabled={refreshing} data-testid="button-refresh" className="gap-1.5">
-            <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? 'animate-spin' : ''}`} />Refresh
-          </Button>
+    <div className="min-h-screen bg-background">
+      {/* ── Page Header Banner ── */}
+      <div className="bg-gradient-to-r from-[#0F2041] via-[#1a3260] to-[#1D3461] px-6 py-6 md:py-8">
+        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <div className="flex items-center gap-2.5 mb-1">
+              <div className="rounded-lg bg-white/10 p-2">
+                <Users className="h-5 w-5 text-white" />
+              </div>
+              <div>
+                <h1 className="text-xl font-bold text-white leading-tight">Staff Directory</h1>
+                <p className="text-white/50 text-sm">دليل الموظفين</p>
+              </div>
+            </div>
+            <p className="text-white/60 text-xs mt-2 max-w-lg">
+              Profiles · Bank accounts · Online presence · Capacity overview
+            </p>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <ExportMenu profiles={filtered} tab={activeTab} label={exportLabel} />
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => load(true)}
+              disabled={refreshing}
+              className="gap-1.5 bg-white/10 border-white/20 text-white hover:bg-white/20 hover:text-white"
+              data-testid="button-refresh"
+            >
+              <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? 'animate-spin' : ''}`} />
+              Refresh
+            </Button>
+          </div>
         </div>
       </div>
 
-      {/* Summary Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-        {[
-          { label: 'Total Staff',       value: stats.total,       icon: Users,        color: 'text-[#0F2041]', bg: 'bg-[#0F2041]/5'                       },
-          { label: 'Online Now',        value: stats.online,      icon: Wifi,         color: 'text-green-600', bg: 'bg-green-50 dark:bg-green-950/30'      },
-          { label: 'Busy',             value: stats.busy,        icon: Activity,     color: 'text-amber-600', bg: 'bg-amber-50 dark:bg-amber-950/30'      },
-          { label: 'With Bank Account', value: stats.withBank,    icon: Landmark,     color: 'text-blue-600',  bg: 'bg-blue-50 dark:bg-blue-950/30'        },
-          { label: 'Missing Account',   value: stats.missingBank, icon: AlertCircle,  color: 'text-red-600',   bg: 'bg-red-50 dark:bg-red-950/30'          },
-        ].map(({ label, value, icon: Icon, color, bg }) => (
-          <Card key={label} className="border">
-            <CardContent className={`pt-3 pb-3 px-4 ${bg} rounded-lg`}>
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs text-muted-foreground">{label}</p>
-                  <p className={`text-2xl font-bold ${color}`}>{loading ? '—' : value}</p>
-                </div>
-                <Icon className={`h-5 w-5 ${color} opacity-50`} />
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+      <div className="max-w-7xl mx-auto px-4 md:px-6 py-5 space-y-5">
+        {/* ── Info Banner ── */}
+        <PageInfoBanner
+          title="Staff Directory"
+          description="View all staff profiles across field operations. The Directory tab shows live online status and device info. Bank Accounts shows full payment details (both web and mobile entries). Capacity shows headcount breakdown by Hub, State, and Role. Online Now shows who is currently active."
+          descriptionAr="عرض جميع ملفات تعريف الموظفين عبر العمليات الميدانية. يعرض حساباتهم البنكية وحالتهم الإلكترونية ومعلومات الجهاز وتفاصيل التحصيل."
+        />
 
-      {/* Tabs */}
-      <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <div className="flex items-center justify-between gap-3 flex-wrap">
-          <TabsList className="bg-slate-100 dark:bg-slate-800 border rounded-xl p-1">
-            <TabsTrigger value="directory" className="gap-1.5 data-[state=active]:bg-[#0F2041] data-[state=active]:text-white rounded-lg text-xs">
-              <LayoutGrid className="h-3.5 w-3.5" />Directory
-              <span className="bg-white/20 text-[10px] px-1.5 py-0.5 rounded-full font-bold">{filtered.length}</span>
-            </TabsTrigger>
-            <TabsTrigger value="bank_accounts" className="gap-1.5 data-[state=active]:bg-[#0F2041] data-[state=active]:text-white rounded-lg text-xs">
-              <Landmark className="h-3.5 w-3.5" />Bank Accounts
-              {stats.missingBank > 0 && <span className="bg-red-500 text-white text-[10px] px-1.5 py-0.5 rounded-full font-bold">{stats.missingBank}</span>}
-            </TabsTrigger>
-            <TabsTrigger value="capacity" className="gap-1.5 data-[state=active]:bg-[#0F2041] data-[state=active]:text-white rounded-lg text-xs">
-              <BarChart3 className="h-3.5 w-3.5" />Capacity
-            </TabsTrigger>
-            <TabsTrigger value="online" className="gap-1.5 data-[state=active]:bg-green-700 data-[state=active]:text-white rounded-lg text-xs">
-              <Wifi className="h-3.5 w-3.5" />Online Now
-              {stats.online > 0 && <span className="bg-green-500 data-[state=active]:bg-white/20 text-white text-[10px] px-1.5 py-0.5 rounded-full font-bold">{stats.online}</span>}
-            </TabsTrigger>
-          </TabsList>
+        {/* ── Stats row ── */}
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+          <StatCard label="Total Staff"       value={stats.total}       icon={Users}       color="text-[#0F2041] dark:text-blue-300"  bg="bg-background border-border"                             />
+          <StatCard label="Online"            value={stats.online}      icon={Wifi}        color="text-green-700 dark:text-green-400" bg="bg-green-50 dark:bg-green-950/30 border-green-200 dark:border-green-800" onClick={() => setStatusFilter('online')} />
+          <StatCard label="Busy"              value={stats.busy}        icon={Activity}    color="text-amber-700 dark:text-amber-400" bg="bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800"  onClick={() => setStatusFilter('busy')}   />
+          <StatCard label="With Bank Account" value={stats.withBank}    icon={UserCheck}   color="text-blue-700 dark:text-blue-400"   bg="bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-800"    onClick={() => setBankFilter('has')}      />
+          <StatCard label="Missing Account"   value={stats.missingBank} icon={UserX}       color="text-red-700 dark:text-red-400"     bg="bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-800"        onClick={() => setBankFilter('missing')}  />
         </div>
 
-        {/* Shared filter bar */}
-        <div className="mt-3">{FilterBar}</div>
-
-        {/* ── Directory Tab ── */}
-        <TabsContent value="directory">
-          {loading ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 mt-4">
-              {Array(8).fill(0).map((_, i) => <Skeleton key={i} className="h-48 w-full rounded-xl" />)}
-            </div>
-          ) : filtered.length === 0 ? (
-            <div className="mt-12 text-center text-muted-foreground space-y-2">
-              <Users className="h-10 w-10 mx-auto opacity-30" />
-              <p className="font-medium">No profiles match your filters</p>
-              <Button variant="ghost" size="sm" onClick={clearFilters}>Clear filters</Button>
-            </div>
-          ) : viewMode === 'cards' ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 mt-4">
-              {filtered.map(p => <ProfileCard key={p.id} p={p} />)}
-            </div>
-          ) : (
-            <div className="mt-4 rounded-xl border overflow-hidden">
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow className="bg-slate-50 dark:bg-slate-900">
-                      <TableHead>Name</TableHead><TableHead>Role</TableHead><TableHead>Status</TableHead>
-                      <TableHead>Hub</TableHead><TableHead>State</TableHead><TableHead>Bank Account</TableHead>
-                      <TableHead>Last Active</TableHead><TableHead>Device</TableHead><TableHead></TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {filtered.map(p => {
-                      const hub   = hubs.find(h => h.id === p.hub_id);
-                      const state = sudanStates.find(s => s.id === p.state_id);
-                      const av    = avBadge(p.availability);
-                      const hasBank = !!p.bank_account?.accountNumber;
-                      return (
-                        <TableRow key={p.id} className="cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-900" onClick={() => setSelected(p)}>
-                          <TableCell>
-                            <div className="flex items-center gap-2">
-                              <div className="relative">
-                                <div className="w-7 h-7 rounded-full bg-[#0F2041]/10 flex items-center justify-center text-[10px] font-bold text-[#0F2041]">{initials(p.full_name)}</div>
-                                <span className={`absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full border border-white dark:border-slate-900 ${av.dot}`} />
-                              </div>
-                              <div><p className="text-sm font-medium">{p.full_name || '—'}</p><p className="text-[10px] text-muted-foreground">{p.email}</p></div>
-                            </div>
-                          </TableCell>
-                          <TableCell><Badge className={`text-[10px] ${ROLE_COLORS[p.role || ''] || ''}`}>{ROLE_LABELS[p.role || ''] || p.role || '—'}</Badge></TableCell>
-                          <TableCell><span className={`text-xs font-semibold ${av.text}`}>{av.label}</span></TableCell>
-                          <TableCell className="text-xs">{hub?.name || '—'}</TableCell>
-                          <TableCell className="text-xs">{state?.name || '—'}</TableCell>
-                          <TableCell>
-                            {hasBank
-                              ? <span className="text-xs font-mono">{maskAcc(p.bank_account?.accountNumber)}</span>
-                              : <span className="text-xs text-red-500 font-medium">Missing</span>}
-                          </TableCell>
-                          <TableCell className="text-xs text-muted-foreground">{lastActive(p.last_activity, p.updated_at)}</TableCell>
-                          <TableCell className="text-xs">{p.device_info || '—'}</TableCell>
-                          <TableCell><ChevronRight className="h-4 w-4 text-muted-foreground" /></TableCell>
-                        </TableRow>
-                      );
-                    })}
-                  </TableBody>
-                </Table>
-              </div>
-            </div>
-          )}
-        </TabsContent>
-
-        {/* ── Bank Accounts Tab ── */}
-        <TabsContent value="bank_accounts">
-          <div className="mt-4 space-y-3">
-            {stats.missingBank > 0 && (
-              <div className="rounded-xl border-2 border-red-200 bg-red-50 dark:bg-red-950/20 px-5 py-3 flex items-center justify-between gap-4">
-                <div className="flex items-center gap-3">
-                  <AlertCircle className="h-5 w-5 text-red-600 shrink-0" />
-                  <div>
-                    <p className="text-sm font-bold text-red-800 dark:text-red-300">{stats.missingBank} staff member{stats.missingBank !== 1 ? 's' : ''} missing bank account</p>
-                    <p className="text-xs text-red-600/80">Payments cannot be processed for these members.</p>
-                  </div>
-                </div>
-                <Button size="sm" variant="outline" className="border-red-300 text-red-700 hover:bg-red-100 shrink-0"
-                  onClick={() => setBankFilter('missing')}>View Missing</Button>
-              </div>
-            )}
-            <div className="rounded-xl border overflow-hidden">
-              <div className="bg-slate-50 dark:bg-slate-900 px-4 py-2.5 border-b flex items-center justify-between">
-                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Bank Account Registry · {filtered.length} profiles</p>
-                <div className="flex gap-2 text-xs">
-                  <span className="text-green-600 font-semibold">{filtered.filter(p => p.bank_account?.accountNumber).length} registered</span>
-                  <span className="text-muted-foreground">·</span>
-                  <span className="text-red-500 font-semibold">{filtered.filter(p => !p.bank_account?.accountNumber).length} missing</span>
-                </div>
-              </div>
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow className="bg-slate-50/50">
-                      <TableHead>Staff Member</TableHead><TableHead>Role</TableHead><TableHead>Hub / State</TableHead>
-                      <TableHead>Account Name</TableHead><TableHead>Account Number</TableHead>
-                      <TableHead>Bank</TableHead><TableHead>Branch</TableHead><TableHead>Status</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {filtered.map(p => {
-                      const hub   = hubs.find(h => h.id === p.hub_id);
-                      const state = sudanStates.find(s => s.id === p.state_id);
-                      const hasBank = !!p.bank_account?.accountNumber;
-                      return (
-                        <TableRow key={p.id} className="cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-900" onClick={() => setSelected(p)}>
-                          <TableCell>
-                            <div className="flex items-center gap-2">
-                              <div className="w-7 h-7 rounded-full bg-[#0F2041]/10 flex items-center justify-center text-[10px] font-bold text-[#0F2041]">{initials(p.full_name)}</div>
-                              <div><p className="text-sm font-medium">{p.full_name || '—'}</p><p className="text-[10px] text-muted-foreground">{p.email}</p></div>
-                            </div>
-                          </TableCell>
-                          <TableCell><Badge className={`text-[10px] ${ROLE_COLORS[p.role || ''] || ''}`}>{ROLE_LABELS[p.role || ''] || p.role || '—'}</Badge></TableCell>
-                          <TableCell className="text-xs">{[hub?.name, state?.name].filter(Boolean).join(' / ') || '—'}</TableCell>
-                          <TableCell className="text-sm font-medium">{p.bank_account?.accountName || <span className="text-muted-foreground">—</span>}</TableCell>
-                          <TableCell className="font-mono text-sm font-bold">{p.bank_account?.accountNumber || <span className="text-muted-foreground font-normal">—</span>}</TableCell>
-                          <TableCell className="text-sm">{p.bank_account?.bankName || <span className="text-muted-foreground">—</span>}</TableCell>
-                          <TableCell className="text-sm">{p.bank_account?.branch || <span className="text-muted-foreground">—</span>}</TableCell>
-                          <TableCell>
-                            {hasBank
-                              ? <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-green-700"><CheckCircle className="h-3 w-3" />Registered</span>
-                              : <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-red-600"><XCircle className="h-3 w-3" />Missing</span>}
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })}
-                  </TableBody>
-                </Table>
-              </div>
-            </div>
+        {/* ── Tabs ── */}
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <TabsList className="flex-wrap h-auto gap-1 p-1 bg-muted/60 border rounded-lg">
+              <TabsTrigger value="directory" className="gap-1.5 data-[state=active]:bg-[#0F2041] data-[state=active]:text-white rounded-md text-xs h-8 px-3">
+                <LayoutGrid className="h-3.5 w-3.5" />Directory
+                {!loading && (
+                  <span className="ml-0.5 rounded-full bg-current/10 px-1.5 py-0 text-[10px] font-bold data-[state=active]:bg-white/20">
+                    {filtered.length}
+                  </span>
+                )}
+              </TabsTrigger>
+              <TabsTrigger value="bank_accounts" className="gap-1.5 data-[state=active]:bg-[#0F2041] data-[state=active]:text-white rounded-md text-xs h-8 px-3">
+                <Landmark className="h-3.5 w-3.5" />Bank Accounts
+                {!loading && stats.missingBank > 0 && (
+                  <span className="ml-0.5 rounded-full bg-red-500 text-white px-1.5 py-0 text-[10px] font-bold">
+                    {stats.missingBank}
+                  </span>
+                )}
+              </TabsTrigger>
+              <TabsTrigger value="capacity" className="gap-1.5 data-[state=active]:bg-[#0F2041] data-[state=active]:text-white rounded-md text-xs h-8 px-3">
+                <BarChart3 className="h-3.5 w-3.5" />Capacity
+              </TabsTrigger>
+              <TabsTrigger value="online" className="gap-1.5 data-[state=active]:bg-green-700 data-[state=active]:text-white rounded-md text-xs h-8 px-3">
+                <Wifi className="h-3.5 w-3.5" />Online Now
+                {!loading && stats.online > 0 && (
+                  <span className="ml-0.5 rounded-full bg-green-500 data-[state=inactive]:bg-green-500 text-white px-1.5 py-0 text-[10px] font-bold">
+                    {stats.online}
+                  </span>
+                )}
+              </TabsTrigger>
+            </TabsList>
           </div>
-        </TabsContent>
 
-        {/* ── Capacity Tab ── */}
-        <TabsContent value="capacity">
-          <div className="mt-4 grid grid-cols-1 lg:grid-cols-3 gap-5">
-            {([
-              { title: 'By Hub',   icon: Building2, data: capHub   },
-              { title: 'By State', icon: MapPin,    data: capState },
-              { title: 'By Role',  icon: Shield,    data: capRole  },
-            ] as const).map(({ title, icon: Icon, data }) => (
-              <Card key={title}>
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-sm flex items-center gap-1.5"><Icon className="h-4 w-4" />{title}</CardTitle>
-                  <CardDescription className="text-xs">Staff capacity breakdown</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-3 max-h-72 overflow-y-auto">
-                  {data.length === 0
-                    ? <p className="text-xs text-muted-foreground text-center py-4">No data</p>
-                    : data.map(r => <CapRow key={r.name} label={r.name} total={r.total} online={r.online} withBank={r.withBank} max={data[0].total} />)}
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        </TabsContent>
+          {/* Shared filter bar */}
+          {FilterBar}
 
-        {/* ── Online Now Tab ── */}
-        <TabsContent value="online">
-          <div className="mt-4">
+          {/* ── Directory tab ── */}
+          <TabsContent value="directory" className="mt-0">
             {loading ? (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                {Array(4).fill(0).map((_, i) => <Skeleton key={i} className="h-40" />)}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+                {Array(8).fill(0).map((_, i) => <Skeleton key={i} className="h-52 w-full rounded-lg" />)}
               </div>
-            ) : profiles.filter(p => p.availability === 'online' || p.availability === 'busy').length === 0 ? (
-              <div className="text-center py-16 text-muted-foreground space-y-2">
-                <WifiOff className="h-10 w-10 mx-auto opacity-30" />
-                <p className="font-medium">No staff currently online</p>
+            ) : filtered.length === 0 ? (
+              <EmptyState message="No profiles match your filters" />
+            ) : viewMode === 'cards' ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+                {filtered.map(p => <ProfileCard key={p.id} p={p} />)}
               </div>
             ) : (
-              <>
-                <p className="text-sm text-muted-foreground mb-3">
-                  <span className="font-bold text-green-600">{profiles.filter(p => p.availability === 'online').length}</span> online
-                  {profiles.filter(p => p.availability === 'busy').length > 0 && <> · <span className="font-bold text-amber-600">{profiles.filter(p => p.availability === 'busy').length}</span> busy</>}
+              <Card className="overflow-hidden">
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="bg-muted/50 hover:bg-muted/50">
+                        <TableHead className="w-[200px]">Name</TableHead>
+                        <TableHead>Role</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead>Hub</TableHead>
+                        <TableHead>State</TableHead>
+                        <TableHead>Bank Account</TableHead>
+                        <TableHead>Last Active</TableHead>
+                        <TableHead>Device</TableHead>
+                        <TableHead className="w-8"></TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {filtered.map(p => {
+                        const hub   = hubs.find(h => h.id === p.hub_id);
+                        const state = sudanStates.find(s => s.id === p.state_id);
+                        const av    = avBadge(p.availability);
+                        const hasBank = !!(p.bank_account?.accountNumber || p.bank_account?.accountName);
+                        return (
+                          <TableRow
+                            key={p.id}
+                            className="cursor-pointer hover:bg-blue-50/50 dark:hover:bg-blue-950/20"
+                            onClick={() => setSelected(p)}
+                            data-testid={`row-profile-${p.id}`}
+                          >
+                            <TableCell>
+                              <div className="flex items-center gap-2.5">
+                                <Avatar name={p.full_name} size="sm" availability={p.availability} />
+                                <div className="min-w-0">
+                                  <p className="text-sm font-medium truncate">{p.full_name || '—'}</p>
+                                  <p className="text-[10px] text-muted-foreground truncate">{p.email}</p>
+                                </div>
+                              </div>
+                            </TableCell>
+                            <TableCell><RoleBadge role={p.role} /></TableCell>
+                            <TableCell>
+                              <div className="flex items-center gap-1.5">
+                                <span className={`w-2 h-2 rounded-full ${av.dot}`} />
+                                <span className={`text-xs font-medium ${av.labelColor}`}>{av.label}</span>
+                              </div>
+                            </TableCell>
+                            <TableCell className="text-xs">{hub?.name || '—'}</TableCell>
+                            <TableCell className="text-xs">{state?.name || '—'}</TableCell>
+                            <TableCell>
+                              {hasBank
+                                ? <span className="text-xs font-mono font-medium">{maskAcc(p.bank_account?.accountNumber)}</span>
+                                : <span className="text-xs text-red-500 font-medium">Missing</span>}
+                            </TableCell>
+                            <TableCell className="text-xs text-muted-foreground">{lastActive(p.last_activity, p.updated_at)}</TableCell>
+                            <TableCell className="text-xs text-muted-foreground">{p.device_info || '—'}</TableCell>
+                            <TableCell><ChevronRight className="h-4 w-4 text-muted-foreground" /></TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </div>
+              </Card>
+            )}
+          </TabsContent>
+
+          {/* ── Bank Accounts tab ── */}
+          <TabsContent value="bank_accounts" className="mt-0 space-y-3">
+            {/* Alert banner */}
+            {stats.missingBank > 0 && (
+              <div className="flex items-center justify-between gap-4 rounded-lg border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/20 px-4 py-3">
+                <div className="flex items-center gap-3">
+                  <div className="rounded-full bg-red-100 dark:bg-red-900/50 p-1.5">
+                    <AlertCircle className="h-4 w-4 text-red-600 dark:text-red-400" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-red-800 dark:text-red-300">
+                      {stats.missingBank} staff member{stats.missingBank !== 1 ? 's' : ''} missing bank account
+                    </p>
+                    <p className="text-xs text-red-600/70 dark:text-red-400/70">Payments cannot be processed for these members</p>
+                  </div>
+                </div>
+                <Button size="sm" variant="outline" className="border-red-300 dark:border-red-700 text-red-700 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/30 shrink-0" onClick={() => setBankFilter('missing')}>
+                  View Missing
+                </Button>
+              </div>
+            )}
+
+            <Card className="overflow-hidden">
+              <div className="flex items-center justify-between px-4 py-2.5 border-b bg-muted/30">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                  Bank Account Registry
                 </p>
+                <div className="flex items-center gap-3 text-xs">
+                  <span className="flex items-center gap-1 text-green-600 dark:text-green-400 font-semibold">
+                    <CheckCircle className="h-3 w-3" />{filtered.filter(p => p.bank_account?.accountNumber || p.bank_account?.accountName).length} registered
+                  </span>
+                  <span className="text-muted-foreground/50">·</span>
+                  <span className="flex items-center gap-1 text-red-500 font-semibold">
+                    <XCircle className="h-3 w-3" />{filtered.filter(p => !(p.bank_account?.accountNumber || p.bank_account?.accountName)).length} missing
+                  </span>
+                </div>
+              </div>
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="bg-muted/30 hover:bg-muted/30">
+                      <TableHead>Staff Member</TableHead>
+                      <TableHead>Role</TableHead>
+                      <TableHead>Hub / State</TableHead>
+                      <TableHead>Account Name</TableHead>
+                      <TableHead>Account Number</TableHead>
+                      <TableHead>Bank</TableHead>
+                      <TableHead>Branch</TableHead>
+                      <TableHead>Status</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {loading ? (
+                      Array(5).fill(0).map((_, i) => (
+                        <TableRow key={i}>
+                          {Array(8).fill(0).map((_, j) => <TableCell key={j}><Skeleton className="h-4 w-full" /></TableCell>)}
+                        </TableRow>
+                      ))
+                    ) : filtered.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={8} className="text-center py-10 text-muted-foreground">No profiles match your filters</TableCell>
+                      </TableRow>
+                    ) : filtered.map(p => {
+                      const hub   = hubs.find(h => h.id === p.hub_id);
+                      const state = sudanStates.find(s => s.id === p.state_id);
+                      const hasBank = !!(p.bank_account?.accountNumber || p.bank_account?.accountName);
+                      return (
+                        <TableRow
+                          key={p.id}
+                          className="cursor-pointer hover:bg-blue-50/50 dark:hover:bg-blue-950/20"
+                          onClick={() => setSelected(p)}
+                          data-testid={`row-bank-${p.id}`}
+                        >
+                          <TableCell>
+                            <div className="flex items-center gap-2.5">
+                              <Avatar name={p.full_name} size="sm" availability={p.availability} />
+                              <div className="min-w-0">
+                                <p className="text-sm font-medium truncate">{p.full_name || '—'}</p>
+                                <p className="text-[10px] text-muted-foreground truncate">{p.email}</p>
+                              </div>
+                            </div>
+                          </TableCell>
+                          <TableCell><RoleBadge role={p.role} /></TableCell>
+                          <TableCell className="text-xs text-muted-foreground">{[hub?.name, state?.name].filter(Boolean).join(' / ') || '—'}</TableCell>
+                          <TableCell className="text-sm font-medium">{p.bank_account?.accountName || <span className="text-muted-foreground text-xs">—</span>}</TableCell>
+                          <TableCell>
+                            {p.bank_account?.accountNumber
+                              ? <span className="text-sm font-mono font-bold text-[#0F2041] dark:text-blue-300">{p.bank_account.accountNumber}</span>
+                              : <span className="text-muted-foreground text-xs">—</span>}
+                          </TableCell>
+                          <TableCell className="text-sm">{p.bank_account?.bankName || <span className="text-muted-foreground text-xs">—</span>}</TableCell>
+                          <TableCell className="text-sm">{p.bank_account?.branch || <span className="text-muted-foreground text-xs">—</span>}</TableCell>
+                          <TableCell>
+                            {hasBank
+                              ? <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-green-700 dark:text-green-400"><CheckCircle className="h-3 w-3" />Registered</span>
+                              : <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-red-600 dark:text-red-400"><XCircle className="h-3 w-3" />Missing</span>}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
+            </Card>
+          </TabsContent>
+
+          {/* ── Capacity tab ── */}
+          <TabsContent value="capacity" className="mt-0">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+              {([
+                { title: 'By Hub',   icon: Building2, data: capHub,   desc: 'Headcount per hub office' },
+                { title: 'By State', icon: MapPin,    data: capState, desc: 'Headcount per state' },
+                { title: 'By Role',  icon: Shield,    data: capRole,  desc: 'Headcount per role' },
+              ] as const).map(({ title, icon: Icon, data, desc }) => (
+                <Card key={title}>
+                  <CardHeader className="pb-3 border-b">
+                    <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                      <Icon className="h-4 w-4 text-muted-foreground" />{title}
+                    </CardTitle>
+                    <CardDescription className="text-xs">{desc}</CardDescription>
+                    <div className="flex items-center gap-3 text-[10px] text-muted-foreground pt-1">
+                      <span className="flex items-center gap-1"><Wifi className="h-2.5 w-2.5 text-green-500" />Online</span>
+                      <span className="flex items-center gap-1"><Landmark className="h-2.5 w-2.5 text-blue-500" />Banked</span>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="pt-3 space-y-3 max-h-72 overflow-y-auto">
+                    {loading ? (
+                      Array(4).fill(0).map((_, i) => <Skeleton key={i} className="h-8 w-full" />)
+                    ) : data.length === 0 ? (
+                      <p className="text-xs text-muted-foreground text-center py-4">No data</p>
+                    ) : data.map(r => (
+                      <CapRow key={r.name} label={r.name} total={r.total} online={r.online} withBank={r.withBank} max={data[0].total} />
+                    ))}
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          </TabsContent>
+
+          {/* ── Online Now tab ── */}
+          <TabsContent value="online" className="mt-0">
+            {loading ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+                {Array(4).fill(0).map((_, i) => <Skeleton key={i} className="h-52" />)}
+              </div>
+            ) : profiles.filter(p => p.availability === 'online' || p.availability === 'busy').length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-20 text-muted-foreground space-y-3">
+                <div className="rounded-full bg-muted p-4">
+                  <WifiOff className="h-8 w-8 opacity-40" />
+                </div>
+                <p className="font-medium text-sm">No staff currently online</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <span className="inline-flex items-center gap-1.5 font-semibold text-green-700 dark:text-green-400">
+                    <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+                    {profiles.filter(p => p.availability === 'online').length} online
+                  </span>
+                  {profiles.filter(p => p.availability === 'busy').length > 0 && (
+                    <>
+                      <span className="text-muted-foreground/40">·</span>
+                      <span className="font-semibold text-amber-600 dark:text-amber-400">
+                        {profiles.filter(p => p.availability === 'busy').length} busy
+                      </span>
+                    </>
+                  )}
+                </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
                   {profiles
                     .filter(p => p.availability === 'online' || p.availability === 'busy')
                     .sort((a, b) => (a.availability === 'online' ? -1 : 1))
                     .map(p => <ProfileCard key={p.id} p={p} />)}
                 </div>
-              </>
+              </div>
             )}
-          </div>
-        </TabsContent>
-      </Tabs>
+          </TabsContent>
+        </Tabs>
+      </div>
 
-      {/* Profile Detail Modal */}
+      {/* Profile detail modal */}
       {selected && <ProfileDetail profile={selected} onClose={() => setSelected(null)} />}
     </div>
   );
