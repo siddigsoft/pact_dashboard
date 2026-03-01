@@ -34,6 +34,7 @@ import { useLocation } from '@/context/location/LocationContext';
 import { useCoordinatorSites, type SiteVisit, type SiteEntryCounts } from './hooks/useCoordinatorSites';
 import { DataFreshnessBadge } from '@/components/realtime/DataFreshnessBadge';
 import { FileCheck as FileCheck2, ListChecks, BarChart3, Shield } from 'lucide-react';
+import { MmpFilterBar } from '@/components/mmp/MmpFilterBar';
 
 // Predefined options for dropdowns
 const HUB_OFFICE_OPTIONS = [
@@ -3655,36 +3656,15 @@ const CoordinatorSites: React.FC = () => {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        {mmpFilterOptions.length > 1 && (
-          <Card className="mb-3">
-            <CardContent className="py-2 px-3">
-              <div className="flex flex-wrap items-center gap-2">
-                <div className="flex items-center gap-1.5">
-                  <FileCheck2 className="h-3.5 w-3.5 text-muted-foreground" />
-                  <span className="text-xs font-medium text-muted-foreground">MMP:</span>
-                </div>
-                <Select value={mmpFilter} onValueChange={setMmpFilter}>
-                  <SelectTrigger className="w-[280px] h-8 text-xs" data-testid="select-mmp-filter">
-                    <SelectValue placeholder="All MMPs" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All MMPs ({mmpFilterOptions.reduce((sum, m) => sum + m.count, 0)} sites)</SelectItem>
-                    {mmpFilterOptions.map(mmp => (
-                      <SelectItem key={mmp.id} value={mmp.id}>
-                        {mmp.name} ({mmp.count} sites)
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {mmpFilter !== 'all' && (
-                  <Button variant="ghost" size="sm" onClick={() => setMmpFilter('all')} className="h-7 px-2 text-xs">
-                    Clear
-                  </Button>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-        )}
+        <MmpFilterBar
+          mmpOptions={mmpFilterOptions.map(m => ({ id: m.id, label: m.name, count: m.count }))}
+          mmpFilter={mmpFilter}
+          onMmpFilterChange={setMmpFilter}
+          totalCount={mmpFilterOptions.reduce((sum, m) => sum + m.count, 0)}
+          filteredCount={mmpFilter !== 'all' ? (mmpFilterOptions.find(m => m.id === mmpFilter)?.count ?? 0) : mmpFilterOptions.reduce((sum, m) => sum + m.count, 0)}
+          onClearAll={() => setMmpFilter('all')}
+          title="Filter Sites by MMP"
+        />
 
         <div className="overflow-x-auto mb-6">
           <TabsList className="inline-flex w-max bg-gradient-to-r from-slate-900/90 to-blue-900/90 border border-blue-500/40 backdrop-blur-xl p-1.5 min-h-[48px] rounded-xl shadow-lg">
