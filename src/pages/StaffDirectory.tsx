@@ -15,7 +15,7 @@ import {
 import {
   Users, Wifi, WifiOff, Search, Building2, MapPin, Landmark,
   Shield, RefreshCw, LayoutGrid, List, ChevronRight,
-  Smartphone, Monitor, Clock, AlertCircle, AlertTriangle, CheckCircle, XCircle,
+  Smartphone, Monitor, Clock, AlertCircle, CheckCircle, XCircle,
   Hash, Globe, Activity, BarChart3, Copy, Download, FileSpreadsheet,
   FileText, FileDown, GitBranch, UserCheck, UserX
 } from "lucide-react";
@@ -457,16 +457,12 @@ function ExportMenu({
 /* ─── Capacity Bar Row ───────────────────────────────────── */
 function CapRow({ label, total, online, withBank, max }: { label: string; total: number; online: number; withBank: number; max: number }) {
   const pct = max > 0 ? Math.round((total / max) * 100) : 0;
-  const isUnassigned = label === 'Unassigned' || label === 'Unknown';
   return (
-    <div className={`space-y-1.5 ${isUnassigned ? 'rounded-md border border-dashed border-amber-300 dark:border-amber-700 bg-amber-50/60 dark:bg-amber-950/20 px-2 pt-1.5 pb-2' : ''}`}>
+    <div className="space-y-1.5">
       <div className="flex items-center justify-between gap-2 text-xs">
-        <span className={`font-medium truncate max-w-[55%] flex items-center gap-1 ${isUnassigned ? 'text-amber-700 dark:text-amber-400 italic' : 'text-foreground'}`} title={label}>
-          {isUnassigned && <AlertTriangle className="h-3 w-3 shrink-0" />}
-          {label}
-        </span>
+        <span className="font-medium text-foreground truncate max-w-[45%]" title={label}>{label}</span>
         <div className="flex items-center gap-2.5 shrink-0 text-muted-foreground">
-          <span className={`font-semibold ${isUnassigned ? 'text-amber-700 dark:text-amber-400' : 'text-foreground'}`}>{total}</span>
+          <span className="font-semibold text-foreground">{total}</span>
           <span className="inline-flex items-center gap-1 text-green-600 dark:text-green-400">
             <Wifi className="h-2.5 w-2.5" />{online}
           </span>
@@ -477,7 +473,7 @@ function CapRow({ label, total, online, withBank, max }: { label: string; total:
       </div>
       <div className="h-1.5 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
         <div
-          className={`h-full rounded-full transition-all duration-500 ${isUnassigned ? 'bg-amber-400' : 'bg-gradient-to-r from-[#0F2041] to-[#2563EB]'}`}
+          className="h-full rounded-full bg-gradient-to-r from-[#0F2041] to-[#2563EB] transition-all duration-500"
           style={{ width: `${pct}%` }}
         />
       </div>
