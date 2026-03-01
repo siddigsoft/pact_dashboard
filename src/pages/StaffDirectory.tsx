@@ -527,7 +527,7 @@ export default function StaffDirectory() {
 
       const { data: pData, error: pErr } = await (supabase as any)
         .from('profiles')
-        .select('id, full_name, email, phone, role, employee_id, hub_id, state_id, locality_id, availability, status, location, location_sharing, updated_at, created_at, bank_account')
+        .select('id, full_name, email, phone, role, employee_id, hub_id, state_id, locality_id, availability, status, location, location_sharing, updated_at, created_at, bank_account, last_activity')
         .order('full_name');
       if (pErr) throw pErr;
 
@@ -555,7 +555,15 @@ export default function StaffDirectory() {
         if (act?.metadata?.appVersion || act?.metadata?.app_version) {
           app_version = String(act.metadata.appVersion || act.metadata.app_version);
         }
-        const last_activity = act?.created_at || null;
+        /* Use the most recent of: profiles.last_activity (written by web AND mobile
+           heartbeats) vs user_activity_logs.created_at (written by auth events).
+           This ensures mobile users show as online/away without needing the
+           web WebSocket channel. */
+        const profileTs = p.last_activity || null;
+        const actTs     = act?.created_at   || null;
+        const last_activity = (profileTs && actTs)
+          ? (new Date(profileTs) > new Date(actTs) ? profileTs : actTs)
+          : (profileTs || actTs);
         const presence = presenceFromActivity(last_activity, p.updated_at);
         return { ...p, bank_account: ba, last_activity, device_info, app_version, presence };
       });
@@ -567,6 +575,33 @@ export default function StaffDirectory() {
   }, [toast]);
 
   useEffect(() => { load(); }, [load]);
+
+  /* ── Realtime: patch last_activity in-place when any profile updates ──
+     This fires every time a mobile user writes their heartbeat to profiles.last_activity
+     so the dashboard shows them as "online" without requiring a manual refresh. */
+  useEffect(() => {
+    const ch = (supabase as any)
+      .channel('staff-directory-presence')
+      .on('postgres_changes', {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'profiles',
+      }, (payload: any) => {
+        const updated = payload.new;
+        if (!updated?.id || !updated?.last_activity) return;
+        setProfiles(prev => prev.map(p =>
+          p.id === updated.id
+            ? { ...p,
+                last_activity: updated.last_activity,
+                location: updated.location ?? p.location,
+                location_sharing: updated.location_sharing ?? p.location_sharing,
+              }
+            : p
+        ));
+      })
+      .subscribe();
+    return () => { (supabase as any).removeChannel(ch); };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   /* ── Filtered list ── */
   const filtered = useMemo(() => {

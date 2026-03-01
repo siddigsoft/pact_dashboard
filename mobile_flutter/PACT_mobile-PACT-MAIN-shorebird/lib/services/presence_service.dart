@@ -120,6 +120,7 @@ class PresenceService {
   RealtimeChannel? _presenceChannel;
   Timer? _heartbeatTimer;
   StreamSubscription? _connectivitySubscription;
+  int _heartbeatCount = 0;
 
   String? _currentUserId;
   String? _currentUserName;
@@ -462,12 +463,36 @@ class PresenceService {
 
   void _startHeartbeat() {
     _heartbeatTimer?.cancel();
+    _heartbeatCount = 0;
     _heartbeatTimer = Timer.periodic(const Duration(seconds: 30), (_) async {
       final connectivity = await Connectivity().checkConnectivity();
-      if (!connectivity.contains(ConnectivityResult.none)) {
-        await _trackPresence();
+      if (connectivity.contains(ConnectivityResult.none)) return;
+
+      await _trackPresence();
+
+      // Write last_activity to profiles every 5 minutes (every 10th tick).
+      // This makes mobile users visible as "online" on the web Staff Directory
+      // even though mobile uses a different Realtime channel than the web app.
+      _heartbeatCount++;
+      if (_heartbeatCount % 10 == 1) {
+        // tick 1, 11, 21 … → immediately on connect, then every 5 min
+        await _writeLastActivityToProfile();
       }
     });
+    // Write immediately on start so the user appears online right away
+    _writeLastActivityToProfile();
+  }
+
+  Future<void> _writeLastActivityToProfile() async {
+    if (_currentUserId == null) return;
+    try {
+      await _supabase.from('profiles').update({
+        'last_activity': DateTime.now().toUtc().toIso8601String(),
+      }).eq('id', _currentUserId!);
+      debugPrint('[PresenceService] last_activity written to profiles');
+    } catch (e) {
+      debugPrint('[PresenceService] Failed to write last_activity: $e');
+    }
   }
 
   Future<void> updateCallStatus({required bool inCall, String? callId}) async {
