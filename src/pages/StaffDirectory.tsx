@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { sudanStates, getLocalitiesByState } from "@/data/sudanStates";
+import { useGlobalPresence } from "@/context/presence/GlobalPresenceContext";
 import { useToast } from "@/hooks/use-toast";
 import { format, parseISO, formatDistanceToNow } from "date-fns";
 import { PageInfoBanner } from "@/components/financial/PageInfoBanner";
@@ -389,6 +390,7 @@ function CapRow({ label, total, online, withBank, max }: { label: string; total:
 ══════════════════════════════════════════════════════════════ */
 export default function StaffDirectory() {
   const { toast } = useToast();
+  const { isUserOnline, isConnected, onlineUserIds } = useGlobalPresence();
   const [profiles, setProfiles]          = useState<StaffProfile[]>([]);
   const [dbHubs, setDbHubs]              = useState<{ id: string; name: string }[]>([]);
   const [loading, setLoading]            = useState(true);
@@ -413,6 +415,22 @@ export default function StaffDirectory() {
 
   const availableLocalities = useMemo(() =>
     stateFilter === 'all' ? [] : getLocalitiesByState(stateFilter), [stateFilter]);
+
+  /**
+   * Merge DB profiles with LIVE WebSocket presence from GlobalPresenceContext.
+   * `isUserOnline(id)` returns true only when a WebSocket connection is open
+   * right now for that user — it auto-updates on join/leave events.
+   * "Away" is the fallback for recently active (< 30 min) but not connected.
+   */
+  const enrichedProfiles = useMemo<StaffProfile[]>(() =>
+    profiles.map(p => ({
+      ...p,
+      presence: isUserOnline(p.id)
+        ? 'online'
+        : presenceFromActivity(p.last_activity, p.updated_at),
+    })),
+  // onlineUserIds array reference changes every time the Set changes → correct dep
+  [profiles, onlineUserIds]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /* ── Fast batch data load ── */
   const load = useCallback(async (isRefresh = false) => {
@@ -471,7 +489,7 @@ export default function StaffDirectory() {
   /* ── Filtered list ── */
   const filtered = useMemo(() => {
     const q = search.toLowerCase();
-    return profiles.filter(p => {
+    return enrichedProfiles.filter(p => {
       if (q && !p.full_name?.toLowerCase().includes(q) && !p.email?.toLowerCase().includes(q) &&
         !p.phone?.toLowerCase().includes(q) && !p.employee_id?.toLowerCase().includes(q)) return false;
       if (hubFilter !== 'all' && p.hub_id !== hubFilter) return false;
@@ -485,16 +503,16 @@ export default function StaffDirectory() {
       if (bankFilter === 'missing' &&  (p.bank_account?.accountNumber || p.bank_account?.accountName)) return false;
       return true;
     });
-  }, [profiles, search, hubFilter, stateFilter, localityFilter, roleFilter, statusFilter, bankFilter]);
+  }, [enrichedProfiles, search, hubFilter, stateFilter, localityFilter, roleFilter, statusFilter, bankFilter]);
 
-  /* ── Summary stats ── */
+  /* ── Summary stats — always over enrichedProfiles so online count is live ── */
   const stats = useMemo(() => ({
-    total:       profiles.length,
-    online:      profiles.filter(p => p.presence === 'online').length,
-    busy:        profiles.filter(p => p.presence === 'away').length,
-    withBank:    profiles.filter(p => !!(p.bank_account?.accountNumber || p.bank_account?.accountName)).length,
-    missingBank: profiles.filter(p => !(p.bank_account?.accountNumber || p.bank_account?.accountName)).length,
-  }), [profiles]);
+    total:       enrichedProfiles.length,
+    online:      enrichedProfiles.filter(p => p.presence === 'online').length,
+    busy:        enrichedProfiles.filter(p => p.presence === 'away').length,
+    withBank:    enrichedProfiles.filter(p => !!(p.bank_account?.accountNumber || p.bank_account?.accountName)).length,
+    missingBank: enrichedProfiles.filter(p => !(p.bank_account?.accountNumber || p.bank_account?.accountName)).length,
+  }), [enrichedProfiles]);
 
   /* ── Capacity groups ── */
   const mkMap = (key: (p: StaffProfile) => string) => {
@@ -747,7 +765,7 @@ export default function StaffDirectory() {
         <div className="flex items-center gap-1.5 ml-auto">
           {hasFilters && (
             <Badge variant="secondary" className="text-xs font-medium">
-              {filtered.length} of {profiles.length}
+              {filtered.length} of {enrichedProfiles.length}
             </Badge>
           )}
           <div className="flex border rounded-md overflow-hidden">
@@ -1088,31 +1106,39 @@ export default function StaffDirectory() {
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
                 {Array(4).fill(0).map((_, i) => <Skeleton key={i} className="h-52" />)}
               </div>
-            ) : profiles.filter(p => p.presence === 'online' || p.presence === 'away').length === 0 ? (
+            ) : enrichedProfiles.filter(p => p.presence === 'online' || p.presence === 'away').length === 0 ? (
               <div className="flex flex-col items-center justify-center py-20 text-muted-foreground space-y-3">
                 <div className="rounded-full bg-muted p-4">
                   <WifiOff className="h-8 w-8 opacity-40" />
                 </div>
-                <p className="font-medium text-sm">No staff currently online</p>
+                <p className="font-medium text-sm">No staff currently connected</p>
+                <p className="text-xs">Online means a live WebSocket connection is open right now</p>
               </div>
             ) : (
               <div className="space-y-3">
+                {/* Real-time connection indicator */}
+                <div className="flex items-center gap-2 rounded-lg border border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-950/30 px-3 py-2 text-xs">
+                  <span className={`w-2 h-2 rounded-full shrink-0 ${isConnected ? 'bg-green-500 animate-pulse' : 'bg-slate-400'}`} />
+                  <span className="text-green-700 dark:text-green-400 font-medium">
+                    {isConnected ? 'Live WebSocket connected — updates instantly' : 'Connecting to presence channel…'}
+                  </span>
+                </div>
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
                   <span className="inline-flex items-center gap-1.5 font-semibold text-green-700 dark:text-green-400">
                     <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-                    {profiles.filter(p => p.presence === 'online').length} online
+                    {enrichedProfiles.filter(p => p.presence === 'online').length} online now
                   </span>
-                  {profiles.filter(p => p.presence === 'away').length > 0 && (
+                  {enrichedProfiles.filter(p => p.presence === 'away').length > 0 && (
                     <>
                       <span className="text-muted-foreground/40">·</span>
                       <span className="font-semibold text-amber-600 dark:text-amber-400">
-                        {profiles.filter(p => p.presence === 'away').length} away
+                        {enrichedProfiles.filter(p => p.presence === 'away').length} away (&lt;30 min)
                       </span>
                     </>
                   )}
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
-                  {profiles
+                  {enrichedProfiles
                     .filter(p => p.presence === 'online' || p.presence === 'away')
                     .sort((a, b) => (a.presence === 'online' ? -1 : 1))
                     .map(p => <ProfileCard key={p.id} p={p} />)}
