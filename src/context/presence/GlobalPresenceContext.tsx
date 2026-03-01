@@ -18,41 +18,49 @@ const GlobalPresenceContext = createContext<GlobalPresenceContextValue>({
 
 export const useGlobalPresence = () => useContext(GlobalPresenceContext);
 
-const GLOBAL_PRESENCE_CHANNEL = 'global-presence';
-/** Write last_activity to DB every 5 minutes while the tab is active */
-const ACTIVITY_WRITE_INTERVAL_MS = 5 * 60 * 1000;
-/** Supabase Presence heartbeat — keeps the WebSocket slot alive */
-const PRESENCE_HEARTBEAT_MS = 30_000;
+/** Web users join this channel via GlobalPresenceContext */
+const WEB_CHANNEL   = 'global-presence';
+/** Flutter / APK users join this channel via PresenceService */
+const MOBILE_CHANNEL = 'user-call-presence';
 
-interface GlobalPresenceProviderProps {
-  children: ReactNode;
-}
+const ACTIVITY_WRITE_INTERVAL_MS = 5 * 60 * 1000; // 5 min
+const PRESENCE_HEARTBEAT_MS      = 30_000;         // 30 s
+
+interface GlobalPresenceProviderProps { children: ReactNode; }
 
 export function GlobalPresenceProvider({ children }: GlobalPresenceProviderProps) {
   const { currentUser, authReady } = useUser();
-  const [isConnected, setIsConnected]       = useState(false);
-  const [onlineUserIds, setOnlineUserIds]   = useState<Set<string>>(new Set());
+  const [isConnected, setIsConnected]     = useState(false);
 
-  const channelRef        = useRef<ReturnType<typeof supabase.channel> | null>(null);
-  const heartbeatRef      = useRef<NodeJS.Timeout | null>(null);
-  const activityWriteRef  = useRef<NodeJS.Timeout | null>(null);
-  const initializedRef    = useRef(false);
+  /** Two separate sets — merged into a single onlineUserIds array */
+  const webIdsRef    = useRef<Set<string>>(new Set());
+  const mobileIdsRef = useRef<Set<string>>(new Set());
 
-  // ── Write last_activity timestamp to profiles table ──────────────────
+  const [onlineUserIds, setOnlineUserIds] = useState<Set<string>>(new Set());
+
+  const webChannelRef    = useRef<ReturnType<typeof supabase.channel> | null>(null);
+  const mobileChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+  const heartbeatRef     = useRef<NodeJS.Timeout | null>(null);
+  const activityWriteRef = useRef<NodeJS.Timeout | null>(null);
+  const initializedRef   = useRef(false);
+
+  /** Recompute the merged set and update state */
+  const syncMerged = useCallback(() => {
+    setOnlineUserIds(new Set([...webIdsRef.current, ...mobileIdsRef.current]));
+  }, []);
+
   const writeLastActivity = useCallback(async (userId: string) => {
     try {
-      await supabase
+      await (supabase as any)
         .from('profiles')
         .update({ last_activity: new Date().toISOString() })
         .eq('id', userId);
-    } catch {
-      // Non-critical — ignore errors silently
-    }
+    } catch { /* non-critical */ }
   }, []);
 
   const trackPresence = useCallback(() => {
-    if (!currentUser?.id || !channelRef.current) return;
-    channelRef.current.track({
+    if (!currentUser?.id || !webChannelRef.current) return;
+    webChannelRef.current.track({
       user_id: currentUser.id,
       online_at: new Date().toISOString(),
     });
@@ -64,13 +72,13 @@ export function GlobalPresenceProvider({ children }: GlobalPresenceProviderProps
 
   useEffect(() => {
     if (!authReady || !currentUser?.id) {
-      if (channelRef.current) {
-        supabase.removeChannel(channelRef.current);
-        channelRef.current = null;
-      }
+      if (webChannelRef.current)    { supabase.removeChannel(webChannelRef.current);    webChannelRef.current = null; }
+      if (mobileChannelRef.current) { supabase.removeChannel(mobileChannelRef.current); mobileChannelRef.current = null; }
       if (heartbeatRef.current)     { clearInterval(heartbeatRef.current);     heartbeatRef.current = null; }
       if (activityWriteRef.current) { clearInterval(activityWriteRef.current); activityWriteRef.current = null; }
       initializedRef.current = false;
+      webIdsRef.current = new Set();
+      mobileIdsRef.current = new Set();
       setIsConnected(false);
       setOnlineUserIds(new Set());
       return;
@@ -82,86 +90,94 @@ export function GlobalPresenceProvider({ children }: GlobalPresenceProviderProps
     const userId = currentUser.id;
     console.log('[GlobalPresence] Setting up presence for user:', userId);
 
-    const channel = supabase.channel(GLOBAL_PRESENCE_CHANNEL, {
+    /* ── 1. Web channel — we join + track ───────────────────────────── */
+    const webChannel = supabase.channel(WEB_CHANNEL, {
       config: { presence: { key: userId } },
     });
 
-    channel
-      // ── Sync: full reconciliation from server ──
+    const extractIds = (state: Record<string, any[]>) => {
+      const ids = new Set<string>();
+      Object.values(state).forEach(presences =>
+        presences.forEach((p: any) => { if (p.user_id) ids.add(p.user_id); })
+      );
+      return ids;
+    };
+
+    webChannel
       .on('presence', { event: 'sync' }, () => {
-        const state = channel.presenceState();
-        const ids = new Set<string>();
-        Object.values(state).forEach(presences => {
-          presences.forEach((p: any) => {
-            if (p.user_id) ids.add(p.user_id);
-          });
-        });
-        setOnlineUserIds(ids);
-        console.log('[GlobalPresence] Synced, online users:', ids.size);
+        webIdsRef.current = extractIds(webChannel.presenceState());
+        syncMerged();
+        console.log('[GlobalPresence] Web synced, online:', webIdsRef.current.size);
       })
-      // ── Join: someone came online — instant ──
       .on('presence', { event: 'join' }, ({ newPresences }) => {
-        newPresences.forEach((p: any) => {
-          if (p.user_id) {
-            setOnlineUserIds(prev => new Set([...prev, p.user_id]));
-            console.log('[GlobalPresence] User joined:', p.user_id);
-          }
-        });
+        newPresences.forEach((p: any) => { if (p.user_id) webIdsRef.current.add(p.user_id); });
+        syncMerged();
       })
-      // ── Leave: someone went offline — instant ──
       .on('presence', { event: 'leave' }, ({ leftPresences }) => {
-        leftPresences.forEach((p: any) => {
-          if (p.user_id) {
-            setOnlineUserIds(prev => {
-              const next = new Set(prev);
-              next.delete(p.user_id);
-              return next;
-            });
-            console.log('[GlobalPresence] User left:', p.user_id);
-          }
-        });
+        leftPresences.forEach((p: any) => { if (p.user_id) webIdsRef.current.delete(p.user_id); });
+        syncMerged();
       })
       .subscribe(async (status) => {
-        console.log('[GlobalPresence] Channel status:', status);
+        console.log('[GlobalPresence] Web channel:', status);
         if (status === 'SUBSCRIBED') {
           setIsConnected(true);
-          // Track self on Supabase Presence channel
-          channel.track({ user_id: userId, online_at: new Date().toISOString() });
-          // Write last_activity immediately on connect
+          webChannel.track({ user_id: userId, online_at: new Date().toISOString() });
           await writeLastActivity(userId);
         }
       });
 
-    channelRef.current = channel;
+    webChannelRef.current = webChannel;
 
-    // ── Heartbeat: keep Supabase Presence slot alive (30 s) ──
-    heartbeatRef.current = setInterval(() => {
-      if (channelRef.current && userId) {
-        channelRef.current.track({
-          user_id: userId,
-          online_at: new Date().toISOString(),
+    /* ── 2. Mobile channel — read-only observer ─────────────────────── */
+    const mobileChannel = supabase.channel(MOBILE_CHANNEL);
+
+    mobileChannel
+      .on('presence', { event: 'sync' }, () => {
+        mobileIdsRef.current = extractIds(mobileChannel.presenceState());
+        syncMerged();
+        console.log('[GlobalPresence] Mobile synced, online:', mobileIdsRef.current.size);
+      })
+      .on('presence', { event: 'join' }, ({ newPresences }) => {
+        newPresences.forEach((p: any) => {
+          const id = p.user_id || p.odId;
+          if (id) mobileIdsRef.current.add(id);
         });
-      }
+        syncMerged();
+      })
+      .on('presence', { event: 'leave' }, ({ leftPresences }) => {
+        leftPresences.forEach((p: any) => {
+          const id = p.user_id || p.odId;
+          if (id) mobileIdsRef.current.delete(id);
+        });
+        syncMerged();
+      })
+      .subscribe((status) => {
+        console.log('[GlobalPresence] Mobile channel:', status);
+      });
+
+    mobileChannelRef.current = mobileChannel;
+
+    /* ── 3. Heartbeat: keep web Presence slot alive ─────────────────── */
+    heartbeatRef.current = setInterval(() => {
+      webChannelRef.current?.track({ user_id: userId, online_at: new Date().toISOString() });
     }, PRESENCE_HEARTBEAT_MS);
 
-    // ── Activity write: persist last_activity to DB every 5 minutes ──
+    /* ── 4. Activity write every 5 min ──────────────────────────────── */
     activityWriteRef.current = setInterval(() => {
       writeLastActivity(userId);
     }, ACTIVITY_WRITE_INTERVAL_MS);
 
-    // ── Visibility change: update activity when tab regains focus ──
+    /* ── 5. Visibility change ────────────────────────────────────────── */
     const handleVisibility = () => {
       if (document.visibilityState === 'visible' && userId) {
-        // Re-track presence in case WS reconnected
-        channelRef.current?.track({ user_id: userId, online_at: new Date().toISOString() });
+        webChannelRef.current?.track({ user_id: userId, online_at: new Date().toISOString() });
         writeLastActivity(userId);
       }
     };
     document.addEventListener('visibilitychange', handleVisibility);
 
-    // ── Page unload: best-effort final activity write ──
+    /* ── 6. Page unload — best-effort final write ───────────────────── */
     const handleUnload = () => {
-      // sendBeacon is fire-and-forget — works even during page unload
       const payload = JSON.stringify({ last_activity: new Date().toISOString() });
       navigator.sendBeacon?.(
         `${import.meta.env.VITE_SUPABASE_URL}/rest/v1/profiles?id=eq.${userId}`,
@@ -172,17 +188,15 @@ export function GlobalPresenceProvider({ children }: GlobalPresenceProviderProps
 
     return () => {
       console.log('[GlobalPresence] Cleaning up');
-      if (channelRef.current) {
-        supabase.removeChannel(channelRef.current);
-        channelRef.current = null;
-      }
+      if (webChannelRef.current)    { supabase.removeChannel(webChannelRef.current);    webChannelRef.current = null; }
+      if (mobileChannelRef.current) { supabase.removeChannel(mobileChannelRef.current); mobileChannelRef.current = null; }
       if (heartbeatRef.current)     { clearInterval(heartbeatRef.current);     heartbeatRef.current = null; }
       if (activityWriteRef.current) { clearInterval(activityWriteRef.current); activityWriteRef.current = null; }
       document.removeEventListener('visibilitychange', handleVisibility);
       window.removeEventListener('beforeunload', handleUnload);
       initializedRef.current = false;
     };
-  }, [authReady, currentUser?.id, writeLastActivity]);
+  }, [authReady, currentUser?.id, writeLastActivity, syncMerged]);
 
   return (
     <GlobalPresenceContext.Provider value={{
