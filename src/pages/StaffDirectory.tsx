@@ -18,7 +18,7 @@ import {
   Smartphone, Monitor, Clock, AlertCircle, CheckCircle, XCircle,
   Hash, Globe, Activity, BarChart3, Copy, Download, FileSpreadsheet,
   FileText, FileDown, GitBranch, UserCheck, UserX,
-  TrendingDown, Banknote, ChevronDown, ChevronUp
+  TrendingDown, Banknote, ChevronDown, ChevronUp, AlertTriangle
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { sudanStates, getLocalitiesByState } from "@/data/sudanStates";
@@ -765,12 +765,13 @@ interface FinRow    { total: number; approved: number; amountSDG: number }
 interface FinMonth  { current: FinRow; prev: FinRow }
 
 function FinSummaryCard({
-  title, titleAr, icon: Icon, data, accentBg, accentText, accentBorder, loading,
+  title, titleAr, icon: Icon, data, accentBg, accentText, accentBorder, loading, awaitingAck,
 }: {
   title: string; titleAr: string; icon: React.ElementType;
   data: FinMonth;
   accentBg: string; accentText: string; accentBorder: string;
   loading: boolean;
+  awaitingAck?: number;
 }) {
   const diff = data.current.amountSDG - data.prev.amountSDG;
   const up   = diff >= 0;
@@ -826,6 +827,15 @@ function FinSummaryCard({
             </div>
           </div>
         )}
+        {/* Awaiting acknowledgment alert (only for Withdrawal Requests card) */}
+        {!loading && awaitingAck !== undefined && awaitingAck > 0 && (
+          <div className="flex items-center gap-1.5 rounded-md bg-amber-50 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-700 px-2.5 py-1.5">
+            <AlertTriangle className="h-3 w-3 text-amber-600 dark:text-amber-400 shrink-0" />
+            <span className="text-[10px] font-semibold text-amber-700 dark:text-amber-400">
+              {awaitingAck} awaiting acknowledgment
+            </span>
+          </div>
+        )}
       </CardContent>
     </Card>
   );
@@ -858,6 +868,7 @@ export default function StaffDirectory() {
   /* ── Financial summary state ── */
   const emptyFinRow = (): FinRow => ({ total: 0, approved: 0, amountSDG: 0 });
   const [finLoading, setFinLoading] = useState(true);
+  const [awaitingAck, setAwaitingAck] = useState(0);
   const [finData, setFinData] = useState<{
     advances:    FinMonth;
     costs:       FinMonth;
@@ -876,13 +887,14 @@ export default function StaffDirectory() {
       const prevStart = new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString();
       const prevEnd   = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59).toISOString();
 
-      const [dpCur, dpPrv, ocCur, ocPrv, wtCur, wtPrv] = await Promise.all([
+      const [dpCur, dpPrv, ocCur, ocPrv, wtCur, wtPrv, ackRes] = await Promise.all([
         supabase.from('down_payment_requests').select('requested_amount,status').gte('created_at', thisStart),
         supabase.from('down_payment_requests').select('requested_amount,status').gte('created_at', prevStart).lte('created_at', prevEnd),
         supabase.from('operational_cost_submissions').select('amount_cents,tier2_status').gte('created_at', thisStart),
         supabase.from('operational_cost_submissions').select('amount_cents,tier2_status').gte('created_at', prevStart).lte('created_at', prevEnd),
         supabase.from('wallet_transactions').select('amount,type,transaction_type').gte('created_at', thisStart).or('type.eq.withdrawal,type.eq.debit,transaction_type.eq.withdrawal'),
         supabase.from('wallet_transactions').select('amount,type,transaction_type').gte('created_at', prevStart).lte('created_at', prevEnd).or('type.eq.withdrawal,type.eq.debit,transaction_type.eq.withdrawal'),
+        supabase.from('withdrawal_requests').select('id', { count: 'exact', head: true }).eq('status', 'approved').neq('fund_receipt_confirmed', true),
       ]);
 
       const calcDp = (rows: any[]): FinRow => ({
@@ -901,6 +913,7 @@ export default function StaffDirectory() {
         amountSDG: Math.round(rows.reduce((s, r) => s + Math.abs(Number(r.amount) || 0), 0)),
       });
 
+      setAwaitingAck(ackRes.count ?? 0);
       setFinData({
         advances:    { current: calcDp(dpCur.data || []), prev: calcDp(dpPrv.data || []) },
         costs:       { current: calcOc(ocCur.data || []), prev: calcOc(ocPrv.data || []) },
@@ -1508,6 +1521,7 @@ export default function StaffDirectory() {
               accentBg="bg-emerald-100 dark:bg-emerald-900/40"
               accentText="text-emerald-600 dark:text-emerald-400"
               loading={finLoading}
+              awaitingAck={awaitingAck}
             />
           </div>
         </div>
