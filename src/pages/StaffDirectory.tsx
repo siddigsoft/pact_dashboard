@@ -175,65 +175,67 @@ function ProfileDetail({
 
   const copy = (t: string, l: string) => { navigator.clipboard.writeText(t); toast({ title: `${l} copied` }); };
 
-  /* ── Per-user financial data ── */
+  /* ── Per-user financial data (with individual records) ── */
   const [finLoading, setFinLoading] = useState(true);
-  const [userFin, setUserFin] = useState<{
-    advances: { total: number; pending: number; approved: number; amountSDG: number };
-    costs:    { total: number; pending: number; approved: number; amountSDG: number };
-    withdrawals: { total: number; pending: number; approved: number; amountSDG: number; confirmed: number; unconfirmed: number };
-  }>({
-    advances:    { total: 0, pending: 0, approved: 0, amountSDG: 0 },
-    costs:       { total: 0, pending: 0, approved: 0, amountSDG: 0 },
-    withdrawals: { total: 0, pending: 0, approved: 0, amountSDG: 0, confirmed: 0, unconfirmed: 0 },
-  });
+  const [advanceRows,    setAdvanceRows]    = useState<any[]>([]);
+  const [costRows,       setCostRows]       = useState<any[]>([]);
+  const [withdrawalRows, setWithdrawalRows] = useState<any[]>([]);
+  const [finOpen, setFinOpen] = useState<'advances' | 'costs' | 'withdrawals' | null>(null);
 
   useEffect(() => {
     const fetchUserFin = async () => {
       setFinLoading(true);
       const [dpRes, ocRes, wrRes] = await Promise.all([
         supabase.from('down_payment_requests')
-          .select('status,requested_amount')
-          .eq('user_id', profile.id),
+          .select('id,status,requested_amount,created_at,notes,hub,state')
+          .eq('user_id', profile.id)
+          .order('created_at', { ascending: false }),
         supabase.from('operational_cost_submissions')
-          .select('tier1_status,tier2_status,amount_cents')
-          .eq('submitted_by', profile.id),
+          .select('id,tier1_status,tier2_status,amount_cents,expense_category,description,submitted_at,created_at')
+          .eq('submitted_by', profile.id)
+          .order('created_at', { ascending: false }),
         supabase.from('withdrawal_requests')
-          .select('status,amount,fund_receipt_confirmed')
-          .eq('user_id', profile.id),
+          .select('id,status,amount,currency,request_reason,fund_receipt_confirmed,fund_receipt_confirmed_at,fund_receipt_notes,admin_processed_at,created_at')
+          .eq('user_id', profile.id)
+          .order('created_at', { ascending: false }),
       ]);
-      const dp = dpRes.data || [];
-      const oc = ocRes.data || [];
-      const wr = wrRes.data || [];
-      setUserFin({
-        advances: {
-          total:     dp.length,
-          pending:   dp.filter((r: any) => ['pending', 'pending_supervisor', 'pending_admin'].includes(r.status)).length,
-          approved:  dp.filter((r: any) => r.status === 'approved' || r.status === 'paid').length,
-          amountSDG: Math.round(dp.reduce((s: number, r: any) => s + Math.abs(Number(r.requested_amount) || 0), 0)),
-        },
-        costs: {
-          total:     oc.length,
-          pending:   oc.filter((r: any) => !r.tier2_status || (r.tier2_status !== 'approved' && r.tier2_status !== 'rejected')).length,
-          approved:  oc.filter((r: any) => r.tier2_status === 'approved').length,
-          amountSDG: Math.round(oc.reduce((s: number, r: any) => s + Math.abs(Number(r.amount_cents) || 0) / 100, 0)),
-        },
-        withdrawals: {
-          total:       wr.length,
-          pending:     wr.filter((r: any) => r.status === 'pending').length,
-          approved:    wr.filter((r: any) => r.status === 'approved').length,
-          amountSDG:   Math.round(wr.reduce((s: number, r: any) => s + Math.abs(Number(r.amount) || 0), 0)),
-          confirmed:   wr.filter((r: any) => r.status === 'approved' && r.fund_receipt_confirmed).length,
-          unconfirmed: wr.filter((r: any) => r.status === 'approved' && !r.fund_receipt_confirmed).length,
-        },
-      });
+      setAdvanceRows(dpRes.data || []);
+      setCostRows(ocRes.data || []);
+      setWithdrawalRows(wrRes.data || []);
       setFinLoading(false);
     };
     fetchUserFin();
   }, [profile.id]);
 
+  const dpSummary = useMemo(() => ({
+    total:     advanceRows.length,
+    pending:   advanceRows.filter(r => ['pending','pending_supervisor','pending_admin'].includes(r.status)).length,
+    approved:  advanceRows.filter(r => r.status === 'approved' || r.status === 'paid').length,
+    rejected:  advanceRows.filter(r => r.status === 'rejected').length,
+    amountSDG: Math.round(advanceRows.reduce((s, r) => s + Math.abs(Number(r.requested_amount) || 0), 0)),
+  }), [advanceRows]);
+
+  const ocSummary = useMemo(() => ({
+    total:     costRows.length,
+    pending:   costRows.filter(r => !r.tier2_status || !['approved','rejected'].includes(r.tier2_status)).length,
+    approved:  costRows.filter(r => r.tier2_status === 'approved').length,
+    rejected:  costRows.filter(r => r.tier2_status === 'rejected' || r.tier1_status === 'rejected').length,
+    amountSDG: Math.round(costRows.reduce((s, r) => s + Math.abs(Number(r.amount_cents) || 0) / 100, 0)),
+  }), [costRows]);
+
+  const wrSummary = useMemo(() => ({
+    total:       withdrawalRows.length,
+    pending:     withdrawalRows.filter(r => r.status === 'pending').length,
+    approved:    withdrawalRows.filter(r => r.status === 'approved').length,
+    rejected:    withdrawalRows.filter(r => r.status === 'rejected').length,
+    amountSDG:   Math.round(withdrawalRows.reduce((s, r) => s + Math.abs(Number(r.amount) || 0), 0)),
+    confirmed:   withdrawalRows.filter(r => r.status === 'approved' && r.fund_receipt_confirmed).length,
+    unconfirmed: withdrawalRows.filter(r => r.status === 'approved' && !r.fund_receipt_confirmed).length,
+  }), [withdrawalRows]);
+
   return (
     <Dialog open onOpenChange={() => onClose()}>
-      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto p-0 gap-0">
+      <DialogContent className="max-w-2xl w-full max-h-[92vh] overflow-y-auto p-0 gap-0">
         {/* ── Branded header ── */}
         <div className="bg-gradient-to-r from-[#0F2041] to-[#1D3461] px-6 py-6 rounded-t-lg">
           <DialogHeader>
@@ -454,99 +456,201 @@ function ProfileDetail({
             </p>
             {finLoading ? (
               <div className="space-y-2">
-                <Skeleton className="h-10 w-full" />
-                <Skeleton className="h-10 w-full" />
-                <Skeleton className="h-10 w-full" />
+                <Skeleton className="h-14 w-full" />
+                <Skeleton className="h-14 w-full" />
+                <Skeleton className="h-14 w-full" />
               </div>
             ) : (
               <div className="space-y-2">
-                {/* Transportation Advances row */}
-                <div className="rounded-md border bg-muted/30 px-3 py-2.5">
-                  <div className="flex items-center justify-between gap-2 mb-1.5">
-                    <div className="flex items-center gap-1.5">
-                      <TrendingDown className="h-3 w-3 text-indigo-500" />
-                      <span className="text-xs font-semibold text-foreground">Transportation Advances</span>
-                    </div>
-                    <span className="text-xs font-bold text-foreground">SDG {userFin.advances.amountSDG.toLocaleString()}</span>
-                  </div>
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] bg-slate-100 dark:bg-slate-800 text-muted-foreground">
-                      Total: <strong>{userFin.advances.total}</strong>
-                    </span>
-                    {userFin.advances.pending > 0 && (
-                      <span className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400">
-                        ⏳ {userFin.advances.pending} pending
-                      </span>
-                    )}
-                    <span className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400">
-                      <CheckCircle className="h-2.5 w-2.5" />{userFin.advances.approved} approved
-                    </span>
-                  </div>
-                </div>
 
-                {/* Cost Submissions row */}
-                <div className="rounded-md border bg-muted/30 px-3 py-2.5">
-                  <div className="flex items-center justify-between gap-2 mb-1.5">
-                    <div className="flex items-center gap-1.5">
-                      <FileText className="h-3 w-3 text-orange-500" />
-                      <span className="text-xs font-semibold text-foreground">Cost Submissions</span>
+                {/* ── Transportation Advances ── */}
+                <div className="rounded-lg border overflow-hidden">
+                  {/* summary header — clickable to expand */}
+                  <button
+                    type="button"
+                    onClick={() => setFinOpen(o => o === 'advances' ? null : 'advances')}
+                    className="w-full flex items-center gap-3 px-4 py-3 bg-indigo-50 dark:bg-indigo-950/30 hover:bg-indigo-100 dark:hover:bg-indigo-950/50 transition-colors text-left"
+                  >
+                    <TrendingDown className="h-4 w-4 text-indigo-600 shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-sm font-semibold text-foreground">Transportation Advances</span>
+                        <span className="text-[10px] text-muted-foreground">سلف النقل</span>
+                      </div>
+                      <div className="flex items-center gap-2 mt-1 flex-wrap">
+                        <span className="text-[10px] bg-slate-200 dark:bg-slate-700 text-foreground rounded px-1.5 py-0.5">{dpSummary.total} total</span>
+                        {dpSummary.pending > 0  && <span className="text-[10px] bg-amber-100 dark:bg-amber-900/50 text-amber-700 dark:text-amber-400 rounded px-1.5 py-0.5">⏳ {dpSummary.pending} pending</span>}
+                        {dpSummary.approved > 0 && <span className="text-[10px] bg-green-100 dark:bg-green-900/50 text-green-700 dark:text-green-400 rounded px-1.5 py-0.5">✓ {dpSummary.approved} approved</span>}
+                        {dpSummary.rejected > 0 && <span className="text-[10px] bg-red-100 dark:bg-red-900/50 text-red-600 dark:text-red-400 rounded px-1.5 py-0.5">✗ {dpSummary.rejected} rejected</span>}
+                      </div>
                     </div>
-                    <span className="text-xs font-bold text-foreground">SDG {userFin.costs.amountSDG.toLocaleString()}</span>
-                  </div>
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] bg-slate-100 dark:bg-slate-800 text-muted-foreground">
-                      Total: <strong>{userFin.costs.total}</strong>
-                    </span>
-                    {userFin.costs.pending > 0 && (
-                      <span className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400">
-                        ⏳ {userFin.costs.pending} pending
-                      </span>
-                    )}
-                    <span className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400">
-                      <CheckCircle className="h-2.5 w-2.5" />{userFin.costs.approved} approved
-                    </span>
-                  </div>
-                </div>
-
-                {/* Withdrawal Requests + Fund Receipt row */}
-                <div className="rounded-md border bg-muted/30 px-3 py-2.5">
-                  <div className="flex items-center justify-between gap-2 mb-1.5">
-                    <div className="flex items-center gap-1.5">
-                      <Landmark className="h-3 w-3 text-emerald-500" />
-                      <span className="text-xs font-semibold text-foreground">Withdrawal Requests</span>
+                    <div className="text-right shrink-0">
+                      <p className="text-sm font-bold text-indigo-700 dark:text-indigo-400">SDG {dpSummary.amountSDG.toLocaleString()}</p>
+                      <ChevronDown className={`h-4 w-4 text-muted-foreground ml-auto mt-0.5 transition-transform ${finOpen === 'advances' ? 'rotate-180' : ''}`} />
                     </div>
-                    <span className="text-xs font-bold text-foreground">SDG {userFin.withdrawals.amountSDG.toLocaleString()}</span>
-                  </div>
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] bg-slate-100 dark:bg-slate-800 text-muted-foreground">
-                      Total: <strong>{userFin.withdrawals.total}</strong>
-                    </span>
-                    {userFin.withdrawals.pending > 0 && (
-                      <span className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400">
-                        ⏳ {userFin.withdrawals.pending} pending
-                      </span>
-                    )}
-                    <span className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400">
-                      <CheckCircle className="h-2.5 w-2.5" />{userFin.withdrawals.approved} approved
-                    </span>
-                  </div>
-                  {/* Fund receipt confirmation status */}
-                  {userFin.withdrawals.approved > 0 && (
-                    <div className="mt-2 pt-2 border-t border-border flex items-center gap-2 flex-wrap">
-                      <span className="text-[10px] text-muted-foreground font-medium">Fund Receipt:</span>
-                      {userFin.withdrawals.confirmed > 0 && (
-                        <span className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-400">
-                          <CheckCircle className="h-2.5 w-2.5" />{userFin.withdrawals.confirmed} confirmed
-                        </span>
-                      )}
-                      {userFin.withdrawals.unconfirmed > 0 && (
-                        <span className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] bg-red-100 dark:bg-red-900/40 text-red-600 dark:text-red-400">
-                          <XCircle className="h-2.5 w-2.5" />{userFin.withdrawals.unconfirmed} unacknowledged
-                        </span>
-                      )}
+                  </button>
+                  {/* expanded rows */}
+                  {finOpen === 'advances' && (
+                    <div className="divide-y divide-border max-h-56 overflow-y-auto">
+                      {advanceRows.length === 0 ? (
+                        <p className="text-xs text-muted-foreground text-center py-4">No advance requests found</p>
+                      ) : advanceRows.map(r => {
+                        const isPending  = ['pending','pending_supervisor','pending_admin'].includes(r.status);
+                        const isApproved = r.status === 'approved' || r.status === 'paid';
+                        const isRejected = r.status === 'rejected';
+                        return (
+                          <div key={r.id} className="px-4 py-2.5 flex items-start justify-between gap-3 hover:bg-muted/30 transition-colors">
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${isApproved ? 'bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400' : isPending ? 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400' : isRejected ? 'bg-red-100 dark:bg-red-900/40 text-red-600 dark:text-red-400' : 'bg-muted text-muted-foreground'}`}>
+                                  {r.status}
+                                </span>
+                                {r.hub && <span className="text-[10px] text-muted-foreground">{r.hub}</span>}
+                                {r.state && <span className="text-[10px] text-muted-foreground">· {r.state}</span>}
+                              </div>
+                              {r.notes && <p className="text-[10px] text-muted-foreground mt-0.5 truncate">{r.notes}</p>}
+                              <p className="text-[10px] text-muted-foreground mt-0.5">{r.created_at ? format(parseISO(r.created_at), 'dd MMM yyyy') : '—'}</p>
+                            </div>
+                            <p className="text-xs font-bold text-foreground shrink-0">SDG {Number(r.requested_amount || 0).toLocaleString()}</p>
+                          </div>
+                        );
+                      })}
                     </div>
                   )}
                 </div>
+
+                {/* ── Cost Submissions ── */}
+                <div className="rounded-lg border overflow-hidden">
+                  <button
+                    type="button"
+                    onClick={() => setFinOpen(o => o === 'costs' ? null : 'costs')}
+                    className="w-full flex items-center gap-3 px-4 py-3 bg-orange-50 dark:bg-orange-950/30 hover:bg-orange-100 dark:hover:bg-orange-950/50 transition-colors text-left"
+                  >
+                    <FileText className="h-4 w-4 text-orange-600 shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-sm font-semibold text-foreground">Cost Submissions</span>
+                        <span className="text-[10px] text-muted-foreground">طلبات التكاليف</span>
+                      </div>
+                      <div className="flex items-center gap-2 mt-1 flex-wrap">
+                        <span className="text-[10px] bg-slate-200 dark:bg-slate-700 text-foreground rounded px-1.5 py-0.5">{ocSummary.total} total</span>
+                        {ocSummary.pending > 0  && <span className="text-[10px] bg-amber-100 dark:bg-amber-900/50 text-amber-700 dark:text-amber-400 rounded px-1.5 py-0.5">⏳ {ocSummary.pending} pending</span>}
+                        {ocSummary.approved > 0 && <span className="text-[10px] bg-green-100 dark:bg-green-900/50 text-green-700 dark:text-green-400 rounded px-1.5 py-0.5">✓ {ocSummary.approved} approved</span>}
+                        {ocSummary.rejected > 0 && <span className="text-[10px] bg-red-100 dark:bg-red-900/50 text-red-600 dark:text-red-400 rounded px-1.5 py-0.5">✗ {ocSummary.rejected} rejected</span>}
+                      </div>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <p className="text-sm font-bold text-orange-700 dark:text-orange-400">SDG {ocSummary.amountSDG.toLocaleString()}</p>
+                      <ChevronDown className={`h-4 w-4 text-muted-foreground ml-auto mt-0.5 transition-transform ${finOpen === 'costs' ? 'rotate-180' : ''}`} />
+                    </div>
+                  </button>
+                  {finOpen === 'costs' && (
+                    <div className="divide-y divide-border max-h-56 overflow-y-auto">
+                      {costRows.length === 0 ? (
+                        <p className="text-xs text-muted-foreground text-center py-4">No cost submissions found</p>
+                      ) : costRows.map(r => {
+                        const effStatus = r.tier2_status === 'approved' ? 'approved' : (r.tier2_status === 'rejected' || r.tier1_status === 'rejected') ? 'rejected' : r.tier1_status === 'approved' ? 'under review' : 'pending';
+                        const isApproved = effStatus === 'approved';
+                        const isRejected = effStatus === 'rejected';
+                        return (
+                          <div key={r.id} className="px-4 py-2.5 flex items-start justify-between gap-3 hover:bg-muted/30 transition-colors">
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${isApproved ? 'bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400' : isRejected ? 'bg-red-100 dark:bg-red-900/40 text-red-600 dark:text-red-400' : 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400'}`}>
+                                  {effStatus}
+                                </span>
+                                {r.expense_category && <span className="text-[10px] text-muted-foreground">{r.expense_category}</span>}
+                              </div>
+                              {r.description && <p className="text-[10px] text-muted-foreground mt-0.5 truncate">{r.description}</p>}
+                              <p className="text-[10px] text-muted-foreground mt-0.5">{r.created_at ? format(parseISO(r.created_at), 'dd MMM yyyy') : '—'}</p>
+                            </div>
+                            <p className="text-xs font-bold text-foreground shrink-0">SDG {(Math.abs(Number(r.amount_cents) || 0) / 100).toLocaleString()}</p>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                {/* ── Withdrawal Requests ── */}
+                <div className="rounded-lg border overflow-hidden">
+                  <button
+                    type="button"
+                    onClick={() => setFinOpen(o => o === 'withdrawals' ? null : 'withdrawals')}
+                    className="w-full flex items-center gap-3 px-4 py-3 bg-emerald-50 dark:bg-emerald-950/30 hover:bg-emerald-100 dark:hover:bg-emerald-950/50 transition-colors text-left"
+                  >
+                    <Landmark className="h-4 w-4 text-emerald-600 shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-sm font-semibold text-foreground">Withdrawal Requests</span>
+                        <span className="text-[10px] text-muted-foreground">طلبات السحب</span>
+                      </div>
+                      <div className="flex items-center gap-2 mt-1 flex-wrap">
+                        <span className="text-[10px] bg-slate-200 dark:bg-slate-700 text-foreground rounded px-1.5 py-0.5">{wrSummary.total} total</span>
+                        {wrSummary.pending > 0     && <span className="text-[10px] bg-amber-100 dark:bg-amber-900/50 text-amber-700 dark:text-amber-400 rounded px-1.5 py-0.5">⏳ {wrSummary.pending} pending</span>}
+                        {wrSummary.approved > 0    && <span className="text-[10px] bg-green-100 dark:bg-green-900/50 text-green-700 dark:text-green-400 rounded px-1.5 py-0.5">✓ {wrSummary.approved} approved</span>}
+                        {wrSummary.unconfirmed > 0 && <span className="text-[10px] bg-red-100 dark:bg-red-900/50 text-red-600 dark:text-red-400 rounded px-1.5 py-0.5">⚠ {wrSummary.unconfirmed} unacknowledged</span>}
+                        {wrSummary.confirmed > 0   && <span className="text-[10px] bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-400 rounded px-1.5 py-0.5">📄 {wrSummary.confirmed} receipt confirmed</span>}
+                      </div>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <p className="text-sm font-bold text-emerald-700 dark:text-emerald-400">SDG {wrSummary.amountSDG.toLocaleString()}</p>
+                      <ChevronDown className={`h-4 w-4 text-muted-foreground ml-auto mt-0.5 transition-transform ${finOpen === 'withdrawals' ? 'rotate-180' : ''}`} />
+                    </div>
+                  </button>
+                  {finOpen === 'withdrawals' && (
+                    <div className="divide-y divide-border max-h-64 overflow-y-auto">
+                      {withdrawalRows.length === 0 ? (
+                        <p className="text-xs text-muted-foreground text-center py-4">No withdrawal requests found</p>
+                      ) : withdrawalRows.map(r => {
+                        const isApproved = r.status === 'approved';
+                        const isRejected = r.status === 'rejected';
+                        const confirmed  = isApproved && r.fund_receipt_confirmed;
+                        return (
+                          <div key={r.id} className="px-4 py-3 hover:bg-muted/30 transition-colors">
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${isApproved ? 'bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400' : isRejected ? 'bg-red-100 dark:bg-red-900/40 text-red-600 dark:text-red-400' : 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400'}`}>
+                                    {r.status}
+                                  </span>
+                                  {r.currency && <span className="text-[10px] text-muted-foreground">{r.currency}</span>}
+                                </div>
+                                {r.request_reason && <p className="text-[10px] text-muted-foreground mt-0.5 truncate">{r.request_reason}</p>}
+                                <p className="text-[10px] text-muted-foreground mt-0.5">{r.created_at ? format(parseISO(r.created_at), 'dd MMM yyyy') : '—'}</p>
+                              </div>
+                              <p className="text-xs font-bold text-foreground shrink-0">SDG {Number(r.amount || 0).toLocaleString()}</p>
+                            </div>
+                            {/* Fund receipt confirmation row */}
+                            {isApproved && (
+                              <div className={`mt-2 flex items-start gap-2 rounded px-2 py-1.5 text-[10px] ${confirmed ? 'bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800' : 'bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800'}`}>
+                                {confirmed ? (
+                                  <>
+                                    <CheckCircle className="h-3 w-3 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
+                                    <div>
+                                      <span className="font-semibold text-blue-700 dark:text-blue-400">Fund receipt confirmed</span>
+                                      {r.fund_receipt_confirmed_at && <span className="text-blue-500 ml-1">· {format(parseISO(r.fund_receipt_confirmed_at), 'dd MMM yyyy')}</span>}
+                                      {r.fund_receipt_notes && <p className="text-blue-500 mt-0.5 italic">"{r.fund_receipt_notes}"</p>}
+                                    </div>
+                                  </>
+                                ) : (
+                                  <>
+                                    <XCircle className="h-3 w-3 text-red-500 shrink-0 mt-0.5" />
+                                    <div>
+                                      <span className="font-semibold text-red-600 dark:text-red-400">Awaiting fund receipt acknowledgment</span>
+                                      {r.admin_processed_at && <span className="text-red-400 ml-1">· disbursed {format(parseISO(r.admin_processed_at), 'dd MMM yyyy')}</span>}
+                                    </div>
+                                  </>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+
               </div>
             )}
           </div>
