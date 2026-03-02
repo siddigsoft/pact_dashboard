@@ -1847,7 +1847,8 @@ const CostSubmission = () => {
                 <span className="hidden sm:inline">Confirmation Audit</span>
                 <span className="sm:hidden">Audit</span>
                 {(() => {
-                  const unconfirmed = submissions.filter(s => s.status === 'paid' && !s.fund_receipt_confirmed).length;
+                  const unconfirmed = submissions.filter(s => s.status === 'paid' && !s.fund_receipt_confirmed).length
+                    + filteredOperationalCosts.filter(o => getOperationalDerivedStatus(o) === 'paid' && !o.fund_receipt_confirmed).length;
                   return unconfirmed > 0 && activeTab !== 'payment_audit' ? (
                     <Badge variant="secondary" className="ml-1 h-5 px-1.5 text-xs bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-300 border-0">
                       {unconfirmed}
@@ -3108,7 +3109,10 @@ const CostSubmission = () => {
         {canViewTeamSubmissions && (
           <TabsContent value="payment_audit" className="space-y-4">
             {(() => {
-              const paidSubs = submissions.filter(s => s.status === 'paid');
+              const paidSubs = [
+                ...submissions.filter(s => s.status === 'paid'),
+                ...filteredOperationalCosts.filter(o => getOperationalDerivedStatus(o) === 'paid'),
+              ] as OperationalCostSubmission[];
               const confirmed = paidSubs.filter(s => s.fund_receipt_confirmed === true);
               const unconfirmed = paidSubs.filter(s => !s.fund_receipt_confirmed);
               const totalPaidCents = paidSubs.reduce((s, sub) => s + (sub.amount_cents ?? 0), 0);
