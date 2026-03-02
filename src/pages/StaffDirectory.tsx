@@ -17,7 +17,8 @@ import {
   Shield, RefreshCw, LayoutGrid, List, ChevronRight,
   Smartphone, Monitor, Clock, AlertCircle, CheckCircle, XCircle,
   Hash, Globe, Activity, BarChart3, Copy, Download, FileSpreadsheet,
-  FileText, FileDown, GitBranch, UserCheck, UserX
+  FileText, FileDown, GitBranch, UserCheck, UserX,
+  TrendingDown, Banknote, ChevronDown, ChevronUp
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { sudanStates, getLocalitiesByState } from "@/data/sudanStates";
@@ -174,9 +175,67 @@ function ProfileDetail({
 
   const copy = (t: string, l: string) => { navigator.clipboard.writeText(t); toast({ title: `${l} copied` }); };
 
+  /* ── Per-user financial data (with individual records) ── */
+  const [finLoading, setFinLoading] = useState(true);
+  const [advanceRows,    setAdvanceRows]    = useState<any[]>([]);
+  const [costRows,       setCostRows]       = useState<any[]>([]);
+  const [withdrawalRows, setWithdrawalRows] = useState<any[]>([]);
+  const [finOpen, setFinOpen] = useState<'advances' | 'costs' | 'withdrawals' | null>(null);
+
+  useEffect(() => {
+    const fetchUserFin = async () => {
+      setFinLoading(true);
+      const [dpRes, ocRes, wrRes] = await Promise.all([
+        supabase.from('down_payment_requests')
+          .select('id,status,requested_amount,created_at,notes,hub,state')
+          .eq('user_id', profile.id)
+          .order('created_at', { ascending: false }),
+        supabase.from('operational_cost_submissions')
+          .select('id,tier1_status,tier2_status,amount_cents,expense_category,description,submitted_at,created_at')
+          .eq('submitted_by', profile.id)
+          .order('created_at', { ascending: false }),
+        supabase.from('withdrawal_requests')
+          .select('id,status,amount,currency,request_reason,fund_receipt_confirmed,fund_receipt_confirmed_at,fund_receipt_notes,admin_processed_at,created_at')
+          .eq('user_id', profile.id)
+          .order('created_at', { ascending: false }),
+      ]);
+      setAdvanceRows(dpRes.data || []);
+      setCostRows(ocRes.data || []);
+      setWithdrawalRows(wrRes.data || []);
+      setFinLoading(false);
+    };
+    fetchUserFin();
+  }, [profile.id]);
+
+  const dpSummary = useMemo(() => ({
+    total:     advanceRows.length,
+    pending:   advanceRows.filter(r => ['pending','pending_supervisor','pending_admin'].includes(r.status)).length,
+    approved:  advanceRows.filter(r => r.status === 'approved' || r.status === 'paid').length,
+    rejected:  advanceRows.filter(r => r.status === 'rejected').length,
+    amountSDG: Math.round(advanceRows.reduce((s, r) => s + Math.abs(Number(r.requested_amount) || 0), 0)),
+  }), [advanceRows]);
+
+  const ocSummary = useMemo(() => ({
+    total:     costRows.length,
+    pending:   costRows.filter(r => !r.tier2_status || !['approved','rejected'].includes(r.tier2_status)).length,
+    approved:  costRows.filter(r => r.tier2_status === 'approved').length,
+    rejected:  costRows.filter(r => r.tier2_status === 'rejected' || r.tier1_status === 'rejected').length,
+    amountSDG: Math.round(costRows.reduce((s, r) => s + Math.abs(Number(r.amount_cents) || 0) / 100, 0)),
+  }), [costRows]);
+
+  const wrSummary = useMemo(() => ({
+    total:       withdrawalRows.length,
+    pending:     withdrawalRows.filter(r => r.status === 'pending').length,
+    approved:    withdrawalRows.filter(r => r.status === 'approved').length,
+    rejected:    withdrawalRows.filter(r => r.status === 'rejected').length,
+    amountSDG:   Math.round(withdrawalRows.reduce((s, r) => s + Math.abs(Number(r.amount) || 0), 0)),
+    confirmed:   withdrawalRows.filter(r => r.status === 'approved' && r.fund_receipt_confirmed).length,
+    unconfirmed: withdrawalRows.filter(r => r.status === 'approved' && !r.fund_receipt_confirmed).length,
+  }), [withdrawalRows]);
+
   return (
     <Dialog open onOpenChange={() => onClose()}>
-      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto p-0 gap-0">
+      <DialogContent className="max-w-2xl w-full max-h-[92vh] overflow-y-auto p-0 gap-0">
         {/* ── Branded header ── */}
         <div className="bg-gradient-to-r from-[#0F2041] to-[#1D3461] px-6 py-6 rounded-t-lg">
           <DialogHeader>
@@ -390,6 +449,212 @@ function ProfileDetail({
             )}
           </div>
 
+          {/* ── Financial Activity ── */}
+          <div className="px-6 py-4">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-3 flex items-center gap-1.5">
+              <Banknote className="h-3 w-3" />Financial Activity — النشاط المالي
+            </p>
+            {finLoading ? (
+              <div className="space-y-2">
+                <Skeleton className="h-14 w-full" />
+                <Skeleton className="h-14 w-full" />
+                <Skeleton className="h-14 w-full" />
+              </div>
+            ) : (
+              <div className="space-y-2">
+
+                {/* ── Transportation Advances ── */}
+                <div className="rounded-lg border overflow-hidden">
+                  {/* summary header — clickable to expand */}
+                  <button
+                    type="button"
+                    onClick={() => setFinOpen(o => o === 'advances' ? null : 'advances')}
+                    className="w-full flex items-center gap-3 px-4 py-3 bg-indigo-50 dark:bg-indigo-950/30 hover:bg-indigo-100 dark:hover:bg-indigo-950/50 transition-colors text-left"
+                  >
+                    <TrendingDown className="h-4 w-4 text-indigo-600 shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-sm font-semibold text-foreground">Transportation Advances</span>
+                        <span className="text-[10px] text-muted-foreground">سلف النقل</span>
+                      </div>
+                      <div className="flex items-center gap-2 mt-1 flex-wrap">
+                        <span className="text-[10px] bg-slate-200 dark:bg-slate-700 text-foreground rounded px-1.5 py-0.5">{dpSummary.total} total</span>
+                        {dpSummary.pending > 0  && <span className="text-[10px] bg-amber-100 dark:bg-amber-900/50 text-amber-700 dark:text-amber-400 rounded px-1.5 py-0.5">⏳ {dpSummary.pending} pending</span>}
+                        {dpSummary.approved > 0 && <span className="text-[10px] bg-green-100 dark:bg-green-900/50 text-green-700 dark:text-green-400 rounded px-1.5 py-0.5">✓ {dpSummary.approved} approved</span>}
+                        {dpSummary.rejected > 0 && <span className="text-[10px] bg-red-100 dark:bg-red-900/50 text-red-600 dark:text-red-400 rounded px-1.5 py-0.5">✗ {dpSummary.rejected} rejected</span>}
+                      </div>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <p className="text-sm font-bold text-indigo-700 dark:text-indigo-400">SDG {dpSummary.amountSDG.toLocaleString()}</p>
+                      <ChevronDown className={`h-4 w-4 text-muted-foreground ml-auto mt-0.5 transition-transform ${finOpen === 'advances' ? 'rotate-180' : ''}`} />
+                    </div>
+                  </button>
+                  {/* expanded rows */}
+                  {finOpen === 'advances' && (
+                    <div className="divide-y divide-border max-h-56 overflow-y-auto">
+                      {advanceRows.length === 0 ? (
+                        <p className="text-xs text-muted-foreground text-center py-4">No advance requests found</p>
+                      ) : advanceRows.map(r => {
+                        const isPending  = ['pending','pending_supervisor','pending_admin'].includes(r.status);
+                        const isApproved = r.status === 'approved' || r.status === 'paid';
+                        const isRejected = r.status === 'rejected';
+                        return (
+                          <div key={r.id} className="px-4 py-2.5 flex items-start justify-between gap-3 hover:bg-muted/30 transition-colors">
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${isApproved ? 'bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400' : isPending ? 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400' : isRejected ? 'bg-red-100 dark:bg-red-900/40 text-red-600 dark:text-red-400' : 'bg-muted text-muted-foreground'}`}>
+                                  {r.status}
+                                </span>
+                                {r.hub && <span className="text-[10px] text-muted-foreground">{r.hub}</span>}
+                                {r.state && <span className="text-[10px] text-muted-foreground">· {r.state}</span>}
+                              </div>
+                              {r.notes && <p className="text-[10px] text-muted-foreground mt-0.5 truncate">{r.notes}</p>}
+                              <p className="text-[10px] text-muted-foreground mt-0.5">{r.created_at ? format(parseISO(r.created_at), 'dd MMM yyyy') : '—'}</p>
+                            </div>
+                            <p className="text-xs font-bold text-foreground shrink-0">SDG {Number(r.requested_amount || 0).toLocaleString()}</p>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                {/* ── Cost Submissions ── */}
+                <div className="rounded-lg border overflow-hidden">
+                  <button
+                    type="button"
+                    onClick={() => setFinOpen(o => o === 'costs' ? null : 'costs')}
+                    className="w-full flex items-center gap-3 px-4 py-3 bg-orange-50 dark:bg-orange-950/30 hover:bg-orange-100 dark:hover:bg-orange-950/50 transition-colors text-left"
+                  >
+                    <FileText className="h-4 w-4 text-orange-600 shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-sm font-semibold text-foreground">Cost Submissions</span>
+                        <span className="text-[10px] text-muted-foreground">طلبات التكاليف</span>
+                      </div>
+                      <div className="flex items-center gap-2 mt-1 flex-wrap">
+                        <span className="text-[10px] bg-slate-200 dark:bg-slate-700 text-foreground rounded px-1.5 py-0.5">{ocSummary.total} total</span>
+                        {ocSummary.pending > 0  && <span className="text-[10px] bg-amber-100 dark:bg-amber-900/50 text-amber-700 dark:text-amber-400 rounded px-1.5 py-0.5">⏳ {ocSummary.pending} pending</span>}
+                        {ocSummary.approved > 0 && <span className="text-[10px] bg-green-100 dark:bg-green-900/50 text-green-700 dark:text-green-400 rounded px-1.5 py-0.5">✓ {ocSummary.approved} approved</span>}
+                        {ocSummary.rejected > 0 && <span className="text-[10px] bg-red-100 dark:bg-red-900/50 text-red-600 dark:text-red-400 rounded px-1.5 py-0.5">✗ {ocSummary.rejected} rejected</span>}
+                      </div>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <p className="text-sm font-bold text-orange-700 dark:text-orange-400">SDG {ocSummary.amountSDG.toLocaleString()}</p>
+                      <ChevronDown className={`h-4 w-4 text-muted-foreground ml-auto mt-0.5 transition-transform ${finOpen === 'costs' ? 'rotate-180' : ''}`} />
+                    </div>
+                  </button>
+                  {finOpen === 'costs' && (
+                    <div className="divide-y divide-border max-h-56 overflow-y-auto">
+                      {costRows.length === 0 ? (
+                        <p className="text-xs text-muted-foreground text-center py-4">No cost submissions found</p>
+                      ) : costRows.map(r => {
+                        const effStatus = r.tier2_status === 'approved' ? 'approved' : (r.tier2_status === 'rejected' || r.tier1_status === 'rejected') ? 'rejected' : r.tier1_status === 'approved' ? 'under review' : 'pending';
+                        const isApproved = effStatus === 'approved';
+                        const isRejected = effStatus === 'rejected';
+                        return (
+                          <div key={r.id} className="px-4 py-2.5 flex items-start justify-between gap-3 hover:bg-muted/30 transition-colors">
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${isApproved ? 'bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400' : isRejected ? 'bg-red-100 dark:bg-red-900/40 text-red-600 dark:text-red-400' : 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400'}`}>
+                                  {effStatus}
+                                </span>
+                                {r.expense_category && <span className="text-[10px] text-muted-foreground">{r.expense_category}</span>}
+                              </div>
+                              {r.description && <p className="text-[10px] text-muted-foreground mt-0.5 truncate">{r.description}</p>}
+                              <p className="text-[10px] text-muted-foreground mt-0.5">{r.created_at ? format(parseISO(r.created_at), 'dd MMM yyyy') : '—'}</p>
+                            </div>
+                            <p className="text-xs font-bold text-foreground shrink-0">SDG {(Math.abs(Number(r.amount_cents) || 0) / 100).toLocaleString()}</p>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                {/* ── Withdrawal Requests ── */}
+                <div className="rounded-lg border overflow-hidden">
+                  <button
+                    type="button"
+                    onClick={() => setFinOpen(o => o === 'withdrawals' ? null : 'withdrawals')}
+                    className="w-full flex items-center gap-3 px-4 py-3 bg-emerald-50 dark:bg-emerald-950/30 hover:bg-emerald-100 dark:hover:bg-emerald-950/50 transition-colors text-left"
+                  >
+                    <Landmark className="h-4 w-4 text-emerald-600 shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-sm font-semibold text-foreground">Withdrawal Requests</span>
+                        <span className="text-[10px] text-muted-foreground">طلبات السحب</span>
+                      </div>
+                      <div className="flex items-center gap-2 mt-1 flex-wrap">
+                        <span className="text-[10px] bg-slate-200 dark:bg-slate-700 text-foreground rounded px-1.5 py-0.5">{wrSummary.total} total</span>
+                        {wrSummary.pending > 0     && <span className="text-[10px] bg-amber-100 dark:bg-amber-900/50 text-amber-700 dark:text-amber-400 rounded px-1.5 py-0.5">⏳ {wrSummary.pending} pending</span>}
+                        {wrSummary.approved > 0    && <span className="text-[10px] bg-green-100 dark:bg-green-900/50 text-green-700 dark:text-green-400 rounded px-1.5 py-0.5">✓ {wrSummary.approved} approved</span>}
+                        {wrSummary.unconfirmed > 0 && <span className="text-[10px] bg-red-100 dark:bg-red-900/50 text-red-600 dark:text-red-400 rounded px-1.5 py-0.5">⚠ {wrSummary.unconfirmed} unacknowledged</span>}
+                        {wrSummary.confirmed > 0   && <span className="text-[10px] bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-400 rounded px-1.5 py-0.5">📄 {wrSummary.confirmed} receipt confirmed</span>}
+                      </div>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <p className="text-sm font-bold text-emerald-700 dark:text-emerald-400">SDG {wrSummary.amountSDG.toLocaleString()}</p>
+                      <ChevronDown className={`h-4 w-4 text-muted-foreground ml-auto mt-0.5 transition-transform ${finOpen === 'withdrawals' ? 'rotate-180' : ''}`} />
+                    </div>
+                  </button>
+                  {finOpen === 'withdrawals' && (
+                    <div className="divide-y divide-border max-h-64 overflow-y-auto">
+                      {withdrawalRows.length === 0 ? (
+                        <p className="text-xs text-muted-foreground text-center py-4">No withdrawal requests found</p>
+                      ) : withdrawalRows.map(r => {
+                        const isApproved = r.status === 'approved';
+                        const isRejected = r.status === 'rejected';
+                        const confirmed  = isApproved && r.fund_receipt_confirmed;
+                        return (
+                          <div key={r.id} className="px-4 py-3 hover:bg-muted/30 transition-colors">
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${isApproved ? 'bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400' : isRejected ? 'bg-red-100 dark:bg-red-900/40 text-red-600 dark:text-red-400' : 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400'}`}>
+                                    {r.status}
+                                  </span>
+                                  {r.currency && <span className="text-[10px] text-muted-foreground">{r.currency}</span>}
+                                </div>
+                                {r.request_reason && <p className="text-[10px] text-muted-foreground mt-0.5 truncate">{r.request_reason}</p>}
+                                <p className="text-[10px] text-muted-foreground mt-0.5">{r.created_at ? format(parseISO(r.created_at), 'dd MMM yyyy') : '—'}</p>
+                              </div>
+                              <p className="text-xs font-bold text-foreground shrink-0">SDG {Number(r.amount || 0).toLocaleString()}</p>
+                            </div>
+                            {/* Fund receipt confirmation row */}
+                            {isApproved && (
+                              <div className={`mt-2 flex items-start gap-2 rounded px-2 py-1.5 text-[10px] ${confirmed ? 'bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800' : 'bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800'}`}>
+                                {confirmed ? (
+                                  <>
+                                    <CheckCircle className="h-3 w-3 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
+                                    <div>
+                                      <span className="font-semibold text-blue-700 dark:text-blue-400">Fund receipt confirmed</span>
+                                      {r.fund_receipt_confirmed_at && <span className="text-blue-500 ml-1">· {format(parseISO(r.fund_receipt_confirmed_at), 'dd MMM yyyy')}</span>}
+                                      {r.fund_receipt_notes && <p className="text-blue-500 mt-0.5 italic">"{r.fund_receipt_notes}"</p>}
+                                    </div>
+                                  </>
+                                ) : (
+                                  <>
+                                    <XCircle className="h-3 w-3 text-red-500 shrink-0 mt-0.5" />
+                                    <div>
+                                      <span className="font-semibold text-red-600 dark:text-red-400">Awaiting fund receipt acknowledgment</span>
+                                      {r.admin_processed_at && <span className="text-red-400 ml-1">· disbursed {format(parseISO(r.admin_processed_at), 'dd MMM yyyy')}</span>}
+                                    </div>
+                                  </>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+
+              </div>
+            )}
+          </div>
+
           {/* ── Timestamps ── */}
           <div className="px-6 py-3">
             <div className="flex items-center justify-between text-xs text-muted-foreground">
@@ -481,6 +746,77 @@ function CapRow({ label, total, online, withBank, max }: { label: string; total:
   );
 }
 
+/* ─── Financial Summary Card ─────────────────────────────── */
+interface FinRow    { total: number; approved: number; amountSDG: number }
+interface FinMonth  { current: FinRow; prev: FinRow }
+
+function FinSummaryCard({
+  title, titleAr, icon: Icon, data, accentBg, accentText, accentBorder, loading,
+}: {
+  title: string; titleAr: string; icon: React.ElementType;
+  data: FinMonth;
+  accentBg: string; accentText: string; accentBorder: string;
+  loading: boolean;
+}) {
+  const diff = data.current.amountSDG - data.prev.amountSDG;
+  const up   = diff >= 0;
+  return (
+    <Card className="overflow-hidden">
+      <div className={`h-1 ${accentBorder}`} />
+      <CardContent className="pt-3 pb-4 px-4 space-y-3">
+        {/* Header */}
+        <div className="flex items-center gap-2">
+          <div className={`rounded-md p-1.5 ${accentBg}`}>
+            <Icon className={`h-3.5 w-3.5 ${accentText}`} />
+          </div>
+          <div>
+            <p className="text-xs font-semibold text-foreground leading-tight">{title}</p>
+            <p className="text-[10px] text-muted-foreground leading-tight">{titleAr}</p>
+          </div>
+          {!loading && diff !== 0 && (
+            <span className={`ml-auto flex items-center gap-0.5 text-[10px] font-semibold ${up ? 'text-red-500' : 'text-green-600'}`}>
+              {up ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+              {up ? '+' : ''}{diff.toLocaleString()} SDG
+            </span>
+          )}
+        </div>
+        {/* This month / Last month columns */}
+        {loading ? (
+          <div className="grid grid-cols-2 gap-2">
+            <Skeleton className="h-14" />
+            <Skeleton className="h-14" />
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 divide-x divide-border">
+            {/* This month */}
+            <div className="pr-3 space-y-1">
+              <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">This Month</p>
+              <p className={`text-2xl font-bold leading-none ${accentText}`}>{data.current.total}</p>
+              <p className="text-[10px] text-muted-foreground">
+                <span className="font-semibold text-foreground">{data.current.approved}</span> approved
+              </p>
+              <p className="text-[10px] font-medium text-foreground">
+                SDG {data.current.amountSDG.toLocaleString()}
+              </p>
+            </div>
+            {/* Last month */}
+            <div className="pl-3 space-y-1">
+              <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Last Month</p>
+              <p className="text-2xl font-bold leading-none text-muted-foreground">{data.prev.total}</p>
+              <p className="text-[10px] text-muted-foreground">
+                <span className="font-semibold">{data.prev.approved}</span> approved
+              </p>
+              <p className="text-[10px] font-medium text-muted-foreground">
+                SDG {data.prev.amountSDG.toLocaleString()}
+              </p>
+            </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 /* ═══════════════════════════════════════════════════════════
    MAIN PAGE
 ══════════════════════════════════════════════════════════════ */
@@ -498,6 +834,62 @@ export default function StaffDirectory() {
   const pageTopRef = useRef<HTMLDivElement>(null);
   useLayoutEffect(() => {
     pageTopRef.current?.scrollIntoView({ behavior: 'instant', block: 'start' });
+  }, []);
+
+  /* ── Financial summary state ── */
+  const emptyFinRow = (): FinRow => ({ total: 0, approved: 0, amountSDG: 0 });
+  const [finLoading, setFinLoading] = useState(true);
+  const [finData, setFinData] = useState<{
+    advances:    FinMonth;
+    costs:       FinMonth;
+    withdrawals: FinMonth;
+  }>({
+    advances:    { current: emptyFinRow(), prev: emptyFinRow() },
+    costs:       { current: emptyFinRow(), prev: emptyFinRow() },
+    withdrawals: { current: emptyFinRow(), prev: emptyFinRow() },
+  });
+
+  useEffect(() => {
+    const fetchFin = async () => {
+      setFinLoading(true);
+      const now = new Date();
+      const thisStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+      const prevStart = new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString();
+      const prevEnd   = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59).toISOString();
+
+      const [dpCur, dpPrv, ocCur, ocPrv, wtCur, wtPrv] = await Promise.all([
+        supabase.from('down_payment_requests').select('requested_amount,status').gte('created_at', thisStart),
+        supabase.from('down_payment_requests').select('requested_amount,status').gte('created_at', prevStart).lte('created_at', prevEnd),
+        supabase.from('operational_cost_submissions').select('amount_cents,tier2_status').gte('created_at', thisStart),
+        supabase.from('operational_cost_submissions').select('amount_cents,tier2_status').gte('created_at', prevStart).lte('created_at', prevEnd),
+        supabase.from('wallet_transactions').select('amount,type,transaction_type').gte('created_at', thisStart).or('type.eq.withdrawal,type.eq.debit,transaction_type.eq.withdrawal'),
+        supabase.from('wallet_transactions').select('amount,type,transaction_type').gte('created_at', prevStart).lte('created_at', prevEnd).or('type.eq.withdrawal,type.eq.debit,transaction_type.eq.withdrawal'),
+      ]);
+
+      const calcDp = (rows: any[]): FinRow => ({
+        total:     rows.length,
+        approved:  rows.filter(r => r.status === 'approved' || r.status === 'paid').length,
+        amountSDG: Math.round(rows.reduce((s, r) => s + Math.abs(Number(r.requested_amount) || 0), 0)),
+      });
+      const calcOc = (rows: any[]): FinRow => ({
+        total:     rows.length,
+        approved:  rows.filter(r => r.tier2_status === 'approved').length,
+        amountSDG: Math.round(rows.reduce((s, r) => s + Math.abs(Number(r.amount_cents) || 0) / 100, 0)),
+      });
+      const calcWt = (rows: any[]): FinRow => ({
+        total:     rows.length,
+        approved:  rows.length,
+        amountSDG: Math.round(rows.reduce((s, r) => s + Math.abs(Number(r.amount) || 0), 0)),
+      });
+
+      setFinData({
+        advances:    { current: calcDp(dpCur.data || []), prev: calcDp(dpPrv.data || []) },
+        costs:       { current: calcOc(ocCur.data || []), prev: calcOc(ocPrv.data || []) },
+        withdrawals: { current: calcWt(wtCur.data || []), prev: calcWt(wtPrv.data || []) },
+      });
+      setFinLoading(false);
+    };
+    fetchFin();
   }, []);
 
   /* Filters */
@@ -1058,6 +1450,47 @@ export default function StaffDirectory() {
             accent={{ border: 'bg-red-500', iconBg: 'bg-red-100 dark:bg-red-900/40', iconColor: 'text-red-600 dark:text-red-400', numColor: 'text-red-700 dark:text-red-400' }}
             onClick={() => setBankFilter('missing')}
           />
+        </div>
+
+        {/* ── Financial Summary ── */}
+        <div className="space-y-2">
+          <div className="flex items-center gap-2">
+            <TrendingDown className="h-4 w-4 text-muted-foreground" />
+            <h2 className="text-sm font-semibold text-foreground">Financial Overview</h2>
+            <span className="text-xs text-muted-foreground">— ملخص مالي</span>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <FinSummaryCard
+              title="Transportation Advances"
+              titleAr="سلف النقل"
+              icon={TrendingDown}
+              data={finData.advances}
+              accentBorder="bg-indigo-500"
+              accentBg="bg-indigo-100 dark:bg-indigo-900/40"
+              accentText="text-indigo-600 dark:text-indigo-400"
+              loading={finLoading}
+            />
+            <FinSummaryCard
+              title="Cost Submissions"
+              titleAr="طلبات التكاليف"
+              icon={FileText}
+              data={finData.costs}
+              accentBorder="bg-orange-500"
+              accentBg="bg-orange-100 dark:bg-orange-900/40"
+              accentText="text-orange-600 dark:text-orange-400"
+              loading={finLoading}
+            />
+            <FinSummaryCard
+              title="Withdrawal Requests"
+              titleAr="طلبات السحب"
+              icon={Banknote}
+              data={finData.withdrawals}
+              accentBorder="bg-emerald-500"
+              accentBg="bg-emerald-100 dark:bg-emerald-900/40"
+              accentText="text-emerald-600 dark:text-emerald-400"
+              loading={finLoading}
+            />
+          </div>
         </div>
 
         {/* ── Tabs ── */}
