@@ -262,7 +262,6 @@ function ProfileDetail({
                     <Copy className="h-3 w-3" />
                   </button>
                 </div>
-                {profile.phone && <p className="text-white/60 text-xs">{profile.phone}</p>}
                 <div className="flex flex-wrap gap-1.5 mt-2.5">
                   <RoleBadge role={profile.role} />
                   <span className={`inline-flex items-center gap-1 rounded-md border border-white/20 bg-white/10 px-1.5 py-0.5 text-[10px] font-semibold text-white`}>
