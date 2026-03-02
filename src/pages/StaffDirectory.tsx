@@ -177,6 +177,7 @@ function ProfileDetail({
 
   /* ── Per-user financial data (with individual records) ── */
   const [finRequested, setFinRequested] = useState(false);
+  const [finKey,       setFinKey]       = useState(0);
   const [finLoading, setFinLoading] = useState(false);
   const [advanceRows,    setAdvanceRows]    = useState<any[]>([]);
   const [costRows,       setCostRows]       = useState<any[]>([]);
@@ -210,7 +211,7 @@ function ProfileDetail({
       setFinLoading(false);
     };
     fetchUserFin();
-  }, [finRequested, profile.id]);
+  }, [finRequested, finKey, profile.id]);
 
   const dpSummary = useMemo(() => ({
     total:     advanceRows.length,
@@ -250,7 +251,17 @@ function ProfileDetail({
                 <DialogTitle className="text-white text-lg font-bold leading-tight truncate">
                   {profile.full_name || 'Unknown'}
                 </DialogTitle>
-                <p className="text-white/60 text-xs mt-0.5 truncate">{profile.email}</p>
+                <div className="flex items-center gap-1.5 mt-0.5 group/email">
+                  <p className="text-white/60 text-xs truncate">{profile.email}</p>
+                  <button
+                    type="button"
+                    onClick={() => copy(profile.email, 'Email')}
+                    className="opacity-0 group-hover/email:opacity-100 text-white/40 hover:text-white/80 transition-all shrink-0"
+                    title="Copy email"
+                  >
+                    <Copy className="h-3 w-3" />
+                  </button>
+                </div>
                 {profile.phone && <p className="text-white/60 text-xs">{profile.phone}</p>}
                 <div className="flex flex-wrap gap-1.5 mt-2.5">
                   <RoleBadge role={profile.role} />
@@ -456,9 +467,21 @@ function ProfileDetail({
 
           {/* ── Financial Activity ── */}
           <div className="px-6 py-4">
-            <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-3 flex items-center gap-1.5">
-              <Banknote className="h-3 w-3" />Financial Activity — النشاط المالي
-            </p>
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground flex items-center gap-1.5">
+                <Banknote className="h-3 w-3" />Financial Activity — النشاط المالي
+              </p>
+              {finRequested && !finLoading && (
+                <button
+                  type="button"
+                  onClick={() => setFinKey(k => k + 1)}
+                  className="text-muted-foreground hover:text-foreground transition-colors"
+                  title="Reload financial data"
+                >
+                  <RefreshCw className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </div>
             {!finRequested ? (
               <button
                 type="button"
@@ -1459,28 +1482,28 @@ export default function StaffDirectory() {
             value={stats.online}
             icon={Wifi}
             accent={{ border: 'bg-green-500', iconBg: 'bg-green-100 dark:bg-green-900/40', iconColor: 'text-green-600 dark:text-green-400', numColor: 'text-green-700 dark:text-green-400' }}
-            onClick={() => setStatusFilter('online')}
+            onClick={() => setActiveTab('online')}
           />
           <StatCard
             label="Away (< 60 min)"
             value={stats.busy}
             icon={Activity}
             accent={{ border: 'bg-amber-400', iconBg: 'bg-amber-100 dark:bg-amber-900/40', iconColor: 'text-amber-600 dark:text-amber-400', numColor: 'text-amber-700 dark:text-amber-400' }}
-            onClick={() => setStatusFilter('away')}
+            onClick={() => { setStatusFilter('away'); setActiveTab('directory'); }}
           />
           <StatCard
             label="With Bank Account"
             value={stats.withBank}
             icon={UserCheck}
             accent={{ border: 'bg-blue-500', iconBg: 'bg-blue-100 dark:bg-blue-900/40', iconColor: 'text-blue-600 dark:text-blue-400', numColor: 'text-blue-700 dark:text-blue-400' }}
-            onClick={() => setBankFilter('has')}
+            onClick={() => { setBankFilter('has'); setActiveTab('bank_accounts'); }}
           />
           <StatCard
             label="Missing Account"
             value={stats.missingBank}
             icon={UserX}
             accent={{ border: 'bg-red-500', iconBg: 'bg-red-100 dark:bg-red-900/40', iconColor: 'text-red-600 dark:text-red-400', numColor: 'text-red-700 dark:text-red-400' }}
-            onClick={() => setBankFilter('missing')}
+            onClick={() => { setBankFilter('missing'); setActiveTab('bank_accounts'); }}
           />
         </div>
 
