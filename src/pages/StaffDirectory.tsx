@@ -176,28 +176,33 @@ function ProfileDetail({
   const copy = (t: string, l: string) => { navigator.clipboard.writeText(t); toast({ title: `${l} copied` }); };
 
   /* ── Per-user financial data (with individual records) ── */
-  const [finLoading, setFinLoading] = useState(true);
+  const [finRequested, setFinRequested] = useState(false);
+  const [finLoading, setFinLoading] = useState(false);
   const [advanceRows,    setAdvanceRows]    = useState<any[]>([]);
   const [costRows,       setCostRows]       = useState<any[]>([]);
   const [withdrawalRows, setWithdrawalRows] = useState<any[]>([]);
   const [finOpen, setFinOpen] = useState<'advances' | 'costs' | 'withdrawals' | null>(null);
 
   useEffect(() => {
+    if (!finRequested) return;
     const fetchUserFin = async () => {
       setFinLoading(true);
       const [dpRes, ocRes, wrRes] = await Promise.all([
         supabase.from('down_payment_requests')
           .select('id,status,requested_amount,created_at,notes,hub,state')
           .eq('user_id', profile.id)
-          .order('created_at', { ascending: false }),
+          .order('created_at', { ascending: false })
+          .limit(100),
         supabase.from('operational_cost_submissions')
           .select('id,tier1_status,tier2_status,amount_cents,expense_category,description,submitted_at,created_at')
           .eq('submitted_by', profile.id)
-          .order('created_at', { ascending: false }),
+          .order('created_at', { ascending: false })
+          .limit(100),
         supabase.from('withdrawal_requests')
           .select('id,status,amount,currency,request_reason,fund_receipt_confirmed,fund_receipt_confirmed_at,fund_receipt_notes,admin_processed_at,created_at')
           .eq('user_id', profile.id)
-          .order('created_at', { ascending: false }),
+          .order('created_at', { ascending: false })
+          .limit(100),
       ]);
       setAdvanceRows(dpRes.data || []);
       setCostRows(ocRes.data || []);
@@ -205,7 +210,7 @@ function ProfileDetail({
       setFinLoading(false);
     };
     fetchUserFin();
-  }, [profile.id]);
+  }, [finRequested, profile.id]);
 
   const dpSummary = useMemo(() => ({
     total:     advanceRows.length,
@@ -454,7 +459,16 @@ function ProfileDetail({
             <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-3 flex items-center gap-1.5">
               <Banknote className="h-3 w-3" />Financial Activity — النشاط المالي
             </p>
-            {finLoading ? (
+            {!finRequested ? (
+              <button
+                type="button"
+                onClick={() => setFinRequested(true)}
+                className="w-full rounded-lg border border-dashed border-muted-foreground/30 py-4 text-xs text-muted-foreground hover:bg-muted/40 hover:border-muted-foreground/50 transition-colors flex items-center justify-center gap-2"
+              >
+                <Banknote className="h-3.5 w-3.5" />
+                Load Financial Activity
+              </button>
+            ) : finLoading ? (
               <div className="space-y-2">
                 <Skeleton className="h-14 w-full" />
                 <Skeleton className="h-14 w-full" />
