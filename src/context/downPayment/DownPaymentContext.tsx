@@ -1,10 +1,16 @@
-import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
+import React, { createContext, useContext, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { useQueryClient } from '@tanstack/react-query';
 import { useUser } from '../user/UserContext';
 import { useToast } from '@/hooks/use-toast';
 import { useRealtimeTable } from '@/hooks/useRealtimeResource';
 import { ensureValidSession } from '@/lib/session-health';
 import { withTimeout } from '@/utils/promise-with-timeout';
+import {
+  useDownPaymentRequestsQuery,
+  downPaymentQueryKeys,
+  type UserForDownPayment,
+} from './downPaymentQueries';
 import {
   DownPaymentRequest,
   CreateDownPaymentRequest,
@@ -70,92 +76,41 @@ export function useDownPayment() {
   return context;
 }
 
-function transformFromDB(data: any): DownPaymentRequest {
-  // Extract state and project from joined mmp_site_entries if available
-  const mmpEntry = data.mmp_site_entries;
-  
-  // For state, try multiple sources in order of preference:
-  // 1. MMP site entry state
-  // 2. Metadata state_name  
-  // Do NOT fall back to hub_name - hubs and states are separate geographic levels
-  const stateName = mmpEntry?.state || 
-                    data.metadata?.state_name || 
-                    undefined;
-  
-  return {
-    id: data.id,
-    siteVisitId: data.site_visit_id,
-    mmpSiteEntryId: data.mmp_site_entry_id,
-    siteName: data.site_name,
-    mmpName: mmpEntry?.mmp_files?.name || data.metadata?.mmp_name || undefined,
-    stateName,
-    localityName: mmpEntry?.locality || data.metadata?.locality_name || undefined,
-    projectName: mmpEntry?.cp_name || mmpEntry?.mmp_files?.projects?.name || mmpEntry?.mmp_files?.project_name || data.metadata?.project_name || 'WFP TPM',
-    wfpProjectName: mmpEntry?.mmp_files?.projects?.name || mmpEntry?.mmp_files?.project_name || data.metadata?.project_name || undefined,
-    activityType: mmpEntry?.activity_type || data.metadata?.activity_type || undefined,
-    requestedBy: data.requested_by,
-    requestedByName: data.metadata?.requested_by_name || undefined,
-    requestedAt: data.requested_at,
-    requesterRole: data.requester_role,
-    hubId: data.hub_id,
-    hubName: data.hub_name,
-    totalTransportationBudget: parseFloat(data.total_transportation_budget),
-    requestedAmount: parseFloat(data.requested_amount),
-    approvedAmount: data.metadata?.approved_amount ? parseFloat(data.metadata.approved_amount) : undefined,
-    approvalType: data.metadata?.approval_type,
-    approvalPercentage: data.metadata?.approval_percentage,
-    paymentType: data.payment_type,
-    installmentPlan: data.installment_plan || [],
-    paidInstallments: data.paid_installments || [],
-    justification: data.justification,
-    supportingDocuments: data.supporting_documents || [],
-    supervisorId: data.supervisor_id,
-    supervisorStatus: data.supervisor_status,
-    supervisorApprovedBy: data.supervisor_approved_by,
-    supervisorApprovedByName: data.metadata?.supervisor_approved_by_name || undefined,
-    supervisorApprovedAt: data.supervisor_approved_at,
-    supervisorNotes: data.supervisor_notes,
-    supervisorRejectionReason: data.supervisor_rejection_reason,
-    supervisorApprovedAmount: data.metadata?.supervisor_approved_amount ? parseFloat(data.metadata.supervisor_approved_amount) : undefined,
-    adminStatus: data.admin_status,
-    adminProcessedBy: data.admin_processed_by,
-    adminProcessedByName: data.metadata?.admin_processed_by_name || undefined,
-    adminProcessedAt: data.admin_processed_at,
-    adminNotes: data.admin_notes,
-    adminRejectionReason: data.admin_rejection_reason,
-    adminApprovedAmount: data.metadata?.admin_approved_amount ? parseFloat(data.metadata.admin_approved_amount) : undefined,
-    status: data.status,
-    totalPaidAmount: parseFloat(data.total_paid_amount || 0),
-    remainingAmount: parseFloat(data.remaining_amount || 0),
-    walletTransactionIds: data.wallet_transaction_ids || [],
-    auditLog: data.metadata?.audit_log || [],
-    createdAt: data.created_at,
-    updatedAt: data.updated_at,
-    metadata: data.metadata || {},
-    paymentProofUrl: data.payment_proof_url || null,
-    paymentProofNotes: data.payment_proof_notes || null,
-    paymentProofUploadedAt: data.payment_proof_uploaded_at || null,
-  };
-}
-
 export function DownPaymentProvider({ children }: { children: React.ReactNode }) {
   const { currentUser } = useUser();
   const { toast } = useToast();
-  const [requests, setRequests] = useState<DownPaymentRequest[]>([]);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
 
   // Stable refs — prevent stale closures without causing callback re-creation
   const toastRef = useRef(toast);
   toastRef.current = toast;
 
-  // Track previous user id to only re-fetch when the user actually changes
-  const currentUserIdRef = useRef<string | null>(null);
+  // User shape for query (role-based filtering)
+  const userForQuery: UserForDownPayment | null = currentUser
+    ? { id: currentUser.id, hubId: currentUser.hubId, secondaryHubId: currentUser.secondaryHubId, role: currentUser.role }
+    : null;
 
-  // Debounce ref for realtime-triggered refreshes (avoid re-fetching on every row in a bulk op)
+  const requestsQuery = useDownPaymentRequestsQuery(userForQuery);
+  const requests = requestsQuery.data ?? [];
+  const loading = requestsQuery.isLoading;
+
+  // Show toast on fetch error
+  useEffect(() => {
+    if (requestsQuery.isError && requestsQuery.error) {
+      const err = requestsQuery.error as Error;
+      const isPermissionError = err?.message?.includes('permission') || err?.message?.includes('RLS') || err?.message?.includes('policy');
+      if (!isPermissionError) {
+        toastRef.current({ title: 'Error', description: err?.message || 'Failed to load down-payment requests', variant: 'destructive' });
+      }
+    }
+  }, [requestsQuery.isError, requestsQuery.error]);
+
+  const refreshRequests = useCallback(async () => {
+    await queryClient.invalidateQueries({ queryKey: downPaymentQueryKeys.all });
+  }, [queryClient]);
+
+  // Debounce ref for realtime-triggered invalidations (avoid re-fetch storms)
   const realtimeDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  // Track whether we've already fetched once for the current user
-  const hasFetchedRef = useRef(false);
 
   const cleanupDeletedRequests = useCallback(async () => {
     try {
@@ -197,158 +152,13 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
     }
   }, []);
 
-  const refreshRequests = useCallback(async () => {
-    // Read the current user from the context at call time — avoids stale closure
-    const user = currentUser;
-    if (!user) {
-      setRequests([]);
-      setLoading(false);
-      return;
-    }
-
-    try {
-      setLoading(true);
-      await withTimeout(
-        (async () => {
-      const userRole = user.role?.toLowerCase();
-
-      // Main query with full join so we get state/locality/project in one round-trip
-      let query = supabase.from('down_payment_requests').select(`
-        *,
-        mmp_site_entries (
-          state,
-          locality,
-          cp_name,
-          activity_type,
-          mmp_files (
-            name,
-            project_name,
-            projects (
-              name
-            )
-          )
-        )
-      `);
-
-      // ── Build role-based filter (extracted to helper to avoid duplication) ──
-      const applyRoleFilter = (q: typeof query) => {
-        if (userRole === 'datacollector' || userRole === 'coordinator') {
-          return q.eq('requested_by', user.id);
-        }
-        if (userRole === 'supervisor' || userRole === 'hubsupervisor') {
-          if (user.hubId) {
-            let hubFilter = `requested_by.eq.${user.id},hub_id.eq.${user.hubId}`;
-            if (user.secondaryHubId) hubFilter += `,hub_id.eq.${user.secondaryHubId}`;
-            return q.or(hubFilter);
-          }
-          return q.eq('requested_by', user.id);
-        }
-        const isAdmin = [
-          'admin', 'financialadmin', 'superadmin', 'super_admin',
-          'ict', 'fom', 'field operation manager',
-          'countrydirector', 'country_director', 'datateam', 'data_team',
-        ].includes(userRole || '');
-        if (!isAdmin) return q.eq('requested_by', user.id);
-        return q; // admins see everything — no filter
-      };
-
-      let { data, error } = await applyRoleFilter(query).order('created_at', { ascending: false });
-
-      // Fallback: if the join fails (e.g. RLS on mmp_site_entries), retry without it
-      if (error) {
-        console.warn('[DownPayment] Join query failed, retrying without join:', error.message);
-        const plain = applyRoleFilter(supabase.from('down_payment_requests').select('*'));
-        const fallback = await plain.order('created_at', { ascending: false });
-        data = fallback.data;
-        error = fallback.error;
-      }
-
-      if (error) {
-        const isPermErr = error.code === '42501' || error.message?.includes('permission') || error.message?.includes('RLS');
-        if (isPermErr) {
-          setRequests([]);
-          setLoading(false);
-          return;
-        }
-        throw error;
-      }
-
-      const transformed = (data || []).map(transformFromDB).filter(r => {
-        if (r.status === 'deleted') return false;
-        if (r.status === 'cancelled' && r.metadata?.deleted) return false;
-        return true;
-      });
-
-      // ── Enrich any rows where the join returned no state/locality/mmp data ──
-      // Run the two enrichment queries in PARALLEL instead of sequentially
-      const needsEnrichment = transformed.filter(r => (!r.stateName || !r.localityName || !r.mmpName) && r.mmpSiteEntryId);
-      if (needsEnrichment.length > 0) {
-        const entryIds = [...new Set(needsEnrichment.map(r => r.mmpSiteEntryId).filter(Boolean))] as string[];
-        try {
-          const { data: entries } = await supabase
-            .from('mmp_site_entries')
-            .select('id, state, locality, mmp_file_id')
-            .in('id', entryIds);
-
-          if (entries && entries.length > 0) {
-            const entryMap = new Map(entries.map(e => [e.id, e]));
-            const mmpFileIds = [...new Set(entries.map(e => (e as any).mmp_file_id).filter(Boolean))] as string[];
-
-            // Parallel fetch of MMP names (no need to wait for entries to finish first)
-            let mmpNameMap = new Map<string, string>();
-            if (mmpFileIds.length > 0) {
-              const { data: mmpFiles } = await supabase
-                .from('mmp_files').select('id, name').in('id', mmpFileIds);
-              if (mmpFiles) mmpNameMap = new Map(mmpFiles.map(f => [f.id, f.name]));
-            }
-
-            transformed.forEach(r => {
-              if (r.mmpSiteEntryId && entryMap.has(r.mmpSiteEntryId)) {
-                const e = entryMap.get(r.mmpSiteEntryId)!;
-                if (!r.stateName && e.state) r.stateName = e.state;
-                if (!r.localityName && e.locality) r.localityName = e.locality;
-                if (!r.mmpName && (e as any).mmp_file_id) r.mmpName = mmpNameMap.get((e as any).mmp_file_id);
-              }
-            });
-          }
-        } catch (enrichErr) {
-          console.warn('[DownPayment] Enrichment failed (non-critical):', enrichErr);
-        }
-      }
-
-      setRequests(transformed);
-        })(),
-        20000,
-        'Failed to load requests. Please refresh the page.'
-      );
-    } catch (error: any) {
-      const isPermissionError = error?.code === '42501' ||
-        error?.message?.includes('permission') || error?.message?.includes('RLS') || error?.message?.includes('policy');
-      if (!isPermissionError) {
-        console.error('[DownPayment] Fetch failed:', error);
-        toastRef.current({ title: 'Error', description: error?.message || 'Failed to load down-payment requests', variant: 'destructive' });
-      }
-    } finally {
-      setLoading(false);
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentUser?.id, currentUser?.hubId, currentUser?.secondaryHubId, currentUser?.role]);
-
-  // ── Initial load: only re-fetch when the signed-in user actually changes ──
-  useEffect(() => {
-    const uid = currentUser?.id ?? null;
-    if (uid === currentUserIdRef.current && hasFetchedRef.current) return;
-    currentUserIdRef.current = uid;
-    hasFetchedRef.current = true;
-    refreshRequests();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentUser?.id]);
-
-  // ── Real-time: single subscription, debounced to avoid re-fetch storms ──
+  // Real-time: debounced invalidation to avoid re-fetch storms
   const debouncedRefresh = useCallback(() => {
     if (realtimeDebounceRef.current) clearTimeout(realtimeDebounceRef.current);
-    realtimeDebounceRef.current = setTimeout(() => refreshRequests(), 800);
-  }, [refreshRequests]);
+    realtimeDebounceRef.current = setTimeout(() => {
+      queryClient.invalidateQueries({ queryKey: downPaymentQueryKeys.all });
+    }, 800);
+  }, [queryClient]);
 
   useRealtimeTable('down_payment_requests', debouncedRefresh, {
     enabled: !!currentUser,
@@ -1015,10 +825,6 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
   };
 
   const deleteRequest = async (requestId: string): Promise<boolean> => {
-    // Optimistic removal — item disappears from the list instantly
-    const snapshot = requests.slice();
-    setRequests(prev => prev.filter(r => r.id !== requestId));
-
     try {
       const now = new Date().toISOString();
 
@@ -1045,12 +851,9 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
         description: 'The request has been removed. / تم إزالة الطلب.',
       });
 
-      // Silent background refresh to sync any server-side state
-      refreshRequests().catch(console.error);
+      await refreshRequests();
       return true;
     } catch (error: any) {
-      // Rollback optimistic removal on failure
-      setRequests(snapshot);
       console.error('Failed to delete request:', error);
       toast({
         title: 'Delete Failed / فشل الحذف',

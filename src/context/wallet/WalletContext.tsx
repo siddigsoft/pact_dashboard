@@ -1,5 +1,6 @@
-import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, useMemo, useCallback, ReactNode } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { useQueryClient } from '@tanstack/react-query';
 import { useToast } from '@/hooks/use-toast';
 import { useUser } from '@/context/user/UserContext';
 import { ensureValidSession } from '@/lib/session-health';
@@ -7,6 +8,15 @@ import { withTimeout } from '@/utils/promise-with-timeout';
 import { useClassification } from '@/context/classification/ClassificationContext';
 import { NotificationTriggerService } from '@/services/NotificationTriggerService';
 import { createSiteVisitWalletTransaction } from '@/utils/wallet-transactions';
+import {
+  useWalletQuery,
+  useTransactionsQuery,
+  useWithdrawalRequestsQuery,
+  useSupervisedWithdrawalRequestsQuery,
+  useInvalidateWalletQueries,
+  walletQueryKeys,
+  type UserForWallet,
+} from './walletQueries';
 import type {
   Wallet,
   WalletTransaction,
@@ -153,91 +163,29 @@ const pendingFeeAdditions = new Set<string>();
 export function WalletProvider({ children }: { children: ReactNode }) {
   const { currentUser, authReady } = useUser();
   const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const invalidate = useInvalidateWalletQueries();
   const { getUserClassification, getActiveFeeStructure } = useClassification();
-  const [wallet, setWallet] = useState<Wallet | null>(null);
-  const [transactions, setTransactions] = useState<WalletTransaction[]>([]);
-  const [withdrawalRequests, setWithdrawalRequests] = useState<WithdrawalRequest[]>([]);
-  const [supervisedWithdrawalRequests, setSupervisedWithdrawalRequests] = useState<SupervisedWithdrawalRequest[]>([]);
-  const [stats, setStats] = useState<WalletStats | null>(null);
-  const [loading, setLoading] = useState(true);
 
-  const refreshWallet = async (showErrorToast: boolean = false) => {
-    if (!currentUser?.id) return;
+  const userId = currentUser?.id;
+  const userForSupervised: UserForWallet | null = currentUser
+    ? { id: currentUser.id, hubId: currentUser.hubId, secondaryHubId: currentUser.secondaryHubId, stateId: currentUser.stateId, role: currentUser.role }
+    : null;
 
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) return;
-      const { data, error } = await supabase
-        .from('wallets')
-        .select('*')
-        .eq('user_id', currentUser.id)
-        .single();
+  const walletQuery = useWalletQuery(userId);
+  const transactionsQuery = useTransactionsQuery(userId);
+  const withdrawalRequestsQuery = useWithdrawalRequestsQuery(userId);
+  const supervisedQuery = useSupervisedWithdrawalRequestsQuery(userForSupervised);
 
-      if (error) {
-        if (error.code === 'PGRST116') {
-          const { data: newWallet, error: createError } = await supabase
-            .from('wallets')
-            .insert({ user_id: currentUser.id, balances: { SDG: 0 } })
-            .select()
-            .single();
+  const wallet = walletQuery.data ?? null;
+  const transactions = transactionsQuery.data ?? [];
+  const withdrawalRequests = withdrawalRequestsQuery.data ?? [];
+  const supervisedWithdrawalRequests = supervisedQuery.data ?? [];
 
-          if (createError) throw createError;
-          setWallet(transformWalletFromDB(newWallet));
-        } else {
-          throw error;
-        }
-      } else {
-        setWallet(transformWalletFromDB(data));
-      }
-    } catch (error: any) {
-      console.error('Failed to fetch wallet:', error);
-      if (showErrorToast) {
-        toast({
-          title: 'Error',
-          description: 'Failed to load wallet information',
-          variant: 'destructive',
-        });
-      }
-    }
-  };
+  const loading = !authReady || (!!userId && (walletQuery.isLoading || transactionsQuery.isLoading || withdrawalRequestsQuery.isLoading));
 
-  const refreshTransactions = async () => {
-    if (!currentUser?.id) return;
-
-    try {
-      const { data, error} = await supabase
-        .from('wallet_transactions')
-        .select('*')
-        .eq('user_id', currentUser.id)
-        .order('created_at', { ascending: false })
-        .limit(100);
-
-      if (error) throw error;
-      setTransactions((data || []).map(transformTransactionFromDB));
-    } catch (error: any) {
-      console.error('Failed to fetch transactions:', error);
-    }
-  };
-
-  const refreshWithdrawalRequests = async () => {
-    if (!currentUser?.id) return;
-
-    try {
-      const { data, error } = await supabase
-        .from('withdrawal_requests')
-        .select('*')
-        .eq('user_id', currentUser.id)
-        .order('created_at', { ascending: false});
-
-      if (error) throw error;
-      setWithdrawalRequests((data || []).map(transformWithdrawalRequestFromDB));
-    } catch (error: any) {
-      console.error('Failed to fetch withdrawal requests:', error);
-    }
-  };
-
-  const calculateStats = () => {
-    if (!wallet || !transactions || !withdrawalRequests) return;
+  const stats = useMemo((): WalletStats | null => {
+    if (!wallet || !transactions || !withdrawalRequests) return null;
 
     const pendingWithdrawals = withdrawalRequests
       .filter(r => r.status === 'pending')
@@ -252,7 +200,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     const utcNow = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
     const dayOfWeek = new Date(utcNow).getUTCDay();
     const weekStartMs = utcNow - (dayOfWeek * 24 * 60 * 60 * 1000);
-    
+
     const weeklyEarnings = earningTransactions
       .filter(t => new Date(t.createdAt).getTime() >= weekStartMs)
       .reduce((sum, t) => sum + t.amount, 0);
@@ -270,7 +218,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       .filter(t => t.type === 'earning' || t.type === 'site_visit_fee' || t.type === 'adjustment')
       .filter(t => t.amount > 0)
       .reduce((sum, t) => sum + t.amount, 0);
-    
+
     const calculatedWithdrawn = transactions
       .filter(t => t.type === 'withdrawal')
       .reduce((sum, t) => sum + Math.abs(t.amount), 0);
@@ -278,7 +226,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     const totalEarned = Math.max(wallet.totalEarned, calculatedEarned);
     const totalWithdrawn = Math.max(wallet.totalWithdrawn, calculatedWithdrawn);
 
-    setStats({
+    return {
       totalEarned,
       totalWithdrawn,
       pendingWithdrawals,
@@ -288,8 +236,24 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       weeklyEarnings,
       monthlyEarnings,
       weeklySiteVisits,
-    });
-  };
+    };
+  }, [wallet, transactions, withdrawalRequests]);
+
+  const refreshWallet = useCallback(async (_showErrorToast?: boolean) => {
+    await invalidate.invalidateAll(userId);
+  }, [invalidate, userId]);
+
+  const refreshTransactions = useCallback(async () => {
+    await invalidate.invalidateTransactions(userId);
+  }, [invalidate, userId]);
+
+  const refreshWithdrawalRequests = useCallback(async () => {
+    await invalidate.invalidateWithdrawalRequests(userId);
+  }, [invalidate, userId]);
+
+  const refreshSupervisedWithdrawalRequests = useCallback(async () => {
+    await invalidate.invalidateSupervised(userId);
+  }, [invalidate, userId]);
 
   const createWithdrawalRequest = async (amount: number, reason: string, paymentMethod?: string) => {
     if (!currentUser?.id || !wallet) return;
@@ -322,8 +286,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         description: 'Your request is pending supervisor approval',
       });
 
-      // Refresh both personal and supervised requests (supervisors will see new requests)
-      await Promise.all([refreshWithdrawalRequests(), refreshSupervisedWithdrawalRequests()]);
+      await invalidate.invalidateAll(userId);
     } catch (error: any) {
       console.error('Failed to create withdrawal request:', error);
       toast({
@@ -349,8 +312,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         description: 'Your withdrawal request has been cancelled',
       });
 
-      // Refresh both personal and supervised requests
-      await Promise.all([refreshWithdrawalRequests(), refreshSupervisedWithdrawalRequests()]);
+      await invalidate.invalidateAll(userId);
     } catch (error: any) {
       console.error('Failed to cancel withdrawal request:', error);
       toast({
@@ -434,7 +396,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       );
 
       // Refresh both personal and supervised withdrawal requests
-      await Promise.all([refreshWithdrawalRequests(), refreshSupervisedWithdrawalRequests()]);
+      await invalidate.invalidateAll(userId);
         })(),
         WALLET_MUTATION_TIMEOUT_MS,
         'Request timed out. Please try again or refresh the page.'
@@ -575,7 +537,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       );
 
       // Refresh all relevant data including supervised requests
-      await Promise.all([refreshWallet(), refreshTransactions(), refreshWithdrawalRequests(), refreshSupervisedWithdrawalRequests()]);
+      await invalidate.invalidateAll(userId);
         })(),
         WALLET_MUTATION_TIMEOUT_MS,
         'Request timed out. Please try again or refresh the page.'
@@ -668,7 +630,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       );
 
       // Refresh all relevant data including supervised requests
-      await Promise.all([refreshWithdrawalRequests(), refreshSupervisedWithdrawalRequests()]);
+      await invalidate.invalidateAll(userId);
         })(),
         WALLET_MUTATION_TIMEOUT_MS,
         'Request timed out. Please try again or refresh the page.'
@@ -733,7 +695,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       }
 
       // Refresh both personal and supervised withdrawal requests
-      await Promise.all([refreshWithdrawalRequests(), refreshSupervisedWithdrawalRequests()]);
+      await invalidate.invalidateAll(userId);
         })(),
         WALLET_MUTATION_TIMEOUT_MS,
         'Request timed out. Please try again or refresh the page.'
@@ -809,7 +771,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         request.amount
       );
 
-      await refreshWithdrawalRequests();
+      await invalidate.invalidateWithdrawalRequests(userId);
         })(),
         WALLET_MUTATION_TIMEOUT_MS,
         'Request timed out. Please try again or refresh the page.'
@@ -1093,8 +1055,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         
         // Refresh wallet and transactions if this is the current user
         if (userId === currentUser?.id) {
-          await refreshWallet();
-          await refreshTransactions();
+          await invalidate.invalidateWallet(userId);
+          await invalidate.invalidateTransactions(userId);
         }
       } else {
         // The centralized function already shows toast notifications, but we'll log the error
@@ -1249,8 +1211,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       if (transactionError) throw transactionError;
 
       if (userId === currentUser?.id) {
-        await refreshWallet();
-        await refreshTransactions();
+        await invalidate.invalidateWallet(userId);
+        await invalidate.invalidateTransactions(userId);
       }
     } catch (error: any) {
       console.error('Failed to add retainer to wallet:', error);
@@ -1585,53 +1547,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const refreshSupervisedWithdrawalRequests = async () => {
-    const requests = await listSupervisedWithdrawalRequests();
-    setSupervisedWithdrawalRequests(requests);
-  };
-
   useEffect(() => {
-    const initWallet = async () => {
-      if (!authReady) {
-        setLoading(false);
-        return;
-      }
-
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        setLoading(false);
-        return;
-      }
-
-      if (!currentUser?.id) {
-        setLoading(false);
-        return;
-      }
-
-      setLoading(true);
-      const initPromises = [refreshWallet(), refreshTransactions(), refreshWithdrawalRequests()];
-      
-      const userRole = currentUser.role?.toLowerCase();
-      const isSupervisorRole = userRole === 'supervisor' || userRole === 'hubsupervisor' || userRole === 'fom';
-      const isAdmin = userRole === 'admin' || userRole === 'financialadmin';
-      
-      if (isSupervisorRole || isAdmin) {
-        initPromises.push(refreshSupervisedWithdrawalRequests());
-      }
-      
-      await Promise.all(initPromises);
-      setLoading(false);
-    };
-
-    initWallet();
-  }, [authReady, currentUser?.id]);
-
-  useEffect(() => {
-    calculateStats();
-  }, [wallet, transactions, withdrawalRequests]);
-
-  useEffect(() => {
-    if (!currentUser?.id) return;
+    if (!currentUser?.id || !userId) return;
 
     const userRole = currentUser.role?.toLowerCase();
     const isSupervisorRole = userRole === 'supervisor' || userRole === 'hubsupervisor' || userRole === 'fom';
@@ -1648,8 +1565,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
           filter: `user_id=eq.${currentUser.id}`,
         },
         () => {
-          console.log('[Wallet Realtime] Wallet updated');
-          refreshWallet();
+          queryClient.invalidateQueries({ queryKey: walletQueryKeys.wallet(userId) });
         }
       )
       .on(
@@ -1661,8 +1577,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
           filter: `user_id=eq.${currentUser.id}`,
         },
         () => {
-          console.log('[Wallet Realtime] Transactions updated');
-          refreshTransactions();
+          queryClient.invalidateQueries({ queryKey: walletQueryKeys.transactions(userId) });
         }
       )
       .on(
@@ -1674,15 +1589,11 @@ export function WalletProvider({ children }: { children: ReactNode }) {
           filter: `user_id=eq.${currentUser.id}`,
         },
         () => {
-          console.log('[Wallet Realtime] Withdrawal requests updated');
-          refreshWithdrawalRequests();
+          queryClient.invalidateQueries({ queryKey: walletQueryKeys.withdrawalRequests(userId) });
         }
       )
-      .subscribe((status) => {
-        console.log('[Wallet Realtime] Channel status:', status);
-      });
+      .subscribe();
 
-    // Supervisors/Admins: Subscribe to ALL withdrawal requests for real-time team updates
     let supervisorChannel: ReturnType<typeof supabase.channel> | null = null;
     if (isSupervisorRole || isAdmin) {
       supervisorChannel = supabase
@@ -1695,13 +1606,10 @@ export function WalletProvider({ children }: { children: ReactNode }) {
             table: 'withdrawal_requests',
           },
           () => {
-            console.log('[Wallet Realtime] Supervised withdrawal requests updated');
-            refreshSupervisedWithdrawalRequests();
+            queryClient.invalidateQueries({ queryKey: walletQueryKeys.supervisedWithdrawalRequests(userId) });
           }
         )
-        .subscribe((status) => {
-          console.log('[Wallet Realtime] Supervisor channel status:', status);
-        });
+        .subscribe();
     }
 
     return () => {
@@ -1710,7 +1618,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         supabase.removeChannel(supervisorChannel);
       }
     };
-  }, [currentUser?.id, currentUser?.role]);
+  }, [currentUser?.id, currentUser?.role, queryClient, userId]);
 
   return (
     <WalletContext.Provider

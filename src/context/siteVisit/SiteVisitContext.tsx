@@ -1,15 +1,17 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { SiteVisit, User } from '@/types';
+import { useQueryClient } from '@tanstack/react-query';
 import { useToast } from '@/hooks/use-toast';
 import { useUser } from '../user/UserContext';
 import { SiteVisitContextType } from './types';
 import { calculateOnTimeRate, calculateUserRating } from './utils';
 import { isUserNearSite, calculateUserWorkload, calculateDistance } from '@/utils/collectorUtils';
-import { fetchSiteVisits, createSiteVisitInDb, updateSiteVisitInDb, deleteSiteVisitInDb } from './supabase';
+import { createSiteVisitInDb, updateSiteVisitInDb, deleteSiteVisitInDb } from './supabase';
 import { useNotifications } from '../notifications/NotificationContext';
 import { useWallet } from '../wallet/WalletContext';
 import { supabase } from '@/integrations/supabase/client';
 import { NotificationTriggerService } from '@/services/NotificationTriggerService';
+import { useSiteVisitsQuery, siteVisitQueryKeys } from './siteVisitQueries';
 
 const SiteVisitContext = createContext<SiteVisitContextType | undefined>(undefined);
 
@@ -17,32 +19,28 @@ const SiteVisitContext = createContext<SiteVisitContextType | undefined>(undefin
 const pendingCompletions = new Set<string>();
 
 export const SiteVisitProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [appSiteVisits, setAppSiteVisits] = useState<SiteVisit[]>([]);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
   const { toast } = useToast();
   const { currentUser, users, updateUser } = useUser();
   const { addSiteVisitFeeToWallet } = useWallet();
-  
+
+  const siteVisitsQuery = useSiteVisitsQuery();
+  const appSiteVisits = siteVisitsQuery.data ?? [];
+  const loading = siteVisitsQuery.isLoading;
+
   const refreshSiteVisits = useCallback(async () => {
-    try {
-      setLoading(true);
-      const visits = await fetchSiteVisits();
-      setAppSiteVisits(visits);
-    } catch (error) {
-      console.error('Failed to load site visits:', error);
+    await queryClient.invalidateQueries({ queryKey: siteVisitQueryKeys.all });
+  }, [queryClient]);
+
+  useEffect(() => {
+    if (siteVisitsQuery.isError && siteVisitsQuery.error) {
       toast({
         title: "Error loading site visits",
         description: "Please try again.",
         variant: "destructive",
       });
-    } finally {
-      setLoading(false);
     }
-  }, [toast]);
-
-  useEffect(() => {
-    refreshSiteVisits();
-  }, [refreshSiteVisits]);
+  }, [siteVisitsQuery.isError, siteVisitsQuery.error, toast]);
 
   useEffect(() => {
     const channel = supabase
@@ -50,29 +48,19 @@ export const SiteVisitProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'mmp_site_entries' },
-        () => refreshSiteVisits()
+        () => queryClient.invalidateQueries({ queryKey: siteVisitQueryKeys.all })
       )
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'site_visits' },
-        () => refreshSiteVisits()
+        () => queryClient.invalidateQueries({ queryKey: siteVisitQueryKeys.all })
       )
-      .subscribe((status) => {
-        if (status === 'SUBSCRIBED') {
-          console.log('✅ Site visits real-time subscription active');
-        } else if (status === 'CHANNEL_ERROR') {
-          console.error('❌ Site visits real-time subscription error - Check if replication is enabled in Supabase');
-        } else if (status === 'TIMED_OUT') {
-          console.warn('⏱️ Site visits real-time subscription timed out');
-        } else {
-          console.log('Site visits subscription status:', status);
-        }
-      });
+      .subscribe();
 
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [refreshSiteVisits]);
+  }, [queryClient]);
 
   const createSiteVisit = async (siteVisitData: Partial<SiteVisit>): Promise<string | undefined> => {
     try {
@@ -91,7 +79,7 @@ export const SiteVisitProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         createdAt: now,
       });
 
-      setAppSiteVisits(prev => [...prev, newVisit]);
+      await refreshSiteVisits();
       
       try {
         const normalize = (v?: string) => (v ?? '').toString().trim().toLowerCase();
@@ -214,7 +202,7 @@ export const SiteVisitProvider: React.FC<{ children: React.ReactNode }> = ({ chi
             assignedAt: new Date().toISOString(),
           });
 
-          setAppSiteVisits(prev => prev.map(v => v.id === newVisit.id ? updatedVisit : v));
+          refreshSiteVisits();
 
           addNotification({
             userId: best.user.id,
@@ -242,7 +230,7 @@ export const SiteVisitProvider: React.FC<{ children: React.ReactNode }> = ({ chi
               assignedAt: new Date().toISOString(),
             });
 
-            setAppSiteVisits(prev => prev.map(v => v.id === newVisit.id ? updatedVisit : v));
+            refreshSiteVisits();
 
             addNotification({
               userId: bestState.user.id,
@@ -270,7 +258,7 @@ export const SiteVisitProvider: React.FC<{ children: React.ReactNode }> = ({ chi
                 assignedAt: new Date().toISOString(),
               });
 
-              setAppSiteVisits(prev => prev.map(v => v.id === newVisit.id ? updatedVisit : v));
+              refreshSiteVisits();
 
               addNotification({
                 userId: bestHub.user.id,
@@ -295,7 +283,7 @@ export const SiteVisitProvider: React.FC<{ children: React.ReactNode }> = ({ chi
                 assignedAt: new Date().toISOString(),
               });
 
-              setAppSiteVisits(prev => prev.map(v => v.id === newVisit.id ? updatedVisit : v));
+              refreshSiteVisits();
 
               addNotification({
                 userId: bestAny.user.id,
@@ -348,11 +336,7 @@ export const SiteVisitProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         },
       });
 
-      setAppSiteVisits(prev => 
-        prev.map(visit => 
-          visit.id === siteVisitId ? updatedVisit : visit
-        )
-      );
+      refreshSiteVisits();
 
       const managers = users.filter(u => 
         ['admin', 'ict', 'fom'].includes(u.role)
@@ -410,9 +394,7 @@ export const SiteVisitProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         assignedAt: new Date().toISOString(),
       });
 
-      setAppSiteVisits(prev => 
-        prev.map(v => v.id === siteVisitId ? updatedVisit : v)
-      );
+      refreshSiteVisits();
 
       // Notify the assignee with fee and payment schedule details
       addNotification({
@@ -465,14 +447,8 @@ export const SiteVisitProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         return false;
       }
 
-      setAppSiteVisits(prev => 
-        prev.map(v => 
-          v.id === siteVisitId ? {
-            ...v,
-            status: 'inProgress',
-          } : v
-        )
-      );
+      await updateSiteVisitInDb(siteVisitId, { status: 'inProgress' });
+      refreshSiteVisits();
 
       const supervisors = users.filter(u => u.role === 'supervisor');
       supervisors.forEach(supervisor => {
@@ -555,18 +531,6 @@ export const SiteVisitProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
       const now = new Date().toISOString();
 
-      setAppSiteVisits(prev => 
-        prev.map(v => 
-          v.id === siteVisitId ? {
-            ...v,
-            status: 'completed',
-            completedAt: now,
-            notes: data.notes || v.notes,
-            attachments: data.attachments || v.attachments,
-          } : v
-        )
-      );
-
       try {
         await updateSiteVisitInDb(siteVisitId, {
           status: 'completed',
@@ -577,7 +541,7 @@ export const SiteVisitProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       } catch (persistErr) {
         console.warn('Failed to persist completed status:', persistErr);
       }
-
+      refreshSiteVisits();
 
       const assignedUserId = siteVisit.assignedTo;
       const user = users.find(u => u.id === assignedUserId);
@@ -762,15 +726,8 @@ export const SiteVisitProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         return false;
       }
 
-      setAppSiteVisits(prev => 
-        prev.map(v => 
-          v.id === siteVisitId ? {
-            ...v,
-            rating: data.rating,
-            ratingNotes: data.notes,
-          } : v
-        )
-      );
+      await updateSiteVisitInDb(siteVisitId, { rating: data.rating, notes: data.notes });
+      refreshSiteVisits();
 
       const assignedUserId = siteVisit.assignedTo;
       const user = users.find(u => u.id === assignedUserId);
@@ -815,7 +772,7 @@ export const SiteVisitProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const deleteSiteVisit = async (siteVisitId: string): Promise<boolean> => {
     try {
       await deleteSiteVisitInDb(siteVisitId);
-      setAppSiteVisits(prev => prev.filter(v => v.id !== siteVisitId));
+      refreshSiteVisits();
       toast({
         title: "Site visit deleted",
         description: `The site visit has been removed.`,

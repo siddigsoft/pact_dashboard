@@ -1,9 +1,10 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { Project, ProjectActivity, SubActivity, ProjectTeamMember } from '@/types/project';
+import React, { createContext, useContext, useState, useCallback, useRef, useEffect } from 'react';
+import { Project, ProjectActivity, SubActivity } from '@/types/project';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { validateProject } from '@/utils/projectValidation';
 import { useRealtimeTables } from '@/hooks/useRealtimeResource';
+import { useProjectsQuery, useInvalidateProjectsQueries, mapDbProjectToProject, mapProjectToDbProject } from './projectQueries';
 
 interface ProjectContextProps {
   projects: Project[];
@@ -36,145 +37,36 @@ const ProjectContext = createContext<ProjectContextProps>({
 export const useProjectContext = () => useContext(ProjectContext);
 
 export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [currentProject, setCurrentProject] = useState<Project | null>(null);
   const { toast } = useToast();
+  const invalidateProjects = useInvalidateProjectsQueries();
+  const invalidateRef = useRef(invalidateProjects);
+  invalidateRef.current = invalidateProjects;
 
-  const mapDbProjectToProject = (dbProject: any): Project => {
-    return {
-      id: dbProject.id,
-      name: dbProject.name,
-      projectCode: dbProject.project_code,
-      description: dbProject.description,
-      projectType: dbProject.project_type,
-      status: dbProject.status,
-      startDate: dbProject.start_date,
-      endDate: dbProject.end_date,
-      budget: dbProject.budget,
-      location: dbProject.location,
-      team: dbProject.team,
-      activities: [],
-      createdAt: dbProject.created_at,
-      updatedAt: dbProject.updated_at,
-    };
-  };
-
-  const mapProjectToDbProject = (project: Project): any => {
-    return {
-      name: project.name,
-      project_code: project.projectCode,
-      description: project.description,
-      project_type: project.projectType,
-      status: project.status,
-      start_date: project.startDate,
-      end_date: project.endDate,
-      budget: project.budget,
-      location: project.location,
-      team: project.team,
-    };
-  };
-
-  const fetchProjects = useCallback(async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      
-      const { data: projectsData, error: projectsError } = await supabase
-        .from('projects')
-        .select(`
-          id,
-          name,
-          project_code,
-          description,
-          project_type,
-          status,
-          start_date,
-          end_date,
-          budget,
-          location,
-          team,
-          created_at,
-          updated_at,
-          project_activities (
-            id,
-            name,
-            description,
-            start_date,
-            end_date,
-            status,
-            is_active,
-            assigned_to,
-            sub_activities (
-              id,
-              name,
-              description,
-              status,
-              is_active,
-              due_date,
-              assigned_to
-            )
-          )
-        `);
-
-      if (projectsError) {
-        throw new Error(projectsError.message);
-      }
-
-      const formattedProjects: Project[] = (projectsData || []).map((dbProject: any) => {
-        const project = mapDbProjectToProject(dbProject);
-
-        const activities: ProjectActivity[] = (dbProject.project_activities || []).map((dbActivity: any) => {
-          const subActivities: SubActivity[] = (dbActivity.sub_activities || []).map((dbSub: any) => ({
-            id: dbSub.id,
-            name: dbSub.name,
-            description: dbSub.description,
-            status: dbSub.status,
-            isActive: dbSub.is_active,
-            dueDate: dbSub.due_date,
-            assignedTo: dbSub.assigned_to,
-          }));
-
-          return {
-            id: dbActivity.id,
-            name: dbActivity.name,
-            description: dbActivity.description,
-            startDate: dbActivity.start_date,
-            endDate: dbActivity.end_date,
-            status: dbActivity.status,
-            isActive: dbActivity.is_active,
-            assignedTo: dbActivity.assigned_to,
-            subActivities,
-          };
-        });
-
-        return { ...project, activities } as Project;
-      });
-
-      setProjects(formattedProjects);
-    } catch (err) {
-      console.error("Error fetching projects:", err);
-      setError(err instanceof Error ? err.message : 'Failed to fetch projects');
-      toast({
-        title: "Error",
-        description: "Failed to fetch projects. Please try again.",
-        variant: "destructive",
-      });
-    } finally {
-      setLoading(false);
-    }
-  }, [toast]);
+  const projectsQuery = useProjectsQuery(true);
+  const projects = projectsQuery.data ?? [];
+  const loading = projectsQuery.isLoading;
 
   useEffect(() => {
-    fetchProjects();
-  }, [fetchProjects]);
+    if (projectsQuery.isError && projectsQuery.error) {
+      setError(projectsQuery.error instanceof Error ? projectsQuery.error.message : 'Failed to fetch projects');
+      toast({ title: 'Error', description: 'Failed to fetch projects. Please try again.', variant: 'destructive' });
+    } else if (projectsQuery.data !== undefined && !projectsQuery.isError) {
+      setError(null);
+    }
+  }, [projectsQuery.isError, projectsQuery.error, projectsQuery.data, toast]);
 
-  useRealtimeTables(['projects', 'project_activities', 'sub_activities'], fetchProjects);
+  const fetchProjects = useCallback(async () => {
+    await invalidateProjects();
+  }, [invalidateProjects]);
+
+  useRealtimeTables(['projects', 'project_activities', 'sub_activities'], () => {
+    invalidateRef.current();
+  });
 
   const addProject = async (project: Project): Promise<Project | null> => {
     try {
-      setLoading(true);
       setError(null);
 
       const validationResult = validateProject(project);
@@ -182,7 +74,7 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
         throw new Error(validationResult.errors?.join('\n'));
       }
 
-      const dbProject = mapProjectToDbProject(project);
+      const dbProject = mapProjectToDbProject(project) as Record<string, unknown>;
       const { data, error } = await supabase
         .from('projects')
         .insert(dbProject)
@@ -197,10 +89,9 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
         throw new Error('No data returned from insert');
       }
       
-      // Map the returned data to a Project object
-      const createdProject = mapDbProjectToProject(data);
+      const createdProject = { ...mapDbProjectToProject(data), activities: [] } as Project;
       
-      await fetchProjects();
+      await invalidateProjects();
       
       toast({
         title: "Success",
@@ -218,14 +109,11 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
         variant: "destructive",
       });
       return null;
-    } finally {
-      setLoading(false);
     }
   };
 
   const updateProject = async (updatedProject: Project) => {
     try {
-      setLoading(true);
       setError(null);
 
       const validationResult = validateProject(updatedProject);
@@ -329,7 +217,7 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
         }
       }
       
-      await fetchProjects();
+      await invalidateProjects();
       
       if (currentProject?.id === updatedProject.id) {
         setCurrentProject(updatedProject);
@@ -348,8 +236,6 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
         description: err instanceof Error ? err.message : "Failed to update project",
         variant: "destructive",
       });
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -367,9 +253,7 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
         throw new Error(error.message);
       }
 
-      setProjects(prev => prev.map(p => 
-        p.id === projectId ? { ...p, team } : p
-      ));
+      await invalidateProjects();
       
       if (currentProject?.id === projectId) {
         setCurrentProject({ ...currentProject, team });
@@ -387,8 +271,6 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   const deleteProject = async (id: string) => {
     try {
-      setLoading(true);
-      
       const { error } = await supabase
         .from('projects')
         .delete()
@@ -398,7 +280,7 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
         throw new Error(error.message);
       }
       
-      setProjects(projects.filter(p => p.id !== id));
+      await invalidateProjects();
       
       if (currentProject?.id === id) {
         setCurrentProject(null);
@@ -417,8 +299,6 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
         description: "Failed to delete project. Please try again.",
         variant: "destructive",
       });
-    } finally {
-      setLoading(false);
     }
   };
 

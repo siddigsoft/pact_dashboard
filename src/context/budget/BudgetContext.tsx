@@ -1,9 +1,18 @@
-import { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
+import { createContext, useContext, useRef, useEffect, ReactNode, useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useUser } from '@/context/user/UserContext';
 import { ensureValidSession } from '@/lib/session-health';
 import { withTimeout } from '@/utils/promise-with-timeout';
+import {
+  useProjectBudgetsQuery,
+  useMMPBudgetsQuery,
+  useBudgetTransactionsQuery,
+  useBudgetAlertsQuery,
+  useInvalidateBudgetQueries,
+  transformProjectBudgetFromDB,
+  transformMMPBudgetFromDB,
+} from './budgetQueries';
 import type {
   ProjectBudget,
   MMPBudget,
@@ -50,176 +59,48 @@ interface BudgetContextType {
 
 const BudgetContext = createContext<BudgetContextType | undefined>(undefined);
 
-function transformProjectBudgetFromDB(data: any): ProjectBudget {
-  return {
-    id: data.id,
-    projectId: data.project_id,
-    totalBudgetCents: parseInt(data.total_budget_cents || 0),
-    allocatedBudgetCents: parseInt(data.allocated_budget_cents || 0),
-    spentBudgetCents: parseInt(data.spent_budget_cents || 0),
-    remainingBudgetCents: parseInt(data.remaining_budget_cents || 0),
-    budgetPeriod: data.budget_period,
-    periodStartDate: data.period_start_date,
-    periodEndDate: data.period_end_date,
-    categoryAllocations: data.category_allocations || {
-      site_visits: 0,
-      transportation: 0,
-      accommodation: 0,
-      meals: 0,
-      equipment: 0,
-      other: 0,
-    },
-    status: data.status,
-    approvedBy: data.approved_by,
-    approvedAt: data.approved_at,
-    fiscalYear: data.fiscal_year,
-    budgetNotes: data.budget_notes,
-    createdBy: data.created_by,
-    updatedBy: data.updated_by,
-    createdAt: data.created_at,
-    updatedAt: data.updated_at,
-  };
-}
-
-function transformMMPBudgetFromDB(data: any): MMPBudget {
-  return {
-    id: data.id,
-    mmpFileId: data.mmp_file_id,
-    projectBudgetId: data.project_budget_id,
-    allocatedBudgetCents: parseInt(data.allocated_budget_cents || 0),
-    spentBudgetCents: parseInt(data.spent_budget_cents || 0),
-    remainingBudgetCents: parseInt(data.remaining_budget_cents || 0),
-    totalSites: data.total_sites || 0,
-    budgetedSites: data.budgeted_sites || 0,
-    completedSites: data.completed_sites || 0,
-    averageCostPerSiteCents: parseInt(data.average_cost_per_site_cents || 0),
-    categoryBreakdown: data.category_breakdown || {
-      site_visit_fees: 0,
-      transportation: 0,
-      accommodation: 0,
-      meals: 0,
-      other: 0,
-    },
-    sourceType: data.source_type,
-    parentBudgetId: data.parent_budget_id,
-    status: data.status,
-    budgetNotes: data.budget_notes,
-    allocatedBy: data.allocated_by,
-    createdAt: data.created_at,
-    updatedAt: data.updated_at,
-  };
-}
-
-function transformBudgetTransactionFromDB(data: any): BudgetTransaction {
-  return {
-    id: data.id,
-    projectBudgetId: data.project_budget_id,
-    mmpBudgetId: data.mmp_budget_id,
-    siteVisitId: data.site_visit_id,
-    walletTransactionId: data.wallet_transaction_id,
-    transactionType: data.transaction_type,
-    amountCents: parseInt(data.amount_cents),
-    currency: data.currency,
-    category: data.category,
-    balanceBeforeCents: data.balance_before_cents ? parseInt(data.balance_before_cents) : undefined,
-    balanceAfterCents: data.balance_after_cents ? parseInt(data.balance_after_cents) : undefined,
-    description: data.description,
-    metadata: data.metadata,
-    referenceNumber: data.reference_number,
-    requiresApproval: data.requires_approval,
-    approvedBy: data.approved_by,
-    approvedAt: data.approved_at,
-    createdBy: data.created_by,
-    createdAt: data.created_at,
-  };
-}
-
-function transformBudgetAlertFromDB(data: any): BudgetAlert {
-  return {
-    id: data.id,
-    projectBudgetId: data.project_budget_id,
-    mmpBudgetId: data.mmp_budget_id,
-    alertType: data.alert_type,
-    severity: data.severity,
-    thresholdPercentage: data.threshold_percentage,
-    title: data.title,
-    message: data.message,
-    status: data.status,
-    acknowledgedBy: data.acknowledged_by,
-    acknowledgedAt: data.acknowledged_at,
-    metadata: data.metadata,
-    createdAt: data.created_at,
-    resolvedAt: data.resolved_at,
-  };
-}
-
 export function BudgetProvider({ children }: { children: ReactNode }) {
   const { currentUser } = useUser();
   const { toast } = useToast();
-  const [projectBudgets, setProjectBudgets] = useState<ProjectBudget[]>([]);
-  const [mmpBudgets, setMMPBudgets] = useState<MMPBudget[]>([]);
-  const [budgetTransactions, setBudgetTransactions] = useState<BudgetTransaction[]>([]);
-  const [budgetAlerts, setBudgetAlerts] = useState<BudgetAlert[]>([]);
-  const [stats, setStats] = useState<BudgetStats | null>(null);
-  const [loading, setLoading] = useState(true);
+  const invalidate = useInvalidateBudgetQueries();
 
-  const refreshProjectBudgets = useCallback(async () => {
-    try {
-      const { data, error } = await supabase
-        .from('project_budgets')
-        .select('*')
-        .order('created_at', { ascending: false });
+  const projectBudgetsQuery = useProjectBudgetsQuery(!!currentUser);
+  const mmpBudgetsQuery = useMMPBudgetsQuery(!!currentUser);
+  const transactionsQuery = useBudgetTransactionsQuery(!!currentUser);
+  const alertsQuery = useBudgetAlertsQuery(!!currentUser);
 
-      if (error) throw error;
-      setProjectBudgets((data || []).map(transformProjectBudgetFromDB));
-    } catch (error: any) {
-      console.error('Failed to fetch project budgets:', error);
-    }
-  }, []);
+  const projectBudgets = projectBudgetsQuery.data ?? [];
+  const mmpBudgets = mmpBudgetsQuery.data ?? [];
+  const budgetTransactions = transactionsQuery.data ?? [];
+  const budgetAlerts = alertsQuery.data ?? [];
 
-  const refreshMMPBudgets = useCallback(async () => {
-    try {
-      const { data, error } = await supabase
-        .from('mmp_budgets')
-        .select('*')
-        .order('created_at', { ascending: false });
+  const loading = projectBudgetsQuery.isLoading || mmpBudgetsQuery.isLoading ||
+    transactionsQuery.isLoading || alertsQuery.isLoading;
 
-      if (error) throw error;
-      setMMPBudgets((data || []).map(transformMMPBudgetFromDB));
-    } catch (error: any) {
-      console.error('Failed to fetch MMP budgets:', error);
-    }
-  }, []);
+  const stats: BudgetStats | null = useMemo(() => {
+    const totalBudget = projectBudgets.reduce((sum, b) => sum + b.totalBudgetCents, 0);
+    const totalAllocated = projectBudgets.reduce((sum, b) => sum + b.allocatedBudgetCents, 0);
+    const totalSpent = projectBudgets.reduce((sum, b) => sum + b.spentBudgetCents, 0);
+    const totalRemaining = projectBudgets.reduce((sum, b) => sum + b.remainingBudgetCents, 0);
+    return {
+      totalBudget: totalBudget / 100,
+      totalAllocated: totalAllocated / 100,
+      totalSpent: totalSpent / 100,
+      totalRemaining: totalRemaining / 100,
+      utilizationRate: totalBudget > 0 ? (totalSpent / totalBudget) * 100 : 0,
+      averageCostPerSite: mmpBudgets.length > 0 ? mmpBudgets.reduce((sum, b) => sum + b.averageCostPerSiteCents, 0) / mmpBudgets.length / 100 : 0,
+      projectedOverspend: 0,
+      burnRate: 0,
+    };
+  }, [projectBudgets, mmpBudgets]);
 
-  const refreshBudgetTransactions = useCallback(async () => {
-    try {
-      const { data, error } = await supabase
-        .from('budget_transactions')
-        .select('*')
-        .order('created_at', { ascending: false })
-        .limit(100);
+  const invalidateRef = useRef(invalidate);
+  invalidateRef.current = invalidate;
 
-      if (error) throw error;
-      setBudgetTransactions((data || []).map(transformBudgetTransactionFromDB));
-    } catch (error: any) {
-      console.error('Failed to fetch budget transactions:', error);
-    }
-  }, []);
-
-  const refreshBudgetAlerts = useCallback(async () => {
-    try {
-      const { data, error } = await supabase
-        .from('budget_alerts')
-        .select('*')
-        .eq('status', 'active')
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
-      setBudgetAlerts((data || []).map(transformBudgetAlertFromDB));
-    } catch (error: any) {
-      console.error('Failed to fetch budget alerts:', error);
-    }
-  }, []);
+  const refreshProjectBudgets = async () => invalidate.invalidateProjectBudgets();
+  const refreshMMPBudgets = async () => invalidate.invalidateMMPBudgets();
+  const refreshBudgetTransactions = async () => invalidate.invalidateTransactions();
+  const refreshBudgetAlerts = async () => invalidate.invalidateAlerts();
 
   const createProjectBudget = async (input: CreateProjectBudgetInput): Promise<ProjectBudget | null> => {
     const session = await ensureValidSession();
@@ -713,32 +594,21 @@ export function BudgetProvider({ children }: { children: ReactNode }) {
   };
 
   useEffect(() => {
-    if (currentUser) {
-      Promise.all([
-        refreshProjectBudgets(),
-        refreshMMPBudgets(),
-        refreshBudgetTransactions(),
-        refreshBudgetAlerts(),
-      ]).finally(() => setLoading(false));
-    }
-  }, [currentUser, refreshProjectBudgets, refreshMMPBudgets, refreshBudgetTransactions, refreshBudgetAlerts]);
-
-  useEffect(() => {
     if (!currentUser) return;
 
     const channel = supabase
       .channel('budget_changes')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'project_budgets' }, () => {
-        refreshProjectBudgets();
+        invalidateRef.current.invalidateProjectBudgets();
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'mmp_budgets' }, () => {
-        refreshMMPBudgets();
+        invalidateRef.current.invalidateMMPBudgets();
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'budget_transactions' }, () => {
-        refreshBudgetTransactions();
+        invalidateRef.current.invalidateTransactions();
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'budget_alerts' }, () => {
-        refreshBudgetAlerts();
+        invalidateRef.current.invalidateAlerts();
       });
 
     channel.subscribe((status) => {
@@ -756,25 +626,7 @@ export function BudgetProvider({ children }: { children: ReactNode }) {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [currentUser, refreshProjectBudgets, refreshMMPBudgets, refreshBudgetTransactions, refreshBudgetAlerts]);
-
-  useEffect(() => {
-    const totalBudget = projectBudgets.reduce((sum, b) => sum + b.totalBudgetCents, 0);
-    const totalAllocated = projectBudgets.reduce((sum, b) => sum + b.allocatedBudgetCents, 0);
-    const totalSpent = projectBudgets.reduce((sum, b) => sum + b.spentBudgetCents, 0);
-    const totalRemaining = projectBudgets.reduce((sum, b) => sum + b.remainingBudgetCents, 0);
-
-    setStats({
-      totalBudget: totalBudget / 100,
-      totalAllocated: totalAllocated / 100,
-      totalSpent: totalSpent / 100,
-      totalRemaining: totalRemaining / 100,
-      utilizationRate: totalBudget > 0 ? (totalSpent / totalBudget) * 100 : 0,
-      averageCostPerSite: mmpBudgets.length > 0 ? mmpBudgets.reduce((sum, b) => sum + b.averageCostPerSiteCents, 0) / mmpBudgets.length / 100 : 0,
-      projectedOverspend: 0,
-      burnRate: 0,
-    });
-  }, [projectBudgets, mmpBudgets]);
+  }, [currentUser]);
 
   const value: BudgetContextType = {
     projectBudgets,
