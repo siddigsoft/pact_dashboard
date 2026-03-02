@@ -833,7 +833,12 @@ export default function StaffDirectory() {
      scroll position between page navigations, which can hide the blue header. */
   const pageTopRef = useRef<HTMLDivElement>(null);
   useLayoutEffect(() => {
-    pageTopRef.current?.scrollIntoView({ behavior: 'instant', block: 'start' });
+    let el = pageTopRef.current?.parentElement;
+    while (el) {
+      const ov = window.getComputedStyle(el).overflowY;
+      if (ov === 'auto' || ov === 'scroll') { el.scrollTop = 0; break; }
+      el = el.parentElement;
+    }
   }, []);
 
   /* ── Financial summary state ── */
