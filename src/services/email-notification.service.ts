@@ -8,6 +8,7 @@
 
 import { supabase } from '@/integrations/supabase/client';
 import { logEmailSend } from '@/utils/audit-logger';
+import { PACT_LOGO_B64 } from './pact-logo-b64';
 
 // Base URL for links in emails
 const APP_URL = 'https://app.pactorg.com';
@@ -88,119 +89,124 @@ const generateNotificationEmailHTML = (
   options: NotificationEmailOptions
 ): string => {
   const { title, message, titleAr, messageAr, type = 'info', actionUrl, actionLabel, details, recipientRole } = options;
-  
-  const typeColors: Record<string, { bg: string; border: string }> = {
-    info: { bg: '#e3f2fd', border: '#2196f3' },
-    success: { bg: '#e8f5e9', border: '#4caf50' },
-    warning: { bg: '#fff3e0', border: '#ff9800' },
-    error: { bg: '#ffebee', border: '#f44336' },
+
+  const typeColors: Record<string, { bg: string; border: string; accent: string }> = {
+    info:    { bg: '#EEF4FF', border: '#3B82F6', accent: '#1D4ED8' },
+    success: { bg: '#ECFDF5', border: '#10B981', accent: '#065F46' },
+    warning: { bg: '#FFFBEB', border: '#F59E0B', accent: '#92400E' },
+    error:   { bg: '#FEF2F2', border: '#EF4444', accent: '#991B1B' },
   };
-  
-  const colors = typeColors[type];
+
+  const colors = typeColors[type] || typeColors.info;
   const fullUrl = actionUrl ? (actionUrl.startsWith('http') ? actionUrl : APP_URL + actionUrl) : '';
-  
-  // Role-based greeting
+
   const roleEn = recipientRole?.en || '';
   const roleAr = recipientRole?.ar || '';
-  const greetingEn = roleEn ? `Dear ${recipientName} (${roleEn}),` : `Hello ${recipientName},`;
-  const greetingAr = roleAr ? `عزيزي ${recipientName} (${roleAr})،` : `مرحباً ${recipientName}،`;
-  
-  // Arabic content (use provided or fallback)
+  const greetingEn = `Dear ${recipientName}${roleEn ? ` (${roleEn})` : ''},`;
+  const greetingAr = `عزيزي ${recipientName}${roleAr ? ` (${roleAr})` : ''}،`;
+
   const titleArText = titleAr || title;
   const messageArText = messageAr || message;
-  
+
   const detailsHtml = details?.length ? `
-    <div style="background-color: ${colors.bg}; border-left: 4px solid ${colors.border}; border-radius: 4px; padding: 16px; margin: 20px 0;">
-      ${details.map(d => `<p style="margin: 5px 0;"><strong>${d.label}:</strong> ${d.value}</p>`).join('')}
-    </div>
+    <table style="width:100%; border-collapse:collapse; margin:18px 0; font-size:13.5px;">
+      ${details.map((d, i) => `
+        <tr style="background:${i % 2 === 0 ? '#F8FAFC' : '#FFFFFF'};">
+          <td style="padding:9px 12px; font-weight:600; color:#374151; width:42%; border:1px solid #E5E7EB;">${d.label}</td>
+          <td style="padding:9px 12px; color:#1F2937; border:1px solid #E5E7EB;">${d.value}</td>
+        </tr>`).join('')}
+    </table>
   ` : '';
-  
+
   const actionButton = fullUrl ? `
-    <div style="text-align: center; margin: 25px 0;">
-      <a href="${fullUrl}" 
-         style="display: inline-block; padding: 14px 30px; background-color: #9b87f5; color: white; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 16px;">
-        ${actionLabel || 'View Details'} | عرض التفاصيل
+    <div style="text-align:center; margin:28px 0;">
+      <a href="${fullUrl}"
+         style="display:inline-block; padding:13px 32px; background-color:#0F2041; color:#ffffff; text-decoration:none; border-radius:6px; font-weight:700; font-size:15px; letter-spacing:0.3px;">
+        ${actionLabel || 'View Details'} &nbsp;|&nbsp; عرض التفاصيل
       </a>
     </div>
   ` : '';
-  
-  // Role notice for footer
-  const roleNoticeEn = roleEn 
-    ? `You are receiving this notification as a ${roleEn}.`
-    : 'You are receiving this notification as part of the PACT team.';
-  const roleNoticeAr = roleAr
-    ? `أنت تتلقى هذا الإشعار بصفتك ${roleAr}.`
-    : 'أنت تتلقى هذا الإشعار كجزء من فريق باكت.';
 
-  return `
-    <!DOCTYPE html>
-    <html dir="ltr">
-    <head>
-      <meta charset="utf-8">
-      <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <title>${title} | ${titleArText}</title>
-    </head>
-    <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f5f5f5;">
-      <div style="background-color: white; border-radius: 8px; padding: 40px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
-        <div style="text-align: center; margin-bottom: 30px; border-bottom: 2px solid ${colors.border}; padding-bottom: 20px;">
-          <h1 style="color: #1a1a2e; margin: 0; font-size: 24px;">PACT Command Center</h1>
-          <p style="color: #666; margin: 5px 0 0 0; font-size: 14px;">مركز قيادة باكت</p>
-        </div>
-        
-        <!-- English Section -->
-        <div style="margin-bottom: 25px; padding-bottom: 25px; border-bottom: 1px solid #eee;">
-          <p style="color: #333; font-size: 16px; line-height: 1.5;">${greetingEn}</p>
-          
-          ${detailsHtml || `
-          <div style="background-color: ${colors.bg}; border-left: 4px solid ${colors.border}; border-radius: 4px; padding: 16px; margin: 20px 0;">
-            <h2 style="color: #333; margin: 0 0 10px 0; font-size: 18px;">${title}</h2>
-            <p style="color: #555; margin: 0; font-size: 14px; line-height: 1.5;">${message}</p>
-          </div>
-          `}
-          
-          ${!detailsHtml ? '' : `<p style="color: #555; font-size: 14px; line-height: 1.5;">${message}</p>`}
-        </div>
-        
-        <!-- Arabic Section -->
-        <div dir="rtl" style="margin-top: 25px; padding-top: 25px; border-top: 1px solid #eee; text-align: right;">
-          <p style="color: #333; font-size: 16px; line-height: 1.8;">${greetingAr}</p>
-          
-          <div style="background-color: ${colors.bg}; border-right: 4px solid ${colors.border}; border-radius: 4px; padding: 16px; margin: 20px 0;">
-            <h2 style="color: #333; margin: 0 0 10px 0; font-size: 18px;">${titleArText}</h2>
-            <p style="color: #555; margin: 0; font-size: 14px; line-height: 1.8;">${messageArText}</p>
-          </div>
-        </div>
-        
-        ${actionButton}
-        
-        <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;">
-        
-        <!-- Role Notice -->
-        <p style="color: #666; font-size: 12px; text-align: center; margin-bottom: 15px;">
-          ${roleNoticeEn}<br>
-          <span style="direction: rtl; display: inline-block;">${roleNoticeAr}</span>
-        </p>
-        
-        <!-- Management Oversight Notice -->
-        <div style="background-color: #f8f9fa; border-radius: 6px; padding: 12px; margin-bottom: 20px;">
-          <p style="color: #555; font-size: 11px; text-align: center; margin: 0; line-height: 1.6;">
-            This notification has been sent to relevant management for oversight and accountability.<br>
-            <span style="direction: rtl; display: inline-block;">تم إرسال هذا الإشعار إلى الإدارة المعنية للإشراف والمساءلة.</span>
-          </p>
-        </div>
-        
-        <!-- Platform Footer -->
-        <p style="color: #999; font-size: 12px; text-align: center;">
-          This is an automated message from PACT Workflow Platform.<br>
-          هذه رسالة آلية من منصة باكت للعمليات الميدانية.<br>
-          ICT Team - PACT Command Center Platform<br>
-          فريق تكنولوجيا المعلومات - منصة مركز قيادة باكت
-        </p>
-      </div>
-    </body>
-    </html>
-  `;
+  return `<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${title}</title>
+</head>
+<body style="margin:0; padding:0; background-color:#F3F4F6; font-family:'Segoe UI', Arial, sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#F3F4F6; padding:32px 16px;">
+    <tr><td align="center">
+      <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px; width:100%; background:#FFFFFF; border-radius:10px; overflow:hidden; box-shadow:0 2px 12px rgba(0,0,0,0.09);">
+
+        <!-- Header bar -->
+        <tr>
+          <td style="background:#0F2041; padding:22px 36px 18px 36px;">
+            <p style="margin:0; font-size:22px; font-weight:800; color:#FFFFFF; letter-spacing:0.5px;">PACT Command Center</p>
+            <p style="margin:4px 0 0 0; font-size:12px; color:#8FADD4; letter-spacing:0.3px;">مركز قيادة باكت &nbsp;|&nbsp; ICT Team Platform</p>
+          </td>
+        </tr>
+
+        <!-- Accent line -->
+        <tr><td style="height:4px; background:linear-gradient(90deg,#2962FF,#00C6FF);"></td></tr>
+
+        <!-- Body -->
+        <tr>
+          <td style="padding:36px 36px 28px 36px;">
+
+            <!-- Greeting -->
+            <p style="margin:0 0 6px 0; font-size:16px; color:#111827;">${greetingEn}</p>
+
+            <!-- Subject line -->
+            <h2 style="margin:18px 0 10px 0; font-size:20px; font-weight:700; color:#0F2041; line-height:1.3;">${title}</h2>
+
+            <!-- Message body -->
+            <p style="margin:0 0 18px 0; font-size:14.5px; color:#374151; line-height:1.7;">${message.replace(/\n/g, '<br>')}</p>
+
+            ${detailsHtml}
+
+            ${actionButton}
+
+            <!-- Divider -->
+            <hr style="border:none; border-top:1px solid #E5E7EB; margin:28px 0 20px 0;">
+
+            <!-- Arabic section -->
+            <div dir="rtl" style="text-align:right;">
+              <p style="margin:0 0 6px 0; font-size:15px; color:#111827;">${greetingAr}</p>
+              <h3 style="margin:14px 0 8px 0; font-size:17px; font-weight:700; color:#0F2041;">${titleArText}</h3>
+              <p style="margin:0; font-size:14px; color:#374151; line-height:1.8;">${messageArText.replace(/\n/g, '<br>')}</p>
+            </div>
+
+            <!-- Divider -->
+            <hr style="border:none; border-top:1px solid #E5E7EB; margin:28px 0 20px 0;">
+
+            <!-- Sign-off -->
+            <p style="margin:0 0 4px 0; font-size:14px; color:#374151;">Kind regards,</p>
+            <p style="margin:0 0 2px 0; font-size:15px; font-weight:700; color:#0F2041;">PACT Command Center</p>
+            <p style="margin:0; font-size:13px; color:#6B7280;">ICT Team &nbsp;|&nbsp; فريق تكنولوجيا المعلومات</p>
+            <p style="margin:6px 0 0 0; font-size:12px; color:#9CA3AF; font-style:italic;">On behalf of the PACT Operations Team &nbsp;|&nbsp; نيابةً عن فريق عمليات باكت</p>
+
+          </td>
+        </tr>
+
+        <!-- Footer -->
+        <tr>
+          <td style="background:#F8FAFC; border-top:1px solid #E5E7EB; padding:14px 36px; text-align:center;">
+            <p style="margin:0; font-size:11px; color:#9CA3AF; line-height:1.6;">
+              This is an automated notification from the PACT Command Center Platform.<br>
+              هذه رسالة آلية من منصة مركز قيادة باكت &nbsp;|&nbsp; <strong>PACT Platform v2</strong>
+            </p>
+          </td>
+        </tr>
+
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`;
 };
+
+export { generateNotificationEmailHTML, buildEnhancedPaymentEmailHTML };
 
 const generatePlainText = (
   recipientName: string,
@@ -240,6 +246,285 @@ const generatePlainText = (
   text += '\n\n---\nPACT Workflow Platform | منصة باكت';
   return text;
 };
+
+// ── Enhanced payment/advance email template ──────────────────────────────────
+function buildEnhancedPaymentEmailHTML(d: {
+  recipientName: string;
+  approverName: string;
+  requestId: string;
+  groupLabel: string;
+  mmpLabel: string;
+  totalAmount: number;
+  count: number;
+  date: string;
+  project: string;
+  actionUrl: string;
+  fundingType: string;
+  category: string;
+  isBulk: boolean;
+  currency: string;
+  usdRate?: number;
+}): string {
+  const fmt = (n: number) => `${d.currency} ${n.toLocaleString()}`;
+  const totalUsd = d.usdRate && d.usdRate > 0 ? d.totalAmount / d.usdRate : null;
+  const fundingLabel = d.fundingType === 'advance' ? 'Advance Request' : d.fundingType === 'operational_cost' ? 'Operational Cost Submission' : 'Reimbursement';
+  const fundingLabelAr = d.fundingType === 'advance' ? 'طلب سلفة' : d.fundingType === 'operational_cost' ? 'تقديم تكاليف تشغيلية' : 'طلب تعويض';
+  const showPriorityRibbon = d.fundingType === 'advance';
+  const ribbonBg = '#B45309';
+  const fullActionUrl = d.actionUrl.startsWith('http') ? d.actionUrl : APP_URL + d.actionUrl;
+
+  return `<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1.0">
+  <title>Payment Request — ${d.requestId}</title>
+</head>
+<body style="margin:0;padding:0;background:#EAECF0;font-family:Georgia,'Times New Roman',Times,serif;">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#EAECF0;padding:32px 16px;">
+<tr><td align="center">
+<table width="100%" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:#FFFFFF;border-radius:10px;overflow:hidden;box-shadow:0 6px 32px rgba(0,0,0,0.13);">
+
+  <!-- LETTERHEAD HEADER -->
+  <tr>
+    <td style="background:#0F2041;padding:0;">
+      <table width="100%" cellpadding="0" cellspacing="0">
+        <tr>
+          <td style="padding:26px 36px 22px;">
+            <table cellpadding="0" cellspacing="0">
+              <tr>
+                <td style="vertical-align:middle;padding-right:14px;">
+                  <table cellpadding="0" cellspacing="0" style="background:#E87722;border-radius:10px;width:44px;height:44px;">
+                    <tr><td align="center" valign="middle" style="padding:0;">
+                      <span style="font-size:18px;font-weight:900;color:#FFFFFF;font-family:Arial,Helvetica,sans-serif;letter-spacing:-0.5px;line-height:1;display:block;padding:12px 0;">P</span>
+                    </td></tr>
+                  </table>
+                </td>
+                <td style="vertical-align:middle;">
+                  <p style="margin:0;font-size:26px;font-weight:900;color:#FFFFFF;letter-spacing:0.5px;line-height:1;font-family:Arial,Helvetica,sans-serif;">PACT</p>
+                  <p style="margin:3px 0 0 0;font-size:10.5px;color:#7FA5CC;letter-spacing:2px;text-transform:uppercase;font-family:Arial,Helvetica,sans-serif;">Command Center &nbsp;·&nbsp; Field Operations Platform</p>
+                </td>
+              </tr>
+            </table>
+          </td>
+          <td style="padding:22px 36px 22px;text-align:right;vertical-align:top;">
+            <table cellpadding="0" cellspacing="0" style="margin-left:auto;">
+              <tr><td style="padding:2px 0;font-size:10px;color:#8FADD4;white-space:nowrap;">
+                <span style="color:#BFD3F0;font-weight:600;">Ref No:&nbsp;</span>${d.requestId}
+              </td></tr>
+              <tr><td style="padding:2px 0;font-size:10px;color:#8FADD4;white-space:nowrap;">
+                <span style="color:#BFD3F0;font-weight:600;">Date:&nbsp;</span>${d.date}
+              </td></tr>
+              <tr><td style="padding:2px 0;font-size:10px;white-space:nowrap;">
+                <span style="color:#BFD3F0;font-weight:600;">Priority:&nbsp;</span>
+                <span style="color:${showPriorityRibbon ? '#FCD34D' : '#93C5FD'};font-weight:700;">&#9679; ${showPriorityRibbon ? 'HIGH' : 'NORMAL'}</span>
+              </td></tr>
+            </table>
+          </td>
+        </tr>
+      </table>
+    </td>
+  </tr>
+
+  ${showPriorityRibbon ? `<!-- PRIORITY RIBBON -->
+  <tr>
+    <td style="background:${ribbonBg};padding:9px 36px;text-align:center;">
+      <p style="margin:0;font-size:11.5px;font-weight:700;color:#FFFFFF;letter-spacing:1.2px;text-transform:uppercase;">
+        &#9888;&nbsp; HIGH PRIORITY — PAYMENT AUTHORIZATION REQUIRED &nbsp;|&nbsp; أولوية عالية — مطلوب تفويض الدفع
+      </p>
+    </td>
+  </tr>` : ''}
+
+  <!-- BLUE ACCENT LINE -->
+  <tr><td style="height:3px;background:linear-gradient(90deg,#2962FF,#00C6FF);"></td></tr>
+
+  <!-- BODY -->
+  <tr>
+    <td style="padding:38px 36px 32px;">
+
+      <p style="margin:0 0 6px 0;font-size:10px;color:#6B7280;text-transform:uppercase;letter-spacing:1.5px;font-weight:700;font-family:Arial,Helvetica,sans-serif;">Official Payment Request &nbsp;/&nbsp; طلب دفع رسمي</p>
+      <p style="margin:0 0 24px 0;font-size:16px;color:#111827;font-family:Georgia,'Times New Roman',Times,serif;">Dear <strong>${d.recipientName}</strong>,</p>
+
+      <!-- FINANCIAL HIGHLIGHT CARD -->
+      <table width="100%" cellpadding="0" cellspacing="0" style="background:#F0F4FF;border:2px solid #2962FF;border-radius:8px;margin-bottom:26px;overflow:hidden;">
+        <tr>
+          <td style="padding:20px;border-right:1px solid #C7D7FF;text-align:center;width:34%;">
+            <p style="margin:0;font-size:10px;color:#2962FF;text-transform:uppercase;letter-spacing:1px;font-weight:700;">Total ${d.fundingType === 'advance' ? 'Approved' : 'Requested'}</p>
+            <p style="margin:8px 0 2px 0;font-size:20px;font-weight:900;color:#0F2041;line-height:1;">${fmt(d.totalAmount)}</p>
+            <p style="margin:0;font-size:9px;color:#6B7280;">المبلغ الإجمالي ${d.fundingType === 'advance' ? 'المعتمد' : 'المطلوب'}</p>
+          </td>
+          <td style="padding:20px;border-right:1px solid #C7D7FF;text-align:center;width:33%;">
+            <p style="margin:0;font-size:10px;color:#2962FF;text-transform:uppercase;letter-spacing:1px;font-weight:700;">Requests</p>
+            <p style="margin:8px 0 2px 0;font-size:28px;font-weight:900;color:#0F2041;line-height:1;">${d.count}</p>
+            <p style="margin:0;font-size:9px;color:#6B7280;">عدد الطلبات</p>
+          </td>
+          <td style="padding:20px;text-align:center;width:33%;">
+            <p style="margin:0;font-size:10px;color:#2962FF;text-transform:uppercase;letter-spacing:1px;font-weight:700;">Group</p>
+            <p style="margin:8px 0 2px 0;font-size:14px;font-weight:800;color:#0F2041;line-height:1.2;">${d.groupLabel}</p>
+            <p style="margin:0;font-size:9px;color:#6B7280;">المجموعة</p>
+          </td>
+        </tr>
+      </table>
+
+      <!-- INSTRUCTION -->
+      <p style="margin:0 0 18px 0;font-size:13.5px;color:#1F2937;line-height:1.8;font-family:Georgia,'Times New Roman',Times,serif;">
+        ${d.isBulk
+          ? d.fundingType === 'operational_cost'
+            ? `Please find the attached report containing <strong>${d.count} approved operational cost submission${d.count !== 1 ? 's' : ''}</strong>. Kindly review the details, authorize the payments, and confirm disbursement at your earliest convenience.`
+            : `Please find the attached report containing <strong>${d.count} approved transportation advance request${d.count !== 1 ? 's' : ''}</strong> from <strong>${d.mmpLabel}</strong>. Kindly review the details, authorize the disbursements, and confirm receipt at your earliest convenience.`
+          : d.fundingType === 'operational_cost'
+            ? `An operational cost submission has been fully approved and is ready for payment processing. Kindly review the details below and process the payment at your earliest convenience.`
+            : `A transportation advance request has been fully approved and is ready for payment processing. Kindly review the details below and process the disbursement at your earliest convenience.`
+        }
+      </p>
+
+      <!-- DETAILS TABLE -->
+      <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin:0 0 18px 0;font-size:12.5px;border-radius:6px;overflow:hidden;border:1px solid #D1D5DB;font-family:Arial,Helvetica,sans-serif;">
+        <tr style="background:#0F2041;">
+          <td style="padding:6px 12px;color:#FFFFFF;font-weight:700;font-size:11px;letter-spacing:0.5px;text-transform:uppercase;width:40%;line-height:1.2;">Field / الحقل</td>
+          <td style="padding:6px 12px;color:#FFFFFF;font-weight:700;font-size:11px;letter-spacing:0.5px;text-transform:uppercase;line-height:1.2;">Detail / التفصيل</td>
+        </tr>
+        <tr style="background:#F8FAFC;">
+          <td style="padding:5px 12px;font-weight:600;color:#4B5563;border-bottom:1px solid #E5E7EB;border-right:1px solid #E5E7EB;font-size:12.5px;line-height:1.3;">Reference No / رقم المرجع</td>
+          <td style="padding:5px 12px;color:#111827;border-bottom:1px solid #E5E7EB;font-size:12.5px;line-height:1.3;">${d.requestId}</td>
+        </tr>
+        <tr style="background:#FFFFFF;">
+          <td style="padding:5px 12px;font-weight:600;color:#4B5563;border-bottom:1px solid #E5E7EB;border-right:1px solid #E5E7EB;font-size:12.5px;line-height:1.3;">MMP / الخطة الشهرية</td>
+          <td style="padding:5px 12px;color:#0F2041;border-bottom:1px solid #E5E7EB;font-weight:700;font-size:14px;line-height:1.3;">${d.mmpLabel}</td>
+        </tr>
+        <tr style="background:#F8FAFC;">
+          <td style="padding:5px 12px;font-weight:600;color:#4B5563;border-bottom:1px solid #E5E7EB;border-right:1px solid #E5E7EB;font-size:12.5px;line-height:1.3;">Type / النوع</td>
+          <td style="padding:5px 12px;color:#111827;border-bottom:1px solid #E5E7EB;font-size:12.5px;line-height:1.3;">${fundingLabel} / ${fundingLabelAr}</td>
+        </tr>
+        <tr style="background:#FFFFFF;">
+          <td style="padding:5px 12px;font-weight:600;color:#4B5563;border-bottom:1px solid #E5E7EB;border-right:1px solid #E5E7EB;font-size:12.5px;line-height:1.3;">Category / الفئة</td>
+          <td style="padding:5px 12px;color:#111827;border-bottom:1px solid #E5E7EB;font-size:12.5px;line-height:1.3;">${d.category}</td>
+        </tr>
+        <tr style="background:#F8FAFC;">
+          <td style="padding:5px 12px;font-weight:600;color:#4B5563;border-bottom:1px solid #E5E7EB;border-right:1px solid #E5E7EB;font-size:12.5px;line-height:1.3;">Total Amount / المبلغ الإجمالي</td>
+          <td style="padding:5px 12px;color:#065F46;font-weight:700;border-bottom:1px solid #E5E7EB;font-size:14px;line-height:1.3;">${fmt(d.totalAmount)}</td>
+        </tr>
+        ${totalUsd !== null ? `<tr style="background:#FFFFFF;">
+          <td style="padding:5px 12px;font-weight:600;color:#4B5563;border-bottom:1px solid #E5E7EB;border-right:1px solid #E5E7EB;font-size:12.5px;line-height:1.3;">USD Equivalent / المعادل بالدولار<br><span style="font-weight:400;font-size:11px;color:#9CA3AF;">Rate: 1 USD = ${d.usdRate?.toLocaleString()} ${d.currency}</span></td>
+          <td style="padding:5px 12px;color:#1D4ED8;font-weight:700;border-bottom:1px solid #E5E7EB;font-size:14px;line-height:1.3;">USD ${totalUsd.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+        </tr>` : ''}
+        <tr style="background:${totalUsd !== null ? '#F8FAFC' : '#FFFFFF'};">
+          <td style="padding:5px 12px;font-weight:600;color:#4B5563;border-bottom:1px solid #E5E7EB;border-right:1px solid #E5E7EB;font-size:12.5px;line-height:1.3;">Project / المشروع</td>
+          <td style="padding:5px 12px;color:#111827;border-bottom:1px solid #E5E7EB;font-size:12.5px;line-height:1.3;">${d.project}</td>
+        </tr>
+        <tr style="background:#F8FAFC;">
+          <td style="padding:5px 12px;font-weight:600;color:#4B5563;border-right:1px solid #E5E7EB;font-size:12.5px;line-height:1.3;">Approved By / تمت الموافقة من</td>
+          <td style="padding:5px 12px;color:#111827;font-size:12.5px;line-height:1.3;">${d.approverName}</td>
+        </tr>
+      </table>
+
+      <!-- ACTION BUTTONS -->
+      <table width="100%" cellpadding="0" cellspacing="0" style="margin:20px 0 24px 0;">
+        <tr>
+          <td style="padding:0 5px 0 0;width:50%;">
+            <a href="${fullActionUrl}" style="display:block;padding:12px 16px;background:#0F2041;color:#FFFFFF;text-decoration:none;border-radius:6px;font-weight:700;font-size:13px;text-align:center;line-height:1.35;">
+              View &amp; Process Payment
+              <span style="display:block;font-size:11px;font-weight:400;opacity:0.85;margin-top:2px;">عرض ومعالجة الدفع</span>
+            </a>
+          </td>
+          <td style="padding:0 0 0 5px;width:50%;">
+            <a href="${fullActionUrl}" style="display:block;padding:12px 16px;background:#1D3461;color:#FFFFFF;text-decoration:none;border-radius:6px;font-weight:700;font-size:13px;text-align:center;line-height:1.35;">
+              Download Report
+              <span style="display:block;font-size:11px;font-weight:400;opacity:0.85;margin-top:2px;">تحميل التقرير</span>
+            </a>
+          </td>
+        </tr>
+      </table>
+
+      ${d.fundingType === 'advance' ? `<!-- RECONCILIATION NOTICE -->
+      <table width="100%" cellpadding="0" cellspacing="0" style="background:#FFFBEB;border:1px solid #FDE68A;border-left:4px solid #F59E0B;border-radius:5px;margin-bottom:30px;">
+        <tr>
+          <td style="padding:14px 16px;">
+            <p style="margin:0 0 5px 0;font-size:13px;font-weight:700;color:#92400E;">&#9888; Reconciliation Requirement / اشتراط التسوية</p>
+            <p style="margin:0;font-size:12.5px;color:#78350F;line-height:1.65;">
+              All recipients must submit receipts and return any unused funds within <strong>5 working days</strong> of disbursement.
+            </p>
+            <p dir="rtl" style="margin:5px 0 0 0;font-size:12.5px;color:#78350F;line-height:1.65;text-align:right;">
+              يجب على جميع المستلمين تقديم الإيصالات وإرجاع أي أموال غير مستخدمة خلال <strong>5 أيام عمل</strong> من صرف المبلغ.
+            </p>
+          </td>
+        </tr>
+      </table>` : ''}
+
+      <hr style="border:none;border-top:1px solid #E5E7EB;margin:26px 0;">
+
+      <!-- ARABIC SECTION -->
+      <div dir="rtl" style="text-align:right;font-family:'Segoe UI',Tahoma,Arial,sans-serif;">
+        <p style="margin:0 0 6px 0;font-size:15px;color:#111827;">عزيزي <strong>${d.recipientName}</strong>،</p>
+        <h3 style="margin:12px 0 8px 0;font-size:17px;font-weight:700;color:#0F2041;">طلب دفع رقم ${d.requestId} | ${d.groupLabel} | ${fundingLabelAr}</h3>
+        <p style="margin:0;font-size:14px;color:#374151;line-height:1.85;">
+          ${d.isBulk
+            ? d.fundingType === 'operational_cost'
+              ? `يرجى مراجعة التقرير المرفق الذي يحتوي على <strong>${d.count} تقديم تكاليف تشغيلية معتمد</strong>. يُرجى مراجعة التفاصيل واعتماد المدفوعات وتأكيد الصرف في أقرب وقت ممكن.`
+              : `تمت الموافقة الكاملة على طلبات السلفة المرفقة وهي جاهزة للمعالجة المالية. يرجى مراجعة التقرير المرفق واعتماد الصرف وتأكيد الاستلام في أقرب وقت ممكن.`
+            : d.fundingType === 'operational_cost'
+              ? `تمت الموافقة الكاملة على تقديم التكاليف التشغيلية وهو جاهز لمعالجة الدفع. يرجى مراجعة التفاصيل أدناه وإتمام الدفع في أقرب وقت ممكن.`
+              : `تمت الموافقة الكاملة على هذا الطلب وهو جاهز لمعالجة الدفع. يرجى مراجعة التفاصيل واعتماد الصرف في أقرب وقت ممكن.`
+          }
+          ${d.fundingType === 'advance' ? '<br><br><strong>ملاحظة:</strong> يجب على المستلمين تقديم الإيصالات وإعادة أي أموال غير مستخدمة خلال فترة التسوية المحددة.' : ''}
+        </p>
+      </div>
+
+      <hr style="border:none;border-top:1px solid #E5E7EB;margin:26px 0;">
+
+      <!-- SIGN-OFF -->
+      <table width="100%" cellpadding="0" cellspacing="0">
+        <tr>
+          <td style="vertical-align:top;">
+            <p style="margin:0 0 3px 0;font-size:14px;color:#374151;font-family:Georgia,'Times New Roman',Times,serif;font-style:italic;">Yours faithfully,</p>
+            <p style="margin:8px 0 2px 0;font-size:15px;font-weight:700;color:#0F2041;font-family:Arial,Helvetica,sans-serif;">${d.approverName}</p>
+            <p style="margin:0 0 1px 0;font-size:11.5px;color:#6B7280;font-family:Arial,Helvetica,sans-serif;letter-spacing:0.3px;">Approving Officer — PACT Command Center</p>
+            <p style="margin:0;font-size:11.5px;color:#6B7280;font-family:Arial,Helvetica,sans-serif;letter-spacing:0.3px;">On behalf of the PACT Operations Team</p>
+          </td>
+          <td style="vertical-align:top;text-align:right;" dir="rtl">
+            <p style="margin:0 0 3px 0;font-size:14px;color:#374151;font-family:'Segoe UI',Tahoma,Arial,sans-serif;font-style:italic;">مع خالص التقدير،</p>
+            <p style="margin:8px 0 2px 0;font-size:15px;font-weight:700;color:#0F2041;font-family:'Segoe UI',Tahoma,Arial,sans-serif;">${d.approverName}</p>
+            <p style="margin:0;font-size:11.5px;color:#6B7280;font-family:'Segoe UI',Tahoma,Arial,sans-serif;">مسؤول الموافقة — مركز قيادة باكت</p>
+          </td>
+        </tr>
+      </table>
+
+    </td>
+  </tr>
+
+  <!-- FOOTER -->
+  <tr>
+    <td style="background:#F1F5F9;border-top:1px solid #E2E8F0;padding:18px 36px;">
+      <p style="margin:0 0 8px 0;font-size:11px;color:#94A3B8;line-height:1.65;text-align:center;">
+        <strong style="color:#64748B;">CONFIDENTIAL:</strong> This communication and any attachments are confidential and intended solely for the named recipient(s).
+        If received in error, please notify the sender immediately and delete this message.
+      </p>
+      <p dir="rtl" style="margin:0 0 10px 0;font-size:11px;color:#94A3B8;line-height:1.65;text-align:center;">
+        <strong style="color:#64748B;">سري:</strong> هذه الرسالة ومرفقاتها سرية وموجهة حصراً للمستلم المحدد. إذا وصلت إليك بالخطأ، يرجى إخطار المُرسِل فوراً وحذف الرسالة.
+      </p>
+      <hr style="border:none;border-top:1px solid #E2E8F0;margin:10px 0;">
+      <table width="100%" cellpadding="0" cellspacing="0">
+        <tr>
+          <td align="center" style="padding-bottom:8px;">
+            <img src="${PACT_LOGO_B64}" alt="PACT" width="28" height="28" style="display:inline-block;vertical-align:middle;border-radius:5px;border:0;margin-right:7px;" />
+            <span style="font-size:13px;font-weight:700;color:#475569;vertical-align:middle;">PACT</span>
+          </td>
+        </tr>
+      </table>
+      <p style="margin:0 0 4px 0;font-size:10.5px;color:#94A3B8;text-align:center;line-height:1.5;">
+        Automated notification &nbsp;·&nbsp; PACT Command Center Platform &nbsp;·&nbsp; <strong>PACT Platform v2</strong><br>
+        مركز قيادة باكت — رسالة آلية
+      </p>
+      <p style="margin:0;font-size:10px;color:#94A3B8;text-align:center;">© ${new Date().getFullYear()} PACT. All rights reserved.</p>
+    </td>
+  </tr>
+
+</table>
+</td></tr>
+</table>
+</body>
+</html>`;
+}
 
 export const EmailNotificationService = {
   /**
@@ -330,18 +615,14 @@ export const EmailNotificationService = {
       
       console.log(`[EMAIL] Sending notification to ${email}: ${subject} (attempt ${retryCount + 1}/${MAX_RETRIES + 1})`);
 
+      const renderedHtml = generateNotificationEmailHTML(recipientName || 'User', options);
       const emailBody: Record<string, unknown> = {
         to: email,
         subject,
-        type: 'notification',
+        html: renderedHtml,
+        type: 'general',
         recipientName: recipientName || 'User',
-        title_en: options.title,
-        title_ar: options.titleAr || options.title,
-        message_en: options.message,
-        message_ar: options.messageAr || options.message,
-        actionUrl: options.actionUrl,
         priority: options.type === 'error' ? 'urgent' : options.type === 'warning' ? 'high' : 'normal',
-        details: options.details,
         cc: retryCount === 0 ? (options as any).cc : undefined,
       };
       if (options.attachments?.length) {
@@ -1516,8 +1797,10 @@ PACT Command Center | مركز قيادة باكت`;
     approvalNotes: string = '',
     costSubmissionUrl: string = '/cost-submission',
     pdfAttachment?: { base64: string; filename: string },
-    additionalAttachments?: Array<{ base64: string; filename: string }>,
-    extraCcEmails?: string[]
+    additionalAttachments?: Array<{ base64: string; filename: string; mimeType?: string }>,
+    extraCcEmails?: string[],
+    mmpNames?: string,
+    usdRate?: number
   ): Promise<EmailNotificationResult> {
     try {
       if (!recipients || recipients.length === 0) {
@@ -1525,7 +1808,8 @@ PACT Command Center | مركز قيادة باكت`;
       }
 
       const fundingLabel = fundingType === 'advance' ? 'Advance Request' : 'Reimbursement';
-      const fundingLabelAr = fundingType === 'advance' ? 'طلب سلفة' : 'طلب تعويض';
+      const isBulk = requestId.startsWith('BULK-');
+      const count = isBulk ? (parseInt(requestId.replace('BULK-', ''), 10) || 1) : 1;
 
       const allAttachments: Array<{ filename: string; content: string; type: string }> = [];
       if (pdfAttachment) {
@@ -1533,7 +1817,7 @@ PACT Command Center | مركز قيادة باكت`;
       }
       if (additionalAttachments?.length) {
         additionalAttachments.forEach(att => {
-          allAttachments.push({ filename: att.filename, content: att.base64, type: 'application/pdf' });
+          allAttachments.push({ filename: att.filename, content: att.base64, type: att.mimeType || 'application/pdf' });
         });
       }
 
@@ -1545,39 +1829,64 @@ PACT Command Center | مركز قيادة باكت`;
         });
       }
 
-      const options: NotificationEmailOptions = {
-        title: `Payment Request: ${requestTitle} - ${fundingLabel}`,
-        titleAr: `طلب دفع: ${requestTitle} - ${fundingLabelAr}`,
-        message: `A cost submission has been fully approved and is ready for payment processing. ${approverName} is requesting the finance team to process the payment.\n\nPlease review and process this payment at your earliest convenience.${fundingType === 'advance' ? '\n\nIMPORTANT - RECONCILIATION REQUIRED: This advance payment must be reconciled after the field activity is completed. The recipient must submit receipts/supporting documents and return any unused funds within the reconciliation period. Please ensure reconciliation is tracked.' : ''}`,
-        messageAr: `تمت الموافقة الكاملة على طلب تكلفة تشغيلية وهو جاهز لمعالجة الدفع. يطلب ${approverName} من فريق المالية معالجة الدفع.\n\nيرجى مراجعة هذا الدفع ومعالجته في أقرب وقت.${fundingType === 'advance' ? '\n\nهام - التسوية مطلوبة: يجب تسوية هذه السلفة بعد اكتمال النشاط الميداني. يجب على المستلم تقديم الإيصالات/المستندات الداعمة وإعادة أي أموال غير مستخدمة خلال فترة التسوية.' : ''}`,
-        type: 'warning',
+      const priorityPrefix = fundingType === 'advance' ? '[HIGH PRIORITY | أولوية عالية] ' : '';
+      const effectiveMmpLabel = mmpNames || requestTitle;
+      const subject = `${priorityPrefix}Payment Request No. ${requestId} | For MMP: ${effectiveMmpLabel} | ${fundingLabel}`;
+
+      const now = new Date();
+      const dateStr = now.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+
+      const primaryRecipient = recipients[0];
+      const ccRecipients = recipients.slice(1).map(r => r.email);
+      if (ccRecipients.length) ccList.push(...ccRecipients.filter(e => !ccList.includes(e)));
+
+      const renderedHtml = buildEnhancedPaymentEmailHTML({
+        recipientName: primaryRecipient.name || 'Finance Team',
+        approverName,
+        requestId,
+        groupLabel: requestTitle,
+        mmpLabel: effectiveMmpLabel,
+        totalAmount,
+        count,
+        date: dateStr,
+        project: projectName || 'WFP TPM',
         actionUrl: costSubmissionUrl,
-        actionLabel: 'Process Payment / معالجة الدفع',
-        details: [
-          { label: 'Request ID / رقم الطلب', value: requestId },
-          { label: 'Request Title / عنوان الطلب', value: requestTitle },
-          { label: 'Submitted By / مقدم من', value: submitterName },
-          { label: 'Type / النوع', value: `${fundingLabel} / ${fundingLabelAr}` },
-          { label: 'Category / الفئة', value: category },
-          { label: 'Total Amount / المبلغ الإجمالي', value: `${currency} ${totalAmount.toLocaleString()}` },
-          { label: 'Project / المشروع', value: projectName || 'N/A' },
-          { label: 'Approved By / تمت الموافقة من', value: approverName },
-          { label: 'Status / الحالة', value: 'Approved - Ready for Payment / تمت الموافقة - جاهز للدفع' },
-          ...(fundingType === 'advance' ? [{ label: 'Reconciliation / التسوية', value: 'REQUIRED - Must reconcile after activity completion / مطلوبة - يجب التسوية بعد اكتمال النشاط' }] : []),
-          ...(approvalNotes ? [{ label: 'Approval Notes / ملاحظات', value: approvalNotes }] : []),
-        ],
-        cc: ccList,
-        attachments: allAttachments.length > 0 ? allAttachments : undefined,
-      };
+        fundingType,
+        category,
+        isBulk,
+        currency,
+        usdRate,
+      });
 
-      const result = await this.sendBulk(recipients, options);
-      console.log(`[EMAIL] Payment request notification: sent to ${result.successful}/${result.total} selected recipients${allAttachments.length > 0 ? ` (with ${allAttachments.length} PDF attachment(s))` : ''}`);
-
-      return {
-        success: result.successful > 0,
-        messageId: result.successful > 0 ? `payment-request-${Date.now()}` : undefined,
-        error: result.failed > 0 ? `${result.failed} emails failed` : undefined,
+      const emailBody: Record<string, unknown> = {
+        to: primaryRecipient.email,
+        subject,
+        html: renderedHtml,
+        type: 'general',
+        recipientName: primaryRecipient.name,
+        priority: fundingType === 'advance' ? 'high' : 'normal',
+        cc: ccList.length > 0 ? ccList : undefined,
       };
+      if (allAttachments.length > 0) emailBody.attachments = allAttachments;
+
+      const { data, error } = await supabase.functions.invoke('send-email', { body: emailBody });
+
+      if (error) {
+        console.error('[EMAIL] Payment request email failed:', error);
+        await logEmailSend(primaryRecipient.email, subject, 'notification', false, undefined, error.message);
+        return { success: false, error: error.message };
+      }
+      if (data && !data.success) {
+        console.error('[EMAIL] Payment request email returned error:', data.error);
+        await logEmailSend(primaryRecipient.email, subject, 'notification', false, undefined, data.error);
+        return { success: false, error: data.error };
+      }
+
+      const messageId = data?.messageId || `payment-request-${Date.now()}`;
+      console.log(`[EMAIL] Payment request (enhanced) sent to ${primaryRecipient.email}${ccList.length ? ` + ${ccList.length} CC` : ''}${allAttachments.length > 0 ? ` (${allAttachments.length} attachment(s))` : ''}`);
+      await logEmailSend(primaryRecipient.email, subject, 'notification', true, messageId);
+
+      return { success: true, messageId };
     } catch (err: any) {
       console.error('[EMAIL] Error in sendPaymentRequestToFinanceWithRecipients:', err);
       return { success: false, error: err.message };
@@ -2021,7 +2330,7 @@ PACT Workflow Platform`;
   async sendBulk(
     recipients: Array<{ email: string; name: string }>,
     options: NotificationEmailOptions
-  ): Promise<{ total: number; successful: number; failed: number }> {
+  ): Promise<{ total: number; successful: number; failed: number; error?: string }> {
     if (recipients.length === 0) {
       return { total: 0, successful: 0, failed: 0 };
     }
@@ -2033,6 +2342,7 @@ PACT Workflow Platform`;
         total: 1,
         successful: result.success ? 1 : 0,
         failed: result.success ? 0 : 1,
+        error: result.success ? undefined : result.error,
       };
     }
     
@@ -2047,18 +2357,14 @@ PACT Workflow Platform`;
                             options.type === 'warning' ? '[HIGH PRIORITY | أولوية عالية] ' : '';
       const subject = priorityPrefix + options.title;
       
+      const renderedHtml = generateNotificationEmailHTML(primaryRecipient.name || 'User', options);
       const emailBody: Record<string, unknown> = {
         to: primaryRecipient.email,
         subject,
-        type: 'notification',
+        html: renderedHtml,
+        type: 'general',
         recipientName: primaryRecipient.name,
-        title_en: options.title,
-        title_ar: options.titleAr || options.title,
-        message_en: options.message,
-        message_ar: options.messageAr || options.message,
-        actionUrl: options.actionUrl,
         priority: options.type === 'error' ? 'urgent' : options.type === 'warning' ? 'high' : 'normal',
-        details: options.details,
         cc: ccRecipients,
       };
       if (options.attachments?.length) {
@@ -2071,13 +2377,14 @@ PACT Workflow Platform`;
       if (error) {
         console.error('[EMAIL] Bulk email with CC failed:', error);
         await logEmailSend(primaryRecipient.email, subject, 'notification', false, undefined, error.message);
-        return { total: recipients.length, successful: 0, failed: recipients.length };
+        return { total: recipients.length, successful: 0, failed: recipients.length, error: error.message };
       }
 
       if (data && !data.success) {
-        console.error('[EMAIL] Bulk email with CC returned error:', data.error);
-        await logEmailSend(primaryRecipient.email, subject, 'notification', false, undefined, data.error);
-        return { total: recipients.length, successful: 0, failed: recipients.length };
+        const smtpError: string = data.error || 'Send failed';
+        console.error('[EMAIL] Bulk email with CC returned error:', smtpError);
+        await logEmailSend(primaryRecipient.email, subject, 'notification', false, undefined, smtpError);
+        return { total: recipients.length, successful: 0, failed: recipients.length, error: smtpError };
       }
 
       console.log(`[EMAIL] Bulk email sent successfully to ${primaryRecipient.email} + ${ccRecipients.length} CC`);
@@ -2098,7 +2405,7 @@ PACT Workflow Platform`;
       };
     } catch (error: any) {
       console.error('[EMAIL] Bulk email exception:', error);
-      return { total: recipients.length, successful: 0, failed: recipients.length };
+      return { total: recipients.length, successful: 0, failed: recipients.length, error: error.message };
     }
   },
 

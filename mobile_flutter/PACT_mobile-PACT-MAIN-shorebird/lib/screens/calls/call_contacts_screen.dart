@@ -148,7 +148,7 @@ class _CallContactsScreenState extends ConsumerState<CallContactsScreen> {
         children: [
           Container(
             padding: const EdgeInsets.all(16),
-            color: Theme.of(context).primaryColor.withOpacity(0.05),
+            color: Theme.of(context).primaryColor.withValues(alpha: 0.05),
             child: TextField(
               controller: _searchController,
               onChanged: _filterContacts,
@@ -266,7 +266,7 @@ class _ContactTile extends StatelessWidget {
               backgroundImage: avatarUrl != null
                   ? NetworkImage(avatarUrl!)
                   : null,
-              backgroundColor: Theme.of(context).primaryColor.withOpacity(0.1),
+              backgroundColor: Theme.of(context).primaryColor.withValues(alpha: 0.1),
               child: avatarUrl == null
                   ? Text(
                       initials,

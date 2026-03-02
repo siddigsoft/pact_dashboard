@@ -16,6 +16,11 @@ import '../services/presence_service.dart';
 import '../models/call_state.dart';
 import '../widgets/whats_new_dialog.dart';
 import 'dart:async';
+import 'dart:io';
+import 'package:flutter/foundation.dart';
+import 'package:package_info_plus/package_info_plus.dart';
+import 'package:geolocator/geolocator.dart';
+import '../services/location_service.dart';
 
 class MainScreen extends StatefulWidget {
   const MainScreen({super.key});
@@ -31,6 +36,7 @@ class _MainScreenState extends State<MainScreen> {
   bool _isCoordinator = false;
   bool _isLoadingRole = true;
   bool _servicesInitialized = false;
+  Timer? _activityHeartbeatTimer;
 
   @override
   void initState() {
@@ -39,6 +45,7 @@ class _MainScreenState extends State<MainScreen> {
     _initializeWebRTC();
     _showWhatsNewIfNeeded();
     _setupConnectivityListener();
+    _startGlobalActivityHeartbeat();
 
     // Check for active call from notification tap after a short delay
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -82,7 +89,82 @@ class _MainScreenState extends State<MainScreen> {
       _agoraIncomingCallSubscription?.cancel();
     }
     _connectivitySubscription?.cancel();
+    _activityHeartbeatTimer?.cancel();
     super.dispose();
+  }
+
+  /// Global presence heartbeat — writes last_activity, device_info, and app_version
+  /// to profiles every 5 minutes. Runs for ALL logged-in users regardless of
+  /// which screen they're on. This is what makes users visible as "online" in
+  /// the web Staff Directory without needing a shared WebSocket channel.
+  void _startGlobalActivityHeartbeat() {
+    _writeActivityToProfile(); // Immediate write on app open
+    _activityHeartbeatTimer?.cancel();
+    _activityHeartbeatTimer = Timer.periodic(
+      const Duration(minutes: 3),
+      (_) => _writeActivityToProfile(),
+    );
+  }
+
+  Future<void> _writeActivityToProfile() async {
+    try {
+      final userId = Supabase.instance.client.auth.currentUser?.id;
+      if (userId == null) return;
+
+      // ── Device label ────────────────────────────────────────────────────────
+      String deviceLabel = 'Android';
+      if (!kIsWeb) {
+        if (Platform.isIOS)
+          deviceLabel = 'iOS';
+        else if (Platform.isAndroid)
+          deviceLabel = 'Android';
+      }
+
+      // ── App version ─────────────────────────────────────────────────────────
+      String? version;
+      try {
+        final info = await PackageInfo.fromPlatform();
+        version = '${info.version}+${info.buildNumber}';
+      } catch (_) {}
+
+      // ── GPS location (best-effort, won't block if unavailable) ───────────────
+      Map<String, dynamic>? locationPayload;
+      try {
+        final position = await LocationService.getCurrentLocation().timeout(
+          const Duration(seconds: 8),
+        );
+        if (position != null) {
+          locationPayload = {
+            'lat': position.latitude,
+            'lng': position.longitude,
+            'accuracy': position.accuracy,
+            'captured_at': DateTime.now().toUtc().toIso8601String(),
+          };
+        }
+      } catch (_) {
+        // GPS unavailable or timed out — skip silently
+      }
+
+      // ── Write to Supabase profiles ───────────────────────────────────────────
+      final update = <String, dynamic>{
+        'last_activity': DateTime.now().toUtc().toIso8601String(),
+        'device_info': deviceLabel,
+        if (version != null) 'app_version': version,
+        if (locationPayload != null) 'location': locationPayload,
+      };
+
+      await Supabase.instance.client
+          .from('profiles')
+          .update(update)
+          .eq('id', userId);
+
+      debugPrint(
+        '[MainScreen] Heartbeat ✓ — device=$deviceLabel ver=$version '
+        'gps=${locationPayload != null ? "${locationPayload['lat']},${locationPayload['lng']}" : "n/a"}',
+      );
+    } catch (e) {
+      debugPrint('[MainScreen] Activity write failed: $e');
+    }
   }
 
   Future<void> _checkUserRole() async {
@@ -223,7 +305,11 @@ class _MainScreenState extends State<MainScreen> {
       }
 
       // Initialize WebRTC service (signaling)
-      await WebRTCService().initialize(user.id, userName, userAvatar: userAvatar);
+      await WebRTCService().initialize(
+        user.id,
+        userName,
+        userAvatar: userAvatar,
+      );
 
       debugPrint('✅ WebRTC service initialized for user: $userName');
 
@@ -239,34 +325,50 @@ class _MainScreenState extends State<MainScreen> {
 
         // Listen for Agora incoming calls
         debugPrint('[MainScreen] Setting up incoming call subscription...');
-        debugPrint('[MainScreen] Stream instance: ${AgoraCallService().incomingCallStream.hashCode}');
-        _agoraIncomingCallSubscription =
-            AgoraCallService().incomingCallStream.listen((incomingCall) {
-          debugPrint('[MainScreen] >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>');
-          debugPrint('[MainScreen] Incoming call event received!');
-          debugPrint('[MainScreen] From: ${incomingCall.callerName}');
-          debugPrint('[MainScreen] CallId: ${incomingCall.callId}');
-          debugPrint('[MainScreen] mounted: $mounted, context.mounted: ${context.mounted}');
-          debugPrint('[MainScreen] >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>');
-          if (mounted && context.mounted) {
-            try {
-              debugPrint('[MainScreen] About to show dialog...');
-              showAgoraIncomingCallDialog(context, incomingCall: incomingCall);
-              debugPrint('[MainScreen] Dialog show called successfully');
-            } catch (e, st) {
-              debugPrint('[MainScreen] ERROR showing incoming call dialog: $e');
-              debugPrint('[MainScreen] StackTrace: $st');
+        debugPrint(
+          '[MainScreen] Stream instance: ${AgoraCallService().incomingCallStream.hashCode}',
+        );
+        _agoraIncomingCallSubscription = AgoraCallService().incomingCallStream.listen(
+          (incomingCall) {
+            debugPrint('[MainScreen] >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>');
+            debugPrint('[MainScreen] Incoming call event received!');
+            debugPrint('[MainScreen] From: ${incomingCall.callerName}');
+            debugPrint('[MainScreen] CallId: ${incomingCall.callId}');
+            debugPrint(
+              '[MainScreen] mounted: $mounted, context.mounted: ${context.mounted}',
+            );
+            debugPrint('[MainScreen] >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>');
+            if (mounted && context.mounted) {
+              try {
+                debugPrint('[MainScreen] About to show dialog...');
+                showAgoraIncomingCallDialog(
+                  context,
+                  incomingCall: incomingCall,
+                );
+                debugPrint('[MainScreen] Dialog show called successfully');
+              } catch (e, st) {
+                debugPrint(
+                  '[MainScreen] ERROR showing incoming call dialog: $e',
+                );
+                debugPrint('[MainScreen] StackTrace: $st');
+              }
+            } else {
+              debugPrint(
+                '[MainScreen] Cannot show dialog - not mounted (mounted=$mounted, context.mounted=${context.mounted})',
+              );
             }
-          } else {
-            debugPrint('[MainScreen] Cannot show dialog - not mounted (mounted=$mounted, context.mounted=${context.mounted})');
-          }
-        }, onError: (e, st) {
-          debugPrint('[MainScreen] Incoming call stream ERROR: $e');
-          debugPrint('[MainScreen] StackTrace: $st');
-        }, onDone: () {
-          debugPrint('[MainScreen] Incoming call stream DONE (closed)');
-        });
-        debugPrint('[MainScreen] Subscription created: ${_agoraIncomingCallSubscription.hashCode}');
+          },
+          onError: (e, st) {
+            debugPrint('[MainScreen] Incoming call stream ERROR: $e');
+            debugPrint('[MainScreen] StackTrace: $st');
+          },
+          onDone: () {
+            debugPrint('[MainScreen] Incoming call stream DONE (closed)');
+          },
+        );
+        debugPrint(
+          '[MainScreen] Subscription created: ${_agoraIncomingCallSubscription.hashCode}',
+        );
       } catch (e) {
         debugPrint('⚠️ Agora init failed (calls may use WebRTC): $e');
       }

@@ -1,6 +1,6 @@
 name: pact_mobile
 description: "A new Flutter project."
-version: 1.0.6+9
+version: 1.01.0+1
 publish_to: 'none'
 
 environment:

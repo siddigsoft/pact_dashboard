@@ -115,7 +115,7 @@ class _ChatsScreenState extends State<ChatsScreen> {
             end: Alignment.bottomCenter,
             colors: [
               AppColors.primaryWhite,
-              AppColors.backgroundGray.withOpacity(0.3),
+              AppColors.backgroundGray.withValues(alpha: 0.3),
             ],
           ),
         ),
@@ -235,7 +235,7 @@ class _ChatsScreenState extends State<ChatsScreen> {
                                     ),
                                   ],
                                   border: Border.all(
-                                    color: AppColors.primaryOrange.withOpacity(
+                                    color: AppColors.primaryOrange.withValues(alpha: 
                                       0.1,
                                     ),
                                     width: 1,
@@ -259,7 +259,7 @@ class _ChatsScreenState extends State<ChatsScreen> {
                                       gradient: LinearGradient(
                                         colors: [
                                           AppColors.primaryOrange,
-                                          AppColors.primaryOrange.withOpacity(
+                                          AppColors.primaryOrange.withValues(alpha: 
                                             0.7,
                                           ),
                                         ],
@@ -297,7 +297,7 @@ class _ChatsScreenState extends State<ChatsScreen> {
                                           style: TextStyle(
                                             color: const Color(
                                               0xFF263238,
-                                            ).withOpacity(0.7),
+                                            ).withValues(alpha: 0.7),
                                             fontSize: 14,
                                           ),
                                         )
@@ -313,7 +313,7 @@ class _ChatsScreenState extends State<ChatsScreen> {
                                               colors: [
                                                 AppColors.primaryOrange,
                                                 AppColors.primaryOrange
-                                                    .withOpacity(0.8),
+                                                    .withValues(alpha: 0.8),
                                               ],
                                             ),
                                             borderRadius: BorderRadius.circular(
@@ -368,7 +368,7 @@ class _ChatsScreenState extends State<ChatsScreen> {
               gradient: LinearGradient(
                 colors: [
                   AppColors.primaryOrange,
-                  AppColors.primaryOrange.withOpacity(0.8),
+                  AppColors.primaryOrange.withValues(alpha: 0.8),
                 ],
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
@@ -376,7 +376,7 @@ class _ChatsScreenState extends State<ChatsScreen> {
               shape: BoxShape.circle,
               boxShadow: [
                 BoxShadow(
-                  color: AppColors.primaryOrange.withOpacity(0.3),
+                  color: AppColors.primaryOrange.withValues(alpha: 0.3),
                   blurRadius: 12,
                   offset: const Offset(0, 6),
                 ),
@@ -415,13 +415,13 @@ class _ChatsScreenState extends State<ChatsScreen> {
               gradient: LinearGradient(
                 colors: [
                   AppColors.primaryOrange,
-                  AppColors.primaryOrange.withOpacity(0.8),
+                  AppColors.primaryOrange.withValues(alpha: 0.8),
                 ],
               ),
               borderRadius: BorderRadius.circular(12),
               boxShadow: [
                 BoxShadow(
-                  color: AppColors.primaryOrange.withOpacity(0.3),
+                  color: AppColors.primaryOrange.withValues(alpha: 0.3),
                   blurRadius: 8,
                   offset: const Offset(0, 4),
                 ),

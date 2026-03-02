@@ -72,7 +72,7 @@ class ModernAppHeader extends StatelessWidget {
         ),
         boxShadow: [
           BoxShadow(
-            color: AppColors.shadowColor.withOpacity(0.1),
+            color: AppColors.shadowColor.withValues(alpha: 0.1),
             blurRadius: 16,
             offset: const Offset(0, 4),
           ),
@@ -157,11 +157,11 @@ class ModernAppHeader extends StatelessWidget {
           decoration: BoxDecoration(
             color: (backgroundColor == Colors.white || backgroundColor == null)
                 ? AppColors.backgroundGray
-                : Colors.white.withOpacity(0.2),
+                : Colors.white.withValues(alpha: 0.2),
             borderRadius: BorderRadius.circular(14),
             boxShadow: [
               BoxShadow(
-                color: AppColors.shadowColor.withOpacity(0.08),
+                color: AppColors.shadowColor.withValues(alpha: 0.08),
                 blurRadius: 8,
                 spreadRadius: 0,
                 offset: const Offset(0, 2),
@@ -237,7 +237,7 @@ class HeaderActionButton extends StatelessWidget {
             borderRadius: BorderRadius.circular(14),
             boxShadow: [
               BoxShadow(
-                color: AppColors.shadowColor.withOpacity(0.08),
+                color: AppColors.shadowColor.withValues(alpha: 0.08),
                 blurRadius: 8,
                 spreadRadius: 0,
                 offset: const Offset(0, 2),

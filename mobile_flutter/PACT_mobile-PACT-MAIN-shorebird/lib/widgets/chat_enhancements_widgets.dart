@@ -28,7 +28,7 @@ class ReactionPicker extends StatelessWidget {
         borderRadius: BorderRadius.circular(24),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.1),
+            color: Colors.black.withValues(alpha: 0.1),
             blurRadius: 8,
             offset: const Offset(0, 2),
           ),
@@ -80,8 +80,8 @@ class MessageReactionsDisplay extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
             decoration: BoxDecoration(
               color: reaction.currentUserReacted
-                  ? AppColors.primaryBlue.withOpacity(0.2)
-                  : Colors.grey.withOpacity(0.1),
+                  ? AppColors.primaryBlue.withValues(alpha: 0.2)
+                  : Colors.grey.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(12),
               border: reaction.currentUserReacted
                   ? Border.all(color: AppColors.primaryBlue, width: 1)
@@ -132,7 +132,7 @@ class ReplyPreview extends StatelessWidget {
     return Container(
       padding: EdgeInsets.all(isCompact ? 8 : 12),
       decoration: BoxDecoration(
-        color: Colors.grey.withOpacity(0.1),
+        color: Colors.grey.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(8),
         border: Border(
           left: BorderSide(color: AppColors.primaryBlue, width: 3),
@@ -271,7 +271,7 @@ class _TypingIndicatorWidgetState extends State<TypingIndicatorWidget>
               height: 6,
               margin: const EdgeInsets.symmetric(horizontal: 1),
               decoration: BoxDecoration(
-                color: Colors.grey.withOpacity(0.3 + opacity * 0.7),
+                color: Colors.grey.withValues(alpha: 0.3 + opacity * 0.7),
                 shape: BoxShape.circle,
               ),
             );
@@ -297,9 +297,9 @@ class LinkPreviewCard extends StatelessWidget {
       child: Container(
         margin: const EdgeInsets.only(top: 8),
         decoration: BoxDecoration(
-          color: Colors.grey.withOpacity(0.1),
+          color: Colors.grey.withValues(alpha: 0.1),
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Colors.grey.withOpacity(0.2)),
+          border: Border.all(color: Colors.grey.withValues(alpha: 0.2)),
         ),
         clipBehavior: Clip.antiAlias,
         child: Column(
@@ -382,8 +382,8 @@ class _VoiceMessagePlayerState extends State<VoiceMessagePlayer> {
   Widget build(BuildContext context) {
     final color = widget.isOwnMessage ? Colors.white : AppColors.primaryBlue;
     final bgColor = widget.isOwnMessage
-        ? Colors.white.withOpacity(0.2)
-        : AppColors.primaryBlue.withOpacity(0.1);
+        ? Colors.white.withValues(alpha: 0.2)
+        : AppColors.primaryBlue.withValues(alpha: 0.1);
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -417,7 +417,7 @@ class _VoiceMessagePlayerState extends State<VoiceMessagePlayer> {
                       overlayRadius: 12,
                     ),
                     activeTrackColor: color,
-                    inactiveTrackColor: color.withOpacity(0.3),
+                    inactiveTrackColor: color.withValues(alpha: 0.3),
                     thumbColor: color,
                   ),
                   child: Slider(
@@ -431,7 +431,7 @@ class _VoiceMessagePlayerState extends State<VoiceMessagePlayer> {
                     _formatDuration(widget.duration),
                     style: TextStyle(
                       fontSize: 11,
-                      color: color.withOpacity(0.7),
+                      color: color.withValues(alpha: 0.7),
                     ),
                   ),
                 ),
@@ -531,7 +531,7 @@ class MessageContextMenu extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.1),
+            color: Colors.black.withValues(alpha: 0.1),
             blurRadius: 8,
             offset: const Offset(0, 2),
           ),

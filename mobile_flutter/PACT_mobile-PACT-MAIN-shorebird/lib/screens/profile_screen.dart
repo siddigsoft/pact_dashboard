@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../constants/sudanese_banks.dart';
 import '../models/pact_user_profile.dart';
 import '../providers/profile_provider.dart';
 import '../services/offline/offline_db.dart';
@@ -34,7 +35,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   String? _hubName;
   String? _stateName;
   String? _localityName;
-  List<String> _classificationNames = [];
+  List<Map<String, dynamic>> _classifications = [];
   bool _isLoadingLookups = false;
 
   // Sync status
@@ -218,18 +219,27 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         }
       }
 
-      // Load classifications
+      // Load classification history
       try {
         final classificationsResponse = await supabase
             .from('user_classifications')
-            .select('classification_level, role_scope')
-            .eq('user_id', profile.id);
+            .select(
+                'id, classification_level, role_scope, assigned_at, reason, is_current')
+            .eq('user_id', profile.id)
+            .order('assigned_at', ascending: false);
 
-        _classificationNames = (classificationsResponse as List).map((c) {
-          final level = c['classification_level'] as String? ?? '';
-          final scope = c['role_scope'] as String? ?? '';
-          return scope.isNotEmpty ? '$level ($scope)' : level;
-        }).toList();
+        _classifications =
+            (classificationsResponse as List).cast<Map<String, dynamic>>();
+
+        // Mark current: prefer is_current flag, else mark most-recent as current
+        bool anyMarkedCurrent =
+            _classifications.any((c) => c['is_current'] == true);
+        if (!anyMarkedCurrent && _classifications.isNotEmpty) {
+          _classifications[0] = {
+            ..._classifications[0],
+            'is_current': true,
+          };
+        }
       } catch (e) {
         debugPrint('Error loading classifications: $e');
       }
@@ -458,7 +468,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                         children: [
                           CircleAvatar(
                             radius: 60,
-                            backgroundColor: AppColors.primaryBlue.withOpacity(
+                            backgroundColor: AppColors.primaryBlue.withValues(alpha: 
                               0.2,
                             ),
                             backgroundImage: _selectedImageBytes != null
@@ -618,51 +628,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                     ),
                     const SizedBox(height: 16),
 
-                    // Classifications Section
-                    _buildSection(
-                      title: 'Classifications',
-                      icon: Icons.stars,
-                      color: AppColors.primaryOrange,
-                      children: [
-                        if (_classificationNames.isNotEmpty)
-                          ..._classificationNames.map(
-                            (name) => Padding(
-                              padding: const EdgeInsets.only(bottom: 8),
-                              child: _buildInfoRow(
-                                'Level',
-                                name,
-                                icon: Icons.grade,
-                              ),
-                            ),
-                          )
-                        else if (profile.classification != null) ...[
-                          _buildInfoRow(
-                            'Level',
-                            profile.classification!.level.toUpperCase(),
-                            icon: Icons.grade,
-                          ),
-                          const SizedBox(height: 8),
-                          _buildInfoRow(
-                            'Scope',
-                            profile.classification!.roleScope,
-                            icon: Icons.work,
-                          ),
-                          if (profile.classification!.hasRetainer) ...[
-                            const SizedBox(height: 8),
-                            _buildInfoRow(
-                              'Retainer',
-                              '${profile.classification!.retainerAmount} ${profile.classification!.retainerCurrency}',
-                              icon: Icons.payments,
-                            ),
-                          ],
-                        ] else
-                          _buildInfoRow(
-                            'Classification',
-                            'Not assigned',
-                            icon: Icons.grade,
-                          ),
-                      ],
-                    ),
+                    // Classifications Section — full history timeline
+                    _buildClassificationHistory(profile),
                     const SizedBox(height: 16),
 
                     // Bank Account Section
@@ -691,9 +658,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                       ],
                     ),
 
-                    // Save Button
+                    // Save Button / bottom safe area padding
                     if (_isEditMode) ...[
-                      const SizedBox(height: 32),
+                      const SizedBox(height: 24),
                       SizedBox(
                         width: double.infinity,
                         child: ElevatedButton(
@@ -728,11 +695,309 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                       ),
                     ],
 
-                    const SizedBox(height: 16),
+                    SizedBox(
+                        height: MediaQuery.of(context).padding.bottom + 24),
                   ],
                 ),
               ),
             ),
+    );
+  }
+
+  // ── Classification history timeline ─────────────────────────────────────────
+  Widget _buildClassificationHistory(dynamic profile) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.orange.shade100),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.orange.withValues(alpha: 0.06),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            decoration: BoxDecoration(
+              color: AppColors.primaryOrange.withValues(alpha: 0.08),
+              borderRadius:
+                  const BorderRadius.vertical(top: Radius.circular(12)),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.stars, color: AppColors.primaryOrange, size: 18),
+                const SizedBox(width: 8),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Classifications',
+                        style: GoogleFonts.poppins(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 14,
+                            color: AppColors.primaryOrange)),
+                    Text('التصنيفات',
+                        style: GoogleFonts.poppins(
+                            fontSize: 10,
+                            color: AppColors.primaryOrange.withValues(alpha: 0.8))),
+                  ],
+                ),
+                const Spacer(),
+                if (_classifications.isNotEmpty)
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: AppColors.primaryOrange.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Text('${_classifications.length} records',
+                        style: GoogleFonts.poppins(
+                            fontSize: 10,
+                            color: AppColors.primaryOrange,
+                            fontWeight: FontWeight.w600)),
+                  ),
+              ],
+            ),
+          ),
+
+          // Timeline body
+          if (_classifications.isEmpty)
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                children: [
+                  _buildInfoRow('Classification',
+                      profile.classification?.level?.toUpperCase() ??
+                          'Not assigned',
+                      icon: Icons.grade),
+                  if (profile.classification?.roleScope != null) ...[
+                    const SizedBox(height: 8),
+                    _buildInfoRow('Scope', profile.classification!.roleScope,
+                        icon: Icons.work),
+                  ],
+                ],
+              ),
+            )
+          else
+            Padding(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              child: Column(
+                children: List.generate(_classifications.length, (i) {
+                  final c = _classifications[i];
+                  final isCurrent = c['is_current'] == true;
+                  final level =
+                      (c['classification_level'] as String? ?? '').trim();
+                  final scope = (c['role_scope'] as String? ?? '').trim();
+                  final reason = (c['reason'] as String?)?.trim();
+                  final assignedAt = c['assigned_at'] as String?;
+                  final isLast = i == _classifications.length - 1;
+
+                  return IntrinsicHeight(
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Timeline spine
+                        SizedBox(
+                          width: 28,
+                          child: Column(
+                            children: [
+                              // Circle dot
+                              Container(
+                                width: isCurrent ? 14 : 10,
+                                height: isCurrent ? 14 : 10,
+                                margin: EdgeInsets.only(
+                                    top: isCurrent ? 3 : 5),
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: isCurrent
+                                      ? AppColors.primaryOrange
+                                      : Colors.grey.shade300,
+                                  border: isCurrent
+                                      ? Border.all(
+                                          color: AppColors.primaryOrange
+                                              .withValues(alpha: 0.3),
+                                          width: 3)
+                                      : null,
+                                  boxShadow: isCurrent
+                                      ? [
+                                          BoxShadow(
+                                            color: AppColors.primaryOrange
+                                                .withValues(alpha: 0.35),
+                                            blurRadius: 6,
+                                          )
+                                        ]
+                                      : null,
+                                ),
+                              ),
+                              // Vertical line to next item
+                              if (!isLast)
+                                Expanded(
+                                  child: Container(
+                                    width: 2,
+                                    margin: const EdgeInsets.only(top: 4),
+                                    color: Colors.grey.shade200,
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+
+                        // Card content
+                        Expanded(
+                          child: Container(
+                            margin: EdgeInsets.only(
+                                bottom: isLast ? 0 : 10),
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              color: isCurrent
+                                  ? AppColors.primaryOrange
+                                      .withValues(alpha: 0.07)
+                                  : Colors.grey.shade50,
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(
+                                color: isCurrent
+                                    ? AppColors.primaryOrange
+                                        .withValues(alpha: 0.35)
+                                    : Colors.grey.shade200,
+                                width: isCurrent ? 1.5 : 1,
+                              ),
+                            ),
+                            child: Column(
+                              crossAxisAlignment:
+                                  CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    // Level badge
+                                    Container(
+                                      padding:
+                                          const EdgeInsets.symmetric(
+                                              horizontal: 8,
+                                              vertical: 3),
+                                      decoration: BoxDecoration(
+                                        color: isCurrent
+                                            ? AppColors.primaryOrange
+                                            : Colors.grey.shade400,
+                                        borderRadius:
+                                            BorderRadius.circular(6),
+                                      ),
+                                      child: Text(
+                                        level.toUpperCase(),
+                                        style: GoogleFonts.poppins(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w700,
+                                          color: Colors.white,
+                                        ),
+                                      ),
+                                    ),
+                                    if (isCurrent) ...[
+                                      const SizedBox(width: 6),
+                                      Container(
+                                        padding:
+                                            const EdgeInsets.symmetric(
+                                                horizontal: 6,
+                                                vertical: 2),
+                                        decoration: BoxDecoration(
+                                          color: Colors.green.shade600,
+                                          borderRadius:
+                                              BorderRadius.circular(5),
+                                        ),
+                                        child: Text(
+                                          'Current / الحالي',
+                                          style: GoogleFonts.poppins(
+                                              fontSize: 9,
+                                              color: Colors.white,
+                                              fontWeight:
+                                                  FontWeight.w600),
+                                        ),
+                                      ),
+                                    ],
+                                    const Spacer(),
+                                    if (assignedAt != null &&
+                                        DateTime.tryParse(assignedAt) != null)
+                                      Text(
+                                        _formatDate(
+                                            DateTime.parse(assignedAt)),
+                                        style: GoogleFonts.poppins(
+                                            fontSize: 10,
+                                            color: Colors.grey.shade500),
+                                      ),
+                                  ],
+                                ),
+                                if (scope.isNotEmpty) ...[
+                                  const SizedBox(height: 4),
+                                  Row(children: [
+                                    Icon(Icons.work_outline,
+                                        size: 11,
+                                        color: Colors.grey.shade500),
+                                    const SizedBox(width: 3),
+                                    Text(scope,
+                                        style: GoogleFonts.poppins(
+                                            fontSize: 11,
+                                            color: Colors.grey.shade600)),
+                                  ]),
+                                ],
+                                if (reason != null &&
+                                    reason.isNotEmpty) ...[
+                                  const SizedBox(height: 6),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 8, vertical: 4),
+                                    decoration: BoxDecoration(
+                                      color: isCurrent
+                                          ? AppColors.primaryOrange
+                                              .withValues(alpha: 0.1)
+                                          : Colors.blue.shade50,
+                                      borderRadius:
+                                          BorderRadius.circular(6),
+                                    ),
+                                    child: Row(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Icon(Icons.comment_outlined,
+                                            size: 11,
+                                            color: isCurrent
+                                                ? AppColors.primaryOrange
+                                                : Colors.blue.shade600),
+                                        const SizedBox(width: 4),
+                                        Expanded(
+                                          child: Text(
+                                            reason,
+                                            style: GoogleFonts.poppins(
+                                              fontSize: 10,
+                                              color: isCurrent
+                                                  ? AppColors
+                                                      .primaryOrange
+                                                  : Colors.blue.shade700,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }),
+              ),
+            ),
+        ],
+      ),
     );
   }
 
@@ -741,9 +1006,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       margin: const EdgeInsets.only(bottom: 16),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Colors.orange.withOpacity(0.1),
+        color: Colors.orange.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.orange.withOpacity(0.3)),
+        border: Border.all(color: Colors.orange.withValues(alpha: 0.3)),
       ),
       child: Row(
         children: [
@@ -824,7 +1089,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 10,
             offset: const Offset(0, 2),
           ),
@@ -836,7 +1101,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: color.withOpacity(0.1),
+              color: color.withValues(alpha: 0.1),
               borderRadius: const BorderRadius.only(
                 topLeft: Radius.circular(16),
                 topRight: Radius.circular(16),
@@ -916,13 +1181,13 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: hasAccount
-            ? Colors.green.withOpacity(0.05)
-            : Colors.orange.withOpacity(0.05),
+            ? Colors.green.withValues(alpha: 0.05)
+            : Colors.orange.withValues(alpha: 0.05),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
           color: hasAccount
-              ? Colors.green.withOpacity(0.3)
-              : Colors.orange.withOpacity(0.4),
+              ? Colors.green.withValues(alpha: 0.3)
+              : Colors.orange.withValues(alpha: 0.4),
         ),
       ),
       child: Column(
@@ -953,9 +1218,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                   decoration: BoxDecoration(
-                    color: AppColors.primaryBlue.withOpacity(0.1),
+                    color: AppColors.primaryBlue.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: AppColors.primaryBlue.withOpacity(0.3)),
+                    border: Border.all(color: AppColors.primaryBlue.withValues(alpha: 0.3)),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
@@ -1027,10 +1292,15 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     final existing = profile.bankAccount;
     final accountNameCtrl = TextEditingController(text: existing?.accountName ?? '');
     final accountNumberCtrl = TextEditingController(text: existing?.accountNumber ?? '');
-    final bankNameCtrl = TextEditingController(text: existing?.bankName ?? '');
     final branchCodeCtrl = TextEditingController(text: existing?.branchCode ?? '');
     final sheetFormKey = GlobalKey<FormState>();
     bool isSaving = false;
+    // Resolve existing bank name to a bank in the list (or null if not found)
+    String? selectedBankName = kSudaneseBanks
+        .map((b) => b.nameEn)
+        .contains(existing?.bankName)
+        ? existing?.bankName
+        : null;
 
     showModalBottomSheet(
       context: context,
@@ -1085,34 +1355,59 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                         ],
                       ),
                       const SizedBox(height: 20),
-                      // Bank Name (required)
-                      TextFormField(
-                        controller: bankNameCtrl,
-                        style: GoogleFonts.poppins(),
+                      // Bank Name — dropdown with all Sudanese banks
+                      DropdownButtonFormField<String>(
+                        value: selectedBankName,
+                        isExpanded: true,
                         decoration: InputDecoration(
                           labelText: 'Bank Name / اسم البنك *',
                           labelStyle: GoogleFonts.poppins(color: Colors.grey[600]),
                           prefixIcon: const Icon(Icons.account_balance_outlined),
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                          border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12)),
                         ),
+                        hint: Text('Select bank / اختر البنك',
+                            style: GoogleFonts.poppins(color: Colors.grey[500])),
+                        items: kSudaneseBanks
+                            .map((bank) => DropdownMenuItem<String>(
+                                  value: bank.nameEn,
+                                  child: Text(
+                                    bank.display,
+                                    style: GoogleFonts.poppins(fontSize: 13),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ))
+                            .toList(),
+                        onChanged: (v) => setSheetState(() => selectedBankName = v),
                         validator: (v) =>
-                            (v == null || v.trim().isEmpty) ? 'Bank name is required' : null,
+                            (v == null || v.isEmpty) ? 'Bank name is required / مطلوب' : null,
                       ),
                       const SizedBox(height: 14),
-                      // Account Number (required)
+                      // Account Number — exactly 7 digits
                       TextFormField(
                         controller: accountNumberCtrl,
                         style: GoogleFonts.poppins(),
                         keyboardType: TextInputType.number,
+                        maxLength: 7,
                         decoration: InputDecoration(
                           labelText: 'Account Number / رقم الحساب *',
                           labelStyle: GoogleFonts.poppins(color: Colors.grey[600]),
                           prefixIcon: const Icon(Icons.credit_card),
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                          hintText: '7-digit account number',
+                          border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12)),
+                          counterStyle: GoogleFonts.poppins(fontSize: 11),
                         ),
                         validator: (v) {
-                          if (v == null || v.trim().isEmpty) return 'Account number is required';
-                          if (v.trim().length < 8) return 'Must be at least 8 digits';
+                          if (v == null || v.trim().isEmpty) {
+                            return 'Account number is required / مطلوب';
+                          }
+                          if (v.trim().length != 7) {
+                            return 'Must be exactly 7 digits / يجب أن يكون 7 أرقام';
+                          }
+                          if (!RegExp(r'^\d{7}$').hasMatch(v.trim())) {
+                            return 'Digits only / أرقام فقط';
+                          }
                           return null;
                         },
                       ),
@@ -1155,7 +1450,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                                         .read(profileProvider.notifier)
                                         .updateProfile(
                                           bankAccount: BankAccount(
-                                            bankName: bankNameCtrl.text.trim(),
+                                            bankName: selectedBankName ?? '',
                                             accountNumber: accountNumberCtrl.text.trim(),
                                             accountName: accountNameCtrl.text.trim().isEmpty
                                                 ? null

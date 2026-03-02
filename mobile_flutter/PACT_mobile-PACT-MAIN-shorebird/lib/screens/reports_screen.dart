@@ -957,7 +957,9 @@ class _ReportsScreenState extends State<ReportsScreen> {
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
-          : Column(
+          : SafeArea(
+              top: false,
+              child: Column(
               children: [
                 // Summary Cards
                 Container(
@@ -1132,8 +1134,8 @@ class _ReportsScreenState extends State<ReportsScreen> {
                       colors: [
                         const Color(
                           0xFFFF9800,
-                        ).withOpacity(0.1), // Light orange
-                        const Color(0xFF1976D2).withOpacity(0.1), // Light blue
+                        ).withValues(alpha: 0.1), // Light orange
+                        const Color(0xFF1976D2).withValues(alpha: 0.1), // Light blue
                       ],
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,
@@ -1197,7 +1199,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
                                 border: Border.all(
                                   color: const Color(
                                     0xFFFF9800,
-                                  ).withOpacity(0.1), // Light orange border
+                                  ).withValues(alpha: 0.1), // Light orange border
                                   width: 1,
                                 ),
                               ),
@@ -1219,7 +1221,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
                                               colors: [
                                                 const Color(
                                                   0xFF1976D2,
-                                                ).withOpacity(
+                                                ).withValues(alpha: 
                                                   0.8,
                                                 ), // Blue gradient
                                                 const Color(0xFF42A5F5),
@@ -1452,14 +1454,14 @@ class _ReportsScreenState extends State<ReportsScreen> {
                                           decoration: BoxDecoration(
                                             color: const Color(
                                               0xFF4CAF50,
-                                            ).withOpacity(0.1),
+                                            ).withValues(alpha: 0.1),
                                             borderRadius: BorderRadius.circular(
                                               12,
                                             ),
                                             border: Border.all(
                                               color: const Color(
                                                 0xFF4CAF50,
-                                              ).withOpacity(0.3),
+                                              ).withValues(alpha: 0.3),
                                             ),
                                           ),
                                           child: const Text(
@@ -1481,6 +1483,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
                         ),
                 ),
               ],
+            )
             ),
     );
   }
@@ -1493,12 +1496,12 @@ class _ReportsScreenState extends State<ReportsScreen> {
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: color.withOpacity(0.1),
+            color: color.withValues(alpha: 0.1),
             blurRadius: 8,
             offset: const Offset(0, 4),
           ),
         ],
-        border: Border.all(color: color.withOpacity(0.2), width: 1),
+        border: Border.all(color: color.withValues(alpha: 0.2), width: 1),
       ),
       child: Column(
         children: [

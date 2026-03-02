@@ -2,6 +2,20 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../theme/app_colors.dart';
 
+/// Transportation Advance Request dialog.
+///
+/// Layout mirrors the Quick Withdrawal Request dialog exactly:
+///   • Blue gradient header
+///   • Light-blue info strip (site name | transport budget ceiling)
+///   • Quick-select % chips  →  amount field (inline error if over-budget)
+///   • Progress bar  →  notes field
+///   • Green summary row (visible when amount is valid)
+///   • Cancel / Submit buttons
+///
+/// Amount is hard-capped at [transportationBudget].  If the user types
+/// more, the field shows "Amount not accepted" inline (same pattern as
+/// the withdrawal dialog's "Insufficient balance" errorText) and the
+/// submit button stays disabled.
 class RequestAdvanceDialog extends StatefulWidget {
   final Map<String, dynamic> site;
   final double transportationBudget;
@@ -21,638 +35,605 @@ class RequestAdvanceDialog extends StatefulWidget {
 }
 
 class _RequestAdvanceDialogState extends State<RequestAdvanceDialog> {
-  final _formKey = GlobalKey<FormState>();
   final _amountController = TextEditingController();
-  final _justificationController = TextEditingController();
-
-  String _paymentType = 'full_advance';
+  final _notesController  = TextEditingController();
   bool _isSubmitting = false;
-
-  // Installment plan
-  List<Map<String, dynamic>> _installments = [];
 
   @override
   void initState() {
     super.initState();
-    _amountController.text = widget.transportationBudget.toStringAsFixed(0);
-    _installments = [
-      {
-        'amount': widget.transportationBudget * 0.6,
-        'stage': 'before_travel',
-        'description': 'Initial down-payment',
-        'paid': false,
-      },
-      {
-        'amount': widget.transportationBudget * 0.4,
-        'stage': 'after_completion',
-        'description': 'Final payment',
-        'paid': false,
-      },
-    ];
+    // Pre-fill with the full transport budget so the user just taps Submit.
+    if (widget.transportationBudget > 0) {
+      _amountController.text =
+          widget.transportationBudget.toStringAsFixed(0);
+    }
   }
 
   @override
   void dispose() {
     _amountController.dispose();
-    _justificationController.dispose();
+    _notesController.dispose();
     super.dispose();
   }
 
-  double get _requestedAmount {
-    return double.tryParse(_amountController.text) ?? 0.0;
+  // ── Derived values ──────────────────────────────────────────────────────
+
+  double get _amount => double.tryParse(_amountController.text) ?? 0.0;
+  double get _budget => widget.transportationBudget;
+
+  bool get _isOverBudget  => _budget > 0 && _amount > _budget;
+  bool get _isZeroOrEmpty => _amount <= 0;
+  bool get _isValid       => !_isZeroOrEmpty && !_isOverBudget;
+
+  double get _fillPct =>
+      _budget > 0 ? (_amount / _budget).clamp(0.0, 1.0) : 0.0;
+
+  // ── Quick-select helpers ────────────────────────────────────────────────
+
+  void _setQuickAmount(double pct) {
+    if (_budget <= 0) return;
+    final val = (_budget * pct).floorToDouble();
+    _amountController.text = val.toStringAsFixed(0);
+    setState(() {});
   }
 
-  double get _installmentTotal {
-    return _installments.fold<double>(
-      0.0,
-      (sum, inst) => sum + (inst['amount'] as num? ?? 0).toDouble(),
-    );
-  }
+  String _fmtCurrency(double v) =>
+      '${v.toStringAsFixed(0).replaceAllMapped(RegExp(r'\B(?=(\d{3})+(?!\d))'), (_) => ',')} SDG';
 
-  void _addInstallment() {
-    setState(() {
-      _installments.add({
-        'amount': 0.0,
-        'stage': '',
-        'description': '',
-        'paid': false,
-      });
+  // ── Submit ──────────────────────────────────────────────────────────────
+
+  void _submit() {
+    if (!_isValid || _isSubmitting) return;
+    Navigator.of(context).pop({
+      'success'         : true,
+      'requestedAmount' : _amount,
+      'paymentType'     : 'full_advance',
+      'justification'   : _notesController.text.trim().isEmpty
+          ? 'Transportation advance'
+          : _notesController.text.trim(),
+      'installmentPlan' : <Map<String, dynamic>>[],
     });
   }
 
-  void _removeInstallment(int index) {
-    setState(() {
-      _installments.removeAt(index);
-    });
-  }
-
-  void _updateInstallment(int index, String field, dynamic value) {
-    setState(() {
-      _installments[index][field] = value;
-    });
-  }
-
-  Future<void> _submit() async {
-    if (!_formKey.currentState!.validate()) return;
-
-    if (_justificationController.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please provide justification for this request'),
-          backgroundColor: Colors.red,
-        ),
-      );
-      return;
-    }
-
-    if (_requestedAmount <= 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Requested amount must be greater than zero'),
-          backgroundColor: Colors.red,
-        ),
-      );
-      return;
-    }
-
-    if (_requestedAmount > widget.transportationBudget) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Requested amount (${_requestedAmount.toStringAsFixed(0)} SDG) cannot exceed transportation budget (${widget.transportationBudget.toStringAsFixed(0)} SDG)',
-          ),
-          backgroundColor: Colors.red,
-        ),
-      );
-      return;
-    }
-
-    if (_paymentType == 'installments') {
-      if (_installmentTotal != _requestedAmount) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              'Installment total (${_installmentTotal.toStringAsFixed(0)} SDG) must equal requested amount (${_requestedAmount.toStringAsFixed(0)} SDG)',
-            ),
-            backgroundColor: Colors.red,
-          ),
-        );
-        return;
-      }
-    }
-
-    setState(() => _isSubmitting = true);
-
-    try {
-      Navigator.of(context).pop({
-        'success': true,
-        'requestedAmount': _requestedAmount,
-        'paymentType': _paymentType,
-        'justification': _justificationController.text.trim(),
-        'installmentPlan': _paymentType == 'installments' ? _installments : [],
-      });
-    } catch (e) {
-      debugPrint('Error submitting advance request: $e');
-      if (mounted) {
-        setState(() => _isSubmitting = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error: ${e.toString()}'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    }
-  }
+  // ── Build ───────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
-    final siteName =
-        widget.site['site_name'] ?? widget.site['siteName'] ?? 'Unknown Site';
+    final isArabic  = Localizations.localeOf(context).languageCode == 'ar';
+    final siteName  = widget.site['site_name'] ?? widget.site['siteName'] ?? 'Unknown Site';
+    final siteCode  = widget.site['site_code'] ?? widget.site['siteCode'] ?? '';
+    final state     = widget.site['state']    ?? '';
+    final locality  = widget.site['locality'] ?? '';
+
+    final amount    = _amount;
+    final isValid   = _isValid;
+
+    // Inline error text — matches withdrawal dialog's "Insufficient balance"
+    String? _errorText;
+    if (_isOverBudget) {
+      _errorText = isArabic
+          ? 'المبلغ غير مقبول — الحد ${_fmtCurrency(_budget)}'
+          : 'Amount not accepted — max is ${_fmtCurrency(_budget)}';
+    } else if (amount < 0) {
+      _errorText = isArabic ? 'مبلغ غير صالح' : 'Invalid amount';
+    }
 
     return Dialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 32),
+      backgroundColor: Colors.transparent,
       child: Container(
-        constraints: const BoxConstraints(maxHeight: 600),
+        constraints: const BoxConstraints(maxHeight: 640),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(24),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.18),
+              blurRadius: 32,
+              offset: const Offset(0, 12),
+            ),
+          ],
+        ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Header
+
+            // ── Gradient header (matches withdrawal dialog exactly) ──────
             Container(
-              padding: const EdgeInsets.all(20),
               decoration: const BoxDecoration(
-                color: AppColors.primaryBlue,
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [AppColors.primaryBlue, Color(0xFF2E5C8A)],
+                ),
                 borderRadius: BorderRadius.only(
-                  topLeft: Radius.circular(16),
-                  topRight: Radius.circular(16),
+                  topLeft:  Radius.circular(24),
+                  topRight: Radius.circular(24),
                 ),
               ),
+              padding: const EdgeInsets.fromLTRB(20, 20, 16, 20),
               child: Row(
                 children: [
-                  const Icon(Icons.payment, color: Colors.white, size: 24),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      'Request Advance',
-                      style: GoogleFonts.poppins(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                      ),
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.2),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.directions_car_rounded,
+                      color: Colors.white,
+                      size: 22,
                     ),
                   ),
-                  IconButton(
-                    icon: const Icon(Icons.close, color: Colors.white),
-                    onPressed: () => Navigator.of(context).pop(),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          isArabic ? 'طلب سلفة نقل' : 'Request Transport Advance',
+                          style: GoogleFonts.poppins(
+                            fontSize: 17,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.white,
+                          ),
+                        ),
+                        Text(
+                          'طلب سلفة نقل | Transport Advance',
+                          style: GoogleFonts.poppins(
+                            fontSize: 11,
+                            color: Colors.white70,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  GestureDetector(
+                    onTap: () => Navigator.of(context).pop(),
+                    child: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.2),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.close,
+                        color: Colors.white,
+                        size: 18,
+                      ),
+                    ),
                   ),
                 ],
               ),
             ),
-            // Content
+
+            // ── Info strip (matches withdrawal balance strip) ────────────
+            Container(
+              color: const Color(0xFFF0F7FF),
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+              child: Row(
+                children: [
+                  Expanded(
+                    flex: 2,
+                    child: _summaryTile(
+                      isArabic ? 'الموقع' : 'Site',
+                      siteName,
+                      siteCode.isNotEmpty
+                          ? siteCode
+                          : [locality, state]
+                              .where((s) => s.isNotEmpty)
+                              .join(', '),
+                      Icons.location_on_outlined,
+                      AppColors.primaryBlue,
+                    ),
+                  ),
+                  Container(
+                    width: 1,
+                    height: 44,
+                    color: Colors.blue[100],
+                  ),
+                  Expanded(
+                    child: _summaryTile(
+                      isArabic ? 'حد السلفة' : 'Max Advance',
+                      _budget > 0 ? _fmtCurrency(_budget) : '—',
+                      isArabic ? 'ميزانية النقل' : 'Transport budget',
+                      Icons.lock_outline_rounded,
+                      Colors.orange,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            // ── Form body ────────────────────────────────────────────────
             Expanded(
-              child: Form(
-                key: _formKey,
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.all(20),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // Site Info Card
-                      Container(
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: AppColors.backgroundGray,
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Column(
-                          children: [
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        'Site Name',
-                                        style: GoogleFonts.poppins(
-                                          fontSize: 12,
-                                          color: AppColors.textLight,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 4),
-                                      Text(
-                                        siteName,
-                                        style: GoogleFonts.poppins(
-                                          fontSize: 14,
-                                          fontWeight: FontWeight.w600,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                Column(
-                                  crossAxisAlignment: CrossAxisAlignment.end,
-                                  children: [
-                                    Text(
-                                      'Transport Budget',
-                                      style: GoogleFonts.poppins(
-                                        fontSize: 12,
-                                        color: AppColors.textLight,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      '${widget.transportationBudget.toStringAsFixed(0)} SDG',
-                                      style: GoogleFonts.poppins(
-                                        fontSize: 16,
-                                        fontWeight: FontWeight.bold,
-                                        color: AppColors.primaryBlue,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ],
-                            ),
-                            if (widget.hubName != null) ...[
-                              const Divider(height: 24),
-                              Row(
-                                children: [
-                                  Text(
-                                    'Hub: ',
-                                    style: GoogleFonts.poppins(
-                                      fontSize: 12,
-                                      color: AppColors.textLight,
-                                    ),
-                                  ),
-                                  Text(
-                                    widget.hubName!,
-                                    style: GoogleFonts.poppins(
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ],
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 20),
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
 
-                      // Requested Amount
-                      Text(
-                        'Requested Amount (SDG) *',
-                        style: GoogleFonts.poppins(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                        ),
+                    // Transportation-only info banner
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 10),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFFF7E6),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                            color: Colors.orange.withValues(alpha: 0.4)),
                       ),
-                      const SizedBox(height: 8),
-                      TextFormField(
-                        controller: _amountController,
-                        keyboardType: TextInputType.number,
-                        decoration: InputDecoration(
-                          hintText: 'Enter amount',
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          filled: true,
-                          fillColor: Colors.white,
-                          errorText: _requestedAmount >
-                                  widget.transportationBudget
-                              ? 'Amount exceeds budget by ${(_requestedAmount - widget.transportationBudget).toStringAsFixed(0)} SDG'
-                              : _requestedAmount <= 0
-                                  ? 'Amount must be greater than zero'
-                                  : null,
-                          suffixText: 'SDG',
-                        ),
-                        validator: (value) {
-                          final amount = double.tryParse(value ?? '') ?? 0;
-                          if (amount <= 0) {
-                            return 'Amount must be greater than zero';
-                          }
-                          if (amount > widget.transportationBudget) {
-                            return 'Amount cannot exceed ${widget.transportationBudget.toStringAsFixed(0)} SDG';
-                          }
-                          return null;
-                        },
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        'Maximum: ${widget.transportationBudget.toStringAsFixed(0)} SDG (total transportation budget)',
-                        style: GoogleFonts.poppins(
-                          fontSize: 12,
-                          color: AppColors.textLight,
-                        ),
-                      ),
-                      const SizedBox(height: 20),
-
-                      // Payment Type
-                      Text(
-                        'Payment Type *',
-                        style: GoogleFonts.poppins(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Row(
+                      child: Row(
                         children: [
+                          const Icon(Icons.info_outline_rounded,
+                              size: 16, color: Colors.orange),
+                          const SizedBox(width: 8),
                           Expanded(
-                            child: RadioListTile<String>(
-                              title: Text(
-                                'Full Advance',
-                                style: GoogleFonts.poppins(fontSize: 13),
+                            child: Text(
+                              isArabic
+                                  ? 'السلفة مخصصة لتكاليف النقل فقط'
+                                  : 'Advance is for transportation costs only',
+                              style: GoogleFonts.poppins(
+                                fontSize: 11.5,
+                                color: Colors.orange.shade800,
+                                fontWeight: FontWeight.w500,
                               ),
-                              subtitle: Text(
-                                'Receive entire amount upfront',
-                                style: GoogleFonts.poppins(
-                                  fontSize: 11,
-                                  color: AppColors.textLight,
-                                ),
-                              ),
-                              value: 'full_advance',
-                              groupValue: _paymentType,
-                              onChanged: (value) {
-                                setState(() =>
-                                    _paymentType = value ?? 'full_advance');
-                              },
-                              contentPadding: EdgeInsets.zero,
-                            ),
-                          ),
-                          Expanded(
-                            child: RadioListTile<String>(
-                              title: Text(
-                                'Installments',
-                                style: GoogleFonts.poppins(fontSize: 13),
-                              ),
-                              subtitle: Text(
-                                'Receive payment in stages',
-                                style: GoogleFonts.poppins(
-                                  fontSize: 11,
-                                  color: AppColors.textLight,
-                                ),
-                              ),
-                              value: 'installments',
-                              groupValue: _paymentType,
-                              onChanged: (value) {
-                                setState(() =>
-                                    _paymentType = value ?? 'installments');
-                              },
-                              contentPadding: EdgeInsets.zero,
                             ),
                           ),
                         ],
                       ),
+                    ),
+                    const SizedBox(height: 18),
 
-                      // Installment Plan
-                      if (_paymentType == 'installments') ...[
-                        const SizedBox(height: 20),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text(
-                              'Installment Plan',
-                              style: GoogleFonts.poppins(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                            TextButton.icon(
-                              onPressed: _addInstallment,
-                              icon: const Icon(Icons.add, size: 18),
-                              label: const Text('Add Installment'),
-                            ),
-                          ],
+                    // Quick-select chips (same style as withdrawal dialog)
+                    Row(
+                      children: [
+                        Text(
+                          isArabic ? 'اختيار سريع:' : 'Quick select:',
+                          style: GoogleFonts.poppins(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.textLight,
+                          ),
                         ),
-                        const SizedBox(height: 12),
-                        ...List.generate(_installments.length, (index) {
-                          return Container(
-                            margin: const EdgeInsets.only(bottom: 12),
-                            padding: const EdgeInsets.all(16),
-                            decoration: BoxDecoration(
-                              border:
-                                  Border.all(color: AppColors.backgroundGray),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: Column(
-                              children: [
-                                Row(
-                                  mainAxisAlignment:
-                                      MainAxisAlignment.spaceBetween,
-                                  children: [
-                                    Text(
-                                      'Installment ${index + 1}',
-                                      style: GoogleFonts.poppins(
-                                        fontSize: 14,
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    ),
-                                    if (_installments.length > 1)
-                                      IconButton(
-                                        icon: const Icon(Icons.delete,
-                                            color: Colors.red, size: 20),
-                                        onPressed: () =>
-                                            _removeInstallment(index),
-                                      ),
-                                  ],
-                                ),
-                                const SizedBox(height: 12),
-                                Row(
-                                  children: [
-                                    Expanded(
-                                      child: TextFormField(
-                                        initialValue: (_installments[index]
-                                                    ['amount'] as num?)
-                                                ?.toStringAsFixed(0) ??
-                                            '0',
-                                        keyboardType: TextInputType.number,
-                                        decoration: InputDecoration(
-                                          labelText: 'Amount (SDG)',
-                                          border: OutlineInputBorder(
-                                            borderRadius:
-                                                BorderRadius.circular(8),
-                                          ),
-                                          filled: true,
-                                          fillColor: Colors.white,
-                                          isDense: true,
-                                        ),
-                                        onChanged: (value) {
-                                          _updateInstallment(
-                                            index,
-                                            'amount',
-                                            double.tryParse(value) ?? 0.0,
-                                          );
-                                        },
-                                      ),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Expanded(
-                                      child: TextFormField(
-                                        initialValue: _installments[index]
-                                                ['stage'] as String? ??
-                                            '',
-                                        decoration: InputDecoration(
-                                          labelText: 'Stage',
-                                          hintText: 'e.g., before_travel',
-                                          border: OutlineInputBorder(
-                                            borderRadius:
-                                                BorderRadius.circular(8),
-                                          ),
-                                          filled: true,
-                                          fillColor: Colors.white,
-                                          isDense: true,
-                                        ),
-                                        onChanged: (value) {
-                                          _updateInstallment(
-                                              index, 'stage', value);
-                                        },
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(height: 8),
-                                TextFormField(
-                                  initialValue: _installments[index]
-                                          ['description'] as String? ??
-                                      '',
-                                  decoration: InputDecoration(
-                                    labelText: 'Description',
-                                    hintText: 'Describe this payment stage',
-                                    border: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(8),
-                                    ),
-                                    filled: true,
-                                    fillColor: Colors.white,
-                                    isDense: true,
+                        const SizedBox(width: 8),
+                        ...[
+                          ('25%', 0.25),
+                          ('50%', 0.50),
+                          ('75%', 0.75),
+                          (isArabic ? 'الكل' : 'Max', 1.0),
+                        ].map((entry) {
+                          return Padding(
+                            padding: const EdgeInsets.only(right: 6),
+                            child: GestureDetector(
+                              onTap: () => _setQuickAmount(entry.$2),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 10, vertical: 5),
+                                decoration: BoxDecoration(
+                                  color: AppColors.primaryBlue
+                                      .withValues(alpha: 0.1),
+                                  borderRadius: BorderRadius.circular(20),
+                                  border: Border.all(
+                                    color: AppColors.primaryBlue
+                                        .withValues(alpha: 0.3),
                                   ),
-                                  onChanged: (value) {
-                                    _updateInstallment(
-                                        index, 'description', value);
-                                  },
                                 ),
-                              ],
+                                child: Text(
+                                  entry.$1,
+                                  style: GoogleFonts.poppins(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w700,
+                                    color: AppColors.primaryBlue,
+                                  ),
+                                ),
+                              ),
                             ),
                           );
                         }),
-                        Container(
-                          padding: const EdgeInsets.all(16),
-                          decoration: BoxDecoration(
-                            color: AppColors.backgroundGray,
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Text(
-                                'Total Installments:',
-                                style: GoogleFonts.poppins(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                              Text(
-                                '${_installmentTotal.toStringAsFixed(0)} SDG',
-                                style: GoogleFonts.poppins(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.bold,
-                                  color: _installmentTotal == _requestedAmount
-                                      ? Colors.green
-                                      : Colors.red,
-                                ),
-                              ),
-                            ],
+                      ],
+                    ),
+                    const SizedBox(height: 14),
+
+                    // Amount field — inline errorText when over-budget
+                    TextField(
+                      controller: _amountController,
+                      keyboardType: const TextInputType.numberWithOptions(
+                          decimal: true),
+                      style: GoogleFonts.poppins(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
+                      ),
+                      decoration: InputDecoration(
+                        labelText: isArabic
+                            ? 'المبلغ (SDG)'
+                            : 'Amount (SDG)',
+                        prefixIcon: const Icon(
+                          Icons.attach_money_rounded,
+                          color: AppColors.primaryBlue,
+                        ),
+                        filled: true,
+                        fillColor: const Color(0xFFF8FAFF),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(14),
+                          borderSide:
+                              const BorderSide(color: AppColors.borderColor),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(14),
+                          borderSide: BorderSide(
+                            color: _isOverBudget
+                                ? Colors.red
+                                : AppColors.borderColor,
+                            width: _isOverBudget ? 1.5 : 1,
                           ),
                         ),
-                        if (_installmentTotal != _requestedAmount) ...[
-                          const SizedBox(height: 8),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(14),
+                          borderSide: BorderSide(
+                            color: _isOverBudget
+                                ? Colors.red
+                                : AppColors.primaryBlue,
+                            width: 2,
+                          ),
+                        ),
+                        // Inline error — same pattern as withdrawal dialog
+                        errorText: _errorText,
+                        // Show % of budget as suffix when valid
+                        suffix: amount > 0 && !_isOverBudget
+                            ? Text(
+                                '${(_fillPct * 100).toStringAsFixed(0)}%',
+                                style: GoogleFonts.poppins(
+                                  fontSize: 12,
+                                  color: AppColors.primaryBlue,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              )
+                            : null,
+                      ),
+                      onChanged: (_) => setState(() {}),
+                    ),
+
+                    // Progress bar
+                    const SizedBox(height: 8),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(4),
+                      child: LinearProgressIndicator(
+                        value: _fillPct,
+                        minHeight: 5,
+                        backgroundColor: Colors.grey[200],
+                        color: _isOverBudget
+                            ? AppColors.accentRed
+                            : _fillPct > 0.9
+                                ? AppColors.accentYellow
+                                : AppColors.primaryBlue,
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text('0',
+                              style: GoogleFonts.poppins(
+                                  fontSize: 10,
+                                  color: AppColors.textLight)),
                           Text(
-                            '⚠️ Installment total must equal requested amount',
+                            _budget > 0
+                                ? _fmtCurrency(_budget)
+                                : isArabic
+                                    ? 'غير محدد'
+                                    : 'No budget set',
                             style: GoogleFonts.poppins(
-                              fontSize: 12,
-                              color: Colors.red,
+                              fontSize: 10,
+                              color: AppColors.textLight,
+                              fontWeight: FontWeight.w600,
                             ),
                           ),
                         ],
-                      ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
 
-                      const SizedBox(height: 20),
-
-                      // Justification
-                      Text(
-                        'Justification *',
-                        style: GoogleFonts.poppins(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
+                    // Notes / reason (optional)
+                    TextField(
+                      controller: _notesController,
+                      maxLines: 2,
+                      decoration: InputDecoration(
+                        labelText: isArabic
+                            ? 'ملاحظات (اختياري)'
+                            : 'Notes (optional)',
+                        hintText: isArabic
+                            ? 'تفاصيل الرحلة، وسيلة النقل...'
+                            : 'Trip details, transport type…',
+                        prefixIcon: const Icon(
+                          Icons.edit_note_rounded,
+                          color: AppColors.primaryBlue,
+                        ),
+                        filled: true,
+                        fillColor: const Color(0xFFF8FAFF),
+                        border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(14)),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(14),
+                          borderSide: const BorderSide(
+                              color: AppColors.primaryBlue, width: 2),
                         ),
                       ),
-                      const SizedBox(height: 8),
-                      TextFormField(
-                        controller: _justificationController,
-                        maxLines: 4,
-                        decoration: InputDecoration(
-                          hintText:
-                              'Explain why you need this advance and how it will be used...',
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          filled: true,
-                          fillColor: Colors.white,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+            // ── Green summary row when valid (matches withdrawal dialog) ─
+            if (isValid)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+                child: Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF0FDF4),
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(
+                        color:
+                            AppColors.accentGreen.withValues(alpha: 0.4)),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.check_circle_rounded,
+                          color: AppColors.accentGreen, size: 18),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              isArabic
+                                  ? 'سيتم طلب ${_fmtCurrency(amount)}'
+                                  : 'Requesting ${_fmtCurrency(amount)}',
+                              style: GoogleFonts.poppins(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.accentGreen,
+                              ),
+                            ),
+                            Text(
+                              isArabic
+                                  ? 'من ميزانية النقل — بانتظار موافقة المشرف'
+                                  : 'From transport budget — pending supervisor approval',
+                              style: GoogleFonts.poppins(
+                                fontSize: 11,
+                                color: AppColors.textLight,
+                              ),
+                            ),
+                          ],
                         ),
-                        validator: (value) {
-                          if (value == null || value.trim().isEmpty) {
-                            return 'Justification is required';
-                          }
-                          return null;
-                        },
                       ),
                     ],
                   ),
                 ),
               ),
-            ),
-            // Footer
-            Container(
-              padding: const EdgeInsets.all(20),
-              decoration: const BoxDecoration(
-                border: Border(
-                  top: BorderSide(color: AppColors.backgroundGray),
-                ),
-              ),
+
+            // ── Action buttons ────────────────────────────────────────────
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
               child: Row(
-                mainAxisAlignment: MainAxisAlignment.end,
                 children: [
-                  TextButton(
-                    onPressed: _isSubmitting
-                        ? null
-                        : () => Navigator.of(context).pop(),
-                    child: const Text('Cancel'),
-                  ),
-                  const SizedBox(width: 8),
-                  ElevatedButton(
-                    onPressed: _isSubmitting ? null : _submit,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.green,
-                      foregroundColor: Colors.white,
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () => Navigator.of(context).pop(),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        side: BorderSide(color: Colors.grey[300]!),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14)),
+                      ),
+                      child: Text(
+                        isArabic ? 'إلغاء' : 'Cancel',
+                        style: GoogleFonts.poppins(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.textLight,
+                        ),
+                      ),
                     ),
-                    child: _isSubmitting
-                        ? const SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              valueColor:
-                                  AlwaysStoppedAnimation<Color>(Colors.white),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    flex: 2,
+                    child: ElevatedButton(
+                      onPressed: isValid && !_isSubmitting ? _submit : null,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.primaryBlue,
+                        disabledBackgroundColor: Colors.grey[300],
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14)),
+                        elevation: 0,
+                      ),
+                      child: _isSubmitting
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white,
+                              ),
+                            )
+                          : Text(
+                              isArabic ? 'إرسال الطلب' : 'Submit Request',
+                              style: GoogleFonts.poppins(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w700,
+                                color: Colors.white,
+                              ),
                             ),
-                          )
-                        : const Text('Submit Request'),
+                    ),
                   ),
                 ],
               ),
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  // ── Summary tile (matches withdrawal dialog) ────────────────────────────
+
+  Widget _summaryTile(
+    String label,
+    String value,
+    String? sub,
+    IconData icon,
+    Color color,
+  ) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, size: 13, color: color),
+              const SizedBox(width: 4),
+              Flexible(
+                child: Text(
+                  label,
+                  style: GoogleFonts.poppins(
+                    fontSize: 10,
+                    color: AppColors.textLight,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 2),
+          Text(
+            value,
+            style: GoogleFonts.poppins(
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+              color: color,
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          if (sub != null && sub.isNotEmpty)
+            Text(
+              sub,
+              style: GoogleFonts.poppins(
+                fontSize: 10,
+                color: AppColors.textLight,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+        ],
       ),
     );
   }

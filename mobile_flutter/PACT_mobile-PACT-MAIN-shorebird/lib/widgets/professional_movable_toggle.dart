@@ -567,14 +567,14 @@ class _ProfessionalMovableToggleState
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
                       color: isOnline
-                          ? const Color(0xFF10B981).withOpacity(0.9)
-                          : const Color(0xFF6B7280).withOpacity(0.9),
+                          ? const Color(0xFF10B981).withValues(alpha: 0.9)
+                          : const Color(0xFF6B7280).withValues(alpha: 0.9),
                       boxShadow: [
                         BoxShadow(
                           color: (isOnline
                                   ? const Color(0xFF10B981)
                                   : const Color(0xFF6B7280))
-                              .withOpacity(0.4),
+                              .withValues(alpha: 0.4),
                           blurRadius: 8,
                           spreadRadius: 2,
                         ),
@@ -586,7 +586,7 @@ class _ProfessionalMovableToggleState
                         height: 10,
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
-                          color: Colors.white.withOpacity(0.9),
+                          color: Colors.white.withValues(alpha: 0.9),
                         ),
                       ),
                     ),
@@ -642,8 +642,8 @@ class _ProfessionalMovableToggleState
     final primaryColor =
         isOnline ? const Color(0xFF10B981) : const Color(0xFF6B7280);
     final backgroundColor = isOnline
-        ? const Color(0xFF10B981).withOpacity(0.15)
-        : const Color(0xFF6B7280).withOpacity(0.15);
+        ? const Color(0xFF10B981).withValues(alpha: 0.15)
+        : const Color(0xFF6B7280).withValues(alpha: 0.15);
 
     return AnimatedContainer(
       duration: const Duration(milliseconds: 200),
@@ -653,18 +653,18 @@ class _ProfessionalMovableToggleState
         borderRadius: BorderRadius.circular(26),
         color: Colors.white,
         border: Border.all(
-          color: primaryColor.withOpacity(0.3),
+          color: primaryColor.withValues(alpha: 0.3),
           width: 1.5,
         ),
         boxShadow: [
           BoxShadow(
-            color: primaryColor.withOpacity(0.2),
+            color: primaryColor.withValues(alpha: 0.2),
             blurRadius: 16,
             spreadRadius: 0,
             offset: const Offset(0, 4),
           ),
           BoxShadow(
-            color: Colors.black.withOpacity(0.08),
+            color: Colors.black.withValues(alpha: 0.08),
             blurRadius: 8,
             spreadRadius: 0,
             offset: const Offset(0, 2),
@@ -708,7 +708,7 @@ class _ProfessionalMovableToggleState
                           color: primaryColor,
                           boxShadow: [
                             BoxShadow(
-                              color: primaryColor.withOpacity(0.4),
+                              color: primaryColor.withValues(alpha: 0.4),
                               blurRadius: 8,
                               spreadRadius: 0,
                             ),

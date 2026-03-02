@@ -1,10 +1,12 @@
 // lib/services/presence_service.dart
 
 import 'dart:async';
+import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:hive_flutter/hive_flutter.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 
 /// User presence data model
 class UserPresence {
@@ -120,6 +122,7 @@ class PresenceService {
   RealtimeChannel? _presenceChannel;
   Timer? _heartbeatTimer;
   StreamSubscription? _connectivitySubscription;
+  int _heartbeatCount = 0;
 
   String? _currentUserId;
   String? _currentUserName;
@@ -462,12 +465,53 @@ class PresenceService {
 
   void _startHeartbeat() {
     _heartbeatTimer?.cancel();
+    _heartbeatCount = 0;
     _heartbeatTimer = Timer.periodic(const Duration(seconds: 30), (_) async {
       final connectivity = await Connectivity().checkConnectivity();
-      if (!connectivity.contains(ConnectivityResult.none)) {
-        await _trackPresence();
+      if (connectivity.contains(ConnectivityResult.none)) return;
+
+      await _trackPresence();
+
+      // Write last_activity to profiles every 3 minutes (every 6th tick).
+      // This makes mobile users visible as "online" on the web Staff Directory
+      // even though mobile uses a different Realtime channel than the web app.
+      _heartbeatCount++;
+      if (_heartbeatCount % 6 == 1) {
+        // tick 1, 7, 13 … → immediately on connect, then every 3 min
+        await _writeLastActivityToProfile();
       }
     });
+    // Write immediately on start so the user appears online right away
+    _writeLastActivityToProfile();
+  }
+
+  Future<void> _writeLastActivityToProfile() async {
+    if (_currentUserId == null) return;
+    try {
+      // Detect device type
+      String deviceLabel = 'Android';
+      if (!kIsWeb) {
+        if (Platform.isIOS) deviceLabel = 'iOS';
+        else if (Platform.isAndroid) deviceLabel = 'Android';
+        else if (Platform.isWindows || Platform.isMacOS || Platform.isLinux) deviceLabel = 'Desktop';
+      }
+
+      // Get app version
+      String? version;
+      try {
+        final info = await PackageInfo.fromPlatform();
+        version = '${info.version}+${info.buildNumber}';
+      } catch (_) {}
+
+      await _supabase.from('profiles').update({
+        'last_activity': DateTime.now().toUtc().toIso8601String(),
+        'device_info':   deviceLabel,
+        if (version != null) 'app_version': version,
+      }).eq('id', _currentUserId!);
+      debugPrint('[PresenceService] Wrote last_activity/$deviceLabel/$version to profiles');
+    } catch (e) {
+      debugPrint('[PresenceService] Failed to write activity to profiles: $e');
+    }
   }
 
   Future<void> updateCallStatus({required bool inCall, String? callId}) async {

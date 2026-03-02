@@ -169,7 +169,9 @@ class _EmailTrackingScreenState extends State<EmailTrackingScreen> {
         ),
         body: !_hasAccess
             ? const Center(child: CircularProgressIndicator())
-            : Column(
+            : SafeArea(
+                top: false,
+                child: Column(
                 children: [
                   _buildStatsRow(),
                   _buildFilterBar(),
@@ -189,6 +191,7 @@ class _EmailTrackingScreenState extends State<EmailTrackingScreen> {
                               ),
                   ),
                 ],
+              )
               ),
       ),
     );
@@ -233,7 +236,7 @@ class _EmailTrackingScreenState extends State<EmailTrackingScreen> {
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 12),
         decoration: BoxDecoration(
-          color: color.withOpacity(0.1),
+          color: color.withValues(alpha: 0.1),
           borderRadius: BorderRadius.circular(12),
         ),
         child: Column(
@@ -367,7 +370,7 @@ class _EmailTrackingScreenState extends State<EmailTrackingScreen> {
                 Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: statusColor.withOpacity(0.1),
+                    color: statusColor.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Icon(statusIcon, color: statusColor, size: 20),
@@ -411,7 +414,7 @@ class _EmailTrackingScreenState extends State<EmailTrackingScreen> {
                       vertical: 2,
                     ),
                     decoration: BoxDecoration(
-                      color: AppColors.primaryBlue.withOpacity(0.1),
+                      color: AppColors.primaryBlue.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Text(
@@ -463,9 +466,9 @@ class _EmailTrackingScreenState extends State<EmailTrackingScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
+        color: color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withOpacity(0.3)),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
       ),
       child: Text(
         label,

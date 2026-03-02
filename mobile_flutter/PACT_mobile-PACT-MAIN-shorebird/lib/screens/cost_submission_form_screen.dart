@@ -127,7 +127,9 @@ class _CostSubmissionFormScreenState extends State<CostSubmissionFormScreen> {
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
-          : Form(
+          : SafeArea(
+              top: false,
+              child: Form(
               key: _formKey,
               child: ListView(
                 padding: const EdgeInsets.all(16),
@@ -156,6 +158,7 @@ class _CostSubmissionFormScreenState extends State<CostSubmissionFormScreen> {
                   const SizedBox(height: 16),
                 ],
               ),
+            )
             ),
     );
   }
@@ -169,7 +172,7 @@ class _CostSubmissionFormScreenState extends State<CostSubmissionFormScreen> {
       child: Container(
         decoration: BoxDecoration(
           gradient: LinearGradient(
-            colors: [Theme.of(context).primaryColor, Theme.of(context).primaryColor.withOpacity(0.8)],
+            colors: [Theme.of(context).primaryColor, Theme.of(context).primaryColor.withValues(alpha: 0.8)],
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
           ),
@@ -192,7 +195,7 @@ class _CostSubmissionFormScreenState extends State<CostSubmissionFormScreen> {
               decoration: InputDecoration(
                 border: InputBorder.none,
                 hintText: '0.00',
-                hintStyle: TextStyle(color: Colors.white.withOpacity(0.4), fontSize: 32),
+                hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.4), fontSize: 32),
                 suffixText: _selectedCurrency,
                 suffixStyle: const TextStyle(color: Colors.white70, fontSize: 16),
               ),
@@ -248,7 +251,7 @@ class _CostSubmissionFormScreenState extends State<CostSubmissionFormScreen> {
                   onSelected: (sel) {
                     if (sel) setState(() => _selectedCategory = cat);
                   },
-                  selectedColor: Theme.of(context).primaryColor.withOpacity(0.2),
+                  selectedColor: Theme.of(context).primaryColor.withValues(alpha: 0.2),
                 );
               }).toList(),
             ),
@@ -296,7 +299,7 @@ class _CostSubmissionFormScreenState extends State<CostSubmissionFormScreen> {
                       onSelected: (sel) {
                         if (sel) setState(() => _selectedFundingType = ft);
                       },
-                      selectedColor: Theme.of(context).primaryColor.withOpacity(0.2),
+                      selectedColor: Theme.of(context).primaryColor.withValues(alpha: 0.2),
                     ),
                   ),
                 );

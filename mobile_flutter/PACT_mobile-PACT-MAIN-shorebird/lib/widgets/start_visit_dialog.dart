@@ -69,7 +69,7 @@ class StartVisitDialog extends StatelessWidget {
                             margin: const EdgeInsets.only(top: 4),
                             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                             decoration: BoxDecoration(
-                              color: isDM ? Colors.blue.withOpacity(0.3) : Colors.orange.withOpacity(0.3),
+                              color: isDM ? Colors.blue.withValues(alpha: 0.3) : Colors.orange.withValues(alpha: 0.3),
                               borderRadius: BorderRadius.circular(8),
                             ),
                             child: Text(
@@ -103,7 +103,7 @@ class StartVisitDialog extends StatelessWidget {
                         borderRadius: BorderRadius.circular(16),
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.black.withOpacity(0.05),
+                            color: Colors.black.withValues(alpha: 0.05),
                             blurRadius: 10,
                             offset: const Offset(0, 2),
                           ),
@@ -178,7 +178,7 @@ class StartVisitDialog extends StatelessWidget {
                         borderRadius: BorderRadius.circular(16),
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.black.withOpacity(0.05),
+                            color: Colors.black.withValues(alpha: 0.05),
                             blurRadius: 10,
                             offset: const Offset(0, 2),
                           ),
@@ -233,7 +233,7 @@ class StartVisitDialog extends StatelessWidget {
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(24),
                         ),
-                        side: BorderSide(color: Colors.black.withOpacity(0.2)),
+                        side: BorderSide(color: Colors.black.withValues(alpha: 0.2)),
                       ),
                       child: Text(
                         isArabic ? 'إلغاء' : 'Cancel',
@@ -348,7 +348,7 @@ class StartVisitDialog extends StatelessWidget {
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
           decoration: BoxDecoration(
-            color: isHighlighted ? Colors.black : Colors.black.withOpacity(0.1),
+            color: isHighlighted ? Colors.black : Colors.black.withValues(alpha: 0.1),
             borderRadius: BorderRadius.circular(12),
           ),
           child: Text(
@@ -379,7 +379,7 @@ class StartVisitDialog extends StatelessWidget {
             text,
             style: GoogleFonts.poppins(
               fontSize: 13,
-              color: AppColors.textDark.withOpacity(0.7),
+              color: AppColors.textDark.withValues(alpha: 0.7),
             ),
           ),
         ),

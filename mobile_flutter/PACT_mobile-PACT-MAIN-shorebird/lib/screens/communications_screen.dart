@@ -797,7 +797,7 @@ class _CommunicationsScreenState extends State<CommunicationsScreen>
           Text(
             '$onlineCount online of ${_allUsers.length} users',
             style: GoogleFonts.poppins(
-              color: Colors.white.withOpacity(0.8),
+              color: Colors.white.withValues(alpha: 0.8),
               fontSize: 12,
             ),
           ),
@@ -810,8 +810,8 @@ class _CommunicationsScreenState extends State<CommunicationsScreen>
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
           decoration: BoxDecoration(
             color: _agoraService.isReady
-                ? Colors.green.withOpacity(0.2)
-                : Colors.orange.withOpacity(0.2),
+                ? Colors.green.withValues(alpha: 0.2)
+                : Colors.orange.withValues(alpha: 0.2),
             borderRadius: BorderRadius.circular(12),
           ),
           child: Row(
@@ -850,7 +850,7 @@ class _CommunicationsScreenState extends State<CommunicationsScreen>
   Widget _buildSearchBar() {
     return Container(
       padding: const EdgeInsets.all(16),
-      color: AppColors.primaryBlue.withOpacity(0.1),
+      color: AppColors.primaryBlue.withValues(alpha: 0.1),
       child: TextField(
         controller: _searchController,
         onChanged: _onSearchChanged,
@@ -949,7 +949,7 @@ class _CommunicationsScreenState extends State<CommunicationsScreen>
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      color: Colors.orange.withOpacity(0.1),
+      color: Colors.orange.withValues(alpha: 0.1),
       child: Row(
         children: [
           const Icon(Icons.wifi_off, color: Colors.orange, size: 18),
@@ -1048,7 +1048,7 @@ class _CommunicationsScreenState extends State<CommunicationsScreen>
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 4,
             offset: const Offset(0, 2),
           ),
@@ -1068,7 +1068,7 @@ class _CommunicationsScreenState extends State<CommunicationsScreen>
                   children: [
                     CircleAvatar(
                       radius: 24,
-                      backgroundColor: AppColors.primaryBlue.withOpacity(0.1),
+                      backgroundColor: AppColors.primaryBlue.withValues(alpha: 0.1),
                       backgroundImage: user.userAvatar != null
                           ? NetworkImage(user.userAvatar!)
                           : null,
@@ -1132,7 +1132,7 @@ class _CommunicationsScreenState extends State<CommunicationsScreen>
                                 vertical: 2,
                               ),
                               decoration: BoxDecoration(
-                                color: Colors.orange.withOpacity(0.1),
+                                color: Colors.orange.withValues(alpha: 0.1),
                                 borderRadius: BorderRadius.circular(4),
                               ),
                               child: Text(
@@ -1193,7 +1193,7 @@ class _CommunicationsScreenState extends State<CommunicationsScreen>
                         Icons.call,
                         color: (user.isOnline && !user.isInCall && _isOnline)
                             ? AppColors.primaryGreen
-                            : Colors.grey.withOpacity(0.5),
+                            : Colors.grey.withValues(alpha: 0.5),
                       ),
                       iconSize: 22,
                       onPressed: (user.isOnline && !user.isInCall && _isOnline)
@@ -1213,7 +1213,7 @@ class _CommunicationsScreenState extends State<CommunicationsScreen>
                         Icons.video_camera_front,
                         color: (user.isOnline && !user.isInCall && _isOnline)
                             ? Colors.green
-                            : Colors.grey.withOpacity(0.5),
+                            : Colors.grey.withValues(alpha: 0.5),
                       ),
                       iconSize: 22,
                       onPressed: (user.isOnline && !user.isInCall && _isOnline)
@@ -1269,7 +1269,7 @@ class _CommunicationsScreenState extends State<CommunicationsScreen>
                       children: [
                         CircleAvatar(
                           radius: 30,
-                          backgroundColor: AppColors.primaryBlue.withOpacity(
+                          backgroundColor: AppColors.primaryBlue.withValues(alpha: 
                             0.1,
                           ),
                           backgroundImage: user.userAvatar != null
@@ -1371,7 +1371,7 @@ class _CommunicationsScreenState extends State<CommunicationsScreen>
                 leading: Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: AppColors.primaryBlue.withOpacity(0.1),
+                    color: AppColors.primaryBlue.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: const Icon(
@@ -1398,8 +1398,8 @@ class _CommunicationsScreenState extends State<CommunicationsScreen>
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
                     color: (user.isOnline && !user.isInCall && _isOnline)
-                        ? AppColors.primaryGreen.withOpacity(0.1)
-                        : Colors.grey.withOpacity(0.1),
+                        ? AppColors.primaryGreen.withValues(alpha: 0.1)
+                        : Colors.grey.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Icon(
@@ -1442,8 +1442,8 @@ class _CommunicationsScreenState extends State<CommunicationsScreen>
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
                     color: (user.isOnline && !user.isInCall && _isOnline)
-                        ? Colors.green.withOpacity(0.1)
-                        : Colors.grey.withOpacity(0.1),
+                        ? Colors.green.withValues(alpha: 0.1)
+                        : Colors.grey.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Icon(

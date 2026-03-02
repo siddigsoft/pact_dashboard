@@ -458,7 +458,7 @@ export default function SupervisorApprovals() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          {hubName && (
+          {hubName && isSupervisor && !isAdmin && (
             <Badge variant="outline" className="flex items-center gap-1">
               <Building2 className="h-3 w-3" />
               {hubName}

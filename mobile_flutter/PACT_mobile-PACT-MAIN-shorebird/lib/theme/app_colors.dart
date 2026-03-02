@@ -74,7 +74,7 @@ class AppColors {
   );
 
   // Modern frosted glass effect
-  static Color get frostedGlass => Colors.white.withOpacity(0.75);
+  static Color get frostedGlass => Colors.white.withValues(alpha: 0.75);
 
   // Modern card decoration
   static BoxDecoration get modernCardDecoration => BoxDecoration(
@@ -96,7 +96,7 @@ class AppColors {
     borderRadius: BorderRadius.circular(16),
     boxShadow: [
       BoxShadow(
-        color: primaryOrange.withOpacity(0.25),
+        color: primaryOrange.withValues(alpha: 0.25),
         blurRadius: 12,
         spreadRadius: 0,
         offset: const Offset(0, 4),

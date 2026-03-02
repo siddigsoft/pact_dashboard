@@ -374,7 +374,7 @@ class _ChatScreenState extends State<ChatScreen> {
             width: 60,
             height: 60,
             decoration: BoxDecoration(
-              color: color.withOpacity(0.1),
+              color: color.withValues(alpha: 0.1),
               shape: BoxShape.circle,
             ),
             child: Icon(icon, color: color, size: 28),
@@ -1112,7 +1112,7 @@ class _ChatScreenState extends State<ChatScreen> {
                   colors: [Colors.orange.shade400, Colors.deepOrange.shade400],
                 ),
                 border: Border.all(
-                  color: Colors.white.withOpacity(0.3),
+                  color: Colors.white.withValues(alpha: 0.3),
                   width: 2,
                 ),
               ),
@@ -1163,7 +1163,7 @@ class _ChatScreenState extends State<ChatScreen> {
               icon: Container(
                 padding: const EdgeInsets.all(6),
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.15),
+                  color: Colors.white.withValues(alpha: 0.15),
                   shape: BoxShape.circle,
                 ),
                 child: const Icon(
@@ -1179,7 +1179,7 @@ class _ChatScreenState extends State<ChatScreen> {
               icon: Container(
                 padding: const EdgeInsets.all(6),
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.15),
+                  color: Colors.white.withValues(alpha: 0.15),
                   shape: BoxShape.circle,
                 ),
                 child: const Icon(
@@ -1196,7 +1196,7 @@ class _ChatScreenState extends State<ChatScreen> {
             icon: Container(
               padding: const EdgeInsets.all(6),
               decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.15),
+                color: Colors.white.withValues(alpha: 0.15),
                 shape: BoxShape.circle,
               ),
               child: const Icon(Icons.more_vert, color: Colors.white, size: 20),
@@ -1464,7 +1464,7 @@ class _ChatScreenState extends State<ChatScreen> {
                         shape: BoxShape.circle,
                         boxShadow: [
                           BoxShadow(
-                            color: const Color(0xFFFF9800).withOpacity(0.3),
+                            color: const Color(0xFFFF9800).withValues(alpha: 0.3),
                             blurRadius: 6,
                             offset: const Offset(0, 3),
                           ),
@@ -1481,7 +1481,7 @@ class _ChatScreenState extends State<ChatScreen> {
                       shape: BoxShape.circle,
                       boxShadow: [
                         BoxShadow(
-                          color: const Color(0xFFFF9800).withOpacity(0.3),
+                          color: const Color(0xFFFF9800).withValues(alpha: 0.3),
                           blurRadius: 6,
                           offset: const Offset(0, 3),
                         ),
@@ -1583,7 +1583,7 @@ class _ChatScreenState extends State<ChatScreen> {
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
             color: isCurrentUser
-                ? Colors.white.withOpacity(0.2)
+                ? Colors.white.withValues(alpha: 0.2)
                 : Colors.grey[100],
             borderRadius: BorderRadius.circular(8),
           ),
@@ -1725,7 +1725,7 @@ class _ChatScreenState extends State<ChatScreen> {
             border: isCurrentUser
                 ? null
                 : Border.all(
-                    color: const Color(0xFFFF9800).withOpacity(0.1),
+                    color: const Color(0xFFFF9800).withValues(alpha: 0.1),
                     width: 1,
                   ),
           ),
@@ -1740,7 +1740,7 @@ class _ChatScreenState extends State<ChatScreen> {
                     senderName,
                     style: TextStyle(
                       color: isCurrentUser
-                          ? Colors.white.withOpacity(0.9)
+                          ? Colors.white.withValues(alpha: 0.9)
                           : const Color(0xFF1976D2), // Deep blue
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
@@ -1753,8 +1753,8 @@ class _ChatScreenState extends State<ChatScreen> {
                 _formatMessageTime(message.createdAt),
                 style: TextStyle(
                   color: isCurrentUser
-                      ? Colors.white.withOpacity(0.7)
-                      : const Color(0xFF263238).withOpacity(0.6),
+                      ? Colors.white.withValues(alpha: 0.7)
+                      : const Color(0xFF263238).withValues(alpha: 0.6),
                   fontSize: 12,
                 ),
               ),
@@ -1853,7 +1853,7 @@ class _ChatScreenState extends State<ChatScreen> {
               shape: BoxShape.circle,
               boxShadow: [
                 BoxShadow(
-                  color: const Color(0xFFFF9800).withOpacity(0.3),
+                  color: const Color(0xFFFF9800).withValues(alpha: 0.3),
                   blurRadius: 12,
                   offset: const Offset(0, 6),
                 ),
@@ -1879,7 +1879,7 @@ class _ChatScreenState extends State<ChatScreen> {
             'Start the conversation!',
             style: TextStyle(
               fontSize: 16,
-              color: const Color(0xFF263238).withOpacity(0.7),
+              color: const Color(0xFF263238).withValues(alpha: 0.7),
             ),
           ),
         ],
@@ -1988,7 +1988,7 @@ class _VoiceMessagePlayerState extends State<_VoiceMessagePlayer> {
               height: 36,
               decoration: BoxDecoration(
                 color: widget.isCurrentUser
-                    ? Colors.white.withOpacity(0.3)
+                    ? Colors.white.withValues(alpha: 0.3)
                     : const Color(0xFFFF9800),
                 shape: BoxShape.circle,
               ),
@@ -2010,7 +2010,7 @@ class _VoiceMessagePlayerState extends State<_VoiceMessagePlayer> {
                   child: LinearProgressIndicator(
                     value: progress.clamp(0.0, 1.0),
                     backgroundColor: widget.isCurrentUser
-                        ? Colors.white.withOpacity(0.3)
+                        ? Colors.white.withValues(alpha: 0.3)
                         : Colors.grey[300],
                     valueColor: AlwaysStoppedAnimation<Color>(
                       widget.isCurrentUser
@@ -2026,7 +2026,7 @@ class _VoiceMessagePlayerState extends State<_VoiceMessagePlayer> {
                   style: TextStyle(
                     fontSize: 10,
                     color: widget.isCurrentUser
-                        ? Colors.white.withOpacity(0.7)
+                        ? Colors.white.withValues(alpha: 0.7)
                         : Colors.grey[500],
                   ),
                 ),
@@ -2038,7 +2038,7 @@ class _VoiceMessagePlayerState extends State<_VoiceMessagePlayer> {
             Icons.mic,
             size: 16,
             color: widget.isCurrentUser
-                ? Colors.white.withOpacity(0.7)
+                ? Colors.white.withValues(alpha: 0.7)
                 : Colors.grey[500],
           ),
         ],

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter_animate/flutter_animate.dart';
@@ -11,6 +12,7 @@ import '../widgets/custom_drawer_menu.dart';
 import '../widgets/notifications_panel.dart';
 import '../widgets/main_layout.dart';
 import '../services/wallet_service.dart';
+import '../services/user_notification_service.dart';
 import '../services/offline/offline_db.dart';
 import '../models/site_visit.dart';
 import '../theme/app_colors.dart';
@@ -65,16 +67,25 @@ class _DashboardScreenState extends State<DashboardScreen> {
   String _dataCollectorTab = 'my-visits';
 
   RealtimeChannel? _realtimeChannel;
+  StreamSubscription? _broadcastSub;
 
   @override
   void initState() {
     super.initState();
     _initializeDashboard();
+    // Ensure the notification service is running with realtime subscribed.
+    // initialize() is a no-op if already done; this guards against session
+    // restore or biometric re-auth paths that skip the normal login flow.
+    UserNotificationService().initialize();
+    _broadcastSub = UserNotificationService().broadcastStream.listen((n) {
+      if (mounted) BroadcastPopup.show(context, n);
+    });
   }
 
   @override
   void dispose() {
     _realtimeChannel?.unsubscribe();
+    _broadcastSub?.cancel();
     super.dispose();
   }
 
@@ -909,7 +920,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                     vertical: 6,
                                   ),
                                   decoration: BoxDecoration(
-                                    color: AppColors.accentGreen.withOpacity(
+                                    color: AppColors.accentGreen.withValues(alpha: 
                                       0.1,
                                     ),
                                     borderRadius: BorderRadius.circular(20),
@@ -1382,7 +1393,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 10,
             offset: const Offset(0, 2),
           ),
@@ -1433,7 +1444,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 10,
             offset: const Offset(0, 2),
           ),
@@ -1972,7 +1983,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 'Total Earned',
                 style: GoogleFonts.poppins(
                   fontSize: 14,
-                  color: Colors.white.withOpacity(0.9),
+                  color: Colors.white.withValues(alpha: 0.9),
                 ),
               ),
               const SizedBox(height: 8),
@@ -2174,7 +2185,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
             decoration: BoxDecoration(
-              color: _getStatusColor(visit.status).withOpacity(0.1),
+              color: _getStatusColor(visit.status).withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(12),
             ),
             child: Text(

@@ -71,7 +71,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { format } from 'date-fns';
 import { filterDownPayments, exportToCSV, exportToExcel, exportToPDF, getDownPaymentStats } from '@/utils/downPaymentExport';
 import { generateFinancialStatementPdf, type StatementRow, type StatementConfig } from '@/utils/financialStatementPdf';
-import { generateFinancialStatementExcel } from '@/utils/financialStatementExcel';
+import { generateFinancialStatementExcel, generateFinancialStatementExcelBase64, generateAllSheetsStatementExcelBase64 } from '@/utils/financialStatementExcel';
+import { buildEnhancedPaymentEmailHTML } from '@/services/email-notification.service';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { SignatureConfirmationModal } from '@/components/signatures/SignatureConfirmationModal';
@@ -80,7 +81,7 @@ import { generateTransportAdvanceCertificatePdf, generateTransportAdvanceCertifi
 import { EmailNotificationService } from '@/services/email-notification.service';
 import { EmailCCInput } from '@/components/EmailCCInput';
 import { useToast } from '@/hooks/use-toast';
-import { Mail, Wallet } from 'lucide-react';
+import { Mail, Wallet, Upload, ImageIcon } from 'lucide-react';
 
 interface DownPaymentApprovalPanelProps {
   userRole: 'supervisor' | 'admin';
@@ -95,6 +96,90 @@ const STATUS_OPTIONS: { value: DownPaymentStatus; label: string }[] = [
   { value: 'fully_paid', label: 'Fully Paid' },
   { value: 'cancelled', label: 'Cancelled' },
 ];
+
+type BulkSummaryEntry = { count: number; requested: number; approved: number };
+
+function BulkSummaryTable({ requests, users }: {
+  requests: Array<{ requestedBy?: string; requestedAmount: number; approvedAmount?: number; stateName?: string; hubName?: string; [key: string]: unknown }>;
+  users?: Array<{ id: string; email?: string; [key: string]: unknown }>;
+}) {
+  const [activeTab, setActiveTab] = useState<'state' | 'hub' | 'locality' | 'requester'>('state');
+
+  const buildGroups = (keyFn: (r: typeof requests[0]) => string): [string, BulkSummaryEntry][] => {
+    const m = new Map<string, BulkSummaryEntry>();
+    requests.forEach(r => {
+      const k = keyFn(r) || 'Unknown';
+      const e = m.get(k) || { count: 0, requested: 0, approved: 0 };
+      m.set(k, { count: e.count + 1, requested: e.requested + r.requestedAmount, approved: e.approved + (r.approvedAmount || r.requestedAmount) });
+    });
+    return Array.from(m.entries()).sort(([a], [b]) => a.localeCompare(b));
+  };
+
+  const tabs = [
+    { key: 'state'     as const, label: 'By State',     groups: buildGroups(r => (r.stateName as string) || '-') },
+    { key: 'hub'       as const, label: 'By Hub',       groups: buildGroups(r => (r.hubName as string) || '-') },
+    { key: 'locality'  as const, label: 'By Locality',  groups: buildGroups(r => (r.localityName as string) || '-') },
+    { key: 'requester' as const, label: 'By Requester', groups: buildGroups(r => {
+      const u = users?.find(u => u.id === r.requestedBy);
+      return (u as any)?.fullName || (u as any)?.full_name || u?.email || 'Unknown';
+    }) },
+  ];
+
+  const active = tabs.find(t => t.key === activeTab)!;
+  const totalReq = requests.reduce((s, r) => s + r.requestedAmount, 0);
+  const totalApp = requests.reduce((s, r) => s + (r.approvedAmount || r.requestedAmount), 0);
+
+  return (
+    <div className="border rounded-md overflow-hidden text-xs">
+      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as typeof activeTab)}>
+        <TabsList className="w-full rounded-none h-auto p-0 bg-muted/60 border-b gap-0">
+          {tabs.map(t => (
+            <TabsTrigger
+              key={t.key}
+              value={t.key}
+              className="flex-1 text-[11px] rounded-none py-1.5 data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary"
+            >
+              {t.label} <span className="ml-1 opacity-50">({t.groups.length})</span>
+            </TabsTrigger>
+          ))}
+        </TabsList>
+        {tabs.map(t => (
+          <TabsContent key={t.key} value={t.key} className="mt-0">
+            <ScrollArea className="h-[180px]">
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-muted/30">
+                    <TableHead className="text-[11px] py-1.5 font-semibold">{t.label.replace('By ', '')}</TableHead>
+                    <TableHead className="text-[11px] py-1.5 text-center font-semibold w-10">#</TableHead>
+                    <TableHead className="text-[11px] py-1.5 text-right font-semibold">Requested</TableHead>
+                    <TableHead className="text-[11px] py-1.5 text-right font-semibold">Approved</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {t.groups.map(([name, g], i) => (
+                    <TableRow key={name} className={i % 2 === 1 ? 'bg-muted/20' : ''}>
+                      <TableCell className="py-1 font-medium truncate max-w-[160px]">{name}</TableCell>
+                      <TableCell className="py-1 text-center text-muted-foreground">{g.count}</TableCell>
+                      <TableCell className="py-1 text-right font-mono text-muted-foreground">SDG {g.requested.toLocaleString()}</TableCell>
+                      <TableCell className="py-1 text-right font-mono font-semibold text-green-700 dark:text-green-400">SDG {g.approved.toLocaleString()}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </ScrollArea>
+          </TabsContent>
+        ))}
+      </Tabs>
+      <div className="flex items-center justify-between bg-muted/40 border-t px-3 py-1.5 text-[11px] font-semibold">
+        <span className="text-muted-foreground">Grand Total — {requests.length} requests</span>
+        <div className="flex gap-4">
+          <span className="text-muted-foreground">SDG {totalReq.toLocaleString()}</span>
+          <span className="text-green-700 dark:text-green-400">SDG {totalApp.toLocaleString()}</span>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelProps) {
   const { currentUser, users } = useUser();
@@ -133,9 +218,20 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
     sending: boolean;
     bulkGroupBy: string;
     bulkGroupValue: string;
-  }>({ open: false, request: null, bulkRequests: [], isBulk: false, availableRecipients: [], selectedRecipientIds: [], ccEmails: [], loading: false, sending: false, bulkGroupBy: '', bulkGroupValue: '' });
+    sendMode: 'pdf' | 'excel';
+    showPreview: boolean;
+    usdRate: string;
+  }>({ open: false, request: null, bulkRequests: [], isBulk: false, availableRecipients: [], selectedRecipientIds: [], ccEmails: [], loading: false, sending: false, bulkGroupBy: '', bulkGroupValue: '', sendMode: 'pdf', showPreview: false, usdRate: '' });
   const [markPaidProcessing, setMarkPaidProcessing] = useState(false);
   const [bulkPaymentIds, setBulkPaymentIds] = useState<Set<string>>(new Set());
+  const [markAsPaidDialog, setMarkAsPaidDialog] = useState<{
+    open: boolean;
+    request: DownPaymentRequest | null;
+    proofFile: File | null;
+    proofPreviewUrl: string | null;
+    notes: string;
+    uploading: boolean;
+  }>({ open: false, request: null, proofFile: null, proofPreviewUrl: null, notes: '', uploading: false });
 
   const [editDialog, setEditDialog] = useState<{
     open: boolean;
@@ -317,35 +413,38 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
     if (!currentUser || selectedIds.size === 0) return;
 
     setProcessing(true);
-    await bulkApprove({
-      requestIds: Array.from(selectedIds),
-      approvalType,
-      approvalPercentage: approvalType === 'percentage' ? customPercentage : undefined,
-      customAmount: approvalType === 'custom' ? customAmount : undefined,
-      notes,
-      approvedBy: currentUser.id,
-      approvedByName: currentUser.fullName || currentUser.email,
-    });
-    setProcessing(false);
-    setSelectedIds(new Set());
-    closeDialog();
+    try {
+      await bulkApprove({
+        requestIds: Array.from(selectedIds),
+        approvalType,
+        approvalPercentage: approvalType === 'percentage' ? customPercentage : undefined,
+        customAmount: approvalType === 'custom' ? customAmount : undefined,
+        notes,
+        approvedBy: currentUser.id,
+        approvedByName: currentUser.fullName || currentUser.email,
+      });
+      setSelectedIds(new Set());
+      closeDialog();
+    } finally {
+      setProcessing(false);
+    }
   };
 
   const handleRevert = async () => {
     if (!selectedRequest || !currentUser) return;
 
     setProcessing(true);
-    const success = await revertToPending({
-      requestId: selectedRequest.id,
-      revertedBy: currentUser.id,
-      revertedByName: currentUser.fullName || currentUser.email,
-      reason: notes || undefined,
-      targetStatus: revertTarget,
-    });
-
-    setProcessing(false);
-    if (success) {
-      closeDialog();
+    try {
+      const success = await revertToPending({
+        requestId: selectedRequest.id,
+        revertedBy: currentUser.id,
+        revertedByName: currentUser.fullName || currentUser.email,
+        reason: notes || undefined,
+        targetStatus: revertTarget,
+      });
+      if (success) closeDialog();
+    } finally {
+      setProcessing(false);
     }
   };
 
@@ -713,6 +812,24 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
     });
   };
 
+  const handleDownloadBulkExcel = (reqs: DownPaymentRequest[], groupLabel?: string) => {
+    try {
+      const timestamp = new Date().toISOString().slice(0, 10);
+      const safeName = (groupLabel || 'All').replace(/[^a-zA-Z0-9]/g, '_');
+      exportToExcel(reqs, `PACT_Bulk_${safeName}_${timestamp}`, groupLabel || 'All');
+      toast({
+        title: 'Bulk Excel Downloaded / تم تحميل ملف Excel الجماعي',
+        description: `${reqs.length} request(s) exported to Excel. / تم تصدير ${reqs.length} طلب(ات) في ملف Excel.`,
+      });
+    } catch {
+      toast({
+        title: 'Export Error / خطأ في التصدير',
+        description: 'Failed to generate Excel file. / فشل في إنشاء ملف Excel.',
+        variant: 'destructive',
+      });
+    }
+  };
+
   const handleDownloadBulkPdf = async (reqs: DownPaymentRequest[], groupLabel?: string) => {
     try {
       const certDataList = await Promise.all(
@@ -828,6 +945,25 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
     }
   };
 
+  const openBulkExcelRequestDialog = async (reqs: DownPaymentRequest[], groupBy: string, groupValue: string) => {
+    const cached = cachedRecipientsRef.current;
+    if (cached && cached.length > 0) {
+      setPaymentRequestDialog(prev => ({ ...prev, open: true, request: null, bulkRequests: reqs, isBulk: true, loading: false, selectedRecipientIds: cached.map(r => r.id), availableRecipients: cached, ccEmails: [], bulkGroupBy: groupBy, bulkGroupValue: groupValue, sendMode: 'excel' }));
+      loadFinanceRecipients(true).then(fresh => {
+        setPaymentRequestDialog(prev => ({ ...prev, availableRecipients: fresh, selectedRecipientIds: fresh.map(r => r.id) }));
+      }).catch(() => {});
+    } else {
+      setPaymentRequestDialog(prev => ({ ...prev, open: true, request: null, bulkRequests: reqs, isBulk: true, loading: true, selectedRecipientIds: [], availableRecipients: [], ccEmails: [], bulkGroupBy: groupBy, bulkGroupValue: groupValue, sendMode: 'excel' }));
+      try {
+        const recipients = await loadFinanceRecipients();
+        setPaymentRequestDialog(prev => ({ ...prev, availableRecipients: recipients, selectedRecipientIds: recipients.map(r => r.id), loading: false }));
+      } catch {
+        setPaymentRequestDialog(prev => ({ ...prev, loading: false }));
+        toast({ title: "Error / خطأ", description: "Failed to load recipients. / فشل في تحميل المستلمين.", variant: "destructive" });
+      }
+    }
+  };
+
   const openPaymentRequestDialog = async (req: DownPaymentRequest) => {
     const cached = cachedRecipientsRef.current;
     if (cached && cached.length > 0) {
@@ -852,10 +988,70 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
     }
   };
 
+  const buildEmailPreviewHtml = (): string => {
+    const { request: req, bulkRequests, isBulk, availableRecipients, selectedRecipientIds, bulkGroupBy, bulkGroupValue, sendMode, usdRate } = paymentRequestDialog;
+    const approverName = (currentUser as any)?.fullName || (currentUser as any)?.full_name || currentUser?.email || 'Approver';
+    const firstRecipient = availableRecipients.find(r => selectedRecipientIds.includes(r.id));
+    const recipientName = firstRecipient?.name || 'Finance Team';
+    const now = new Date();
+    const dateStr = now.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+    const parsedRate = parseFloat(usdRate);
+    const effectiveRate = !isNaN(parsedRate) && parsedRate > 0 ? parsedRate : undefined;
+
+    if (isBulk && bulkRequests.length > 0) {
+      const totalAmount = bulkRequests.reduce((s, r) => s + (r.approvedAmount || r.requestedAmount), 0);
+      const groupLabel = bulkGroupBy ? `${bulkGroupBy}: ${bulkGroupValue}` : 'All Approved';
+      const bulkMmps = [...new Set(bulkRequests.map(r => r.mmpName).filter(Boolean))];
+      const mmpLabel = bulkMmps.length > 0 ? bulkMmps.join(', ') : groupLabel;
+      const projectLabel = bulkRequests[0]?.wfpProjectName || bulkRequests[0]?.projectName || 'WFP TPM';
+      return buildEnhancedPaymentEmailHTML({
+        recipientName,
+        approverName,
+        requestId: `BULK-${bulkRequests.length}`,
+        groupLabel,
+        mmpLabel,
+        totalAmount,
+        count: bulkRequests.length,
+        date: dateStr,
+        project: projectLabel,
+        actionUrl: '/down-payment-approval',
+        fundingType: 'advance',
+        category: sendMode === 'excel' ? 'Transportation Advance (Bulk — Excel)' : 'Transportation Advance (Bulk — PDF)',
+        isBulk: true,
+        currency: 'SDG',
+        usdRate: effectiveRate,
+      });
+    } else if (req) {
+      const amount = req.approvedAmount || req.requestedAmount;
+      const mmpLabel = req.mmpName || req.projectName || req.siteName || 'WFP TPM';
+      const projectLabel = req.wfpProjectName || req.projectName || 'WFP TPM';
+      return buildEnhancedPaymentEmailHTML({
+        recipientName,
+        approverName,
+        requestId: req.id?.slice(0, 8)?.toUpperCase() || 'N/A',
+        groupLabel: req.siteName || 'N/A',
+        mmpLabel,
+        totalAmount: amount,
+        count: 1,
+        date: dateStr,
+        project: projectLabel,
+        actionUrl: '/down-payment-approval',
+        fundingType: 'advance',
+        category: 'Transportation Advance',
+        isBulk: false,
+        currency: 'SDG',
+        usdRate: effectiveRate,
+      });
+    }
+    return '';
+  };
+
   const handleSendPaymentRequest = async () => {
-    const { request: req, bulkRequests, isBulk, selectedRecipientIds, availableRecipients, ccEmails, bulkGroupBy, bulkGroupValue } = paymentRequestDialog;
+    const { request: req, bulkRequests, isBulk, selectedRecipientIds, availableRecipients, ccEmails, bulkGroupBy, bulkGroupValue, sendMode, usdRate } = paymentRequestDialog;
     if (!currentUser?.id || selectedRecipientIds.length === 0) return;
     if (!isBulk && !req) return;
+    const parsedRate = parseFloat(usdRate);
+    const effectiveRate = !isNaN(parsedRate) && parsedRate > 0 ? parsedRate : undefined;
 
     setPaymentRequestDialog(prev => ({ ...prev, sending: true }));
     try {
@@ -875,7 +1071,87 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
         }))].join(', ');
         const groupLabel = bulkGroupBy ? `${bulkGroupBy}: ${bulkGroupValue}` : '';
 
+        // ── EXCEL MODE ────────────────────────────────────────────────────
+        if (sendMode === 'excel') {
+          // Use same row mapping and config as the Bank Statement "Excel" button
+          const statementRows: StatementRow[] = bulkRequests.map(mapRequestToStatementRow);
+
+          const config: StatementConfig = {
+            title: 'Transportation Advance',
+            titleAr: 'سلفة النقل',
+            statementType: 'transport_advance',
+            statusFilter: groupLabel || 'All Approved',
+            statusFilterAr: groupLabel ? groupLabel : 'الكل',
+            currency: 'SDG',
+            generatedBy: approverName,
+          };
+
+          // Generate one Excel workbook with 4 sheets: Statement, Full Details, By State, By Enumerator.
+          const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+          let excelAttachments: Array<{ base64: string; filename: string; mimeType: string }> = [];
+          try {
+            const generated = await generateAllSheetsStatementExcelBase64(statementRows, config);
+            if (generated) excelAttachments = [{ ...generated, mimeType: XLSX_MIME }];
+          } catch { /* continue without attachment */ }
+
+          const bulkMmps1 = [...new Set(bulkRequests.map(r => r.mmpName).filter(Boolean))];
+          const mmpLabel1 = bulkMmps1.length > 0 ? bulkMmps1.join(', ') : groupLabel || 'All Approved';
+          const projectLabel1 = bulkRequests[0]?.wfpProjectName || bulkRequests[0]?.projectName || 'WFP TPM';
+          const result = await EmailNotificationService.sendPaymentRequestToFinanceWithRecipients(
+            selectedRecipients,
+            approverName,
+            approverEmail,
+            requesterNames,
+            groupLabel || 'All Approved',
+            `BULK-${bulkRequests.length}`,
+            'Transportation Advance (Bulk)',
+            totalAmount,
+            'advance',
+            projectLabel1,
+            'SDG',
+            '',
+            '/down-payment-approval',
+            undefined,
+            excelAttachments.length > 0 ? excelAttachments : undefined,
+            ccEmails,
+            mmpLabel1,
+            effectiveRate
+          );
+
+          const sentCount = result.success ? selectedRecipients.length - (result.error ? parseInt(result.error) || 0 : 0) : 0;
+          const failedCount = result.error ? (parseInt(result.error) || (result.success ? 0 : selectedRecipients.length)) : 0;
+
+          if (result.success && !result.error) {
+            toast({
+              title: 'Bulk Excel Sent / تم إرسال Excel الجماعي',
+              description: `${bulkRequests.length} requests sent to ${selectedRecipients.length} recipient(s) with the formatted Excel report attached. / تم إرسال ${bulkRequests.length} طلب إلى ${selectedRecipients.length} مستلم مع ملف Excel المنسق.`,
+            });
+          } else if (result.success && result.error) {
+            toast({
+              title: 'Partially Sent / تم الإرسال جزئياً',
+              description: `${sentCount} of ${selectedRecipients.length} recipient(s) received the email. ${failedCount} failed.`,
+              variant: 'destructive',
+            });
+          } else {
+            toast({
+              title: 'Send Failed / فشل الإرسال',
+              description: result.error || 'Could not deliver to the selected recipients.',
+              variant: 'destructive',
+            });
+          }
+          return;
+        }
+
+        // ── PDF MODE (default) ─────────────────────────────────────────────
+        // Always generate the full PDF (all requests as pages in one file).
+        // For large batches the PDF is uploaded to storage and shared as a download link
+        // instead of being attached directly (which would exceed email size limits).
+        const PDF_ATTACH_LIMIT = 30;
+        const pdfTooLarge = bulkRequests.length > PDF_ATTACH_LIMIT;
+
         let summaryPdf: { base64: string; filename: string } | undefined;
+        let pdfDownloadUrl: string | undefined;
+
         try {
           const certDataList = await Promise.all(
             bulkRequests.map(async (bReq) => {
@@ -883,35 +1159,87 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
               return buildCertData(bReq, sig);
             })
           );
-          summaryPdf = await generateBulkPaymentPdfBase64(certDataList, groupLabel || 'All Approved');
+          const generated = await generateBulkPaymentPdfBase64(certDataList, groupLabel || 'All Approved');
+
+          if (!pdfTooLarge) {
+            summaryPdf = generated;
+          } else {
+            // Upload to storage and get a signed download link (expires in 7 days)
+            const batchFileName = generated.filename;
+            const pdfBlob = new Blob(
+              [Uint8Array.from(atob(generated.base64), c => c.charCodeAt(0))],
+              { type: 'application/pdf' }
+            );
+            const uploadPath = `bulk-payment-pdfs/${batchFileName}`;
+            const { error: uploadError } = await supabase.storage
+              .from('mmp-files')
+              .upload(uploadPath, pdfBlob, { contentType: 'application/pdf', upsert: true });
+
+            if (!uploadError) {
+              const { data: signedData } = await supabase.storage
+                .from('mmp-files')
+                .createSignedUrl(uploadPath, 60 * 60 * 24 * 7); // 7 days
+              if (signedData?.signedUrl) {
+                pdfDownloadUrl = signedData.signedUrl;
+              }
+            }
+          }
         } catch { /* continue without PDF */ }
 
+        const pdfNote = pdfTooLarge
+          ? pdfDownloadUrl
+            ? `\n\nBULK PDF DOWNLOAD: This batch contains ${bulkRequests.length} requests. The full PDF (all ${bulkRequests.length} pages) is available for download here (link valid for 7 days):\n${pdfDownloadUrl}\n\nتنزيل PDF: الملف الكامل (${bulkRequests.length} صفحة) متاح للتنزيل عبر الرابط أعلاه (صالح لمدة 7 أيام).`
+            : `\n\nNOTE: This batch contains ${bulkRequests.length} requests. Please log in to PACT Command Center → Processing tab → "Bulk PDF" to download the full PDF.\nملاحظة: يرجى تسجيل الدخول إلى PACT وتنزيل ملف PDF الكامل من تبويب المعالجة.`
+          : '';
+
+        const bulkMmps2 = [...new Set(bulkRequests.map(r => r.mmpName).filter(Boolean))];
+        const mmpLabel2 = bulkMmps2.length > 0 ? bulkMmps2.join(', ') : groupLabel || 'All Approved';
+        const projectLabel2 = bulkRequests[0]?.wfpProjectName || bulkRequests[0]?.projectName || 'WFP TPM';
         const result = await EmailNotificationService.sendPaymentRequestToFinanceWithRecipients(
           selectedRecipients,
           approverName,
           approverEmail,
           requesterNames.length > 60 ? requesterNames.slice(0, 57) + '...' : requesterNames,
-          `Bulk Transport Advance (${bulkRequests.length} requests)${groupLabel ? ` - ${groupLabel}` : ''}`,
-          requestIds.length > 40 ? requestIds.slice(0, 37) + '...' : requestIds,
+          groupLabel || 'All Approved',
+          `BULK-${bulkRequests.length}`,
           'Transportation Advance (Bulk)',
           totalAmount,
           'advance',
-          bulkRequests[0]?.projectName || 'N/A',
+          projectLabel2,
           'SDG',
-          `Bulk payment request for ${bulkRequests.length} approved advances${groupLabel ? ` grouped by ${groupLabel}` : ''}. Total: SDG ${totalAmount.toLocaleString()}. Individual requests: ${bulkRequests.map(r => `${r.siteName} (SDG ${(r.approvedAmount || r.requestedAmount).toLocaleString()})`).join('; ')}.\n\nRECONCILIATION NOTICE: All recipients must submit receipts and return any unused funds within 5 working days.\nملاحظة تسوية: يجب على جميع المستلمين تقديم الإيصالات وإرجاع أي أموال غير مستخدمة خلال 5 أيام عمل.`,
+          `Bulk payment request for ${bulkRequests.length} approved advances${groupLabel ? ` grouped by ${groupLabel}` : ''}. Total: SDG ${totalAmount.toLocaleString()}. Individual requests: ${bulkRequests.map(r => `${r.siteName} (SDG ${(r.approvedAmount || r.requestedAmount).toLocaleString()})`).join('; ')}.\n\nRECONCILIATION NOTICE: All recipients must submit receipts and return any unused funds within 5 working days.\nملاحظة تسوية: يجب على جميع المستلمين تقديم الإيصالات وإرجاع أي أموال غير مستخدمة خلال 5 أيام عمل.${pdfNote}`,
           '/down-payment-approval',
           summaryPdf,
           undefined,
-          ccEmails.length > 0 ? ccEmails : undefined
+          ccEmails.length > 0 ? ccEmails : undefined,
+          mmpLabel2,
+          effectiveRate
         );
 
-        if (result.success) {
+        const sentCount = result.success ? selectedRecipients.length - (result.error ? parseInt(result.error) || 0 : 0) : 0;
+        const failedCount = result.error ? (parseInt(result.error) || (result.success ? 0 : selectedRecipients.length)) : 0;
+
+        if (result.success && !result.error) {
           toast({
             title: "Bulk Payment Request Sent / تم إرسال طلبات الدفع الجماعية",
-            description: `${bulkRequests.length} requests sent to ${selectedRecipients.length} recipient(s) with summary PDF attached. / تم إرسال ${bulkRequests.length} طلب إلى ${selectedRecipients.length} مستلم(ين) مع ملف PDF ملخص مرفق.`,
+            description: pdfTooLarge
+              ? pdfDownloadUrl
+                ? `${bulkRequests.length} requests sent. Full PDF (all ${bulkRequests.length} pages) uploaded — download link included in the email (valid 7 days). / تم الإرسال. رابط تنزيل PDF مرفق في البريد.`
+                : `${bulkRequests.length} requests sent to ${selectedRecipients.length} recipient(s). Use "Bulk PDF" button to download the full PDF. / تم الإرسال. استخدم زر PDF لتنزيل الملف الكامل.`
+              : `${bulkRequests.length} requests sent to ${selectedRecipients.length} recipient(s) with full PDF attached. / تم إرسال ${bulkRequests.length} طلب مع ملف PDF كامل.`,
+          });
+        } else if (result.success && result.error) {
+          toast({
+            title: `Partially Sent / تم الإرسال جزئياً`,
+            description: `${sentCount} of ${selectedRecipients.length} recipient(s) received the email. ${failedCount} failed — check that all recipient email addresses are valid. / تم الإرسال إلى ${sentCount} من ${selectedRecipients.length}. فشل ${failedCount} — تحقق من صحة عناوين البريد.`,
+            variant: "destructive",
           });
         } else {
-          toast({ title: "Email Failed / فشل الإرسال", description: result.error || "Could not send. / تعذر الإرسال.", variant: "destructive" });
+          toast({
+            title: "Email Failed / فشل الإرسال",
+            description: `Could not send to ${selectedRecipients.length} recipient(s). Please verify email addresses are valid and try again. / تعذر الإرسال. تحقق من عناوين البريد الإلكتروني وأعد المحاولة.`,
+            variant: "destructive",
+          });
         }
       } else if (req) {
         const requester = users?.find(u => u.id === req.requestedBy);
@@ -926,32 +1254,68 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
 
         const result = await EmailNotificationService.sendPaymentRequestToFinanceWithRecipients(
           selectedRecipients, approverName, approverEmail, requesterName,
-          `Transport Advance - ${req.siteName}`, requestId, 'Transportation Advance',
-          req.approvedAmount || req.requestedAmount, 'advance', req.projectName || 'N/A',
+          req.mmpName || req.projectName || req.siteName || 'WFP TPM', requestId, 'Transportation Advance',
+          req.approvedAmount || req.requestedAmount, 'advance',
+          req.wfpProjectName || req.projectName || 'WFP TPM',
           'SDG', '', '/down-payment-approval', pdfAttachment,
-          undefined, ccEmails.length > 0 ? ccEmails : undefined
+          undefined, ccEmails.length > 0 ? ccEmails : undefined,
+          req.mmpName || undefined
         );
 
-        if (result.success) {
+        if (result.success && !result.error) {
           toast({
             title: "Payment Request Sent / تم إرسال طلب الدفع",
             description: `Email sent to ${selectedRecipients.length} recipient(s). / تم إرسال البريد إلى ${selectedRecipients.length} مستلم(ين).`,
           });
+        } else if (result.success && result.error) {
+          toast({
+            title: "Partially Sent / تم الإرسال جزئياً",
+            description: `Some recipients did not receive the email. ${result.error}. Check that all email addresses are valid. / بعض المستلمين لم يستلموا البريد. تحقق من عناوين البريد الإلكتروني.`,
+            variant: "destructive",
+          });
         } else {
-          toast({ title: "Email Failed / فشل الإرسال", description: result.error || "Could not send. / تعذر الإرسال.", variant: "destructive" });
+          toast({
+            title: "Email Failed / فشل الإرسال",
+            description: `Could not deliver to the selected recipient. Please check the email address is valid and the inbox is reachable. / تعذر الإرسال. تحقق من عنوان البريد الإلكتروني وأعد المحاولة.`,
+            variant: "destructive",
+          });
         }
       }
     } catch {
       toast({ title: "Error / خطأ", description: "Failed to send payment request. / فشل في إرسال طلب الدفع.", variant: "destructive" });
     } finally {
-      setPaymentRequestDialog({ open: false, request: null, bulkRequests: [], isBulk: false, availableRecipients: [], selectedRecipientIds: [], ccEmails: [], loading: false, sending: false, bulkGroupBy: '', bulkGroupValue: '' });
+      setPaymentRequestDialog({ open: false, request: null, bulkRequests: [], isBulk: false, availableRecipients: [], selectedRecipientIds: [], ccEmails: [], loading: false, sending: false, bulkGroupBy: '', bulkGroupValue: '', sendMode: 'pdf' as const, showPreview: false, usdRate: '' });
     }
   };
 
-  const handleMarkAsPaid = async (req: DownPaymentRequest) => {
-    if (!currentUser?.id) return;
+  const handleMarkAsPaidProofFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const previewUrl = file.type.startsWith('image/') ? URL.createObjectURL(file) : null;
+    setMarkAsPaidDialog(prev => ({ ...prev, proofFile: file, proofPreviewUrl: previewUrl }));
+  };
+
+  const handleConfirmAdvanceMarkAsPaid = async () => {
+    const { request: req, proofFile, notes } = markAsPaidDialog;
+    if (!req || !currentUser?.id) return;
+    if (!proofFile) {
+      toast({ title: "Receipt Required / الإيصال مطلوب", description: "Please attach a payment receipt before confirming. / يرجى إرفاق إيصال الدفع قبل التأكيد.", variant: "destructive" });
+      return;
+    }
+    setMarkAsPaidDialog(prev => ({ ...prev, uploading: true }));
     setMarkPaidProcessing(true);
     try {
+      let proofUrl: string | null = null;
+      const timestamp = Date.now();
+      const random = Math.random().toString(36).substring(2, 8);
+      const extension = proofFile.name.split('.').pop()?.toLowerCase() || 'file';
+      const filePath = `payment-proofs/advance_${timestamp}_${random}.${extension}`;
+      const { error: uploadErr } = await supabase.storage
+        .from('mmp-files')
+        .upload(filePath, proofFile, { cacheControl: '3600', upsert: false });
+      if (uploadErr) throw new Error(uploadErr.message);
+      proofUrl = supabase.storage.from('mmp-files').getPublicUrl(filePath).data.publicUrl;
+
       const now = new Date().toISOString();
       const { error } = await supabase
         .from('down_payment_requests')
@@ -960,6 +1324,9 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
           total_paid_amount: req.approvedAmount || req.requestedAmount,
           remaining_amount: 0,
           updated_at: now,
+          payment_proof_url: proofUrl,
+          ...(notes.trim() ? { payment_proof_notes: notes.trim() } : {}),
+          payment_proof_uploaded_at: now,
         } as any)
         .eq('id', req.id);
 
@@ -968,15 +1335,21 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
       } else {
         toast({
           title: "Marked as Paid / تم التحديد كمدفوع",
-          description: "The advance has been marked as fully paid. / تم تحديد السلفة كمدفوعة بالكامل.",
+          description: "The advance has been marked as fully paid with receipt. / تم تحديد السلفة كمدفوعة بالكامل مع الإيصال.",
         });
+        setMarkAsPaidDialog({ open: false, request: null, proofFile: null, proofPreviewUrl: null, notes: '', uploading: false });
         refreshRequests();
       }
-    } catch {
-      toast({ title: "Error / خطأ", description: "Failed to mark as paid. / فشل في التحديد كمدفوع.", variant: "destructive" });
+    } catch (err: any) {
+      toast({ title: "Error / خطأ", description: err.message || "Failed to mark as paid.", variant: "destructive" });
     } finally {
+      setMarkAsPaidDialog(prev => ({ ...prev, uploading: false }));
       setMarkPaidProcessing(false);
     }
+  };
+
+  const handleMarkAsPaid = (req: DownPaymentRequest) => {
+    setMarkAsPaidDialog({ open: true, request: req, proofFile: null, proofPreviewUrl: null, notes: '', uploading: false });
   };
 
   const isApprovedOrPaid = (status: string) => ['approved', 'partially_paid', 'fully_paid'].includes(status);
@@ -1930,7 +2303,7 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
               </CardHeader>
               <CardContent className="p-3 pt-0">
                 <p className="text-xs text-muted-foreground mb-3">Filter requests by location and send bulk payment emails. / تصفية الطلبات حسب الموقع وإرسال رسائل الدفع الجماعي.</p>
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2">
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-2">
                   <Select
                     value={filters.stateName || 'all'}
                     onValueChange={(val) => {
@@ -1962,6 +2335,23 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
                       {uniqueHubs.map(h => {
                         const count = requests.filter(r => r.hubName === h).length;
                         return count > 0 ? <SelectItem key={h} value={h!}>{h} ({count})</SelectItem> : null;
+                      })}
+                    </SelectContent>
+                  </Select>
+                  <Select
+                    value={filters.mmpName || 'all'}
+                    onValueChange={(val) => {
+                      setFilters(f => ({ ...f, mmpName: val === 'all' ? undefined : val }));
+                    }}
+                  >
+                    <SelectTrigger data-testid="select-bulk-mmp">
+                      <SelectValue placeholder="All MMPs" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All MMPs</SelectItem>
+                      {uniqueMMPs.map(mmp => {
+                        const count = requests.filter(r => r.mmpName === mmp).length;
+                        return count > 0 ? <SelectItem key={mmp} value={mmp!}>{mmp} ({count})</SelectItem> : null;
                       })}
                     </SelectContent>
                   </Select>
@@ -2046,6 +2436,15 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
                     <FileText className="h-3.5 w-3.5 mr-1" />
                     Bulk PDF ({approvedForPayment.length})
                   </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => openBulkExcelRequestDialog(approvedForPayment, '', 'All Approved')}
+                    data-testid="button-bulk-excel-all"
+                  >
+                    <FileSpreadsheet className="h-3.5 w-3.5 mr-1" />
+                    Bulk Excel ({approvedForPayment.length})
+                  </Button>
                   <span className="text-xs text-muted-foreground">
                     Total: SDG {approvedForPayment.reduce((s, r) => s + (r.approvedAmount || r.requestedAmount), 0).toLocaleString()}
                   </span>
@@ -2099,6 +2498,12 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
                   }} disabled={processing} data-testid="button-selected-bulk-pdf">
                     <FileText className="h-4 w-4 mr-1" />
                     PDF ({selectedIds.size})
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={() => {
+                    if (selectedProcessing.length > 0) openBulkExcelRequestDialog(selectedProcessing, '', `${selectedProcessing.length} Selected`);
+                  }} disabled={processing} data-testid="button-selected-bulk-excel">
+                    <FileSpreadsheet className="h-4 w-4 mr-1" />
+                    Excel ({selectedIds.size})
                   </Button>
                   <Button size="sm" variant="outline" onClick={() => handleBulkRevert('pending_supervisor')} disabled={processing} data-testid="button-selected-revert-supervisor">
                     <Undo2 className="h-4 w-4 mr-1" />
@@ -2652,13 +3057,21 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
         />
       )}
 
-      <Dialog open={paymentRequestDialog.open} onOpenChange={(open) => { if (!open) setPaymentRequestDialog({ open: false, request: null, bulkRequests: [], isBulk: false, availableRecipients: [], selectedRecipientIds: [], ccEmails: [], loading: false, sending: false, bulkGroupBy: '', bulkGroupValue: '' }); }}>
+      <Dialog open={paymentRequestDialog.open} onOpenChange={(open) => { if (!open) setPaymentRequestDialog({ open: false, request: null, bulkRequests: [], isBulk: false, availableRecipients: [], selectedRecipientIds: [], ccEmails: [], loading: false, sending: false, bulkGroupBy: '', bulkGroupValue: '', sendMode: 'pdf' as const, showPreview: false, usdRate: '' }); }}>
         <DialogContent className={paymentRequestDialog.isBulk ? "max-w-2xl max-h-[90vh] overflow-y-auto" : "max-w-lg max-h-[90vh] overflow-y-auto"}>
           <DialogHeader>
-            <DialogTitle>{paymentRequestDialog.isBulk ? 'Bulk Payment Request / طلب دفع جماعي' : 'Request Payment / طلب دفع'}</DialogTitle>
+            <DialogTitle>
+              {paymentRequestDialog.isBulk
+                ? paymentRequestDialog.sendMode === 'excel'
+                  ? 'Send Bulk Excel / إرسال Excel الجماعي'
+                  : 'Bulk Payment Request / طلب دفع جماعي'
+                : 'Request Payment / طلب دفع'}
+            </DialogTitle>
             <DialogDescription>
               {paymentRequestDialog.isBulk
-                ? `Send one email with a summary PDF for ${paymentRequestDialog.bulkRequests.length} approved advance(s) to finance team.`
+                ? paymentRequestDialog.sendMode === 'excel'
+                  ? `Send a formatted Excel report for ${paymentRequestDialog.bulkRequests.length} advance(s) to the finance team. / إرسال تقرير Excel منسق لـ ${paymentRequestDialog.bulkRequests.length} سلفة إلى فريق المالية.`
+                  : `Send one email with a summary PDF for ${paymentRequestDialog.bulkRequests.length} approved advance(s) to finance team.`
                 : 'Send payment request email to finance team with the approval certificate attached.'}
             </DialogDescription>
             {paymentRequestDialog.isBulk && paymentRequestDialog.bulkRequests.length > 0 && (
@@ -2697,37 +3110,40 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
                         <p className="font-semibold">SDG {paymentRequestDialog.bulkRequests.reduce((s, r) => s + (r.approvedAmount || r.requestedAmount), 0).toLocaleString()}</p>
                       </div>
                     </div>
-                  </div>
-                  <ScrollArea className="h-[200px] border rounded-md">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead className="text-xs py-1.5">Requester</TableHead>
-                          <TableHead className="text-xs py-1.5">Site</TableHead>
-                          <TableHead className="text-xs py-1.5">Hub</TableHead>
-                          <TableHead className="text-xs py-1.5">State</TableHead>
-                          <TableHead className="text-xs py-1.5 text-right">Requested</TableHead>
-                          <TableHead className="text-xs py-1.5 text-right">Approved</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {paymentRequestDialog.bulkRequests.map(r => {
-                          const requester = users?.find(u => u.id === r.requestedBy);
-                          const rName = (requester as any)?.fullName || (requester as any)?.full_name || requester?.email || 'Unknown';
+                    {/* USD Rate input */}
+                    <div className="pt-2 border-t border-border/50 space-y-1.5">
+                      <Label htmlFor="dp-usd-rate" className="text-xs font-semibold text-[#0F2041]">
+                        USD Exchange Rate (1 USD = ? SDG) <span className="text-muted-foreground font-normal">— optional / اختياري</span>
+                      </Label>
+                      <div className="flex items-center gap-2">
+                        <Input
+                          id="dp-usd-rate"
+                          type="number"
+                          min="1"
+                          step="0.01"
+                          placeholder="e.g. 3500"
+                          value={paymentRequestDialog.usdRate}
+                          onChange={(e) => setPaymentRequestDialog(prev => ({ ...prev, usdRate: e.target.value }))}
+                          data-testid="input-dp-usd-rate"
+                          className="h-8 text-sm font-semibold w-36"
+                        />
+                        {paymentRequestDialog.usdRate && !isNaN(parseFloat(paymentRequestDialog.usdRate)) && parseFloat(paymentRequestDialog.usdRate) > 0 && (() => {
+                          const rate = parseFloat(paymentRequestDialog.usdRate);
+                          const totalSdg = paymentRequestDialog.bulkRequests.reduce((s, r) => s + (r.approvedAmount || r.requestedAmount), 0);
+                          const totalUsd = totalSdg / rate;
+                          const perReq = paymentRequestDialog.bulkRequests.length > 0 ? totalUsd / paymentRequestDialog.bulkRequests.length : 0;
                           return (
-                            <TableRow key={r.id} className="text-xs">
-                              <TableCell className="py-1.5 max-w-[120px] truncate">{rName}</TableCell>
-                              <TableCell className="py-1.5 max-w-[100px] truncate">{r.siteName}</TableCell>
-                              <TableCell className="py-1.5 max-w-[80px] truncate">{r.hubName || '-'}</TableCell>
-                              <TableCell className="py-1.5 max-w-[80px] truncate">{r.stateName || '-'}</TableCell>
-                              <TableCell className="py-1.5 text-right font-mono">SDG {r.requestedAmount.toLocaleString()}</TableCell>
-                              <TableCell className="py-1.5 text-right font-mono font-semibold">SDG {(r.approvedAmount || r.requestedAmount).toLocaleString()}</TableCell>
-                            </TableRow>
+                            <div className="flex flex-col">
+                              <span className="text-xs font-bold text-blue-700">≈ USD {totalUsd.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                              <span className="text-[10px] text-muted-foreground">~USD {perReq.toFixed(2)} / request</span>
+                            </div>
                           );
-                        })}
-                      </TableBody>
-                    </Table>
-                  </ScrollArea>
+                        })()}
+                      </div>
+                      <p className="text-[11px] text-muted-foreground">If provided, the USD equivalent will appear in the email and attached files / إذا أُدخل، سيظهر المعادل بالدولار في البريد والمرفقات</p>
+                    </div>
+                  </div>
+                  <BulkSummaryTable requests={paymentRequestDialog.bulkRequests} users={users} />
                   <div className="p-2 bg-destructive/10 rounded text-xs text-destructive flex items-start gap-2">
                     <AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
                     <div>
@@ -2737,8 +3153,10 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
                     </div>
                   </div>
                   <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                    <FileText className="h-3.5 w-3.5" />
-                    <span>A single summary PDF with all requests will be generated and attached to the email.</span>
+                    {paymentRequestDialog.sendMode === 'excel' ? <FileSpreadsheet className="h-3.5 w-3.5" /> : <FileText className="h-3.5 w-3.5" />}
+                    <span>{paymentRequestDialog.sendMode === 'excel'
+                      ? `1 Excel file (4 sheets) will be attached: Statement · Full Details · By State · By Enumerator — covering all ${paymentRequestDialog.bulkRequests.length} requests.`
+                      : 'A single summary PDF with all requests will be generated and attached to the email.'}</span>
                   </div>
                 </div>
               )}
@@ -2833,25 +3251,86 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
               </div>
             </div>
           )}
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setPaymentRequestDialog({ open: false, request: null, bulkRequests: [], isBulk: false, availableRecipients: [], selectedRecipientIds: [], ccEmails: [], loading: false, sending: false, bulkGroupBy: '', bulkGroupValue: '' })}
-              data-testid="button-cancel-payment-request"
-            >
-              Cancel
-            </Button>
-            <Button
-              onClick={handleSendPaymentRequest}
-              disabled={paymentRequestDialog.sending || paymentRequestDialog.selectedRecipientIds.length === 0}
-              data-testid="button-send-payment-request"
-            >
-              {paymentRequestDialog.sending ? (
-                <><RefreshCw className="h-4 w-4 mr-1 animate-spin" /> Sending...</>
-              ) : (
-                <><Mail className="h-4 w-4 mr-1" /> Send Request</>
-              )}
-            </Button>
+          {paymentRequestDialog.showPreview && !paymentRequestDialog.loading && (
+            <div className="border rounded-lg overflow-hidden" style={{ height: '420px' }}>
+              <div className="bg-muted/60 px-3 py-2 flex items-center justify-between gap-2 border-b">
+                <div className="flex items-center gap-2">
+                  <Eye className="h-3.5 w-3.5 text-muted-foreground" />
+                  <span className="text-xs font-medium text-muted-foreground">Email Preview — as the recipient will see it</span>
+                </div>
+                <div className="flex items-center gap-1.5 bg-green-50 dark:bg-green-950 border border-green-200 dark:border-green-800 rounded px-2 py-0.5">
+                  {paymentRequestDialog.sendMode === 'excel'
+                    ? <FileSpreadsheet className="h-3 w-3 text-green-700 dark:text-green-400" />
+                    : <FileText className="h-3 w-3 text-green-700 dark:text-green-400" />}
+                  <span className="text-xs font-medium text-green-700 dark:text-green-400">
+                    Attached: {paymentRequestDialog.sendMode === 'excel' ? '1 Excel file · 4 sheets (Statement, Full Details, By State, By Enumerator)' : 'PDF Certificate (.pdf)'}
+                  </span>
+                </div>
+              </div>
+              <iframe
+                srcDoc={buildEmailPreviewHtml()}
+                title="Email Preview"
+                sandbox="allow-same-origin"
+                className="w-full h-full border-0"
+                style={{ height: 'calc(420px - 37px)' }}
+              />
+            </div>
+          )}
+          <DialogFooter className="flex-wrap gap-2">
+            {paymentRequestDialog.showPreview ? (
+              <>
+                <Button
+                  variant="outline"
+                  onClick={() => setPaymentRequestDialog(prev => ({ ...prev, showPreview: false }))}
+                  data-testid="button-back-from-preview"
+                >
+                  ← Back / رجوع
+                </Button>
+                <Button
+                  onClick={handleSendPaymentRequest}
+                  disabled={paymentRequestDialog.sending || paymentRequestDialog.selectedRecipientIds.length === 0}
+                  data-testid="button-confirm-send-payment-request"
+                  className="bg-green-700 hover:bg-green-800 text-white"
+                >
+                  {paymentRequestDialog.sending ? (
+                    <><RefreshCw className="h-4 w-4 mr-1 animate-spin" /> Sending...</>
+                  ) : (
+                    <><Mail className="h-4 w-4 mr-1" /> Confirm & Send</>
+                  )}
+                </Button>
+              </>
+            ) : (
+              <>
+                <Button
+                  variant="outline"
+                  onClick={() => setPaymentRequestDialog({ open: false, request: null, bulkRequests: [], isBulk: false, availableRecipients: [], selectedRecipientIds: [], ccEmails: [], loading: false, sending: false, bulkGroupBy: '', bulkGroupValue: '', sendMode: 'pdf' as const, showPreview: false, usdRate: '' })}
+                  data-testid="button-cancel-payment-request"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => setPaymentRequestDialog(prev => ({ ...prev, showPreview: true }))}
+                  disabled={paymentRequestDialog.selectedRecipientIds.length === 0 || paymentRequestDialog.loading}
+                  data-testid="button-preview-email"
+                >
+                  <Eye className="h-4 w-4 mr-1" /> Preview Email
+                </Button>
+                <Button
+                  onClick={handleSendPaymentRequest}
+                  disabled={paymentRequestDialog.sending || paymentRequestDialog.selectedRecipientIds.length === 0}
+                  data-testid="button-send-payment-request"
+                >
+                  {paymentRequestDialog.sending ? (
+                    <><RefreshCw className="h-4 w-4 mr-1 animate-spin" /> Sending...</>
+                  ) : paymentRequestDialog.sendMode === 'excel' ? (
+                    <><FileSpreadsheet className="h-4 w-4 mr-1" /> Send Excel</>
+                  ) : (
+                    <><Mail className="h-4 w-4 mr-1" /> Send Request</>
+                  )}
+                </Button>
+              </>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -2998,6 +3477,124 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
                 <><RefreshCw className="h-4 w-4 mr-1 animate-spin" /> Saving...</>
               ) : (
                 <><Pencil className="h-4 w-4 mr-1" /> Save Changes / حفظ التغييرات</>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Mark Advance as Paid — mandatory receipt upload dialog */}
+      <Dialog
+        open={markAsPaidDialog.open}
+        onOpenChange={(open) => {
+          if (!open && !markAsPaidDialog.uploading) {
+            if (markAsPaidDialog.proofPreviewUrl) URL.revokeObjectURL(markAsPaidDialog.proofPreviewUrl);
+            setMarkAsPaidDialog({ open: false, request: null, proofFile: null, proofPreviewUrl: null, notes: '', uploading: false });
+          }
+        }}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Wallet className="h-5 w-5 text-green-600" />
+              Mark Advance as Paid / تحديد السلفة كمدفوعة
+            </DialogTitle>
+            <DialogDescription>
+              Attach a payment receipt before confirming. A receipt is required. / أرفق إيصال الدفع قبل التأكيد. الإيصال مطلوب.
+            </DialogDescription>
+          </DialogHeader>
+
+          {markAsPaidDialog.request && (
+            <div className="space-y-4">
+              <div className="rounded-lg bg-muted/50 p-3 text-sm space-y-1">
+                <p className="font-medium">{markAsPaidDialog.request.siteName}</p>
+                <p className="text-lg font-bold tabular-nums">
+                  {(markAsPaidDialog.request.approvedAmount || markAsPaidDialog.request.requestedAmount).toLocaleString()} SDG
+                </p>
+                {markAsPaidDialog.request.stateName && (
+                  <p className="text-muted-foreground text-xs">State: {markAsPaidDialog.request.stateName}</p>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">
+                  Payment Receipt / إيصال الدفع <span className="text-red-500">*</span>
+                </Label>
+                <div className="border-2 border-dashed border-muted-foreground/30 rounded-lg p-4 text-center hover:border-green-400 transition-colors relative">
+                  <input
+                    type="file"
+                    accept="image/*,application/pdf"
+                    className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                    onChange={handleMarkAsPaidProofFileChange}
+                    disabled={markAsPaidDialog.uploading}
+                    data-testid="input-advance-payment-proof"
+                  />
+                  {markAsPaidDialog.proofFile ? (
+                    <div className="space-y-2">
+                      {markAsPaidDialog.proofPreviewUrl ? (
+                        <img
+                          src={markAsPaidDialog.proofPreviewUrl}
+                          alt="Receipt preview"
+                          className="max-h-32 mx-auto rounded object-contain"
+                        />
+                      ) : (
+                        <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
+                          <FileText className="h-8 w-8 text-red-500" />
+                          <span>{markAsPaidDialog.proofFile.name}</span>
+                        </div>
+                      )}
+                      <p className="text-xs text-muted-foreground">Click to change / انقر للتغيير</p>
+                    </div>
+                  ) : (
+                    <div className="text-muted-foreground">
+                      <ImageIcon className="h-8 w-8 mx-auto mb-1 opacity-40" />
+                      <p className="text-sm">Upload receipt image or PDF / ارفع صورة أو PDF</p>
+                      <p className="text-xs opacity-60">Click to browse / انقر للتصفح</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">
+                  Notes / ملاحظات <span className="text-muted-foreground font-normal">(optional / اختياري)</span>
+                </Label>
+                <Textarea
+                  value={markAsPaidDialog.notes}
+                  onChange={(e) => setMarkAsPaidDialog(prev => ({ ...prev, notes: e.target.value }))}
+                  placeholder="e.g. Bank transfer ref: TXN123... / مثال: رقم التحويل: TXN123..."
+                  className="resize-none h-20 text-sm"
+                  disabled={markAsPaidDialog.uploading}
+                  data-testid="input-advance-payment-notes"
+                />
+              </div>
+            </div>
+          )}
+
+          <DialogFooter className="gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                if (markAsPaidDialog.proofPreviewUrl) URL.revokeObjectURL(markAsPaidDialog.proofPreviewUrl);
+                setMarkAsPaidDialog({ open: false, request: null, proofFile: null, proofPreviewUrl: null, notes: '', uploading: false });
+              }}
+              disabled={markAsPaidDialog.uploading}
+              data-testid="button-cancel-advance-mark-paid"
+            >
+              Cancel / إلغاء
+            </Button>
+            <Button
+              type="button"
+              onClick={handleConfirmAdvanceMarkAsPaid}
+              disabled={markAsPaidDialog.uploading || !markAsPaidDialog.proofFile}
+              className="bg-green-600 hover:bg-green-700 text-white"
+              data-testid="button-confirm-advance-mark-paid"
+            >
+              {markAsPaidDialog.uploading ? (
+                <><RefreshCw className="h-4 w-4 mr-1.5 animate-spin" /> Uploading...</>
+              ) : (
+                <><CheckCircle2 className="h-4 w-4 mr-1.5" /> Confirm Payment / تأكيد الدفع</>
               )}
             </Button>
           </DialogFooter>

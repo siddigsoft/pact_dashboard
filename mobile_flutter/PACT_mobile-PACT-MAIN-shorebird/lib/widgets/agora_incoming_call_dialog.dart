@@ -96,13 +96,13 @@ class _AgoraIncomingCallDialogState extends State<AgoraIncomingCallDialog>
             end: Alignment.bottomRight,
             colors: [
               const Color(0xFF1a1a2e),
-              AppColors.primary.withOpacity(0.3),
+              AppColors.primary.withValues(alpha: 0.3),
             ],
           ),
           borderRadius: BorderRadius.circular(24),
           boxShadow: [
             BoxShadow(
-              color: AppColors.primary.withOpacity(0.3),
+              color: AppColors.primary.withValues(alpha: 0.3),
               blurRadius: 20,
               spreadRadius: 2,
             ),
@@ -115,9 +115,9 @@ class _AgoraIncomingCallDialogState extends State<AgoraIncomingCallDialog>
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
               decoration: BoxDecoration(
-                color: Colors.green.withOpacity(0.2),
+                color: Colors.green.withValues(alpha: 0.2),
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.green.withOpacity(0.5)),
+                border: Border.all(color: Colors.green.withValues(alpha: 0.5)),
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
@@ -156,13 +156,13 @@ class _AgoraIncomingCallDialogState extends State<AgoraIncomingCallDialog>
                   shape: BoxShape.circle,
                   gradient: LinearGradient(
                     colors: [
-                      AppColors.primary.withOpacity(0.5),
-                      AppColors.primary.withOpacity(0.3),
+                      AppColors.primary.withValues(alpha: 0.5),
+                      AppColors.primary.withValues(alpha: 0.3),
                     ],
                   ),
                   boxShadow: [
                     BoxShadow(
-                      color: AppColors.primary.withOpacity(0.4),
+                      color: AppColors.primary.withValues(alpha: 0.4),
                       blurRadius: 20,
                       spreadRadius: 2,
                     ),
@@ -202,7 +202,7 @@ class _AgoraIncomingCallDialogState extends State<AgoraIncomingCallDialog>
                   ? 'Incoming audio call...'
                   : 'Incoming video call...',
               style: TextStyle(
-                color: Colors.white.withOpacity(0.7),
+                color: Colors.white.withValues(alpha: 0.7),
                 fontSize: 14,
               ),
             ),
@@ -291,7 +291,7 @@ class _AgoraIncomingCallDialogState extends State<AgoraIncomingCallDialog>
       height: 90,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        color: AppColors.primary.withOpacity(0.3),
+        color: AppColors.primary.withValues(alpha: 0.3),
       ),
       child: Center(
         child: Text(

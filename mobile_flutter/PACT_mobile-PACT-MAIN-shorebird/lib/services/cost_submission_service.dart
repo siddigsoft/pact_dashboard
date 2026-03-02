@@ -5,7 +5,7 @@ import '../models/cost_submission.dart';
 /// Cost Submission Service - Matches React implementation
 ///
 /// Handles cost submission operations with the same API as React:
-/// - Table: site_visit_cost_submissions (not operational_cost_submissions)
+/// - Table: operational_cost_submissions (getUserSubmissions + createCostSubmission)
 /// - Approval history tracking via cost_approval_history
 /// - Real-time subscriptions
 /// - Payment integration with wallet_transactions
@@ -201,7 +201,7 @@ class CostSubmissionService {
       };
 
       final response = await _supabase
-          .from('site_visit_cost_submissions')
+          .from('operational_cost_submissions')
           .insert(data)
           .select()
           .single();
@@ -470,10 +470,21 @@ class CostSubmissionService {
     return createCostSubmission(request: request);
   }
 
-  @deprecated
   Future<List<OperationalCostSubmission>> getUserSubmissions() async {
     if (currentUserId == null) return [];
-    return fetchUserCostSubmissions(currentUserId!);
+    try {
+      final response = await _supabase
+          .from('operational_cost_submissions')
+          .select()
+          .eq('submitted_by', currentUserId!)
+          .order('created_at', ascending: false);
+      return (response as List)
+          .map((json) => OperationalCostSubmission.fromJson(json))
+          .toList();
+    } catch (e) {
+      print('Error fetching operational cost submissions: $e');
+      return [];
+    }
   }
 
   @deprecated

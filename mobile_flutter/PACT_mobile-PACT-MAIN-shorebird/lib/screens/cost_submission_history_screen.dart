@@ -127,7 +127,7 @@ class _CostSubmissionHistoryScreenState extends State<CostSubmissionHistoryScree
                 label: Text(isArabic ? f['ar']! : f['en']!),
                 selected: isSelected,
                 onSelected: (sel) => setState(() => _statusFilter = sel ? f['key']! : 'all'),
-                selectedColor: Theme.of(context).primaryColor.withOpacity(0.2),
+                selectedColor: Theme.of(context).primaryColor.withValues(alpha: 0.2),
                 checkmarkColor: Theme.of(context).primaryColor,
               ),
             );
@@ -180,9 +180,9 @@ class _CostSubmissionHistoryScreenState extends State<CostSubmissionHistoryScree
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                     decoration: BoxDecoration(
-                      color: statusColor.withOpacity(0.1),
+                      color: statusColor.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: statusColor.withOpacity(0.4)),
+                      border: Border.all(color: statusColor.withValues(alpha: 0.4)),
                     ),
                     child: Text(statusLabel, style: TextStyle(color: statusColor, fontSize: 11, fontWeight: FontWeight.w600)),
                   ),
@@ -211,7 +211,7 @@ class _CostSubmissionHistoryScreenState extends State<CostSubmissionHistoryScree
                       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                       margin: const EdgeInsets.only(right: 8),
                       decoration: BoxDecoration(
-                        color: Colors.deepPurple.withOpacity(0.1),
+                        color: Colors.deepPurple.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(4),
                       ),
                       child: Text(
@@ -222,7 +222,7 @@ class _CostSubmissionHistoryScreenState extends State<CostSubmissionHistoryScree
                   if (s.supportingDocuments.isNotEmpty)
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                      decoration: BoxDecoration(color: Colors.blue.withOpacity(0.1), borderRadius: BorderRadius.circular(4)),
+                      decoration: BoxDecoration(color: Colors.blue.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(4)),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [

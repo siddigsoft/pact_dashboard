@@ -4,7 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ChevronLeft, Clock, CheckCircle, XCircle, AlertCircle, Sparkles, DollarSign, FileText, Users, Shield, Receipt, ThumbsUp, ThumbsDown, ArrowRight, Calendar, MapPin, Building2, FolderOpen, Hash, Paperclip, Download, Pencil, Trash2, RotateCcw, SendHorizonal, FileSpreadsheet, FileDown, Info, RefreshCw, CircleDollarSign, ClipboardCheck, HelpCircle, Wallet, Ticket, Gift, Wifi, GraduationCap, Car, Package, Printer, Coffee, MoreHorizontal, Briefcase, Mail } from "lucide-react";
+import { ChevronLeft, Clock, CheckCircle, XCircle, AlertCircle, Sparkles, DollarSign, FileText, Users, Shield, Receipt, ThumbsUp, ThumbsDown, ArrowRight, Calendar, MapPin, Building2, FolderOpen, Hash, Paperclip, Download, Pencil, Trash2, RotateCcw, SendHorizonal, FileSpreadsheet, FileDown, Info, RefreshCw, CircleDollarSign, ClipboardCheck, HelpCircle, Wallet, Ticket, Gift, Wifi, GraduationCap, Car, Package, Printer, Coffee, MoreHorizontal, Briefcase, Mail, Upload, Eye, ImageIcon } from "lucide-react";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
@@ -25,10 +25,11 @@ import CostDocumentUpload from "@/components/cost-submission/CostDocumentUpload"
 import OutstandingAdvances from "@/components/cost-submission/OutstandingAdvances";
 import type { SupportingDocument } from "@/types/cost-submission";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { supabase } from "@/integrations/supabase/client";
-import { format } from "date-fns";
+import { format, parseISO } from "date-fns";
 import { SignatureConfirmationModal } from "@/components/signatures/SignatureConfirmationModal";
 import type { SignatureMethod } from "@/types/signature";
 import { generateApprovalCertificatePdf, generateApprovalCertificateBase64 } from "@/utils/approvalCertificatePdf";
@@ -51,6 +52,7 @@ import { EmailNotificationService } from '@/services/email-notification.service'
 import { EmailCCInput } from '@/components/EmailCCInput';
 import { generateFinancialStatementPdf, type StatementRow, type StatementConfig } from '@/utils/financialStatementPdf';
 import { generateFinancialStatementExcel } from '@/utils/financialStatementExcel';
+import { generateBulkCostPDFBase64, generateBulkCostExcelBase64, type BulkSubmission, type BulkUserMap, type BulkProjectMap } from '@/utils/bulkCostEmailAttachments';
 import { getStatesInHub, normalizeHubId } from '@/data/sudanStates';
 import { getHubAccessInfo, isStateInAnyHub } from '@/utils/hubAccessControl';
 
@@ -106,6 +108,13 @@ interface OperationalCostSubmission {
   reconciliation_notes: string | null;
   created_at: string;
   updated_at: string;
+  fund_receipt_confirmed?: boolean | null;
+  fund_receipt_confirmed_at?: string | null;
+  fund_receipt_signature_url?: string | null;
+  fund_receipt_notes?: string | null;
+  payment_proof_url?: string | null;
+  payment_proof_notes?: string | null;
+  payment_proof_uploaded_at?: string | null;
 }
 
 const CostSubmission = () => {
@@ -155,7 +164,7 @@ const CostSubmission = () => {
   const canViewTeamSubmissions = isAdmin || isSupervisor || isSuperAdmin || isFinanceAdmin || isAdminOrSuperUser;
 
   // Default to Submit Request tab for all users
-  const [activeTab, setActiveTab] = useState<"submit" | "reconciliation" | "outstanding" | "history">("submit");
+  const [activeTab, setActiveTab] = useState<"submit" | "reconciliation" | "outstanding" | "history" | "payment_audit">("submit");
   const [statusFilter, setStatusFilter] = useState<"all" | "pending" | "under_review" | "approved" | "rejected" | "paid" | "reconciled">("all");
   const [showGuide, setShowGuide] = useState(false);
   const [operationalCosts, setOperationalCosts] = useState<OperationalCostSubmission[]>([]);
@@ -187,10 +196,32 @@ const CostSubmission = () => {
     sending: boolean;
   }>({ open: false, submission: null, availableRecipients: [], selectedRecipientIds: [], ccEmails: [], loading: false, sending: false });
 
+  const [bulkCostEmailDialog, setBulkCostEmailDialog] = useState<{
+    step: 'rate' | 'recipients';
+    open: boolean;
+    usdRate: string;
+    totalSdg: number;
+    count: number;
+    approvedSubmissions: OperationalCostSubmission[];
+    availableRecipients: Array<{ id: string; email: string; name: string; role: string }>;
+    selectedRecipientIds: string[];
+    ccEmails: string[];
+    loading: boolean;
+    sending: boolean;
+  }>({ step: 'rate', open: false, usdRate: '', totalSdg: 0, count: 0, approvedSubmissions: [], availableRecipients: [], selectedRecipientIds: [], ccEmails: [], loading: false, sending: false });
+
   const [editingSubmission, setEditingSubmission] = useState<OperationalCostSubmission | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<OperationalCostSubmission | null>(null);
   const [recallConfirm, setRecallConfirm] = useState<OperationalCostSubmission | null>(null);
   const [actionProcessing, setActionProcessing] = useState(false);
+  const [markAsPaidDialog, setMarkAsPaidDialog] = useState<{
+    open: boolean;
+    submission: OperationalCostSubmission | null;
+    proofFile: File | null;
+    proofPreviewUrl: string | null;
+    notes: string;
+    uploading: boolean;
+  }>({ open: false, submission: null, proofFile: null, proofPreviewUrl: null, notes: '', uploading: false });
   const [viewAdvanceDetails, setViewAdvanceDetails] = useState<OperationalCostSubmission | null>(null);
   const [activeReconciliation, setActiveReconciliation] = useState<OperationalCostSubmission | null>(null);
   const [reconcileNotes, setReconcileNotes] = useState('');
@@ -427,6 +458,10 @@ const CostSubmission = () => {
     if (oc.status === 'reconciled') return 'reconciled';
     if (oc.status === 'paid') return 'paid';
     if (oc.tier1_status === 'rejected' || oc.tier2_status === 'rejected' || oc.tier3_status === 'rejected' || oc.status === 'rejected') return 'rejected';
+    // Authoritative: the approval handler only sets status='approved' once all required tiers pass.
+    // Catch coordinator submissions (3-tier flow) that completed tier1+tier2 but have tier3_status=null,
+    // and any other case where the DB status is already 'approved'.
+    if (oc.status === 'approved') return 'approved';
     if (hasThreeTiers(oc)) {
       if (oc.tier1_status === 'approved' && oc.tier2_status === 'approved' && oc.tier3_status === 'approved') return 'approved';
       if (oc.tier1_status === 'approved' && (oc.tier2_status === 'pending' || oc.tier3_status === 'pending')) return 'under_review';
@@ -463,7 +498,8 @@ const CostSubmission = () => {
 
   const canTier3Approve = (oc: OperationalCostSubmission): boolean => {
     if (!hasThreeTiers(oc)) return false;
-    if (oc.tier2_status !== 'approved' || oc.tier3_status !== 'pending') return false;
+    if (oc.tier2_status !== 'approved') return false;
+    if (oc.tier3_status !== 'pending' && oc.tier3_status !== null) return false;
     if (isSuperAdmin) return true;
     return isAdmin;
   };
@@ -541,6 +577,7 @@ const CostSubmission = () => {
             updates.status = 'approved';
           } else {
             updates.status = 'under_review';
+            updates.tier3_status = 'pending';
           }
         } else {
           updates.status = 'rejected';
@@ -795,49 +832,75 @@ const CostSubmission = () => {
     return isSuperAdmin || isAdmin || isFinanceAdmin;
   };
 
-  const handleMarkAsPaid = async (oc: OperationalCostSubmission) => {
-    if (!currentUser?.id) return;
+  const openMarkAsPaidDialog = (oc: OperationalCostSubmission) => {
+    setMarkAsPaidDialog({ open: true, submission: oc, proofFile: null, proofPreviewUrl: null, notes: '', uploading: false });
+  };
+
+  const handleMarkAsPaidProofFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const previewUrl = file.type.startsWith('image/') ? URL.createObjectURL(file) : null;
+    setMarkAsPaidDialog(prev => ({ ...prev, proofFile: file, proofPreviewUrl: previewUrl }));
+  };
+
+  const handleConfirmMarkAsPaid = async () => {
+    const { submission: oc, proofFile, notes } = markAsPaidDialog;
+    if (!oc || !currentUser?.id) return;
+    if (!proofFile) {
+      toast({ title: "Receipt Required / الإيصال مطلوب", description: "Please attach a payment receipt before confirming. / يرجى إرفاق إيصال الدفع قبل التأكيد.", variant: "destructive" });
+      return;
+    }
+    setMarkAsPaidDialog(prev => ({ ...prev, uploading: true }));
     setActionProcessing(true);
     try {
+      let proofUrl: string | null = null;
+
+      if (proofFile) {
+        const timestamp = Date.now();
+        const random = Math.random().toString(36).substring(2, 8);
+        const extension = proofFile.name.split('.').pop()?.toLowerCase() || 'file';
+        const filePath = `payment-proofs/${timestamp}_${random}.${extension}`;
+        const { error: uploadErr } = await supabase.storage
+          .from('mmp-files')
+          .upload(filePath, proofFile, { cacheControl: '3600', upsert: false });
+        if (uploadErr) throw new Error(uploadErr.message);
+        proofUrl = supabase.storage.from('mmp-files').getPublicUrl(filePath).data.publicUrl;
+      }
+
       const now = new Date().toISOString();
       const updatePayload: Record<string, unknown> = {
         status: 'paid',
         paid_at: now,
+        paid_by: currentUser.id,
         updated_at: now,
+        ...(proofUrl ? { payment_proof_url: proofUrl, payment_proof_uploaded_at: now } : {}),
+        ...(notes.trim() ? { payment_proof_notes: notes.trim() } : {}),
       };
-      try {
-        updatePayload.paid_by = currentUser.id;
-      } catch { /* field may not exist in schema cache */ }
 
-      let { error } = await supabase
+      const { error } = await supabase
         .from('operational_cost_submissions')
         .update(updatePayload)
         .eq('id', oc.id);
-      
-      if (error?.message?.includes('paid_by')) {
-        const { paid_by, ...safePayload } = updatePayload as any;
-        const fallback = await supabase
-          .from('operational_cost_submissions')
-          .update({ ...safePayload, description: `${oc.description || ''}\n[Paid by: ${currentUser.id}]` })
-          .eq('id', oc.id);
-        error = fallback.error;
-      }
-      
+
       if (error) {
         toast({ title: "Failed / فشل", description: error.message, variant: "destructive" });
       } else {
-        toast({ 
-          title: "Marked as Paid / تم التحديد كمدفوع", 
-          description: "The payment has been recorded. The advance is now outstanding and awaiting reconciliation. / تم تسجيل الدفع. السلفة الآن معلقة وتنتظر التسوية." 
+        toast({
+          title: "Payment Sent / تم إرسال الدفعة",
+          description: "Marked as paid. The recipient can now view the receipt and confirm in their Cost Submissions tab. / تم التحديد كمدفوع. يمكن للمستلم الآن الاطلاع على الإيصال والتأكيد."
         });
+        setMarkAsPaidDialog({ open: false, submission: null, proofFile: null, proofPreviewUrl: null, notes: '', uploading: false });
         fetchOperationalCosts();
       }
-    } catch {
-      toast({ title: "Error / خطأ", description: "Failed to mark as paid. / فشل في التحديد كمدفوع.", variant: "destructive" });
+    } catch (err: any) {
+      toast({ title: "Error / خطأ", description: err.message || "Failed to mark as paid.", variant: "destructive" });
     } finally {
+      setMarkAsPaidDialog(prev => ({ ...prev, uploading: false }));
       setActionProcessing(false);
     }
   };
+
+  const handleMarkAsPaid = (oc: OperationalCostSubmission) => openMarkAsPaidDialog(oc);
 
   const canRequestPayment = (oc: OperationalCostSubmission): boolean => {
     const derivedStatus = getOperationalDerivedStatus(oc);
@@ -924,6 +987,141 @@ const CostSubmission = () => {
         ? []
         : prev.availableRecipients.map(r => r.id),
     }));
+  };
+
+  const openBulkCostEmailDialog = (forceSubmission?: OperationalCostSubmission) => {
+    const approvedSubs = forceSubmission
+      ? [forceSubmission]
+      : operationalCosts.filter(o => getOperationalDerivedStatus(o) === 'approved');
+    const totalSdg = approvedSubs.reduce((sum, oc) => {
+      const cents = (oc as any).amount_cents || 0;
+      const direct = (oc as any).total_amount || (oc as any).amount || 0;
+      return sum + (cents > 0 ? cents / 100 : direct);
+    }, 0);
+    setBulkCostEmailDialog({ step: 'rate', open: true, usdRate: '', totalSdg, count: approvedSubs.length, approvedSubmissions: approvedSubs, availableRecipients: [], selectedRecipientIds: [], ccEmails: [], loading: false, sending: false });
+  };
+
+  const proceedBulkToRecipients = async () => {
+    setBulkCostEmailDialog(prev => ({ ...prev, step: 'recipients', loading: true }));
+    try {
+      const cached = cachedRecipientsRef.current;
+      if (cached.length > 0) {
+        setBulkCostEmailDialog(prev => ({ ...prev, availableRecipients: cached, selectedRecipientIds: cached.map(r => r.id), loading: false }));
+        return;
+      }
+      const { data: financeUsers } = await supabase
+        .from('profiles')
+        .select('id, email, full_name, role')
+        .in('role', ['finance_admin', 'Finance Admin', 'superAdmin', 'SuperAdmin', 'super_admin', 'admin', 'Admin', 'Administrator'])
+        .eq('status', 'approved');
+      const recipients = (financeUsers || []).filter((u: any) => u.email).map((u: any) => ({ id: u.id, email: u.email, name: u.full_name || u.email, role: u.role }));
+      cachedRecipientsRef.current = recipients;
+      setBulkCostEmailDialog(prev => ({ ...prev, availableRecipients: recipients, selectedRecipientIds: recipients.map((r: any) => r.id), loading: false }));
+    } catch {
+      setBulkCostEmailDialog(prev => ({ ...prev, loading: false }));
+      toast({ title: "Error / خطأ", description: "Failed to load recipients.", variant: "destructive" });
+    }
+  };
+
+  const handleBulkCostEmailSend = async () => {
+    const { selectedRecipientIds, availableRecipients, ccEmails, totalSdg, count, usdRate, approvedSubmissions } = bulkCostEmailDialog;
+    if (!currentUser?.id || selectedRecipientIds.length === 0) return;
+    const rate = parseFloat(usdRate);
+    const effectiveRate = !isNaN(rate) && rate > 0 ? rate : null;
+    setBulkCostEmailDialog(prev => ({ ...prev, sending: true }));
+    try {
+      const selectedRecipients = availableRecipients.filter(r => selectedRecipientIds.includes(r.id)).map(r => ({ email: r.email, name: r.name }));
+      const approverName = (currentUser as any).fullName || (currentUser as any).full_name || currentUser.email || 'Approver';
+      const approverEmail = currentUser.email || '';
+      const bulkId = `BULK-${count}-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}`;
+
+      const userMap: BulkUserMap = {};
+      (users || []).forEach((u: any) => {
+        if (u.id) userMap[u.id] = { name: u.fullName || u.full_name || u.name || u.email || '—', email: u.email || '—', role: u.role };
+      });
+
+      const projectMap: BulkProjectMap = {};
+      (allProjects || []).forEach((p: any) => {
+        if (p.id) projectMap[p.id] = p.name || p.id;
+      });
+
+      const bulkSubs: BulkSubmission[] = approvedSubmissions.map(s => ({
+        id: s.id,
+        expense_category: s.expense_category,
+        amount_cents: s.amount_cents,
+        currency: s.currency,
+        description: s.description,
+        expense_date: s.expense_date,
+        vendor: s.vendor,
+        submitted_by: s.submitted_by,
+        submitted_at: s.submitted_at,
+        status: s.status,
+        tier1_approved_at: s.tier1_approved_at,
+        tier2_approved_at: s.tier2_approved_at,
+        tier2_notes: s.tier2_notes,
+        project_id: s.project_id,
+        reference_number: s.reference_number,
+      }));
+
+      let pdfAttachment: { base64: string; filename: string } | undefined;
+      let excelAttachment: { base64: string; filename: string; mimeType: string } | undefined;
+
+      try {
+        const pdfBase64 = generateBulkCostPDFBase64(bulkSubs, approverName, totalSdg, effectiveRate, userMap, projectMap);
+        pdfAttachment = {
+          base64: pdfBase64,
+          filename: `PACT_Approved_Costs_${new Date().toISOString().slice(0, 10)}.pdf`,
+        };
+      } catch (pdfErr) {
+        console.warn('[BulkEmail] PDF generation failed:', pdfErr);
+      }
+
+      try {
+        const excelBase64 = generateBulkCostExcelBase64(bulkSubs, approverName, effectiveRate, userMap, projectMap);
+        excelAttachment = {
+          base64: excelBase64,
+          filename: `PACT_Approved_Costs_${new Date().toISOString().slice(0, 10)}.xlsx`,
+          mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        };
+      } catch (xlErr) {
+        console.warn('[BulkEmail] Excel generation failed:', xlErr);
+      }
+
+      const recalcTotalSdg = approvedSubmissions.reduce((sum, s) => sum + (s.amount_cents || 0) / 100, 0);
+      const effectiveTotalSdg = recalcTotalSdg > 0 ? recalcTotalSdg : totalSdg;
+
+      const result = await EmailNotificationService.sendPaymentRequestToFinanceWithRecipients(
+        selectedRecipients,
+        approverName,
+        approverEmail,
+        'Multiple Submitters',
+        'All Approved Operational Cost Submissions',
+        bulkId,
+        'Operational Costs (Bulk)',
+        effectiveTotalSdg,
+        'operational_cost',
+        (allProjects.find(p => approvedSubmissions[0]?.project_id === p.id)?.name) || 'WFP TPM',
+        'SDG',
+        '',
+        '/cost-submission',
+        pdfAttachment,
+        excelAttachment ? [excelAttachment] : undefined,
+        ccEmails.length > 0 ? ccEmails : undefined,
+        'All Approved Submissions',
+        effectiveRate ?? undefined
+      );
+      if (result.success) {
+        const attachDesc = [pdfAttachment ? 'PDF report' : '', excelAttachment ? 'Excel workbook' : ''].filter(Boolean).join(' + ');
+        toast({ title: "Email Sent / تم الإرسال", description: `Payment request for ${count} submissions sent to ${selectedRecipients.length} recipient(s)${attachDesc ? ` with ${attachDesc} attached` : ''}.` });
+        setBulkCostEmailDialog({ step: 'rate', open: false, usdRate: '', totalSdg: 0, count: 0, approvedSubmissions: [], availableRecipients: [], selectedRecipientIds: [], ccEmails: [], loading: false, sending: false });
+      } else {
+        toast({ title: "Send Failed / فشل الإرسال", description: result.error || "Failed to send bulk email.", variant: "destructive" });
+        setBulkCostEmailDialog(prev => ({ ...prev, sending: false }));
+      }
+    } catch (err: any) {
+      toast({ title: "Error / خطأ", description: err?.message || "Unexpected error sending bulk email.", variant: "destructive" });
+      setBulkCostEmailDialog(prev => ({ ...prev, sending: false }));
+    }
   };
 
   const handleSendPaymentRequest = async () => {
@@ -1233,12 +1431,13 @@ const CostSubmission = () => {
         </Button>
 
         <div className="flex flex-col gap-2">
-          <div className="flex items-center gap-3">
-            <div className="p-3 rounded-lg bg-gradient-to-br from-blue-500 to-blue-700">
-              <FileText className="h-8 w-8 text-white" />
-            </div>
-            <div>
-              <h1 className="text-3xl font-bold tracking-tight flex items-center gap-2">
+          <div className="flex items-start justify-between gap-3 flex-wrap">
+            <div className="flex items-center gap-3">
+              <div className="p-3 rounded-lg bg-gradient-to-br from-blue-500 to-blue-700">
+                <FileText className="h-8 w-8 text-white" />
+              </div>
+              <div>
+              <h1 className="text-3xl font-bold tracking-tight flex items-center flex-wrap gap-2">
                 {canViewTeamSubmissions ? "Cost Approval & Tracking" : "Cost Submission"}
                 {(isAdmin || isSuperAdmin) && (
                   <Badge variant="outline" className="bg-purple-100 dark:bg-purple-900 text-purple-800 dark:text-purple-200 border-purple-300">
@@ -1262,6 +1461,23 @@ const CostSubmission = () => {
                 }
               </p>
             </div>
+            </div>
+            {canViewTeamSubmissions && (
+              <Button
+                size="default"
+                onClick={openBulkCostEmailDialog}
+                className="bg-[#0F2041] hover:bg-[#1D3461] text-white shrink-0 font-semibold shadow-md"
+                data-testid="button-bulk-cost-email"
+              >
+                <Mail className="h-4 w-4 mr-2" />
+                Send Approved Email
+                {operationalCosts.filter(o => getOperationalDerivedStatus(o) === 'approved').length > 0 && (
+                  <span className="ml-2 bg-amber-400 text-amber-900 text-xs font-bold rounded-full px-2 py-0.5 leading-none">
+                    {operationalCosts.filter(o => getOperationalDerivedStatus(o) === 'approved').length}
+                  </span>
+                )}
+              </Button>
+            )}
           </div>
         </div>
       </div>
@@ -1619,6 +1835,27 @@ const CostSubmission = () => {
                 </Badge>
               )}
             </TabsTrigger>
+
+            {/* Confirmation Audit — admins & supervisors only */}
+            {canViewTeamSubmissions && (
+              <TabsTrigger
+                value="payment_audit"
+                data-testid="tab-payment-audit"
+                className="relative flex-1 min-w-[150px] gap-2 py-3 px-4 rounded-lg font-medium transition-all duration-300 data-[state=active]:bg-gradient-to-r data-[state=active]:from-violet-600 data-[state=active]:to-purple-700 data-[state=active]:text-white data-[state=active]:shadow-lg data-[state=active]:shadow-violet-500/25 data-[state=inactive]:text-slate-600 data-[state=inactive]:dark:text-slate-400 data-[state=inactive]:hover:bg-slate-200/50 data-[state=inactive]:dark:hover:bg-slate-700/50"
+              >
+                <Shield className="h-4 w-4" />
+                <span className="hidden sm:inline">Confirmation Audit</span>
+                <span className="sm:hidden">Audit</span>
+                {(() => {
+                  const unconfirmed = submissions.filter(s => s.status === 'paid' && !s.fund_receipt_confirmed).length;
+                  return unconfirmed > 0 && activeTab !== 'payment_audit' ? (
+                    <Badge variant="secondary" className="ml-1 h-5 px-1.5 text-xs bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-300 border-0">
+                      {unconfirmed}
+                    </Badge>
+                  ) : null;
+                })()}
+              </TabsTrigger>
+            )}
           </TabsList>
         </div>
 
@@ -2198,6 +2435,46 @@ const CostSubmission = () => {
 
         {/* Submissions History Tab */}
         <TabsContent value="history" className="space-y-4">
+          {/* ── Finance Email Action Bar — only in All Submissions tab ── */}
+          {canViewTeamSubmissions && (() => {
+            const approvedCount = operationalCosts.filter(o => getOperationalDerivedStatus(o) === 'approved').length;
+            const approvedTotal = operationalCosts.filter(o => getOperationalDerivedStatus(o) === 'approved').reduce((sum, o) => sum + (o.amount_cents || 0) / 100, 0);
+            return (
+              <div className={`rounded-xl border-2 px-5 py-3.5 flex items-center justify-between gap-4 transition-all ${approvedCount > 0 ? 'bg-gradient-to-r from-[#0F2041] to-[#1D3461] border-[#0F2041]' : 'bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700'}`}>
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className={`shrink-0 w-9 h-9 rounded-lg flex items-center justify-center ${approvedCount > 0 ? 'bg-white/15' : 'bg-slate-200 dark:bg-slate-800'}`}>
+                    <Mail className={`h-4 w-4 ${approvedCount > 0 ? 'text-white' : 'text-slate-500'}`} />
+                  </div>
+                  <div className="min-w-0">
+                    <p className={`text-sm font-bold leading-tight ${approvedCount > 0 ? 'text-white' : 'text-slate-700 dark:text-slate-200'}`}>
+                      Send Payment Email to Finance
+                      <span className="font-normal text-xs opacity-60 mr-1"> / إرسال بريد الدفع للمالية</span>
+                    </p>
+                    <p className={`text-xs leading-tight mt-0.5 ${approvedCount > 0 ? 'text-white/75' : 'text-muted-foreground'}`}>
+                      {approvedCount > 0
+                        ? `${approvedCount} approved submission${approvedCount !== 1 ? 's' : ''} · SDG ${approvedTotal.toLocaleString(undefined, { maximumFractionDigits: 0 })} ready to send`
+                        : 'No approved submissions — check back after tier approvals are complete'}
+                    </p>
+                  </div>
+                </div>
+                <Button
+                  size="sm"
+                  type="button"
+                  onClick={openBulkCostEmailDialog}
+                  disabled={approvedCount === 0}
+                  className={`shrink-0 font-semibold gap-1.5 ${approvedCount > 0 ? 'bg-white text-[#0F2041] hover:bg-white/90 shadow-lg shadow-black/20' : 'bg-slate-200 text-slate-500 cursor-not-allowed'}`}
+                  data-testid="button-bulk-cost-email-bar"
+                >
+                  <Mail className="h-3.5 w-3.5" />
+                  Send to Finance
+                  {approvedCount > 0 && (
+                    <span className="bg-[#0F2041] text-white text-[10px] font-bold rounded-full px-1.5 py-0.5 leading-none">{approvedCount}</span>
+                  )}
+                </Button>
+              </div>
+            );
+          })()}
+
           <Card>
             <CardHeader className="pb-3">
               <div className="flex items-center gap-2">
@@ -2426,13 +2703,41 @@ const CostSubmission = () => {
                                 )}
                               </div>
                             </div>
-                            <div className="flex flex-col items-end gap-1 shrink-0">
+                            <div className="flex flex-col items-end gap-1.5 shrink-0">
                               <span className="font-bold text-lg tabular-nums" data-testid={`text-amount-${oc.id}`}>
                                 {oc.currency} {(oc.amount_cents / 100).toLocaleString()}
                               </span>
                               <Badge className={`text-xs border-0 ${statusColors[derivedStatus] || statusColors.pending}`}>
                                 {statusLabels[derivedStatus] || derivedStatus}
                               </Badge>
+                              {/* Quick action buttons — visible at top of card for admins */}
+                              {canMarkAsPaid(oc) && (
+                                <Button
+                                  size="sm"
+                                  type="button"
+                                  onClick={() => handleMarkAsPaid(oc)}
+                                  disabled={actionProcessing}
+                                  data-testid={`button-quick-mark-paid-${oc.id}`}
+                                  className="h-7 px-2.5 text-xs bg-green-600 hover:bg-green-700 text-white"
+                                >
+                                  <Wallet className="h-3 w-3 mr-1" />
+                                  Mark Paid
+                                </Button>
+                              )}
+                              {canRequestPayment(oc) && (
+                                <Button
+                                  size="sm"
+                                  type="button"
+                                  variant="outline"
+                                  onClick={() => openPaymentRequestDialog(oc)}
+                                  disabled={actionProcessing}
+                                  data-testid={`button-quick-request-payment-${oc.id}`}
+                                  className="h-7 px-2.5 text-xs border-blue-300 text-blue-700 hover:bg-blue-50"
+                                >
+                                  <Mail className="h-3 w-3 mr-1" />
+                                  Send to Finance
+                                </Button>
+                              )}
                             </div>
                           </div>
 
@@ -2698,6 +3003,18 @@ const CostSubmission = () => {
                                 Reconcile
                               </Button>
                             )}
+                            {(isSuperAdmin || isAdmin || isFinanceAdmin) && !['rejected', 'cancelled', 'reconciled'].includes(derivedStatus) && !canRequestPayment(oc) && !canMarkAsPaid(oc) && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => openBulkCostEmailDialog(oc)}
+                                data-testid={`button-send-finance-${oc.id}`}
+                                className="border-blue-300 text-blue-700 hover:bg-blue-50 dark:border-blue-700 dark:text-blue-400 dark:hover:bg-blue-950/40"
+                              >
+                                <Mail className="h-3.5 w-3.5 mr-1" />
+                                Send to Finance
+                              </Button>
+                            )}
                             <div className="flex-1" />
                             {canEditSubmission(oc) && (
                               <Button
@@ -2786,6 +3103,146 @@ const CostSubmission = () => {
             </Card>
           ) : null}
         </TabsContent>
+
+        {/* ─── Confirmation Audit ─── */}
+        {canViewTeamSubmissions && (
+          <TabsContent value="payment_audit" className="space-y-4">
+            {(() => {
+              const paidSubs = submissions.filter(s => s.status === 'paid');
+              const confirmed = paidSubs.filter(s => s.fund_receipt_confirmed === true);
+              const unconfirmed = paidSubs.filter(s => !s.fund_receipt_confirmed);
+              const totalPaidCents = paidSubs.reduce((s, sub) => s + (sub.amount_cents ?? 0), 0);
+              const confirmedCents = confirmed.reduce((s, sub) => s + (sub.amount_cents ?? 0), 0);
+              return (
+                <>
+                  {/* Summary */}
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                    <Card className="border-violet-200 bg-violet-50 dark:bg-violet-950/30">
+                      <CardContent className="pt-4 pb-3">
+                        <p className="text-xs text-muted-foreground mb-1">Total Paid Out</p>
+                        <p className="text-xl font-bold text-violet-700 dark:text-violet-300">
+                          {(totalPaidCents / 100).toLocaleString(undefined, { maximumFractionDigits: 0 })} SDG
+                        </p>
+                        <p className="text-xs text-muted-foreground">{paidSubs.length} submission{paidSubs.length !== 1 ? 's' : ''}</p>
+                      </CardContent>
+                    </Card>
+                    <Card className="border-green-200 bg-green-50 dark:bg-green-950/30">
+                      <CardContent className="pt-4 pb-3">
+                        <p className="text-xs text-muted-foreground mb-1">Receipt Confirmed</p>
+                        <p className="text-xl font-bold text-green-700 dark:text-green-300">
+                          {(confirmedCents / 100).toLocaleString(undefined, { maximumFractionDigits: 0 })} SDG
+                        </p>
+                        <p className="text-xs text-muted-foreground">{confirmed.length} submission{confirmed.length !== 1 ? 's' : ''}</p>
+                      </CardContent>
+                    </Card>
+                    <Card className="border-orange-200 bg-orange-50 dark:bg-orange-950/30">
+                      <CardContent className="pt-4 pb-3">
+                        <p className="text-xs text-muted-foreground mb-1">Awaiting Confirmation</p>
+                        <p className="text-xl font-bold text-orange-700 dark:text-orange-300">
+                          {((totalPaidCents - confirmedCents) / 100).toLocaleString(undefined, { maximumFractionDigits: 0 })} SDG
+                        </p>
+                        <p className="text-xs text-muted-foreground">{unconfirmed.length} pending</p>
+                      </CardContent>
+                    </Card>
+                  </div>
+
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2">
+                        <Shield className="h-5 w-5" />
+                        Fund Receipt Confirmation Audit
+                      </CardTitle>
+                      <CardDescription>
+                        All paid cost submissions — shows whether the field staff member has confirmed receiving the funds
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="p-0">
+                      {isLoading ? (
+                        <div className="p-6 space-y-2">{Array(5).fill(0).map((_, i) => <Skeleton key={i} className="h-10 w-full" />)}</div>
+                      ) : paidSubs.length === 0 ? (
+                        <div className="p-12 text-center text-muted-foreground">No paid submissions found</div>
+                      ) : (
+                        <div className="overflow-x-auto">
+                          <Table>
+                            <TableHeader>
+                              <TableRow>
+                                <TableHead>Submitted By</TableHead>
+                                <TableHead>Category</TableHead>
+                                <TableHead className="text-right">Amount (SDG)</TableHead>
+                                <TableHead>Paid At</TableHead>
+                                <TableHead>Payment Receipt</TableHead>
+                                <TableHead>Receipt Confirmed</TableHead>
+                                <TableHead>Confirmed At</TableHead>
+                                <TableHead>Notes</TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {paidSubs.map(sub => {
+                                const submitterName = users.find(u => u.id === sub.submitted_by)?.name || sub.submitted_by;
+                                const amountSdg = (sub.amount_cents ?? 0) / 100;
+                                const categoryLabel: Record<string, string> = {
+                                  permits: 'Permits', incentives: 'Incentives', communications: 'Comms',
+                                  training: 'Training', transport: 'Transport', general_transport: 'Transport',
+                                  equipment: 'Equipment', printing: 'Printing', meetings: 'Meetings',
+                                  office_admin: 'Office Admin', other: 'Other',
+                                };
+                                return (
+                                  <TableRow key={sub.id} data-testid={`row-audit-${sub.id}`}>
+                                    <TableCell className="font-medium">{submitterName}</TableCell>
+                                    <TableCell>{categoryLabel[sub.expense_category] ?? sub.expense_category}</TableCell>
+                                    <TableCell className="text-right font-mono">
+                                      {amountSdg.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                                    </TableCell>
+                                    <TableCell className="text-xs text-muted-foreground">
+                                      {sub.paid_at ? format(parseISO(sub.paid_at), 'dd/MM/yyyy') : '—'}
+                                    </TableCell>
+                                    <TableCell>
+                                      {sub.payment_proof_url ? (
+                                        <a
+                                          href={sub.payment_proof_url}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className="inline-flex items-center gap-1 text-xs text-blue-600 hover:underline"
+                                        >
+                                          <Eye className="h-3 w-3" />View
+                                        </a>
+                                      ) : (
+                                        <span className="text-xs text-muted-foreground">—</span>
+                                      )}
+                                    </TableCell>
+                                    <TableCell>
+                                      {sub.fund_receipt_confirmed ? (
+                                        <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200 border-green-200 gap-1">
+                                          <CheckCircle className="h-3 w-3" />Confirmed
+                                        </Badge>
+                                      ) : (
+                                        <Badge className="bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200 border-orange-200 gap-1">
+                                          <Clock className="h-3 w-3" />Pending
+                                        </Badge>
+                                      )}
+                                    </TableCell>
+                                    <TableCell className="text-xs text-muted-foreground">
+                                      {sub.fund_receipt_confirmed_at
+                                        ? format(parseISO(sub.fund_receipt_confirmed_at), 'dd/MM/yyyy HH:mm')
+                                        : '—'}
+                                    </TableCell>
+                                    <TableCell className="text-xs max-w-[180px] truncate" title={sub.fund_receipt_notes ?? ''}>
+                                      {sub.fund_receipt_notes || '—'}
+                                    </TableCell>
+                                  </TableRow>
+                                );
+                              })}
+                            </TableBody>
+                          </Table>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                </>
+              );
+            })()}
+          </TabsContent>
+        )}
       </Tabs>
 
       <Dialog open={approvalDialog.open} onOpenChange={(open) => {
@@ -3201,6 +3658,339 @@ const CostSubmission = () => {
         </DialogContent>
       </Dialog>
 
+      {/* ── Bulk Payment Email Dialog (2-step: Review & Rate → Recipients & Send) ── */}
+      <Dialog open={bulkCostEmailDialog.open} onOpenChange={(open) => {
+        if (!open && !bulkCostEmailDialog.sending) {
+          setBulkCostEmailDialog({ step: 'rate', open: false, usdRate: '', totalSdg: 0, count: 0, approvedSubmissions: [], availableRecipients: [], selectedRecipientIds: [], ccEmails: [], loading: false, sending: false });
+        }
+      }}>
+        <DialogContent className="max-w-2xl p-0 overflow-hidden">
+
+          {/* ── Dialog Header (shared across both steps) ── */}
+          <div className="bg-gradient-to-r from-[#0F2041] to-[#1D3461] px-6 py-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-lg bg-white/15 flex items-center justify-center">
+                  <Mail className="h-4.5 w-4.5 text-white" />
+                </div>
+                <div>
+                  <h2 className="text-base font-bold text-white leading-tight">
+                    Payment Email to Finance
+                    <span className="font-normal text-white/60 text-xs mr-2"> / بريد الدفع للمالية</span>
+                  </h2>
+                  <p className="text-xs text-white/65 mt-0.5">
+                    {bulkCostEmailDialog.step === 'rate' ? 'Step 1 of 2 · Review submissions & set exchange rate' : 'Step 2 of 2 · Choose recipients & send'}
+                  </p>
+                </div>
+              </div>
+              {/* Step dots */}
+              <div className="flex gap-1.5 items-center">
+                <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold ${bulkCostEmailDialog.step === 'rate' ? 'bg-white text-[#0F2041]' : 'bg-white/30 text-white'}`}>1</div>
+                <div className="w-4 h-0.5 bg-white/30 rounded" />
+                <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold ${bulkCostEmailDialog.step === 'recipients' ? 'bg-white text-[#0F2041]' : 'bg-white/30 text-white'}`}>2</div>
+              </div>
+            </div>
+          </div>
+
+          {bulkCostEmailDialog.step === 'rate' ? (
+            <>
+              <div className="px-6 py-4 space-y-4 max-h-[65vh] overflow-y-auto">
+
+                {/* Warning: no submissions */}
+                {bulkCostEmailDialog.count === 0 && (
+                  <div className="rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-950/30 px-4 py-3 flex items-start gap-2">
+                    <AlertCircle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+                    <p className="text-sm text-amber-800 dark:text-amber-300">
+                      No approved submissions found. The email will be sent without payment details.
+                      <span className="block mt-0.5 text-xs opacity-70">لا توجد طلبات موافق عليها.</span>
+                    </p>
+                  </div>
+                )}
+
+                {/* Submissions table */}
+                {bulkCostEmailDialog.approvedSubmissions.length > 0 && (
+                  <div className="rounded-xl border overflow-hidden">
+                    <div className="bg-slate-50 dark:bg-slate-900 px-4 py-2.5 flex items-center justify-between border-b">
+                      <p className="text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase tracking-wide flex items-center gap-1.5">
+                        <CheckCircle className="h-3.5 w-3.5 text-green-600" />
+                        Approved Submissions · {bulkCostEmailDialog.count}
+                      </p>
+                      <span className="text-xs font-bold text-green-700 dark:text-green-400">
+                        Total: SDG {bulkCostEmailDialog.totalSdg.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                      </span>
+                    </div>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-xs">
+                        <thead>
+                          <tr className="border-b bg-slate-50/50 dark:bg-slate-900/50">
+                            <th className="text-left px-3 py-2 font-semibold text-muted-foreground">#</th>
+                            <th className="text-left px-3 py-2 font-semibold text-muted-foreground">Ref / Category</th>
+                            <th className="text-left px-3 py-2 font-semibold text-muted-foreground">Submitter</th>
+                            <th className="text-left px-3 py-2 font-semibold text-muted-foreground">Date</th>
+                            <th className="text-left px-3 py-2 font-semibold text-muted-foreground">Tier 1 ✓</th>
+                            <th className="text-left px-3 py-2 font-semibold text-muted-foreground">Tier 2 ✓</th>
+                            <th className="text-right px-3 py-2 font-semibold text-muted-foreground">Amount (SDG)</th>
+                            {bulkCostEmailDialog.usdRate && !isNaN(parseFloat(bulkCostEmailDialog.usdRate)) && parseFloat(bulkCostEmailDialog.usdRate) > 0 && (
+                              <th className="text-right px-3 py-2 font-semibold text-blue-600">Amount (USD)</th>
+                            )}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {bulkCostEmailDialog.approvedSubmissions.map((sub, idx) => {
+                            const amtSdg = (sub.amount_cents || 0) > 0 ? (sub.amount_cents || 0) / 100 : ((sub as any).total_amount || (sub as any).amount || 0);
+                            const rate = parseFloat(bulkCostEmailDialog.usdRate);
+                            const amtUsd = !isNaN(rate) && rate > 0 ? amtSdg / rate : null;
+                            const submitterUser = users.find(u => u.id === sub.submitted_by);
+                            const tier1User = (sub as any).tier1_approved_by ? users.find(u => u.id === (sub as any).tier1_approved_by) : null;
+                            const tier2User = (sub as any).tier2_approved_by ? users.find(u => u.id === (sub as any).tier2_approved_by) : null;
+                            return (
+                              <tr key={sub.id || idx} className={`border-b last:border-0 ${idx % 2 === 0 ? '' : 'bg-slate-50/50 dark:bg-slate-900/30'}`}>
+                                <td className="px-3 py-2 text-muted-foreground">{idx + 1}</td>
+                                <td className="px-3 py-2">
+                                  <span className="font-medium text-[#0F2041] dark:text-blue-300 capitalize">{(sub.expense_category || 'N/A').replace(/_/g, ' ')}</span>
+                                  {sub.reference_number && <span className="block text-[10px] text-muted-foreground">{sub.reference_number}</span>}
+                                </td>
+                                <td className="px-3 py-2 text-muted-foreground">
+                                  {(submitterUser as any)?.fullName || (submitterUser as any)?.full_name || (submitterUser as any)?.name || '—'}
+                                </td>
+                                <td className="px-3 py-2 text-muted-foreground whitespace-nowrap">
+                                  {sub.expense_date ? format(parseISO(sub.expense_date), 'dd MMM yy') : (sub.submitted_at ? format(parseISO(sub.submitted_at), 'dd MMM yy') : '—')}
+                                </td>
+                                <td className="px-3 py-2">
+                                  {tier1User ? (
+                                    <span className="text-green-700 dark:text-green-400 font-medium">{(tier1User as any)?.fullName || (tier1User as any)?.full_name || (tier1User as any)?.name || '✓'}</span>
+                                  ) : <span className="text-muted-foreground">—</span>}
+                                </td>
+                                <td className="px-3 py-2">
+                                  {tier2User ? (
+                                    <span className="text-green-700 dark:text-green-400 font-medium">{(tier2User as any)?.fullName || (tier2User as any)?.full_name || (tier2User as any)?.name || '✓'}</span>
+                                  ) : <span className="text-muted-foreground">—</span>}
+                                </td>
+                                <td className="px-3 py-2 text-right font-semibold text-[#0F2041] dark:text-blue-200 whitespace-nowrap">
+                                  {amtSdg > 0 ? amtSdg.toLocaleString(undefined, { maximumFractionDigits: 0 }) : <span className="text-amber-600 font-normal">No amt</span>}
+                                </td>
+                                {bulkCostEmailDialog.usdRate && !isNaN(parseFloat(bulkCostEmailDialog.usdRate)) && parseFloat(bulkCostEmailDialog.usdRate) > 0 && (
+                                  <td className="px-3 py-2 text-right text-blue-700 dark:text-blue-300 whitespace-nowrap">
+                                    {amtUsd !== null ? amtUsd.toFixed(2) : '—'}
+                                  </td>
+                                )}
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                        {/* Totals row */}
+                        <tfoot>
+                          <tr className="border-t-2 bg-[#0F2041]/5 dark:bg-[#0F2041]/20">
+                            <td colSpan={6} className="px-3 py-2 text-xs font-bold text-[#0F2041] dark:text-blue-200 text-right">Total</td>
+                            <td className="px-3 py-2 text-right text-sm font-bold text-green-700 dark:text-green-400 whitespace-nowrap">
+                              {bulkCostEmailDialog.totalSdg.toLocaleString(undefined, { maximumFractionDigits: 0 })} SDG
+                            </td>
+                            {bulkCostEmailDialog.usdRate && !isNaN(parseFloat(bulkCostEmailDialog.usdRate)) && parseFloat(bulkCostEmailDialog.usdRate) > 0 && (
+                              <td className="px-3 py-2 text-right text-sm font-bold text-blue-700 dark:text-blue-300 whitespace-nowrap">
+                                {(bulkCostEmailDialog.totalSdg / parseFloat(bulkCostEmailDialog.usdRate)).toFixed(2)} USD
+                              </td>
+                            )}
+                          </tr>
+                        </tfoot>
+                      </table>
+                    </div>
+                  </div>
+                )}
+
+                {/* Exchange Rate Input */}
+                <div className="rounded-xl border-2 border-dashed border-blue-200 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-950/20 p-4 space-y-2">
+                  <div className="flex items-center gap-2 mb-1">
+                    <DollarSign className="h-4 w-4 text-blue-600" />
+                    <Label htmlFor="usd-rate-input" className="text-sm font-semibold text-blue-900 dark:text-blue-200">
+                      Today's USD / SDG Exchange Rate
+                      <span className="font-normal text-xs text-muted-foreground mr-1"> — optional / اختياري</span>
+                    </Label>
+                  </div>
+                  <div className="flex gap-2 items-center">
+                    <span className="text-sm font-semibold text-muted-foreground whitespace-nowrap">1 USD =</span>
+                    <Input
+                      id="usd-rate-input"
+                      type="number"
+                      min="1"
+                      step="0.01"
+                      placeholder="e.g. 3500"
+                      value={bulkCostEmailDialog.usdRate}
+                      onChange={(e) => setBulkCostEmailDialog(prev => ({ ...prev, usdRate: e.target.value }))}
+                      data-testid="input-bulk-usd-rate"
+                      className="text-lg font-bold border-blue-300 dark:border-blue-700 focus:ring-blue-400 max-w-[140px]"
+                      onKeyDown={(e) => { if (e.key === 'Enter') proceedBulkToRecipients(); }}
+                    />
+                    <span className="text-sm font-semibold text-muted-foreground">SDG</span>
+                  </div>
+                  {bulkCostEmailDialog.usdRate && !isNaN(parseFloat(bulkCostEmailDialog.usdRate)) && parseFloat(bulkCostEmailDialog.usdRate) > 0 ? (
+                    <div className="mt-2 flex flex-wrap gap-3">
+                      <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-100 dark:bg-blue-900/50 px-3 py-1 text-xs font-semibold text-blue-800 dark:text-blue-200">
+                        <CheckCircle className="h-3 w-3" />
+                        Total ≈ USD {(bulkCostEmailDialog.totalSdg / parseFloat(bulkCostEmailDialog.usdRate)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </span>
+                      <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 dark:bg-slate-800 px-3 py-1 text-xs text-muted-foreground">
+                        Avg per submission: ~USD {(bulkCostEmailDialog.count > 0 ? (bulkCostEmailDialog.totalSdg / parseFloat(bulkCostEmailDialog.usdRate)) / bulkCostEmailDialog.count : 0).toFixed(2)}
+                      </span>
+                    </div>
+                  ) : (
+                    <p className="text-xs text-muted-foreground mt-1">Leave blank to send SDG amounts only — the table above will update live as you type.</p>
+                  )}
+                </div>
+
+                {/* What will be attached */}
+                <div className="rounded-lg border bg-slate-50 dark:bg-slate-900 px-4 py-3 flex items-center gap-3">
+                  <Paperclip className="h-4 w-4 text-muted-foreground shrink-0" />
+                  <p className="text-xs text-muted-foreground">
+                    A <strong className="text-foreground">PDF report</strong> and <strong className="text-foreground">Excel workbook</strong> with full submission details will be auto-generated and attached to the email.
+                  </p>
+                </div>
+              </div>
+
+              <div className="border-t px-6 py-3 flex justify-between items-center bg-slate-50 dark:bg-slate-900">
+                <Button type="button" variant="outline" onClick={() => setBulkCostEmailDialog(prev => ({ ...prev, open: false }))}>
+                  Cancel / إلغاء
+                </Button>
+                <Button
+                  type="button"
+                  onClick={proceedBulkToRecipients}
+                  className="bg-[#0F2041] hover:bg-[#1D3461] text-white gap-1.5"
+                  data-testid="button-bulk-next-recipients"
+                >
+                  Next: Choose Recipients
+                  <ArrowRight className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="px-6 py-4 space-y-4 max-h-[65vh] overflow-y-auto">
+
+                {/* Email summary strip */}
+                <div className="rounded-xl border bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-950/30 dark:to-emerald-950/30 border-green-200 dark:border-green-800 px-4 py-3">
+                  <p className="text-xs font-semibold text-green-800 dark:text-green-300 uppercase tracking-wide mb-2 flex items-center gap-1.5">
+                    <Mail className="h-3.5 w-3.5" /> Email Preview — What recipients will receive
+                  </p>
+                  <div className="space-y-1 text-xs">
+                    <div className="flex gap-2">
+                      <span className="text-muted-foreground w-20 shrink-0">Subject:</span>
+                      <span className="font-medium text-foreground">Payment Request — {bulkCostEmailDialog.count} Approved Cost Submission{bulkCostEmailDialog.count !== 1 ? 's' : ''}</span>
+                    </div>
+                    <div className="flex gap-2">
+                      <span className="text-muted-foreground w-20 shrink-0">Total (SDG):</span>
+                      <span className="font-bold text-green-700 dark:text-green-400">SDG {bulkCostEmailDialog.totalSdg.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
+                    </div>
+                    {bulkCostEmailDialog.usdRate && !isNaN(parseFloat(bulkCostEmailDialog.usdRate)) && parseFloat(bulkCostEmailDialog.usdRate) > 0 && (
+                      <div className="flex gap-2">
+                        <span className="text-muted-foreground w-20 shrink-0">Total (USD):</span>
+                        <span className="font-bold text-blue-700 dark:text-blue-400">≈ USD {(bulkCostEmailDialog.totalSdg / parseFloat(bulkCostEmailDialog.usdRate)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                      </div>
+                    )}
+                    <div className="flex gap-2">
+                      <span className="text-muted-foreground w-20 shrink-0">Attachments:</span>
+                      <span className="text-foreground flex gap-1.5 flex-wrap">
+                        <span className="inline-flex items-center gap-1 bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 rounded px-1.5 py-0.5 text-[10px] font-semibold">PDF Report</span>
+                        <span className="inline-flex items-center gap-1 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 rounded px-1.5 py-0.5 text-[10px] font-semibold">Excel Workbook</span>
+                      </span>
+                    </div>
+                    <div className="flex gap-2">
+                      <span className="text-muted-foreground w-20 shrink-0">Sent by:</span>
+                      <span className="font-medium text-foreground">{(currentUser as any)?.fullName || (currentUser as any)?.full_name || currentUser?.email || 'You'}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Recipients */}
+                <div className="space-y-2">
+                  <p className="text-sm font-semibold text-foreground flex items-center gap-1.5">
+                    <Users className="h-4 w-4 text-muted-foreground" />
+                    Finance Recipients
+                    <span className="text-xs font-normal text-muted-foreground">— select who receives this email</span>
+                  </p>
+                  {bulkCostEmailDialog.loading ? (
+                    <div className="space-y-2">{Array(3).fill(0).map((_, i) => <Skeleton key={i} className="h-10 w-full" />)}</div>
+                  ) : bulkCostEmailDialog.availableRecipients.length === 0 ? (
+                    <div className="rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-950/30 px-4 py-3 text-sm text-amber-800 dark:text-amber-300 flex items-center gap-2">
+                      <AlertCircle className="h-4 w-4 shrink-0" />
+                      No finance or admin recipients found in the system.
+                    </div>
+                  ) : (
+                    <div className="rounded-xl border overflow-hidden">
+                      {/* Select All */}
+                      <div className="flex items-center gap-3 px-4 py-2.5 bg-slate-50 dark:bg-slate-900 border-b">
+                        <Checkbox
+                          id="bulk-select-all"
+                          checked={bulkCostEmailDialog.selectedRecipientIds.length === bulkCostEmailDialog.availableRecipients.length}
+                          onCheckedChange={() => setBulkCostEmailDialog(prev => ({
+                            ...prev,
+                            selectedRecipientIds: prev.selectedRecipientIds.length === prev.availableRecipients.length ? [] : prev.availableRecipients.map(r => r.id),
+                          }))}
+                          data-testid="checkbox-bulk-select-all"
+                        />
+                        <label htmlFor="bulk-select-all" className="text-xs font-semibold text-muted-foreground cursor-pointer uppercase tracking-wide">
+                          Select All Recipients ({bulkCostEmailDialog.availableRecipients.length})
+                        </label>
+                        <span className="ml-auto text-xs text-muted-foreground">{bulkCostEmailDialog.selectedRecipientIds.length} selected</span>
+                      </div>
+                      {/* Recipient rows */}
+                      {bulkCostEmailDialog.availableRecipients.map((recipient, idx) => (
+                        <div key={recipient.id} className={`flex items-center gap-3 px-4 py-2.5 ${idx % 2 === 0 ? '' : 'bg-slate-50/50 dark:bg-slate-900/30'} border-b last:border-0`}>
+                          <Checkbox
+                            id={`bulk-r-${recipient.id}`}
+                            checked={bulkCostEmailDialog.selectedRecipientIds.includes(recipient.id)}
+                            onCheckedChange={() => setBulkCostEmailDialog(prev => ({
+                              ...prev,
+                              selectedRecipientIds: prev.selectedRecipientIds.includes(recipient.id)
+                                ? prev.selectedRecipientIds.filter(id => id !== recipient.id)
+                                : [...prev.selectedRecipientIds, recipient.id],
+                            }))}
+                            data-testid={`checkbox-bulk-recipient-${recipient.id}`}
+                          />
+                          <div className="w-8 h-8 rounded-full bg-[#0F2041]/10 dark:bg-[#0F2041]/30 flex items-center justify-center shrink-0">
+                            <span className="text-xs font-bold text-[#0F2041] dark:text-blue-300">{(recipient.name || '?')[0].toUpperCase()}</span>
+                          </div>
+                          <label htmlFor={`bulk-r-${recipient.id}`} className="text-sm cursor-pointer flex-1 min-w-0">
+                            <span className="font-semibold text-foreground block truncate">{recipient.name}</span>
+                            <span className="text-xs text-muted-foreground truncate block">{recipient.email}</span>
+                          </label>
+                          <Badge variant="outline" className="text-[10px] shrink-0 capitalize">{recipient.role?.replace(/_/g, ' ')}</Badge>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* CC Emails */}
+                {!bulkCostEmailDialog.loading && bulkCostEmailDialog.availableRecipients.length > 0 && (
+                  <EmailCCInput
+                    ccEmails={bulkCostEmailDialog.ccEmails}
+                    onChange={(emails) => setBulkCostEmailDialog(prev => ({ ...prev, ccEmails: emails }))}
+                    contacts={ccContacts.filter(c => !bulkCostEmailDialog.selectedRecipientIds.includes(c.id))}
+                  />
+                )}
+              </div>
+
+              <div className="border-t px-6 py-3 flex justify-between items-center bg-slate-50 dark:bg-slate-900">
+                <Button type="button" variant="outline" onClick={() => setBulkCostEmailDialog(prev => ({ ...prev, step: 'rate' }))} disabled={bulkCostEmailDialog.sending}>
+                  ← Back
+                </Button>
+                <Button
+                  type="button"
+                  onClick={handleBulkCostEmailSend}
+                  disabled={bulkCostEmailDialog.sending || bulkCostEmailDialog.selectedRecipientIds.length === 0}
+                  className="bg-[#0F2041] hover:bg-[#1D3461] text-white gap-1.5"
+                  data-testid="button-bulk-cost-send"
+                >
+                  <Mail className="h-3.5 w-3.5" />
+                  {bulkCostEmailDialog.sending
+                    ? 'Generating & Sending...'
+                    : `Send to ${bulkCostEmailDialog.selectedRecipientIds.length} Recipient${bulkCostEmailDialog.selectedRecipientIds.length !== 1 ? 's' : ''}`}
+                </Button>
+              </div>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={!!viewAdvanceDetails} onOpenChange={(open) => !open && setViewAdvanceDetails(null)}>
         <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
           <DialogHeader>
@@ -3355,6 +4145,60 @@ const CostSubmission = () => {
                       <p className="text-xs text-muted-foreground">
                         {format(new Date(oc.paid_at), 'MMM d, yyyy HH:mm')}
                       </p>
+                      {oc.payment_proof_url && (
+                        <div className="mt-2 space-y-1">
+                          <p className="text-xs font-medium text-purple-700 dark:text-purple-300">
+                            Payment Receipt / إيصال الدفع:
+                          </p>
+                          {oc.payment_proof_url.match(/\.(jpg|jpeg|png|gif|webp)$/i) ? (
+                            <a href={oc.payment_proof_url} target="_blank" rel="noopener noreferrer">
+                              <img
+                                src={oc.payment_proof_url}
+                                alt="Payment receipt"
+                                className="max-h-32 rounded border border-purple-200 object-contain cursor-pointer hover:opacity-90 transition-opacity"
+                              />
+                            </a>
+                          ) : (
+                            <a
+                              href={oc.payment_proof_url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1.5 text-xs text-purple-700 dark:text-purple-300 underline hover:no-underline"
+                            >
+                              <FileText className="h-3.5 w-3.5" />
+                              View Payment Receipt / عرض الإيصال
+                            </a>
+                          )}
+                          {oc.payment_proof_notes && (
+                            <p className="text-xs text-muted-foreground italic">"{oc.payment_proof_notes}"</p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {oc.paid_at && (
+                    <div className={`rounded-lg border-l-2 pl-3 py-2 ${oc.fund_receipt_confirmed ? 'border-green-500 bg-green-50/50 dark:bg-green-950/20' : 'border-amber-500 bg-amber-50/50 dark:bg-amber-950/20'}`}>
+                      <div className="flex items-center gap-2 mb-1">
+                        {oc.fund_receipt_confirmed
+                          ? <CheckCircle className="h-4 w-4 text-green-500" />
+                          : <AlertCircle className="h-4 w-4 text-amber-500" />}
+                        <span className="font-medium text-sm">
+                          {oc.fund_receipt_confirmed
+                            ? 'Receipt Confirmed by Recipient / تم تأكيد الاستلام'
+                            : 'Awaiting Recipient Confirmation / بانتظار تأكيد المستلم'}
+                        </span>
+                      </div>
+                      {oc.fund_receipt_confirmed && oc.fund_receipt_confirmed_at && (
+                        <p className="text-xs text-muted-foreground">
+                          {format(new Date(oc.fund_receipt_confirmed_at), 'MMM d, yyyy HH:mm')}
+                        </p>
+                      )}
+                      {!oc.fund_receipt_confirmed && (
+                        <p className="text-xs text-muted-foreground">
+                          The recipient must confirm receipt in their Cost Submissions tab. / على المستلم تأكيد الاستلام في تبويب تقديم التكاليف.
+                        </p>
+                      )}
                     </div>
                   )}
 
@@ -3450,6 +4294,124 @@ const CostSubmission = () => {
           }}
         />
       )}
+
+      {/* Mark as Paid dialog with optional payment proof upload */}
+      <Dialog
+        open={markAsPaidDialog.open}
+        onOpenChange={(open) => {
+          if (!open && !markAsPaidDialog.uploading) {
+            if (markAsPaidDialog.proofPreviewUrl) URL.revokeObjectURL(markAsPaidDialog.proofPreviewUrl);
+            setMarkAsPaidDialog({ open: false, submission: null, proofFile: null, proofPreviewUrl: null, notes: '', uploading: false });
+          }
+        }}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Wallet className="h-5 w-5 text-green-600" />
+              Mark as Paid / تحديد كمدفوع
+            </DialogTitle>
+            <DialogDescription>
+              Attach a payment receipt before confirming. A receipt is required. / أرفق إيصال الدفع قبل التأكيد. الإيصال مطلوب.
+            </DialogDescription>
+          </DialogHeader>
+
+          {markAsPaidDialog.submission && (
+            <div className="space-y-4">
+              <div className="rounded-lg bg-muted/50 p-3 text-sm space-y-1">
+                <p className="font-medium">{markAsPaidDialog.submission.expense_category.replace(/_/g, ' ')}</p>
+                <p className="text-lg font-bold tabular-nums">
+                  {markAsPaidDialog.submission.currency} {(markAsPaidDialog.submission.amount_cents / 100).toLocaleString()}
+                </p>
+                {markAsPaidDialog.submission.vendor && (
+                  <p className="text-muted-foreground text-xs">Vendor: {markAsPaidDialog.submission.vendor}</p>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">
+                  Payment Receipt / إيصال الدفع <span className="text-red-500">*</span>
+                </Label>
+                <div className="border-2 border-dashed border-muted-foreground/30 rounded-lg p-4 text-center hover:border-green-400 transition-colors relative">
+                  <input
+                    type="file"
+                    accept="image/*,application/pdf"
+                    className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                    onChange={handleMarkAsPaidProofFileChange}
+                    disabled={markAsPaidDialog.uploading}
+                    data-testid="input-payment-proof"
+                  />
+                  {markAsPaidDialog.proofFile ? (
+                    <div className="space-y-2">
+                      {markAsPaidDialog.proofPreviewUrl ? (
+                        <img
+                          src={markAsPaidDialog.proofPreviewUrl}
+                          alt="Receipt preview"
+                          className="max-h-32 mx-auto rounded object-contain"
+                        />
+                      ) : (
+                        <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
+                          <FileText className="h-8 w-8 text-red-500" />
+                          <span>{markAsPaidDialog.proofFile.name}</span>
+                        </div>
+                      )}
+                      <p className="text-xs text-muted-foreground">Click to change / انقر للتغيير</p>
+                    </div>
+                  ) : (
+                    <div className="text-muted-foreground">
+                      <ImageIcon className="h-8 w-8 mx-auto mb-1 opacity-40" />
+                      <p className="text-sm">Upload receipt image or PDF / ارفع صورة أو PDF</p>
+                      <p className="text-xs opacity-60">Click to browse / انقر للتصفح</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">
+                  Payment Notes / ملاحظات الدفع <span className="text-muted-foreground font-normal">(optional / اختياري)</span>
+                </Label>
+                <Textarea
+                  value={markAsPaidDialog.notes}
+                  onChange={(e) => setMarkAsPaidDialog(prev => ({ ...prev, notes: e.target.value }))}
+                  placeholder="e.g. Bank transfer ref: TXN123... / مثال: رقم التحويل: TXN123..."
+                  className="resize-none h-20 text-sm"
+                  disabled={markAsPaidDialog.uploading}
+                  data-testid="input-payment-notes"
+                />
+              </div>
+            </div>
+          )}
+
+          <DialogFooter className="gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                if (markAsPaidDialog.proofPreviewUrl) URL.revokeObjectURL(markAsPaidDialog.proofPreviewUrl);
+                setMarkAsPaidDialog({ open: false, submission: null, proofFile: null, proofPreviewUrl: null, notes: '', uploading: false });
+              }}
+              disabled={markAsPaidDialog.uploading}
+              data-testid="button-cancel-mark-paid"
+            >
+              Cancel / إلغاء
+            </Button>
+            <Button
+              type="button"
+              onClick={handleConfirmMarkAsPaid}
+              disabled={markAsPaidDialog.uploading}
+              className="bg-green-600 hover:bg-green-700 text-white"
+              data-testid="button-confirm-mark-paid"
+            >
+              {markAsPaidDialog.uploading ? (
+                <><RefreshCw className="h-4 w-4 mr-1.5 animate-spin" /> {markAsPaidDialog.proofFile ? 'Uploading...' : 'Saving...'}</>
+              ) : (
+                <><CheckCircle className="h-4 w-4 mr-1.5" /> Confirm Payment / تأكيد الدفع</>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

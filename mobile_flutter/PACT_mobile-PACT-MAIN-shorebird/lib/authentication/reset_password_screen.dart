@@ -207,7 +207,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                       width: 120,
                       height: 120,
                       decoration: BoxDecoration(
-                        color: AppColors.primaryOrange.withOpacity(0.1),
+                        color: AppColors.primaryOrange.withValues(alpha: 0.1),
                         shape: BoxShape.circle,
                       ),
                       child: const Icon(
@@ -252,7 +252,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                         ),
                         decoration: BoxDecoration(
                           border: Border.all(
-                            color: AppColors.textLight.withOpacity(0.3),
+                            color: AppColors.textLight.withValues(alpha: 0.3),
                           ),
                           borderRadius: BorderRadius.circular(12),
                         ),
@@ -362,7 +362,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                       width: 120,
                       height: 120,
                       decoration: BoxDecoration(
-                        color: Colors.green.withOpacity(0.1),
+                        color: Colors.green.withValues(alpha: 0.1),
                         shape: BoxShape.circle,
                       ),
                       child: const Icon(
@@ -406,7 +406,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                             enabledBorder: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(12),
                               borderSide: BorderSide(
-                                color: AppColors.textLight.withOpacity(0.3),
+                                color: AppColors.textLight.withValues(alpha: 0.3),
                               ),
                             ),
                             focusedBorder: OutlineInputBorder(
@@ -435,7 +435,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                             enabledBorder: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(12),
                               borderSide: BorderSide(
-                                color: AppColors.textLight.withOpacity(0.3),
+                                color: AppColors.textLight.withValues(alpha: 0.3),
                               ),
                             ),
                             focusedBorder: OutlineInputBorder(

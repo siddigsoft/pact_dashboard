@@ -166,7 +166,9 @@ class _WithdrawalRequestScreenState
         foregroundColor: Colors.white,
         elevation: 0,
       ),
-      body: walletAsync.when(
+      body: SafeArea(
+        top: false,
+        child: walletAsync.when(
         data: (wallet) {
           if (wallet == null) {
             return const Center(child: Text('Wallet not found'));
@@ -192,7 +194,7 @@ class _WithdrawalRequestScreenState
                       borderRadius: BorderRadius.circular(16),
                       boxShadow: [
                         BoxShadow(
-                          color: const Color(0xFF1976D2).withOpacity(0.3),
+                          color: const Color(0xFF1976D2).withValues(alpha: 0.3),
                           blurRadius: 8,
                           offset: const Offset(0, 4),
                         ),
@@ -204,7 +206,7 @@ class _WithdrawalRequestScreenState
                         Text(
                           'Available Balance',
                           style: TextStyle(
-                            color: Colors.white.withOpacity(0.9),
+                            color: Colors.white.withValues(alpha: 0.9),
                             fontSize: 14,
                           ),
                         ),
@@ -389,7 +391,7 @@ class _WithdrawalRequestScreenState
                       color: const Color(0xFFE3F2FD),
                       borderRadius: BorderRadius.circular(12),
                       border: Border.all(
-                        color: const Color(0xFF1976D2).withOpacity(0.3),
+                        color: const Color(0xFF1976D2).withValues(alpha: 0.3),
                       ),
                     ),
                     child: const Row(
@@ -481,6 +483,7 @@ class _WithdrawalRequestScreenState
             ],
           ),
         ),
+      )
       ),
     );
   }
@@ -498,7 +501,7 @@ class _WithdrawalRequestScreenState
               color: const Color(0xFFFFF3E0),
               borderRadius: BorderRadius.circular(12),
               border: Border.all(
-                color: const Color(0xFFFF9800).withOpacity(0.3),
+                color: const Color(0xFFFF9800).withValues(alpha: 0.3),
               ),
             ),
             child: const Column(
@@ -553,7 +556,7 @@ class _WithdrawalRequestScreenState
                   boxShadow: isSelected
                       ? [
                           BoxShadow(
-                            color: const Color(0xFF1976D2).withOpacity(0.2),
+                            color: const Color(0xFF1976D2).withValues(alpha: 0.2),
                             blurRadius: 8,
                             offset: const Offset(0, 2),
                           ),
@@ -605,7 +608,7 @@ class _WithdrawalRequestScreenState
                           vertical: 4,
                         ),
                         decoration: BoxDecoration(
-                          color: const Color(0xFF4CAF50).withOpacity(0.1),
+                          color: const Color(0xFF4CAF50).withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(4),
                         ),
                         child: const Text(
@@ -635,7 +638,7 @@ class _WithdrawalRequestScreenState
         decoration: BoxDecoration(
           color: const Color(0xFFFFEBEE),
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: const Color(0xFFE53935).withOpacity(0.3)),
+          border: Border.all(color: const Color(0xFFE53935).withValues(alpha: 0.3)),
         ),
         child: Row(
           children: [

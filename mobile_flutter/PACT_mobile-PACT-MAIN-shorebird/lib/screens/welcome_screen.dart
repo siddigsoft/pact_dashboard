@@ -123,9 +123,9 @@ class _WelcomeScreenState extends State<WelcomeScreen>
             end: Alignment.bottomRight,
             colors: [
               AppColors.primaryWhite,
-              greetingColor.withOpacity(0.1),
-              AppColors.backgroundGray.withOpacity(0.9),
-              greetingColor.withOpacity(0.15),
+              greetingColor.withValues(alpha: 0.1),
+              AppColors.backgroundGray.withValues(alpha: 0.9),
+              greetingColor.withValues(alpha: 0.15),
             ],
             stops: const [0.0, 0.3, 0.7, 1.0],
           ),
@@ -150,13 +150,13 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
                       gradient: LinearGradient(
-                        colors: [Colors.white, greetingColor.withOpacity(0.2)],
+                        colors: [Colors.white, greetingColor.withValues(alpha: 0.2)],
                         begin: Alignment.topLeft,
                         end: Alignment.bottomRight,
                       ),
                       boxShadow: [
                         BoxShadow(
-                          color: greetingColor.withOpacity(0.3),
+                          color: greetingColor.withValues(alpha: 0.3),
                           blurRadius: 30,
                           offset: const Offset(0, 10),
                         ),
@@ -202,7 +202,7 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                     style: GoogleFonts.poppins(
                       fontSize: 28,
                       fontWeight: FontWeight.w600,
-                      color: AppColors.textDark.withOpacity(0.85),
+                      color: AppColors.textDark.withValues(alpha: 0.85),
                       letterSpacing: 0.5,
                     ),
                   )
@@ -218,11 +218,11 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                       vertical: 12,
                     ),
                     decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.9),
+                      color: Colors.white.withValues(alpha: 0.9),
                       borderRadius: BorderRadius.circular(30),
                       boxShadow: [
                         BoxShadow(
-                          color: greetingColor.withOpacity(0.15),
+                          color: greetingColor.withValues(alpha: 0.15),
                           blurRadius: 20,
                           offset: const Offset(0, 5),
                         ),
@@ -245,7 +245,7 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                   .shimmer(
                     duration: 1500.ms,
                     delay: 1500.ms,
-                    color: greetingColor.withOpacity(0.3),
+                    color: greetingColor.withValues(alpha: 0.3),
                   ),
 
               const SizedBox(height: 20),
@@ -289,13 +289,13 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                           gradient: LinearGradient(
                             colors: [
                               greetingColor,
-                              greetingColor.withOpacity(0.8),
+                              greetingColor.withValues(alpha: 0.8),
                             ],
                           ),
                           borderRadius: BorderRadius.circular(30),
                           boxShadow: [
                             BoxShadow(
-                              color: greetingColor.withOpacity(0.4),
+                              color: greetingColor.withValues(alpha: 0.4),
                               blurRadius: 15,
                               offset: const Offset(0, 5),
                             ),
@@ -333,7 +333,7 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                   'Tap to continue or wait...',
                   style: GoogleFonts.poppins(
                     fontSize: 12,
-                    color: AppColors.textLight.withOpacity(0.7),
+                    color: AppColors.textLight.withValues(alpha: 0.7),
                   ),
                 ).animate().fadeIn(duration: 400.ms, delay: 200.ms),
 
@@ -356,7 +356,7 @@ class _WelcomeScreenState extends State<WelcomeScreen>
     }
 
     return Container(
-      color: _getGreetingColor().withOpacity(0.2),
+      color: _getGreetingColor().withValues(alpha: 0.2),
       child: Center(
         child: Text(
           initials,

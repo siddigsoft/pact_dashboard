@@ -36,30 +36,37 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
   StreamSubscription<Position>? _positionStream;
 
   String? _selectedActivityType;
+  int _pdmQuestionnaires = 0;
+  final TextEditingController _pdmQController = TextEditingController();
+  final TextEditingController _marketNameController = TextEditingController();
 
-  static const List<String> _dmActivities = ['GFA', 'CBT', 'EBSFP'];
+  static const int _pdmQPerVisit = 7;
 
+  // Activity Type selector: only for GFA sites, PDM and MDM only
   static const Map<String, String> _activityTypesEn = {
-    'PDM': 'Post-Distribution Monitoring',
-    'DM': 'Distribution Monitoring',
-    'Assessment': 'Assessment',
-    'Monitoring': 'Monitoring',
-    'Supervision': 'Supervision',
-    'Verification': 'Verification',
-    'Other': 'Other',
+    'PDM': 'Post-Distribution\nMonitoring',
+    'MDM': 'Market Diversion\nMonitoring',
   };
 
   static const Map<String, String> _activityTypesAr = {
     'PDM': 'رصد ما بعد التوزيع',
-    'DM': 'رصد التوزيع',
-    'Assessment': 'تقييم',
-    'Monitoring': 'مراقبة',
-    'Supervision': 'إشراف',
-    'Verification': 'تحقق',
-    'Other': 'أخرى',
+    'MDM': 'رصد انحراف السوق',
   };
 
   bool get _isArabic => Localizations.localeOf(context).languageCode == 'ar';
+
+  /// True if site is GFA — only GFA sites get the Activity Type selector
+  bool get _isGfaSite {
+    final siteActivityType =
+        widget.site['activity_type'] ?? widget.site['main_activity'];
+    return siteActivityType?.toString().toUpperCase() == 'GFA';
+  }
+
+  /// True if MDM is selected (market diversion = 2 visits)
+  bool get _hasMDM => _selectedActivityType == 'MDM';
+
+  int get _pdmSiteVisits => (_pdmQuestionnaires / _pdmQPerVisit).floor();
+  int get _pdmRemainder => _pdmQuestionnaires % _pdmQPerVisit;
 
   @override
   void initState() {
@@ -73,6 +80,8 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
   void dispose() {
     _activitiesController.dispose();
     _notesController.dispose();
+    _pdmQController.dispose();
+    _marketNameController.dispose();
     _positionStream?.cancel();
     super.dispose();
   }
@@ -103,6 +112,11 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
       _notesController.text = additionalData['draft_notes'] ?? '';
       _durationMinutes = additionalData['draft_visit_duration'] ?? 0;
       _selectedActivityType = additionalData['draft_activity_type'];
+      final draftQ = (additionalData['draft_pdm_questionnaires'] as num?)?.toInt() ?? 0;
+      if (draftQ > 0) {
+        _pdmQuestionnaires = draftQ;
+        _pdmQController.text = draftQ.toString();
+      }
 
       final rawCoords = additionalData['draft_coordinates'];
       if (rawCoords != null && rawCoords is Map) {
@@ -126,11 +140,12 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
       }
     }
 
-    final siteActivityType = widget.site['activity_type'] ?? widget.site['main_activity'];
+    final siteActivityType =
+        widget.site['activity_type'] ?? widget.site['main_activity'];
     if (_selectedActivityType == null && siteActivityType != null) {
       final act = siteActivityType.toString().toUpperCase();
-      if (_dmActivities.contains(act)) {
-        _selectedActivityType = 'DM';
+      if (act == 'GFA') {
+        _selectedActivityType = 'PDM';
       }
     }
 
@@ -157,6 +172,11 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
           }
           if (draft['draft_activity_type'] != null) {
             _selectedActivityType = draft['draft_activity_type'] as String?;
+          }
+          final draftQ2 = (draft['draft_pdm_questionnaires'] as num?)?.toInt() ?? 0;
+          if (draftQ2 > 0) {
+            _pdmQuestionnaires = draftQ2;
+            _pdmQController.text = draftQ2.toString();
           }
           final rawCoords = draft['draft_coordinates'];
           if (rawCoords != null && rawCoords is Map) {
@@ -396,6 +416,8 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
         durationMinutes: _durationMinutes,
         coordinates: _coordinates,
         activityType: _selectedActivityType,
+        pdmQuestionnaires: _pdmQuestionnaires,
+        hasMarketDiversion: _hasMDM,
       );
 
       if (mounted) {
@@ -426,6 +448,8 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
         'draft_visit_duration': _durationMinutes,
         'draft_photo_paths': List<String>.from(_photoPaths),
         'draft_activity_type': _selectedActivityType,
+        if (_pdmQuestionnaires > 0)
+          'draft_pdm_questionnaires': _pdmQuestionnaires,
       };
       if (_coordinates != null) {
         draft['draft_coordinates'] = {
@@ -527,7 +551,7 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
                           siteName,
                           style: GoogleFonts.poppins(
                             fontSize: 12,
-                            color: Colors.white.withOpacity(0.7),
+                            color: Colors.white.withValues(alpha: 0.7),
                           ),
                         ),
                       ],
@@ -551,9 +575,10 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
 
                       _buildSiteInfoCard(siteCode, locality, state),
 
-                      const SizedBox(height: 20),
-
-                      _buildActivityTypeSelector(),
+                      if (_isGfaSite) ...[
+                        const SizedBox(height: 20),
+                        _buildActivityTypeSelector(),
+                      ],
 
                       const SizedBox(height: 20),
 
@@ -672,7 +697,7 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 10,
             offset: const Offset(0, 2),
           ),
@@ -681,74 +706,271 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Text(
-                _isArabic ? 'نوع النشاط' : 'ACTIVITY TYPE',
-                style: GoogleFonts.poppins(
-                  fontSize: 10,
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.textLight,
-                  letterSpacing: 1.2,
-                ),
-              ),
-              const SizedBox(width: 4),
-              Text(
-                _isArabic ? '(PDM/DM)' : '(PDM/DM)',
-                style: GoogleFonts.poppins(
-                  fontSize: 10,
-                  color: AppColors.textLight,
-                ),
-              ),
-            ],
+          // ── Header ────────────────────────────────────────────────────────
+          Text(
+            _isArabic ? 'نوع النشاط' : 'ACTIVITY TYPE',
+            style: GoogleFonts.poppins(
+              fontSize: 10,
+              fontWeight: FontWeight.bold,
+              color: AppColors.textLight,
+              letterSpacing: 1.2,
+            ),
           ),
           const SizedBox(height: 12),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
+
+          // ── Activity type chips (PDM / MDM — GFA sites only) ─────────────
+          Row(
             children: activityTypes.entries.map((entry) {
               final isSelected = _selectedActivityType == entry.key;
-              final isPdmDm = entry.key == 'PDM' || entry.key == 'DM';
-              final selectedColor = isPdmDm
-                  ? (entry.key == 'DM' ? Colors.blue.shade700 : Colors.orange.shade700)
-                  : Colors.black;
-              return GestureDetector(
-                onTap: () => setState(() => _selectedActivityType = entry.key),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                  decoration: BoxDecoration(
-                    color: isSelected ? selectedColor : Colors.white,
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(
-                      color: isSelected ? selectedColor : Colors.grey.shade300,
-                      width: isSelected ? 2 : 1,
-                    ),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      if (isPdmDm) ...[
-                        Icon(
-                          entry.key == 'PDM' ? Icons.fact_check : Icons.local_shipping,
-                          size: 14,
-                          color: isSelected ? Colors.white : (entry.key == 'DM' ? Colors.blue.shade600 : Colors.orange.shade600),
+              final isMDM = entry.key == 'MDM';
+              final chipColor =
+                  isMDM ? Colors.blue.shade700 : Colors.orange.shade700;
+              return Expanded(
+                child: Padding(
+                  padding: EdgeInsets.only(right: isMDM ? 0 : 8),
+                  child: GestureDetector(
+                    onTap: () => setState(() {
+                      _selectedActivityType = entry.key;
+                      _pdmQuestionnaires = 0;
+                      _pdmQController.clear();
+                      _marketNameController.clear();
+                    }),
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 180),
+                      padding: const EdgeInsets.symmetric(
+                          vertical: 12, horizontal: 8),
+                      decoration: BoxDecoration(
+                        color: isSelected ? chipColor : Colors.white,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color:
+                              isSelected ? chipColor : Colors.grey.shade300,
+                          width: isSelected ? 2 : 1,
                         ),
-                        const SizedBox(width: 4),
-                      ],
-                      Text(
-                        '${entry.key} - ${entry.value}',
-                        style: GoogleFonts.poppins(
-                          fontSize: 12,
-                          fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-                          color: isSelected ? Colors.white : AppColors.textDark,
-                        ),
+                        boxShadow: isSelected
+                            ? [
+                                BoxShadow(
+                                  color: chipColor.withValues(alpha: 0.3),
+                                  blurRadius: 8,
+                                  offset: const Offset(0, 3),
+                                )
+                              ]
+                            : [],
                       ),
-                    ],
+                      child: Column(
+                        children: [
+                          Icon(
+                            isMDM
+                                ? Icons.store_outlined
+                                : Icons.fact_check,
+                            size: 22,
+                            color: isSelected ? Colors.white : chipColor,
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            entry.key,
+                            style: GoogleFonts.poppins(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w800,
+                              color:
+                                  isSelected ? Colors.white : chipColor,
+                            ),
+                          ),
+                          Text(
+                            entry.value,
+                            textAlign: TextAlign.center,
+                            style: GoogleFonts.poppins(
+                              fontSize: 9,
+                              color: isSelected
+                                  ? Colors.white.withValues(alpha: 0.85)
+                                  : Colors.grey.shade600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
                 ),
               );
             }).toList(),
           ),
+
+          // ── PDM: questionnaire count input ────────────────────────────────
+          if (_selectedActivityType == 'PDM') ...[
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: Colors.orange.shade50,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.orange.shade200),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(children: [
+                    Icon(Icons.quiz_outlined,
+                        size: 15, color: Colors.orange.shade700),
+                    const SizedBox(width: 6),
+                    Text(
+                      _isArabic
+                          ? 'عدد الاستبيانات المقدمة'
+                          : 'Questionnaires Submitted',
+                      style: GoogleFonts.poppins(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 12,
+                        color: Colors.orange.shade800,
+                      ),
+                    ),
+                  ]),
+                  const SizedBox(height: 3),
+                  Text(
+                    _isArabic
+                        ? 'كل 7 استبيانات = زيارة موقع واحدة'
+                        : 'Every 7 questionnaires = 1 site visit fee',
+                    style: GoogleFonts.poppins(
+                        fontSize: 10, color: Colors.orange.shade600),
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: _pdmQController,
+                    keyboardType: TextInputType.number,
+                    decoration: InputDecoration(
+                      hintText: _isArabic
+                          ? 'أدخل عدد الاستبيانات'
+                          : 'Enter count',
+                      border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8)),
+                      contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 10),
+                      isDense: true,
+                      filled: true,
+                      fillColor: Colors.white,
+                    ),
+                    onChanged: (v) => setState(() {
+                      _pdmQuestionnaires = int.tryParse(v) ?? 0;
+                    }),
+                  ),
+                  if (_pdmQuestionnaires > 0) ...[
+                    const SizedBox(height: 10),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: Colors.orange.shade100,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '$_pdmQuestionnaires ÷ $_pdmQPerVisit = $_pdmSiteVisits ${_isArabic ? 'زيارة مدفوعة' : 'site visit fee(s)'}',
+                            style: GoogleFonts.poppins(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 12,
+                              color: Colors.orange.shade900,
+                            ),
+                          ),
+                          if (_pdmRemainder > 0)
+                            Text(
+                              _isArabic
+                                  ? '$_pdmRemainder/$_pdmQPerVisit نحو الزيارة التالية'
+                                  : '$_pdmRemainder/$_pdmQPerVisit toward next visit',
+                              style: GoogleFonts.poppins(
+                                  fontSize: 10,
+                                  color: Colors.orange.shade700),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
+
+          // ── MDM: market name + 2-visit badge ─────────────────────────────
+          if (_selectedActivityType == 'MDM') ...[
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: Colors.blue.shade50,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.blue.shade200),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(Icons.store_outlined,
+                          size: 15, color: Colors.blue.shade700),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          _isArabic
+                              ? 'رصد انحراف السوق — × ٢ زيارة'
+                              : 'Market Diversion Monitoring — × 2 visits',
+                          style: GoogleFonts.poppins(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 12,
+                            color: Colors.blue.shade800,
+                          ),
+                        ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: Colors.blue.shade600,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          _isArabic ? '× ٢' : '× 2',
+                          style: GoogleFonts.poppins(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    _isArabic
+                        ? 'اسم السوق المُغطى *'
+                        : 'Market Name Covered *',
+                    style: GoogleFonts.poppins(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 11,
+                      color: Colors.blue.shade800,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  TextField(
+                    controller: _marketNameController,
+                    decoration: InputDecoration(
+                      hintText: _isArabic
+                          ? 'أدخل اسم السوق...'
+                          : 'Enter market name...',
+                      border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8)),
+                      contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 10),
+                      isDense: true,
+                      filled: true,
+                      fillColor: Colors.white,
+                      prefixIcon: Icon(Icons.storefront,
+                          size: 18, color: Colors.blue.shade400),
+                    ),
+                    onChanged: (_) => setState(() {}),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -762,7 +984,7 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 10,
             offset: const Offset(0, 2),
           ),
@@ -783,14 +1005,14 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
                       color:
                           _coordinates != null && (_coordinates!.accuracy <= 10)
                               ? Colors.black
-                              : Colors.black.withOpacity(0.3),
+                              : Colors.black.withValues(alpha: 0.3),
                       shape: BoxShape.circle,
                     ),
                     child: Icon(
                       Icons.navigation,
                       color: _coordinates != null
                           ? Colors.white
-                          : Colors.white.withOpacity(0.5),
+                          : Colors.white.withValues(alpha: 0.5),
                       size: 24,
                     ),
                   ),

@@ -202,8 +202,8 @@ class _BiometricPromptScreenState extends State<BiometricPromptScreen>
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
             colors: [
-              AppColors.primaryOrange.withOpacity(0.1),
-              AppColors.primaryBlue.withOpacity(0.1),
+              AppColors.primaryOrange.withValues(alpha: 0.1),
+              AppColors.primaryBlue.withValues(alpha: 0.1),
             ],
           ),
         ),
@@ -224,7 +224,7 @@ class _BiometricPromptScreenState extends State<BiometricPromptScreen>
                       gradient: AppColors.primaryGradient,
                       boxShadow: [
                         BoxShadow(
-                          color: AppColors.primaryOrange.withOpacity(0.3),
+                          color: AppColors.primaryOrange.withValues(alpha: 0.3),
                           blurRadius: 20,
                           offset: const Offset(0, 10),
                         ),
@@ -283,7 +283,7 @@ class _BiometricPromptScreenState extends State<BiometricPromptScreen>
                           borderRadius: BorderRadius.circular(30),
                         ),
                         elevation: 8,
-                        shadowColor: AppColors.primaryOrange.withOpacity(0.3),
+                        shadowColor: AppColors.primaryOrange.withValues(alpha: 0.3),
                       ),
                     ),
 

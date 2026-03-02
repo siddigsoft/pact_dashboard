@@ -847,7 +847,9 @@ class _DocumentsScreenState extends State<DocumentsScreen>
         ),
         body: _isLoading
             ? const Center(child: CircularProgressIndicator())
-            : CustomScrollView(
+            : SafeArea(
+                top: false,
+                child: CustomScrollView(
                 slivers: [
                   SliverToBoxAdapter(child: _buildStatsCards(stats, isArabic)),
                   SliverToBoxAdapter(child: _buildSearchBar(isArabic)),
@@ -868,6 +870,7 @@ class _DocumentsScreenState extends State<DocumentsScreen>
                           isArabic,
                         ),
                 ],
+              )
               ),
       ),
     );
@@ -962,9 +965,9 @@ class _DocumentsScreenState extends State<DocumentsScreen>
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 6),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
+        color: color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: color.withOpacity(0.3)),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
       ),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -1237,7 +1240,7 @@ class _DocumentsScreenState extends State<DocumentsScreen>
                 setState(() => _selectedCategory = selected ? category : 'all');
               },
               backgroundColor: Colors.white,
-              selectedColor: AppColors.primaryBlue.withOpacity(0.2),
+              selectedColor: AppColors.primaryBlue.withValues(alpha: 0.2),
               labelStyle: GoogleFonts.poppins(
                 color: isSelected ? AppColors.primaryBlue : Colors.grey[700],
                 fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
@@ -1427,7 +1430,7 @@ class _DocumentsScreenState extends State<DocumentsScreen>
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: categoryColor.withOpacity(0.1),
+                  color: categoryColor.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Icon(categoryIcon, color: categoryColor, size: 24),
@@ -1457,7 +1460,7 @@ class _DocumentsScreenState extends State<DocumentsScreen>
                             vertical: 2,
                           ),
                           decoration: BoxDecoration(
-                            color: categoryColor.withOpacity(0.1),
+                            color: categoryColor.withValues(alpha: 0.1),
                             borderRadius: BorderRadius.circular(8),
                           ),
                           child: Text(
@@ -1478,10 +1481,10 @@ class _DocumentsScreenState extends State<DocumentsScreen>
                             decoration: BoxDecoration(
                               color:
                                   status == 'verified' || status == 'approved'
-                                  ? Colors.green.withOpacity(0.1)
+                                  ? Colors.green.withValues(alpha: 0.1)
                                   : status == 'rejected'
-                                  ? Colors.red.withOpacity(0.1)
-                                  : Colors.orange.withOpacity(0.1),
+                                  ? Colors.red.withValues(alpha: 0.1)
+                                  : Colors.orange.withValues(alpha: 0.1),
                               borderRadius: BorderRadius.circular(8),
                             ),
                             child: Text(

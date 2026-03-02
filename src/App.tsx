@@ -98,6 +98,7 @@ const AuditLogs = lazy(() => import('./pages/AuditLogs'));
 const EmailTracking = lazy(() => import('./pages/EmailTracking'));
 const EmailManagement = lazy(() => import('./pages/EmailManagement'));
 const AdminBroadcast = lazy(() => import('./pages/AdminBroadcast'));
+const StaffDirectory = lazy(() => import('./pages/StaffDirectory'));
 const PermissionsManagement = lazy(() => import('./pages/PermissionsManagement'));
 const RolePerspectiveViewer = lazy(() => import('./pages/RolePerspectiveViewer'));
 const CostPredictions = lazy(() => import('./pages/CostPredictions'));
@@ -133,6 +134,7 @@ import { MobilePermissionGuard } from './components/mobile/MobilePermissionGuard
 import { LiveDashboardProvider } from './context/realtime/LiveDashboardContext';
 import SessionManager from './components/layout/SessionManager';
 import { ActivityTrackingProvider } from './context/activity/ActivityTrackingContext';
+import EmailPreviewPage from './pages/EmailPreviewPage';
 
 
 // Loading component for Suspense fallback
@@ -215,7 +217,7 @@ const AuthGuard = ({ children }) => {
 
   if (
     !currentUser &&
-    !['/', '/auth', '/login', '/register', '/registration-success', '/forgot-password', '/reset-password', '/documentation', '/mobile-documentation'].includes(location.pathname) &&
+    !['/', '/auth', '/login', '/register', '/registration-success', '/forgot-password', '/reset-password', '/documentation', '/mobile-documentation', '/email-preview'].includes(location.pathname) &&
     !location.pathname.startsWith('/demo/')
   ) {
     return <Navigate to="/auth" replace />;
@@ -237,6 +239,7 @@ const AppRoutes = () => {
       <Route path="/forgot-password" element={<ForgotPassword />} />
       <Route path="/reset-password" element={<ResetPassword />} />
       <Route path="/demo/data-collector" element={<DemoDataCollector />} />
+      <Route path="/email-preview" element={<EmailPreviewPage />} />
 
       {/* Protected routes */}
   <Route element={<AuthGuard><MainLayout /></AuthGuard>}>
@@ -330,6 +333,7 @@ const AppRoutes = () => {
         <Route path="/email-tracking" element={<EmailTracking />} />
         <Route path="/email-management" element={<EmailManagement />} />
         <Route path="/admin/broadcast" element={<AdminBroadcast />} />
+        <Route path="/admin/staff-profiles" element={<StaffDirectory />} />
         <Route path="/permissions-management" element={<PermissionsManagement />} />
         <Route path="/role-perspective" element={<RolePerspectiveViewer />} />
         <Route path="/support-contacts" element={<SupportContacts />} />

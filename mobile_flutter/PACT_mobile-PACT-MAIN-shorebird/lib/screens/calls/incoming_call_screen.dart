@@ -81,8 +81,8 @@ class _IncomingCallScreenState extends ConsumerState<IncomingCallScreen>
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
             colors: [
-              Theme.of(context).primaryColor.withOpacity(0.8),
-              Theme.of(context).primaryColor.withOpacity(0.95),
+              Theme.of(context).primaryColor.withValues(alpha: 0.8),
+              Theme.of(context).primaryColor.withValues(alpha: 0.95),
               Theme.of(context).primaryColor,
             ],
           ),
@@ -99,10 +99,10 @@ class _IncomingCallScreenState extends ConsumerState<IncomingCallScreen>
                   height: 140,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    color: Colors.white.withOpacity(0.2),
+                    color: Colors.white.withValues(alpha: 0.2),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withOpacity(0.2),
+                        color: Colors.black.withValues(alpha: 0.2),
                         blurRadius: 20,
                         spreadRadius: 5,
                       ),
@@ -229,7 +229,7 @@ class _CallActionButton extends StatelessWidget {
             color: backgroundColor,
             boxShadow: [
               BoxShadow(
-                color: backgroundColor.withOpacity(0.4),
+                color: backgroundColor.withValues(alpha: 0.4),
                 blurRadius: 15,
                 spreadRadius: 2,
               ),

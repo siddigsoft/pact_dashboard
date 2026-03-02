@@ -427,6 +427,9 @@
     if (!isHidden('/users') && (isSuperAdmin || isAdmin || isICT || perms.users)) {
       adminItems.push({ id: 'user-management', title: "User Management", url: "/users", icon: Users, priority: 1, isPinned: isPinned('/users') });
     }
+    if (!isHidden('/admin/staff-profiles') && (isSuperAdmin || isAdmin || isFinancialAdmin)) {
+      adminItems.push({ id: 'staff-directory', title: "Staff Directory", url: "/admin/staff-profiles", icon: Users, priority: 1.5, isPinned: isPinned('/admin/staff-profiles') });
+    }
     if (!isHidden('/role-management') && (isSuperAdmin || isAdmin || perms.roleManagement)) {
       adminItems.push({ id: 'role-management', title: "Role Management", url: "/role-management", icon: Shield, priority: 2, isPinned: isPinned('/role-management') });
     }
@@ -461,6 +464,9 @@
       }
       if (!isHidden('/email-management')) {
         superAdminItems.push({ id: 'email-management', title: "Email Management", url: "/email-management", icon: Mail, priority: 6, isPinned: isPinned('/email-management') });
+      }
+      if (!isHidden('/email-preview')) {
+        superAdminItems.push({ id: 'email-preview', title: "Email Preview", url: "/email-preview", icon: Eye, priority: 6.5, isPinned: isPinned('/email-preview') });
       }
       if (!isHidden('/admin/broadcast')) {
         superAdminItems.push({ id: 'admin-broadcast', title: "Broadcast Center", url: "/admin/broadcast", icon: Megaphone, priority: 7, isPinned: isPinned('/admin/broadcast') });

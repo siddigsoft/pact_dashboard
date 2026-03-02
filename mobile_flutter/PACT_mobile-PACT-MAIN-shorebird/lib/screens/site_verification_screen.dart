@@ -1,6 +1,7 @@
 // lib/screens/site_verification_screen.dart
 
 import 'dart:io';
+import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -14,6 +15,7 @@ import 'package:pact_mobile/l10n/app_localizations.dart';
 import '../widgets/custom_drawer_menu.dart';
 import '../widgets/reusable_app_bar.dart';
 import '../widgets/modern_app_header.dart';
+import '../widgets/mmp_filter_bar.dart';
 
 /// Permit decision structure for state and locality permits
 class PermitDecision {
@@ -105,14 +107,13 @@ class SiteVerificationScreen extends StatefulWidget {
   State<SiteVerificationScreen> createState() => _SiteVerificationScreenState();
 }
 
-class _SiteVerificationScreenState extends State<SiteVerificationScreen>
-    with SingleTickerProviderStateMixin {
+class _SiteVerificationScreenState extends State<SiteVerificationScreen> {
   final SiteVisitService _siteVisitService = SiteVisitService();
   final SupabaseClient _supabase = Supabase.instance.client;
   // Key to control the Scaffold for opening/closing drawer
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
 
-  late TabController _tabController;
+  String _activeTab = 'new';
   bool _isLoading = true;
   String? _userId;
   String? _userState;
@@ -163,17 +164,17 @@ class _SiteVerificationScreenState extends State<SiteVerificationScreen>
   // Sub-tab for New tab (State Permit vs Locality Permit)
   int _newSubTabIndex = 0; // 0 = State Permit, 1 = Locality Permit
   String _searchQuery = '';
+  String? _selectedMmpId; // null = All MMPs
+  List<Map<String, dynamic>> _availableMmps = []; // [{id, name, count}]
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 6, vsync: this);
     _loadData();
   }
 
   @override
   void dispose() {
-    _tabController.dispose();
     super.dispose();
   }
 
@@ -572,8 +573,31 @@ class _SiteVerificationScreenState extends State<SiteVerificationScreen>
         }
       }
 
+      // Build MMP filter options from all loaded sites
+      final mmpMap = <String, Map<String, dynamic>>{};
+      for (final site in sites) {
+        final id = site['mmp_file_id']?.toString();
+        if (id == null || id.isEmpty) continue;
+        final raw = site['mmp_files'];
+        String name = '';
+        if (raw is Map<String, dynamic>) {
+          name = raw['name']?.toString() ?? '';
+        }
+        if (!mmpMap.containsKey(id)) {
+          mmpMap[id] = {'id': id, 'name': name.isNotEmpty ? name : 'MMP ${id.substring(0, 6)}', 'count': 0};
+        }
+        mmpMap[id]!['count'] = (mmpMap[id]!['count'] as int) + 1;
+      }
+
       if (mounted) {
-        setState(() {});
+        setState(() {
+          _availableMmps = mmpMap.values.toList()
+            ..sort((a, b) => (a['name'] as String).compareTo(b['name'] as String));
+          // Reset MMP filter if the previously selected MMP is no longer present
+          if (_selectedMmpId != null && !mmpMap.containsKey(_selectedMmpId)) {
+            _selectedMmpId = null;
+          }
+        });
       }
     } catch (e) {
       debugPrint('Error fetching sites for verification: $e');
@@ -890,95 +914,53 @@ class _SiteVerificationScreenState extends State<SiteVerificationScreen>
               ],
             ),
 
-            // Tabs container
+            // ── Custom bilingual scrollable pill tab row ──────────────
             Container(
-              margin: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(16),
-                boxShadow: [
-                  BoxShadow(
-                    color: AppColors.shadowColor.withOpacity(0.06),
-                    blurRadius: 10,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
-              ),
-              child: TabBar(
-                controller: _tabController,
-                isScrollable: true,
-                indicator: BoxDecoration(
-                  color: AppColors.primaryBlue,
-                  borderRadius: BorderRadius.circular(12),
+              color: Colors.white,
+              padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: [
+                    _buildVerifTabButton('new', 'New', 'جديد',
+                        Icons.fiber_new_rounded, _newSites.length, Colors.blue),
+                    const SizedBox(width: 8),
+                    _buildVerifTabButton('cp_verification', 'CP Verification',
+                        'تحقق المنسق', Icons.fact_check_outlined,
+                        _cpVerificationSites.length, Colors.indigo),
+                    const SizedBox(width: 8),
+                    _buildVerifTabButton('verified', 'Verified', 'موثق',
+                        Icons.verified_outlined, _verifiedSites.length,
+                        Colors.green),
+                    const SizedBox(width: 8),
+                    _buildVerifTabButton('approved', 'Approved', 'معتمد',
+                        Icons.thumb_up_outlined, _approvedSites.length,
+                        Colors.teal),
+                    const SizedBox(width: 8),
+                    _buildVerifTabButton('completed', 'Completed', 'مكتمل',
+                        Icons.check_circle_outline, _completedSites.length,
+                        Colors.purple),
+                    const SizedBox(width: 8),
+                    _buildVerifTabButton('rejected', 'Rejected', 'مرفوض',
+                        Icons.cancel_outlined, _rejectedSites.length,
+                        Colors.red),
+                  ],
                 ),
-                indicatorSize: TabBarIndicatorSize.tab,
-                labelColor: Colors.white,
-                unselectedLabelColor: AppColors.textDark,
-                labelStyle: GoogleFonts.poppins(
-                  fontWeight: FontWeight.w600,
-                  fontSize: 13,
-                ),
-                unselectedLabelStyle: GoogleFonts.poppins(
-                  fontWeight: FontWeight.w500,
-                  fontSize: 12,
-                ),
-                tabs: [
-                  _buildTab(
-                    icon: Icons.fiber_new_rounded,
-                    label: 'New',
-                    count: _newSites.length,
-                    badgeColor: AppColors.primaryBlue,
-                  ),
-                  _buildTab(
-                    icon: Icons.fact_check_outlined,
-                    label: 'CP Verification',
-                    count: _cpVerificationSites.length,
-                    badgeColor: Colors.blue,
-                  ),
-                  _buildTab(
-                    icon: Icons.verified_outlined,
-                    label: 'Verified',
-                    count: _verifiedSites.length,
-                    badgeColor: Colors.green,
-                  ),
-                  _buildTab(
-                    icon: Icons.thumb_up_outlined,
-                    label: 'Approved',
-                    count: _approvedSites.length,
-                    badgeColor: Colors.teal,
-                  ),
-                  _buildTab(
-                    icon: Icons.check_circle_outline,
-                    label: 'Completed',
-                    count: _completedSites.length,
-                    badgeColor: Colors.purple,
-                  ),
-                  _buildTab(
-                    icon: Icons.cancel_outlined,
-                    label: 'Rejected',
-                    count: _rejectedSites.length,
-                    badgeColor: Colors.red,
-                    highlightIfNonZero: true,
-                  ),
-                ],
               ),
             ),
+            const Divider(height: 1),
 
             // Search
             Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+              padding: const EdgeInsets.fromLTRB(16, 10, 16, 6),
               child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 6,
-                ),
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                 decoration: BoxDecoration(
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(14),
                   boxShadow: [
                     BoxShadow(
-                      color: AppColors.shadowColor.withOpacity(0.05),
+                      color: AppColors.shadowColor.withValues(alpha: 0.05),
                       blurRadius: 12,
                       offset: const Offset(0, 6),
                     ),
@@ -987,37 +969,54 @@ class _SiteVerificationScreenState extends State<SiteVerificationScreen>
                 child: TextField(
                   decoration: const InputDecoration(
                     prefixIcon: Icon(Icons.search),
-                    hintText: 'Search by site name, code, state, or locality',
+                    hintText:
+                        'Search / بحث — site name, code, state, locality',
                     border: InputBorder.none,
-                    contentPadding: EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 12,
-                    ),
+                    contentPadding:
+                        EdgeInsets.symmetric(horizontal: 8, vertical: 12),
                   ),
-                  onChanged: (value) {
-                    setState(() {
-                      _searchQuery = value.trim();
-                    });
-                  },
+                  onChanged: (value) =>
+                      setState(() => _searchQuery = value.trim()),
                 ),
               ),
+            ),
+
+            // MMP Filter bar
+            MmpFilterBar(
+              mmpOptions: _availableMmps,
+              selectedMmpId: _selectedMmpId,
+              onChanged: (id) => setState(() => _selectedMmpId = id),
+              totalCount: _availableMmps.fold(
+                  0, (sum, m) => sum + (m['count'] as int)),
+              filteredCount: _selectedMmpId == null
+                  ? _availableMmps.fold(
+                      0, (sum, m) => sum + (m['count'] as int))
+                  : (_availableMmps
+                          .where((m) => m['id'] == _selectedMmpId)
+                          .isNotEmpty
+                      ? _availableMmps.firstWhere(
+                          (m) => m['id'] == _selectedMmpId)['count'] as int
+                      : 0),
             ),
 
             // Content
             Expanded(
               child: _isLoading
                   ? const Center(child: CircularProgressIndicator())
-                  : TabBarView(
-                      controller: _tabController,
-                      children: [
-                        _buildNewTabContent(),
-                        _buildSiteList(_cpVerificationSites, 'cp_verification'),
-                        _buildSiteList(_verifiedSites, 'verified'),
-                        _buildSiteList(_approvedSites, 'approved'),
-                        _buildSiteList(_completedSites, 'completed'),
-                        _buildSiteList(_rejectedSites, 'rejected'),
-                      ],
-                    ),
+                  : _activeTab == 'cp_verification'
+                      ? _buildSiteList(
+                          _cpVerificationSites, 'cp_verification')
+                      : _activeTab == 'verified'
+                          ? _buildSiteList(_verifiedSites, 'verified')
+                          : _activeTab == 'approved'
+                              ? _buildSiteList(_approvedSites, 'approved')
+                              : _activeTab == 'completed'
+                                  ? _buildSiteList(
+                                      _completedSites, 'completed')
+                                  : _activeTab == 'rejected'
+                                      ? _buildSiteList(
+                                          _rejectedSites, 'rejected')
+                                      : _buildNewTabContent(),
             ),
           ],
         ),
@@ -1025,59 +1024,80 @@ class _SiteVerificationScreenState extends State<SiteVerificationScreen>
     );
   }
 
-  /// Build a styled tab with icon, label, and badge
-  Widget _buildTab({
-    required IconData icon,
-    required String label,
-    required int count,
-    required Color badgeColor,
-    bool highlightIfNonZero = false,
-  }) {
-    final showHighlight = highlightIfNonZero && count > 0;
-
-    return Tab(
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 6),
+  /// Bilingual animated pill tab button for site verification tabs
+  Widget _buildVerifTabButton(String tab, String labelEn, String labelAr,
+      IconData icon, int count, Color activeColor) {
+    final isActive = _activeTab == tab;
+    return GestureDetector(
+      onTap: () => setState(() => _activeTab = tab),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+        decoration: BoxDecoration(
+          color: isActive ? activeColor : const Color(0xFFF3F6FA),
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: isActive
+              ? [
+                  BoxShadow(
+                    color: activeColor.withValues(alpha: 0.25),
+                    blurRadius: 8,
+                    offset: const Offset(0, 3),
+                  )
+                ]
+              : null,
+        ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Container(
-              padding: const EdgeInsets.all(5),
-              decoration: BoxDecoration(
-                color: showHighlight
-                    ? Colors.red.withOpacity(0.3)
-                    : Colors.white.withOpacity(0.2),
-                borderRadius: BorderRadius.circular(6),
-              ),
-              child: Icon(icon, size: 14),
-            ),
+            Icon(icon,
+                size: 16,
+                color: isActive ? Colors.white : AppColors.textLight),
             const SizedBox(width: 6),
             Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(label, style: const TextStyle(fontSize: 12)),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 6,
-                    vertical: 1,
+                Text(
+                  labelEn,
+                  style: GoogleFonts.poppins(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: isActive ? Colors.white : AppColors.textLight,
                   ),
-                  decoration: BoxDecoration(
-                    color: showHighlight
-                        ? Colors.red
-                        : badgeColor.withOpacity(0.3),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Text(
-                    '$count',
-                    style: GoogleFonts.poppins(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w600,
-                    ),
+                ),
+                Text(
+                  labelAr,
+                  style: GoogleFonts.poppins(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: isActive
+                        ? Colors.white.withValues(alpha: 0.85)
+                        : AppColors.textLight,
                   ),
                 ),
               ],
             ),
+            if (count > 0) ...[
+              const SizedBox(width: 6),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: isActive
+                      ? Colors.white.withValues(alpha: 0.3)
+                      : activeColor,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Text(
+                  count.toString(),
+                  style: GoogleFonts.poppins(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w800,
+                    color: Colors.white,
+                  ),
+                ),
+              ),
+            ],
           ],
         ),
       ),
@@ -1177,15 +1197,31 @@ class _SiteVerificationScreenState extends State<SiteVerificationScreen>
                               : Colors.grey[600],
                         ),
                         const SizedBox(width: 6),
-                        Text(
-                          'State (${sitesNeedingStatePermit.length})',
-                          style: GoogleFonts.poppins(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                            color: _newSubTabIndex == 0
-                                ? Colors.white
-                                : Colors.grey[600],
-                          ),
+                        Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'State (${sitesNeedingStatePermit.length})',
+                              style: GoogleFonts.poppins(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                                color: _newSubTabIndex == 0
+                                    ? Colors.white
+                                    : Colors.grey[700],
+                              ),
+                            ),
+                            Text(
+                              'تصريح الولاية (${sitesNeedingStatePermit.length})',
+                              style: GoogleFonts.poppins(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                                color: _newSubTabIndex == 0
+                                    ? Colors.white.withValues(alpha: 0.85)
+                                    : Colors.grey[600],
+                              ),
+                            ),
+                          ],
                         ),
                       ],
                     ),
@@ -1214,15 +1250,31 @@ class _SiteVerificationScreenState extends State<SiteVerificationScreen>
                               : Colors.grey[600],
                         ),
                         const SizedBox(width: 6),
-                        Text(
-                          'Locality (${sitesNeedingLocalityPermit.length})',
-                          style: GoogleFonts.poppins(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                            color: _newSubTabIndex == 1
-                                ? Colors.white
-                                : Colors.grey[600],
-                          ),
+                        Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Locality (${sitesNeedingLocalityPermit.length})',
+                              style: GoogleFonts.poppins(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                                color: _newSubTabIndex == 1
+                                    ? Colors.white
+                                    : Colors.grey[700],
+                              ),
+                            ),
+                            Text(
+                              'تصريح المحلية (${sitesNeedingLocalityPermit.length})',
+                              style: GoogleFonts.poppins(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                                color: _newSubTabIndex == 1
+                                    ? Colors.white.withValues(alpha: 0.85)
+                                    : Colors.grey[600],
+                              ),
+                            ),
+                          ],
                         ),
                       ],
                     ),
@@ -1295,7 +1347,7 @@ class _SiteVerificationScreenState extends State<SiteVerificationScreen>
                 color: Colors.white,
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(
-                  color: AppColors.primaryBlue.withOpacity(0.12),
+                  color: AppColors.primaryBlue.withValues(alpha: 0.12),
                 ),
               ),
               child: Text(
@@ -1318,14 +1370,20 @@ class _SiteVerificationScreenState extends State<SiteVerificationScreen>
                       Expanded(
                         child: ElevatedButton.icon(
                           icon: const Icon(Icons.upload_file),
-                          label: Text(
-                            'Manage state permit (${sitesNeedingStatePermit.length})',
+                          label: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text('Manage state permit (${sitesNeedingStatePermit.length})',
+                                  style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.w600)),
+                              Text('إدارة تصريح الولاية (${sitesNeedingStatePermit.length})',
+                                  style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.w700)),
+                            ],
                           ),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: Colors.white,
                             foregroundColor: AppColors.primaryBlue,
                             side: BorderSide(
-                              color: AppColors.primaryBlue.withOpacity(0.12),
+                              color: AppColors.primaryBlue.withValues(alpha: 0.12),
                             ),
                             elevation: 0,
                           ),
@@ -1369,7 +1427,7 @@ class _SiteVerificationScreenState extends State<SiteVerificationScreen>
             leading: Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: Colors.blue.withOpacity(0.1),
+                color: Colors.blue.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: const Icon(
@@ -1404,7 +1462,7 @@ class _SiteVerificationScreenState extends State<SiteVerificationScreen>
                       color: Colors.white,
                       borderRadius: BorderRadius.circular(8),
                       border: Border.all(
-                        color: AppColors.primaryBlue.withOpacity(0.12),
+                        color: AppColors.primaryBlue.withValues(alpha: 0.12),
                       ),
                     ),
                     child: Text(
@@ -1449,8 +1507,14 @@ class _SiteVerificationScreenState extends State<SiteVerificationScreen>
                       Expanded(
                         child: ElevatedButton.icon(
                           icon: const Icon(Icons.upload_file),
-                          label: Text(
-                            'Upload locality permit (${sitesNeedingLocalityPermit.length})',
+                          label: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text('Upload locality permit (${sitesNeedingLocalityPermit.length})',
+                                  style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.w600)),
+                              Text('رفع تصريح المحلية (${sitesNeedingLocalityPermit.length})',
+                                  style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.w700)),
+                            ],
                           ),
                           onPressed: () {
                             final parts = locality.split(' - ');
@@ -1486,13 +1550,13 @@ class _SiteVerificationScreenState extends State<SiteVerificationScreen>
           Container(
             padding: const EdgeInsets.all(24),
             decoration: BoxDecoration(
-              color: AppColors.primaryBlue.withOpacity(0.1),
+              color: AppColors.primaryBlue.withValues(alpha: 0.1),
               shape: BoxShape.circle,
             ),
             child: Icon(
               _getEmptyIcon(category),
               size: 64,
-              color: AppColors.primaryBlue.withOpacity(0.5),
+              color: AppColors.primaryBlue.withValues(alpha: 0.5),
             ),
           ),
           const SizedBox(height: 24),
@@ -1548,13 +1612,13 @@ class _SiteVerificationScreenState extends State<SiteVerificationScreen>
             Container(
               padding: const EdgeInsets.all(24),
               decoration: BoxDecoration(
-                color: AppColors.primaryBlue.withOpacity(0.1),
+                color: AppColors.primaryBlue.withValues(alpha: 0.1),
                 shape: BoxShape.circle,
               ),
               child: Icon(
                 _getEmptyIcon(category),
                 size: 64,
-                color: AppColors.primaryBlue.withOpacity(0.5),
+                color: AppColors.primaryBlue.withValues(alpha: 0.5),
               ),
             ),
             const SizedBox(height: 24),
@@ -1782,13 +1846,17 @@ class _SiteVerificationScreenState extends State<SiteVerificationScreen>
   List<Map<String, dynamic>> _applySearchFilter(
     List<Map<String, dynamic>> sites,
   ) {
-    if (_searchQuery.isEmpty) {
-      return sites;
+    var result = sites;
+
+    // Apply MMP filter
+    if (_selectedMmpId != null) {
+      result = result.where((site) => site['mmp_file_id']?.toString() == _selectedMmpId).toList();
     }
 
+    // Apply text search
+    if (_searchQuery.isEmpty) return result;
     final query = _searchQuery.toLowerCase();
-
-    return sites.where((site) {
+    return result.where((site) {
       final name = site['site_name']?.toString().toLowerCase() ?? '';
       final code = site['site_code']?.toString().toLowerCase() ?? '';
       final locality = site['locality']?.toString().toLowerCase() ?? '';
@@ -1822,7 +1890,7 @@ class _SiteVerificationScreenState extends State<SiteVerificationScreen>
           color: Colors.white,
           boxShadow: [
             BoxShadow(
-              color: AppColors.shadowColor.withOpacity(0.06),
+              color: AppColors.shadowColor.withValues(alpha: 0.06),
               blurRadius: 18,
               offset: const Offset(0, 8),
             ),
@@ -1842,7 +1910,7 @@ class _SiteVerificationScreenState extends State<SiteVerificationScreen>
                     Container(
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: _getStatusColor(status).withOpacity(0.1),
+                        color: _getStatusColor(status).withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: Icon(
@@ -1931,7 +1999,7 @@ class _SiteVerificationScreenState extends State<SiteVerificationScreen>
                       Container(
                         padding: const EdgeInsets.all(6),
                         decoration: BoxDecoration(
-                          color: AppColors.primaryBlue.withOpacity(0.1),
+                          color: AppColors.primaryBlue.withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: const Icon(
@@ -2081,9 +2149,9 @@ class _SiteVerificationScreenState extends State<SiteVerificationScreen>
                       vertical: 6,
                     ),
                     decoration: BoxDecoration(
-                      color: Colors.red.withOpacity(0.08),
+                      color: Colors.red.withValues(alpha: 0.08),
                       borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: Colors.red.withOpacity(0.12)),
+                      border: Border.all(color: Colors.red.withValues(alpha: 0.12)),
                     ),
                     child: Row(
                       children: [
@@ -2133,10 +2201,10 @@ class _SiteVerificationScreenState extends State<SiteVerificationScreen>
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
-        color: _getStatusColor(status).withOpacity(0.1),
+        color: _getStatusColor(status).withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(20),
         border: Border.all(
-          color: _getStatusColor(status).withOpacity(0.3),
+          color: _getStatusColor(status).withValues(alpha: 0.3),
           width: 1.5,
         ),
       ),
@@ -2258,9 +2326,9 @@ class _SiteVerificationScreenState extends State<SiteVerificationScreen>
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.08),
+        color: color.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: color.withOpacity(0.2), width: 1),
+        border: Border.all(color: color.withValues(alpha: 0.2), width: 1),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -2373,7 +2441,7 @@ class _SiteVerificationScreenState extends State<SiteVerificationScreen>
                 ),
                 textStyle: GoogleFonts.poppins(fontWeight: FontWeight.w600),
                 elevation: 6,
-                shadowColor: AppColors.primaryBlue.withOpacity(0.25),
+                shadowColor: AppColors.primaryBlue.withValues(alpha: 0.25),
               ),
             ),
           ),
@@ -2414,7 +2482,7 @@ class _SiteVerificationScreenState extends State<SiteVerificationScreen>
                 ),
                 textStyle: GoogleFonts.poppins(fontWeight: FontWeight.w600),
                 elevation: 6,
-                shadowColor: AppColors.primaryBlue.withOpacity(0.25),
+                shadowColor: AppColors.primaryBlue.withValues(alpha: 0.25),
               ),
             ),
           ),
@@ -2456,7 +2524,7 @@ class _SiteVerificationScreenState extends State<SiteVerificationScreen>
               fontWeight: FontWeight.w600,
             ),
             elevation: 6,
-            shadowColor: const Color(0xFF10B981).withOpacity(0.25),
+            shadowColor: const Color(0xFF10B981).withValues(alpha: 0.25),
           ),
         ),
       );
@@ -2477,7 +2545,7 @@ class _SiteVerificationScreenState extends State<SiteVerificationScreen>
                 backgroundColor: Colors.white,
                 foregroundColor: AppColors.primaryBlue,
                 side: BorderSide(
-                  color: AppColors.primaryBlue.withOpacity(0.12),
+                  color: AppColors.primaryBlue.withValues(alpha: 0.12),
                 ),
                 padding: const EdgeInsets.symmetric(vertical: 14),
                 shape: RoundedRectangleBorder(
@@ -2571,6 +2639,7 @@ class _SiteVerificationScreenState extends State<SiteVerificationScreen>
   void _showLocalityPermitDialog(Map<String, dynamic> site) async {
     final locality = site['locality']?.toString() ?? '';
     final state = site['state']?.toString() ?? '';
+    final isArabic = Localizations.localeOf(context).languageCode == 'ar';
 
     // First show locality permit requirement dialog
     final requirementResult = await showDialog<Map<String, dynamic>>(
@@ -2579,6 +2648,7 @@ class _SiteVerificationScreenState extends State<SiteVerificationScreen>
         locality: locality,
         state: state,
         siteCount: 1,
+        isArabic: isArabic,
       ),
     );
 
@@ -2600,6 +2670,7 @@ class _SiteVerificationScreenState extends State<SiteVerificationScreen>
           locality: locality,
           state: state,
           siteCount: 1,
+          isArabic: isArabic,
         ),
       );
 
@@ -3182,6 +3253,7 @@ class _SiteVerificationScreenState extends State<SiteVerificationScreen>
   ) async {
     final firstSite = sites.isNotEmpty ? sites.first : null;
     if (firstSite == null) return;
+    final isArabic = Localizations.localeOf(context).languageCode == 'ar';
 
     // First show locality permit requirement dialog
     final requirementResult = await showDialog<Map<String, dynamic>>(
@@ -3190,6 +3262,7 @@ class _SiteVerificationScreenState extends State<SiteVerificationScreen>
         locality: locality,
         state: state,
         siteCount: sites.length,
+        isArabic: isArabic,
       ),
     );
 
@@ -3211,6 +3284,7 @@ class _SiteVerificationScreenState extends State<SiteVerificationScreen>
           locality: locality,
           state: state,
           siteCount: sites.length,
+          isArabic: isArabic,
         ),
       );
 
@@ -4642,8 +4716,8 @@ class _SiteDetailsSheet extends StatelessWidget {
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
                 colors: [
-                  AppColors.primaryBlue.withOpacity(0.1),
-                  AppColors.primaryBlue.withOpacity(0.05),
+                  AppColors.primaryBlue.withValues(alpha: 0.1),
+                  AppColors.primaryBlue.withValues(alpha: 0.05),
                 ],
               ),
               borderRadius: const BorderRadius.only(
@@ -4796,7 +4870,7 @@ class _SiteDetailsSheet extends StatelessWidget {
                           borderRadius: BorderRadius.circular(12),
                           boxShadow: [
                             BoxShadow(
-                              color: AppColors.primaryBlue.withOpacity(0.3),
+                              color: AppColors.primaryBlue.withValues(alpha: 0.3),
                               blurRadius: 8,
                               offset: const Offset(0, 4),
                             ),
@@ -4862,7 +4936,7 @@ class _SiteDetailsSheet extends StatelessWidget {
                           borderRadius: BorderRadius.circular(12),
                           boxShadow: [
                             BoxShadow(
-                              color: const Color(0xFF10B981).withOpacity(0.3),
+                              color: const Color(0xFF10B981).withValues(alpha: 0.3),
                               blurRadius: 8,
                               offset: const Offset(0, 4),
                             ),
@@ -4961,13 +5035,13 @@ class _SiteDetailsSheet extends StatelessWidget {
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: isComplete
-            ? Colors.green.withOpacity(0.1)
-            : AppColors.primaryBlue.withOpacity(0.06),
+            ? Colors.green.withValues(alpha: 0.1)
+            : AppColors.primaryBlue.withValues(alpha: 0.06),
         borderRadius: BorderRadius.circular(8),
         border: Border.all(
           color: isComplete
-              ? Colors.green.withOpacity(0.3)
-              : AppColors.primaryBlue.withOpacity(0.12),
+              ? Colors.green.withValues(alpha: 0.3)
+              : AppColors.primaryBlue.withValues(alpha: 0.12),
         ),
       ),
       child: Row(
@@ -5357,7 +5431,7 @@ class _PermitVerificationDialogState extends State<_PermitVerificationDialog> {
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
         side: BorderSide(
-          color: AppColors.primaryBlue.withOpacity(0.12),
+          color: AppColors.primaryBlue.withValues(alpha: 0.12),
           width: 1,
         ),
       ),
@@ -5366,7 +5440,7 @@ class _PermitVerificationDialogState extends State<_PermitVerificationDialog> {
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: [AppColors.primaryBlue.withOpacity(0.05), Colors.white],
+            colors: [AppColors.primaryBlue.withValues(alpha: 0.05), Colors.white],
           ),
           borderRadius: BorderRadius.circular(12),
         ),
@@ -5405,10 +5479,10 @@ class _PermitVerificationDialogState extends State<_PermitVerificationDialog> {
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: AppColors.primaryBlue.withOpacity(0.05),
+                  color: AppColors.primaryBlue.withValues(alpha: 0.05),
                   borderRadius: BorderRadius.circular(8),
                   border: Border.all(
-                    color: AppColors.primaryBlue.withOpacity(0.12),
+                    color: AppColors.primaryBlue.withValues(alpha: 0.12),
                   ),
                 ),
                 child: Row(
@@ -5571,7 +5645,7 @@ class _PermitVerificationDialogState extends State<_PermitVerificationDialog> {
               width: _statePermitUploaded ? 2 : 1,
             ),
             borderRadius: BorderRadius.circular(12),
-            color: _statePermitUploaded ? Colors.green.withOpacity(0.1) : null,
+            color: _statePermitUploaded ? Colors.green.withValues(alpha: 0.1) : null,
           ),
           child: Column(
             children: [
@@ -5786,7 +5860,7 @@ class _PermitVerificationDialogState extends State<_PermitVerificationDialog> {
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: [Colors.green[50]!.withOpacity(0.5), Colors.white],
+            colors: [Colors.green[50]!.withValues(alpha: 0.5), Colors.white],
           ),
           borderRadius: BorderRadius.circular(12),
         ),
@@ -5949,7 +6023,7 @@ class _PermitVerificationDialogState extends State<_PermitVerificationDialog> {
             ),
             borderRadius: BorderRadius.circular(12),
             color: _localityPermitUploaded
-                ? Colors.green.withOpacity(0.1)
+                ? Colors.green.withValues(alpha: 0.1)
                 : null,
           ),
           child: Column(
@@ -6071,7 +6145,7 @@ class _PermitVerificationDialogState extends State<_PermitVerificationDialog> {
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
         side: BorderSide(
-          color: AppColors.primaryBlue.withOpacity(0.12),
+          color: AppColors.primaryBlue.withValues(alpha: 0.12),
           width: 1,
         ),
       ),
@@ -6080,7 +6154,7 @@ class _PermitVerificationDialogState extends State<_PermitVerificationDialog> {
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: [AppColors.primaryBlue.withOpacity(0.05), Colors.white],
+            colors: [AppColors.primaryBlue.withValues(alpha: 0.05), Colors.white],
           ),
           borderRadius: BorderRadius.circular(12),
         ),
@@ -6119,10 +6193,10 @@ class _PermitVerificationDialogState extends State<_PermitVerificationDialog> {
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: AppColors.primaryBlue.withOpacity(0.05),
+                  color: AppColors.primaryBlue.withValues(alpha: 0.05),
                   borderRadius: BorderRadius.circular(8),
                   border: Border.all(
-                    color: AppColors.primaryBlue.withOpacity(0.12),
+                    color: AppColors.primaryBlue.withValues(alpha: 0.12),
                   ),
                 ),
                 child: Row(
@@ -6731,8 +6805,8 @@ class _PermitVerificationDialogState extends State<_PermitVerificationDialog> {
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                   colors: [
-                    AppColors.primaryBlue.withOpacity(0.15),
-                    AppColors.primaryBlue.withOpacity(0.05),
+                    AppColors.primaryBlue.withValues(alpha: 0.15),
+                    AppColors.primaryBlue.withValues(alpha: 0.05),
                   ],
                 )
               : null,
@@ -7018,7 +7092,7 @@ class _LocalityPermitDialogState extends State<_LocalityPermitDialog> {
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: [Colors.white, Colors.blue.withOpacity(0.02)],
+            colors: [Colors.white, Colors.blue.withValues(alpha: 0.02)],
           ),
         ),
         child: Column(
@@ -7046,7 +7120,7 @@ class _LocalityPermitDialogState extends State<_LocalityPermitDialog> {
                       Container(
                         padding: const EdgeInsets.all(10),
                         decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.2),
+                          color: Colors.white.withValues(alpha: 0.2),
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: const Icon(
@@ -7075,7 +7149,7 @@ class _LocalityPermitDialogState extends State<_LocalityPermitDialog> {
                       vertical: 6,
                     ),
                     decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.2),
+                      color: Colors.white.withValues(alpha: 0.2),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Text(
@@ -7128,9 +7202,9 @@ class _LocalityPermitDialogState extends State<_LocalityPermitDialog> {
         Container(
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color: Colors.blue.withOpacity(0.1),
+            color: Colors.blue.withValues(alpha: 0.1),
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: Colors.blue.withOpacity(0.3)),
+            border: Border.all(color: Colors.blue.withValues(alpha: 0.3)),
           ),
           child: Row(
             children: [
@@ -7236,9 +7310,9 @@ class _LocalityPermitDialogState extends State<_LocalityPermitDialog> {
         Container(
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color: Colors.green.withOpacity(0.1),
+            color: Colors.green.withValues(alpha: 0.1),
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: Colors.green.withOpacity(0.3)),
+            border: Border.all(color: Colors.green.withValues(alpha: 0.3)),
           ),
           child: Row(
             children: [
@@ -7277,7 +7351,7 @@ class _LocalityPermitDialogState extends State<_LocalityPermitDialog> {
             ),
             borderRadius: BorderRadius.circular(12),
             color: _localityPermitUploaded
-                ? Colors.green.withOpacity(0.1)
+                ? Colors.green.withValues(alpha: 0.1)
                 : null,
           ),
           child: Column(
@@ -7958,7 +8032,7 @@ class _VerificationDialogState extends State<_VerificationDialog> {
           Container(
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: Colors.green.withOpacity(0.1),
+              color: Colors.green.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(8),
             ),
             child: const Icon(Icons.verified, color: Colors.green, size: 24),
@@ -7984,7 +8058,7 @@ class _VerificationDialogState extends State<_VerificationDialog> {
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: Colors.grey.withOpacity(0.1),
+                color: Colors.grey.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Column(
@@ -8016,21 +8090,21 @@ class _VerificationDialogState extends State<_VerificationDialog> {
                     ),
                     decoration: BoxDecoration(
                       color: widget.isDMActivity
-                          ? Colors.blue.withOpacity(0.1)
+                          ? Colors.blue.withValues(alpha: 0.1)
                           : isMultiVisit
-                          ? AppColors.primaryBlue.withOpacity(0.06)
+                          ? AppColors.primaryBlue.withValues(alpha: 0.06)
                           : isUrgent
-                          ? Colors.red.withOpacity(0.1)
-                          : Colors.green.withOpacity(0.1),
+                          ? Colors.red.withValues(alpha: 0.1)
+                          : Colors.green.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(12),
                       border: Border.all(
                         color: widget.isDMActivity
-                            ? Colors.blue.withOpacity(0.3)
+                            ? Colors.blue.withValues(alpha: 0.3)
                             : isMultiVisit
-                            ? AppColors.primaryBlue.withOpacity(0.3)
+                            ? AppColors.primaryBlue.withValues(alpha: 0.3)
                             : isUrgent
-                            ? Colors.red.withOpacity(0.3)
-                            : Colors.green.withOpacity(0.3),
+                            ? Colors.red.withValues(alpha: 0.3)
+                            : Colors.green.withValues(alpha: 0.3),
                       ),
                     ),
                     child: Text(
@@ -8325,9 +8399,9 @@ class _VerificationDialogState extends State<_VerificationDialog> {
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: Colors.blue.withOpacity(0.1),
+                color: Colors.blue.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.blue.withOpacity(0.3)),
+                border: Border.all(color: Colors.blue.withValues(alpha: 0.3)),
               ),
               child: Row(
                 children: [
@@ -8459,7 +8533,7 @@ class _VerificationDialogState extends State<_VerificationDialog> {
           ),
           borderRadius: BorderRadius.circular(8),
           color: value != null
-              ? AppColors.primaryBlue.withOpacity(0.05)
+              ? AppColors.primaryBlue.withValues(alpha: 0.05)
               : Colors.grey[50],
         ),
         child: Row(
@@ -8494,11 +8568,13 @@ class _BulkLocalityPermitRequirementDialog extends StatefulWidget {
   final String locality;
   final String state;
   final int siteCount;
+  final bool isArabic;
 
   const _BulkLocalityPermitRequirementDialog({
     required this.locality,
     required this.state,
     required this.siteCount,
+    this.isArabic = false,
   });
 
   @override
@@ -8512,97 +8588,140 @@ class _BulkLocalityPermitRequirementDialogState
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      backgroundColor: Colors.white,
-      title: Row(
-        children: [
-          Icon(Icons.location_on, color: Colors.green[600], size: 24),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              'Bulk Locality Permit Verification',
-              style: GoogleFonts.poppins(
-                fontSize: 18,
-                fontWeight: FontWeight.w600,
-                color: Colors.green[800],
+    final isArabic = widget.isArabic;
+    return Directionality(
+      textDirection: isArabic ? ui.TextDirection.rtl : ui.TextDirection.ltr,
+      child: AlertDialog(
+        backgroundColor: Colors.white,
+        title: Row(
+          children: [
+            Icon(Icons.location_on, color: Colors.green[600], size: 24),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    isArabic
+                        ? '\u0627\u0644\u062a\u062d\u0642\u0642 \u0645\u0646 \u062a\u0635\u0631\u064a\u062d \u0627\u0644\u0645\u062d\u0644\u064a\u0629'
+                        : 'Bulk Locality Permit Verification',
+                    style: GoogleFonts.poppins(
+                      fontSize: 17,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.green[800],
+                    ),
+                  ),
+                  if (isArabic)
+                    Text(
+                      'Bulk Locality Permit Verification',
+                      style: GoogleFonts.poppins(
+                        fontSize: 11,
+                        color: Colors.green[600],
+                      ),
+                    ),
+                ],
               ),
+            ),
+          ],
+        ),
+        content: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.of(context).size.height * 0.6,
+          ),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  isArabic
+                      ? '\u0627\u0644\u062a\u062d\u0642\u0642 \u0645\u0646 \u0645\u062a\u0637\u0644\u0628\u0627\u062a \u062a\u0635\u0631\u064a\u062d \u0627\u0644\u0645\u062d\u0644\u064a\u0629 \u0641\u064a ${widget.locality}\u060c ${widget.state}'
+                      : 'Verify locality permit requirements for ${widget.locality}, ${widget.state}',
+                  style: GoogleFonts.poppins(fontSize: 13, color: Colors.grey[600]),
+                ),
+                Text(
+                  isArabic
+                      ? '\u0633\u064a\u062a\u0623\u062b\u0631 ${widget.siteCount} \u0645\u0648\u0627\u0642\u0639'
+                      : '${widget.siteCount} sites will be affected',
+                  style: GoogleFonts.poppins(
+                    fontSize: 12,
+                    color: Colors.grey[500],
+                    fontStyle: FontStyle.italic,
+                  ),
+                ),
+                const SizedBox(height: 24),
+                Text(
+                  isArabic
+                      ? '\u0647\u0644 \u062a\u062d\u062a\u0627\u062c \u0625\u0644\u0649 \u062a\u0635\u0631\u064a\u062d \u0645\u062d\u0644\u064a\u0629 \u0641\u064a \u0647\u0630\u0647 \u0627\u0644\u0645\u062d\u0644\u064a\u0629\u061f'
+                      : 'Do you require a Locality permit in this locality?',
+                  style: GoogleFonts.poppins(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w500,
+                    color: Colors.grey[800],
+                  ),
+                ),
+                const SizedBox(height: 16),
+                _buildOptionWithDescription(
+                  isArabic
+                      ? '\u0646\u0639\u0645\u060c \u0645\u0637\u0644\u0648\u0628 \u0648\u0633\u0623\u0631\u0641\u0639\u0647'
+                      : 'Yes, it\'s required and I will upload it',
+                  isArabic
+                      ? '\u0644\u062f\u064a \u062a\u0635\u0631\u064a\u062d \u0627\u0644\u0645\u062d\u0644\u064a\u0629 \u0648\u0633\u0623\u0631\u0641\u0639\u0647 \u0627\u0644\u0622\u0646'
+                      : 'I have the locality permit and will upload it now',
+                  'required_have_it',
+                  _localityPermitRequirement,
+                  (value) => setState(() => _localityPermitRequirement = value),
+                ),
+                _buildOptionWithDescription(
+                  isArabic
+                      ? '\u0646\u0639\u0645\u060c \u0645\u0637\u0644\u0648\u0628 \u0644\u0643\u0646 \u0644\u064a\u0633 \u0644\u062f\u064a'
+                      : 'Yes, it\'s required but I don\'t have it',
+                  isArabic
+                      ? '\u0627\u0644\u062a\u0635\u0631\u064a\u062d \u0645\u0637\u0644\u0648\u0628 \u0644\u0643\u0646 \u063a\u064a\u0631 \u0645\u062a\u0627\u062d'
+                      : 'The locality permit is required but not available',
+                  'required_dont_have_it',
+                  _localityPermitRequirement,
+                  (value) => setState(() => _localityPermitRequirement = value),
+                ),
+                _buildOptionWithDescription(
+                  isArabic
+                      ? '\u0644\u0627\u060c \u0644\u064a\u0633 \u0645\u0637\u0644\u0648\u0628\u0627\u064b'
+                      : 'No, it\'s not a requirement',
+                  isArabic
+                      ? '\u0644\u0627 \u064a\u0648\u062c\u062f \u062a\u0635\u0631\u064a\u062d \u0645\u062d\u0644\u064a\u0629 \u0645\u0637\u0644\u0648\u0628 \u0641\u064a \u0647\u0630\u0647 \u0627\u0644\u0645\u062d\u0644\u064a\u0629'
+                      : 'Locality permit is not required in this locality',
+                  'not_required',
+                  _localityPermitRequirement,
+                  (value) => setState(() => _localityPermitRequirement = value),
+                ),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: Text(
+              isArabic ? '\u0625\u0644\u063a\u0627\u0621' : 'Cancel',
+              style: GoogleFonts.poppins(),
+            ),
+          ),
+          ElevatedButton(
+            onPressed: _localityPermitRequirement != null
+                ? () => Navigator.of(
+                    context,
+                  ).pop({'requirement': _localityPermitRequirement})
+                : null,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primaryBlue,
+            ),
+            child: Text(
+              isArabic ? '\u0627\u0644\u062a\u0627\u0644\u064a' : 'Next',
+              style: GoogleFonts.poppins(color: Colors.white),
             ),
           ),
         ],
       ),
-      content: ConstrainedBox(
-        constraints: BoxConstraints(
-          maxHeight: MediaQuery.of(context).size.height * 0.6,
-        ),
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Verify locality permit requirements for ${widget.locality}, ${widget.state}',
-                style: GoogleFonts.poppins(fontSize: 13, color: Colors.grey[600]),
-              ),
-              Text(
-                '${widget.siteCount} sites will be affected',
-                style: GoogleFonts.poppins(
-                  fontSize: 12,
-                  color: Colors.grey[500],
-                  fontStyle: FontStyle.italic,
-                ),
-              ),
-              const SizedBox(height: 24),
-              Text(
-                'Do you require a Locality permit in this locality?',
-                style: GoogleFonts.poppins(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w500,
-                  color: Colors.grey[800],
-                ),
-              ),
-              const SizedBox(height: 16),
-              _buildOptionWithDescription(
-                'Yes, it\'s required and I will upload it',
-                'I have the locality permit and will upload it now',
-                'required_have_it',
-                _localityPermitRequirement,
-                (value) => setState(() => _localityPermitRequirement = value),
-              ),
-              _buildOptionWithDescription(
-                'Yes, it\'s required but I don\'t have it',
-                'The locality permit is required but not available',
-                'required_dont_have_it',
-                _localityPermitRequirement,
-                (value) => setState(() => _localityPermitRequirement = value),
-              ),
-              _buildOptionWithDescription(
-                'No, it\'s not a requirement',
-                'Locality permit is not required in this locality',
-                'not_required',
-                _localityPermitRequirement,
-                (value) => setState(() => _localityPermitRequirement = value),
-              ),
-            ],
-          ),
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: Text('Cancel', style: GoogleFonts.poppins()),
-        ),
-        ElevatedButton(
-          onPressed: _localityPermitRequirement != null
-              ? () => Navigator.of(
-                  context,
-                ).pop({'requirement': _localityPermitRequirement})
-              : null,
-          style: ElevatedButton.styleFrom(
-            backgroundColor: AppColors.primaryBlue,
-          ),
-          child: Text('Next', style: GoogleFonts.poppins(color: Colors.white)),
-        ),
-      ],
     );
   }
 
@@ -8626,8 +8745,8 @@ class _BulkLocalityPermitRequirementDialogState
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                   colors: [
-                    AppColors.primaryBlue.withOpacity(0.15),
-                    AppColors.primaryBlue.withOpacity(0.05),
+                    AppColors.primaryBlue.withValues(alpha: 0.15),
+                    AppColors.primaryBlue.withValues(alpha: 0.05),
                   ],
                 )
               : null,
@@ -8684,11 +8803,13 @@ class _BulkLocalityPermitFollowUpDialog extends StatefulWidget {
   final String locality;
   final String state;
   final int siteCount;
+  final bool isArabic;
 
   const _BulkLocalityPermitFollowUpDialog({
     required this.locality,
     required this.state,
     required this.siteCount,
+    this.isArabic = false,
   });
 
   @override
@@ -8702,123 +8823,161 @@ class _BulkLocalityPermitFollowUpDialogState
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      title: Row(
-        children: [
-          const Icon(
-            Icons.warning_amber,
-            color: AppColors.primaryBlue,
-            size: 24,
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              'Locality Permit Not Available',
-              style: GoogleFonts.poppins(
-                fontSize: 18,
-                fontWeight: FontWeight.w600,
-                color: AppColors.primaryBlue,
-              ),
+    final isArabic = widget.isArabic;
+    return Directionality(
+      textDirection: isArabic ? ui.TextDirection.rtl : ui.TextDirection.ltr,
+      child: AlertDialog(
+        title: Row(
+          children: [
+            const Icon(
+              Icons.warning_amber,
+              color: AppColors.primaryBlue,
+              size: 24,
             ),
-          ),
-        ],
-      ),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'You indicated the locality permit for ${widget.locality}, ${widget.state} is required but not available',
-            style: GoogleFonts.poppins(fontSize: 13, color: Colors.grey[600]),
-          ),
-          Text(
-            '${widget.siteCount} sites will be affected',
-            style: GoogleFonts.poppins(
-              fontSize: 12,
-              color: Colors.grey[500],
-              fontStyle: FontStyle.italic,
-            ),
-          ),
-          const SizedBox(height: 16),
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: AppColors.primaryBlue.withOpacity(0.05),
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(
-                color: AppColors.primaryBlue.withOpacity(0.12),
-              ),
-            ),
-            child: Row(
-              children: [
-                const Icon(
-                  Icons.info_outline,
-                  color: AppColors.primaryBlue,
-                  size: 20,
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    'The locality permit is required but you don\'t have it. Can you proceed with the verification without it?',
+            const SizedBox(width: 8),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    isArabic
+                        ? '\u062a\u0635\u0631\u064a\u062d \u0627\u0644\u0645\u062d\u0644\u064a\u0629 \u063a\u064a\u0631 \u0645\u062a\u0627\u062d'
+                        : 'Locality Permit Not Available',
                     style: GoogleFonts.poppins(
-                      fontSize: 13,
+                      fontSize: 17,
+                      fontWeight: FontWeight.w600,
                       color: AppColors.primaryBlue,
                     ),
                   ),
+                  if (isArabic)
+                    Text(
+                      'Locality Permit Not Available',
+                      style: GoogleFonts.poppins(
+                        fontSize: 11,
+                        color: AppColors.primaryBlue.withValues(alpha: 0.7),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              isArabic
+                  ? '\u0644\u0642\u062f \u0623\u0634\u0631\u062a \u0625\u0644\u0649 \u0623\u0646 \u062a\u0635\u0631\u064a\u062d \u0627\u0644\u0645\u062d\u0644\u064a\u0629 \u0641\u064a ${widget.locality}\u060c ${widget.state} \u0645\u0637\u0644\u0648\u0628 \u0644\u0643\u0646 \u063a\u064a\u0631 \u0645\u062a\u0627\u062d'
+                  : 'You indicated the locality permit for ${widget.locality}, ${widget.state} is required but not available',
+              style: GoogleFonts.poppins(fontSize: 13, color: Colors.grey[600]),
+            ),
+            Text(
+              isArabic
+                  ? '\u0633\u064a\u062a\u0623\u062b\u0631 ${widget.siteCount} \u0645\u0648\u0627\u0642\u0639'
+                  : '${widget.siteCount} sites will be affected',
+              style: GoogleFonts.poppins(
+                fontSize: 12,
+                color: Colors.grey[500],
+                fontStyle: FontStyle.italic,
+              ),
+            ),
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppColors.primaryBlue.withValues(alpha: 0.05),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: AppColors.primaryBlue.withValues(alpha: 0.12),
                 ),
-              ],
+              ),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.info_outline,
+                    color: AppColors.primaryBlue,
+                    size: 20,
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      isArabic
+                          ? '\u0627\u0644\u062a\u0635\u0631\u064a\u062d \u0645\u0637\u0644\u0648\u0628 \u0644\u0643\u0646\u0643 \u0644\u0627 \u062a\u0645\u0644\u0643\u0647. \u0647\u0644 \u064a\u0645\u0643\u0646\u0643 \u0627\u0644\u0645\u0636\u064a \u0641\u064a \u0627\u0644\u062a\u062d\u0642\u0642 \u0628\u062f\u0648\u0646\u0647\u061f'
+                          : 'The locality permit is required but you don\'t have it. Can you proceed with the verification without it?',
+                      style: GoogleFonts.poppins(
+                        fontSize: 13,
+                        color: AppColors.primaryBlue,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 24),
+            Text(
+              isArabic
+                  ? '\u0647\u0644 \u064a\u0645\u0643\u0646\u0643 \u0627\u0644\u0639\u0645\u0644 \u0628\u062f\u0648\u0646 \u062a\u0635\u0631\u064a\u062d \u0627\u0644\u0645\u062d\u0644\u064a\u0629\u061f'
+                  : 'Are you able to work without the locality permit?',
+              style: GoogleFonts.poppins(
+                fontSize: 16,
+                fontWeight: FontWeight.w500,
+                color: Colors.grey[800],
+              ),
+            ),
+            const SizedBox(height: 16),
+            _buildOptionWithDescription(
+              isArabic
+                  ? '\u0646\u0639\u0645\u060c \u064a\u0645\u0643\u0646\u0646\u064a \u0627\u0644\u0645\u062a\u0627\u0628\u0639\u0629 \u0628\u062f\u0648\u0646\u0647'
+                  : 'Yes, I can proceed without it',
+              isArabic
+                  ? '\u0633\u0623\u0643\u0645\u0644 \u0639\u0645\u0644\u064a\u0629 \u0627\u0644\u062a\u062d\u0642\u0642'
+                  : 'I will continue with the verification',
+              'yes',
+              _canWorkWithoutLocalityPermit,
+              (value) => setState(() => _canWorkWithoutLocalityPermit = value),
+            ),
+            _buildOptionWithDescription(
+              isArabic
+                  ? '\u0644\u0627\u060c \u0644\u0627 \u064a\u0645\u0643\u0646\u0646\u064a \u0627\u0644\u0645\u062a\u0627\u0628\u0639\u0629 \u0628\u062f\u0648\u0646\u0647'
+                  : 'No, I cannot proceed without it',
+              isArabic
+                  ? '\u0625\u0639\u0627\u062f\u0629 \u0627\u0644\u0645\u0648\u0627\u0642\u0639 \u0625\u0644\u0649 \u0645\u0633\u0624\u0648\u0644 \u0627\u0644\u0639\u0645\u0644\u064a\u0627\u062a'
+                  : 'Send the sites back to FOM for action',
+              'no',
+              _canWorkWithoutLocalityPermit,
+              (value) => setState(() => _canWorkWithoutLocalityPermit = value),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: Text(
+              isArabic ? '\u0625\u0644\u063a\u0627\u0621' : 'Cancel',
+              style: GoogleFonts.poppins(),
             ),
           ),
-          const SizedBox(height: 24),
-          Text(
-            'Are you able to work without the locality permit?',
-            style: GoogleFonts.poppins(
-              fontSize: 16,
-              fontWeight: FontWeight.w500,
-              color: Colors.grey[800],
+          ElevatedButton(
+            onPressed: _canWorkWithoutLocalityPermit != null
+                ? () => Navigator.of(
+                    context,
+                  ).pop({'canWorkWithout': _canWorkWithoutLocalityPermit})
+                : null,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: _canWorkWithoutLocalityPermit == 'no'
+                  ? Colors.red
+                  : AppColors.primaryBlue,
             ),
-          ),
-          const SizedBox(height: 16),
-          _buildOptionWithDescription(
-            'Yes, I can proceed without it',
-            'I will continue with the verification',
-            'yes',
-            _canWorkWithoutLocalityPermit,
-            (value) => setState(() => _canWorkWithoutLocalityPermit = value),
-          ),
-          _buildOptionWithDescription(
-            'No, I cannot proceed without it',
-            'Send the sites back to FOM for action',
-            'no',
-            _canWorkWithoutLocalityPermit,
-            (value) => setState(() => _canWorkWithoutLocalityPermit = value),
+            child: Text(
+              _canWorkWithoutLocalityPermit == 'no'
+                  ? (isArabic ? '\u0625\u0631\u062c\u0627\u0639 \u0644\u0645\u0633\u0624\u0648\u0644 \u0627\u0644\u0639\u0645\u0644\u064a\u0627\u062a' : 'Send Back to FOM')
+                  : (isArabic ? '\u0645\u062a\u0627\u0628\u0639\u0629' : 'Continue'),
+              style: GoogleFonts.poppins(color: Colors.white),
+            ),
           ),
         ],
       ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: Text('Cancel', style: GoogleFonts.poppins()),
-        ),
-        ElevatedButton(
-          onPressed: _canWorkWithoutLocalityPermit != null
-              ? () => Navigator.of(
-                  context,
-                ).pop({'canWorkWithout': _canWorkWithoutLocalityPermit})
-              : null,
-          style: ElevatedButton.styleFrom(
-            backgroundColor: _canWorkWithoutLocalityPermit == 'no'
-                ? Colors.red
-                : AppColors.primaryBlue,
-          ),
-          child: Text(
-            _canWorkWithoutLocalityPermit == 'no'
-                ? 'Send Back to FOM'
-                : 'Continue',
-            style: GoogleFonts.poppins(color: Colors.white),
-          ),
-        ),
-      ],
     );
   }
 
@@ -8842,8 +9001,8 @@ class _BulkLocalityPermitFollowUpDialogState
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                   colors: [
-                    AppColors.primaryBlue.withOpacity(0.15),
-                    AppColors.primaryBlue.withOpacity(0.05),
+                    AppColors.primaryBlue.withValues(alpha: 0.15),
+                    AppColors.primaryBlue.withValues(alpha: 0.05),
                   ],
                 )
               : null,

@@ -2,6 +2,7 @@
 /// Handles all Supabase operations for operational cost submissions
 
 import 'dart:async';
+import 'dart:typed_data';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/operational_cost_submission.dart';
 
@@ -417,7 +418,6 @@ class OperationalCostService {
     final userId = currentUserId;
     if (userId == null) return false;
 
-    // Verify user has payout permission (Admin only)
     final permissions = await getUserPermissions();
     if (!permissions.canPayOut) {
       print('Error: User does not have payout permission');
@@ -433,11 +433,69 @@ class OperationalCostService {
           })
           .eq('id', submissionId)
           .eq('status', 'approved');
-
       return true;
     } catch (e) {
       print('Error marking as paid: $e');
       return false;
+    }
+  }
+
+  /// Mark as paid WITH a mandatory payment receipt upload.
+  /// [proofBytes]     — raw bytes of the image or PDF selected by the admin.
+  /// [proofExtension] — file extension e.g. 'jpg', 'pdf'.
+  /// [proofNotes]     — optional admin notes attached alongside the proof.
+  /// Returns the public URL of the uploaded receipt, or throws on failure.
+  Future<String> markAsPaidWithProof({
+    required String submissionId,
+    required List<int> proofBytes,
+    required String proofExtension,
+    String? proofNotes,
+  }) async {
+    final userId = currentUserId;
+    if (userId == null) throw Exception('Not authenticated');
+
+    final permissions = await getUserPermissions();
+    if (!permissions.canPayOut) throw Exception('Insufficient permissions');
+
+    // 1. Upload receipt to Supabase Storage
+    final timestamp = DateTime.now().millisecondsSinceEpoch;
+    final random = (DateTime.now().microsecondsSinceEpoch % 10000).toString().padLeft(4, '0');
+    final filePath = 'payment-proofs/${timestamp}_$random.$proofExtension';
+
+    await _supabase.storage
+        .from('mmp-files')
+        .uploadBinary(filePath, Uint8List.fromList(proofBytes),
+            fileOptions: FileOptions(contentType: _mimeType(proofExtension), upsert: false));
+
+    final proofUrl = _supabase.storage.from('mmp-files').getPublicUrl(filePath);
+
+    // 2. Update the submission record
+    final now = DateTime.now().toIso8601String();
+    await _supabase
+        .from('operational_cost_submissions')
+        .update({
+          'status': 'paid',
+          'paid_by': userId,
+          'paid_at': now,
+          'payment_proof_url': proofUrl,
+          'payment_proof_uploaded_at': now,
+          if (proofNotes != null && proofNotes.trim().isNotEmpty)
+            'payment_proof_notes': proofNotes.trim(),
+          'updated_at': now,
+        })
+        .eq('id', submissionId);
+
+    return proofUrl;
+  }
+
+  String _mimeType(String ext) {
+    switch (ext.toLowerCase()) {
+      case 'pdf': return 'application/pdf';
+      case 'png': return 'image/png';
+      case 'jpg':
+      case 'jpeg': return 'image/jpeg';
+      case 'webp': return 'image/webp';
+      default: return 'application/octet-stream';
     }
   }
 

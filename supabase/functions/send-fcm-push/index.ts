@@ -14,7 +14,40 @@ interface PushPayload {
   data?: Record<string, string>
   notification_id?: string
   action_url?: string
-  priority?: 'normal' | 'high'
+  priority?: 'normal' | 'high' | 'urgent'
+  /** notification_type drives which Android channel and deep-link route to use */
+  notification_type?: string
+}
+
+// ── Android notification channel IDs ─────────────────────────────────────────
+// These must be registered in the Flutter app (see AndroidManifest / FlutterLocalNotificationsPlugin setup)
+const CHANNEL_URGENT    = 'pact_urgent'      // red, max priority, full-screen intent
+const CHANNEL_BROADCAST = 'pact_broadcast'   // indigo, high priority
+const CHANNEL_APPROVAL  = 'pact_approvals'   // blue, high priority
+const CHANNEL_FINANCE   = 'pact_finance'     // green, high priority
+const CHANNEL_DEFAULT   = 'pact_default'     // grey, normal priority
+
+function resolveChannel(type: string, priority: string): string {
+  if (priority === 'urgent') return CHANNEL_URGENT
+  switch (type) {
+    case 'broadcast':               return CHANNEL_BROADCAST
+    case 'cost_submission_approved':
+    case 'cost_submission_rejected':
+    case 'cost_submission_revision':
+    case 'withdrawal_approved':
+    case 'withdrawal_rejected':
+    case 'mmp_approved':
+    case 'mmp_rejected':            return CHANNEL_APPROVAL
+    case 'fund_receipt_confirmation':
+    case 'advance_disbursed':
+    case 'payment_processed':       return CHANNEL_FINANCE
+    default:                        return CHANNEL_DEFAULT
+  }
+}
+
+function resolveAndroidPriority(priority: string): string {
+  if (priority === 'urgent' || priority === 'high') return 'HIGH'
+  return 'NORMAL'
 }
 
 async function getAccessToken(serviceAccount: Record<string, string>): Promise<string> {
@@ -35,7 +68,6 @@ async function getAccessToken(serviceAccount: Record<string, string>): Promise<s
   const payloadB64 = encode(payload)
   const unsigned = `${headerB64}.${payloadB64}`
 
-  // Import the private key
   const pemKey = serviceAccount.private_key.replace(/\\n/g, '\n')
   const pemBody = pemKey
     .replace('-----BEGIN PRIVATE KEY-----', '')
@@ -82,28 +114,57 @@ async function sendFCMMessage(
   title: string,
   body: string,
   data: Record<string, string> = {},
-  priority: 'normal' | 'high' = 'high'
+  priority: 'normal' | 'high' | 'urgent' = 'high',
+  notificationType: string = 'default',
 ): Promise<{ success: boolean; error?: string }> {
+
+  const channelId = resolveChannel(notificationType, priority)
+  const androidPriority = resolveAndroidPriority(priority)
+  const isUrgent = priority === 'urgent'
+
   const message = {
     message: {
       token: fcmToken,
       notification: { title, body },
       data: {
         ...data,
+        // Always include routing fields so Flutter can deep-link
         click_action: 'FLUTTER_NOTIFICATION_CLICK',
+        notification_type: notificationType,
+        channel_id: channelId,
       },
       android: {
-        priority: priority === 'high' ? 'HIGH' : 'NORMAL',
+        priority: androidPriority,
         notification: {
           sound: 'default',
           click_action: 'FLUTTER_NOTIFICATION_CLICK',
+          channel_id: channelId,
+          // Heads-up (peek) notification for high/urgent
+          notification_priority: isUrgent
+            ? 'PRIORITY_MAX'
+            : androidPriority === 'HIGH'
+              ? 'PRIORITY_HIGH'
+              : 'PRIORITY_DEFAULT',
+          // Show on lock screen for urgent
+          visibility: isUrgent ? 'PUBLIC' : 'PRIVATE',
+          // Vibrate for high-priority
+          default_vibrate_timings: androidPriority === 'HIGH',
+          default_light_settings: true,
         },
       },
       apns: {
+        headers: {
+          // APNs priority: 10 = immediate delivery, 5 = power-considerate
+          'apns-priority': androidPriority === 'HIGH' ? '10' : '5',
+        },
         payload: {
           aps: {
             sound: 'default',
             badge: 1,
+            // content-available: 1 allows background processing on iOS
+            'content-available': 1,
+            // interruption-level controls iOS notification behaviour
+            'interruption-level': isUrgent ? 'critical' : 'active',
           },
         },
       },
@@ -125,7 +186,6 @@ async function sendFCMMessage(
   if (!response.ok) {
     const errorData = await response.json()
     const errorCode = errorData?.error?.details?.[0]?.errorCode || ''
-    // Token is invalid/unregistered — caller should clean it up
     if (errorCode === 'UNREGISTERED' || errorCode === 'INVALID_ARGUMENT') {
       return { success: false, error: `TOKEN_INVALID:${fcmToken}` }
     }
@@ -160,7 +220,17 @@ serve(async (req) => {
     }
 
     const payload: PushPayload = await req.json()
-    const { user_ids = [], fcm_tokens: directTokens = [], title, body, data = {}, notification_id, action_url, priority = 'high' } = payload
+    const {
+      user_ids = [],
+      fcm_tokens: directTokens = [],
+      title,
+      body,
+      data = {},
+      notification_id,
+      action_url,
+      priority = 'high',
+      notification_type = 'default',
+    } = payload
 
     if (!title || !body) {
       return new Response(
@@ -204,19 +274,21 @@ serve(async (req) => {
       )
     }
 
-    // Get OAuth access token
     const accessToken = await getAccessToken(serviceAccount)
 
+    // Build data payload — all values must be strings for FCM data fields
     const notificationData: Record<string, string> = {
       ...data,
+      notification_type,
+      priority,
     }
     if (notification_id) notificationData.notification_id = notification_id
-    if (action_url) notificationData.action_url = action_url
+    if (action_url)      notificationData.action_url = action_url
 
     // Send to all tokens in parallel
     const results = await Promise.allSettled(
       allTokens.map(token =>
-        sendFCMMessage(accessToken, projectId, token, title, body, notificationData, priority)
+        sendFCMMessage(accessToken, projectId, token, title, body, notificationData, priority as any, notification_type)
       )
     )
 
@@ -230,10 +302,8 @@ serve(async (req) => {
           sent++
         } else {
           failed++
-          // Track invalid tokens for cleanup
           if (result.value.error?.startsWith('TOKEN_INVALID:')) {
-            const badToken = result.value.error.replace('TOKEN_INVALID:', '')
-            invalidTokens.push(badToken)
+            invalidTokens.push(result.value.error.replace('TOKEN_INVALID:', ''))
           }
           console.error('FCM send failed:', result.value.error)
         }
@@ -268,7 +338,7 @@ serve(async (req) => {
       }
     }
 
-    console.log(`FCM push: ${sent} sent, ${failed} failed, ${invalidTokens.length} invalid tokens cleaned`)
+    console.log(`FCM push [${notification_type}|${priority}]: ${sent} sent, ${failed} failed, ${invalidTokens.length} tokens cleaned`)
 
     return new Response(
       JSON.stringify({ success: true, sent, failed, tokens_targeted: allTokens.length }),

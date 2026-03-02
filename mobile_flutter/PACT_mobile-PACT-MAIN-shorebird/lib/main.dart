@@ -23,6 +23,7 @@ import 'screens/field_operations_enhanced_screen.dart';
 import 'screens/comprehensive_monitoring_form_screen.dart';
 import 'screens/chat_screen.dart';
 import 'models/chat.dart';
+import 'widgets/notifications_panel.dart';
 import 'theme/app_colors.dart';
 import 'l10n/app_localizations.dart';
 import 'providers/locale_provider.dart';
@@ -68,12 +69,14 @@ Future<void> _requestAllPermissionsOnStartup() async {
 // Must be a top-level function to work with FCM background isolate.
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   try {
-    // Try to initialize the bilingual/local notification plugin in background.
     await BilingualNotificationService.initialize();
 
     final data = message.data;
-    final type = (data['type'] ?? '').toString().toLowerCase();
+    // Prefer the richer `notification_type` field set by the updated edge function,
+    // then fall back to the older `type` field.
+    final type = (data['notification_type'] ?? data['type'] ?? '').toString().toLowerCase();
 
+    // ── Incoming call — highest priority, always show ────────────────────────
     if (type == 'incoming_call' ||
         data['call_id'] != null ||
         data['callId'] != null) {
@@ -90,23 +93,23 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
       return;
     }
 
-    // Admin broadcast — show notification with the actual title/body written by admin
+    // ── Admin broadcast — use raw title/body written by admin, route to notifications ─
     if (type == 'broadcast') {
       final fcmTitle = message.notification?.title ?? data['title']?.toString() ?? '';
       final fcmBody  = message.notification?.body  ?? data['body']?.toString()  ?? '';
-      final actionUrl = data['action_url']?.toString() ?? '';
       if (fcmTitle.isNotEmpty || fcmBody.isNotEmpty) {
         await BilingualNotificationService.showRawNotification(
           title: fcmTitle,
           body: fcmBody,
-          payload: actionUrl.isNotEmpty ? 'broadcast:$actionUrl' : 'broadcast',
+          // payload 'notifications' routes the tap to the notifications screen
+          payload: 'notifications',
         );
       }
       return;
     }
 
-    // Fund receipt confirmation — enumerator needs to acknowledge in-app
-    if (type == 'fund_receipt_confirmation') {
+    // ── Fund receipt / advance disbursed ─────────────────────────────────────
+    if (type == 'fund_receipt_confirmation' || type == 'advance_disbursed') {
       final amount = data['amount']?.toString() ?? '';
       final siteName = data['siteName']?.toString() ?? data['site_name']?.toString() ?? '';
       await BilingualNotificationService.showBilingualNotification(
@@ -118,13 +121,41 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
       return;
     }
 
-    // Fallback: show a simple bilingual notification for generic messages
+    // ── Cost submission status ─────────────────────────────────────────────────
+    if (type == 'cost_submission_approved' ||
+        type == 'cost_submission_rejected' ||
+        type == 'cost_submission_revision') {
+      final fcmTitle = message.notification?.title ?? data['title']?.toString() ?? '';
+      final fcmBody  = message.notification?.body  ?? data['body']?.toString()  ?? '';
+      await BilingualNotificationService.showRawNotification(
+        title: fcmTitle.isNotEmpty ? fcmTitle : 'Cost Submission Update',
+        body: fcmBody,
+        payload: 'wallet:cost_payments',
+        channelId: 'pact_approvals',
+      );
+      return;
+    }
+
+    // ── Withdrawal / payment ──────────────────────────────────────────────────
+    if (type == 'withdrawal_approved' || type == 'withdrawal_rejected' || type == 'payment_processed') {
+      final fcmTitle = message.notification?.title ?? data['title']?.toString() ?? '';
+      final fcmBody  = message.notification?.body  ?? data['body']?.toString()  ?? '';
+      await BilingualNotificationService.showRawNotification(
+        title: fcmTitle.isNotEmpty ? fcmTitle : 'Payment Update',
+        body: fcmBody,
+        payload: 'wallet:advances',
+        channelId: 'pact_finance',
+      );
+      return;
+    }
+
+    // ── Fallback: show a simple bilingual notification ─────────────────────────
     if (message.notification != null) {
       final title = message.notification?.title ?? '';
       await BilingualNotificationService.showBilingualNotification(
         titleKey: 'new_message',
         bodyKey: 'tap_to_view_details',
-        payload: data['payload'] ?? 'payload',
+        payload: 'notifications',
         bodyParams: {'name': title},
       );
     }
@@ -296,13 +327,29 @@ void main() async {
               builder: (_) => const WalletScreen(initialTab: 3),
             ),
           );
-        } else if (payload == 'broadcast' || payload.startsWith('broadcast:')) {
-          // Admin broadcast tapped — navigate to main home screen
-          // (action_url values are web paths, not mobile routes)
-          navigatorKey.currentState?.pushNamedAndRemoveUntil(
-            '/main',
-            (route) => false,
+        } else if (payload == 'wallet:cost_payments') {
+          // Navigate directly to Wallet screen — Cost Payments tab
+          navigatorKey.currentState?.push(
+            MaterialPageRoute(
+              builder: (_) => const WalletScreen(initialTab: 4),
+            ),
           );
+        } else if (payload == 'notifications') {
+          // Broadcast or generic notification tapped — open notifications panel
+          final ctx = navigatorKey.currentContext;
+          if (ctx != null) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              NotificationsPanel.show(ctx, initialTab: 'broadcasts');
+            });
+          }
+        } else if (payload == 'broadcast' || payload.startsWith('broadcast:')) {
+          // Legacy broadcast payload — open notifications panel
+          final ctx = navigatorKey.currentContext;
+          if (ctx != null) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              NotificationsPanel.show(ctx, initialTab: 'broadcasts');
+            });
+          }
         } else if (payload == 'offline_sync_completed') {
           navigatorKey.currentState?.pushNamed(
             '/main',

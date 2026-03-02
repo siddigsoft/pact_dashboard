@@ -253,7 +253,7 @@ class _FormsScreenState extends State<FormsScreen> {
             borderRadius: BorderRadius.circular(16),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(0.05),
+                color: Colors.black.withValues(alpha: 0.05),
                 blurRadius: 10,
                 offset: const Offset(0, 2),
                 spreadRadius: 0,
@@ -319,7 +319,7 @@ class _FormsScreenState extends State<FormsScreen> {
                                   )
                                   .shimmer(
                                     duration: 1.5.seconds,
-                                    color: Colors.white.withOpacity(0.6),
+                                    color: Colors.white.withValues(alpha: 0.6),
                                   )
                                   .animate() // Add a second animation
                                   .scaleXY(

@@ -208,7 +208,9 @@ class _IncidentReportScreenState extends State<IncidentReportScreen> {
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
-          : ListView.builder(
+          : SafeArea(
+              top: false,
+              child: ListView.builder(
               padding: const EdgeInsets.all(16),
               itemCount: _reports.length,
               itemBuilder: (context, index) {
@@ -295,6 +297,7 @@ class _IncidentReportScreenState extends State<IncidentReportScreen> {
                   ),
                 ).animate().fadeIn(duration: 300.ms);
               },
+            )
             ),
       floatingActionButton: FloatingActionButton(
         onPressed: () {

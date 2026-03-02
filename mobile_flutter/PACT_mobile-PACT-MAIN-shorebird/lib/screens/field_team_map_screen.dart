@@ -262,7 +262,9 @@ class _FieldTeamMapScreenState extends State<FieldTeamMapScreen> {
         ),
         body: _isLoading
             ? const Center(child: CircularProgressIndicator())
-            : Column(
+            : SafeArea(
+                top: false,
+                child: Column(
                 children: [
                   _buildFilterBar(isArabic),
                   Expanded(
@@ -285,6 +287,7 @@ class _FieldTeamMapScreenState extends State<FieldTeamMapScreen> {
                     ),
                   ),
                 ],
+              )
               ),
       ),
     );
@@ -342,7 +345,7 @@ class _FieldTeamMapScreenState extends State<FieldTeamMapScreen> {
       onSelected: (_) {
         setState(() => _statusFilter = value);
       },
-      selectedColor: AppColors.primaryBlue.withOpacity(0.2),
+      selectedColor: AppColors.primaryBlue.withValues(alpha: 0.2),
       checkmarkColor: AppColors.primaryBlue,
     );
   }
@@ -465,7 +468,7 @@ class _FieldTeamMapScreenState extends State<FieldTeamMapScreen> {
                       width: 44,
                       height: 44,
                       decoration: BoxDecoration(
-                        color: statusColor.withOpacity(0.3),
+                        color: statusColor.withValues(alpha: 0.3),
                         shape: BoxShape.circle,
                       ),
                     ),
@@ -478,7 +481,7 @@ class _FieldTeamMapScreenState extends State<FieldTeamMapScreen> {
                         border: Border.all(color: statusColor, width: 3),
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.black.withOpacity(0.2),
+                            color: Colors.black.withValues(alpha: 0.2),
                             blurRadius: 4,
                           ),
                         ],
@@ -537,7 +540,7 @@ class _FieldTeamMapScreenState extends State<FieldTeamMapScreen> {
               children: [
                 CircleAvatar(
                   radius: 28,
-                  backgroundColor: statusColor.withOpacity(0.2),
+                  backgroundColor: statusColor.withValues(alpha: 0.2),
                   backgroundImage: member['avatar_url'] != null
                       ? NetworkImage(member['avatar_url'])
                       : null,

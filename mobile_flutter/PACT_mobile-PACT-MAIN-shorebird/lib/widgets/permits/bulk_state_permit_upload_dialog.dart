@@ -553,7 +553,7 @@ class _BulkStatePermitUploadDialogState
                         style: BorderStyle.solid,
                       ),
                       borderRadius: BorderRadius.circular(8),
-                      color: AppColors.primaryBlue.withOpacity(0.05),
+                      color: AppColors.primaryBlue.withValues(alpha: 0.05),
                     ),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
@@ -688,7 +688,7 @@ class _BulkStatePermitUploadDialogState
             color: date != null ? AppColors.primaryBlue : Colors.grey.shade300,
           ),
           borderRadius: BorderRadius.circular(8),
-          color: date != null ? AppColors.primaryBlue.withOpacity(0.05) : null,
+          color: date != null ? AppColors.primaryBlue.withValues(alpha: 0.05) : null,
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,

@@ -174,7 +174,9 @@ class _AuditLogsScreenState extends State<AuditLogsScreen> {
         ),
         body: !_hasAccess
             ? const Center(child: CircularProgressIndicator())
-            : Column(
+            : SafeArea(
+                top: false,
+                child: Column(
                 children: [
                   _buildFiltersBar(),
                   Expanded(
@@ -193,6 +195,7 @@ class _AuditLogsScreenState extends State<AuditLogsScreen> {
                               ),
                   ),
                 ],
+              )
               ),
       ),
     );
@@ -326,7 +329,7 @@ class _AuditLogsScreenState extends State<AuditLogsScreen> {
             Container(
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                color: color.withOpacity(0.1),
+                color: color.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(10),
               ),
               child: Icon(icon, color: color, size: 20),
@@ -405,9 +408,9 @@ class _AuditLogsScreenState extends State<AuditLogsScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
+        color: color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withOpacity(0.3)),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
       ),
       child: Text(
         action.toUpperCase(),
@@ -575,7 +578,7 @@ class _AuditLogsScreenState extends State<AuditLogsScreen> {
     return FilterChip(
       label: Text(label),
       selected: isSelected,
-      selectedColor: AppColors.primaryBlue.withOpacity(0.2),
+      selectedColor: AppColors.primaryBlue.withValues(alpha: 0.2),
       checkmarkColor: AppColors.primaryBlue,
       onSelected: (selected) {
         setState(() => _selectedType = selected ? value : 'all');

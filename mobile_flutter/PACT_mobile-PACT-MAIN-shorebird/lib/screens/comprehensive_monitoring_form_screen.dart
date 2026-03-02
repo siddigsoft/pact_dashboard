@@ -362,7 +362,9 @@ class _ComprehensiveMonitoringFormScreenState
           ),
         ),
       ),
-      body: Form(
+      body: SafeArea(
+        top: false,
+        child: Form(
         key: _formKey,
         child: ListView(
           controller: _scrollController,
@@ -402,6 +404,7 @@ class _ComprehensiveMonitoringFormScreenState
             const SizedBox(height: 40),
           ],
         ),
+      )
       ),
     );
   }
@@ -416,7 +419,7 @@ class _ComprehensiveMonitoringFormScreenState
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: AppColors.primaryOrange.withOpacity(0.1),
+                  color: AppColors.primaryOrange.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: const Icon(
@@ -486,7 +489,7 @@ class _ComprehensiveMonitoringFormScreenState
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: AppColors.primaryBlue.withOpacity(0.1),
+                  color: AppColors.primaryBlue.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: const Icon(
@@ -602,7 +605,7 @@ class _ComprehensiveMonitoringFormScreenState
                     _activitiesMonitored[entry.key] = selected;
                   });
                 },
-                selectedColor: AppColors.primaryOrange.withOpacity(0.2),
+                selectedColor: AppColors.primaryOrange.withValues(alpha: 0.2),
                 checkmarkColor: AppColors.primaryOrange,
               );
             }).toList(),
@@ -913,7 +916,7 @@ class _ComprehensiveMonitoringFormScreenState
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             decoration: BoxDecoration(
-              color: AppColors.lightOrange.withOpacity(0.3),
+              color: AppColors.lightOrange.withValues(alpha: 0.3),
               borderRadius: BorderRadius.circular(6),
             ),
             child: Text(

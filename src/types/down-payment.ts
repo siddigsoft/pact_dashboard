@@ -145,6 +145,11 @@ export interface DownPaymentRequest {
   
   // Metadata
   metadata?: Record<string, any>;
+
+  // Payment proof (receipt attached by finance when marking as paid)
+  paymentProofUrl?: string | null;
+  paymentProofNotes?: string | null;
+  paymentProofUploadedAt?: string | null;
 }
 
 export interface CreateDownPaymentRequest {

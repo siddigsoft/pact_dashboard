@@ -1,7 +1,11 @@
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:google_fonts/google_fonts.dart';
+import 'package:file_picker/file_picker.dart';
 import '../models/operational_cost_submission.dart';
 import '../services/operational_cost_service.dart';
+import '../theme/app_colors.dart';
 
 class CostApprovalsScreen extends StatefulWidget {
   final String userRole;
@@ -19,10 +23,9 @@ class CostApprovalsScreen extends StatefulWidget {
   State<CostApprovalsScreen> createState() => _CostApprovalsScreenState();
 }
 
-class _CostApprovalsScreenState extends State<CostApprovalsScreen>
-    with SingleTickerProviderStateMixin {
-  late TabController _tabController;
+class _CostApprovalsScreenState extends State<CostApprovalsScreen> {
   final _costService = OperationalCostService();
+  String _activeTab = 'tier1';
   late CostSubmissionPermissions _permissions;
   List<OperationalCostSubmission> _allSubmissions = [];
   bool _isLoading = true;
@@ -50,13 +53,11 @@ class _CostApprovalsScreenState extends State<CostApprovalsScreen>
   void initState() {
     super.initState();
     _permissions = CostSubmissionPermissions.fromRole(widget.userRole);
-    _tabController = TabController(length: 4, vsync: this);
     _loadData();
   }
 
   @override
   void dispose() {
-    _tabController.dispose();
     super.dispose();
   }
 
@@ -117,52 +118,118 @@ class _CostApprovalsScreenState extends State<CostApprovalsScreen>
             ],
           ),
         ],
-        bottom: TabBar(
-          controller: _tabController,
-          isScrollable: true,
-          tabs: [
-            _buildTab(isArabic ? 'المستوى 1' : 'Tier 1', _tier1Pending.length),
-            _buildTab(isArabic ? 'المستوى 2' : 'Tier 2', _tier2Pending.length),
-            _buildTab(isArabic ? 'المستوى 3' : 'Tier 3', _tier3Pending.length),
-            Tab(text: isArabic ? 'المعالجة' : 'Processed'),
-          ],
-        ),
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
-          : TabBarView(
-              controller: _tabController,
+          : SafeArea(
+              top: false,
+              child: Column(
               children: [
-                _buildApprovalList(_tier1Pending, 1),
-                _buildApprovalList(_tier2Pending, 2),
-                _buildApprovalList(_tier3Pending, 3),
-                _buildProcessedList(),
+                // ── Bilingual scrollable tab row ───────────────────────
+                Container(
+                  color: Colors.white,
+                  padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: [
+                        _buildTabButton('tier1', 'Tier 1', 'المستوى 1',
+                            Icons.looks_one_rounded, _tier1Pending.length, isArabic),
+                        const SizedBox(width: 8),
+                        _buildTabButton('tier2', 'Tier 2', 'المستوى 2',
+                            Icons.looks_two_rounded, _tier2Pending.length, isArabic),
+                        const SizedBox(width: 8),
+                        _buildTabButton('tier3', 'Tier 3', 'المستوى 3',
+                            Icons.looks_3_rounded, _tier3Pending.length, isArabic),
+                        const SizedBox(width: 8),
+                        _buildTabButton('processed', 'Processed', 'المعالجة',
+                            Icons.check_circle_outline_rounded, 0, isArabic),
+                      ],
+                    ),
+                  ),
+                ),
+                const Divider(height: 1),
+                Expanded(
+                  child: _activeTab == 'tier2'
+                      ? _buildApprovalList(_tier2Pending, 2)
+                      : _activeTab == 'tier3'
+                          ? _buildApprovalList(_tier3Pending, 3)
+                          : _activeTab == 'processed'
+                              ? _buildProcessedList()
+                              : _buildApprovalList(_tier1Pending, 1),
+                ),
               ],
+            )
             ),
     );
   }
 
-  Tab _buildTab(String label, int count) {
-    return Tab(
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(label),
-          if (count > 0) ...[
+  Widget _buildTabButton(String tab, String labelEn, String labelAr,
+      IconData icon, int count, bool isArabic) {
+    final isActive = _activeTab == tab;
+    return GestureDetector(
+      onTap: () => setState(() => _activeTab = tab),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        decoration: BoxDecoration(
+          color: isActive ? AppColors.primaryBlue : const Color(0xFFF3F6FA),
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon,
+                size: 16,
+                color: isActive ? Colors.white : AppColors.textLight),
             const SizedBox(width: 6),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-              decoration: BoxDecoration(
-                color: Colors.red,
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Text(
-                count.toString(),
-                style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
-              ),
+            Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  isArabic ? labelAr : labelEn,
+                  style: GoogleFonts.poppins(
+                    fontSize: isArabic ? 13 : 12,
+                    fontWeight: FontWeight.w700,
+                    color: isActive ? Colors.white : AppColors.textLight,
+                  ),
+                ),
+                Text(
+                  isArabic ? labelEn : labelAr,
+                  style: GoogleFonts.poppins(
+                    fontSize: isArabic ? 10 : 11,
+                    fontWeight: isArabic ? FontWeight.w600 : FontWeight.w700,
+                    color: isActive
+                        ? Colors.white.withValues(alpha: 0.8)
+                        : AppColors.textLight,
+                  ),
+                ),
+              ],
             ),
+            if (count > 0) ...[
+              const SizedBox(width: 6),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: isActive
+                      ? Colors.white.withValues(alpha: 0.3)
+                      : AppColors.accentRed,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Text(
+                  count.toString(),
+                  style: GoogleFonts.poppins(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w800,
+                    color: Colors.white,
+                  ),
+                ),
+              ),
+            ],
           ],
-        ],
+        ),
       ),
     );
   }
@@ -450,76 +517,289 @@ class _CostApprovalsScreenState extends State<CostApprovalsScreen>
     );
   }
 
+  // ─── Mark as Paid — full receipt-upload dialog (mirrors web CostSubmission.tsx) ──
   Future<void> _showRecordPaymentDialog(OperationalCostSubmission submission) async {
     final isArabic = widget.isArabic;
+    final notesCtrl = TextEditingController();
+    Uint8List? proofBytes;
+    String? proofFileName;
+    String? proofExtension;
+    bool uploading = false;
+
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text(isArabic ? 'تسجيل الدفع' : 'Record Payment'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              '${isArabic ? submission.expenseCategory.labelAr : submission.expenseCategory.labelEn}',
-              style: const TextStyle(fontWeight: FontWeight.bold),
+      barrierDismissible: false,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDs) {
+          final isImage = proofExtension != null &&
+              ['jpg', 'jpeg', 'png', 'webp', 'gif'].contains(proofExtension!.toLowerCase());
+          final isPdf   = proofExtension?.toLowerCase() == 'pdf';
+          final hasProof = proofBytes != null;
+
+          Future<void> pickFile() async {
+            final result = await FilePicker.platform.pickFiles(
+              type: FileType.custom,
+              allowedExtensions: ['jpg', 'jpeg', 'png', 'webp', 'pdf'],
+              withData: true,
+            );
+            if (result != null && result.files.single.bytes != null) {
+              setDs(() {
+                proofBytes    = result.files.single.bytes;
+                proofFileName = result.files.single.name;
+                proofExtension = result.files.single.extension ?? 'jpg';
+              });
+            }
+          }
+
+          return Dialog(
+            insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            child: SingleChildScrollView(
+              child: Padding(
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // ── Header ──────────────────────────────────────────────
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: Colors.purple.shade50,
+                            shape: BoxShape.circle,
+                          ),
+                          child: Icon(Icons.payments_rounded, color: Colors.purple.shade700, size: 20),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                isArabic ? 'تسجيل الدفع / Record Payment' : 'Record Payment / تسجيل الدفع',
+                                style: GoogleFonts.poppins(fontSize: 15, fontWeight: FontWeight.w700),
+                              ),
+                              Text(
+                                isArabic ? 'يجب إرفاق إيصال الدفع' : 'Payment receipt is mandatory',
+                                style: GoogleFonts.poppins(fontSize: 11, color: Colors.red.shade600),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+
+                    // ── Submission summary ───────────────────────────────────
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.purple.shade50,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: Colors.purple.shade200),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            isArabic
+                                ? submission.expenseCategory.labelAr
+                                : submission.expenseCategory.labelEn,
+                            style: GoogleFonts.poppins(fontWeight: FontWeight.w700, fontSize: 13),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            '${submission.amount.toStringAsFixed(2)} ${submission.currency}',
+                            style: GoogleFonts.poppins(
+                              fontSize: 20, fontWeight: FontWeight.w800, color: Colors.purple.shade700),
+                          ),
+                          if (submission.description != null && submission.description!.isNotEmpty) ...[
+                            const SizedBox(height: 4),
+                            Text(submission.description!,
+                              maxLines: 2, overflow: TextOverflow.ellipsis,
+                              style: GoogleFonts.poppins(fontSize: 11, color: Colors.grey.shade600)),
+                          ],
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+
+                    // ── Receipt upload ───────────────────────────────────────
+                    Text(
+                      isArabic ? 'إيصال الدفع *' : 'Payment Receipt *',
+                      style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.w700),
+                    ),
+                    const SizedBox(height: 8),
+
+                    // Preview
+                    if (hasProof) ...[
+                      if (isImage)
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(10),
+                          child: Image.memory(proofBytes!, height: 160, width: double.infinity, fit: BoxFit.cover),
+                        )
+                      else if (isPdf)
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: Colors.red.shade50,
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: Colors.red.shade200),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(Icons.picture_as_pdf, color: Colors.red.shade700, size: 28),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Text(proofFileName ?? 'receipt.pdf',
+                                  style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.w600),
+                                  overflow: TextOverflow.ellipsis),
+                              ),
+                            ],
+                          ),
+                        ),
+                      const SizedBox(height: 8),
+                    ],
+
+                    // Upload button
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        onPressed: pickFile,
+                        icon: Icon(hasProof ? Icons.swap_horiz_rounded : Icons.attach_file_rounded, size: 18),
+                        label: Text(
+                          hasProof
+                              ? (isArabic ? 'تغيير الملف' : 'Change File')
+                              : (isArabic ? 'إرفاق الإيصال (صورة أو PDF)' : 'Attach Receipt (image or PDF)'),
+                          style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.w600),
+                        ),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: Colors.purple.shade700,
+                          side: BorderSide(
+                            color: hasProof ? Colors.green.shade400 : Colors.purple.shade300,
+                            width: hasProof ? 2 : 1,
+                          ),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                        ),
+                      ),
+                    ),
+
+                    if (!hasProof) ...[
+                      const SizedBox(height: 6),
+                      Row(
+                        children: [
+                          Icon(Icons.info_outline, size: 12, color: Colors.amber.shade700),
+                          const SizedBox(width: 4),
+                          Text(
+                            isArabic
+                                ? 'الإيصال مطلوب قبل تأكيد الدفع'
+                                : 'Receipt is required before confirming payment',
+                            style: GoogleFonts.poppins(fontSize: 10, color: Colors.amber.shade700),
+                          ),
+                        ],
+                      ),
+                    ],
+
+                    const SizedBox(height: 14),
+
+                    // ── Notes ────────────────────────────────────────────────
+                    Text(
+                      isArabic ? 'ملاحظات (اختياري)' : 'Notes (optional)',
+                      style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.w700),
+                    ),
+                    const SizedBox(height: 6),
+                    TextField(
+                      controller: notesCtrl,
+                      maxLines: 2,
+                      style: GoogleFonts.poppins(fontSize: 13),
+                      decoration: InputDecoration(
+                        hintText: isArabic ? 'أضف أي ملاحظات...' : 'Add any notes...',
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          borderSide: const BorderSide(color: Colors.purple, width: 2),
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        isDense: true,
+                      ),
+                    ),
+
+                    const SizedBox(height: 20),
+
+                    // ── Actions ──────────────────────────────────────────────
+                    Row(
+                      children: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(ctx, false),
+                          child: Text(isArabic ? 'إلغاء' : 'Cancel',
+                            style: GoogleFonts.poppins(color: Colors.grey.shade600, fontWeight: FontWeight.w600)),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: ElevatedButton.icon(
+                            onPressed: (!hasProof || uploading) ? null : () => Navigator.pop(ctx, true),
+                            icon: uploading
+                                ? const SizedBox(width: 16, height: 16,
+                                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                                : const Icon(Icons.check_circle_outline, size: 18),
+                            label: Text(
+                              uploading
+                                  ? (isArabic ? 'جارٍ الرفع...' : 'Uploading...')
+                                  : (isArabic ? 'تأكيد الدفع' : 'Confirm Payment'),
+                              style: GoogleFonts.poppins(fontWeight: FontWeight.w700, fontSize: 13),
+                            ),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.purple,
+                              foregroundColor: Colors.white,
+                              disabledBackgroundColor: Colors.purple.withValues(alpha: 0.4),
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
             ),
-            const SizedBox(height: 8),
-            Text(
-              '${submission.amount.toStringAsFixed(2)} ${submission.currency}',
-              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.purple),
-            ),
-            const SizedBox(height: 12),
-            Text(
-              isArabic
-                  ? 'هل أنت متأكد من تسجيل دفع هذا المبلغ؟'
-                  : 'Are you sure you want to record payment for this amount?',
-              style: TextStyle(color: Colors.grey[600]),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: Text(isArabic ? 'إلغاء' : 'Cancel'),
-          ),
-          ElevatedButton.icon(
-            onPressed: () => Navigator.pop(context, true),
-            icon: const Icon(Icons.payments, size: 18),
-            label: Text(isArabic ? 'تأكيد الدفع' : 'Confirm Payment'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.purple,
-              foregroundColor: Colors.white,
-            ),
-          ),
-        ],
+          );
+        },
       ),
     );
 
-    if (confirmed == true) {
-      try {
-        final success = await _costService.markAsPaid(submission.id);
-        if (success) {
-          await _costService.notifyPaymentRecorded(
-            submission: submission,
-          );
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(isArabic ? 'تم تسجيل الدفع بنجاح' : 'Payment recorded successfully'),
-                backgroundColor: Colors.green,
-              ),
-            );
-            _loadSubmissions();
-          }
-        }
-      } catch (e) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
-          );
-        }
+    if (confirmed != true || proofBytes == null) return;
+
+    // ── Upload + save ────────────────────────────────────────────────────────
+    try {
+      await _costService.markAsPaidWithProof(
+        submissionId:   submission.id,
+        proofBytes:     proofBytes!,
+        proofExtension: proofExtension ?? 'jpg',
+        proofNotes:     notesCtrl.text.trim().isNotEmpty ? notesCtrl.text.trim() : null,
+      );
+      await _costService.notifyPaymentRecorded(submission: submission);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(isArabic
+              ? 'تم تسجيل الدفع وحفظ الإيصال ✓'
+              : 'Payment recorded with receipt ✓'),
+          backgroundColor: Colors.green,
+        ));
+        _loadSubmissions();
       }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      notesCtrl.dispose();
     }
   }
 

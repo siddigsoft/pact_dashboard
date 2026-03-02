@@ -349,7 +349,7 @@ class _CustomDrawerMenuState extends ConsumerState<CustomDrawerMenu> {
                           //     ),
                           //     boxShadow: [
                           //       BoxShadow(
-                          //         color: Colors.black.withOpacity(0.2),
+                          //         color: Colors.black.withValues(alpha: 0.2),
                           //         blurRadius: 8,
                           //         offset: const Offset(0, 4),
                           //       ),
@@ -381,10 +381,10 @@ class _CustomDrawerMenuState extends ConsumerState<CustomDrawerMenu> {
                           //     vertical: 6,
                           //   ),
                           //   decoration: BoxDecoration(
-                          //     color: Colors.white.withOpacity(0.2),
+                          //     color: Colors.white.withValues(alpha: 0.2),
                           //     borderRadius: BorderRadius.circular(20),
                           //     border: Border.all(
-                          //       color: Colors.white.withOpacity(0.3),
+                          //       color: Colors.white.withValues(alpha: 0.3),
                           //     ),
                           //   ),
                           //   // child: const Text(
@@ -415,7 +415,7 @@ class _CustomDrawerMenuState extends ConsumerState<CustomDrawerMenu> {
                       Text(
                         userEmail,
                         style: TextStyle(
-                          color: Colors.white.withOpacity(0.9),
+                          color: Colors.white.withValues(alpha: 0.9),
                           fontSize: 14,
                         ),
                       ),
@@ -427,7 +427,7 @@ class _CustomDrawerMenuState extends ConsumerState<CustomDrawerMenu> {
                           vertical: 4,
                         ),
                         decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.2),
+                          color: Colors.white.withValues(alpha: 0.2),
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: Text(
@@ -861,7 +861,7 @@ class _CustomDrawerMenuState extends ConsumerState<CustomDrawerMenu> {
                 borderRadius: BorderRadius.circular(16),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.red.withOpacity(0.3),
+                    color: Colors.red.withValues(alpha: 0.3),
                     blurRadius: 8,
                     offset: const Offset(0, 4),
                   ),
@@ -994,7 +994,7 @@ class _CustomDrawerMenuState extends ConsumerState<CustomDrawerMenu> {
                 Container(
                   padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(
-                    color: item.iconColor.withOpacity(0.1),
+                    color: item.iconColor.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Icon(item.icon, color: item.iconColor, size: 24),

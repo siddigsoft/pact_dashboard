@@ -47,6 +47,7 @@ import { useOfflineSiteVisit } from '@/hooks/useOfflineSiteVisit';
 import { useOffline } from '@/hooks/use-offline';
 import WorkflowTrackerTab from '@/components/mmp/WorkflowTrackerTab';
 import { getHubAccessInfo, filterByHubAccess, shouldApplyHubFilter } from '@/utils/hubAccessControl';
+import { MmpFilterBar } from '@/components/mmp/MmpFilterBar';
 import { getStateName, normalizeStateId } from '@/utils/siteNormalization';
 // Helper component to convert SiteVisitRow[] to site entries and display using MMPSiteEntriesTable
 interface SitesDisplayTableProps {
@@ -4806,129 +4807,27 @@ const MMP = () => {
             <TabsContent value="verified">
               {/* Global Site Entry Filters - above subcategory tabs */}
               {(isAdmin || isICT || isFOM || isCoordinator || isSupervisor || isDataTeam) && (
-                <Card className="mb-3">
-                  <CardContent className="py-2">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <div className="flex items-center gap-1.5">
-                        <Filter className="h-3.5 w-3.5 text-muted-foreground" />
-                        <span className="text-xs font-medium text-muted-foreground">Filters:</span>
-                      </div>
-                      
-                      {/* MMP File Filter */}
-                      <div className="flex items-center gap-1.5">
-                        <label className="text-xs text-muted-foreground">MMP:</label>
-                        <Select value={siteMmpFilter} onValueChange={setSiteMmpFilter}>
-                          <SelectTrigger className="w-[200px] h-8 text-xs" data-testid="select-mmp-filter">
-                            <SelectValue placeholder="All MMPs" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="all">All MMPs ({mmpFilterOptions.length})</SelectItem>
-                            {mmpFilterOptions.map(mmp => (
-                              <SelectItem key={mmp.id} value={mmp.id}>
-                                {mmp.label} ({mmp.siteCount} sites)
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      
-                      {/* Status Filter */}
-                      <div className="flex items-center gap-1.5">
-                        <label className="text-xs text-muted-foreground">Status:</label>
-                        <Select value={siteStatusFilter} onValueChange={setSiteStatusFilter}>
-                          <SelectTrigger className="w-[140px] h-8 text-xs" data-testid="select-status-filter">
-                            <SelectValue placeholder="All Statuses" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="all">All Statuses</SelectItem>
-                            {globalSiteFilterOptions.statuses.map(status => (
-                              <SelectItem key={status} value={status}>{status}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      
-                      {/* Hub Filter */}
-                      <div className="flex items-center gap-1.5">
-                        <label className="text-xs text-muted-foreground">Hub:</label>
-                        <Select value={siteHubFilter} onValueChange={(val) => {
-                          setSiteHubFilter(val);
-                          setSiteStateFilter('all');
-                          setSiteLocalityFilter('all');
-                        }}>
-                          <SelectTrigger className="w-[140px] h-8 text-xs" data-testid="select-hub-filter">
-                            <SelectValue placeholder="All Hubs" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="all">All Hubs</SelectItem>
-                            {globalSiteFilterOptions.hubs.map(hub => (
-                              <SelectItem key={hub} value={hub}>{hub}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      
-                      {/* State Filter */}
-                      <div className="flex items-center gap-1.5">
-                        <label className="text-xs text-muted-foreground">State:</label>
-                        <Select value={siteStateFilter} onValueChange={(val) => {
-                          setSiteStateFilter(val);
-                          setSiteLocalityFilter('all');
-                        }}>
-                          <SelectTrigger className="w-[140px] h-8 text-xs" data-testid="select-state-filter">
-                            <SelectValue placeholder="All States" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="all">All States</SelectItem>
-                            {filteredStatesForDropdown.map(state => (
-                              <SelectItem key={state} value={state}>{state}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      
-                      {/* Locality Filter */}
-                      <div className="flex items-center gap-1.5">
-                        <label className="text-xs text-muted-foreground">Locality:</label>
-                        <Select 
-                          value={siteLocalityFilter} 
-                          onValueChange={setSiteLocalityFilter}
-                          disabled={siteStateFilter === 'all'}
-                        >
-                          <SelectTrigger className="w-[140px] h-8 text-xs" data-testid="select-locality-filter">
-                            <SelectValue placeholder={siteStateFilter === 'all' ? 'Select State First' : 'All Localities'} />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="all">All Localities</SelectItem>
-                            {filteredLocalitiesForDropdown.map(locality => (
-                              <SelectItem key={locality} value={locality}>{locality}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      
-                      {/* Clear Filters Button */}
-                      {(siteMmpFilter !== 'all' || siteStatusFilter !== 'all' || siteHubFilter !== 'all' || siteStateFilter !== 'all' || siteLocalityFilter !== 'all') && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => {
-                            setSiteMmpFilter('all');
-                            setSiteStatusFilter('all');
-                            setSiteHubFilter('all');
-                            setSiteStateFilter('all');
-                            setSiteLocalityFilter('all');
-                          }}
-                          className="h-8 text-xs"
-                          data-testid="button-clear-filters"
-                        >
-                          <X className="h-3 w-3 mr-1" />
-                          Clear
-                        </Button>
-                      )}
-                    </div>
-                  </CardContent>
-                </Card>
+                <MmpFilterBar
+                  mmpOptions={mmpFilterOptions.map(m => ({ id: m.id, label: m.label, count: m.siteCount }))}
+                  mmpFilter={siteMmpFilter}
+                  onMmpFilterChange={setSiteMmpFilter}
+                  statusOptions={globalSiteFilterOptions.statuses}
+                  statusFilter={siteStatusFilter}
+                  onStatusFilterChange={setSiteStatusFilter}
+                  hubOptions={globalSiteFilterOptions.hubs}
+                  hubFilter={siteHubFilter}
+                  onHubFilterChange={(val) => { setSiteHubFilter(val); setSiteStateFilter('all'); setSiteLocalityFilter('all'); }}
+                  stateOptions={filteredStatesForDropdown}
+                  stateFilter={siteStateFilter}
+                  onStateFilterChange={(val) => { setSiteStateFilter(val); setSiteLocalityFilter('all'); }}
+                  localityOptions={filteredLocalitiesForDropdown}
+                  localityFilter={siteLocalityFilter}
+                  onLocalityFilterChange={setSiteLocalityFilter}
+                  totalCount={verifiedSiteEntries.length}
+                  filteredCount={hasActiveGlobalFilters ? applyGlobalFilters(verifiedSiteEntries).length : verifiedSiteEntries.length}
+                  onClearAll={() => { setSiteMmpFilter('all'); setSiteStatusFilter('all'); setSiteHubFilter('all'); setSiteStateFilter('all'); setSiteLocalityFilter('all'); }}
+                  title="Filter Verified Sites"
+                />
               )}
 
               {/* Subcategory tabs - below filters */}

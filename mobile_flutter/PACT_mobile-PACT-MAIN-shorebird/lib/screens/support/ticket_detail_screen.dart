@@ -241,7 +241,7 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
             decoration: BoxDecoration(
               color: isDark ? Colors.grey.shade900 : Colors.grey.shade50,
               border: Border(
-                bottom: BorderSide(color: Colors.grey.withOpacity(0.2)),
+                bottom: BorderSide(color: Colors.grey.withValues(alpha: 0.2)),
               ),
             ),
             child: Column(
@@ -272,7 +272,7 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
                     decoration: BoxDecoration(
                       color: isDark ? Colors.grey.shade800 : Colors.white,
                       borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: Colors.grey.withOpacity(0.2)),
+                      border: Border.all(color: Colors.grey.withValues(alpha: 0.2)),
                     ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -344,7 +344,7 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
               decoration: BoxDecoration(
                 color: isDark ? Colors.grey.shade900 : Colors.white,
                 border: Border(
-                  top: BorderSide(color: Colors.grey.withOpacity(0.2)),
+                  top: BorderSide(color: Colors.grey.withValues(alpha: 0.2)),
                 ),
               ),
               child: SafeArea(
@@ -403,9 +403,9 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
             Container(
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
-                color: Colors.grey.withOpacity(0.1),
+                color: Colors.grey.withValues(alpha: 0.1),
                 border: Border(
-                  top: BorderSide(color: Colors.grey.withOpacity(0.2)),
+                  top: BorderSide(color: Colors.grey.withValues(alpha: 0.2)),
                 ),
               ),
               child: Row(
@@ -433,9 +433,9 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
+        color: color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: color.withOpacity(0.3)),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
       ),
       child: Text(
         text,
@@ -486,7 +486,7 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
                         fontSize: 11,
                         fontWeight: FontWeight.w600,
                         color: isMe
-                            ? Colors.white.withOpacity(0.8)
+                            ? Colors.white.withValues(alpha: 0.8)
                             : Colors.grey.shade600,
                       ),
                     ),
@@ -496,7 +496,7 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
                       style: TextStyle(
                         fontSize: 10,
                         color: isMe
-                            ? Colors.white.withOpacity(0.6)
+                            ? Colors.white.withValues(alpha: 0.6)
                             : Colors.grey.shade500,
                       ),
                     ),

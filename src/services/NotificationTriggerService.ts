@@ -293,7 +293,9 @@ export const NotificationTriggerService = {
             title: title || 'Notification',
             body: message || '',
             priority: fcmPriority,
+            notification_type: category || 'system',
             data: {
+              type: category || 'system',
               event_type: category || 'system',
               ...(link ? { action_url: link } : {}),
               ...(relatedEntityId ? { entity_id: relatedEntityId } : {}),

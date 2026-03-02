@@ -16,12 +16,9 @@ class UserManagementScreen extends StatefulWidget {
   State<UserManagementScreen> createState() => _UserManagementScreenState();
 }
 
-class _UserManagementScreenState extends State<UserManagementScreen>
-    with SingleTickerProviderStateMixin {
+class _UserManagementScreenState extends State<UserManagementScreen> {
   final _supabase = Supabase.instance.client;
   final _searchController = TextEditingController();
-  late TabController _tabController;
-
   List<Map<String, dynamic>> _users = [];
   List<Map<String, dynamic>> _filteredUsers = [];
   bool _isLoading = true;
@@ -39,8 +36,6 @@ class _UserManagementScreenState extends State<UserManagementScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 4, vsync: this);
-    _tabController.addListener(_onTabChanged);
     _checkAdminAccess();
   }
 
@@ -86,7 +81,6 @@ class _UserManagementScreenState extends State<UserManagementScreen>
 
   @override
   void dispose() {
-    _tabController.dispose();
     _searchController.dispose();
     _usersChannel?.unsubscribe();
     super.dispose();
@@ -109,10 +103,9 @@ class _UserManagementScreenState extends State<UserManagementScreen>
         .subscribe();
   }
 
-  void _onTabChanged() {
-    final tabs = ['all', 'active', 'pending', 'admins'];
+  void _switchTab(String tab) {
     setState(() {
-      _selectedTab = tabs[_tabController.index];
+      _selectedTab = tab;
       _filterUsers();
     });
   }
@@ -238,7 +231,9 @@ class _UserManagementScreenState extends State<UserManagementScreen>
         ),
         body: !_hasAccess
             ? const Center(child: CircularProgressIndicator())
-            : Column(
+            : SafeArea(
+                top: false,
+                child: Column(
                 children: [
                   _buildStatsRow(),
                   _buildSearchAndFilters(),
@@ -252,6 +247,7 @@ class _UserManagementScreenState extends State<UserManagementScreen>
                           ),
                   ),
                 ],
+              )
               ),
       ),
     );
@@ -296,7 +292,7 @@ class _UserManagementScreenState extends State<UserManagementScreen>
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 12),
         decoration: BoxDecoration(
-          color: color.withOpacity(0.1),
+          color: color.withValues(alpha: 0.1),
           borderRadius: BorderRadius.circular(12),
         ),
         child: Column(
@@ -383,27 +379,97 @@ class _UserManagementScreenState extends State<UserManagementScreen>
   }
 
   Widget _buildTabBar() {
+    final isArabic = widget.isArabic;
     return Container(
       color: Colors.white,
-      child: TabBar(
-        controller: _tabController,
-        labelColor: AppColors.primaryBlue,
-        unselectedLabelColor: Colors.grey,
-        indicatorColor: AppColors.primaryBlue,
-        tabs: [
-          Tab(
-            text: widget.isArabic
-                ? 'الكل ($_totalUsers)'
-                : 'All Users ($_totalUsers)',
-          ),
-          Tab(text: widget.isArabic ? 'نشط' : 'Active'),
-          Tab(
-            text: widget.isArabic
-                ? 'معلق ($_pendingUsers)'
-                : 'Pending ($_pendingUsers)',
-          ),
-          Tab(text: widget.isArabic ? 'مشرفين' : 'Admins'),
-        ],
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: [
+            _buildTabButton('all', 'All Users', 'الكل', Icons.people_rounded,
+                _totalUsers, isArabic),
+            const SizedBox(width: 8),
+            _buildTabButton('active', 'Active', 'نشط',
+                Icons.check_circle_outline_rounded, _activeUsers, isArabic),
+            const SizedBox(width: 8),
+            _buildTabButton('pending', 'Pending', 'معلق',
+                Icons.pending_outlined, _pendingUsers, isArabic),
+            const SizedBox(width: 8),
+            _buildTabButton('admins', 'Admins', 'مشرفون',
+                Icons.admin_panel_settings_rounded, _adminUsers, isArabic),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTabButton(String tab, String labelEn, String labelAr,
+      IconData icon, int count, bool isArabic) {
+    final isActive = _selectedTab == tab;
+    return GestureDetector(
+      onTap: () => _switchTab(tab),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        decoration: BoxDecoration(
+          color: isActive ? AppColors.primaryBlue : const Color(0xFFF3F6FA),
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon,
+                size: 16,
+                color: isActive ? Colors.white : AppColors.textLight),
+            const SizedBox(width: 6),
+            Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  isArabic ? labelAr : labelEn,
+                  style: GoogleFonts.poppins(
+                    fontSize: isArabic ? 13 : 12,
+                    fontWeight: FontWeight.w700,
+                    color: isActive ? Colors.white : AppColors.textLight,
+                  ),
+                ),
+                Text(
+                  isArabic ? labelEn : labelAr,
+                  style: GoogleFonts.poppins(
+                    fontSize: isArabic ? 10 : 11,
+                    fontWeight: isArabic ? FontWeight.w600 : FontWeight.w700,
+                    color: isActive
+                        ? Colors.white.withValues(alpha: 0.8)
+                        : AppColors.textLight,
+                  ),
+                ),
+              ],
+            ),
+            if (count > 0) ...[
+              const SizedBox(width: 6),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: isActive
+                      ? Colors.white.withValues(alpha: 0.3)
+                      : AppColors.primaryBlue.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Text(
+                  count.toString(),
+                  style: GoogleFonts.poppins(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w800,
+                    color: isActive ? Colors.white : AppColors.primaryBlue,
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
       ),
     );
   }
@@ -462,7 +528,7 @@ class _UserManagementScreenState extends State<UserManagementScreen>
           children: [
             CircleAvatar(
               radius: 24,
-              backgroundColor: AppColors.primaryBlue.withOpacity(0.1),
+              backgroundColor: AppColors.primaryBlue.withValues(alpha: 0.1),
               backgroundImage: user['avatar_url'] != null
                   ? NetworkImage(user['avatar_url'] as String)
                   : null,
@@ -507,7 +573,7 @@ class _UserManagementScreenState extends State<UserManagementScreen>
                           vertical: 2,
                         ),
                         decoration: BoxDecoration(
-                          color: statusColor.withOpacity(0.1),
+                          color: statusColor.withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: Text(
@@ -628,9 +694,9 @@ class _UserManagementScreenState extends State<UserManagementScreen>
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
+        color: color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withOpacity(0.3)),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
       ),
       child: Text(
         label,

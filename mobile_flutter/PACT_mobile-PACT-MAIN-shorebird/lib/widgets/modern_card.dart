@@ -55,7 +55,7 @@ class ModernCard extends StatelessWidget {
             boxShadow ??
             [
               BoxShadow(
-                color: AppColors.shadowColor.withOpacity(
+                color: AppColors.shadowColor.withValues(alpha: 
                   elevation != null ? 0.08 * elevation! : 0.08,
                 ),
                 blurRadius: elevation != null ? elevation! * 4 : 16,

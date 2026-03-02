@@ -63,7 +63,7 @@ class CustomBottomNavigationBar extends StatelessWidget {
         color: Colors.white,
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.06),
+            color: Colors.black.withValues(alpha: 0.06),
             blurRadius: 20,
             offset: const Offset(0, -5),
             spreadRadius: -2,
@@ -92,7 +92,7 @@ class CustomBottomNavigationBar extends StatelessWidget {
                 borderRadius: BorderRadius.circular(1.5),
                 boxShadow: [
                   BoxShadow(
-                    color: _getActiveColor(currentIndex).withOpacity(0.5),
+                    color: _getActiveColor(currentIndex).withValues(alpha: 0.5),
                     blurRadius: 5,
                     offset: const Offset(0, 2),
                     spreadRadius: -1,
@@ -191,13 +191,13 @@ class CustomBottomNavigationBar extends StatelessWidget {
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
                     color: isActive
-                        ? activeColor.withOpacity(0.1)
+                        ? activeColor.withValues(alpha: 0.1)
                         : Colors.transparent,
                     borderRadius: BorderRadius.circular(16),
                     boxShadow: isActive
                         ? [
                             BoxShadow(
-                              color: activeColor.withOpacity(0.2),
+                              color: activeColor.withValues(alpha: 0.2),
                               blurRadius: 8,
                               offset: const Offset(0, 3),
                               spreadRadius: -2,
@@ -260,7 +260,7 @@ class CustomBottomNavigationBar extends StatelessWidget {
           )
           .shimmer(
             duration: isActive ? 1200.ms : 0.ms,
-            color: isActive ? activeColor.withOpacity(0.1) : Colors.transparent,
+            color: isActive ? activeColor.withValues(alpha: 0.1) : Colors.transparent,
           ),
     );
   }

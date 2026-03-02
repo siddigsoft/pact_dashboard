@@ -146,7 +146,9 @@ class _MissedCallsScreenState extends State<MissedCallsScreen> {
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
-          : RefreshIndicator(
+          : SafeArea(
+              top: false,
+              child: RefreshIndicator(
               onRefresh: _loadMissedCalls,
               child: _missedCalls.isEmpty
                   ? _buildEmptyState()
@@ -157,6 +159,7 @@ class _MissedCallsScreenState extends State<MissedCallsScreen> {
                         return _buildCallTile(_missedCalls[index]);
                       },
                     ),
+            )
             ),
     );
   }
@@ -226,7 +229,7 @@ class _MissedCallsScreenState extends State<MissedCallsScreen> {
           borderRadius: BorderRadius.circular(16),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.05),
+              color: Colors.black.withValues(alpha: 0.05),
               blurRadius: 8,
               offset: const Offset(0, 2),
             ),
@@ -360,7 +363,7 @@ class _MissedCallsScreenState extends State<MissedCallsScreen> {
         width: 36,
         height: 36,
         decoration: BoxDecoration(
-          color: color.withOpacity(0.1),
+          color: color.withValues(alpha: 0.1),
           shape: BoxShape.circle,
         ),
         child: Icon(icon, size: 18, color: color),

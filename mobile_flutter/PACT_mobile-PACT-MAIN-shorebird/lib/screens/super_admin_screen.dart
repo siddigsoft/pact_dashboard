@@ -1,8 +1,11 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../widgets/custom_drawer_menu.dart';
 import '../theme/app_colors.dart';
+import '../data/sudan_locations.dart';
 
 class SuperAdminScreen extends StatefulWidget {
   const SuperAdminScreen({super.key});
@@ -11,15 +14,14 @@ class SuperAdminScreen extends StatefulWidget {
   State<SuperAdminScreen> createState() => _SuperAdminScreenState();
 }
 
-class _SuperAdminScreenState extends State<SuperAdminScreen>
-    with SingleTickerProviderStateMixin {
+class _SuperAdminScreenState extends State<SuperAdminScreen> {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   final _supabase = Supabase.instance.client;
-  late TabController _tabController;
 
   bool _isLoading = true;
   bool _isSuperAdmin = false;
   String _searchQuery = '';
+  String _activeTab = 'users';
   final TextEditingController _searchController = TextEditingController();
 
   // Users data
@@ -33,13 +35,11 @@ class _SuperAdminScreenState extends State<SuperAdminScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
     _checkAccess();
   }
 
   @override
   void dispose() {
-    _tabController.dispose();
     _searchController.dispose();
     super.dispose();
   }
@@ -180,17 +180,21 @@ class _SuperAdminScreenState extends State<SuperAdminScreen>
           ),
         ),
       ),
-      body: Column(
+      body: SafeArea(
+        top: false,
+        child: Column(
         children: [
           _buildHeader(),
           _buildTabs(),
           Expanded(
-            child: TabBarView(
-              controller: _tabController,
-              children: [_buildUsersTab(), _buildRolesTab(), _buildSystemTab()],
-            ),
+            child: _activeTab == 'roles'
+                ? _buildRolesTab()
+                : _activeTab == 'system'
+                    ? _buildSystemTab()
+                    : _buildUsersTab(),
           ),
         ],
+      )
       ),
     );
   }
@@ -202,7 +206,7 @@ class _SuperAdminScreenState extends State<SuperAdminScreen>
         gradient: LinearGradient(
           colors: [
             AppColors.primaryBlue,
-            AppColors.primaryBlue.withOpacity(0.8),
+            AppColors.primaryBlue.withValues(alpha: 0.8),
           ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
@@ -216,7 +220,7 @@ class _SuperAdminScreenState extends State<SuperAdminScreen>
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.2),
+                  color: Colors.white.withValues(alpha: 0.2),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: const Icon(
@@ -241,7 +245,7 @@ class _SuperAdminScreenState extends State<SuperAdminScreen>
                     Text(
                       '${_allUsers.length} total users',
                       style: GoogleFonts.poppins(
-                        color: Colors.white.withOpacity(0.9),
+                        color: Colors.white.withValues(alpha: 0.9),
                         fontSize: 13,
                       ),
                     ),
@@ -281,7 +285,7 @@ class _SuperAdminScreenState extends State<SuperAdminScreen>
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.15),
+        color: Colors.white.withValues(alpha: 0.15),
         borderRadius: BorderRadius.circular(8),
       ),
       child: Row(
@@ -308,17 +312,53 @@ class _SuperAdminScreenState extends State<SuperAdminScreen>
   Widget _buildTabs() {
     return Container(
       color: Colors.white,
-      child: TabBar(
-        controller: _tabController,
-        labelColor: AppColors.primaryBlue,
-        unselectedLabelColor: Colors.grey,
-        indicatorColor: AppColors.primaryBlue,
-        indicatorWeight: 3,
-        tabs: const [
-          Tab(icon: Icon(Icons.people, size: 20), text: 'Users'),
-          Tab(icon: Icon(Icons.security, size: 20), text: 'Roles'),
-          Tab(icon: Icon(Icons.settings, size: 20), text: 'System'),
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+      child: Row(
+        children: [
+          Expanded(child: _buildTabButton('users', 'Users', 'المستخدمون', Icons.people_rounded)),
+          const SizedBox(width: 8),
+          Expanded(child: _buildTabButton('roles', 'Roles', 'الأدوار', Icons.security_rounded)),
+          const SizedBox(width: 8),
+          Expanded(child: _buildTabButton('system', 'System', 'النظام', Icons.settings_rounded)),
         ],
+      ),
+    );
+  }
+
+  Widget _buildTabButton(String tab, String labelEn, String labelAr, IconData icon) {
+    final isActive = _activeTab == tab;
+    return GestureDetector(
+      onTap: () => setState(() => _activeTab = tab),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(vertical: 10),
+        decoration: BoxDecoration(
+          color: isActive ? AppColors.primaryBlue : const Color(0xFFF3F6FA),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 20, color: isActive ? Colors.white : AppColors.textLight),
+            const SizedBox(height: 3),
+            Text(
+              labelEn,
+              style: GoogleFonts.poppins(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: isActive ? Colors.white : AppColors.textLight,
+              ),
+            ),
+            Text(
+              labelAr,
+              style: GoogleFonts.poppins(
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                color: isActive ? Colors.white.withValues(alpha: 0.85) : AppColors.textLight,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -385,7 +425,7 @@ class _SuperAdminScreenState extends State<SuperAdminScreen>
           children: [
             CircleAvatar(
               radius: 24,
-              backgroundColor: AppColors.primaryBlue.withOpacity(0.1),
+              backgroundColor: AppColors.primaryBlue.withValues(alpha: 0.1),
               backgroundImage: avatarUrl != null
                   ? NetworkImage(avatarUrl)
                   : null,
@@ -488,7 +528,7 @@ class _SuperAdminScreenState extends State<SuperAdminScreen>
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
+        color: color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Text(
@@ -526,7 +566,7 @@ class _SuperAdminScreenState extends State<SuperAdminScreen>
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
+        color: color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Text(
@@ -831,7 +871,7 @@ class _SuperAdminScreenState extends State<SuperAdminScreen>
         trailing: Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
           decoration: BoxDecoration(
-            color: AppColors.primaryBlue.withOpacity(0.1),
+            color: AppColors.primaryBlue.withValues(alpha: 0.1),
             borderRadius: BorderRadius.circular(20),
           ),
           child: Text(
@@ -1142,49 +1182,8 @@ class _SuperAdminScreenState extends State<SuperAdminScreen>
   void _showBroadcastMessage() {
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text(
-          'Broadcast Message',
-          style: GoogleFonts.poppins(fontWeight: FontWeight.bold),
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              decoration: const InputDecoration(
-                labelText: 'Message Title',
-                border: OutlineInputBorder(),
-              ),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              maxLines: 4,
-              decoration: const InputDecoration(
-                labelText: 'Message Content',
-                border: OutlineInputBorder(),
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Message broadcast sent'),
-                  backgroundColor: Colors.green,
-                ),
-              );
-            },
-            child: const Text('Send'),
-          ),
-        ],
-      ),
+      barrierDismissible: false,
+      builder: (ctx) => _BroadcastDialog(supabase: _supabase),
     );
   }
 
@@ -1196,7 +1195,7 @@ class _SuperAdminScreenState extends State<SuperAdminScreen>
         leading: Container(
           padding: const EdgeInsets.all(8),
           decoration: BoxDecoration(
-            color: AppColors.primaryBlue.withOpacity(0.1),
+            color: AppColors.primaryBlue.withValues(alpha: 0.1),
             borderRadius: BorderRadius.circular(8),
           ),
           child: Icon(icon, color: AppColors.primaryBlue),
@@ -1229,7 +1228,7 @@ class _SuperAdminScreenState extends State<SuperAdminScreen>
         leading: Container(
           padding: const EdgeInsets.all(8),
           decoration: BoxDecoration(
-            color: color.withOpacity(0.1),
+            color: color.withValues(alpha: 0.1),
             borderRadius: BorderRadius.circular(8),
           ),
           child: Icon(icon, color: color),
@@ -1312,5 +1311,940 @@ class _SuperAdminScreenState extends State<SuperAdminScreen>
         }
       }
     }
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Full Broadcast Center dialog — matches web /admin/broadcast feature set
+// Includes: state filter, test send, confirmation dialog, char counts,
+//           draft auto-save (SharedPreferences), schedule picker
+// ─────────────────────────────────────────────────────────────────────────────
+class _BroadcastDialog extends StatefulWidget {
+  final dynamic supabase;
+  const _BroadcastDialog({required this.supabase});
+
+  @override
+  State<_BroadcastDialog> createState() => _BroadcastDialogState();
+}
+
+class _BroadcastDialogState extends State<_BroadcastDialog> {
+  final _titleEnCtrl = TextEditingController();
+  final _titleArCtrl = TextEditingController();
+  final _msgEnCtrl   = TextEditingController();
+  final _msgArCtrl   = TextEditingController();
+  final _linkCtrl    = TextEditingController();
+
+  String  _audience     = 'all';
+  String  _priority     = 'normal';
+  String? _stateFilter;
+  bool    _sending      = false;
+  bool    _testSending  = false;
+  bool    _draftRestored = false;
+  DateTime? _scheduleAt;
+  Timer?  _scheduleTimer;
+  Map<String, dynamic>? _result;
+
+  static const _draftKey = 'broadcast_draft_mobile_v1';
+  static const _purple   = Color(0xFF7C3AED);
+
+  static const _audiences = [
+    {'value': 'all',             'label': 'All Users',         'icon': Icons.group},
+    {'value': 'no_bank_account', 'label': 'No Bank Account',   'icon': Icons.account_balance},
+    {'value': 'data_collector',  'label': 'Data Collectors',   'icon': Icons.assignment_ind},
+    {'value': 'coordinator',     'label': 'Coordinators',      'icon': Icons.manage_accounts},
+    {'value': 'by_state',        'label': 'By State',          'icon': Icons.location_on},
+  ];
+
+  static const _priorities = [
+    {'value': 'normal', 'label': 'Normal', 'color': 0xFF64748B},
+    {'value': 'high',   'label': 'High',   'color': 0xFFD97706},
+    {'value': 'urgent', 'label': 'Urgent', 'color': 0xFFDC2626},
+  ];
+
+  static const _templates = [
+    {
+      'label':    'Bank Account Reminder',
+      'titleEn':  'Action Required: Add Bank Account',
+      'titleAr':  'إجراء مطلوب: أضف حسابك البنكي',
+      'msgEn':    'Please update your bank account details in your profile settings to receive payments.',
+      'msgAr':    'يرجى تحديث بيانات حسابك البنكي في إعدادات ملفك الشخصي لاستلام المدفوعات.',
+      'audience': 'no_bank_account',
+      'priority': 'high',
+    },
+    {
+      'label':    'System Maintenance',
+      'titleEn':  'Scheduled Maintenance',
+      'titleAr':  'صيانة مجدولة',
+      'msgEn':    'The system will be under maintenance. Please save your work before the maintenance window.',
+      'msgAr':    'سيكون النظام تحت الصيانة. يرجى حفظ عملك قبل فترة الصيانة.',
+      'audience': 'all',
+      'priority': 'high',
+    },
+    {
+      'label':    'New Feature',
+      'titleEn':  'New Feature Available',
+      'titleAr':  'ميزة جديدة متاحة',
+      'msgEn':    'A new feature has been added to improve your workflow. Check it out in the app.',
+      'msgAr':    'تمت إضافة ميزة جديدة لتحسين سير عملك. تحقق منها في التطبيق.',
+      'audience': 'all',
+      'priority': 'normal',
+    },
+  ];
+
+  // ── Lifecycle ──────────────────────────────────────────────────────────────
+  @override
+  void initState() {
+    super.initState();
+    _loadDraft();
+    for (final ctrl in [_titleEnCtrl, _titleArCtrl, _msgEnCtrl, _msgArCtrl, _linkCtrl]) {
+      ctrl.addListener(_saveDraft);
+    }
+  }
+
+  @override
+  void dispose() {
+    _scheduleTimer?.cancel();
+    for (final ctrl in [_titleEnCtrl, _titleArCtrl, _msgEnCtrl, _msgArCtrl, _linkCtrl]) {
+      ctrl.removeListener(_saveDraft);
+      ctrl.dispose();
+    }
+    super.dispose();
+  }
+
+  // ── Draft persistence ──────────────────────────────────────────────────────
+  Future<void> _loadDraft() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final stored = prefs.getStringList(_draftKey);
+      if (stored != null && stored.length >= 7 && stored[0].isNotEmpty) {
+        setState(() {
+          _titleEnCtrl.text = stored[0];
+          _titleArCtrl.text = stored[1];
+          _msgEnCtrl.text   = stored[2];
+          _msgArCtrl.text   = stored[3];
+          _linkCtrl.text    = stored[4];
+          _audience         = stored[5];
+          _priority         = stored[6];
+          _draftRestored    = true;
+        });
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _saveDraft() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setStringList(_draftKey, [
+        _titleEnCtrl.text, _titleArCtrl.text,
+        _msgEnCtrl.text,   _msgArCtrl.text,
+        _linkCtrl.text,    _audience, _priority,
+      ]);
+    } catch (_) {}
+  }
+
+  Future<void> _clearDraft() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove(_draftKey);
+      _titleEnCtrl.clear(); _titleArCtrl.clear();
+      _msgEnCtrl.clear();   _msgArCtrl.clear();
+      _linkCtrl.clear();
+      setState(() { _audience = 'all'; _priority = 'normal'; _draftRestored = false; });
+    } catch (_) {}
+  }
+
+  // ── Template ───────────────────────────────────────────────────────────────
+  void _applyTemplate(Map t) {
+    _titleEnCtrl.text = t['titleEn'] as String;
+    _titleArCtrl.text = t['titleAr'] as String;
+    _msgEnCtrl.text   = t['msgEn']   as String;
+    _msgArCtrl.text   = t['msgAr']   as String;
+    setState(() {
+      _audience     = t['audience'] as String;
+      _priority     = t['priority'] as String;
+      _stateFilter  = null;
+    });
+  }
+
+  // ── Schedule ───────────────────────────────────────────────────────────────
+  Future<void> _pickSchedule() async {
+    final now = DateTime.now();
+    final date = await showDatePicker(
+      context: context,
+      initialDate: now.add(const Duration(hours: 1)),
+      firstDate: now,
+      lastDate: now.add(const Duration(days: 30)),
+      builder: (ctx, child) => Theme(
+        data: Theme.of(ctx).copyWith(
+          colorScheme: const ColorScheme.light(primary: _purple),
+        ),
+        child: child!,
+      ),
+    );
+    if (date == null || !mounted) return;
+
+    final time = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay.fromDateTime(now.add(const Duration(hours: 1))),
+    );
+    if (time == null || !mounted) return;
+
+    final scheduled = DateTime(date.year, date.month, date.day, time.hour, time.minute);
+    if (scheduled.isBefore(now.add(const Duration(minutes: 1)))) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Please pick a time at least 1 minute in the future'),
+        backgroundColor: Colors.orange,
+      ));
+      return;
+    }
+
+    setState(() => _scheduleAt = scheduled);
+    _scheduleTimer?.cancel();
+    final delay = scheduled.difference(DateTime.now());
+    _scheduleTimer = Timer(delay, () async {
+      if (mounted) await _executeSend(testOnly: false, scheduled: true);
+    });
+
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text('Scheduled for ${_fmtSchedule(scheduled)}'),
+      backgroundColor: Colors.green,
+    ));
+  }
+
+  void _cancelSchedule() {
+    _scheduleTimer?.cancel();
+    setState(() => _scheduleAt = null);
+  }
+
+  String _fmtSchedule(DateTime dt) {
+    final months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    final h = dt.hour.toString().padLeft(2,'0');
+    final m = dt.minute.toString().padLeft(2,'0');
+    return '${months[dt.month-1]} ${dt.day}, $h:$m';
+  }
+
+  // ── Audience helpers ───────────────────────────────────────────────────────
+  Future<List> _resolveTargetUsers({bool testOnly = false}) async {
+    if (testOnly) {
+      final me = widget.supabase.auth.currentUser;
+      return me != null ? [{'id': me.id}] : [];
+    }
+    final List all = await widget.supabase
+        .from('profiles')
+        .select('id, bank_account, role, state')
+        .not('role', 'is', null);
+
+    if (_audience == 'no_bank_account') {
+      return all.where((u) {
+        final ba   = u['bank_account'] as Map?;
+        final acct = ba?['accountNumber'] ?? ba?['account_number'];
+        return acct == null || (acct as String).isEmpty;
+      }).toList();
+    }
+    if (_audience == 'by_state' && _stateFilter != null) {
+      return all.where((u) =>
+        (u['state'] as String? ?? '').toLowerCase() == _stateFilter!.toLowerCase()
+      ).toList();
+    }
+    if (_audience != 'all') {
+      return all.where((u) =>
+        (u['role'] as String? ?? '').toLowerCase() == _audience
+      ).toList();
+    }
+    return all;
+  }
+
+  // ── Core send ──────────────────────────────────────────────────────────────
+  Future<void> _executeSend({bool testOnly = false, bool scheduled = false}) async {
+    if (testOnly) {
+      setState(() => _testSending = true);
+    } else {
+      setState(() => _sending = true);
+    }
+
+    try {
+      final targetUsers = await _resolveTargetUsers(testOnly: testOnly);
+
+      if (targetUsers.isEmpty) {
+        if (mounted) {
+          setState(() { _sending = false; _testSending = false; });
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('No users match the selected audience / لا يوجد مستخدمون مطابقون'),
+            backgroundColor: Colors.orange,
+          ));
+        }
+        return;
+      }
+
+      final now         = DateTime.now().toUtc().toIso8601String();
+      final broadcastId = 'bc_${DateTime.now().millisecondsSinceEpoch}';
+      final titleEn     = _titleEnCtrl.text.trim();
+      final titleAr     = _titleArCtrl.text.trim().isNotEmpty ? _titleArCtrl.text.trim() : titleEn;
+      final msgEn       = _msgEnCtrl.text.trim();
+      final msgAr       = _msgArCtrl.text.trim().isNotEmpty ? _msgArCtrl.text.trim() : msgEn;
+      final link        = _linkCtrl.text.trim().isNotEmpty ? _linkCtrl.text.trim() : null;
+      final notifType   = _priority == 'urgent' ? 'error' : _priority == 'high' ? 'warning' : 'info';
+
+      final rows = targetUsers.map((u) => {
+        'recipient_id':      u['id'],
+        'user_id':           u['id'],
+        'title_en':          titleEn,
+        'title_ar':          titleAr,
+        'message_en':        msgEn,
+        'message_ar':        msgAr,
+        'priority':          _priority,
+        'action_url':        link,
+        'related_entity_id': broadcastId,
+        'entity_type':       'broadcast_batch',
+        'event_type':        'broadcast',
+        'status':            'pending',
+        'email_sent':        false,
+        'title':             titleEn,
+        'message':           msgEn,
+        'link':              link,
+        'type':              notifType,
+        'is_read':           false,
+        'created_at':        now,
+      }).toList();
+
+      await widget.supabase.from('notifications').insert(rows);
+
+      try {
+        await widget.supabase.functions.invoke('send-fcm-push', body: {
+          'user_ids':          targetUsers.map((u) => u['id']).toList(),
+          'title':             titleAr.isNotEmpty ? '$titleEn | $titleAr' : titleEn,
+          'body':              msgAr.isNotEmpty   ? '$msgEn\n$msgAr'      : msgEn,
+          'priority':          _priority,
+          'notification_type': 'broadcast',
+          'data': {
+            'type':         'broadcast',
+            'broadcast_id': broadcastId,
+            'action_url':   link ?? '',
+            'priority':     _priority,
+          },
+          if (link != null) 'action_url': link,
+        });
+      } catch (_) {}
+
+      if (mounted) {
+        if (testOnly) {
+          setState(() => _testSending = false);
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('Test sent to you successfully! / تم الإرسال التجريبي إليك'),
+            backgroundColor: Colors.green,
+          ));
+        } else {
+          await _clearDraft();
+          setState(() {
+            _sending = false;
+            _scheduleAt = null;
+            _result = {
+              'sent':     targetUsers.length,
+              'audience': _audience,
+              'priority': _priority,
+              'scheduled': scheduled,
+            };
+          });
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() { _sending = false; _testSending = false; });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
+  // ── Confirm dialog before real send ───────────────────────────────────────
+  void _handleSend() {
+    if (_titleEnCtrl.text.trim().isEmpty || _msgEnCtrl.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Fill in English title & message first / أدخل العنوان والرسالة بالإنجليزية'),
+        backgroundColor: Colors.red,
+      ));
+      return;
+    }
+    if (_audience == 'by_state' && _stateFilter == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Please select a state / الرجاء اختيار ولاية'),
+        backgroundColor: Colors.orange,
+      ));
+      return;
+    }
+    showDialog(
+      context: context,
+      builder: (_) => _ConfirmBroadcastDialog(
+        titleEn:  _titleEnCtrl.text.trim(),
+        messageEn: _msgEnCtrl.text.trim(),
+        audience: _audience,
+        state:    _stateFilter,
+        priority: _priority,
+        onConfirm: () => _executeSend(testOnly: false),
+      ),
+    );
+  }
+
+  // ── Build ──────────────────────────────────────────────────────────────────
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      insetPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 24),
+      backgroundColor: Colors.transparent,
+      child: Container(
+        constraints: const BoxConstraints(maxWidth: 520, maxHeight: 720),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(24),
+          boxShadow: [BoxShadow(
+            color: Colors.black.withValues(alpha: 0.18),
+            blurRadius: 32, offset: const Offset(0, 12),
+          )],
+        ),
+        child: Column(
+          children: [
+            _buildHeader(),
+            Expanded(
+              child: _result != null
+                  ? _buildSuccess()
+                  : SingleChildScrollView(
+                      padding: const EdgeInsets.all(20),
+                      child: _buildForm(),
+                    ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHeader() {
+    return Container(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          colors: [Color(0xFF7C3AED), Color(0xFF5B21B6)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      padding: const EdgeInsets.fromLTRB(20, 18, 16, 18),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.2),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(Icons.campaign_rounded, color: Colors.white, size: 22),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Broadcast Center / مركز البث',
+                  style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.w700, color: Colors.white)),
+                Text('Compose, preview and send to your audience',
+                  style: GoogleFonts.poppins(fontSize: 11, color: Colors.white70)),
+              ],
+            ),
+          ),
+          GestureDetector(
+            onTap: () => Navigator.pop(context),
+            child: Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.2),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.close, color: Colors.white, size: 18),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildForm() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // ── Draft restored banner ──────────────────────────────────────
+        if (_draftRestored) ...[
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: BoxDecoration(
+              color: const Color(0xFFFFFBEB),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: const Color(0xFFFDE68A)),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.restore, size: 16, color: Color(0xFFD97706)),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text('Draft restored from last session / تمت استعادة المسودة',
+                    style: GoogleFonts.poppins(fontSize: 11, color: const Color(0xFF92400E))),
+                ),
+                GestureDetector(
+                  onTap: _clearDraft,
+                  child: Text('Discard', style: GoogleFonts.poppins(
+                    fontSize: 11, fontWeight: FontWeight.w700, color: Colors.red.shade400)),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 14),
+        ],
+
+        // ── Quick templates ────────────────────────────────────────────
+        _sectionLabel('Quick Templates / قوالب سريعة'),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8, runSpacing: 8,
+          children: _templates.map((t) => GestureDetector(
+            onTap: () => _applyTemplate(t),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF5F0FF),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: _purple.withValues(alpha: 0.3)),
+              ),
+              child: Text(t['label'] as String,
+                style: GoogleFonts.poppins(fontSize: 11, color: _purple, fontWeight: FontWeight.w600)),
+            ),
+          )).toList(),
+        ),
+        const SizedBox(height: 18),
+
+        // ── Audience ───────────────────────────────────────────────────
+        _sectionLabel('Audience / الجمهور المستهدف'),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8, runSpacing: 8,
+          children: _audiences.map((a) {
+            final sel = _audience == a['value'];
+            return GestureDetector(
+              onTap: () => setState(() { _audience = a['value'] as String; _stateFilter = null; }),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: sel ? _purple : Colors.grey.shade100,
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: sel ? _purple : Colors.grey.shade300),
+                ),
+                child: Row(mainAxisSize: MainAxisSize.min, children: [
+                  Icon(a['icon'] as IconData, size: 13, color: sel ? Colors.white : Colors.grey.shade600),
+                  const SizedBox(width: 5),
+                  Text(a['label'] as String,
+                    style: GoogleFonts.poppins(fontSize: 11, color: sel ? Colors.white : Colors.grey.shade700, fontWeight: FontWeight.w600)),
+                ]),
+              ),
+            );
+          }).toList(),
+        ),
+
+        // ── State dropdown ─────────────────────────────────────────────
+        if (_audience == 'by_state') ...[
+          const SizedBox(height: 10),
+          DropdownButtonFormField<String>(
+            value: _stateFilter,
+            hint: Text('Select Sudan state / اختر الولاية',
+              style: GoogleFonts.poppins(fontSize: 12, color: Colors.grey.shade500)),
+            decoration: InputDecoration(
+              prefixIcon: const Icon(Icons.location_on, color: _purple, size: 18),
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: const BorderSide(color: _purple, width: 2),
+              ),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            ),
+            items: sudanStates.map((s) => DropdownMenuItem(
+              value: s.id,
+              child: Text(s.name, style: GoogleFonts.poppins(fontSize: 12)),
+            )).toList(),
+            onChanged: (v) => setState(() => _stateFilter = v),
+          ),
+        ],
+        const SizedBox(height: 18),
+
+        // ── Priority ───────────────────────────────────────────────────
+        _sectionLabel('Priority / الأولوية'),
+        const SizedBox(height: 8),
+        Row(
+          children: _priorities.map((p) {
+            final sel = _priority == p['value'];
+            final col = Color(p['color'] as int);
+            return Expanded(
+              child: GestureDetector(
+                onTap: () => setState(() => _priority = p['value'] as String),
+                child: Container(
+                  margin: const EdgeInsets.only(right: 8),
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  decoration: BoxDecoration(
+                    color: sel ? col.withValues(alpha: 0.12) : Colors.grey.shade50,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: sel ? col : Colors.grey.shade200, width: sel ? 2 : 1),
+                  ),
+                  child: Text(p['label'] as String,
+                    textAlign: TextAlign.center,
+                    style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.w700,
+                      color: sel ? col : Colors.grey.shade600)),
+                ),
+              ),
+            );
+          }).toList(),
+        ),
+        const SizedBox(height: 18),
+
+        // ── Fields ─────────────────────────────────────────────────────
+        _fieldWithCount(_titleEnCtrl, 'Title (English) *', maxLength: 120),
+        const SizedBox(height: 10),
+        _fieldWithCount(_titleArCtrl, 'العنوان (عربي)', maxLength: 120, rtl: true),
+        const SizedBox(height: 10),
+        _fieldWithCount(_msgEnCtrl, 'Message (English) *', maxLines: 4, maxLength: 600),
+        const SizedBox(height: 10),
+        _fieldWithCount(_msgArCtrl, 'الرسالة (عربي)', maxLines: 4, maxLength: 600, rtl: true),
+        const SizedBox(height: 10),
+        _fieldWithCount(_linkCtrl, 'Action Link (optional)', hint: 'e.g. /profile/bank-account'),
+        const SizedBox(height: 18),
+
+        // ── Schedule picker ────────────────────────────────────────────
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: Colors.grey.shade50,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Colors.grey.shade200),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const Icon(Icons.schedule_rounded, size: 16, color: _purple),
+                  const SizedBox(width: 6),
+                  Text('Schedule Broadcast / جدولة الإرسال',
+                    style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.w700, color: Colors.grey.shade700)),
+                  const SizedBox(width: 6),
+                  Text('(optional)', style: GoogleFonts.poppins(fontSize: 10, color: Colors.grey.shade400)),
+                ],
+              ),
+              const SizedBox(height: 8),
+              if (_scheduleAt != null) ...[
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF5F0FF),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: _purple.withValues(alpha: 0.3)),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.alarm_on_rounded, size: 14, color: _purple),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text('Fires at ${_fmtSchedule(_scheduleAt!)}',
+                          style: GoogleFonts.poppins(fontSize: 11, color: _purple, fontWeight: FontWeight.w600)),
+                      ),
+                      GestureDetector(
+                        onTap: _cancelSchedule,
+                        child: const Icon(Icons.cancel_outlined, size: 16, color: Colors.red),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 8),
+              ],
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: _pickSchedule,
+                  icon: const Icon(Icons.calendar_month_rounded, size: 16),
+                  label: Text(_scheduleAt == null ? 'Pick date & time' : 'Change schedule',
+                    style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.w600)),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: _purple,
+                    side: BorderSide(color: _purple.withValues(alpha: 0.4)),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 18),
+
+        // ── Action buttons ─────────────────────────────────────────────
+        Row(
+          children: [
+            // Test Send
+            OutlinedButton.icon(
+              onPressed: (_testSending || _titleEnCtrl.text.trim().isEmpty)
+                  ? null
+                  : () => _executeSend(testOnly: true),
+              icon: _testSending
+                  ? const SizedBox(width: 14, height: 14,
+                      child: CircularProgressIndicator(strokeWidth: 2, color: _purple))
+                  : const Icon(Icons.science_outlined, size: 16),
+              label: Text('Test', style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.w600)),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: _purple,
+                side: const BorderSide(color: _purple),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+              ),
+            ),
+            const SizedBox(width: 10),
+            // Review & Send
+            Expanded(
+              child: ElevatedButton.icon(
+                onPressed: (_sending || _titleEnCtrl.text.trim().isEmpty || _msgEnCtrl.text.trim().isEmpty)
+                    ? null
+                    : _handleSend,
+                icon: _sending
+                    ? const SizedBox(width: 16, height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                    : const Icon(Icons.send_rounded, size: 18),
+                label: Text(
+                  _sending ? 'Sending...' : 'Review & Send / مراجعة وإرسال',
+                  style: GoogleFonts.poppins(fontWeight: FontWeight.w700, fontSize: 13),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _purple,
+                  foregroundColor: Colors.white,
+                  disabledBackgroundColor: _purple.withValues(alpha: 0.4),
+                  padding: const EdgeInsets.symmetric(vertical: 13),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 4),
+      ],
+    );
+  }
+
+  Widget _buildSuccess() {
+    final sent      = _result!['sent']      as int;
+    final audience  = _result!['audience']  as String;
+    final priority  = _result!['priority']  as String;
+    final scheduled = _result!['scheduled'] as bool? ?? false;
+    final col       = priority == 'urgent' ? Colors.red : priority == 'high' ? Colors.orange : Colors.green;
+
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(color: Colors.green.shade50, shape: BoxShape.circle),
+              child: Icon(Icons.check_circle_rounded, color: Colors.green.shade600, size: 48),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              scheduled ? 'Scheduled Broadcast Sent! / أُرسل البث المجدول' : 'Broadcast Sent! / تم الإرسال!',
+              style: GoogleFonts.poppins(fontSize: 17, fontWeight: FontWeight.w700),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 8),
+            Text('$sent recipients notified',
+              style: GoogleFonts.poppins(fontSize: 14, color: Colors.grey.shade600)),
+            const SizedBox(height: 12),
+            Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+              _badge(audience, Colors.purple),
+              const SizedBox(width: 8),
+              _badge(priority, col),
+            ]),
+            const SizedBox(height: 24),
+            Row(children: [
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: () => setState(() { _result = null; }),
+                  child: Text('Send Another / أرسل آخر',
+                    style: GoogleFonts.poppins(fontWeight: FontWeight.w600)),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: ElevatedButton(
+                  onPressed: () => Navigator.pop(context),
+                  style: ElevatedButton.styleFrom(backgroundColor: _purple, foregroundColor: Colors.white),
+                  child: Text('Done / تم', style: GoogleFonts.poppins(fontWeight: FontWeight.w600)),
+                ),
+              ),
+            ]),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ── Helpers ────────────────────────────────────────────────────────────────
+  Widget _sectionLabel(String text) => Text(text,
+    style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.w700, color: Colors.grey.shade600));
+
+  Widget _fieldWithCount(
+    TextEditingController ctrl,
+    String label, {
+    int maxLines  = 1,
+    int maxLength = 200,
+    bool rtl      = false,
+    String? hint,
+  }) {
+    return StatefulBuilder(
+      builder: (_, setInner) => Column(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          TextField(
+            controller: ctrl,
+            maxLines: maxLines,
+            maxLength: maxLength,
+            buildCounter: (_, {required currentLength, required isFocused, maxLength}) => null,
+            textDirection: rtl ? TextDirection.rtl : TextDirection.ltr,
+            style: GoogleFonts.poppins(fontSize: 13),
+            onChanged: (_) => setInner(() {}),
+            decoration: InputDecoration(
+              labelText: label,
+              hintText: hint,
+              labelStyle: GoogleFonts.poppins(fontSize: 12, color: Colors.grey.shade600),
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: const BorderSide(color: _purple, width: 2),
+              ),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            ),
+          ),
+          const SizedBox(height: 3),
+          _charCount(ctrl.text.length, maxLength),
+        ],
+      ),
+    );
+  }
+
+  Widget _charCount(int current, int max) {
+    final pct = current / max;
+    final color = pct > 0.95 ? Colors.red
+        : pct > 0.8  ? Colors.orange
+        : Colors.grey.shade400;
+    return Text('$current / $max',
+      style: GoogleFonts.poppins(fontSize: 10, fontWeight: FontWeight.w600, color: color));
+  }
+
+  Widget _badge(String label, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
+      ),
+      child: Text(label, style: GoogleFonts.poppins(fontSize: 11, color: color, fontWeight: FontWeight.w600)),
+    );
+  }
+}
+
+// ── Confirmation dialog ───────────────────────────────────────────────────────
+class _ConfirmBroadcastDialog extends StatelessWidget {
+  final String   titleEn;
+  final String   messageEn;
+  final String   audience;
+  final String?  state;
+  final String   priority;
+  final VoidCallback onConfirm;
+
+  const _ConfirmBroadcastDialog({
+    required this.titleEn,
+    required this.messageEn,
+    required this.audience,
+    required this.state,
+    required this.priority,
+    required this.onConfirm,
+  });
+
+  Color get _priorityColor => priority == 'urgent'
+      ? Colors.red
+      : priority == 'high' ? Colors.orange : Colors.grey.shade600;
+
+  @override
+  Widget build(BuildContext context) {
+    final audienceLabel = audience == 'by_state' && state != null
+        ? 'State: $state'
+        : audience.replaceAll('_', ' ');
+
+    return AlertDialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      title: Row(children: [
+        const Icon(Icons.preview_rounded, color: Color(0xFF7C3AED)),
+        const SizedBox(width: 8),
+        Text('Confirm Broadcast / تأكيد البث',
+          style: GoogleFonts.poppins(fontSize: 15, fontWeight: FontWeight.w700)),
+      ]),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.grey.shade50,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: Colors.grey.shade200),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(titleEn, style: GoogleFonts.poppins(fontSize: 13, fontWeight: FontWeight.w700)),
+                const SizedBox(height: 4),
+                Text(messageEn, style: GoogleFonts.poppins(fontSize: 12, color: Colors.grey.shade700)),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          _row(Icons.group, 'Audience', audienceLabel),
+          const SizedBox(height: 4),
+          _row(Icons.flag_rounded, 'Priority', priority.toUpperCase(), valueColor: _priorityColor),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: Text('Cancel', style: GoogleFonts.poppins(color: Colors.grey.shade600)),
+        ),
+        ElevatedButton.icon(
+          onPressed: () {
+            Navigator.pop(context);
+            onConfirm();
+          },
+          icon: const Icon(Icons.send_rounded, size: 16),
+          label: Text('Send Now / أرسل الآن', style: GoogleFonts.poppins(fontWeight: FontWeight.w700, fontSize: 13)),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: const Color(0xFF7C3AED),
+            foregroundColor: Colors.white,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _row(IconData icon, String label, String value, {Color? valueColor}) {
+    return Row(children: [
+      Icon(icon, size: 14, color: Colors.grey.shade500),
+      const SizedBox(width: 6),
+      Text('$label: ', style: GoogleFonts.poppins(fontSize: 11, color: Colors.grey.shade500)),
+      Text(value, style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.w700,
+        color: valueColor ?? Colors.grey.shade800)),
+    ]);
   }
 }

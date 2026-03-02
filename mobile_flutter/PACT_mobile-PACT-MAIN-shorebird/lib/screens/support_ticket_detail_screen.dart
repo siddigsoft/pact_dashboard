@@ -184,7 +184,9 @@ class _SupportTicketDetailScreenState extends State<SupportTicketDetailScreen> {
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
-          : _ticket == null
+          : SafeArea(
+              top: false,
+              child: _ticket == null
               ? Center(
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
@@ -201,6 +203,7 @@ class _SupportTicketDetailScreenState extends State<SupportTicketDetailScreen> {
                     ],
                   ),
                 )
+            )
               : Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
@@ -213,7 +216,7 @@ class _SupportTicketDetailScreenState extends State<SupportTicketDetailScreen> {
                         borderRadius: BorderRadius.circular(12),
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.black.withOpacity(0.05),
+                            color: Colors.black.withValues(alpha: 0.05),
                             blurRadius: 10,
                             offset: const Offset(0, 2),
                           ),
@@ -231,7 +234,7 @@ class _SupportTicketDetailScreenState extends State<SupportTicketDetailScreen> {
                                 ),
                                 decoration: BoxDecoration(
                                   color: _statusColor(_ticket!.status)
-                                      .withOpacity(0.15),
+                                      .withValues(alpha: 0.15),
                                   borderRadius: BorderRadius.circular(20),
                                 ),
                                 child: Text(
@@ -318,7 +321,7 @@ class _SupportTicketDetailScreenState extends State<SupportTicketDetailScreen> {
         decoration: BoxDecoration(
           color: isStaff
               ? Colors.grey.shade200
-              : AppColors.primaryBlue.withOpacity(0.15),
+              : AppColors.primaryBlue.withValues(alpha: 0.15),
           borderRadius: BorderRadius.circular(12),
         ),
         child: Column(
@@ -366,7 +369,7 @@ class _SupportTicketDetailScreenState extends State<SupportTicketDetailScreen> {
         color: Colors.white,
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 8,
             offset: const Offset(0, -2),
           ),

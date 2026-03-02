@@ -747,7 +747,9 @@ export async function generateBulkPaymentPdf(
   const cw = pw - ml - mr;
   const footerH = 14;
   const maxY = ph - footerH - 4;
-  const batchRef = `PACT-BULK-${Date.now().toString(36).toUpperCase().slice(-6)}`;
+  const batchId = Date.now().toString(36).toUpperCase().slice(-6);
+  const batchRef = `PACT-BULK-${batchId}`;
+  const patchNo = (i: number) => `${batchId}-${String(i + 1).padStart(3, '0')}`;
 
   let hasArabic = false;
   try {
@@ -794,16 +796,20 @@ export async function generateBulkPaymentPdf(
 
   let y = 42;
 
-  rr(doc, ml, y, cw, 14, 2, C.blueLight, C.blue as [number, number, number]);
+  rr(doc, ml, y, cw, 18, 2, C.blueLight, C.blue as [number, number, number]);
   doc.setFontSize(12);
   doc.setTextColor(...C.blue);
   doc.setFont('helvetica', 'bold');
-  doc.text('BULK PAYMENT REQUEST', ml + 5, y + 8);
+  doc.text('BULK PAYMENT REQUEST', ml + 5, y + 6);
   if (hasArabic) {
     doc.setFontSize(11);
-    arText('طلب دفع جماعي', pw - mr - 5, y + 8, { align: 'right' });
+    arText('طلب دفع جماعي', pw - mr - 5, y + 6, { align: 'right' });
   }
-  y += 18;
+  doc.setFontSize(7);
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(...C.label);
+  doc.text(`Batch Ref: ${batchRef}`, ml + 5, y + 13);
+  y += 22;
 
   if (groupLabel) {
     doc.setFontSize(9);
@@ -844,9 +850,9 @@ export async function generateBulkPaymentPdf(
   }
   y += 5;
 
-  const tableHead = [['#', 'Ref / المرجع', 'Requester / مقدم الطلب', 'Site / الموقع', 'Hub', 'Requested', 'Approved', 'Status']];
+  const tableHead = [['Patch No', 'Ref / المرجع', 'Requester / مقدم الطلب', 'Site / الموقع', 'Hub', 'Requested', 'Approved', 'Status']];
   const tableBody = requests.map((r, i) => [
-    `${i + 1}`,
+    patchNo(i),
     `PACT-TA-${r.request.id.substring(0, 8).toUpperCase()}`,
     r.requester.name,
     r.request.siteName || 'N/A',
@@ -878,12 +884,15 @@ export async function generateBulkPaymentPdf(
       fillColor: [248, 249, 252],
     },
     columnStyles: {
-      0: { cellWidth: 8, halign: 'center' },
+      0: { cellWidth: 22, halign: 'center', fontStyle: 'bold' },
       5: { halign: 'right' },
       6: { halign: 'right' },
       7: { halign: 'center', fontStyle: 'bold' },
     },
     didParseCell: (data: any) => {
+      if (data.section === 'body' && data.column.index === 0) {
+        data.cell.styles.textColor = C.blue;
+      }
       if (data.section === 'body' && data.column.index === 7) {
         const val = data.cell.raw?.toString().toLowerCase() || '';
         if (val.includes('approved')) {
@@ -1046,7 +1055,9 @@ export async function generateBulkPaymentPdfBase64(
   const cw = pw - ml - mr;
   const footerH = 14;
   const maxY = ph - footerH - 4;
-  const batchRef = `PACT-BULK-${Date.now().toString(36).toUpperCase().slice(-6)}`;
+  const batchId = Date.now().toString(36).toUpperCase().slice(-6);
+  const batchRef = `PACT-BULK-${batchId}`;
+  const patchNo = (i: number) => `${batchId}-${String(i + 1).padStart(3, '0')}`;
 
   let hasArabic = false;
   try {
@@ -1093,16 +1104,20 @@ export async function generateBulkPaymentPdfBase64(
 
   let y = 42;
 
-  rr(doc, ml, y, cw, 14, 2, C.blueLight, C.blue as [number, number, number]);
+  rr(doc, ml, y, cw, 18, 2, C.blueLight, C.blue as [number, number, number]);
   doc.setFontSize(12);
   doc.setTextColor(...C.blue);
   doc.setFont('helvetica', 'bold');
-  doc.text('BULK PAYMENT REQUEST', ml + 5, y + 8);
+  doc.text('BULK PAYMENT REQUEST', ml + 5, y + 6);
   if (hasArabic) {
     doc.setFontSize(11);
-    arText('طلب دفع جماعي', pw - mr - 5, y + 8, { align: 'right' });
+    arText('طلب دفع جماعي', pw - mr - 5, y + 6, { align: 'right' });
   }
-  y += 18;
+  doc.setFontSize(7);
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(...C.label);
+  doc.text(`Batch Ref: ${batchRef}`, ml + 5, y + 13);
+  y += 22;
 
   if (groupLabel) {
     doc.setFontSize(9);
@@ -1143,9 +1158,9 @@ export async function generateBulkPaymentPdfBase64(
   }
   y += 5;
 
-  const tableHead = [['#', 'Ref / المرجع', 'Requester / مقدم الطلب', 'Site / الموقع', 'Hub', 'Requested', 'Approved', 'Status']];
+  const tableHead = [['Patch No', 'Ref / المرجع', 'Requester / مقدم الطلب', 'Site / الموقع', 'Hub', 'Requested', 'Approved', 'Status']];
   const tableBody = requests.map((r, i) => [
-    `${i + 1}`,
+    patchNo(i),
     `PACT-TA-${r.request.id.substring(0, 8).toUpperCase()}`,
     r.requester.name,
     r.request.siteName || 'N/A',
@@ -1177,12 +1192,15 @@ export async function generateBulkPaymentPdfBase64(
       fillColor: [248, 249, 252],
     },
     columnStyles: {
-      0: { cellWidth: 8, halign: 'center' },
+      0: { cellWidth: 22, halign: 'center', fontStyle: 'bold' },
       5: { halign: 'right' },
       6: { halign: 'right' },
       7: { halign: 'center', fontStyle: 'bold' },
     },
     didParseCell: (data: any) => {
+      if (data.section === 'body' && data.column.index === 0) {
+        data.cell.styles.textColor = C.blue;
+      }
       if (data.section === 'body' && data.column.index === 7) {
         const val = data.cell.raw?.toString().toLowerCase() || '';
         if (val.includes('approved')) {

@@ -551,6 +551,12 @@ class OperationalCostSubmission {
   final String? paidAt;
   final int? paidAmountCents;
   final String? paymentNotes;
+  final bool fundReceiptConfirmed;
+  final String? fundReceiptConfirmedAt;
+  final String? fundReceiptNotes;
+  final String? paymentProofUrl;
+  final String? paymentProofNotes;
+  final String? paymentProofUploadedAt;
   final String createdAt;
   final String updatedAt;
 
@@ -583,6 +589,12 @@ class OperationalCostSubmission {
     this.paidAt,
     this.paidAmountCents,
     this.paymentNotes,
+    this.fundReceiptConfirmed = false,
+    this.fundReceiptConfirmedAt,
+    this.fundReceiptNotes,
+    this.paymentProofUrl,
+    this.paymentProofNotes,
+    this.paymentProofUploadedAt,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -617,17 +629,23 @@ class OperationalCostSubmission {
       supportingDocuments: docs,
       status: CostSubmissionStatusExtension.fromString(json['status']),
       tier1Status: TierApprovalStatusExtension.fromString(json['tier1_status']),
-      tier1ReviewedBy: json['tier1_reviewed_by'],
-      tier1ReviewedAt: json['tier1_reviewed_at'],
+      tier1ReviewedBy: json['tier1_approved_by'] ?? json['tier1_reviewed_by'],
+      tier1ReviewedAt: json['tier1_approved_at'] ?? json['tier1_reviewed_at'],
       tier1Notes: json['tier1_notes'],
       tier2Status: TierApprovalStatusExtension.fromString(json['tier2_status']),
-      tier2ReviewedBy: json['tier2_reviewed_by'],
-      tier2ReviewedAt: json['tier2_reviewed_at'],
+      tier2ReviewedBy: json['tier2_approved_by'] ?? json['tier2_reviewed_by'],
+      tier2ReviewedAt: json['tier2_approved_at'] ?? json['tier2_reviewed_at'],
       tier2Notes: json['tier2_notes'],
       walletTransactionId: json['wallet_transaction_id'],
       paidAt: json['paid_at'],
       paidAmountCents: json['paid_amount_cents'],
       paymentNotes: json['payment_notes'],
+      fundReceiptConfirmed: json['fund_receipt_confirmed'] == true,
+      fundReceiptConfirmedAt: json['fund_receipt_confirmed_at']?.toString(),
+      fundReceiptNotes: json['fund_receipt_notes']?.toString(),
+      paymentProofUrl: json['payment_proof_url']?.toString(),
+      paymentProofNotes: json['payment_proof_notes']?.toString(),
+      paymentProofUploadedAt: json['payment_proof_uploaded_at']?.toString(),
       createdAt: json['created_at'] ?? '',
       updatedAt: json['updated_at'] ?? '',
     );
@@ -637,6 +655,40 @@ class OperationalCostSubmission {
 
   String get formattedAmount =>
       '${amountInCurrency.toStringAsFixed(2)} $currency';
+
+  // ── Computed getters used by screens, widgets, and export utilities ────────
+
+  /// A stable string key for the current status, aligned with filter chip
+  /// values used throughout the app ('pending', 'under_review', 'approved',
+  /// 'rejected', 'paid').  Derived statuses like 'disbursed'/'closed'
+  /// map to 'paid' so the history filter still matches them.
+  String get derivedStatus {
+    switch (status) {
+      case CostSubmissionStatus.disbursed:
+      case CostSubmissionStatus.reconciliationPending:
+      case CostSubmissionStatus.reconciled:
+      case CostSubmissionStatus.closed:
+        return 'paid';
+      default:
+        return status.value;
+    }
+  }
+
+  /// Tier-1 approval status as a plain string (e.g. 'pending', 'approved').
+  /// Never null — falls back to 'pending'.
+  String get tier1StatusString => tier1Status.value;
+
+  /// Tier-2 approval status as a plain string.
+  String get tier2StatusString => tier2Status.value;
+
+  /// Tier-3 approval is not yet implemented; always null.
+  /// Screens should use null-guard: `if (submission.tier3Status != null)`.
+  String? get tier3Status => null;
+
+  /// A short display title for list cards and export sheets.
+  /// Returns the description when set, otherwise null.
+  String? get requestTitle =>
+      description.trim().isNotEmpty ? description.trim() : null;
 }
 
 // Cost submission statistics

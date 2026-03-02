@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/advance_request_report.dart';
 import '../services/advance_report_service.dart';
 import '../widgets/pact_header.dart';
 import '../widgets/advance_receipt_confirmation_dialog.dart';
+import '../constants/app_colors.dart';
 import 'dart:io';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
@@ -20,9 +22,8 @@ class AdvanceRequestsReportScreen extends StatefulWidget {
 }
 
 class _AdvanceRequestsReportScreenState
-    extends State<AdvanceRequestsReportScreen>
-    with SingleTickerProviderStateMixin {
-  late TabController _tabController;
+    extends State<AdvanceRequestsReportScreen> {
+  String _activeTab = 'all';
   List<AdvanceRequestData> _requests = [];
   List<AdvanceRequestData> _reclaimedAdvances = [];
   bool _isLoading = true;
@@ -38,13 +39,11 @@ class _AdvanceRequestsReportScreenState
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 7, vsync: this);
     _checkAccessAndLoad();
   }
 
   @override
   void dispose() {
-    _tabController.dispose();
     super.dispose();
   }
 
@@ -349,62 +348,37 @@ class _AdvanceRequestsReportScreenState
         headerSliverBuilder: (context, innerBoxIsScrolled) => [
           _buildSliverAppBar(),
           SliverToBoxAdapter(child: _buildStatsCards()),
-          SliverPersistentHeader(
-            pinned: true,
-            delegate: _SliverTabBarDelegate(
-              TabBar(
-                controller: _tabController,
-                isScrollable: true,
-                labelColor: const Color(0xFF1E40AF),
-                unselectedLabelColor: Colors.grey,
-                indicatorColor: const Color(0xFF1E40AF),
-                tabs: [
-                  const Tab(icon: Icon(Icons.list_alt, size: 18), text: 'All'),
-                  const Tab(icon: Icon(Icons.people, size: 18), text: 'Team'),
-                  const Tab(icon: Icon(Icons.business, size: 18), text: 'Hub'),
-                  const Tab(
-                    icon: Icon(Icons.pending_actions, size: 18),
-                    text: 'Status',
-                  ),
-                  const Tab(icon: Icon(Icons.location_on, size: 18), text: 'State'),
-                  const Tab(icon: Icon(Icons.folder, size: 18), text: 'Project'),
-                  Tab(
-                    icon: Stack(
-                      clipBehavior: Clip.none,
-                      children: [
-                        const Icon(Icons.rotate_left, size: 18),
-                        if (_reclaimStats.needsReconciliationCount > 0)
-                          Positioned(
-                            top: -4,
-                            right: -6,
-                            child: Container(
-                              padding: const EdgeInsets.all(2),
-                              decoration: const BoxDecoration(
-                                color: Colors.orange,
-                                shape: BoxShape.circle,
-                              ),
-                              constraints: const BoxConstraints(
-                                minWidth: 14,
-                                minHeight: 14,
-                              ),
-                              child: Text(
-                                _reclaimStats.needsReconciliationCount > 99
-                                    ? '99+'
-                                    : '${_reclaimStats.needsReconciliationCount}',
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 8,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                                textAlign: TextAlign.center,
-                              ),
-                            ),
-                          ),
-                      ],
-                    ),
-                    text: widget.isArabic ? 'الاسترداد' : 'Reclaim',
-                  ),
-                ],
+          SliverToBoxAdapter(
+            child: Container(
+              color: Colors.white,
+              padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: [
+                    _buildTabBtn('all', 'All', 'الكل', Icons.list_alt_rounded, 0),
+                    const SizedBox(width: 8),
+                    _buildTabBtn('team', 'Team', 'الفريق', Icons.people_rounded, 0),
+                    const SizedBox(width: 8),
+                    _buildTabBtn('hub', 'Hub', 'المركز', Icons.business_rounded, 0),
+                    const SizedBox(width: 8),
+                    _buildTabBtn('status', 'Status', 'الحالة',
+                        Icons.pending_actions_rounded, 0),
+                    const SizedBox(width: 8),
+                    _buildTabBtn(
+                        'state', 'State', 'الولاية', Icons.location_on_rounded, 0),
+                    const SizedBox(width: 8),
+                    _buildTabBtn('project', 'Project', 'المشروع',
+                        Icons.folder_rounded, 0),
+                    const SizedBox(width: 8),
+                    _buildTabBtn(
+                        'reclaim',
+                        widget.isArabic ? 'الاسترداد' : 'Reclaim',
+                        widget.isArabic ? 'Reclaim' : 'الاسترداد',
+                        Icons.rotate_left_rounded,
+                        _reclaimStats.needsReconciliationCount),
+                  ],
+                ),
               ),
             ),
           ),
@@ -412,39 +386,105 @@ class _AdvanceRequestsReportScreenState
         body: _isLoading
             ? const Center(child: CircularProgressIndicator())
             : _hasError
-            ? _buildErrorState()
-            : TabBarView(
-                controller: _tabController,
-                children: [
-                  _buildAllRequestsTab(),
-                  _buildGroupedTab(
-                    'byTeam',
-                    AdvanceReportService.groupByTeamMember(_requests),
-                    'Team Member',
+                ? _buildErrorState()
+                : _activeTab == 'team'
+                    ? _buildGroupedTab('byTeam',
+                        AdvanceReportService.groupByTeamMember(_requests),
+                        'Team Member')
+                    : _activeTab == 'hub'
+                        ? _buildGroupedTab('byHub',
+                            AdvanceReportService.groupByHub(_requests), 'Hub')
+                        : _activeTab == 'status'
+                            ? _buildGroupedTab(
+                                'byStatus',
+                                AdvanceReportService.groupByStatus(_requests),
+                                'Status')
+                            : _activeTab == 'state'
+                                ? _buildGroupedTab(
+                                    'byState',
+                                    AdvanceReportService.groupByState(
+                                        _requests),
+                                    'State')
+                                : _activeTab == 'project'
+                                    ? _buildGroupedTab(
+                                        'byProject',
+                                        AdvanceReportService.groupByProject(
+                                            _requests),
+                                        'Project')
+                                    : _activeTab == 'reclaim'
+                                        ? _buildReclaimImpactTab()
+                                        : _buildAllRequestsTab(),
+      ),
+    );
+  }
+
+  Widget _buildTabBtn(String tab, String labelEn, String labelAr,
+      IconData icon, int badge) {
+    final isActive = _activeTab == tab;
+    final isArabic = widget.isArabic;
+    return GestureDetector(
+      onTap: () => setState(() => _activeTab = tab),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        decoration: BoxDecoration(
+          color: isActive ? AppColors.primaryBlue : const Color(0xFFF3F6FA),
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon,
+                size: 16,
+                color: isActive ? Colors.white : AppColors.textLight),
+            const SizedBox(width: 6),
+            Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  isArabic ? labelAr : labelEn,
+                  style: GoogleFonts.poppins(
+                    fontSize: isArabic ? 13 : 12,
+                    fontWeight: FontWeight.w700,
+                    color: isActive ? Colors.white : AppColors.textLight,
                   ),
-                  _buildGroupedTab(
-                    'byHub',
-                    AdvanceReportService.groupByHub(_requests),
-                    'Hub',
+                ),
+                Text(
+                  isArabic ? labelEn : labelAr,
+                  style: GoogleFonts.poppins(
+                    fontSize: isArabic ? 10 : 11,
+                    fontWeight: isArabic ? FontWeight.w600 : FontWeight.w700,
+                    color: isActive
+                        ? Colors.white.withValues(alpha: 0.8)
+                        : AppColors.textLight,
                   ),
-                  _buildGroupedTab(
-                    'byStatus',
-                    AdvanceReportService.groupByStatus(_requests),
-                    'Status',
+                ),
+              ],
+            ),
+            if (badge > 0) ...[
+              const SizedBox(width: 6),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: isActive
+                      ? Colors.white.withValues(alpha: 0.3)
+                      : Colors.orange,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Text(
+                  badge > 99 ? '99+' : badge.toString(),
+                  style: GoogleFonts.poppins(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w800,
+                    color: Colors.white,
                   ),
-                  _buildGroupedTab(
-                    'byState',
-                    AdvanceReportService.groupByState(_requests),
-                    'State',
-                  ),
-                  _buildGroupedTab(
-                    'byProject',
-                    AdvanceReportService.groupByProject(_requests),
-                    'Project',
-                  ),
-                  _buildReclaimImpactTab(),
-                ],
+                ),
               ),
+            ],
+          ],
+        ),
       ),
     );
   }
@@ -677,7 +717,7 @@ class _AdvanceRequestsReportScreenState
                   Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.2),
+                      color: Colors.white.withValues(alpha: 0.2),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Image.asset(
@@ -708,7 +748,7 @@ class _AdvanceRequestsReportScreenState
                         Text(
                           widget.isArabic ? 'تقرير تكلفة سلفة النقل' : 'Transportation Advance Cost Report',
                           style: TextStyle(
-                            color: Colors.white.withOpacity(0.9),
+                            color: Colors.white.withValues(alpha: 0.9),
                             fontSize: 14,
                           ),
                         ),
@@ -947,9 +987,9 @@ class _ReclaimStatChip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.12),
+        color: color.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: color.withOpacity(0.3)),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -1082,9 +1122,9 @@ class _ReclaimAdvanceCard extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                   decoration: BoxDecoration(
-                    color: badgeColor.withOpacity(0.12),
+                    color: badgeColor.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: badgeColor.withOpacity(0.4)),
+                    border: Border.all(color: badgeColor.withValues(alpha: 0.4)),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
@@ -1237,7 +1277,7 @@ class _StatCard extends StatelessWidget {
             Container(
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                color: color.withOpacity(0.1),
+                color: color.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(10),
               ),
               child: Icon(icon, color: color, size: 24),
@@ -1318,7 +1358,7 @@ class _RequestCard extends StatelessWidget {
                     vertical: 4,
                   ),
                   decoration: BoxDecoration(
-                    color: statusInfo.color.withOpacity(0.1),
+                    color: statusInfo.color.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Row(
@@ -1385,7 +1425,7 @@ class _RequestCard extends StatelessWidget {
                   vertical: 6,
                 ),
                 decoration: BoxDecoration(
-                  color: Colors.green.withOpacity(0.1),
+                  color: Colors.green.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Row(
@@ -1555,7 +1595,7 @@ class _GroupCard extends StatelessWidget {
                     vertical: 4,
                   ),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF1E40AF).withOpacity(0.1),
+                    color: const Color(0xFF1E40AF).withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Text(
@@ -1626,31 +1666,3 @@ class _GroupCard extends StatelessWidget {
   }
 }
 
-class _SliverTabBarDelegate extends SliverPersistentHeaderDelegate {
-  final TabBar tabBar;
-
-  _SliverTabBarDelegate(this.tabBar);
-
-  @override
-  double get minExtent => tabBar.preferredSize.height;
-
-  @override
-  double get maxExtent => tabBar.preferredSize.height;
-
-  @override
-  Widget build(
-    BuildContext context,
-    double shrinkOffset,
-    bool overlapsContent,
-  ) {
-    return Container(
-      color: Theme.of(context).scaffoldBackgroundColor,
-      child: tabBar,
-    );
-  }
-
-  @override
-  bool shouldRebuild(_SliverTabBarDelegate oldDelegate) {
-    return tabBar != oldDelegate.tabBar;
-  }
-}

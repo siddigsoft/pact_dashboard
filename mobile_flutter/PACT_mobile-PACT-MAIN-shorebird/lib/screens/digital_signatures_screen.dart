@@ -20,27 +20,19 @@ class DigitalSignaturesScreen extends StatefulWidget {
       _DigitalSignaturesScreenState();
 }
 
-class _DigitalSignaturesScreenState extends State<DigitalSignaturesScreen>
-    with SingleTickerProviderStateMixin {
+class _DigitalSignaturesScreenState extends State<DigitalSignaturesScreen> {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
-  late TabController _tabController;
 
   bool _isLoading = true;
   List<Map<String, dynamic>> _signatures = [];
   List<Map<String, dynamic>> _signatureHistory = [];
   String _currentLocale = 'en';
+  String _activeTab = 'signatures';
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
     _loadSignatures();
-  }
-
-  @override
-  void dispose() {
-    _tabController.dispose();
-    super.dispose();
   }
 
   Future<void> _loadSignatures() async {
@@ -208,35 +200,101 @@ class _DigitalSignaturesScreenState extends State<DigitalSignaturesScreen>
               ),
             ),
           ],
-          bottom: TabBar(
-            controller: _tabController,
-            indicatorColor: Colors.white,
-            tabs: [
-              Tab(
-                icon: const Icon(Icons.draw),
-                text: isArabic ? 'توقيعاتي' : 'My Signatures',
-              ),
-              Tab(
-                icon: const Icon(Icons.history),
-                text: isArabic ? 'سجل التوقيع' : 'Signing History',
-              ),
-            ],
-          ),
         ),
         body: _isLoading
             ? const Center(child: CircularProgressIndicator())
-            : TabBarView(
-                controller: _tabController,
+            : SafeArea(
+                top: false,
+                child: Column(
                 children: [
-                  _buildSignaturesTab(isArabic),
-                  _buildHistoryTab(isArabic),
+                  // ── Bilingual tab row ──────────────────────────────
+                  Container(
+                    color: Colors.white,
+                    padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: _buildTabButton(
+                            'signatures',
+                            'My Signatures',
+                            'توقيعاتي',
+                            Icons.draw_rounded,
+                            isArabic,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: _buildTabButton(
+                            'history',
+                            'Signing History',
+                            'سجل التوقيع',
+                            Icons.history_rounded,
+                            isArabic,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const Divider(height: 1),
+                  // ── Tab content ────────────────────────────────────
+                  Expanded(
+                    child: _activeTab == 'signatures'
+                        ? _buildSignaturesTab(isArabic)
+                        : _buildHistoryTab(isArabic),
+                  ),
                 ],
+              )
               ),
         floatingActionButton: FloatingActionButton.extended(
           onPressed: () => _showCreateSignatureDialog(isArabic),
           backgroundColor: AppColors.primaryBlue,
           icon: const Icon(Icons.add),
           label: Text(isArabic ? 'إنشاء توقيع' : 'Create Signature'),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTabButton(String tab, String labelEn, String labelAr,
+      IconData icon, bool isArabic) {
+    final isActive = _activeTab == tab;
+    return GestureDetector(
+      onTap: () => setState(() => _activeTab = tab),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(vertical: 10),
+        decoration: BoxDecoration(
+          color: isActive ? AppColors.primaryBlue : const Color(0xFFF3F6FA),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon,
+                size: 20,
+                color: isActive ? Colors.white : AppColors.textLight),
+            const SizedBox(height: 3),
+            Text(
+              isArabic ? labelAr : labelEn,
+              style: GoogleFonts.poppins(
+                fontSize: isArabic ? 12 : 11,
+                fontWeight: FontWeight.w700,
+                color: isActive ? Colors.white : AppColors.textLight,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            Text(
+              isArabic ? labelEn : labelAr,
+              style: GoogleFonts.poppins(
+                fontSize: isArabic ? 10 : 11,
+                fontWeight: isArabic ? FontWeight.w600 : FontWeight.w700,
+                color: isActive
+                    ? Colors.white.withValues(alpha: 0.8)
+                    : AppColors.textLight,
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ],
         ),
       ),
     );
@@ -320,7 +378,7 @@ class _DigitalSignaturesScreenState extends State<DigitalSignaturesScreen>
                                 vertical: 2,
                               ),
                               decoration: BoxDecoration(
-                                color: AppColors.primaryBlue.withOpacity(0.1),
+                                color: AppColors.primaryBlue.withValues(alpha: 0.1),
                                 borderRadius: BorderRadius.circular(8),
                               ),
                               child: Text(
@@ -465,7 +523,7 @@ class _DigitalSignaturesScreenState extends State<DigitalSignaturesScreen>
         leading: Container(
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color: AppColors.primaryGreen.withOpacity(0.1),
+            color: AppColors.primaryGreen.withValues(alpha: 0.1),
             borderRadius: BorderRadius.circular(12),
           ),
           child: Icon(Icons.check_circle, color: AppColors.primaryGreen),

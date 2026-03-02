@@ -130,6 +130,9 @@ function transformFromDB(data: any): DownPaymentRequest {
     createdAt: data.created_at,
     updatedAt: data.updated_at,
     metadata: data.metadata || {},
+    paymentProofUrl: data.payment_proof_url || null,
+    paymentProofNotes: data.payment_proof_notes || null,
+    paymentProofUploadedAt: data.payment_proof_uploaded_at || null,
   };
 }
 
@@ -1017,10 +1020,16 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
     const isSupervisor = userRole === 'supervisor' || userRole === 'hubsupervisor';
     const isAdminRole = ['admin', 'financialadmin', 'superadmin', 'super_admin', 'ict', 'fom',
       'countrydirector', 'country_director', 'datateam', 'data_team'].includes(userRole || '');
+    const now = new Date().toISOString();
 
-    const tasks = data.requestIds.map(async (requestId): Promise<boolean> => {
+    // Separate eligible requests into buckets
+    const supervisorRows: Record<string, any>[] = [];
+    const adminRows: Record<string, any>[] = [];
+    const approvedUserIds: { userId: string; siteName: string; amount: number }[] = [];
+
+    for (const requestId of data.requestIds) {
       const request = requests.find(r => r.id === requestId);
-      if (!request) return false;
+      if (!request) continue;
 
       const approvedAmount = calculateApprovedAmount(
         request.requestedAmount,
@@ -1029,51 +1038,117 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
         data.customAmount
       );
 
-      const basePayload = {
-        requestId,
-        approvedBy: data.approvedBy,
-        approvedByName: data.approvedByName,
-        notes: data.notes,
-        approvalType: data.approvalType,
-        approvalPercentage: data.approvalPercentage,
-        customAmount: approvedAmount,
-        silent: true,
-      };
-
       if (request.status === 'pending_supervisor' && (isSupervisor || isAdminRole)) {
-        return supervisorApprove(basePayload);
+        // Super-admins go straight to fully approved (bypass two-tier)
+        if (isAdminRole) {
+          supervisorRows.push({
+            id: requestId,
+            supervisor_status: 'approved',
+            supervisor_approved_by: data.approvedBy,
+            supervisor_approved_at: now,
+            supervisor_notes: data.notes || null,
+            admin_status: 'approved',
+            admin_processed_by: data.approvedBy,
+            admin_processed_at: now,
+            admin_notes: data.notes || null,
+            remaining_amount: approvedAmount,
+            status: 'approved',
+            updated_at: now,
+            metadata: {
+              ...request.metadata,
+              supervisor_approved_by_name: data.approvedByName,
+              supervisor_approved_amount: approvedAmount,
+              admin_processed_by_name: data.approvedByName,
+              admin_approved_amount: approvedAmount,
+              approved_amount: approvedAmount,
+              approval_type: data.approvalType || 'full',
+              approval_percentage: data.approvalPercentage,
+              super_admin_bypass: true,
+            },
+          });
+        } else {
+          supervisorRows.push({
+            id: requestId,
+            supervisor_status: 'approved',
+            supervisor_approved_by: data.approvedBy,
+            supervisor_approved_at: now,
+            supervisor_notes: data.notes || null,
+            admin_status: 'pending',
+            remaining_amount: approvedAmount,
+            status: 'pending_admin',
+            updated_at: now,
+            metadata: {
+              ...request.metadata,
+              supervisor_approved_by_name: data.approvedByName,
+              supervisor_approved_amount: approvedAmount,
+              approved_amount: approvedAmount,
+              approval_type: data.approvalType || 'full',
+              approval_percentage: data.approvalPercentage,
+            },
+          });
+        }
+        if (request.requestedBy) {
+          approvedUserIds.push({ userId: request.requestedBy, siteName: request.siteName || '', amount: approvedAmount });
+        }
       } else if (request.status === 'pending_admin' && isAdminRole) {
-        return adminApprove(basePayload);
-      } else {
-        console.warn(`[BulkApprove] Skipping ${requestId}: status=${request.status}, role=${userRole}`);
-        return false;
-      }
-    });
-
-    const results = await Promise.allSettled(tasks);
-    let success = 0;
-    let failed = 0;
-    const approvedUserIds: { userId: string; siteName: string; amount: number }[] = [];
-
-    results.forEach((result, i) => {
-      if (result.status === 'fulfilled' && result.value === true) {
-        success++;
-        const req = requests.find(r => r.id === data.requestIds[i]);
-        if (req?.requestedBy) {
-          approvedUserIds.push({ userId: req.requestedBy, siteName: req.siteName || '', amount: req.requestedAmount });
+        adminRows.push({
+          id: requestId,
+          admin_status: 'approved',
+          admin_processed_by: data.approvedBy,
+          admin_processed_at: now,
+          admin_notes: data.notes || null,
+          remaining_amount: approvedAmount - request.totalPaidAmount,
+          status: 'approved',
+          updated_at: now,
+          metadata: {
+            ...request.metadata,
+            admin_processed_by_name: data.approvedByName,
+            admin_approved_amount: approvedAmount,
+            approved_amount: approvedAmount,
+          },
+        });
+        if (request.requestedBy) {
+          approvedUserIds.push({ userId: request.requestedBy, siteName: request.siteName || '', amount: approvedAmount });
         }
       } else {
-        failed++;
+        console.warn(`[BulkApprove] Skipping ${requestId}: status=${request.status}, role=${userRole}`);
       }
-    });
+    }
+
+    let success = 0;
+    let failed = 0;
+
+    // Use individual updates (not upsert) — upsert requires INSERT permission
+    // which RLS may not grant; update only needs UPDATE permission
+    const allRows = [...supervisorRows, ...adminRows];
+
+    if (allRows.length > 0) {
+      const results = await Promise.all(
+        allRows.map(({ id, ...updateData }) =>
+          supabase
+            .from('down_payment_requests')
+            .update(updateData)
+            .eq('id', id)
+        )
+      );
+
+      for (const { error } of results) {
+        if (error) {
+          console.error('[BulkApprove] update failed:', error.message);
+          failed += 1;
+        } else {
+          success += 1;
+        }
+      }
+    }
 
     if (success > 0) {
       toast({
-        title: `${success} Request${success > 1 ? 's' : ''} Approved`,
-        description: `${success} request${success > 1 ? 's' : ''} approved successfully${failed > 0 ? ` · ${failed} failed` : ''}`,
+        title: `${success} Request${success > 1 ? 's' : ''} Approved / تمت الموافقة`,
+        description: `${success} approved successfully${failed > 0 ? ` · ${failed} failed` : ''}`,
       });
-
-      approvedUserIds.forEach(({ userId, siteName, amount }) => {
+      // Fire notifications in background — don't block the UI
+      approvedUserIds.slice(0, success).forEach(({ userId, siteName, amount }) => {
         NotificationTriggerService.send({
           userId,
           title: 'Down-Payment Request Approved',
@@ -1083,14 +1158,14 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
           priority: 'high',
           link: '/wallet',
           sendEmail: true,
-          emailActionLabel: 'View Wallet'
+          emailActionLabel: 'View Wallet',
         }).catch(console.error);
       });
     }
 
     if (failed > 0 && success === 0) {
       toast({
-        title: 'Approval Failed',
+        title: 'Approval Failed / فشل الموافقة',
         description: `${failed} request${failed > 1 ? 's' : ''} could not be approved`,
         variant: 'destructive',
       });
@@ -1132,12 +1207,21 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
       const updatedAuditLog = [...(request.auditLog || []), auditEntry];
       const updatedMetadata: Record<string, any> = { ...request.metadata, audit_log: updatedAuditLog };
 
+      // Detect if request was in a paid state — need to also reset payment fields
+      const wasPaid = ['partially_paid', 'fully_paid'].includes(request.status);
+
       if (data.targetStatus === 'pending_supervisor') {
         updatedMetadata.supervisor_approved_amount = null;
         updatedMetadata.admin_approved_amount = null;
         updatedMetadata.approved_amount = null;
         updatedMetadata.approval_type = null;
         updatedMetadata.approval_percentage = null;
+        if (wasPaid) {
+          // Also clear payment reconciliation metadata when rolling back from a paid state
+          updatedMetadata.advance_reconciled_at = null;
+          updatedMetadata.payment_processed_at = null;
+          updatedMetadata.receipt_confirmation = null;
+        }
         updateData = {
           ...updateData,
           supervisor_status: 'pending',
@@ -1150,10 +1234,16 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
           admin_processed_at: null,
           admin_notes: null,
           admin_rejection_reason: null,
+          ...(wasPaid ? { total_paid_amount: 0 } : {}),
           metadata: updatedMetadata,
         };
       } else if (data.targetStatus === 'pending_admin') {
         updatedMetadata.admin_approved_amount = null;
+        if (wasPaid) {
+          updatedMetadata.advance_reconciled_at = null;
+          updatedMetadata.payment_processed_at = null;
+          updatedMetadata.receipt_confirmation = null;
+        }
         updateData = {
           ...updateData,
           admin_status: 'pending',
@@ -1161,9 +1251,13 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
           admin_processed_at: null,
           admin_notes: null,
           admin_rejection_reason: null,
+          ...(wasPaid ? { total_paid_amount: 0 } : {}),
           metadata: updatedMetadata,
         };
       } else if (data.targetStatus === 'approved') {
+        updatedMetadata.advance_reconciled_at = null;
+        updatedMetadata.payment_processed_at = null;
+        updatedMetadata.receipt_confirmation = null;
         updateData = {
           ...updateData,
           total_paid_amount: 0,
@@ -1171,16 +1265,28 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
         };
       }
 
-      const { error } = await supabase
+      // Race the DB update against a 15-second timeout so the UI never hangs indefinitely
+      const updatePromise = supabase
         .from('down_payment_requests')
         .update(updateData)
         .eq('id', data.requestId);
 
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('Request timed out — please try again')), 15000)
+      );
+
+      const { error } = await Promise.race([updatePromise, timeoutPromise]) as { error: any };
+
       if (error) throw error;
 
+      const targetLabel =
+        data.targetStatus === 'pending_supervisor' ? 'Pending Supervisor Approval' :
+        data.targetStatus === 'pending_admin'       ? 'Pending Admin Approval' :
+                                                      'Approved (Ready for Payment)';
+
       toast({
-        title: 'Status Reverted',
-        description: `Request has been reverted to ${data.targetStatus === 'pending_supervisor' ? 'Pending Supervisor Approval' : 'Pending Admin Approval'}`,
+        title: 'Status Reverted / تم الإرجاع',
+        description: `Request has been reverted to ${targetLabel}`,
       });
 
       await refreshRequests();

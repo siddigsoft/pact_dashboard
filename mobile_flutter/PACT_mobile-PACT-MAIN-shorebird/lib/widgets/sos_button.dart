@@ -61,7 +61,7 @@ class SOSButton extends StatelessWidget {
                     leading: Container(
                       padding: const EdgeInsets.all(8),
                       decoration: BoxDecoration(
-                        color: AppColors.accentRed.withOpacity(0.1),
+                        color: AppColors.accentRed.withValues(alpha: 0.1),
                         shape: BoxShape.circle,
                       ),
                       child:
@@ -104,7 +104,7 @@ class SOSButton extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: AppColors.accentRed.withOpacity(0.1),
+            color: AppColors.accentRed.withValues(alpha: 0.1),
             borderRadius: BorderRadius.circular(12),
             border: Border.all(color: AppColors.accentRed, width: 2),
           ),
@@ -127,7 +127,7 @@ class SOSButton extends StatelessWidget {
       ),
     ).animate(onPlay: (controller) => controller.repeat()).shimmer(
           duration: const Duration(milliseconds: 2000),
-          color: AppColors.accentRed.withOpacity(0.3),
+          color: AppColors.accentRed.withValues(alpha: 0.3),
         );
   }
 }

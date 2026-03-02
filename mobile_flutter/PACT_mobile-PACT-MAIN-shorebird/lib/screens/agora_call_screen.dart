@@ -275,7 +275,7 @@ class _AgoraCallScreenState extends State<AgoraCallScreen>
           end: Alignment.bottomCenter,
           colors: [
             const Color(0xFF1a1a2e),
-            AppColors.primary.withOpacity(0.3),
+            AppColors.primary.withValues(alpha: 0.3),
             const Color(0xFF1a1a2e),
           ],
         ),
@@ -305,13 +305,13 @@ class _AgoraCallScreenState extends State<AgoraCallScreen>
                       ),
                       decoration: BoxDecoration(
                         color: _isConnected
-                            ? Colors.green.withOpacity(0.2)
-                            : Colors.orange.withOpacity(0.2),
+                            ? Colors.green.withValues(alpha: 0.2)
+                            : Colors.orange.withValues(alpha: 0.2),
                         borderRadius: BorderRadius.circular(12),
                         border: Border.all(
                           color: _isConnected
-                              ? Colors.green.withOpacity(0.5)
-                              : Colors.orange.withOpacity(0.5),
+                              ? Colors.green.withValues(alpha: 0.5)
+                              : Colors.orange.withValues(alpha: 0.5),
                         ),
                       ),
                       child: Row(
@@ -389,13 +389,13 @@ class _AgoraCallScreenState extends State<AgoraCallScreen>
             Icon(
               Icons.info_outline,
               size: 56,
-              color: Colors.white.withOpacity(0.7),
+              color: Colors.white.withValues(alpha: 0.7),
             ),
             const SizedBox(height: 20),
             Text(
               'Calls on web',
               style: TextStyle(
-                color: Colors.white.withOpacity(0.9),
+                color: Colors.white.withValues(alpha: 0.9),
                 fontSize: 22,
                 fontWeight: FontWeight.bold,
               ),
@@ -405,7 +405,7 @@ class _AgoraCallScreenState extends State<AgoraCallScreen>
               'Use the mobile app for audio and video.\nYou can start or receive calls here; the other person joins from the app.',
               textAlign: TextAlign.center,
               style: TextStyle(
-                color: Colors.white.withOpacity(0.7),
+                color: Colors.white.withValues(alpha: 0.7),
                 fontSize: 15,
               ),
             ),
@@ -414,7 +414,7 @@ class _AgoraCallScreenState extends State<AgoraCallScreen>
               Text(
                 widget.isOutgoing ? 'Calling ${widget.remoteUserName}...' : 'With ${widget.remoteUserName}',
                 style: TextStyle(
-                  color: Colors.white.withOpacity(0.8),
+                  color: Colors.white.withValues(alpha: 0.8),
                   fontSize: 16,
                 ),
               ),
@@ -470,7 +470,7 @@ class _AgoraCallScreenState extends State<AgoraCallScreen>
                 borderRadius: BorderRadius.circular(16),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.5),
+                    color: Colors.black.withValues(alpha: 0.5),
                     blurRadius: 10,
                     spreadRadius: 2,
                   ),
@@ -534,13 +534,13 @@ class _AgoraCallScreenState extends State<AgoraCallScreen>
               shape: BoxShape.circle,
               gradient: LinearGradient(
                 colors: [
-                  AppColors.primary.withOpacity(0.5),
-                  AppColors.primary.withOpacity(0.3),
+                  AppColors.primary.withValues(alpha: 0.5),
+                  AppColors.primary.withValues(alpha: 0.3),
                 ],
               ),
               boxShadow: [
                 BoxShadow(
-                  color: AppColors.primary.withOpacity(0.4),
+                  color: AppColors.primary.withValues(alpha: 0.4),
                   blurRadius: 30,
                   spreadRadius: 5,
                 ),
@@ -583,7 +583,7 @@ class _AgoraCallScreenState extends State<AgoraCallScreen>
               : _isConnected
                   ? 'Audio Call'
                   : 'Call ended',
-          style: TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 16),
+          style: TextStyle(color: Colors.white.withValues(alpha: 0.7), fontSize: 16),
         ),
 
         const SizedBox(height: 16),
@@ -593,9 +593,9 @@ class _AgoraCallScreenState extends State<AgoraCallScreen>
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             decoration: BoxDecoration(
-              color: Colors.green.withOpacity(0.2),
+              color: Colors.green.withValues(alpha: 0.2),
               borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: Colors.green.withOpacity(0.5)),
+              border: Border.all(color: Colors.green.withValues(alpha: 0.5)),
             ),
             child: const Row(
               mainAxisSize: MainAxisSize.min,
@@ -619,7 +619,7 @@ class _AgoraCallScreenState extends State<AgoraCallScreen>
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       decoration: BoxDecoration(
-        color: Colors.black.withOpacity(0.5),
+        color: Colors.black.withValues(alpha: 0.5),
         borderRadius: BorderRadius.circular(20),
       ),
       child: Row(
@@ -665,7 +665,7 @@ class _AgoraCallScreenState extends State<AgoraCallScreen>
       height: 130,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        color: AppColors.primary.withOpacity(0.3),
+        color: AppColors.primary.withValues(alpha: 0.3),
       ),
       child: Center(
         child: Text(
@@ -692,7 +692,7 @@ class _AgoraCallScreenState extends State<AgoraCallScreen>
       height: 32,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        color: AppColors.primary.withOpacity(0.5),
+        color: AppColors.primary.withValues(alpha: 0.5),
       ),
       child: Center(
         child: Text(
@@ -768,8 +768,8 @@ class _AgoraCallScreenState extends State<AgoraCallScreen>
       children: [
         Material(
           color: isActive
-              ? Colors.red.withOpacity(0.2)
-              : Colors.white.withOpacity(0.1),
+              ? Colors.red.withValues(alpha: 0.2)
+              : Colors.white.withValues(alpha: 0.1),
           shape: const CircleBorder(),
           child: InkWell(
             onTap: onPressed,
@@ -781,8 +781,8 @@ class _AgoraCallScreenState extends State<AgoraCallScreen>
                 shape: BoxShape.circle,
                 border: Border.all(
                   color: isActive
-                      ? Colors.red.withOpacity(0.5)
-                      : Colors.white.withOpacity(0.3),
+                      ? Colors.red.withValues(alpha: 0.5)
+                      : Colors.white.withValues(alpha: 0.3),
                   width: 1,
                 ),
               ),

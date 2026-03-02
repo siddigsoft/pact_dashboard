@@ -1155,48 +1155,64 @@ const AdminWalletDetail = () => {
                         </TableRow>
                       ))
                     )}
-                    {transactions.length > 0 && (
-                      <>
-                        <TableRow className="border-cyan-500/30 bg-green-500/10 font-semibold">
-                          <TableCell colSpan={3} className="text-green-300 text-right">
-                            Total Earned:
-                          </TableCell>
-                          <TableCell className="text-right text-green-400 font-bold">
-                            +{currencyFmt(
-                              transactions.filter(t => t.amount > 0).reduce((sum, t) => sum + t.amount, 0),
-                              currency
-                            )}
-                          </TableCell>
-                          <TableCell />
-                        </TableRow>
-                        {transactions.some(t => t.amount < 0) && (
-                          <TableRow className="border-cyan-500/30 bg-red-500/10 font-semibold">
-                            <TableCell colSpan={3} className="text-red-300 text-right">
-                              Total Deducted:
+                    {transactions.length > 0 && (() => {
+                      const advanceTypes = ['down_payment', 'advance_deduction'];
+                      const earnTypes = ['earning', 'site_visit_fee', 'bonus', 'adjustment'];
+                      const totalEarned = transactions
+                        .filter(t => earnTypes.includes(t.type))
+                        .reduce((sum, t) => sum + t.amount, 0);
+                      const totalAdvances = transactions
+                        .filter(t => advanceTypes.includes(t.type))
+                        .reduce((sum, t) => sum + Math.abs(t.amount), 0);
+                      const totalDeducted = transactions
+                        .filter(t => t.amount < 0 && !advanceTypes.includes(t.type))
+                        .reduce((sum, t) => sum + t.amount, 0);
+                      const netBalance = totalEarned - totalAdvances + totalDeducted;
+                      return (
+                        <>
+                          <TableRow className="border-cyan-500/30 bg-green-500/10 font-semibold">
+                            <TableCell colSpan={3} className="text-green-300 text-right">
+                              Total Earned:
                             </TableCell>
-                            <TableCell className="text-right text-red-400 font-bold">
-                              {currencyFmt(
-                                transactions.filter(t => t.amount < 0).reduce((sum, t) => sum + t.amount, 0),
-                                currency
-                              )}
+                            <TableCell className="text-right text-green-400 font-bold">
+                              +{currencyFmt(totalEarned, currency)}
                             </TableCell>
                             <TableCell />
                           </TableRow>
-                        )}
-                        <TableRow className="border-cyan-500/30 bg-blue-500/10 font-semibold">
-                          <TableCell colSpan={3} className="text-blue-200 text-right">
-                            Net Balance:
-                          </TableCell>
-                          <TableCell className="text-right text-blue-300 font-bold text-lg">
-                            {currencyFmt(
-                              transactions.reduce((sum, t) => sum + t.amount, 0),
-                              currency
-                            )}
-                          </TableCell>
-                          <TableCell />
-                        </TableRow>
-                      </>
-                    )}
+                          {totalAdvances > 0 && (
+                            <TableRow className="border-cyan-500/30 bg-orange-500/10 font-semibold">
+                              <TableCell colSpan={3} className="text-orange-300 text-right">
+                                Advances Paid:
+                              </TableCell>
+                              <TableCell className="text-right text-orange-400 font-bold">
+                                -{currencyFmt(totalAdvances, currency)}
+                              </TableCell>
+                              <TableCell />
+                            </TableRow>
+                          )}
+                          {totalDeducted < 0 && (
+                            <TableRow className="border-cyan-500/30 bg-red-500/10 font-semibold">
+                              <TableCell colSpan={3} className="text-red-300 text-right">
+                                Total Deducted:
+                              </TableCell>
+                              <TableCell className="text-right text-red-400 font-bold">
+                                {currencyFmt(totalDeducted, currency)}
+                              </TableCell>
+                              <TableCell />
+                            </TableRow>
+                          )}
+                          <TableRow className="border-cyan-500/30 bg-blue-500/10 font-semibold">
+                            <TableCell colSpan={3} className="text-blue-200 text-right">
+                              Net Balance:
+                            </TableCell>
+                            <TableCell className="text-right text-blue-300 font-bold text-lg">
+                              {currencyFmt(netBalance, currency)}
+                            </TableCell>
+                            <TableCell />
+                          </TableRow>
+                        </>
+                      );
+                    })()}
                   </TableBody>
                 </Table>
               </div>
