@@ -293,6 +293,17 @@ When determining which user should receive payment, the system checks in this or
 
 ---
 
+## Transport advances (deduction at completion)
+
+When a user receives a **transport advance** (down payment) for a site, that amount must not be credited again at site completion. The **site earning** and **wallet balance** should only increase by the **net** amount: (site fee − advance already paid).
+
+- **When the advance is paid**: The advance is recorded in `down_payment_requests` and a `wallet_transactions` row with type `down_payment` may be created. Wallet balance is **not** increased at that time (advance is cash/disbursement; deduction happens at completion).
+- **When the site is completed**: Both the **application** (`createSiteVisitWalletTransaction` in `src/utils/wallet-transactions.ts`) and the **database trigger** (`create_wallet_transaction_on_completion`) look up unreconciled advances for that site (by `mmp_site_entry_id` / `site_visit_id` or by `site_name` + `requested_by`). They subtract `total_paid_amount` from the gross fee, then credit only the **net** amount to the wallet and set `advance_reconciled_at` on those advances so they are not deducted again.
+
+If completion is done by an **UPDATE status = 'Completed'** (e.g. report submission or sync), the **trigger** runs first and creates the earning. The trigger was updated (migration `20260227_deduct_advances_on_completion_trigger.sql`) to deduct advances so that wallet balance and site earning are correct even when the app’s duplicate check then skips creating a second transaction.
+
+---
+
 ## Duplicate Prevention
 
 The system has multiple layers of duplicate prevention:
