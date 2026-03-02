@@ -63,6 +63,9 @@ export const MobileListItem = forwardRef<HTMLButtonElement, MobileListItemProps>
             src={leftImage} 
             alt="" 
             className="w-full h-full object-cover"
+            width={40}
+            height={40}
+            loading="lazy"
           />
         </div>
       )}

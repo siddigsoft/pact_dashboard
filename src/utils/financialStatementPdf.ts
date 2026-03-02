@@ -82,20 +82,7 @@ function rr(doc: any, x: number, y: number, w: number, h: number, r: number, fil
   doc.setLineWidth(0.2);
 }
 
-async function loadLogoAsDataUrl(): Promise<string | null> {
-  try {
-    const resp = await fetch('/pact-logo.png');
-    const blob = await resp.blob();
-    return new Promise((resolve) => {
-      const reader = new FileReader();
-      reader.onloadend = () => resolve(reader.result as string);
-      reader.onerror = () => resolve(null);
-      reader.readAsDataURL(blob);
-    });
-  } catch {
-    return null;
-  }
-}
+import { loadPactLogoDataUrl } from './pdfLogoCache';
 
 async function loadArabicFont(doc: any): Promise<boolean> {
   try {
@@ -149,7 +136,7 @@ export async function generateFinancialStatementPdf(
   const cur = config.currency || 'SDG';
 
   const hasArabic = await loadArabicFont(doc);
-  const logoDataUrl = await loadLogoAsDataUrl();
+  const logoDataUrl = await loadPactLogoDataUrl();
 
   const arText = (text: string, x: number, yPos: number, opts?: any) => {
     if (!hasArabic) return;

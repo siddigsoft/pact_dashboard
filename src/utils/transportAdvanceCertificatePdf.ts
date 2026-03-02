@@ -95,20 +95,7 @@ function containsArabic(text: string): boolean {
   return /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/.test(text);
 }
 
-async function loadLogoAsDataUrl(): Promise<string | null> {
-  try {
-    const resp = await fetch('/pact-logo.png');
-    const blob = await resp.blob();
-    return new Promise((resolve) => {
-      const reader = new FileReader();
-      reader.onloadend = () => resolve(reader.result as string);
-      reader.onerror = () => resolve(null);
-      reader.readAsDataURL(blob);
-    });
-  } catch {
-    return null;
-  }
-}
+import { loadPactLogoDataUrl } from './pdfLogoCache';
 
 async function generateQRDataUrl(text: string): Promise<string | null> {
   try {
@@ -231,7 +218,7 @@ async function buildTransportCertificateDoc(data: TransportAdvanceCertificateDat
   const qrContent = qrLines.join('\n');
 
   const [logoDataUrl, qrDataUrl] = await Promise.all([
-    loadLogoAsDataUrl(),
+    loadPactLogoDataUrl(),
     generateQRDataUrl(qrContent),
   ]);
 
@@ -756,7 +743,7 @@ export async function generateBulkPaymentPdf(
     hasArabic = await loadArabicFont(doc);
   } catch {}
 
-  const logoDataUrl = await loadLogoAsDataUrl();
+  const logoDataUrl = await loadPactLogoDataUrl();
 
   const arText = (text: string, x: number, yPos: number, opts?: any) => {
     if (!hasArabic) return;
@@ -1064,7 +1051,7 @@ export async function generateBulkPaymentPdfBase64(
     hasArabic = await loadArabicFont(doc);
   } catch {}
 
-  const logoDataUrl = await loadLogoAsDataUrl();
+  const logoDataUrl = await loadPactLogoDataUrl();
 
   const arText = (text: string, x: number, yPos: number, opts?: any) => {
     if (!hasArabic) return;

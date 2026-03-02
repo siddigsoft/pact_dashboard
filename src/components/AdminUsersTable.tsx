@@ -80,6 +80,9 @@ const AdminUsersTable: React.FC<AdminUsersTableProps> = ({ users }) => {
                     src={user.avatar} 
                     alt={user.name} 
                     className="h-8 w-8 rounded-full object-cover"
+                    width={32}
+                    height={32}
+                    loading="lazy"
                   />
                 ) : (
                   <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center">

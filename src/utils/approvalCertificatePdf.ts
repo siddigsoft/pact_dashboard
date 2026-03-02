@@ -90,20 +90,7 @@ function getCleanNotes(notes: string | null): string {
   return notes.replace(/\n?\[Signed:.*?\]/, '').trim();
 }
 
-async function loadLogoAsDataUrl(): Promise<string | null> {
-  try {
-    const resp = await fetch('/pact-logo.png');
-    const blob = await resp.blob();
-    return new Promise((resolve) => {
-      const reader = new FileReader();
-      reader.onloadend = () => resolve(reader.result as string);
-      reader.onerror = () => resolve(null);
-      reader.readAsDataURL(blob);
-    });
-  } catch {
-    return null;
-  }
-}
+import { loadPactLogoDataUrl } from './pdfLogoCache';
 
 async function generateQRDataUrl(text: string): Promise<string | null> {
   try {
@@ -218,7 +205,7 @@ async function buildApprovalCertificateDoc(data: ApprovalCertificateData): Promi
   const qrContent = qrLines.join('\n');
 
   const [logoDataUrl, qrDataUrl] = await Promise.all([
-    loadLogoAsDataUrl(),
+    loadPactLogoDataUrl(),
     generateQRDataUrl(qrContent),
   ]);
 

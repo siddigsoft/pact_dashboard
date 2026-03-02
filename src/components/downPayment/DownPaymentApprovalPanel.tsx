@@ -1,4 +1,5 @@
-import { useState, useMemo, useRef, useEffect } from 'react';
+import { useState, useMemo, useRef, useEffect, type ReactNode } from 'react';
+import { useVirtualizer } from '@tanstack/react-virtual';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -98,6 +99,48 @@ const STATUS_OPTIONS: { value: DownPaymentStatus; label: string }[] = [
 ];
 
 type BulkSummaryEntry = { count: number; requested: number; approved: number };
+
+function VirtualizedRequestList({
+  requests,
+  renderCard,
+}: {
+  requests: DownPaymentRequest[];
+  renderCard: (request: DownPaymentRequest) => ReactNode;
+}) {
+  const parentRef = useRef<HTMLDivElement>(null);
+  const virtualizer = useVirtualizer({
+    count: requests.length,
+    getScrollElement: () => parentRef.current,
+    estimateSize: () => 210,
+    overscan: 5,
+  });
+  if (requests.length === 0) return null;
+  return (
+    <div ref={parentRef} className="min-h-[400px] max-h-[70vh] overflow-auto rounded-md">
+      <div style={{ height: virtualizer.getTotalSize(), position: 'relative' }}>
+        {virtualizer.getVirtualItems().map((virtualRow) => {
+          const request = requests[virtualRow.index];
+          return (
+            <div
+              key={request.id}
+              style={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                width: '100%',
+                height: `${virtualRow.size}px`,
+                transform: `translateY(${virtualRow.start}px)`,
+                paddingBottom: 12,
+              }}
+            >
+              {renderCard(request)}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 
 function BulkSummaryTable({ requests, users }: {
   requests: Array<{ requestedBy?: string; requestedAmount: number; approvedAmount?: number; stateName?: string; hubName?: string; [key: string]: unknown }>;
@@ -2299,15 +2342,13 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
           {pendingRequests.length === 0 ? (
             <Card><CardContent className="py-8 text-center text-muted-foreground">No pending requests</CardContent></Card>
           ) : (
-            <div className="space-y-3">
+            <div>
               <div className="flex items-center gap-2 mb-2">
                 <Button variant="ghost" size="sm" onClick={() => selectAll(pendingRequests)} data-testid="button-select-all">
                   Select All
                 </Button>
               </div>
-              {pendingRequests.map(request => (
-                <RequestCard key={request.id} request={request} showCheckbox />
-              ))}
+              <VirtualizedRequestList requests={pendingRequests} renderCard={(r) => <RequestCard request={r} showCheckbox />} />
             </div>
           )}
         </TabsContent>
@@ -2547,7 +2588,7 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
           {processingRequests.length === 0 ? (
             <Card><CardContent className="py-8 text-center text-muted-foreground">No requests in processing</CardContent></Card>
           ) : (
-            <div className="space-y-3">
+            <div>
               <div className="flex items-center gap-2 mb-2">
                 <Checkbox
                   checked={processingRequests.length > 0 && processingRequests.every(r => selectedIds.has(r.id))}
@@ -2564,9 +2605,7 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
                   Select All ({processingRequests.length})
                 </Button>
               </div>
-              {processingRequests.map(request => (
-                <RequestCard key={request.id} request={request} showCheckbox />
-              ))}
+              <VirtualizedRequestList requests={processingRequests} renderCard={(r) => <RequestCard request={r} showCheckbox />} />
             </div>
           )}
         </TabsContent>
@@ -2575,11 +2614,7 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
           {completedRequests.length === 0 ? (
             <Card><CardContent className="py-8 text-center text-muted-foreground">No completed requests</CardContent></Card>
           ) : (
-            <div className="space-y-3">
-              {completedRequests.map(request => (
-                <RequestCard key={request.id} request={request} />
-              ))}
-            </div>
+            <VirtualizedRequestList requests={completedRequests} renderCard={(r) => <RequestCard request={r} />} />
           )}
         </TabsContent>
 
@@ -2587,11 +2622,7 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
           {filteredRequests.length === 0 ? (
             <Card><CardContent className="py-8 text-center text-muted-foreground">No requests found</CardContent></Card>
           ) : (
-            <div className="space-y-3">
-              {filteredRequests.map(request => (
-                <RequestCard key={request.id} request={request} />
-              ))}
-            </div>
+            <VirtualizedRequestList requests={filteredRequests} renderCard={(r) => <RequestCard request={r} />} />
           )}
         </TabsContent>
       </Tabs>

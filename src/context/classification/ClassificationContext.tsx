@@ -1,7 +1,16 @@
 import { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useUser } from '@/context/user/UserContext';
+import {
+  useUserClassificationsQuery,
+  useFeeStructuresQuery,
+  useInvalidateClassificationQueries,
+  transformUserClassificationFromDB,
+  transformFeeStructureFromDB,
+  classificationQueryKeys,
+} from './classificationQueries';
 import type {
   UserClassification,
   ClassificationFeeStructure,
@@ -51,131 +60,24 @@ interface ClassificationContextType {
 
 const ClassificationContext = createContext<ClassificationContextType | undefined>(undefined);
 
-function transformUserClassificationFromDB(data: any): UserClassification {
-  return {
-    id: data.id,
-    userId: data.user_id,
-    classificationLevel: data.classification_level,
-    roleScope: data.role_scope,
-    effectiveFrom: data.effective_from,
-    effectiveUntil: data.effective_until,
-    hasRetainer: data.has_retainer,
-    retainerAmountCents: parseInt(data.retainer_amount_cents || 0),
-    retainerCurrency: data.retainer_currency,
-    retainerFrequency: data.retainer_frequency,
-    assignedBy: data.assigned_by,
-    changeReason: data.change_reason,
-    notes: data.notes,
-    isActive: data.is_active,
-    createdAt: data.created_at,
-    updatedAt: data.updated_at,
-  };
-}
-
-function transformFeeStructureFromDB(data: any): ClassificationFeeStructure {
-  return {
-    id: data.id,
-    classificationLevel: data.classification_level,
-    roleScope: data.role_scope,
-    siteVisitBaseFeeCents: parseInt(data.site_visit_base_fee_cents || 0),
-    complexityMultiplier: parseFloat(data.complexity_multiplier || 1.0),
-    currency: data.currency,
-    validFrom: data.effective_from,
-    validUntil: data.effective_until,
-    metadata: data.metadata,
-    isActive: data.is_active,
-    createdBy: data.created_by,
-    updatedBy: data.updated_by,
-    changeNotes: data.change_notes,
-    createdAt: data.created_at,
-    updatedAt: data.updated_at,
-  };
-}
-
 export const ClassificationProvider = ({ children }: { children: ReactNode }) => {
-  const [userClassifications, setUserClassifications] = useState<UserClassification[]>([]);
-  const [feeStructures, setFeeStructures] = useState<ClassificationFeeStructure[]>([]);
+  const queryClient = useQueryClient();
+  const { invalidateUserClassifications, invalidateFeeStructures } = useInvalidateClassificationQueries();
   const [classificationHistory, setClassificationHistory] = useState<Record<string, ClassificationHistory[]>>({});
-  const [loading, setLoading] = useState(false);
   const { toast } = useToast();
   const { currentUser } = useUser();
 
-  // Fetch user classifications
+  const { data: userClassifications = [], isLoading: loadingClassifications } = useUserClassificationsQuery();
+  const { data: feeStructures = [], isLoading: loadingFees } = useFeeStructuresQuery();
+  const loading = loadingClassifications || loadingFees;
+
   const refreshUserClassifications = useCallback(async () => {
-    try {
-      setLoading(true);
-      const { data, error } = await supabase
-        .from('user_classifications')
-        .select('*')
-        .order('effective_from', { ascending: false });
+    await invalidateUserClassifications();
+  }, [invalidateUserClassifications]);
 
-      if (error) throw error;
-
-      if (data) {
-        setUserClassifications(data.map(transformUserClassificationFromDB));
-      }
-    } catch (error: any) {
-      // Silent error - table might not exist or be empty (optional feature)
-      console.warn('[Classification] Could not load user classifications:', error?.message || error);
-    } finally {
-      setLoading(false);
-    }
-  }, [toast]);
-
-  // Fetch fee structures
   const refreshFeeStructures = useCallback(async () => {
-    try {
-      setLoading(true);
-      const { data, error } = await supabase
-        .from('classification_fee_structures')
-        .select('*')
-        .order('effective_from', { ascending: false });
-
-      if (error) throw error;
-
-      if (data) {
-        setFeeStructures(data.map(transformFeeStructureFromDB));
-      }
-    } catch (error: any) {
-      // Silent error - table might not exist or be empty (optional feature)
-      console.warn('[Classification] Could not load fee structures:', error?.message || error);
-    } finally {
-      setLoading(false);
-    }
-  }, [toast]);
-
-  // Initial data load - run both in parallel for faster loading
-  useEffect(() => {
-    const loadInitialData = async () => {
-      setLoading(true);
-      try {
-        // Run both queries in parallel
-        const [classificationsResult, feeStructuresResult] = await Promise.all([
-          supabase
-            .from('user_classifications')
-            .select('*')
-            .order('effective_from', { ascending: false }),
-          supabase
-            .from('classification_fee_structures')
-            .select('*')
-            .order('effective_from', { ascending: false })
-        ]);
-
-        if (classificationsResult.data) {
-          setUserClassifications(classificationsResult.data.map(transformUserClassificationFromDB));
-        }
-        if (feeStructuresResult.data) {
-          setFeeStructures(feeStructuresResult.data.map(transformFeeStructureFromDB));
-        }
-      } catch (error: any) {
-        console.warn('[Classification] Could not load initial data:', error?.message || error);
-      } finally {
-        setLoading(false);
-      }
-    };
-    
-    loadInitialData();
-  }, []);
+    await invalidateFeeStructures();
+  }, [invalidateFeeStructures]);
 
   // Realtime subscriptions for classification changes
   useEffect(() => {
@@ -184,10 +86,8 @@ export const ClassificationProvider = ({ children }: { children: ReactNode }) =>
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'user_classifications' },
-        (payload) => {
-          console.log('Classification change:', payload);
-          refreshUserClassifications();
-          
+        () => {
+          queryClient.invalidateQueries({ queryKey: classificationQueryKeys.userClassifications() });
           toast({
             title: 'Classification Updated',
             description: 'A team member classification has been changed',
@@ -201,10 +101,8 @@ export const ClassificationProvider = ({ children }: { children: ReactNode }) =>
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'classification_fee_structures' },
-        (payload) => {
-          console.log('Fee structure change:', payload);
-          refreshFeeStructures();
-          
+        () => {
+          queryClient.invalidateQueries({ queryKey: classificationQueryKeys.feeStructures() });
           toast({
             title: 'Fee Structure Updated',
             description: 'Classification fee structures have been updated',
@@ -217,8 +115,7 @@ export const ClassificationProvider = ({ children }: { children: ReactNode }) =>
       supabase.removeChannel(classificationsChannel);
       supabase.removeChannel(feesChannel);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [queryClient, toast]);
 
   // Get user classification
   const getUserClassification = useCallback((userId: string): UserClassification | null => {
@@ -261,7 +158,7 @@ export const ClassificationProvider = ({ children }: { children: ReactNode }) =>
       if (error) throw error;
 
       const newClassification = transformUserClassificationFromDB(result);
-      setUserClassifications((prev) => [newClassification, ...prev]);
+      queryClient.invalidateQueries({ queryKey: classificationQueryKeys.userClassifications() });
 
       toast({
         title: 'Success',
@@ -278,7 +175,7 @@ export const ClassificationProvider = ({ children }: { children: ReactNode }) =>
       });
       return null;
     }
-  }, [currentUser, toast]);
+  }, [currentUser, toast, queryClient]);
 
   // Update user classification
   const updateUserClassification = useCallback(async (id: string, data: UpdateClassificationRequest): Promise<void> => {
@@ -304,7 +201,7 @@ export const ClassificationProvider = ({ children }: { children: ReactNode }) =>
 
       if (error) throw error;
 
-      await refreshUserClassifications();
+      queryClient.invalidateQueries({ queryKey: classificationQueryKeys.userClassifications() });
 
       toast({
         title: 'Success',
@@ -319,7 +216,7 @@ export const ClassificationProvider = ({ children }: { children: ReactNode }) =>
       });
       throw error;
     }
-  }, [refreshUserClassifications, toast]);
+  }, [toast, queryClient]);
 
   // Deactivate user classification
   const deactivateUserClassification = useCallback(async (id: string, reason: string): Promise<void> => {
@@ -335,7 +232,7 @@ export const ClassificationProvider = ({ children }: { children: ReactNode }) =>
 
       if (error) throw error;
 
-      await refreshUserClassifications();
+      queryClient.invalidateQueries({ queryKey: classificationQueryKeys.userClassifications() });
 
       toast({
         title: 'Success',
@@ -350,7 +247,7 @@ export const ClassificationProvider = ({ children }: { children: ReactNode }) =>
       });
       throw error;
     }
-  }, [refreshUserClassifications, toast]);
+  }, [toast, queryClient]);
 
   // Assign Classification - intelligently creates or updates
   // CONSTRAINT: Each user can only have ONE active classification at a time
@@ -431,8 +328,7 @@ export const ClassificationProvider = ({ children }: { children: ReactNode }) =>
 
       console.log('[Classification] Successfully inserted:', result?.id);
 
-      // Refresh classifications to get updated data
-      await refreshUserClassifications();
+      queryClient.invalidateQueries({ queryKey: classificationQueryKeys.userClassifications() });
 
       const newClassification = transformUserClassificationFromDB(result);
 
@@ -459,7 +355,7 @@ export const ClassificationProvider = ({ children }: { children: ReactNode }) =>
       });
       throw error;
     }
-  }, [userClassifications, currentUser, refreshUserClassifications, toast]);
+  }, [userClassifications, currentUser, toast, queryClient]);
 
   // Create fee structure
   const createFeeStructure = useCallback(async (data: CreateFeeStructureRequest): Promise<ClassificationFeeStructure | null> => {
@@ -487,7 +383,7 @@ export const ClassificationProvider = ({ children }: { children: ReactNode }) =>
       if (error) throw error;
 
       const newFeeStructure = transformFeeStructureFromDB(result);
-      setFeeStructures((prev) => [newFeeStructure, ...prev]);
+      queryClient.invalidateQueries({ queryKey: classificationQueryKeys.feeStructures() });
 
       toast({
         title: 'Success',
@@ -504,7 +400,7 @@ export const ClassificationProvider = ({ children }: { children: ReactNode }) =>
       });
       return null;
     }
-  }, [currentUser, toast]);
+  }, [currentUser, toast, queryClient]);
 
   // Update fee structure
   const updateFeeStructure = useCallback(async (id: string, data: UpdateFeeStructureRequest): Promise<void> => {
@@ -545,7 +441,7 @@ export const ClassificationProvider = ({ children }: { children: ReactNode }) =>
 
       if (error) throw error;
 
-      await refreshFeeStructures();
+      queryClient.invalidateQueries({ queryKey: classificationQueryKeys.feeStructures() });
 
       toast({
         title: 'Success',
@@ -560,7 +456,7 @@ export const ClassificationProvider = ({ children }: { children: ReactNode }) =>
       });
       throw error;
     }
-  }, [currentUser, refreshFeeStructures, toast]);
+  }, [currentUser, toast, queryClient]);
 
   // Deactivate fee structure
   const deactivateFeeStructure = useCallback(async (id: string, reason: string): Promise<void> => {
@@ -577,7 +473,7 @@ export const ClassificationProvider = ({ children }: { children: ReactNode }) =>
 
       if (error) throw error;
 
-      await refreshFeeStructures();
+      queryClient.invalidateQueries({ queryKey: classificationQueryKeys.feeStructures() });
 
       toast({
         title: 'Success',
@@ -592,7 +488,7 @@ export const ClassificationProvider = ({ children }: { children: ReactNode }) =>
       });
       throw error;
     }
-  }, [currentUser, refreshFeeStructures, toast]);
+  }, [currentUser, toast, queryClient]);
 
   // Get active fee structure
   const getActiveFeeStructure = useCallback((level: string, roleScope: string): ClassificationFeeStructure | null => {

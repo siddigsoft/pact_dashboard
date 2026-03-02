@@ -1,6 +1,7 @@
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { format } from 'date-fns';
+import { loadPactLogoDataUrl } from './pdfLogoCache';
 
 const C = {
   navy: [15, 32, 65] as [number, number, number],
@@ -22,20 +23,8 @@ export { C, autoTable };
 
 const ARABIC_RE = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/;
 
-export async function loadLogoAsDataUrl(): Promise<string | null> {
-  try {
-    const resp = await fetch('/pact-logo.png');
-    const blob = await resp.blob();
-    return new Promise((resolve) => {
-      const reader = new FileReader();
-      reader.onloadend = () => resolve(reader.result as string);
-      reader.onerror = () => resolve(null);
-      reader.readAsDataURL(blob);
-    });
-  } catch {
-    return null;
-  }
-}
+/** @deprecated Use loadPactLogoDataUrl from pdfLogoCache for cached logo loading */
+export { loadPactLogoDataUrl as loadLogoAsDataUrl } from './pdfLogoCache';
 
 export async function loadArabicFont(doc: jsPDF): Promise<boolean> {
   try {
@@ -74,7 +63,7 @@ export async function drawPdfHeader(
   const ml = 14;
   const mr = 14;
 
-  const logoDataUrl = await loadLogoAsDataUrl();
+  const logoDataUrl = await loadPactLogoDataUrl();
   const hasArabic = await loadArabicFont(doc);
 
   doc.setFillColor(...C.navy);

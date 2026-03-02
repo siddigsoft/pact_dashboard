@@ -1,9 +1,15 @@
-
-import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
+import React, { createContext, useContext, useMemo, ReactNode, useCallback } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useUser } from '../user/UserContext';
 import { useRealtimeResource } from '@/hooks/useRealtimeResource';
+import {
+  useUserSettingsQuery,
+  useDataVisibilitySettingsQuery,
+  useDashboardSettingsQuery,
+  settingsQueryKeys,
+} from './settingsQueries';
 
 // Define types for settings tables
 export type UserSettings = {
@@ -94,154 +100,101 @@ type SettingsContextType = {
 
 const SettingsContext = createContext<SettingsContextType | undefined>(undefined);
 
+const DEFAULT_NOTIFICATION_SETTINGS: NotificationSettings = {
+  enabled: true,
+  email: false,
+  sound: false,
+  browserPush: false,
+  vibration: false,
+  categories: {
+    assignments: true,
+    approvals: true,
+    financial: true,
+    team: true,
+    system: true,
+  },
+  quietHours: {
+    enabled: false,
+    startHour: 22,
+    endHour: 7,
+  },
+  frequency: 'instant',
+  autoDeleteDays: 30,
+};
+
 export const SettingsProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
+  const queryClient = useQueryClient();
   const { toast } = useToast();
   const { currentUser } = useUser();
-  const [loading, setLoading] = useState<boolean>(true);
-  const [error, setError] = useState<string | null>(null);
-  
-  const [userSettings, setUserSettings] = useState<UserSettings | null>(null);
-  const [dataVisibilitySettings, setDataVisibilitySettings] = useState<DataVisibilitySettings | null>(null);
-  const [dashboardSettings, setDashboardSettings] = useState<DashboardSettings | null>(null);
-  
-  const defaultNotificationSettings: NotificationSettings = {
-    enabled: true,
-    email: false,
-    sound: false,
-    browserPush: false,
-    vibration: false,
-    categories: {
-      assignments: true,
-      approvals: true,
-      financial: true,
-      team: true,
-      system: true,
-    },
-    quietHours: {
-      enabled: false,
-      startHour: 22,
-      endHour: 7,
-    },
-    frequency: 'instant',
-    autoDeleteDays: 30,
-  };
-  
-  const [notificationSettings, setNotificationSettings] = useState<NotificationSettings>(defaultNotificationSettings);
-  const [appearanceSettings, setAppearanceSettings] = useState<AppearanceSettings>({
-    darkMode: false,
-    theme: 'default',
-  });
-  
-  const [menuPreferences, setMenuPreferences] = useState<MenuPreferences>(DEFAULT_MENU_PREFERENCES);
-  const [dashboardPreferences, setDashboardPreferences] = useState<DashboardPreferences>(DEFAULT_DASHBOARD_PREFERENCES);
+  const userId = currentUser?.id;
 
-  const fetchSettings = useCallback(async () => {
-    if (!currentUser?.id) {
-      setLoading(false);
-      return;
-    }
+  const { data: userSettings, isLoading: loadingUser, error: userError } = useUserSettingsQuery(userId);
+  const { data: dataVisibilitySettings, isLoading: loadingVisibility } = useDataVisibilitySettingsQuery(userId);
+  const { data: dashboardSettings, isLoading: loadingDashboard } = useDashboardSettingsQuery(userId);
 
-    setLoading(true);
-    setError(null);
-    try {
-      // user_settings - use limit(1) to handle duplicates gracefully
-      const { data: userDataArray, error: userError } = await supabase
-        .from('user_settings')
-        .select('*')
-        .eq('user_id', currentUser.id)
-        .limit(1);
+  const loading = loadingUser || loadingVisibility || loadingDashboard;
+  const error = userError ? 'Failed to fetch user settings' : null;
 
-      if (userError) {
-        console.error('Error fetching user settings:', userError);
-        setError('Failed to fetch user settings');
-      }
-      const userData = userDataArray?.[0];
-      if (userData) {
-        setUserSettings(userData);
-        if (userData.settings?.theme) {
-          setAppearanceSettings(prev => ({
-            ...prev,
-            darkMode: userData.settings.theme === 'dark',
-            theme: userData.settings.theme === 'system' ? 'default' : userData.settings.theme,
-          }));
-        }
-        if (userData.settings?.notificationPreferences) {
-          const savedPrefs = userData.settings.notificationPreferences;
-          setNotificationSettings({
-            enabled: savedPrefs.enabled ?? defaultNotificationSettings.enabled,
-            email: savedPrefs.email ?? defaultNotificationSettings.email,
-            sound: savedPrefs.sound ?? defaultNotificationSettings.sound,
-            browserPush: savedPrefs.browserPush ?? defaultNotificationSettings.browserPush,
-            vibration: savedPrefs.vibration ?? defaultNotificationSettings.vibration,
-            categories: {
-              assignments: savedPrefs.categories?.assignments ?? defaultNotificationSettings.categories.assignments,
-              approvals: savedPrefs.categories?.approvals ?? defaultNotificationSettings.categories.approvals,
-              financial: savedPrefs.categories?.financial ?? defaultNotificationSettings.categories.financial,
-              team: savedPrefs.categories?.team ?? defaultNotificationSettings.categories.team,
-              system: savedPrefs.categories?.system ?? defaultNotificationSettings.categories.system,
-            },
-            quietHours: {
-              enabled: savedPrefs.quietHours?.enabled ?? defaultNotificationSettings.quietHours.enabled,
-              startHour: savedPrefs.quietHours?.startHour ?? defaultNotificationSettings.quietHours.startHour,
-              endHour: savedPrefs.quietHours?.endHour ?? defaultNotificationSettings.quietHours.endHour,
-            },
-            frequency: savedPrefs.frequency ?? defaultNotificationSettings.frequency,
-            autoDeleteDays: savedPrefs.autoDeleteDays ?? defaultNotificationSettings.autoDeleteDays,
-          });
-        }
-        if (userData.settings?.menuPreferences) {
-          setMenuPreferences({ ...DEFAULT_MENU_PREFERENCES, ...userData.settings.menuPreferences });
-        }
-        if (userData.settings?.dashboardPreferences) {
-          setDashboardPreferences({ ...DEFAULT_DASHBOARD_PREFERENCES, ...userData.settings.dashboardPreferences });
-        }
-      }
+  const notificationSettings = useMemo<NotificationSettings>(() => {
+    const savedPrefs = userSettings?.settings?.notificationPreferences;
+    if (!savedPrefs) return DEFAULT_NOTIFICATION_SETTINGS;
+    return {
+      enabled: savedPrefs.enabled ?? DEFAULT_NOTIFICATION_SETTINGS.enabled,
+      email: savedPrefs.email ?? DEFAULT_NOTIFICATION_SETTINGS.email,
+      sound: savedPrefs.sound ?? DEFAULT_NOTIFICATION_SETTINGS.sound,
+      browserPush: savedPrefs.browserPush ?? DEFAULT_NOTIFICATION_SETTINGS.browserPush,
+      vibration: savedPrefs.vibration ?? DEFAULT_NOTIFICATION_SETTINGS.vibration,
+      categories: {
+        assignments: savedPrefs.categories?.assignments ?? DEFAULT_NOTIFICATION_SETTINGS.categories.assignments,
+        approvals: savedPrefs.categories?.approvals ?? DEFAULT_NOTIFICATION_SETTINGS.categories.approvals,
+        financial: savedPrefs.categories?.financial ?? DEFAULT_NOTIFICATION_SETTINGS.categories.financial,
+        team: savedPrefs.categories?.team ?? DEFAULT_NOTIFICATION_SETTINGS.categories.team,
+        system: savedPrefs.categories?.system ?? DEFAULT_NOTIFICATION_SETTINGS.categories.system,
+      },
+      quietHours: {
+        enabled: savedPrefs.quietHours?.enabled ?? DEFAULT_NOTIFICATION_SETTINGS.quietHours.enabled,
+        startHour: savedPrefs.quietHours?.startHour ?? DEFAULT_NOTIFICATION_SETTINGS.quietHours.startHour,
+        endHour: savedPrefs.quietHours?.endHour ?? DEFAULT_NOTIFICATION_SETTINGS.quietHours.endHour,
+      },
+      frequency: savedPrefs.frequency ?? DEFAULT_NOTIFICATION_SETTINGS.frequency,
+      autoDeleteDays: savedPrefs.autoDeleteDays ?? DEFAULT_NOTIFICATION_SETTINGS.autoDeleteDays,
+    };
+  }, [userSettings?.settings?.notificationPreferences]);
 
+  const appearanceSettings = useMemo<AppearanceSettings>(() => {
+    const theme = userSettings?.settings?.theme;
+    if (!theme) return { darkMode: false, theme: 'default' };
+    return {
+      darkMode: theme === 'dark',
+      theme: theme === 'system' ? 'default' : theme,
+    };
+  }, [userSettings?.settings?.theme]);
 
-      // data_visibility_settings - use limit(1) to handle duplicates gracefully
-      const { data: visibilityDataArray, error: visibilityError } = await supabase
-        .from('data_visibility_settings')
-        .select('*')
-        .eq('user_id', currentUser.id)
-        .limit(1);
-      if (visibilityError) {
-        console.error('Error fetching data visibility settings:', visibilityError);
-      }
-      const visibilityData = visibilityDataArray?.[0];
-      if (visibilityData) setDataVisibilitySettings(visibilityData);
+  const menuPreferences = useMemo<MenuPreferences>(
+    () => ({ ...DEFAULT_MENU_PREFERENCES, ...userSettings?.settings?.menuPreferences }),
+    [userSettings?.settings?.menuPreferences]
+  );
 
-      // dashboard_settings - use limit(1) to handle duplicates gracefully
-      const { data: dashboardDataArray, error: dashboardError } = await supabase
-        .from('dashboard_settings')
-        .select('*')
-        .eq('user_id', currentUser.id)
-        .limit(1);
-      if (dashboardError) {
-        console.error('Error fetching dashboard settings:', dashboardError);
-      }
-      const dashboardData = dashboardDataArray?.[0];
-      if (dashboardData) setDashboardSettings(dashboardData);
-    } catch (err) {
-      console.error('Error in fetchSettings:', err);
-      setError('An unexpected error occurred while fetching settings');
-    } finally {
-      setLoading(false);
-    }
-  }, [currentUser?.id]);
+  const dashboardPreferences = useMemo<DashboardPreferences>(
+    () => ({ ...DEFAULT_DASHBOARD_PREFERENCES, ...userSettings?.settings?.dashboardPreferences }),
+    [userSettings?.settings?.dashboardPreferences]
+  );
 
-  // Fetch settings from the database when the component mounts
-  useEffect(() => {
-    fetchSettings();
-  }, [fetchSettings]);
+  const fetchSettings = useCallback(() => {
+    if (!userId) return;
+    queryClient.invalidateQueries({ queryKey: settingsQueryKeys.userSettings(userId) });
+    queryClient.invalidateQueries({ queryKey: settingsQueryKeys.dataVisibility(userId) });
+    queryClient.invalidateQueries({ queryKey: settingsQueryKeys.dashboard(userId) });
+  }, [userId, queryClient]);
 
   useRealtimeResource({
     configs: [
-      { table: 'user_settings', filter: currentUser?.id ? `user_id=eq.${currentUser.id}` : undefined },
-      { table: 'data_visibility_settings', filter: currentUser?.id ? `user_id=eq.${currentUser.id}` : undefined },
-      { table: 'dashboard_settings', filter: currentUser?.id ? `user_id=eq.${currentUser.id}` : undefined },
+      { table: 'user_settings', filter: userId ? `user_id=eq.${userId}` : undefined },
+      { table: 'data_visibility_settings', filter: userId ? `user_id=eq.${userId}` : undefined },
+      { table: 'dashboard_settings', filter: userId ? `user_id=eq.${userId}` : undefined },
     ],
     onRefresh: fetchSettings,
-    enabled: !!currentUser?.id,
+    enabled: !!userId,
   });
   
   const updateUserSettings = async (settings: Partial<UserSettings['settings']>) => {
@@ -265,11 +218,7 @@ export const SettingsProvider: React.FC<{ children: ReactNode }> = ({ children }
         if (error) throw error;
       }
 
-      setUserSettings(prev => ({
-        ...(prev || {} as any),
-        settings: updatedSettings,
-        user_id: currentUser.id,
-      }));
+      queryClient.invalidateQueries({ queryKey: settingsQueryKeys.userSettings(currentUser.id) });
 
       toast({
         title: 'Settings updated',
@@ -287,14 +236,10 @@ export const SettingsProvider: React.FC<{ children: ReactNode }> = ({ children }
   };
   
   const updateNotificationSettings = async (settings: NotificationSettings) => {
-    setNotificationSettings(settings);
     await updateUserSettings({ notificationPreferences: settings });
   };
   
-  // Update appearance settings (currently frontend-only)
   const updateAppearanceSettings = async (settings: AppearanceSettings) => {
-    setAppearanceSettings(settings);
-    // Map to the database theme format
     const theme = settings.darkMode ? 'dark' : 'light';
     await updateUserSettings({ theme });
   };
@@ -324,16 +269,8 @@ export const SettingsProvider: React.FC<{ children: ReactNode }> = ({ children }
           .eq('id', dataVisibilitySettings.id);
         
         if (error) throw error;
-        
-        // Update local state
-        setDataVisibilitySettings(prev => ({
-          ...prev,
-          options: newOptions,
-          user_id: currentUser.id
-        }));
       } else {
-        // Create new data visibility settings and get the ID back
-        const { data: insertedData, error } = await supabase
+        const { error: insertError } = await supabase
           .from('data_visibility_settings')
           .insert([{ 
             user_id: currentUser.id, 
@@ -342,15 +279,10 @@ export const SettingsProvider: React.FC<{ children: ReactNode }> = ({ children }
           .select()
           .single();
         
-        if (error) throw error;
-        
-        // Update local state with the new record including ID
-        setDataVisibilitySettings({
-          id: insertedData.id,
-          user_id: currentUser.id,
-          options: newOptions
-        });
+        if (insertError) throw insertError;
       }
+
+      queryClient.invalidateQueries({ queryKey: settingsQueryKeys.dataVisibility(currentUser.id) });
       
       toast({
         title: "Visibility settings updated",
@@ -385,8 +317,7 @@ export const SettingsProvider: React.FC<{ children: ReactNode }> = ({ children }
         
         if (error) throw error;
       } else {
-        // Create new dashboard settings
-        const { error } = await supabase
+        const { error: insertError } = await supabase
           .from('dashboard_settings')
           .insert([{ 
             user_id: currentUser.id, 
@@ -394,15 +325,10 @@ export const SettingsProvider: React.FC<{ children: ReactNode }> = ({ children }
             widget_order: settings.widget_order || []
           }]);
         
-        if (error) throw error;
+        if (insertError) throw insertError;
       }
-      
-      // Update local state
-      setDashboardSettings(prev => ({
-        ...prev,
-        ...settings,
-        user_id: currentUser.id
-      }));
+
+      queryClient.invalidateQueries({ queryKey: settingsQueryKeys.dashboard(currentUser.id) });
       
       toast({
         title: "Dashboard settings updated",
@@ -421,13 +347,11 @@ export const SettingsProvider: React.FC<{ children: ReactNode }> = ({ children }
 
   const updateMenuPreferences = async (prefs: Partial<MenuPreferences>) => {
     const updated = { ...menuPreferences, ...prefs };
-    setMenuPreferences(updated);
     await updateUserSettings({ menuPreferences: updated });
   };
 
   const updateDashboardPreferences = async (prefs: Partial<DashboardPreferences>) => {
     const updated = { ...dashboardPreferences, ...prefs };
-    setDashboardPreferences(updated);
     await updateUserSettings({ dashboardPreferences: updated });
   };
 

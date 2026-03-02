@@ -1304,6 +1304,7 @@ export default function FinanceApproval() {
                       src={receiptPreview} 
                       alt="Receipt preview" 
                       className="w-full max-h-40 object-contain bg-muted/30"
+                      loading="lazy"
                     />
                     <Button
                       type="button"

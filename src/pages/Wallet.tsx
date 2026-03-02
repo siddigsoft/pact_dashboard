@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom';
 import { useWallet } from '@/context/wallet/WalletContext';
 import { useAppContext } from '@/context/AppContext';
 import { useDownPayment } from '@/context/downPayment/DownPaymentContext';
-import { useRealtimeWallet } from '@/hooks/use-realtime-wallet';
 import { supabase } from '@/integrations/supabase/client';
 import { DataFreshnessBadge } from '@/components/realtime';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -77,6 +76,7 @@ const WalletPage = () => {
     withdrawalRequests, 
     stats, 
     loading, 
+    lastRefresh,
     createWithdrawalRequest,
     cancelWithdrawalRequest,
     confirmFundReceipt,
@@ -91,9 +91,6 @@ const WalletPage = () => {
     loading: advanceLoading,
     confirmReceipt: confirmAdvanceReceipt,
   } = useDownPayment();
-
-  // Real-time wallet updates
-  const { lastRefresh } = useRealtimeWallet();
 
   useEffect(() => {
     if (currentUser?.id) {

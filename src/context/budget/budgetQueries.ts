@@ -125,7 +125,7 @@ function transformBudgetAlertFromDB(data: any): BudgetAlert {
 async function fetchProjectBudgets(): Promise<ProjectBudget[]> {
   const { data, error } = await supabase
     .from('project_budgets')
-    .select('*')
+    .select('id, project_id, total_budget_cents, allocated_budget_cents, spent_budget_cents, remaining_budget_cents, budget_period, period_start_date, period_end_date, category_allocations, status, approved_by, approved_at, fiscal_year, budget_notes, created_by, updated_by, created_at, updated_at')
     .order('created_at', { ascending: false });
 
   if (error) throw error;
@@ -135,7 +135,7 @@ async function fetchProjectBudgets(): Promise<ProjectBudget[]> {
 async function fetchMMPBudgets(): Promise<MMPBudget[]> {
   const { data, error } = await supabase
     .from('mmp_budgets')
-    .select('*')
+    .select('id, mmp_file_id, project_budget_id, allocated_budget_cents, spent_budget_cents, remaining_budget_cents, total_sites, budgeted_sites, completed_sites, average_cost_per_site_cents, category_breakdown, source_type, parent_budget_id, status, budget_notes, allocated_by, created_at, updated_at')
     .order('created_at', { ascending: false });
 
   if (error) throw error;
@@ -145,7 +145,7 @@ async function fetchMMPBudgets(): Promise<MMPBudget[]> {
 async function fetchBudgetTransactions(): Promise<BudgetTransaction[]> {
   const { data, error } = await supabase
     .from('budget_transactions')
-    .select('*')
+    .select('id, project_budget_id, mmp_budget_id, site_visit_id, wallet_transaction_id, transaction_type, amount_cents, currency, category, balance_before_cents, balance_after_cents, description, metadata, reference_number, requires_approval, approved_by, approved_at, created_by, created_at')
     .order('created_at', { ascending: false })
     .limit(100);
 
@@ -156,7 +156,7 @@ async function fetchBudgetTransactions(): Promise<BudgetTransaction[]> {
 async function fetchBudgetAlerts(): Promise<BudgetAlert[]> {
   const { data, error } = await supabase
     .from('budget_alerts')
-    .select('*')
+    .select('id, project_budget_id, mmp_budget_id, alert_type, severity, threshold_percentage, title, message, status, acknowledged_by, acknowledged_at, metadata, created_at, resolved_at')
     .eq('status', 'active')
     .order('created_at', { ascending: false });
 

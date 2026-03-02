@@ -1,4 +1,5 @@
-import React, { createContext, useContext, useMemo, useCallback } from 'react';
+import React, { useMemo, useCallback } from 'react';
+import { createContext, useContext, useContextSelector } from 'use-context-selector';
 import { UserProvider, useUser } from './user/UserContext';
 import { MMPProvider, useMMP } from './mmp/MMPContext';
 import { NotificationProvider, useNotifications } from './notifications/NotificationContext';
@@ -206,4 +207,12 @@ export const useAppContext = () => {
     throw new Error('useAppContext must be used within AppProviders');
   }
   return context;
+};
+
+/**
+ * Select only the context fields you need to avoid re-renders when unrelated context changes.
+ * Use instead of useAppContext() when you need a subset of values.
+ */
+export const useAppContextSelector = <T,>(selector: (ctx: CompositeContextType) => T): T => {
+  return useContextSelector(AppContext, selector) as T;
 };

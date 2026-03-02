@@ -34,6 +34,7 @@ interface WalletContextType {
   supervisedWithdrawalRequests: SupervisedWithdrawalRequest[];
   stats: WalletStats | null;
   loading: boolean;
+  lastRefresh: Date;
   refreshWallet: () => Promise<void>;
   refreshTransactions: () => Promise<void>;
   refreshWithdrawalRequests: () => Promise<void>;
@@ -184,6 +185,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
   const loading = !authReady || (!!userId && (walletQuery.isLoading || transactionsQuery.isLoading || withdrawalRequestsQuery.isLoading));
 
+  const [lastRefresh, setLastRefresh] = useState<Date>(() => new Date());
+
   const stats = useMemo((): WalletStats | null => {
     if (!wallet || !transactions || !withdrawalRequests) return null;
 
@@ -241,6 +244,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
   const refreshWallet = useCallback(async (_showErrorToast?: boolean) => {
     await invalidate.invalidateAll(userId);
+    setLastRefresh(new Date());
   }, [invalidate, userId]);
 
   const refreshTransactions = useCallback(async () => {
@@ -1566,6 +1570,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         },
         () => {
           queryClient.invalidateQueries({ queryKey: walletQueryKeys.wallet(userId) });
+          setLastRefresh(new Date());
         }
       )
       .on(
@@ -1578,6 +1583,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         },
         () => {
           queryClient.invalidateQueries({ queryKey: walletQueryKeys.transactions(userId) });
+          setLastRefresh(new Date());
         }
       )
       .on(
@@ -1590,6 +1596,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         },
         () => {
           queryClient.invalidateQueries({ queryKey: walletQueryKeys.withdrawalRequests(userId) });
+          setLastRefresh(new Date());
         }
       )
       .subscribe();
@@ -1607,6 +1614,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
           },
           () => {
             queryClient.invalidateQueries({ queryKey: walletQueryKeys.supervisedWithdrawalRequests(userId) });
+            setLastRefresh(new Date());
           }
         )
         .subscribe();
@@ -1629,6 +1637,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         supervisedWithdrawalRequests,
         stats,
         loading,
+        lastRefresh,
         refreshWallet,
         refreshTransactions,
         refreshWithdrawalRequests,

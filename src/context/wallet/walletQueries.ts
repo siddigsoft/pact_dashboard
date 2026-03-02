@@ -103,7 +103,7 @@ async function fetchWallet(userId: string): Promise<Wallet | null> {
 
   const { data, error } = await supabase
     .from('wallets')
-    .select('*')
+    .select('id, user_id, balances, total_earned, total_withdrawn, created_at, updated_at')
     .eq('user_id', userId)
     .single();
 
@@ -125,7 +125,7 @@ async function fetchWallet(userId: string): Promise<Wallet | null> {
 async function fetchTransactions(userId: string): Promise<WalletTransaction[]> {
   const { data, error } = await supabase
     .from('wallet_transactions')
-    .select('*')
+    .select('id, wallet_id, user_id, type, amount, currency, site_visit_id, withdrawal_request_id, description, metadata, balance_before, balance_after, created_by, created_at')
     .eq('user_id', userId)
     .order('created_at', { ascending: false })
     .limit(100);
@@ -137,7 +137,7 @@ async function fetchTransactions(userId: string): Promise<WalletTransaction[]> {
 async function fetchWithdrawalRequests(userId: string): Promise<WithdrawalRequest[]> {
   const { data, error } = await supabase
     .from('withdrawal_requests')
-    .select('*')
+    .select('id, user_id, wallet_id, amount, currency, status, request_reason, supervisor_id, supervisor_notes, approved_at, rejected_at, admin_processed_by, admin_processed_at, admin_notes, payment_method, payment_details, fund_receipt_confirmed, fund_receipt_confirmed_at, fund_receipt_signature_url, fund_receipt_notes, created_at, updated_at')
     .eq('user_id', userId)
     .order('created_at', { ascending: false });
 
@@ -156,7 +156,7 @@ async function fetchSupervisedWithdrawalRequests(user: UserForWallet): Promise<S
     const { data, error } = await supabase
       .from('withdrawal_requests')
       .select(`
-        *,
+        id, user_id, wallet_id, amount, currency, status, request_reason, supervisor_id, supervisor_notes, approved_at, rejected_at, admin_processed_by, admin_processed_at, admin_notes, payment_method, payment_details, fund_receipt_confirmed, fund_receipt_confirmed_at, fund_receipt_signature_url, fund_receipt_notes, created_at, updated_at,
         profiles:profiles!withdrawal_requests_user_id_fkey(full_name, email, hub_id, state_id, role)
       `)
       .order('created_at', { ascending: false })
@@ -201,7 +201,7 @@ async function fetchSupervisedWithdrawalRequests(user: UserForWallet): Promise<S
   const { data, error } = await supabase
     .from('withdrawal_requests')
     .select(`
-      *,
+      id, user_id, wallet_id, amount, currency, status, request_reason, supervisor_id, supervisor_notes, approved_at, rejected_at, admin_processed_by, admin_processed_at, admin_notes, payment_method, payment_details, fund_receipt_confirmed, fund_receipt_confirmed_at, fund_receipt_signature_url, fund_receipt_notes, created_at, updated_at,
       profiles:profiles!withdrawal_requests_user_id_fkey(full_name, email, hub_id, state_id, role)
     `)
     .in('user_id', teamMemberIds)

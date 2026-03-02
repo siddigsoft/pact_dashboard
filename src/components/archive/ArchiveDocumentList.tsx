@@ -318,6 +318,7 @@ const ArchiveDocumentList: React.FC = () => {
                   src={previewDoc?.fileUrl} 
                   alt={previewDoc?.fileName} 
                   className="max-h-[350px] object-contain"
+                  loading="lazy"
                 />
               ) : (
                 <div className="text-center">

@@ -11,6 +11,7 @@
  */
 
 import { useState, useEffect, useCallback, useRef, useMemo, memo, lazy, Suspense } from 'react';
+import { useDebouncedCallback } from '@/hooks/useDebounce';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -154,18 +155,6 @@ interface SignatureManagerProps {
   className?: string;
 }
 
-// Debounce helper for real-time updates
-function useDebounce<T extends (...args: any[]) => any>(fn: T, delay: number): T {
-  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
-  
-  return useCallback((...args: Parameters<T>) => {
-    if (timeoutRef.current) {
-      clearTimeout(timeoutRef.current);
-    }
-    timeoutRef.current = setTimeout(() => fn(...args), delay);
-  }, [fn, delay]) as T;
-}
-
 export function SignatureManager({
   userId,
   userName,
@@ -222,7 +211,7 @@ export function SignatureManager({
   }, [loadSignatures, loadStats]);
 
   // Debounced reload to prevent rapid updates from real-time events
-  const debouncedReload = useDebounce(loadSignatures, 500);
+  const debouncedReload = useDebouncedCallback(loadSignatures, 500);
 
   useEffect(() => {
     loadData();

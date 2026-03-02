@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useUser } from '@/context/user/UserContext';
 import { useSuperAdmin } from '@/context/superAdmin/SuperAdminContext';
 import { useDownPayment } from '@/context/downPayment/DownPaymentContext';
-import { useDebouncedValue } from '@/hooks/use-debounced-value';
+import { useDebounce } from '@/hooks/useDebounce';
 import { DownPaymentApprovalPanel } from '@/components/downPayment/DownPaymentApprovalPanel';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -382,7 +382,7 @@ export default function DownPaymentApproval() {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [mmpFilter, setMmpFilter] = useState('all');
-  const debouncedSearch = useDebouncedValue(search, 300);
+  const debouncedSearch = useDebounce(search, 300);
 
   // ── disbursement tracker specific filters ─────────────────────────────────
   const [disbState, setDisbState] = useState('all');

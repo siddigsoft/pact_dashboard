@@ -505,7 +505,7 @@ const Index = () => {
         <footer className="border-t bg-muted/10">
           <div className="container mx-auto px-4 py-8">
             <div className="mb-6 text-center max-w-3xl mx-auto">
-              <img src={PactLogo} alt="PACT" className="h-10 w-10 mb-4 mx-auto" />
+              <img src={PactLogo} alt="PACT" className="h-10 w-10 mb-4 mx-auto" width={40} height={40} loading="lazy" />
               <h3 className="text-base font-medium mb-2">Built for the Field, Designed for Reliability</h3>
               <p className="text-xs text-muted-foreground leading-relaxed mb-4">
                 The <strong className="text-foreground">PACT Command Center Platform</strong> delivers powerful capabilities across web and mobile applications, 

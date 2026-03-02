@@ -129,11 +129,6 @@ export default defineConfig(({ mode }) => ({
             return 'animations';
           }
           
-          // Icons
-          if (id.includes('lucide-react')) {
-            return 'icons';
-          }
-          
           // Capacitor (mobile)
           if (id.includes('@capacitor')) {
             return 'capacitor';

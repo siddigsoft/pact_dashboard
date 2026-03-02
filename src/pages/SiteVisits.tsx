@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { useAppContext } from "@/context/AppContext";
+import { useAppContextSelector } from "@/context/AppContext";
 import { useAuthorization } from "@/hooks/use-authorization";
 import { SiteVisit } from "@/types";
 import { Link } from "react-router-dom";
@@ -46,7 +46,8 @@ import {
 } from '@/utils/geoDistance';
 
 const SiteVisits = () => {
-  const { currentUser, hasRole } = useAppContext();
+  const currentUser = useAppContextSelector((c) => c.currentUser);
+  const hasRole = useAppContextSelector((c) => c.hasRole);
   const { canViewAllSiteVisits, checkPermission, hasAnyRole } = useAuthorization();
   const { isSuperAdmin } = useSuperAdmin();
   const { siteVisits } = useSiteVisitContext();

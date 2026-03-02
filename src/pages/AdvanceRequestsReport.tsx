@@ -3,7 +3,7 @@ import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { useUser } from '@/context/user/UserContext';
 import { useSuperAdmin } from '@/context/superAdmin/SuperAdminContext';
 import { useDownPayment } from '@/context/downPayment/DownPaymentContext';
-import { useDebouncedValue } from '@/hooks/use-debounced-value';
+import { useDebounce } from '@/hooks/useDebounce';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -113,7 +113,7 @@ function AdvanceRequestsReportContent() {
   const [markPaidProcessing, setMarkPaidProcessing] = useState(false);
   const [remindersExpanded, setRemindersExpanded] = useState(false);
 
-  const debouncedSearchTerm = useDebouncedValue(searchTerm, 300);
+  const debouncedSearchTerm = useDebounce(searchTerm, 300);
 
   const userRole = currentUser?.role?.toLowerCase();
   const isAdmin = userRole === 'admin' || userRole === 'financialadmin' || userRole === 'superadmin' || userRole === 'ict' || isSuperAdmin;
@@ -1598,7 +1598,7 @@ function AdvanceRequestsReportContent() {
               <Button variant="ghost" size="icon" onClick={() => navigate(-1)} data-testid="button-back">
                 <ChevronLeft className="h-5 w-5" />
               </Button>
-              <img src="/pact-logo.png" alt="PACT" className="h-12 w-auto" />
+              <img src="/pact-logo.png" alt="PACT" className="h-12 w-auto" width={48} height={48} loading="lazy" />
               <div>
                 <h1 className="text-2xl font-bold flex items-center gap-2" data-testid="heading-advance-report">
                   <Truck className="h-6 w-6 text-primary" />

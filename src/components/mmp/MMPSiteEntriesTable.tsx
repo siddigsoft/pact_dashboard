@@ -1,5 +1,6 @@
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { useVirtualizer } from '@tanstack/react-virtual';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -396,6 +397,14 @@ const MMPSiteEntriesTable = ({
 
   const totalPages = Math.ceil(filteredSites.length / itemsPerPage);
 
+  const parentRef = useRef<HTMLDivElement>(null);
+  const rowVirtualizer = useVirtualizer({
+    count: paginatedSites.length,
+    getScrollElement: () => parentRef.current,
+    estimateSize: () => 232,
+    overscan: 5,
+  });
+
   const pdmMdmSummary = useMemo(() => {
     let pdmSites = 0;
     let pdmTotalQ = 0;
@@ -649,13 +658,36 @@ const MMPSiteEntriesTable = ({
           </div>
         )}
 
-        {/* List View */}
+        {/* List View - Virtualized for performance with large lists */}
         {paginatedSites.length > 0 ? (
-          <div className="space-y-3">
-              {paginatedSites.map((site, idx) => {
+          <div
+            ref={parentRef}
+            className="overflow-auto min-h-[400px] max-h-[70vh] rounded-md border"
+          >
+            <div
+              style={{
+                height: `${rowVirtualizer.getTotalSize()}px`,
+                width: '100%',
+                position: 'relative',
+              }}
+            >
+              {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+                const site = paginatedSites[virtualRow.index];
                 const row = normalizeSite(site);
                 return (
-                  <Card key={site.id ?? site.siteCode ?? site._key ?? idx} className="p-4 hover:shadow-md transition-shadow">
+                  <div
+                    key={virtualRow.key}
+                    data-index={virtualRow.index}
+                    ref={rowVirtualizer.measureElement}
+                    style={{
+                      position: 'absolute',
+                      top: 0,
+                      left: 0,
+                      width: '100%',
+                      transform: `translateY(${virtualRow.start}px)`,
+                    }}
+                  >
+                  <Card className="p-4 hover:shadow-md transition-shadow">
                     <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                       <div className="flex-1 space-y-2">
                         <div className="flex items-start justify-between gap-4">
@@ -964,8 +996,10 @@ const MMPSiteEntriesTable = ({
                       </div>
                     </div>
                   </Card>
+                  </div>
                 );
               })}
+            </div>
           </div>
         ) : (
           <div className="p-8 text-center text-muted-foreground">

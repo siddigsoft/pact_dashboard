@@ -44,10 +44,14 @@ export class ReportingService {
     projectIds?: string[]
   ): Promise<FinancialSummary> {
     try {
-      let projectBudgetsQuery = supabase.from('project_budgets').select('*');
-      let transactionsQuery = supabase.from('budget_transactions').select('*');
-      let costSubmissionsQuery = supabase.from('cost_submissions').select('*');
-      let walletTransactionsQuery = supabase.from('wallet_transactions').select('*');
+      const budgetCols = 'id, project_id, total_budget_cents, spent_budget_cents, remaining_budget_cents, category_allocations, created_at';
+      const txnCols = 'id, project_id, created_at';
+      const costCols = 'id, status, created_at, transportation_cost_cents, accommodation_cost_cents, meal_allowance_cents, other_costs_cents, total_cost_cents';
+      const walletCols = 'id, type, amount, created_at';
+      let projectBudgetsQuery = supabase.from('project_budgets').select(budgetCols);
+      let transactionsQuery = supabase.from('budget_transactions').select(txnCols);
+      let costSubmissionsQuery = supabase.from('cost_submissions').select(costCols);
+      let walletTransactionsQuery = supabase.from('wallet_transactions').select(walletCols);
 
       if (dateRange?.from) {
         const fromStr = dateRange.from.toISOString();
@@ -475,9 +479,12 @@ export class ReportingService {
     projectIds?: string[]
   ): Promise<ProjectCostAnalysis[]> {
     try {
-      let projectsQuery = supabase.from('projects').select('*');
-      let budgetsQuery = supabase.from('project_budgets').select('*');
-      let entriesQuery = supabase.from('mmp_site_entries').select('*');
+      const projectCols = 'id, name, project_code, status';
+      const budgetColsForAnalysis = 'id, project_id, total_budget_cents, spent_budget_cents';
+      const entryCols = 'id, project_id, mmp_file_id, state, status, fees, budget_blocked, over_budget_approved';
+      let projectsQuery = supabase.from('projects').select(projectCols);
+      let budgetsQuery = supabase.from('project_budgets').select(budgetColsForAnalysis);
+      let entriesQuery = supabase.from('mmp_site_entries').select(entryCols);
 
       if (projectIds?.length) {
         projectsQuery = projectsQuery.in('id', projectIds);

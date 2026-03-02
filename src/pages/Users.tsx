@@ -70,7 +70,7 @@ import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useRoleManagement } from '@/context/role-management/RoleManagementContext';
-import { useAppContext } from '@/context/AppContext';
+import { useAppContextSelector } from '@/context/AppContext';
 import UserClassificationBadge from '@/components/user/UserClassificationBadge';
 import RoleBadge from '@/components/user/RoleBadge';
 
@@ -80,7 +80,7 @@ const Users = () => {
   const { projects, updateProjectTeam, fetchProjects } = useProjectContext();
   const { canManageRoles } = useAuthorization();
   const { toast } = useToast();
-  const { roles } = useAppContext();
+  const roles = useAppContextSelector((c) => c.roles);
   
   const [searchQuery, setSearchQuery] = useState('');
   const debouncedSearchQuery = useDebounce(searchQuery, 300);

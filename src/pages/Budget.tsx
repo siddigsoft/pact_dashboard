@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useBudget } from '@/context/budget/BudgetContext';
-import { useAppContext } from '@/context/AppContext';
+import { useAppContextSelector } from '@/context/AppContext';
 import { useToast } from '@/hooks/use-toast';
 import { useUserProjects } from '@/hooks/useUserProjects';
 import { useProjectContext } from '@/context/project/ProjectContext';
@@ -56,7 +56,8 @@ const formatCurrency = (cents: number) => {
 };
 
 const BudgetPage = () => {
-  const { currentUser, hasGranularPermission } = useAppContext();
+  const currentUser = useAppContextSelector((c) => c.currentUser);
+  const hasGranularPermission = useAppContextSelector((c) => c.hasGranularPermission);
   const { toast } = useToast();
   const { userProjectIds, isAdminOrSuperUser } = useUserProjects();
   const {

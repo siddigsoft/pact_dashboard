@@ -10,6 +10,7 @@
  */
 
 import { useState, useEffect, useCallback, useRef, useMemo, memo } from 'react';
+import { useDebouncedCallback } from '@/hooks/useDebounce';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -67,17 +68,7 @@ interface SignatureAuditLogProps {
   className?: string;
 }
 
-// Debounce helper
-function useDebounce<T extends (...args: any[]) => any>(fn: T, delay: number): T {
-  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
-  
-  return useCallback((...args: Parameters<T>) => {
-    if (timeoutRef.current) {
-      clearTimeout(timeoutRef.current);
-    }
-    timeoutRef.current = setTimeout(() => fn(...args), delay);
-  }, [fn, delay]) as T;
-}
+import { useDebouncedCallback } from '@/hooks/useDebounce';
 
 // Pagination component
 interface PaginationProps {
@@ -150,7 +141,7 @@ export function SignatureAuditLog({ userId, className }: SignatureAuditLogProps)
   }, [userId]);
 
   // Debounced reload to prevent rapid updates
-  const debouncedReload = useDebounce(loadSignatures, 500);
+  const debouncedReload = useDebouncedCallback(loadSignatures, 500);
 
   useEffect(() => {
     loadSignatures();
@@ -507,6 +498,7 @@ export function SignatureAuditLog({ userId, className }: SignatureAuditLogProps)
                       src={selectedSignature.signatureData} 
                       alt="Signature" 
                       className="max-h-[100px] mx-auto object-contain"
+                      loading="lazy"
                     />
                   </div>
                 </div>
