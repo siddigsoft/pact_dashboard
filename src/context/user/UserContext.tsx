@@ -7,6 +7,7 @@ import { AppRole } from '@/types';
 import { supabase } from '@/integrations/supabase/client';
 import { EmailNotificationService } from '@/services/email-notification.service';
 import i18n from '@/lib/i18n';
+import { queryClient } from '@/lib/queryClient';
 
 interface UserContextType {
   currentUser: User | null;
@@ -872,6 +873,9 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
         localStorage.setItem('PACTCurrentUser', JSON.stringify(supabaseUser));
         
         localStorage.setItem(`user-${supabaseUser.id}`, JSON.stringify(supabaseUser));
+
+        // Invalidate cached queries so dashboard data loads fresh after login
+        queryClient.invalidateQueries();
         
         const userExists = appUsers.some(u => u.id === supabaseUser.id);
         
