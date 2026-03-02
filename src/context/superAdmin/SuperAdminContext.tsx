@@ -2,6 +2,8 @@ import React, { createContext, useContext, useState, useEffect, useCallback } fr
 import { supabase } from '@/integrations/supabase/client';
 import { useUser } from '../user/UserContext';
 import { useToast } from '@/hooks/use-toast';
+import { ensureValidSession } from '@/lib/session-health';
+import { withTimeout } from '@/utils/promise-with-timeout';
 import { useRealtimeTable } from '@/hooks/useRealtimeResource';
 import {
   SuperAdmin,
@@ -299,6 +301,16 @@ export function SuperAdminProvider({ children }: { children: React.ReactNode }) 
   });
 
   const createSuperAdmin = async (data: CreateSuperAdmin): Promise<boolean> => {
+    const session = await ensureValidSession();
+    if (!session.success) {
+      toast({
+        title: 'Session expired',
+        description: session.error || 'Please refresh and try again.',
+        variant: 'destructive'
+      });
+      return false;
+    }
+
     try {
       const activeCount = superAdmins.filter(a => a.isActive).length;
       if (activeCount >= 3) {
@@ -310,12 +322,16 @@ export function SuperAdminProvider({ children }: { children: React.ReactNode }) 
         return false;
       }
 
-      const { error } = await supabase.from('super_admins').insert({
+      const { error } = await withTimeout(
+        supabase.from('super_admins').insert({
         user_id: data.userId,
         appointed_by: data.appointedBy,
         appointment_reason: data.appointmentReason,
         is_active: true,
-      });
+      }),
+        15000,
+        'Create super-admin timed out'
+      );
 
       if (error) throw error;
 
@@ -338,9 +354,20 @@ export function SuperAdminProvider({ children }: { children: React.ReactNode }) 
   };
 
   const deactivateSuperAdmin = async (data: DeactivateSuperAdmin): Promise<boolean> => {
+    const session = await ensureValidSession();
+    if (!session.success) {
+      toast({
+        title: 'Session expired',
+        description: session.error || 'Please refresh and try again.',
+        variant: 'destructive'
+      });
+      return false;
+    }
+
     console.log('[SuperAdmin] Deactivating super-admin:', data.superAdminId);
     try {
-      const { data: updateData, error } = await supabase
+      const { data: updateData, error } = await withTimeout(
+        supabase
         .from('super_admins')
         .update({
           is_active: false,
@@ -350,7 +377,10 @@ export function SuperAdminProvider({ children }: { children: React.ReactNode }) 
           updated_at: new Date().toISOString(),
         })
         .eq('id', data.superAdminId)
-        .select();
+        .select(),
+        15000,
+        'Deactivate super-admin timed out'
+      );
 
       console.log('[SuperAdmin] Deactivation result:', { updateData, error });
 
@@ -398,8 +428,20 @@ export function SuperAdminProvider({ children }: { children: React.ReactNode }) 
   };
 
   const deleteSuperAdmin = async (data: DeleteSuperAdmin): Promise<boolean> => {
+    const session = await ensureValidSession();
+    if (!session.success) {
+      toast({
+        title: 'Session expired',
+        description: session.error || 'Please refresh and try again.',
+        variant: 'destructive'
+      });
+      return false;
+    }
+
     console.log('[SuperAdmin] Deleting super-admin:', data.superAdminId);
     try {
+      const result = await withTimeout(
+        (async () => {
       // First get the record data for audit log
       const { data: superAdminRecord, error: fetchError } = await supabase
         .from('super_admins')
@@ -452,6 +494,12 @@ export function SuperAdminProvider({ children }: { children: React.ReactNode }) 
 
       await refreshSuperAdmins();
       return true;
+        })(),
+        15000,
+        'Delete super-admin timed out'
+      );
+
+      return result;
     } catch (error: any) {
       console.error('[SuperAdmin] Failed to delete super-admin:', error);
       toast({
@@ -464,26 +512,39 @@ export function SuperAdminProvider({ children }: { children: React.ReactNode }) 
   };
 
   const logDeletion = async (data: CreateDeletionLog): Promise<boolean> => {
+    const session = await ensureValidSession();
+    if (!session.success) {
+      return false;
+    }
+
     try {
-      const { error } = await supabase.from('deletion_audit_log').insert({
-        table_name: data.tableName,
-        record_id: data.recordId,
-        record_data: data.recordData,
-        deleted_by: data.deletedBy,
-        deleted_by_role: data.deletedByRole,
-        deleted_by_name: data.deletedByName,
-        deletion_reason: data.deletionReason,
-        is_restorable: data.isRestorable ?? true,
-      });
+      const result = await withTimeout(
+        (async () => {
+          const { error } = await supabase.from('deletion_audit_log').insert({
+            table_name: data.tableName,
+            record_id: data.recordId,
+            record_data: data.recordData,
+            deleted_by: data.deletedBy,
+            deleted_by_role: data.deletedByRole,
+            deleted_by_name: data.deletedByName,
+            deletion_reason: data.deletionReason,
+            is_restorable: data.isRestorable ?? true,
+          });
 
-      if (error) throw error;
+          if (error) throw error;
 
-      await supabase.rpc('increment_super_admin_deletion_count', {
-        p_user_id: data.deletedBy,
-      });
+          await supabase.rpc('increment_super_admin_deletion_count', {
+            p_user_id: data.deletedBy,
+          });
 
-      await refreshDeletionLogs();
-      return true;
+          await refreshDeletionLogs();
+          return true;
+        })(),
+        15000,
+        'Log deletion timed out'
+      );
+
+      return result;
     } catch (error: any) {
       console.error('Failed to log deletion:', error);
       return false;
@@ -517,7 +578,19 @@ export function SuperAdminProvider({ children }: { children: React.ReactNode }) 
   };
 
   const resetSiteVisit = async (params: ResetSiteVisitParams): Promise<boolean> => {
+    const session = await ensureValidSession();
+    if (!session.success) {
+      toast({
+        title: 'Session expired',
+        description: session.error || 'Please refresh and try again.',
+        variant: 'destructive'
+      });
+      return false;
+    }
+
     try {
+      return await withTimeout(
+        (async () => {
       const { siteVisitId, reason, deletedBy, deletedByName, deletedByRole, targetStatus = 'assigned' } = params;
       const errors: string[] = [];
 
@@ -706,6 +779,10 @@ export function SuperAdminProvider({ children }: { children: React.ReactNode }) 
       }
 
       return true;
+        })(),
+        15000,
+        'Reset site visit timed out'
+      );
     } catch (error: any) {
       console.error('Failed to reset site visit:', error);
       toast({
@@ -718,7 +795,19 @@ export function SuperAdminProvider({ children }: { children: React.ReactNode }) 
   };
 
   const deleteWalletTransaction = async (params: DeleteWalletTransactionParams): Promise<boolean> => {
+    const session = await ensureValidSession();
+    if (!session.success) {
+      toast({
+        title: 'Session expired',
+        description: session.error || 'Please refresh and try again.',
+        variant: 'destructive'
+      });
+      return false;
+    }
+
     try {
+      return await withTimeout(
+        (async () => {
       const { transactionId, reason, deletedBy, deletedByName, deletedByRole } = params;
 
       // 1. Get the transaction
@@ -810,6 +899,10 @@ export function SuperAdminProvider({ children }: { children: React.ReactNode }) 
       });
 
       return true;
+        })(),
+        15000,
+        'Delete wallet transaction timed out'
+      );
     } catch (error: any) {
       console.error('Failed to delete wallet transaction:', error);
       toast({
@@ -822,7 +915,19 @@ export function SuperAdminProvider({ children }: { children: React.ReactNode }) 
   };
 
   const resetWallet = async (params: ResetWalletParams): Promise<boolean> => {
+    const session = await ensureValidSession();
+    if (!session.success) {
+      toast({
+        title: 'Session expired',
+        description: session.error || 'Please refresh and try again.',
+        variant: 'destructive'
+      });
+      return false;
+    }
+
     try {
+      return await withTimeout(
+        (async () => {
       const { userId, walletId, reason, deletedBy, deletedByName, deletedByRole } = params;
 
       // 1. Get all transactions for this wallet
@@ -896,6 +1001,10 @@ export function SuperAdminProvider({ children }: { children: React.ReactNode }) 
       });
 
       return true;
+        })(),
+        15000,
+        'Reset wallet timed out'
+      );
     } catch (error: any) {
       console.error('Failed to reset wallet:', error);
       toast({
@@ -908,7 +1017,19 @@ export function SuperAdminProvider({ children }: { children: React.ReactNode }) 
   };
 
   const reclaimSite = async (params: ReclaimSiteParams): Promise<boolean> => {
+    const session = await ensureValidSession();
+    if (!session.success) {
+      toast({
+        title: 'Session expired',
+        description: session.error || 'Please refresh and try again.',
+        variant: 'destructive'
+      });
+      return false;
+    }
+
     try {
+      return await withTimeout(
+        (async () => {
       const { siteEntryId, reason, reclaimedBy, reclaimedByName, reclaimedByRole, cancelPendingAdvances = true } = params;
 
       // 1. Get the site entry details first
@@ -1182,6 +1303,10 @@ export function SuperAdminProvider({ children }: { children: React.ReactNode }) 
       });
 
       return true;
+        })(),
+        15000,
+        'Reclaim site timed out'
+      );
     } catch (error: any) {
       console.error('Failed to reclaim site:', error);
       toast({

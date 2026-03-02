@@ -1,4 +1,5 @@
-import { supabase } from '@/integrations/supabase/client';
+import { replaceSupabaseClient, supabase } from '@/integrations/supabase/client';
+import { withTimeout } from '@/utils/promise-with-timeout';
 
 /**
  * Tests Supabase connection using native fetch (bypasses frozen Supabase client)
@@ -99,13 +100,10 @@ export async function isClientFrozen(): Promise<boolean> {
 }
 
 /**
- * Attempts to recover from frozen client state
- */
-/**
- * Ensures a valid session exists before database operations
- * This is the primary function to call before any database write operations
- * to prevent RLS failures due to expired sessions.
- * 
+ * Ensures a valid session exists before database operations.
+ * Wrapped in 10-second timeout to prevent hanging when Supabase client is frozen.
+ * Never throws; returns { success: false, error } on timeout or failure.
+ *
  * @returns Object with success status, user info, and optional error
  */
 export async function ensureValidSession(): Promise<{
@@ -113,12 +111,70 @@ export async function ensureValidSession(): Promise<{
   user?: { id: string; email?: string };
   error?: string;
 }> {
+  const SESSION_TIMEOUT_MS = 10000;
+  console.log('[SessionHealth] ensureValidSession() called (likely from mutation or SessionGuard)');
   try {
-    console.log('[SessionHealth] 🔐 Ensuring valid session for database operation...');
-    
-    // First try to refresh via Supabase client (preferred method)
+    return await withTimeout(
+      ensureValidSessionCore(),
+      SESSION_TIMEOUT_MS,
+      'Session check timed out. Please refresh the page and try again.'
+    );
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'Session check failed.';
+    if (msg.includes('Session check timed out')) {
+      console.error('[SessionHealth] ⏱️ Session check timed out after', SESSION_TIMEOUT_MS, 'ms - refreshSession() likely hung (Supabase client frozen)');
+    }
+    return {
+      success: false,
+      error: msg,
+    };
+  }
+}
+
+/**
+ * Boolean adapter for callers that expect Promise<boolean> (e.g. SessionGuard).
+ */
+export async function ensureValidSessionForMutation(): Promise<boolean> {
+  const { success } = await ensureValidSession();
+  return success;
+}
+
+async function ensureValidSessionCore(): Promise<{
+  success: boolean;
+  user?: { id: string; email?: string };
+  error?: string;
+}> {
+  try {
+    const startedAt = Date.now();
+    console.log('[SessionHealth] 🔐 Session check started');
+
+    // Quick check: is the Supabase client already frozen before we call refreshSession?
+    const frozen = await isClientFrozen();
+    if (frozen) {
+      // Skip refreshSession() and getSession() - both hang on frozen client. Use recovery only.
+      console.warn('[SessionHealth] ⚠️ Supabase client frozen - skipping refreshSession(), using recovery path');
+      const recovered = await recoverFromFrozenClient();
+      if (recovered.success) {
+        console.log('[SessionHealth] ✅ Session recovered (bypassed frozen client)');
+        return {
+          success: true,
+          user: recovered.user,
+        };
+      }
+      return {
+        success: false,
+        error: 'Session could not be recovered. Please refresh the page.',
+      };
+    }
+
+    console.log('[SessionHealth] 📞 Calling supabase.auth.refreshSession()...');
     const { data: sessionData, error: refreshError } = await supabase.auth.refreshSession();
-    
+    console.log('[SessionHealth] 📞 refreshSession returned after', Date.now() - startedAt, 'ms', {
+      hasSession: !!sessionData?.session,
+      hasError: !!refreshError,
+      errorMessage: refreshError?.message,
+    });
+
     if (!refreshError && sessionData?.session) {
       console.log('[SessionHealth] ✅ Session valid/refreshed:', {
         userId: sessionData.session.user?.id,
@@ -138,23 +194,16 @@ export async function ensureValidSession(): Promise<{
       };
     }
     
-    // If refresh failed, try recovery via native fetch
+    // If refresh failed, try recovery via native fetch (do NOT call getSession - client may be frozen)
     console.warn('[SessionHealth] ⚠️ Supabase refresh failed, attempting recovery...');
     const recovered = await recoverFromFrozenClient();
-    
-    if (recovered) {
-      // Get session after recovery
-      const { data: recoveredSession } = await supabase.auth.getSession();
-      if (recoveredSession?.session) {
-        console.log('[SessionHealth] ✅ Session recovered successfully');
-        return {
-          success: true,
-          user: {
-            id: recoveredSession.session.user.id,
-            email: recoveredSession.session.user.email,
-          },
-        };
-      }
+
+    if (recovered.success) {
+      console.log('[SessionHealth] ✅ Session recovered successfully');
+      return {
+        success: true,
+        user: recovered.user,
+      };
     }
     
     // Session is truly expired/invalid
@@ -172,36 +221,40 @@ export async function ensureValidSession(): Promise<{
   }
 }
 
-export async function recoverFromFrozenClient(): Promise<boolean> {
+export type RecoverResult =
+  | { success: true; user: { id: string; email?: string } }
+  | { success: false };
+
+/**
+ * Recovers session using native fetch when Supabase client is frozen.
+ * Returns user info so callers never need to call getSession() on the frozen client.
+ */
+export async function recoverFromFrozenClient(): Promise<RecoverResult> {
   console.warn('[SessionHealth] Attempting to recover from frozen client...');
-  
-  // Test connection with native fetch
+
   const connectionOk = await testConnection(3000);
   if (!connectionOk) {
     console.error('[SessionHealth] Connection test failed, cannot recover');
-    return false;
+    return { success: false };
   }
 
-  // Try to refresh session using native fetch
   try {
     const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-    const supabaseKey = Object.keys(localStorage).find(key => 
+    const supabaseKey = Object.keys(localStorage).find((key) =>
       key.startsWith('sb-') && key.endsWith('-auth-token')
     );
-    
-    if (!supabaseKey) {
-      return false;
-    }
+
+    if (!supabaseKey) return { success: false };
 
     const storedSession = localStorage.getItem(supabaseKey);
     if (!storedSession) {
       console.warn('[SessionHealth] No stored session found for recovery');
-      return false;
+      return { success: false };
     }
 
     const parsed = JSON.parse(storedSession);
     const refreshToken = parsed?.refresh_token;
-    
+
     console.log('[SessionHealth] 🔄 Recovery attempt - Token info:', {
       hasRefreshToken: !!refreshToken,
       refreshTokenPreview: refreshToken ? `${refreshToken.substring(0, 20)}...` : null,
@@ -210,11 +263,8 @@ export async function recoverFromFrozenClient(): Promise<boolean> {
       expiresIn: parsed?.expires_at ? `${parsed.expires_at - Math.floor(Date.now() / 1000)}s` : null,
     });
 
-    if (!refreshToken) {
-      return false;
-    }
+    if (!refreshToken) return { success: false };
 
-    // Use native fetch to refresh session
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 5000);
 
@@ -223,40 +273,55 @@ export async function recoverFromFrozenClient(): Promise<boolean> {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY || '',
+        apikey: import.meta.env.VITE_SUPABASE_ANON_KEY || '',
       },
       body: JSON.stringify({ refresh_token: refreshToken }),
     });
 
     clearTimeout(timeoutId);
 
-    if (response.ok) {
-      const data = await response.json();
-      // Update localStorage with new session
-      const newSession = {
-        access_token: data.access_token,
-        refresh_token: data.refresh_token,
-        expires_at: data.expires_at,
-        expires_in: data.expires_in,
-        token_type: data.token_type,
-        user: parsed.user,
-      };
-      localStorage.setItem(supabaseKey, JSON.stringify(newSession));
-      
-      console.log('[SessionHealth] ✅ Session refreshed successfully:', {
-        newAccessToken: `${data.access_token.substring(0, 20)}...`,
-        newExpiresAt: data.expires_at ? new Date(data.expires_at * 1000).toISOString() : null,
-        newExpiresIn: data.expires_at ? `${data.expires_at - Math.floor(Date.now() / 1000)}s` : null,
-        hasRefreshToken: !!data.refresh_token,
-        tokenType: data.token_type,
-      });
-      return true;
+    if (!response.ok) return { success: false };
+
+    const data = await response.json();
+    const resolvedUser = data.user ?? parsed?.user;
+    if (!resolvedUser?.id) {
+      console.warn('[SessionHealth] Recovery response missing user info');
+      return { success: false };
     }
 
-    return false;
+    const newSession = {
+      access_token: data.access_token,
+      refresh_token: data.refresh_token,
+      expires_at: data.expires_at,
+      expires_in: data.expires_in,
+      token_type: data.token_type,
+      user: resolvedUser,
+    };
+    localStorage.setItem(supabaseKey, JSON.stringify(newSession));
+    console.log('[SessionHealth] ✅ Session refreshed successfully:', {
+      userId: resolvedUser?.id,
+      newAccessToken: `${data.access_token.substring(0, 20)}...`,
+      newExpiresAt: data.expires_at ? new Date(data.expires_at * 1000).toISOString() : null,
+      newExpiresIn: data.expires_at ? `${data.expires_at - Math.floor(Date.now() / 1000)}s` : null,
+      hasRefreshToken: !!data.refresh_token,
+      tokenType: data.token_type,
+    });
+
+    // Replace frozen client with fresh instance so mutations (supabase.from().update())
+    // use the new client that reads tokens from localStorage
+    replaceSupabaseClient();
+
+    const userObj = resolvedUser as { id: string; email?: string; user_metadata?: { email?: string } };
+    return {
+      success: true,
+      user: {
+        id: userObj.id,
+        email: userObj.email ?? userObj.user_metadata?.email,
+      },
+    };
   } catch (error) {
     console.error('[SessionHealth] Failed to recover:', error);
-    return false;
+    return { success: false };
   }
 }
 

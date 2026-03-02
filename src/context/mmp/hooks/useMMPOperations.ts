@@ -5,6 +5,8 @@ import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { uploadMMPFile } from '@/utils/mmpFileUpload';
 import { logDeletionAudit } from '@/services/mmpAudit.service';
+import { ensureValidSession } from '@/lib/session-health';
+import { withTimeout } from '@/utils/promise-with-timeout';
 
 export const useMMPOperations = (mmpFiles: MMPFile[], setMMPFiles: React.Dispatch<React.SetStateAction<MMPFile[]>>) => {
   const [currentMMP, setCurrentMMP] = useState<MMPFile | null>(null);
@@ -36,13 +38,18 @@ export const useMMPOperations = (mmpFiles: MMPFile[], setMMPFiles: React.Dispatc
     }
   };
 
-  const updateMMPFile = (mmp: MMPFile) => {
+  const updateMMPFile = async (mmp: MMPFile) => {
+    const session = await ensureValidSession();
+    if (!session.success) {
+      toast.error(session.error || 'Session expired. Please refresh and try again.');
+      return;
+    }
+
     try {
       setMMPFiles((prev: MMPFile[]) =>
         (prev || []).map((m) => (m.id === mmp.id ? mmp : m))
       );
 
-      // Update database via Supabase with snake_case mapping
       const mapToDB = (m: Partial<MMPFile>) => {
         const map: Record<string, string> = {
           uploadedAt: 'uploaded_at',
@@ -76,18 +83,20 @@ export const useMMPOperations = (mmpFiles: MMPFile[], setMMPFiles: React.Dispatc
       };
 
       const dbPayload = mapToDB(mmp);
-      supabase
-        .from('mmp_files')
-        .update(dbPayload)
-        .eq('id', mmp.id)
-        .then(({ error }) => {
-          if (error) {
-            console.error('Supabase update error:', error);
-            toast.error('Database update failed');
-          } else {
-            toast.success('MMP file updated');
-          }
-        });
+      const { error } = await withTimeout(
+        (async () => {
+          return await supabase.from('mmp_files').update(dbPayload).eq('id', mmp.id);
+        })(),
+        15000,
+        'Update MMP file timed out'
+      );
+
+      if (error) {
+        console.error('Supabase update error:', error);
+        toast.error('Database update failed');
+      } else {
+        toast.success('MMP file updated');
+      }
     } catch (error) {
       console.error('Error updating MMP file:', error);
       toast.error('Failed to update MMP file');
@@ -95,9 +104,17 @@ export const useMMPOperations = (mmpFiles: MMPFile[], setMMPFiles: React.Dispatc
   };
 
   const deleteMMPFile = async (id: string): Promise<boolean> => {
+    const session = await ensureValidSession();
+    if (!session.success) {
+      toast.error(session.error || 'Session expired. Please refresh and try again.');
+      return false;
+    }
+
     try {
-      // Get MMP details before deletion for audit logging
-      const mmpToDelete = mmpFiles.find(m => m.id === id);
+      return await withTimeout(
+        (async () => {
+          // Get MMP details before deletion for audit logging
+          const mmpToDelete = mmpFiles.find(m => m.id === id);
       const mmpName = mmpToDelete?.name || 'Unknown MMP';
 
       // Get current user for audit
@@ -184,6 +201,10 @@ export const useMMPOperations = (mmpFiles: MMPFile[], setMMPFiles: React.Dispatc
       setMMPFiles((prev: MMPFile[]) => (prev || []).filter((mmp) => mmp.id !== id));
       toast.success('MMP file deleted');
       return true;
+        })(),
+        15000,
+        'Delete MMP file timed out'
+      );
     } catch (error) {
       console.error('Error deleting MMP file:', error);
       toast.error('Failed to delete MMP file');

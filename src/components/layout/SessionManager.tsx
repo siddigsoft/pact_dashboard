@@ -61,7 +61,7 @@ const SessionManager: React.FC<SessionManagerProps> = ({ children }) => {
       if (frozen) {
         console.warn('[SessionManager] Client appears frozen, attempting recovery...');
         const recovered = await recoverFromFrozenClient();
-        if (!recovered) {
+        if (!recovered.success) {
           consecutiveFailuresRef.current += 1;
           // Just log the issue - don't show intrusive UI for connection problems
           console.warn('[SessionManager] Connection recovery failed, attempt:', consecutiveFailuresRef.current);

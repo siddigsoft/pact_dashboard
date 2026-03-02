@@ -3,6 +3,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { useUser } from '../user/UserContext';
 import { useToast } from '@/hooks/use-toast';
 import { useRealtimeTable } from '@/hooks/useRealtimeResource';
+import { ensureValidSession } from '@/lib/session-health';
+import { withTimeout } from '@/utils/promise-with-timeout';
 import {
   DownPaymentRequest,
   CreateDownPaymentRequest,
@@ -206,6 +208,8 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
 
     try {
       setLoading(true);
+      await withTimeout(
+        (async () => {
       const userRole = user.role?.toLowerCase();
 
       // Main query with full join so we get state/locality/project in one round-trip
@@ -313,12 +317,16 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
       }
 
       setRequests(transformed);
+        })(),
+        20000,
+        'Failed to load requests. Please refresh the page.'
+      );
     } catch (error: any) {
-      const isPermissionError = error.code === '42501' ||
-        error.message?.includes('permission') || error.message?.includes('RLS') || error.message?.includes('policy');
+      const isPermissionError = error?.code === '42501' ||
+        error?.message?.includes('permission') || error?.message?.includes('RLS') || error?.message?.includes('policy');
       if (!isPermissionError) {
         console.error('[DownPayment] Fetch failed:', error);
-        toastRef.current({ title: 'Error', description: 'Failed to load down-payment requests', variant: 'destructive' });
+        toastRef.current({ title: 'Error', description: error?.message || 'Failed to load down-payment requests', variant: 'destructive' });
       }
     } finally {
       setLoading(false);
@@ -346,10 +354,23 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
     enabled: !!currentUser,
   });
 
+  const MUTATION_TIMEOUT_MS = 15000;
+
   const createRequest = async (request: CreateDownPaymentRequest): Promise<boolean> => {
+    const session = await ensureValidSession();
+    if (!session.success) {
+      toastRef.current({
+        title: 'Session may have expired',
+        description: session.error || 'Please refresh and try again.',
+        variant: 'destructive',
+      });
+      return false;
+    }
     try {
+      return await withTimeout(
+        (async () => {
       if (request.requestedAmount <= 0) {
-        toast({
+        toastRef.current({
           title: 'Invalid Amount',
           description: 'Requested amount must be greater than zero',
           variant: 'destructive',
@@ -358,7 +379,7 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
       }
 
       if (request.requestedAmount > request.totalTransportationBudget) {
-        toast({
+        toastRef.current({
           title: 'Amount Exceeds Budget',
           description: `Requested amount (${request.requestedAmount.toLocaleString()} SDG) cannot exceed transportation budget (${request.totalTransportationBudget.toLocaleString()} SDG)`,
           variant: 'destructive',
@@ -415,18 +436,22 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
 
       if (error) throw error;
 
-      toast({
+      toastRef.current({
         title: 'Request Submitted',
         description: 'Your down-payment request has been submitted for approval',
       });
 
       await refreshRequests();
       return true;
+        })(),
+        MUTATION_TIMEOUT_MS,
+        'Request timed out. Please try again or refresh the page.'
+      );
     } catch (error: any) {
       console.error('Failed to create down-payment request:', error);
-      toast({
+      toastRef.current({
         title: 'Error',
-        description: error.message || 'Failed to submit request',
+        description: error?.message || 'Failed to submit request',
         variant: 'destructive',
       });
       return false;
@@ -434,9 +459,20 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
   };
 
   const supervisorApprove = async (data: ApproveDownPaymentRequest): Promise<boolean> => {
+    const session = await ensureValidSession();
+    if (!session.success) {
+      toastRef.current({
+        title: 'Session may have expired',
+        description: session.error || 'Please refresh and try again.',
+        variant: 'destructive',
+      });
+      return false;
+    }
     try {
-      const request = requests.find(r => r.id === data.requestId);
-      if (!request) throw new Error('Request not found');
+      return await withTimeout(
+        (async () => {
+          const request = requests.find(r => r.id === data.requestId);
+          if (!request) throw new Error('Request not found');
       
       const approvedAmount = data.customAmount !== undefined 
         ? data.customAmount 
@@ -521,10 +557,14 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
         refreshRequests().catch(console.error);
       }
       return true;
+        })(),
+        MUTATION_TIMEOUT_MS,
+        'Request timed out. Please try again or refresh the page.'
+      );
     } catch (error: any) {
       console.error('Failed to approve request:', error);
       if (!data.silent) {
-        toast({
+        toastRef.current({
           title: 'Error',
           description: error.message || 'Failed to approve request',
           variant: 'destructive',
@@ -535,8 +575,19 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
   };
 
   const supervisorReject = async (data: RejectDownPaymentRequest): Promise<boolean> => {
+    const session = await ensureValidSession();
+    if (!session.success) {
+      toastRef.current({
+        title: 'Session may have expired',
+        description: session.error || 'Please refresh and try again.',
+        variant: 'destructive',
+      });
+      return false;
+    }
     try {
-      const request = requests.find(r => r.id === data.requestId);
+      return await withTimeout(
+        (async () => {
+          const request = requests.find(r => r.id === data.requestId);
       
       const { error } = await supabase
         .from('down_payment_requests')
@@ -567,7 +618,7 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
         });
       }
 
-      toast({
+      toastRef.current({
         title: 'Request Rejected',
         description: 'Down-payment request has been rejected',
         variant: 'destructive',
@@ -575,9 +626,13 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
 
       await refreshRequests();
       return true;
+        })(),
+        MUTATION_TIMEOUT_MS,
+        'Request timed out. Please try again or refresh the page.'
+      );
     } catch (error: any) {
       console.error('Failed to reject request:', error);
-      toast({
+      toastRef.current({
         title: 'Error',
         description: error.message || 'Failed to reject request',
         variant: 'destructive',
@@ -587,8 +642,19 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
   };
 
   const adminApprove = async (data: ApproveDownPaymentRequest): Promise<boolean> => {
+    const session = await ensureValidSession();
+    if (!session.success) {
+      toastRef.current({
+        title: 'Session may have expired',
+        description: session.error || 'Please refresh and try again.',
+        variant: 'destructive',
+      });
+      return false;
+    }
     try {
-      const request = requests.find(r => r.id === data.requestId);
+      return await withTimeout(
+        (async () => {
+          const request = requests.find(r => r.id === data.requestId);
       if (!request) throw new Error('Request not found');
       
       const approvedAmount = data.customAmount !== undefined 
@@ -669,17 +735,21 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
             emailActionLabel: 'View Wallet'
           }).catch(console.error);
         }
-        toast({
+        toastRef.current({
           title: 'Request Approved',
           description: `Approved ${approvedAmount.toLocaleString()} SDG - ready for payment`,
         });
         refreshRequests().catch(console.error);
       }
       return true;
+        })(),
+        MUTATION_TIMEOUT_MS,
+        'Request timed out. Please try again or refresh the page.'
+      );
     } catch (error: any) {
       console.error('Failed to approve request:', error);
       if (!data.silent) {
-        toast({
+        toastRef.current({
           title: 'Error',
           description: error.message || 'Failed to approve request',
           variant: 'destructive',
@@ -690,8 +760,19 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
   };
 
   const adminReject = async (data: RejectDownPaymentRequest): Promise<boolean> => {
+    const session = await ensureValidSession();
+    if (!session.success) {
+      toastRef.current({
+        title: 'Session may have expired',
+        description: session.error || 'Please refresh and try again.',
+        variant: 'destructive',
+      });
+      return false;
+    }
     try {
-      const request = requests.find(r => r.id === data.requestId);
+      return await withTimeout(
+        (async () => {
+          const request = requests.find(r => r.id === data.requestId);
       
       const { error } = await supabase
         .from('down_payment_requests')
@@ -722,7 +803,7 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
         });
       }
 
-      toast({
+      toastRef.current({
         title: 'Request Rejected',
         description: 'Down-payment request has been rejected',
         variant: 'destructive',
@@ -730,9 +811,13 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
 
       await refreshRequests();
       return true;
+        })(),
+        MUTATION_TIMEOUT_MS,
+        'Request timed out. Please try again or refresh the page.'
+      );
     } catch (error: any) {
       console.error('Failed to reject request:', error);
-      toast({
+      toastRef.current({
         title: 'Error',
         description: error.message || 'Failed to reject request',
         variant: 'destructive',
@@ -742,8 +827,19 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
   };
 
   const processPayment = async (data: ProcessPayment): Promise<boolean> => {
+    const session = await ensureValidSession();
+    if (!session.success) {
+      toastRef.current({
+        title: 'Session may have expired',
+        description: session.error || 'Please refresh and try again.',
+        variant: 'destructive',
+      });
+      return false;
+    }
     try {
-      const request = requests.find(r => r.id === data.requestId);
+      return await withTimeout(
+        (async () => {
+          const request = requests.find(r => r.id === data.requestId);
       if (!request) throw new Error('Request not found');
 
       // Fetch or create wallet — advance does NOT change balance (it is deducted from the site visit fee at completion)
@@ -839,7 +935,7 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
 
       if (requestUpdateError) throw requestUpdateError;
 
-      toast({
+      toastRef.current({
         title: 'Advance Recorded',
         description: `Transport advance of ${data.amount} SDG recorded — will be deducted from site visit fee upon completion`,
       });
@@ -873,9 +969,13 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
 
       await refreshRequests();
       return true;
+        })(),
+        MUTATION_TIMEOUT_MS,
+        'Request timed out. Please try again or refresh the page.'
+      );
     } catch (error: any) {
       console.error('Failed to process payment:', error);
-      toast({
+      toastRef.current({
         title: 'Error',
         description: error.message || 'Failed to process payment',
         variant: 'destructive',
@@ -1016,6 +1116,18 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
   const bulkApprove = async (
     data: BulkApprovalRequest
   ): Promise<{ success: number; failed: number }> => {
+    const session = await ensureValidSession();
+    if (!session.success) {
+      toastRef.current({
+        title: 'Session may have expired',
+        description: session.error || 'Please refresh and try again.',
+        variant: 'destructive',
+      });
+      return { success: 0, failed: data.requestIds.length };
+    }
+    try {
+      return await withTimeout(
+        (async () => {
     const userRole = currentUser?.role?.toLowerCase();
     const isSupervisor = userRole === 'supervisor' || userRole === 'hubsupervisor';
     const isAdminRole = ['admin', 'financialadmin', 'superadmin', 'super_admin', 'ict', 'fom',
@@ -1143,7 +1255,7 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
     }
 
     if (success > 0) {
-      toast({
+      toastRef.current({
         title: `${success} Request${success > 1 ? 's' : ''} Approved / تمت الموافقة`,
         description: `${success} approved successfully${failed > 0 ? ` · ${failed} failed` : ''}`,
       });
@@ -1164,7 +1276,7 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
     }
 
     if (failed > 0 && success === 0) {
-      toast({
+      toastRef.current({
         title: 'Approval Failed / فشل الموافقة',
         description: `${failed} request${failed > 1 ? 's' : ''} could not be approved`,
         variant: 'destructive',
@@ -1173,13 +1285,37 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
 
     await refreshRequests();
     return { success, failed };
+        })(),
+        MUTATION_TIMEOUT_MS,
+        'Request timed out. Please try again or refresh the page.'
+      );
+    } catch (error: any) {
+      console.error('Failed bulk approve:', error);
+      toastRef.current({
+        title: 'Error',
+        description: error.message || 'Bulk approval failed',
+        variant: 'destructive',
+      });
+      return { success: 0, failed: data.requestIds.length };
+    }
   };
 
   const revertToPending = async (data: RevertToPendingData): Promise<boolean> => {
+    const session = await ensureValidSession();
+    if (!session.success) {
+      toastRef.current({
+        title: 'Session may have expired',
+        description: session.error || 'Please refresh and try again.',
+        variant: 'destructive',
+      });
+      return false;
+    }
     try {
+      return await withTimeout(
+        (async () => {
       const request = requests.find(r => r.id === data.requestId);
       if (!request) {
-        toast({
+        toastRef.current({
           title: 'Error',
           description: 'Request not found',
           variant: 'destructive',
@@ -1284,16 +1420,20 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
         data.targetStatus === 'pending_admin'       ? 'Pending Admin Approval' :
                                                       'Approved (Ready for Payment)';
 
-      toast({
+      toastRef.current({
         title: 'Status Reverted / تم الإرجاع',
         description: `Request has been reverted to ${targetLabel}`,
       });
 
       await refreshRequests();
       return true;
+        })(),
+        MUTATION_TIMEOUT_MS,
+        'Request timed out. Please try again or refresh the page.'
+      );
     } catch (error: any) {
       console.error('Failed to revert request:', error);
-      toast({
+      toastRef.current({
         title: 'Error',
         description: error.message || 'Failed to revert request status',
         variant: 'destructive',
@@ -1369,8 +1509,19 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
   };
 
   const editRequest = async (data: EditDownPaymentData): Promise<boolean> => {
+    const session = await ensureValidSession();
+    if (!session.success) {
+      toastRef.current({
+        title: 'Session may have expired',
+        description: session.error || 'Please refresh and try again.',
+        variant: 'destructive',
+      });
+      return false;
+    }
     try {
-      const request = requests.find(r => r.id === data.requestId);
+      return await withTimeout(
+        (async () => {
+          const request = requests.find(r => r.id === data.requestId);
       if (!request) throw new Error('Request not found');
 
       const previousValues: Record<string, any> = {};
@@ -1449,16 +1600,20 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
 
       if (error) throw error;
 
-      toast({
+      toastRef.current({
         title: 'Request Updated / تم تحديث الطلب',
         description: `${Object.keys(newValues).length} field(s) updated with audit trail. / تم تحديث ${Object.keys(newValues).length} حقل(حقول) مع سجل التدقيق.`,
       });
 
       await refreshRequests();
       return true;
+        })(),
+        MUTATION_TIMEOUT_MS,
+        'Request timed out. Please try again or refresh the page.'
+      );
     } catch (error: any) {
       console.error('Failed to edit request:', error);
-      toast({
+      toastRef.current({
         title: 'Error',
         description: error.message || 'Failed to edit request',
         variant: 'destructive',

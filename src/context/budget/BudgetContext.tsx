@@ -2,6 +2,8 @@ import { createContext, useContext, useState, useEffect, ReactNode, useCallback 
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useUser } from '@/context/user/UserContext';
+import { ensureValidSession } from '@/lib/session-health';
+import { withTimeout } from '@/utils/promise-with-timeout';
 import type {
   ProjectBudget,
   MMPBudget,
@@ -220,23 +222,37 @@ export function BudgetProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const createProjectBudget = async (input: CreateProjectBudgetInput): Promise<ProjectBudget | null> => {
+    const session = await ensureValidSession();
+    if (!session.success) {
+      toast({
+        title: 'Session expired',
+        description: session.error || 'Please refresh and try again.',
+        variant: 'destructive'
+      });
+      return null;
+    }
+
     try {
-      const { data, error } = await supabase
-        .from('project_budgets')
-        .insert({
-          project_id: input.projectId,
-          total_budget_cents: input.totalBudgetCents,
-          budget_period: input.budgetPeriod,
-          period_start_date: input.periodStartDate,
-          period_end_date: input.periodEndDate,
-          category_allocations: input.categoryAllocations,
-          fiscal_year: input.fiscalYear,
-          budget_notes: input.budgetNotes,
-          created_by: currentUser?.id,
-          status: 'draft',
-        })
-        .select()
-        .single();
+      const { data, error } = await withTimeout(
+        supabase
+          .from('project_budgets')
+          .insert({
+            project_id: input.projectId,
+            total_budget_cents: input.totalBudgetCents,
+            budget_period: input.budgetPeriod,
+            period_start_date: input.periodStartDate,
+            period_end_date: input.periodEndDate,
+            category_allocations: input.categoryAllocations,
+            fiscal_year: input.fiscalYear,
+            budget_notes: input.budgetNotes,
+            created_by: currentUser?.id,
+            status: 'draft',
+          })
+          .select()
+          .single(),
+        15000,
+        'Create project budget timed out'
+      );
 
       if (error) throw error;
 
@@ -259,6 +275,16 @@ export function BudgetProvider({ children }: { children: ReactNode }) {
   };
 
   const updateProjectBudget = async (id: string, updates: Partial<ProjectBudget>) => {
+    const session = await ensureValidSession();
+    if (!session.success) {
+      toast({
+        title: 'Session expired',
+        description: session.error || 'Please refresh and try again.',
+        variant: 'destructive'
+      });
+      return;
+    }
+
     try {
       const dbUpdates: any = {
         updated_by: currentUser?.id,
@@ -274,10 +300,11 @@ export function BudgetProvider({ children }: { children: ReactNode }) {
       if (updates.budgetNotes !== undefined) dbUpdates.budget_notes = updates.budgetNotes;
       if (updates.categoryAllocations) dbUpdates.category_allocations = updates.categoryAllocations;
 
-      const { error } = await supabase
-        .from('project_budgets')
-        .update(dbUpdates)
-        .eq('id', id);
+      const { error } = await withTimeout(
+        supabase.from('project_budgets').update(dbUpdates).eq('id', id),
+        15000,
+        'Update project budget timed out'
+      );
 
       if (error) throw error;
 
@@ -298,11 +325,22 @@ export function BudgetProvider({ children }: { children: ReactNode }) {
   };
 
   const deleteProjectBudget = async (id: string) => {
+    const session = await ensureValidSession();
+    if (!session.success) {
+      toast({
+        title: 'Session expired',
+        description: session.error || 'Please refresh and try again.',
+        variant: 'destructive'
+      });
+      return;
+    }
+
     try {
-      const { error } = await supabase
-        .from('project_budgets')
-        .delete()
-        .eq('id', id);
+      const { error } = await withTimeout(
+        supabase.from('project_budgets').delete().eq('id', id),
+        15000,
+        'Delete project budget timed out'
+      );
 
       if (error) throw error;
 
@@ -323,58 +361,76 @@ export function BudgetProvider({ children }: { children: ReactNode }) {
   };
 
   const createMMPBudget = async (input: CreateMMPBudgetInput): Promise<MMPBudget | null> => {
+    const session = await ensureValidSession();
+    if (!session.success) {
+      toast({
+        title: 'Session expired',
+        description: session.error || 'Please refresh and try again.',
+        variant: 'destructive'
+      });
+      return null;
+    }
+
     try {
-      const { data, error } = await supabase
-        .from('mmp_budgets')
-        .insert({
-          mmp_file_id: input.mmpFileId,
-          project_budget_id: input.projectBudgetId,
-          allocated_budget_cents: input.allocatedBudgetCents,
-          total_sites: input.totalSites,
-          budgeted_sites: input.totalSites,
-          category_breakdown: input.categoryBreakdown,
-          source_type: input.sourceType || 'project_allocation',
-          budget_notes: input.budgetNotes,
-          allocated_by: currentUser?.id,
-          status: 'active',
-        })
-        .select()
-        .single();
-
-      if (error) throw error;
-
-      if (input.projectBudgetId) {
-        const { error: txnError } = await supabase
-          .from('budget_transactions')
-          .insert({
-            project_budget_id: input.projectBudgetId,
-            mmp_budget_id: data.id,
-            transaction_type: 'allocation',
-            amount_cents: input.allocatedBudgetCents,
-            currency: 'SDG',
-            description: `Budget allocated to MMP`,
-            created_by: currentUser?.id,
-          });
-
-        if (txnError) console.error('Failed to create allocation transaction:', txnError);
-
-        const { data: projectBudget, error: fetchError } = await supabase
-          .from('project_budgets')
-          .select('allocated_budget_cents')
-          .eq('id', input.projectBudgetId)
-          .single();
-
-        if (!fetchError && projectBudget) {
-          const { error: updateError } = await supabase
-            .from('project_budgets')
-            .update({
-              allocated_budget_cents: parseInt(projectBudget.allocated_budget_cents) + input.allocatedBudgetCents,
+      const result = await withTimeout(
+        (async () => {
+          const { data, error } = await supabase
+            .from('mmp_budgets')
+            .insert({
+              mmp_file_id: input.mmpFileId,
+              project_budget_id: input.projectBudgetId,
+              allocated_budget_cents: input.allocatedBudgetCents,
+              total_sites: input.totalSites,
+              budgeted_sites: input.totalSites,
+              category_breakdown: input.categoryBreakdown,
+              source_type: input.sourceType || 'project_allocation',
+              budget_notes: input.budgetNotes,
+              allocated_by: currentUser?.id,
+              status: 'active',
             })
-            .eq('id', input.projectBudgetId);
+            .select()
+            .single();
 
-          if (updateError) console.error('Failed to update project budget:', updateError);
-        }
-      }
+          if (error) throw error;
+
+          if (input.projectBudgetId) {
+            const { error: txnError } = await supabase
+              .from('budget_transactions')
+              .insert({
+                project_budget_id: input.projectBudgetId,
+                mmp_budget_id: data.id,
+                transaction_type: 'allocation',
+                amount_cents: input.allocatedBudgetCents,
+                currency: 'SDG',
+                description: `Budget allocated to MMP`,
+                created_by: currentUser?.id,
+              });
+
+            if (txnError) console.error('Failed to create allocation transaction:', txnError);
+
+            const { data: projectBudget, error: fetchError } = await supabase
+              .from('project_budgets')
+              .select('allocated_budget_cents')
+              .eq('id', input.projectBudgetId)
+              .single();
+
+            if (!fetchError && projectBudget) {
+              const { error: updateError } = await supabase
+                .from('project_budgets')
+                .update({
+                  allocated_budget_cents: parseInt(projectBudget.allocated_budget_cents) + input.allocatedBudgetCents,
+                })
+                .eq('id', input.projectBudgetId);
+
+              if (updateError) console.error('Failed to update project budget:', updateError);
+            }
+          }
+
+          return data;
+        })(),
+        15000,
+        'Create MMP budget timed out'
+      );
 
       toast({
         title: 'Success',
@@ -382,7 +438,7 @@ export function BudgetProvider({ children }: { children: ReactNode }) {
       });
 
       await Promise.all([refreshMMPBudgets(), refreshProjectBudgets(), refreshBudgetTransactions()]);
-      return transformMMPBudgetFromDB(data);
+      return transformMMPBudgetFromDB(result);
     } catch (error: any) {
       console.error('Failed to create MMP budget:', error);
       toast({
@@ -395,6 +451,16 @@ export function BudgetProvider({ children }: { children: ReactNode }) {
   };
 
   const updateMMPBudget = async (id: string, updates: Partial<MMPBudget>) => {
+    const session = await ensureValidSession();
+    if (!session.success) {
+      toast({
+        title: 'Session expired',
+        description: session.error || 'Please refresh and try again.',
+        variant: 'destructive'
+      });
+      return;
+    }
+
     try {
       const dbUpdates: any = {
         updated_at: new Date().toISOString(),
@@ -405,10 +471,11 @@ export function BudgetProvider({ children }: { children: ReactNode }) {
       if (updates.budgetNotes) dbUpdates.budget_notes = updates.budgetNotes;
       if (updates.completedSites !== undefined) dbUpdates.completed_sites = updates.completedSites;
 
-      const { error } = await supabase
-        .from('mmp_budgets')
-        .update(dbUpdates)
-        .eq('id', id);
+      const { error } = await withTimeout(
+        supabase.from('mmp_budgets').update(dbUpdates).eq('id', id),
+        15000,
+        'Update MMP budget timed out'
+      );
 
       if (error) throw error;
 
@@ -424,32 +491,48 @@ export function BudgetProvider({ children }: { children: ReactNode }) {
   };
 
   const topUpMMPBudget = async (input: TopUpBudgetInput) => {
+    const session = await ensureValidSession();
+    if (!session.success) {
+      toast({
+        title: 'Session expired',
+        description: session.error || 'Please refresh and try again.',
+        variant: 'destructive'
+      });
+      return;
+    }
+
     try {
       const budget = mmpBudgets.find(b => b.id === input.budgetId);
       if (!budget) throw new Error('Budget not found');
 
-      const { error: updateError } = await supabase
-        .from('mmp_budgets')
-        .update({
-          allocated_budget_cents: budget.allocatedBudgetCents + input.amountCents,
-        })
-        .eq('id', input.budgetId);
+      await withTimeout(
+        (async () => {
+          const { error: updateError } = await supabase
+            .from('mmp_budgets')
+            .update({
+              allocated_budget_cents: budget.allocatedBudgetCents + input.amountCents,
+            })
+            .eq('id', input.budgetId);
 
-      if (updateError) throw updateError;
+          if (updateError) throw updateError;
 
-      const { error: txnError } = await supabase
-        .from('budget_transactions')
-        .insert({
-          mmp_budget_id: input.budgetId,
-          transaction_type: 'top_up',
-          amount_cents: input.amountCents,
-          currency: 'SDG',
-          category: input.category,
-          description: input.reason,
-          created_by: currentUser?.id,
-        });
+          const { error: txnError } = await supabase
+            .from('budget_transactions')
+            .insert({
+              mmp_budget_id: input.budgetId,
+              transaction_type: 'top_up',
+              amount_cents: input.amountCents,
+              currency: 'SDG',
+              category: input.category,
+              description: input.reason,
+              created_by: currentUser?.id,
+            });
 
-      if (txnError) throw txnError;
+          if (txnError) throw txnError;
+        })(),
+        15000,
+        'Top up budget timed out'
+      );
 
       toast({
         title: 'Success',
@@ -473,34 +556,50 @@ export function BudgetProvider({ children }: { children: ReactNode }) {
     category: string,
     description?: string
   ) => {
+    const session = await ensureValidSession();
+    if (!session.success) {
+      toast({
+        title: 'Session expired',
+        description: session.error || 'Please refresh and try again.',
+        variant: 'destructive'
+      });
+      throw new Error(session.error || 'Session expired');
+    }
+
     try {
       const budget = mmpBudgets.find(b => b.id === mmpBudgetId);
       if (!budget) throw new Error('Budget not found');
 
-      const { error: updateError } = await supabase
-        .from('mmp_budgets')
-        .update({
-          spent_budget_cents: budget.spentBudgetCents + amountCents,
-        })
-        .eq('id', mmpBudgetId);
+      await withTimeout(
+        (async () => {
+          const { error: updateError } = await supabase
+            .from('mmp_budgets')
+            .update({
+              spent_budget_cents: budget.spentBudgetCents + amountCents,
+            })
+            .eq('id', mmpBudgetId);
 
-      if (updateError) throw updateError;
+          if (updateError) throw updateError;
 
-      const { error: txnError } = await supabase
-        .from('budget_transactions')
-        .insert({
-          mmp_budget_id: mmpBudgetId,
-          transaction_type: 'spend',
-          amount_cents: amountCents,
-          currency: 'SDG',
-          category: category,
-          description: description,
-          balance_before_cents: budget.remainingBudgetCents,
-          balance_after_cents: budget.remainingBudgetCents - amountCents,
-          created_by: currentUser?.id,
-        });
+          const { error: txnError } = await supabase
+            .from('budget_transactions')
+            .insert({
+              mmp_budget_id: mmpBudgetId,
+              transaction_type: 'spend',
+              amount_cents: amountCents,
+              currency: 'SDG',
+              category: category,
+              description: description,
+              balance_before_cents: budget.remainingBudgetCents,
+              balance_after_cents: budget.remainingBudgetCents - amountCents,
+              created_by: currentUser?.id,
+            });
 
-      if (txnError) throw txnError;
+          if (txnError) throw txnError;
+        })(),
+        15000,
+        'Record budget spend timed out'
+      );
 
       await Promise.all([refreshMMPBudgets(), refreshBudgetTransactions(), refreshBudgetAlerts()]);
     } catch (error: any) {
@@ -550,15 +649,29 @@ export function BudgetProvider({ children }: { children: ReactNode }) {
   };
 
   const acknowledgeAlert = async (alertId: string) => {
+    const session = await ensureValidSession();
+    if (!session.success) {
+      toast({
+        title: 'Session expired',
+        description: session.error || 'Please refresh and try again.',
+        variant: 'destructive'
+      });
+      return;
+    }
+
     try {
-      const { error } = await supabase
-        .from('budget_alerts')
-        .update({
-          status: 'acknowledged',
-          acknowledged_by: currentUser?.id,
-          acknowledged_at: new Date().toISOString(),
-        })
-        .eq('id', alertId);
+      const { error } = await withTimeout(
+        supabase
+          .from('budget_alerts')
+          .update({
+            status: 'acknowledged',
+            acknowledged_by: currentUser?.id,
+            acknowledged_at: new Date().toISOString(),
+          })
+          .eq('id', alertId),
+        15000,
+        'Acknowledge alert timed out'
+      );
 
       if (error) throw error;
       await refreshBudgetAlerts();
@@ -568,15 +681,29 @@ export function BudgetProvider({ children }: { children: ReactNode }) {
   };
 
   const dismissAlert = async (alertId: string) => {
+    const session = await ensureValidSession();
+    if (!session.success) {
+      toast({
+        title: 'Session expired',
+        description: session.error || 'Please refresh and try again.',
+        variant: 'destructive'
+      });
+      return;
+    }
+
     try {
-      const { error } = await supabase
-        .from('budget_alerts')
-        .update({
-          status: 'dismissed',
-          acknowledged_by: currentUser?.id,
-          acknowledged_at: new Date().toISOString(),
-        })
-        .eq('id', alertId);
+      const { error } = await withTimeout(
+        supabase
+          .from('budget_alerts')
+          .update({
+            status: 'dismissed',
+            acknowledged_by: currentUser?.id,
+            acknowledged_at: new Date().toISOString(),
+          })
+          .eq('id', alertId),
+        15000,
+        'Dismiss alert timed out'
+      );
 
       if (error) throw error;
       await refreshBudgetAlerts();

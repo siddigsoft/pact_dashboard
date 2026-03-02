@@ -2,12 +2,20 @@
 import { MMPFile } from '@/types';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
+import { ensureValidSession } from '@/lib/session-health';
+import { withTimeout } from '@/utils/promise-with-timeout';
 
 export const useMMPVersioning = (setMMPFiles: React.Dispatch<React.SetStateAction<MMPFile[]>>) => {
   const updateMMPVersion = async (id: string, changes: string): Promise<boolean> => {
+    const session = await ensureValidSession();
+    if (!session.success) {
+      toast.error(session.error || 'Session expired. Please refresh and try again.');
+      return false;
+    }
+
     try {
-      // First update local state
       let versionUpdated = false;
+      let updatedMMP: MMPFile | null = null;
       
       setMMPFiles((prev: MMPFile[]) =>
         (prev || []).map((mmp) => {
@@ -18,7 +26,7 @@ export const useMMPVersioning = (setMMPFiles: React.Dispatch<React.SetStateActio
               updatedAt: new Date().toISOString()
             };
             
-            const updatedMMP = {
+            updatedMMP = {
               ...mmp,
               version: newVersion,
               modifiedAt: new Date().toISOString(),
@@ -35,46 +43,39 @@ export const useMMPVersioning = (setMMPFiles: React.Dispatch<React.SetStateActio
             };
             
             versionUpdated = true;
-            
-            // Update database via Supabase (if connected)
-            try {
-              supabase
-                .from('mmp_files')
-                .update({
-                  version: newVersion,
-                  updated_at: new Date().toISOString(),
-                  modificationhistory: updatedMMP.modificationHistory
-                })
-                .eq('id', id)
-                .then(({ error }) => {
-                  if (error) {
-                    console.error('Supabase version update error:', error);
-                    toast.error('Database version update failed, using local storage');
-                    // Fall back to local storage
-                    const existingFiles = JSON.parse(localStorage.getItem('mock_mmp_files') || '[]');
-                    const updatedFiles = existingFiles.map((m: MMPFile) => m.id === id ? updatedMMP : m);
-                    localStorage.setItem('mock_mmp_files', JSON.stringify(updatedFiles));
-                  } else {
-                    toast.success('MMP version updated successfully');
-                  }
-                });
-            } catch (dbError) {
-              console.error('Database operation failed:', dbError);
-              toast.error('Database operation failed, using local storage');
-              // Fall back to local storage
-              const existingFiles = JSON.parse(localStorage.getItem('mock_mmp_files') || '[]');
-              const updatedFiles = existingFiles.map((m: MMPFile) => m.id === id ? updatedMMP : m);
-              localStorage.setItem('mock_mmp_files', JSON.stringify(updatedFiles));
-            }
-            
             return updatedMMP;
           }
           return mmp;
         })
       );
       
-      if (!versionUpdated) {
+      if (!versionUpdated || !updatedMMP) {
         toast.warning('MMP file not found');
+        return false;
+      }
+
+      const newVersion = updatedMMP.version!;
+      const { error } = await withTimeout(
+        supabase
+          .from('mmp_files')
+          .update({
+            version: newVersion,
+            updated_at: new Date().toISOString(),
+            modificationhistory: updatedMMP.modificationHistory
+          })
+          .eq('id', id),
+        15000,
+        'Update MMP version timed out'
+      );
+
+      if (error) {
+        console.error('Supabase version update error:', error);
+        toast.error('Database version update failed, using local storage');
+        const existingFiles = JSON.parse(localStorage.getItem('mock_mmp_files') || '[]');
+        const updatedFiles = existingFiles.map((m: MMPFile) => m.id === id ? updatedMMP : m);
+        localStorage.setItem('mock_mmp_files', JSON.stringify(updatedFiles));
+      } else {
+        toast.success('MMP version updated successfully');
       }
       
       return versionUpdated;

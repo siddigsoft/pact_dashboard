@@ -9,10 +9,15 @@ if (!isSupabaseConfigured) {
   console.error('[Supabase] Configuration missing');
 }
 
-let supabaseClient: SupabaseClient;
-
-if (isSupabaseConfigured) {
-  supabaseClient = createClient(url!, anonKey!, {
+function createSupabaseClient(): SupabaseClient {
+  if (!isSupabaseConfigured || !url || !anonKey) {
+    return new Proxy({} as SupabaseClient, {
+      get() {
+        return () => Promise.reject(new Error('Supabase is not configured'));
+      },
+    });
+  }
+  return createClient(url, anonKey, {
     auth: {
       persistSession: true,
       autoRefreshToken: true,
@@ -20,13 +25,22 @@ if (isSupabaseConfigured) {
       storage: localStorage, // 🔥 critical fix (web + mobile)
     },
   });
-} else {
-  supabaseClient = new Proxy({} as SupabaseClient, {
-    get() {
-      return () =>
-        Promise.reject(new Error('Supabase is not configured'));
-    },
-  });
 }
 
-export const supabase = supabaseClient;
+let _client = createSupabaseClient();
+
+/**
+ * Replace the Supabase client with a fresh instance.
+ * Call after session recovery when the client is frozen - the new instance
+ * reads tokens from localStorage and works for subsequent mutations.
+ */
+export function replaceSupabaseClient(): void {
+  _client = createSupabaseClient();
+  console.log('[Supabase] Client replaced (recovery from frozen state)');
+}
+
+export const supabase = new Proxy({} as SupabaseClient, {
+  get(_, prop: string) {
+    return ((_client as unknown) as Record<string, unknown>)[prop];
+  },
+});

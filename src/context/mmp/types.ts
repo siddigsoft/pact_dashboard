@@ -30,7 +30,7 @@ export interface MMPContextType {
   currentMMP: MMPFile | null;
   setCurrentMMP: (mmp: MMPFile | null) => void;
   addMMPFile: (mmp: MMPFile) => void;
-  updateMMPFile: (mmp: MMPFile) => void;
+  updateMMPFile: (mmp: MMPFile) => void | Promise<void>;
   deleteMMPFile: (id: string) => Promise<boolean>;
   getMMPById: (id: string) => MMPFile | undefined;
   getMmpById: (id: string) => MMPFile | undefined;
@@ -47,7 +47,7 @@ export interface MMPContextType {
   updateMMP: (id: string, updatedMMP: Partial<MMPFile>) => Promise<boolean>;
   updateMMPVersion: (id: string, changes: string) => Promise<boolean>;
   deleteMMP: (id: string) => Promise<boolean>;
-  restoreMMP: (id: string) => void;
+  restoreMMP: (id: string) => Promise<void>;
   resetMMP: (id?: string) => Promise<boolean>;
   attachPermitsToMMP: (id: string, permits: { federal: File | null; state?: File | null; local?: File | null }) => Promise<void>;
   refreshMMPFiles: () => Promise<void>;

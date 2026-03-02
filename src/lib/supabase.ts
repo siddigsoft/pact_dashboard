@@ -34,30 +34,10 @@ export const supabase: SupabaseClient = createClient(SUPABASE_URL || '', SUPABAS
   },
 });
 
-let _refreshPromise: Promise<boolean> | null = null;
-
-export async function ensureValidSession(): Promise<boolean> {
-  if (_refreshPromise) return _refreshPromise;
-
-  _refreshPromise = (async () => {
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) return false;
-      const expiresAt = session.expires_at ? session.expires_at * 1000 : 0;
-      const now = Date.now();
-      if (expiresAt - now < 2 * 60 * 1000) {
-        const { data, error } = await supabase.auth.refreshSession();
-        if (error || !data.session) return false;
-      }
-      return true;
-    } catch {
-      return false;
-    } finally {
-      _refreshPromise = null;
-    }
-  })();
-
-  return _refreshPromise;
-}
+/**
+ * @deprecated Use ensureValidSessionForMutation from @/lib/session-health instead.
+ * Re-exports for backward compatibility. Uses integrations client via session-health.
+ */
+export { ensureValidSessionForMutation as ensureValidSession } from '@/lib/session-health';
 
 export default supabase;

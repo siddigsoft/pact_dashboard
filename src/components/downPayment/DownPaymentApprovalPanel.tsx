@@ -329,31 +329,34 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
     if (!selectedRequest || !currentUser) return;
 
     const finalAmount = calculateApprovedAmount();
-    
-    setProcessing(true);
-    const success = userRole === 'supervisor'
-      ? await supervisorApprove({
-          requestId: selectedRequest.id,
-          approvedBy: currentUser.id,
-          approvedByName: currentUser.fullName || currentUser.email,
-          notes,
-          approvalType,
-          approvalPercentage: approvalType === 'percentage' ? customPercentage : undefined,
-          customAmount: finalAmount,
-        })
-      : await adminApprove({
-          requestId: selectedRequest.id,
-          approvedBy: currentUser.id,
-          approvedByName: currentUser.fullName || currentUser.email,
-          notes,
-          approvalType,
-          approvalPercentage: approvalType === 'percentage' ? customPercentage : undefined,
-          customAmount: finalAmount,
-        });
 
-    setProcessing(false);
-    if (success) {
-      closeDialog();
+    setProcessing(true);
+    try {
+      const success = userRole === 'supervisor'
+        ? await supervisorApprove({
+            requestId: selectedRequest.id,
+            approvedBy: currentUser.id,
+            approvedByName: currentUser.fullName || currentUser.email,
+            notes,
+            approvalType,
+            approvalPercentage: approvalType === 'percentage' ? customPercentage : undefined,
+            customAmount: finalAmount,
+          })
+        : await adminApprove({
+            requestId: selectedRequest.id,
+            approvedBy: currentUser.id,
+            approvedByName: currentUser.fullName || currentUser.email,
+            notes,
+            approvalType,
+            approvalPercentage: approvalType === 'percentage' ? customPercentage : undefined,
+            customAmount: finalAmount,
+          });
+
+      if (success) {
+        closeDialog();
+      }
+    } finally {
+      setProcessing(false);
     }
   };
 
@@ -366,23 +369,26 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
     }
 
     setProcessing(true);
-    const success = userRole === 'supervisor'
-      ? await supervisorReject({
-          requestId: selectedRequest.id,
-          rejectedBy: currentUser.id,
-          rejectedByName: currentUser.fullName || currentUser.email,
-          rejectionReason,
-        })
-      : await adminReject({
-          requestId: selectedRequest.id,
-          rejectedBy: currentUser.id,
-          rejectedByName: currentUser.fullName || currentUser.email,
-          rejectionReason,
-        });
+    try {
+      const success = userRole === 'supervisor'
+        ? await supervisorReject({
+            requestId: selectedRequest.id,
+            rejectedBy: currentUser.id,
+            rejectedByName: currentUser.fullName || currentUser.email,
+            rejectionReason,
+          })
+        : await adminReject({
+            requestId: selectedRequest.id,
+            rejectedBy: currentUser.id,
+            rejectedByName: currentUser.fullName || currentUser.email,
+            rejectionReason,
+          });
 
-    setProcessing(false);
-    if (success) {
-      closeDialog();
+      if (success) {
+        closeDialog();
+      }
+    } finally {
+      setProcessing(false);
     }
   };
 
@@ -395,17 +401,20 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
     }
 
     setProcessing(true);
-    const success = await processPayment({
-      requestId: selectedRequest.id,
-      amount: paymentAmount,
-      processedBy: currentUser.id,
-      processedByName: currentUser.fullName || currentUser.email,
-      notes,
-    });
+    try {
+      const success = await processPayment({
+        requestId: selectedRequest.id,
+        amount: paymentAmount,
+        processedBy: currentUser.id,
+        processedByName: currentUser.fullName || currentUser.email,
+        notes,
+      });
 
-    setProcessing(false);
-    if (success) {
-      closeDialog();
+      if (success) {
+        closeDialog();
+      }
+    } finally {
+      setProcessing(false);
     }
   };
 
@@ -451,110 +460,119 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
   const handleBulkRevert = async (targetStatus: 'pending_supervisor' | 'pending_admin') => {
     if (!currentUser || selectedIds.size === 0) return;
     setProcessing(true);
-    let successCount = 0;
-    let failCount = 0;
-    const ids = Array.from(selectedIds);
-    for (const id of ids) {
-      const success = await revertToPending({
-        requestId: id,
-        revertedBy: currentUser.id,
-        revertedByName: currentUser.fullName || currentUser.email,
-        reason: `Bulk revert to ${targetStatus === 'pending_supervisor' ? 'Pending Supervisor' : 'Pending Admin'}`,
-        targetStatus,
+    try {
+      let successCount = 0;
+      let failCount = 0;
+      const ids = Array.from(selectedIds);
+      for (const id of ids) {
+        const success = await revertToPending({
+          requestId: id,
+          revertedBy: currentUser.id,
+          revertedByName: currentUser.fullName || currentUser.email,
+          reason: `Bulk revert to ${targetStatus === 'pending_supervisor' ? 'Pending Supervisor' : 'Pending Admin'}`,
+          targetStatus,
+        });
+        if (success) successCount++; else failCount++;
+      }
+      setSelectedIds(new Set());
+      toast({
+        title: `Bulk Revert Complete / اكتمال الإرجاع الجماعي`,
+        description: `${successCount} reverted${failCount > 0 ? `, ${failCount} failed` : ''}`,
       });
-      if (success) successCount++; else failCount++;
+    } finally {
+      setProcessing(false);
     }
-    setProcessing(false);
-    setSelectedIds(new Set());
-    toast({
-      title: `Bulk Revert Complete / اكتمال الإرجاع الجماعي`,
-      description: `${successCount} reverted${failCount > 0 ? `, ${failCount} failed` : ''}`,
-    });
   };
 
   const handleBulkMarkPaid = async () => {
     if (!currentUser || selectedIds.size === 0) return;
     setProcessing(true);
-    let successCount = 0;
-    let failCount = 0;
-    const now = new Date().toISOString();
-    const ids = Array.from(selectedIds);
-    for (const id of ids) {
-      const req = requests.find(r => r.id === id);
-      if (!req || req.status !== 'approved') { failCount++; continue; }
-      try {
-        const { error } = await supabase
-          .from('down_payment_requests')
-          .update({
-            status: 'fully_paid',
-            total_paid_amount: req.approvedAmount || req.requestedAmount,
-            remaining_amount: 0,
-            updated_at: now,
-          } as any)
-          .eq('id', id);
-        if (error) failCount++; else successCount++;
-      } catch { failCount++; }
+    try {
+      let successCount = 0;
+      let failCount = 0;
+      const now = new Date().toISOString();
+      const ids = Array.from(selectedIds);
+      for (const id of ids) {
+        const req = requests.find(r => r.id === id);
+        if (!req || req.status !== 'approved') { failCount++; continue; }
+        try {
+          const { error } = await supabase
+            .from('down_payment_requests')
+            .update({
+              status: 'fully_paid',
+              total_paid_amount: req.approvedAmount || req.requestedAmount,
+              remaining_amount: 0,
+              updated_at: now,
+            } as any)
+            .eq('id', id);
+          if (error) failCount++; else successCount++;
+        } catch { failCount++; }
+      }
+      setSelectedIds(new Set());
+      await refreshRequests();
+      toast({
+        title: `Bulk Mark Paid Complete / اكتمال التحديد كمدفوع`,
+        description: `${successCount} marked as paid${failCount > 0 ? `, ${failCount} failed` : ''}`,
+      });
+    } finally {
+      setProcessing(false);
     }
-    setProcessing(false);
-    setSelectedIds(new Set());
-    await refreshRequests();
-    toast({
-      title: `Bulk Mark Paid Complete / اكتمال التحديد كمدفوع`,
-      description: `${successCount} marked as paid${failCount > 0 ? `, ${failCount} failed` : ''}`,
-    });
   };
 
   const handleBulkDelete = async () => {
     if (!currentUser || selectedIds.size === 0) return;
     setProcessing(true);
-    let successCount = 0;
-    let failCount = 0;
-    const now = new Date().toISOString();
-    const ids = Array.from(selectedIds);
-    for (const id of ids) {
-      try {
-        const { data: existingMeta } = await supabase
-          .from('down_payment_requests')
-          .select('metadata')
-          .eq('id', id)
-          .maybeSingle();
-        const meta = (existingMeta?.metadata as Record<string, any>) || {};
+    try {
+      let successCount = 0;
+      let failCount = 0;
+      const now = new Date().toISOString();
+      const ids = Array.from(selectedIds);
+      for (const id of ids) {
+        try {
+          const { data: existingMeta } = await supabase
+            .from('down_payment_requests')
+            .select('metadata')
+            .eq('id', id)
+            .maybeSingle();
+          const meta = (existingMeta?.metadata as Record<string, any>) || {};
 
-        const { error: softErr } = await supabase
-          .from('down_payment_requests')
-          .update({
-            status: 'cancelled',
-            site_visit_id: null,
-            mmp_site_entry_id: null,
-            updated_at: now,
-            metadata: { ...meta, deleted: true, deleted_at: now },
-          } as any)
-          .eq('id', id);
+          const { error: softErr } = await supabase
+            .from('down_payment_requests')
+            .update({
+              status: 'cancelled',
+              site_visit_id: null,
+              mmp_site_entry_id: null,
+              updated_at: now,
+              metadata: { ...meta, deleted: true, deleted_at: now },
+            } as any)
+            .eq('id', id);
 
-        if (softErr) { failCount++; continue; }
+          if (softErr) { failCount++; continue; }
 
-        const { error: deleteError } = await supabase
-          .from('down_payment_requests')
-          .delete()
-          .eq('id', id)
-          .eq('status', 'cancelled');
+          const { error: deleteError } = await supabase
+            .from('down_payment_requests')
+            .delete()
+            .eq('id', id)
+            .eq('status', 'cancelled');
 
-        if (deleteError) {
-          console.log('Hard delete blocked for', id, '(RLS), record stays as cancelled+deleted');
+          if (deleteError) {
+            console.log('Hard delete blocked for', id, '(RLS), record stays as cancelled+deleted');
+          }
+          successCount++;
+        } catch (e: any) {
+          console.error('Delete error for', id, ':', e?.message || e);
+          failCount++;
         }
-        successCount++;
-      } catch (e: any) {
-        console.error('Delete error for', id, ':', e?.message || e);
-        failCount++;
       }
+      setSelectedIds(new Set());
+      await refreshRequests();
+      toast({
+        title: `Bulk Delete Complete / اكتمال الحذف الجماعي`,
+        description: `${successCount} deleted, they can now submit new requests. / تم حذف ${successCount}، يمكنهم الآن تقديم طلبات جديدة.${failCount > 0 ? ` ${failCount} failed / فشل` : ''}`,
+      });
+    } finally {
+      setProcessing(false);
     }
-    setSelectedIds(new Set());
-    await refreshRequests();
-    setProcessing(false);
-    toast({
-      title: `Bulk Delete Complete / اكتمال الحذف الجماعي`,
-      description: `${successCount} deleted, they can now submit new requests. / تم حذف ${successCount}، يمكنهم الآن تقديم طلبات جديدة.${failCount > 0 ? ` ${failCount} failed / فشل` : ''}`,
-    });
   };
 
   const closeDialog = () => {
@@ -872,23 +890,25 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
       return;
     }
     setEditDialog(prev => ({ ...prev, processing: true }));
-    const approverName = (currentUser as any).fullName || (currentUser as any).full_name || currentUser.email || 'Unknown';
-    const success = await editRequest({
-      requestId: editDialog.request.id,
-      editedBy: currentUser.id,
-      editedByName: approverName,
-      editedByRole: currentUser.role || undefined,
-      reason: editDialog.reason,
-      changes: {
-        requestedAmount: editDialog.requestedAmount,
-        approvedAmount: editDialog.approvedAmount,
-        justification: editDialog.justification,
-        siteName: editDialog.siteName,
-      },
-    });
-    if (success) {
-      setEditDialog({ open: false, request: null, requestedAmount: 0, approvedAmount: 0, justification: '', siteName: '', reason: '', processing: false });
-    } else {
+    try {
+      const approverName = (currentUser as any).fullName || (currentUser as any).full_name || currentUser.email || 'Unknown';
+      const success = await editRequest({
+        requestId: editDialog.request.id,
+        editedBy: currentUser.id,
+        editedByName: approverName,
+        editedByRole: currentUser.role || undefined,
+        reason: editDialog.reason,
+        changes: {
+          requestedAmount: editDialog.requestedAmount,
+          approvedAmount: editDialog.approvedAmount,
+          justification: editDialog.justification,
+          siteName: editDialog.siteName,
+        },
+      });
+      if (success) {
+        setEditDialog({ open: false, request: null, requestedAmount: 0, approvedAmount: 0, justification: '', siteName: '', reason: '', processing: false });
+      }
+    } finally {
       setEditDialog(prev => ({ ...prev, processing: false }));
     }
   };

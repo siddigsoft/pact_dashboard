@@ -9,6 +9,8 @@ import React, { createContext, useContext, ReactNode, useEffect, useRef } from '
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
+import { ensureValidSession } from '@/lib/session-health';
+import { withTimeout } from '@/utils/promise-with-timeout';
 import {
   SiteVisitCostSubmission,
   CostApprovalHistory,
@@ -282,6 +284,16 @@ export const CostSubmissionProvider: React.FC<CostSubmissionProviderProps> = ({ 
   const useCreateSubmission = () => {
     const mutation = useMutation({
       mutationFn: async (request: CreateCostSubmissionRequest) => {
+        const session = await ensureValidSession();
+        if (!session.success) {
+          toast({
+            title: 'Session expired',
+            description: session.error || 'Please refresh and try again.',
+            variant: 'destructive'
+          });
+          throw new Error(session.error || 'Session expired');
+        }
+
         const user = await queryClient.fetchQuery({
           queryKey: ['user'],
           staleTime: 1000 * 60 * 5
@@ -291,7 +303,11 @@ export const CostSubmissionProvider: React.FC<CostSubmissionProviderProps> = ({ 
           throw new Error('User not authenticated');
         }
 
-        await supabaseApi.createCostSubmission(request, user.id);
+        await withTimeout(
+          supabaseApi.createCostSubmission(request, user.id),
+          15000,
+          'Create cost submission timed out'
+        );
       },
       onSuccess: (_, request) => {
         // Invalidate all relevant caches
@@ -324,7 +340,21 @@ export const CostSubmissionProvider: React.FC<CostSubmissionProviderProps> = ({ 
   const useUpdateSubmission = () => {
     const mutation = useMutation({
       mutationFn: async (params: { id: string; request: UpdateCostSubmissionRequest }) => {
-        await supabaseApi.updateCostSubmission(params.id, params.request);
+        const session = await ensureValidSession();
+        if (!session.success) {
+          toast({
+            title: 'Session expired',
+            description: session.error || 'Please refresh and try again.',
+            variant: 'destructive'
+          });
+          throw new Error(session.error || 'Session expired');
+        }
+
+        await withTimeout(
+          supabaseApi.updateCostSubmission(params.id, params.request),
+          15000,
+          'Update cost submission timed out'
+        );
       },
       onSuccess: (_, params) => {
         // Invalidate all relevant caches including specific submission
@@ -355,6 +385,16 @@ export const CostSubmissionProvider: React.FC<CostSubmissionProviderProps> = ({ 
   const useReviewSubmission = () => {
     const mutation = useMutation({
       mutationFn: async (request: ReviewCostSubmissionRequest) => {
+        const session = await ensureValidSession();
+        if (!session.success) {
+          toast({
+            title: 'Session expired',
+            description: session.error || 'Please refresh and try again.',
+            variant: 'destructive'
+          });
+          throw new Error(session.error || 'Session expired');
+        }
+
         const user = await queryClient.fetchQuery({
           queryKey: ['user'],
           staleTime: 1000 * 60 * 5
@@ -364,7 +404,11 @@ export const CostSubmissionProvider: React.FC<CostSubmissionProviderProps> = ({ 
           throw new Error('User not authenticated');
         }
 
-        await supabaseApi.reviewCostSubmission(request, user.id);
+        await withTimeout(
+          supabaseApi.reviewCostSubmission(request, user.id),
+          15000,
+          'Review cost submission timed out'
+        );
       },
       onSuccess: (_, request) => {
         // Invalidate all relevant caches
@@ -396,7 +440,21 @@ export const CostSubmissionProvider: React.FC<CostSubmissionProviderProps> = ({ 
   const useMarkPaid = () => {
     const mutation = useMutation({
       mutationFn: async (params: { submissionId: string; walletTransactionId: string; paidAmountCents?: number }) => {
-        await supabaseApi.markCostSubmissionPaid(params.submissionId, params.walletTransactionId, params.paidAmountCents);
+        const session = await ensureValidSession();
+        if (!session.success) {
+          toast({
+            title: 'Session expired',
+            description: session.error || 'Please refresh and try again.',
+            variant: 'destructive'
+          });
+          throw new Error(session.error || 'Session expired');
+        }
+
+        await withTimeout(
+          supabaseApi.markCostSubmissionPaid(params.submissionId, params.walletTransactionId, params.paidAmountCents),
+          15000,
+          'Mark paid timed out'
+        );
       },
       onSuccess: (_, params) => {
         // Invalidate all relevant caches including wallet
@@ -430,6 +488,16 @@ export const CostSubmissionProvider: React.FC<CostSubmissionProviderProps> = ({ 
   const useCancelSubmission = () => {
     const mutation = useMutation({
       mutationFn: async (id: string) => {
+        const session = await ensureValidSession();
+        if (!session.success) {
+          toast({
+            title: 'Session expired',
+            description: session.error || 'Please refresh and try again.',
+            variant: 'destructive'
+          });
+          throw new Error(session.error || 'Session expired');
+        }
+
         const user = await queryClient.fetchQuery({
           queryKey: ['user'],
           staleTime: 1000 * 60 * 5
@@ -439,7 +507,11 @@ export const CostSubmissionProvider: React.FC<CostSubmissionProviderProps> = ({ 
           throw new Error('User not authenticated');
         }
 
-        await supabaseApi.cancelCostSubmission(id, user.id);
+        await withTimeout(
+          supabaseApi.cancelCostSubmission(id, user.id),
+          15000,
+          'Cancel cost submission timed out'
+        );
       },
       onSuccess: async (_, id) => {
         // Get user ID for user-specific cache invalidation
@@ -480,6 +552,16 @@ export const CostSubmissionProvider: React.FC<CostSubmissionProviderProps> = ({ 
   const useDeleteSubmission = () => {
     const mutation = useMutation({
       mutationFn: async (id: string) => {
+        const session = await ensureValidSession();
+        if (!session.success) {
+          toast({
+            title: 'Session expired',
+            description: session.error || 'Please refresh and try again.',
+            variant: 'destructive'
+          });
+          throw new Error(session.error || 'Session expired');
+        }
+
         const user = await queryClient.fetchQuery({
           queryKey: ['user'],
           staleTime: 1000 * 60 * 5
@@ -489,7 +571,11 @@ export const CostSubmissionProvider: React.FC<CostSubmissionProviderProps> = ({ 
           throw new Error('User not authenticated');
         }
 
-        await supabaseApi.deleteCostSubmission(id, user.id);
+        await withTimeout(
+          supabaseApi.deleteCostSubmission(id, user.id),
+          15000,
+          'Delete cost submission timed out'
+        );
       },
       onSuccess: async (_, id) => {
         // Get user ID for user-specific cache invalidation

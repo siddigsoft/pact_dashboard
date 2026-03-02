@@ -3,12 +3,22 @@ import { useCallback } from 'react';
 import { MMPFile } from '@/types';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
+import { ensureValidSession } from '@/lib/session-health';
+import { withTimeout } from '@/utils/promise-with-timeout';
 
 export const useMMPStatusOperations = (setMMPFiles: React.Dispatch<React.SetStateAction<MMPFile[]>>) => {
   // Verify MMP - marks the MMP as verified after FOM/Admin review
   const verifyMMP = useCallback(
     async (id: string, verifiedBy: string, verifiedByName?: string) => {
+      const session = await ensureValidSession();
+      if (!session.success) {
+        toast.error(session.error || 'Session expired. Please refresh and try again.');
+        throw new Error(session.error || 'Session expired');
+      }
+
       try {
+        await withTimeout(
+          (async () => {
         const timestamp = new Date().toISOString();
         
         // First, fetch the current MMP to get existing workflow (which contains comprehensiveVerification)
@@ -163,6 +173,10 @@ export const useMMPStatusOperations = (setMMPFiles: React.Dispatch<React.SetStat
         );
 
         toast.success('MMP verified successfully! It can now proceed to approval and costing.');
+          })(),
+          15000,
+          'Verify MMP timed out'
+        );
       } catch (error) {
         console.error('Error verifying MMP file:', error);
         toast.error('Failed to verify MMP file');
@@ -174,19 +188,30 @@ export const useMMPStatusOperations = (setMMPFiles: React.Dispatch<React.SetStat
 
   const archiveMMP = useCallback(
     async (id: string, archivedBy: string) => {
+      const session = await ensureValidSession();
+      if (!session.success) {
+        toast.error(session.error || 'Session expired. Please refresh and try again.');
+        throw new Error(session.error || 'Session expired');
+      }
+
       try {
         const timestamp = new Date().toISOString();
 
-        // Persist to database first
-        const { error } = await supabase
-          .from('mmp_files')
-          .update({
-            status: 'archived',
-            archivedby: archivedBy,
-            archivedat: timestamp,
-            updated_at: timestamp,
-          })
-          .eq('id', id);
+        const { error } = await withTimeout(
+          (async () => {
+            return await supabase
+              .from('mmp_files')
+              .update({
+                status: 'archived',
+                archivedby: archivedBy,
+                archivedat: timestamp,
+                updated_at: timestamp,
+              })
+              .eq('id', id);
+          })(),
+          15000,
+          'Archive MMP timed out'
+        );
 
         if (error) {
           console.error('Supabase archive error:', error);
@@ -215,19 +240,30 @@ export const useMMPStatusOperations = (setMMPFiles: React.Dispatch<React.SetStat
 
   const approveMMP = useCallback(
     async (id: string, approvedBy: string) => {
+      const session = await ensureValidSession();
+      if (!session.success) {
+        toast.error(session.error || 'Session expired. Please refresh and try again.');
+        throw new Error(session.error || 'Session expired');
+      }
+
       try {
         const timestamp = new Date().toISOString();
 
-        // Persist to DB first
-        const { error } = await supabase
-          .from('mmp_files')
-          .update({
-            status: 'approved',
-            approvedby: approvedBy,
-            approvedat: timestamp,
-            updated_at: timestamp,
-          })
-          .eq('id', id);
+        const { error } = await withTimeout(
+          (async () => {
+            return await supabase
+              .from('mmp_files')
+              .update({
+                status: 'approved',
+                approvedby: approvedBy,
+                approvedat: timestamp,
+                updated_at: timestamp,
+              })
+              .eq('id', id);
+          })(),
+          15000,
+          'Approve MMP timed out'
+        );
 
         if (error) {
           console.error('Supabase approve error:', error);
@@ -256,18 +292,29 @@ export const useMMPStatusOperations = (setMMPFiles: React.Dispatch<React.SetStat
 
   const rejectMMP = useCallback(
     async (id: string, rejectionReason: string) => {
+      const session = await ensureValidSession();
+      if (!session.success) {
+        toast.error(session.error || 'Session expired. Please refresh and try again.');
+        throw new Error(session.error || 'Session expired');
+      }
+
       try {
         const timestamp = new Date().toISOString();
 
-        // Persist to DB first
-        const { error } = await supabase
-          .from('mmp_files')
-          .update({
-            status: 'rejected',
-            rejectionreason: rejectionReason,
-            updated_at: timestamp,
-          })
-          .eq('id', id);
+        const { error } = await withTimeout(
+          (async () => {
+            return await supabase
+              .from('mmp_files')
+              .update({
+                status: 'rejected',
+                rejectionreason: rejectionReason,
+                updated_at: timestamp,
+              })
+              .eq('id', id);
+          })(),
+          15000,
+          'Reject MMP timed out'
+        );
 
         if (error) {
           console.error('Supabase reject error:', error);

@@ -2,6 +2,8 @@ import React, { createContext, useContext, useEffect, useCallback } from 'react'
 import { MMPFile } from '@/types';
 import { supabase } from '@/integrations/supabase/client';
 import { useQueryClient } from '@tanstack/react-query';
+import { ensureValidSession } from '@/lib/session-health';
+import { withTimeout } from '@/utils/promise-with-timeout';
 import { MMPContextType } from './types';
 import { useMMPOperations } from './hooks/useMMPOperations';
 import { useMMPStatusOperations } from './hooks/useMMPStatusOperations';
@@ -36,7 +38,7 @@ const MMPContext = createContext<MMPContextType>({
   updateMMP: async () => false,
   updateMMPVersion: async () => false,
   deleteMMP: async () => false,
-  restoreMMP: async () => false,
+  restoreMMP: async () => {},
   resetMMP: async () => false,
   attachPermitsToMMP: async () => {},
   refreshMMPFiles: async () => {},
@@ -79,6 +81,11 @@ export const useMMPProvider = () => {
 
   // Attach permits to MMP (federal required, state/local optional)
   const attachPermitsToMMP = async (id: string, permits: { federal: File | null; state?: File | null; local?: File | null }) => {
+    const session = await ensureValidSession();
+    if (!session.success) {
+      throw new Error(session.error || 'Session expired. Please refresh and try again.');
+    }
+
     if (!id || !permits.federal) throw new Error('Federal permit is required');
     // Simulate upload: In real app, upload files to storage and get URLs
     const uploadedDocs: any[] = [];
@@ -108,14 +115,18 @@ export const useMMPProvider = () => {
     } : mmp));
 
     // Persist to Supabase (store metadata, not files)
-    await supabase.from('mmp_files').update({
-      permits: {
-        federal: !!permits.federal,
-        state: !!permits.state,
-        local: !!permits.local,
-        documents: uploadedDocs,
-      }
-    }).eq('id', id);
+    await withTimeout(
+      supabase.from('mmp_files').update({
+        permits: {
+          federal: !!permits.federal,
+          state: !!permits.state,
+          local: !!permits.local,
+          documents: uploadedDocs,
+        }
+      }).eq('id', id),
+      15000,
+      'Attach permits timed out'
+    );
   };
 
   const refreshSiteEntryCounts = useCallback(async () => {
@@ -275,6 +286,11 @@ export const useMMPProvider = () => {
   }, []);
 
   const updateMMP = async (id: string, updatedMMP: Partial<MMPFile>): Promise<boolean> => {
+    const session = await ensureValidSession();
+    if (!session.success) {
+      throw new Error(session.error || 'Session expired. Please refresh and try again.');
+    }
+
     setMMPFiles((prev: MMPFile[]) =>
       prev.map((mmp) => {
         if (mmp.id === id) {
@@ -327,6 +343,8 @@ export const useMMPProvider = () => {
     };
 
     try {
+      return await withTimeout(
+        (async () => {
       const dbUpdate = toDBPartial(updatedMMP);
       const { error: mfErr } = await supabase.from('mmp_files').update(dbUpdate).eq('id', id);
       if (mfErr) {
@@ -473,6 +491,10 @@ export const useMMPProvider = () => {
         }
       }
       return true;
+        })(),
+        15000,
+        'Update MMP timed out'
+      );
     } catch (e) {
       console.error('Failed to persist MMP update:', e);
       return false;
@@ -480,7 +502,14 @@ export const useMMPProvider = () => {
   };
 
   const deleteMMP = async (id: string) => {
+    const session = await ensureValidSession();
+    if (!session.success) {
+      throw new Error(session.error || 'Session expired. Please refresh and try again.');
+    }
+
     try {
+      return await withTimeout(
+        (async () => {
       // First, get all site entries for this MMP that have wallet transactions
       const { data: siteEntries, error: sitesError } = await supabase
         .from('mmp_site_entries')
@@ -541,30 +570,46 @@ export const useMMPProvider = () => {
       }
 
       return true;
+        })(),
+        15000,
+        'Delete MMP timed out'
+      );
     } catch (e) {
       console.error('Failed to delete MMP:', e);
       return false;
     }
   };
 
-  const restoreMMP = (id: string) => {
+  const restoreMMP = async (id: string) => {
+    const session = await ensureValidSession();
+    if (!session.success) {
+      throw new Error(session.error || 'Session expired. Please refresh and try again.');
+    }
+
     setMMPFiles((prev: MMPFile[]) =>
       prev.map((mmp) => (mmp.id === id && mmp.status === 'deleted' ? { ...mmp, status: 'pending', deletedAt: undefined, deletedBy: undefined } : mmp))
     );
     try {
-      supabase
-        .from('mmp_files')
-        .update({ status: 'pending', deleted_at: null, deleted_by: null })
-        .eq('id', id)
-        .then(({ error }) => {
-          if (error) console.error('Supabase restoreMMP error:', error);
-        });
+      const { error } = await withTimeout(
+        supabase
+          .from('mmp_files')
+          .update({ status: 'pending', deleted_at: null, deleted_by: null })
+          .eq('id', id),
+        15000,
+        'Restore MMP timed out'
+      );
+      if (error) console.error('Supabase restoreMMP error:', error);
     } catch (e) {
       console.error('Failed to persist restoreMMP:', e);
     }
   };
 
   const resetMMP = async (id?: string): Promise<boolean> => {
+    const session = await ensureValidSession();
+    if (!session.success) {
+      throw new Error(session.error || 'Session expired. Please refresh and try again.');
+    }
+
     try {
       setCurrentMMP(null);
       if (id) {
@@ -588,19 +633,22 @@ export const useMMPProvider = () => {
 
         // Persist reset to DB (avoid columns that may not exist across envs)
         try {
-  // attachPermitsToMMP, (removed stray comma operator usage)
-          await supabase
-            .from('mmp_files')
-            .update({
-              status: 'pending',
-              approval_workflow: null,
-              rejection_reason: null,
-              approved_by: null,
-              approved_at: null,
-              verified_by: null,
-              verified_at: null,
-            })
-            .eq('id', id);
+          await withTimeout(
+            supabase
+              .from('mmp_files')
+              .update({
+                status: 'pending',
+                approval_workflow: null,
+                rejection_reason: null,
+                approved_by: null,
+                approved_at: null,
+                verified_by: null,
+                verified_at: null,
+              })
+              .eq('id', id),
+            15000,
+            'Reset MMP timed out'
+          );
         } catch (dbErr) {
           console.error('Failed to persist resetMMP to DB:', dbErr);
         }

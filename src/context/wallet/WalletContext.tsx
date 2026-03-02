@@ -2,6 +2,8 @@ import { createContext, useContext, useState, useEffect, ReactNode } from 'react
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useUser } from '@/context/user/UserContext';
+import { ensureValidSession } from '@/lib/session-health';
+import { withTimeout } from '@/utils/promise-with-timeout';
 import { useClassification } from '@/context/classification/ClassificationContext';
 import { NotificationTriggerService } from '@/services/NotificationTriggerService';
 import { createSiteVisitWalletTransaction } from '@/utils/wallet-transactions';
@@ -359,12 +361,26 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const WALLET_MUTATION_TIMEOUT_MS = 15000;
+
   // Step 1: Supervisor approval - moves request to 'supervisor_approved' status
   // Funds are NOT released at this stage - only verified by supervisor
   const approveWithdrawalRequest = async (requestId: string, notes?: string) => {
     if (!currentUser?.id) return;
 
+    const session = await ensureValidSession();
+    if (!session.success) {
+      toast({
+        title: 'Session may have expired',
+        description: session.error || 'Please refresh and try again.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
     try {
+      await withTimeout(
+        (async () => {
       // Look in both personal and supervised withdrawal requests
       let request = withdrawalRequests.find(r => r.id === requestId);
       if (!request) {
@@ -419,6 +435,10 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
       // Refresh both personal and supervised withdrawal requests
       await Promise.all([refreshWithdrawalRequests(), refreshSupervisedWithdrawalRequests()]);
+        })(),
+        WALLET_MUTATION_TIMEOUT_MS,
+        'Request timed out. Please try again or refresh the page.'
+      );
     } catch (error: any) {
       console.error('Failed to approve withdrawal:', error);
       toast({
@@ -433,7 +453,19 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const adminProcessWithdrawal = async (requestId: string, notes?: string) => {
     if (!currentUser?.id) return;
 
+    const session = await ensureValidSession();
+    if (!session.success) {
+      toast({
+        title: 'Session may have expired',
+        description: session.error || 'Please refresh and try again.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
     try {
+      await withTimeout(
+        (async () => {
       // First try to find in local state, then fetch from database if not found
       let request: WithdrawalRequest | SupervisedWithdrawalRequest | undefined = withdrawalRequests.find(r => r.id === requestId);
       if (!request) {
@@ -544,6 +576,10 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
       // Refresh all relevant data including supervised requests
       await Promise.all([refreshWallet(), refreshTransactions(), refreshWithdrawalRequests(), refreshSupervisedWithdrawalRequests()]);
+        })(),
+        WALLET_MUTATION_TIMEOUT_MS,
+        'Request timed out. Please try again or refresh the page.'
+      );
     } catch (error: any) {
       console.error('Failed to process withdrawal:', error);
       toast({
@@ -558,7 +594,19 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const adminRejectWithdrawal = async (requestId: string, notes: string) => {
     if (!currentUser?.id) return;
 
+    const session = await ensureValidSession();
+    if (!session.success) {
+      toast({
+        title: 'Session may have expired',
+        description: session.error || 'Please refresh and try again.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
     try {
+      await withTimeout(
+        (async () => {
       // First try to find in local state, then fetch from database if not found
       let request: WithdrawalRequest | SupervisedWithdrawalRequest | undefined = withdrawalRequests.find(r => r.id === requestId);
       if (!request) {
@@ -621,11 +669,15 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
       // Refresh all relevant data including supervised requests
       await Promise.all([refreshWithdrawalRequests(), refreshSupervisedWithdrawalRequests()]);
+        })(),
+        WALLET_MUTATION_TIMEOUT_MS,
+        'Request timed out. Please try again or refresh the page.'
+      );
     } catch (error: any) {
       console.error('Failed to reject withdrawal:', error);
       toast({
         title: 'Error',
-        description: 'Failed to reject withdrawal request',
+        description: error.message || 'Failed to reject withdrawal request',
         variant: 'destructive',
       });
     }
@@ -634,7 +686,19 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const rejectWithdrawalRequest = async (requestId: string, notes: string) => {
     if (!currentUser?.id) return;
 
+    const session = await ensureValidSession();
+    if (!session.success) {
+      toast({
+        title: 'Session may have expired',
+        description: session.error || 'Please refresh and try again.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
     try {
+      await withTimeout(
+        (async () => {
       // Find the request to get userId and amount for notification
       let request = withdrawalRequests.find(r => r.id === requestId);
       if (!request) {
@@ -670,11 +734,15 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
       // Refresh both personal and supervised withdrawal requests
       await Promise.all([refreshWithdrawalRequests(), refreshSupervisedWithdrawalRequests()]);
+        })(),
+        WALLET_MUTATION_TIMEOUT_MS,
+        'Request timed out. Please try again or refresh the page.'
+      );
     } catch (error: any) {
       console.error('Failed to reject withdrawal:', error);
       toast({
         title: 'Error',
-        description: 'Failed to reject withdrawal request',
+        description: error.message || 'Failed to reject withdrawal request',
         variant: 'destructive',
       });
     }
@@ -683,7 +751,19 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const confirmFundReceipt = async (requestId: string, signatureData: { signatureId: string; signatureHash: string; signatureMethod: string; signedAt: string; notes?: string }) => {
     if (!currentUser?.id) return;
 
+    const session = await ensureValidSession();
+    if (!session.success) {
+      toast({
+        title: 'Session may have expired',
+        description: session.error || 'Please refresh and try again.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
     try {
+      await withTimeout(
+        (async () => {
       const request = withdrawalRequests.find(r => r.id === requestId);
       if (!request) throw new Error('Withdrawal request not found');
 
@@ -730,6 +810,10 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       );
 
       await refreshWithdrawalRequests();
+        })(),
+        WALLET_MUTATION_TIMEOUT_MS,
+        'Request timed out. Please try again or refresh the page.'
+      );
     } catch (error: any) {
       console.error('Failed to confirm fund receipt:', error);
       toast({
