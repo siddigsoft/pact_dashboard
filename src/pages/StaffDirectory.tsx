@@ -17,7 +17,8 @@ import {
   Shield, RefreshCw, LayoutGrid, List, ChevronRight,
   Smartphone, Monitor, Clock, AlertCircle, CheckCircle, XCircle,
   Hash, Globe, Activity, BarChart3, Copy, Download, FileSpreadsheet,
-  FileText, FileDown, GitBranch, UserCheck, UserX
+  FileText, FileDown, GitBranch, UserCheck, UserX,
+  TrendingDown, Banknote, ChevronDown, ChevronUp
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { sudanStates, getLocalitiesByState } from "@/data/sudanStates";
@@ -481,6 +482,77 @@ function CapRow({ label, total, online, withBank, max }: { label: string; total:
   );
 }
 
+/* ─── Financial Summary Card ─────────────────────────────── */
+interface FinRow    { total: number; approved: number; amountSDG: number }
+interface FinMonth  { current: FinRow; prev: FinRow }
+
+function FinSummaryCard({
+  title, titleAr, icon: Icon, data, accentBg, accentText, accentBorder, loading,
+}: {
+  title: string; titleAr: string; icon: React.ElementType;
+  data: FinMonth;
+  accentBg: string; accentText: string; accentBorder: string;
+  loading: boolean;
+}) {
+  const diff = data.current.amountSDG - data.prev.amountSDG;
+  const up   = diff >= 0;
+  return (
+    <Card className="overflow-hidden">
+      <div className={`h-1 ${accentBorder}`} />
+      <CardContent className="pt-3 pb-4 px-4 space-y-3">
+        {/* Header */}
+        <div className="flex items-center gap-2">
+          <div className={`rounded-md p-1.5 ${accentBg}`}>
+            <Icon className={`h-3.5 w-3.5 ${accentText}`} />
+          </div>
+          <div>
+            <p className="text-xs font-semibold text-foreground leading-tight">{title}</p>
+            <p className="text-[10px] text-muted-foreground leading-tight">{titleAr}</p>
+          </div>
+          {!loading && diff !== 0 && (
+            <span className={`ml-auto flex items-center gap-0.5 text-[10px] font-semibold ${up ? 'text-red-500' : 'text-green-600'}`}>
+              {up ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+              {up ? '+' : ''}{diff.toLocaleString()} SDG
+            </span>
+          )}
+        </div>
+        {/* This month / Last month columns */}
+        {loading ? (
+          <div className="grid grid-cols-2 gap-2">
+            <Skeleton className="h-14" />
+            <Skeleton className="h-14" />
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 divide-x divide-border">
+            {/* This month */}
+            <div className="pr-3 space-y-1">
+              <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">This Month</p>
+              <p className={`text-2xl font-bold leading-none ${accentText}`}>{data.current.total}</p>
+              <p className="text-[10px] text-muted-foreground">
+                <span className="font-semibold text-foreground">{data.current.approved}</span> approved
+              </p>
+              <p className="text-[10px] font-medium text-foreground">
+                SDG {data.current.amountSDG.toLocaleString()}
+              </p>
+            </div>
+            {/* Last month */}
+            <div className="pl-3 space-y-1">
+              <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Last Month</p>
+              <p className="text-2xl font-bold leading-none text-muted-foreground">{data.prev.total}</p>
+              <p className="text-[10px] text-muted-foreground">
+                <span className="font-semibold">{data.prev.approved}</span> approved
+              </p>
+              <p className="text-[10px] font-medium text-muted-foreground">
+                SDG {data.prev.amountSDG.toLocaleString()}
+              </p>
+            </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 /* ═══════════════════════════════════════════════════════════
    MAIN PAGE
 ══════════════════════════════════════════════════════════════ */
@@ -498,6 +570,62 @@ export default function StaffDirectory() {
   const pageTopRef = useRef<HTMLDivElement>(null);
   useLayoutEffect(() => {
     pageTopRef.current?.scrollIntoView({ behavior: 'instant', block: 'start' });
+  }, []);
+
+  /* ── Financial summary state ── */
+  const emptyFinRow = (): FinRow => ({ total: 0, approved: 0, amountSDG: 0 });
+  const [finLoading, setFinLoading] = useState(true);
+  const [finData, setFinData] = useState<{
+    advances:    FinMonth;
+    costs:       FinMonth;
+    withdrawals: FinMonth;
+  }>({
+    advances:    { current: emptyFinRow(), prev: emptyFinRow() },
+    costs:       { current: emptyFinRow(), prev: emptyFinRow() },
+    withdrawals: { current: emptyFinRow(), prev: emptyFinRow() },
+  });
+
+  useEffect(() => {
+    const fetchFin = async () => {
+      setFinLoading(true);
+      const now = new Date();
+      const thisStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+      const prevStart = new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString();
+      const prevEnd   = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59).toISOString();
+
+      const [dpCur, dpPrv, ocCur, ocPrv, wtCur, wtPrv] = await Promise.all([
+        supabase.from('down_payment_requests').select('requested_amount,status').gte('created_at', thisStart),
+        supabase.from('down_payment_requests').select('requested_amount,status').gte('created_at', prevStart).lte('created_at', prevEnd),
+        supabase.from('operational_cost_submissions').select('amount_cents,tier2_status').gte('created_at', thisStart),
+        supabase.from('operational_cost_submissions').select('amount_cents,tier2_status').gte('created_at', prevStart).lte('created_at', prevEnd),
+        supabase.from('wallet_transactions').select('amount,type,transaction_type').gte('created_at', thisStart).or('type.eq.withdrawal,type.eq.debit,transaction_type.eq.withdrawal'),
+        supabase.from('wallet_transactions').select('amount,type,transaction_type').gte('created_at', prevStart).lte('created_at', prevEnd).or('type.eq.withdrawal,type.eq.debit,transaction_type.eq.withdrawal'),
+      ]);
+
+      const calcDp = (rows: any[]): FinRow => ({
+        total:     rows.length,
+        approved:  rows.filter(r => r.status === 'approved' || r.status === 'paid').length,
+        amountSDG: Math.round(rows.reduce((s, r) => s + Math.abs(Number(r.requested_amount) || 0), 0)),
+      });
+      const calcOc = (rows: any[]): FinRow => ({
+        total:     rows.length,
+        approved:  rows.filter(r => r.tier2_status === 'approved').length,
+        amountSDG: Math.round(rows.reduce((s, r) => s + Math.abs(Number(r.amount_cents) || 0) / 100, 0)),
+      });
+      const calcWt = (rows: any[]): FinRow => ({
+        total:     rows.length,
+        approved:  rows.length,
+        amountSDG: Math.round(rows.reduce((s, r) => s + Math.abs(Number(r.amount) || 0), 0)),
+      });
+
+      setFinData({
+        advances:    { current: calcDp(dpCur.data || []), prev: calcDp(dpPrv.data || []) },
+        costs:       { current: calcOc(ocCur.data || []), prev: calcOc(ocPrv.data || []) },
+        withdrawals: { current: calcWt(wtCur.data || []), prev: calcWt(wtPrv.data || []) },
+      });
+      setFinLoading(false);
+    };
+    fetchFin();
   }, []);
 
   /* Filters */
@@ -1058,6 +1186,47 @@ export default function StaffDirectory() {
             accent={{ border: 'bg-red-500', iconBg: 'bg-red-100 dark:bg-red-900/40', iconColor: 'text-red-600 dark:text-red-400', numColor: 'text-red-700 dark:text-red-400' }}
             onClick={() => setBankFilter('missing')}
           />
+        </div>
+
+        {/* ── Financial Summary ── */}
+        <div className="space-y-2">
+          <div className="flex items-center gap-2">
+            <TrendingDown className="h-4 w-4 text-muted-foreground" />
+            <h2 className="text-sm font-semibold text-foreground">Financial Overview</h2>
+            <span className="text-xs text-muted-foreground">— ملخص مالي</span>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <FinSummaryCard
+              title="Transportation Advances"
+              titleAr="سلف النقل"
+              icon={TrendingDown}
+              data={finData.advances}
+              accentBorder="bg-indigo-500"
+              accentBg="bg-indigo-100 dark:bg-indigo-900/40"
+              accentText="text-indigo-600 dark:text-indigo-400"
+              loading={finLoading}
+            />
+            <FinSummaryCard
+              title="Cost Submissions"
+              titleAr="طلبات التكاليف"
+              icon={FileText}
+              data={finData.costs}
+              accentBorder="bg-orange-500"
+              accentBg="bg-orange-100 dark:bg-orange-900/40"
+              accentText="text-orange-600 dark:text-orange-400"
+              loading={finLoading}
+            />
+            <FinSummaryCard
+              title="Withdrawal Requests"
+              titleAr="طلبات السحب"
+              icon={Banknote}
+              data={finData.withdrawals}
+              accentBorder="bg-emerald-500"
+              accentBg="bg-emerald-100 dark:bg-emerald-900/40"
+              accentText="text-emerald-600 dark:text-emerald-400"
+              loading={finLoading}
+            />
+          </div>
         </div>
 
         {/* ── Tabs ── */}
