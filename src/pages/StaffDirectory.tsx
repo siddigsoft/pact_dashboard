@@ -175,6 +175,62 @@ function ProfileDetail({
 
   const copy = (t: string, l: string) => { navigator.clipboard.writeText(t); toast({ title: `${l} copied` }); };
 
+  /* ── Per-user financial data ── */
+  const [finLoading, setFinLoading] = useState(true);
+  const [userFin, setUserFin] = useState<{
+    advances: { total: number; pending: number; approved: number; amountSDG: number };
+    costs:    { total: number; pending: number; approved: number; amountSDG: number };
+    withdrawals: { total: number; pending: number; approved: number; amountSDG: number; confirmed: number; unconfirmed: number };
+  }>({
+    advances:    { total: 0, pending: 0, approved: 0, amountSDG: 0 },
+    costs:       { total: 0, pending: 0, approved: 0, amountSDG: 0 },
+    withdrawals: { total: 0, pending: 0, approved: 0, amountSDG: 0, confirmed: 0, unconfirmed: 0 },
+  });
+
+  useEffect(() => {
+    const fetchUserFin = async () => {
+      setFinLoading(true);
+      const [dpRes, ocRes, wrRes] = await Promise.all([
+        supabase.from('down_payment_requests')
+          .select('status,requested_amount')
+          .eq('user_id', profile.id),
+        supabase.from('operational_cost_submissions')
+          .select('tier1_status,tier2_status,amount_cents')
+          .eq('submitted_by', profile.id),
+        supabase.from('withdrawal_requests')
+          .select('status,amount,fund_receipt_confirmed')
+          .eq('user_id', profile.id),
+      ]);
+      const dp = dpRes.data || [];
+      const oc = ocRes.data || [];
+      const wr = wrRes.data || [];
+      setUserFin({
+        advances: {
+          total:     dp.length,
+          pending:   dp.filter((r: any) => ['pending', 'pending_supervisor', 'pending_admin'].includes(r.status)).length,
+          approved:  dp.filter((r: any) => r.status === 'approved' || r.status === 'paid').length,
+          amountSDG: Math.round(dp.reduce((s: number, r: any) => s + Math.abs(Number(r.requested_amount) || 0), 0)),
+        },
+        costs: {
+          total:     oc.length,
+          pending:   oc.filter((r: any) => !r.tier2_status || (r.tier2_status !== 'approved' && r.tier2_status !== 'rejected')).length,
+          approved:  oc.filter((r: any) => r.tier2_status === 'approved').length,
+          amountSDG: Math.round(oc.reduce((s: number, r: any) => s + Math.abs(Number(r.amount_cents) || 0) / 100, 0)),
+        },
+        withdrawals: {
+          total:       wr.length,
+          pending:     wr.filter((r: any) => r.status === 'pending').length,
+          approved:    wr.filter((r: any) => r.status === 'approved').length,
+          amountSDG:   Math.round(wr.reduce((s: number, r: any) => s + Math.abs(Number(r.amount) || 0), 0)),
+          confirmed:   wr.filter((r: any) => r.status === 'approved' && r.fund_receipt_confirmed).length,
+          unconfirmed: wr.filter((r: any) => r.status === 'approved' && !r.fund_receipt_confirmed).length,
+        },
+      });
+      setFinLoading(false);
+    };
+    fetchUserFin();
+  }, [profile.id]);
+
   return (
     <Dialog open onOpenChange={() => onClose()}>
       <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto p-0 gap-0">
@@ -387,6 +443,110 @@ function ProfileDetail({
                 >
                   <Copy className="h-3 w-3" />
                 </button>
+              </div>
+            )}
+          </div>
+
+          {/* ── Financial Activity ── */}
+          <div className="px-6 py-4">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-3 flex items-center gap-1.5">
+              <Banknote className="h-3 w-3" />Financial Activity — النشاط المالي
+            </p>
+            {finLoading ? (
+              <div className="space-y-2">
+                <Skeleton className="h-10 w-full" />
+                <Skeleton className="h-10 w-full" />
+                <Skeleton className="h-10 w-full" />
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {/* Transportation Advances row */}
+                <div className="rounded-md border bg-muted/30 px-3 py-2.5">
+                  <div className="flex items-center justify-between gap-2 mb-1.5">
+                    <div className="flex items-center gap-1.5">
+                      <TrendingDown className="h-3 w-3 text-indigo-500" />
+                      <span className="text-xs font-semibold text-foreground">Transportation Advances</span>
+                    </div>
+                    <span className="text-xs font-bold text-foreground">SDG {userFin.advances.amountSDG.toLocaleString()}</span>
+                  </div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] bg-slate-100 dark:bg-slate-800 text-muted-foreground">
+                      Total: <strong>{userFin.advances.total}</strong>
+                    </span>
+                    {userFin.advances.pending > 0 && (
+                      <span className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400">
+                        ⏳ {userFin.advances.pending} pending
+                      </span>
+                    )}
+                    <span className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400">
+                      <CheckCircle className="h-2.5 w-2.5" />{userFin.advances.approved} approved
+                    </span>
+                  </div>
+                </div>
+
+                {/* Cost Submissions row */}
+                <div className="rounded-md border bg-muted/30 px-3 py-2.5">
+                  <div className="flex items-center justify-between gap-2 mb-1.5">
+                    <div className="flex items-center gap-1.5">
+                      <FileText className="h-3 w-3 text-orange-500" />
+                      <span className="text-xs font-semibold text-foreground">Cost Submissions</span>
+                    </div>
+                    <span className="text-xs font-bold text-foreground">SDG {userFin.costs.amountSDG.toLocaleString()}</span>
+                  </div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] bg-slate-100 dark:bg-slate-800 text-muted-foreground">
+                      Total: <strong>{userFin.costs.total}</strong>
+                    </span>
+                    {userFin.costs.pending > 0 && (
+                      <span className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400">
+                        ⏳ {userFin.costs.pending} pending
+                      </span>
+                    )}
+                    <span className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400">
+                      <CheckCircle className="h-2.5 w-2.5" />{userFin.costs.approved} approved
+                    </span>
+                  </div>
+                </div>
+
+                {/* Withdrawal Requests + Fund Receipt row */}
+                <div className="rounded-md border bg-muted/30 px-3 py-2.5">
+                  <div className="flex items-center justify-between gap-2 mb-1.5">
+                    <div className="flex items-center gap-1.5">
+                      <Landmark className="h-3 w-3 text-emerald-500" />
+                      <span className="text-xs font-semibold text-foreground">Withdrawal Requests</span>
+                    </div>
+                    <span className="text-xs font-bold text-foreground">SDG {userFin.withdrawals.amountSDG.toLocaleString()}</span>
+                  </div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] bg-slate-100 dark:bg-slate-800 text-muted-foreground">
+                      Total: <strong>{userFin.withdrawals.total}</strong>
+                    </span>
+                    {userFin.withdrawals.pending > 0 && (
+                      <span className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400">
+                        ⏳ {userFin.withdrawals.pending} pending
+                      </span>
+                    )}
+                    <span className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400">
+                      <CheckCircle className="h-2.5 w-2.5" />{userFin.withdrawals.approved} approved
+                    </span>
+                  </div>
+                  {/* Fund receipt confirmation status */}
+                  {userFin.withdrawals.approved > 0 && (
+                    <div className="mt-2 pt-2 border-t border-border flex items-center gap-2 flex-wrap">
+                      <span className="text-[10px] text-muted-foreground font-medium">Fund Receipt:</span>
+                      {userFin.withdrawals.confirmed > 0 && (
+                        <span className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-400">
+                          <CheckCircle className="h-2.5 w-2.5" />{userFin.withdrawals.confirmed} confirmed
+                        </span>
+                      )}
+                      {userFin.withdrawals.unconfirmed > 0 && (
+                        <span className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] bg-red-100 dark:bg-red-900/40 text-red-600 dark:text-red-400">
+                          <XCircle className="h-2.5 w-2.5" />{userFin.withdrawals.unconfirmed} unacknowledged
+                        </span>
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
             )}
           </div>
