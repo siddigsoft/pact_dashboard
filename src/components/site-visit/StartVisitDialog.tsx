@@ -4,9 +4,9 @@ import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { MapPin, User, Clock, Play, Car, Navigation, CheckCircle, Calendar, ShoppingCart, ClipboardList, AlertTriangle } from 'lucide-react';
+import { MapPin, User, Clock, Play, Car, Navigation, CheckCircle, Calendar, ShoppingCart, ClipboardList, AlertTriangle, Warehouse } from 'lucide-react';
 import { MMPSiteEntry } from '@/types/mmp';
-import { isPdmActivity, isMdmRequired } from '@/utils/pdmMdmUtils';
+import { isPdmActivity, isMdmRequired, isWhmRequired, isDmActivity, isAimActivity } from '@/utils/pdmMdmUtils';
 
 const MONTHS = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -41,10 +41,12 @@ export const StartVisitDialog: React.FC<StartVisitDialogProps> = ({
   const [cycleEndDate, setCycleEndDate] = useState<string>('');
 
   const siteAny = site as any;
-  const activityLower = (site?.siteActivity || siteAny?.activity_at_site || '').toLowerCase();
-  const isDMActivity = activityLower.includes('distribution monitoring') || activityLower.includes('dm');
-  const isPDMActivity = isPdmActivity(site?.siteActivity || siteAny?.activity_at_site || '');
+  const siteActivityStr = site?.siteActivity || siteAny?.activity_at_site || '';
+  const isDMActivity = isDmActivity(siteActivityStr);
+  const isAIMActivity = isAimActivity(siteActivityStr);
+  const isPDMActivity = isPdmActivity(siteActivityStr);
   const hasMDM = isMdmRequired(site?.useMarketDiversion ?? siteAny?.use_market_diversion);
+  const hasWHM = isWhmRequired(site?.useWarehouseMonitoring ?? siteAny?.use_warehouse_monitoring);
 
   useEffect(() => {
     if (open && isDMActivity) {
@@ -174,8 +176,8 @@ export const StartVisitDialog: React.FC<StartVisitDialogProps> = ({
             </div>
           </div>
 
-          {/* MDM Info Card - When Market Diversion Monitoring is required */}
-          {hasMDM && (
+          {/* MDM Info Card - Only for DM activities with market diversion flag */}
+          {hasMDM && isDMActivity && (
             <div className="rounded-2xl p-5 shadow-lg bg-pink-50 dark:bg-pink-900/20 border border-pink-200 dark:border-pink-800">
               <div className="flex items-center gap-3 mb-3">
                 <div className="w-10 h-10 rounded-full bg-pink-600 dark:bg-pink-500 flex items-center justify-center">
@@ -198,6 +200,36 @@ export const StartVisitDialog: React.FC<StartVisitDialogProps> = ({
                     <p>1. <span className="font-medium">{site?.siteActivity || siteAny?.activity_at_site || 'Main Activity'}</span> (primary)</p>
                     <p>2. <span className="font-medium">Market Diversion Monitoring</span> (additional)</p>
                     <p className="mt-2 text-pink-600 dark:text-pink-400">You will need to report MDM questionnaire count in the visit report.</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* WHM Info Card - For DM or AIM activities with warehouse monitoring flag */}
+          {hasWHM && (isDMActivity || isAIMActivity) && (
+            <div className="rounded-2xl p-5 shadow-lg bg-teal-50 dark:bg-teal-900/20 border border-teal-200 dark:border-teal-800">
+              <div className="flex items-center gap-3 mb-3">
+                <div className="w-10 h-10 rounded-full bg-teal-600 dark:bg-teal-500 flex items-center justify-center">
+                  <Warehouse className="h-5 w-5 text-white" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-teal-900 dark:text-teal-100">
+                    Warehouse Monitoring (WHM)
+                  </h3>
+                  <p className="text-xs text-teal-700 dark:text-teal-300">
+                    This site requires an additional activity
+                  </p>
+                </div>
+              </div>
+              <div className="bg-white dark:bg-neutral-800 rounded-xl p-3 border border-teal-100 dark:border-teal-700">
+                <div className="flex items-start gap-2">
+                  <AlertTriangle className="h-4 w-4 text-teal-600 mt-0.5 flex-shrink-0" />
+                  <div className="text-xs text-teal-800 dark:text-teal-200 space-y-1">
+                    <p className="font-semibold">This site has 2 activities:</p>
+                    <p>1. <span className="font-medium">{siteActivityStr || 'Main Activity'}</span> (primary)</p>
+                    <p>2. <span className="font-medium">Warehouse Monitoring</span> (additional)</p>
+                    <p className="mt-2 text-teal-600 dark:text-teal-400">You will need to report WHM questionnaire count in the visit report.</p>
                   </div>
                 </div>
               </div>

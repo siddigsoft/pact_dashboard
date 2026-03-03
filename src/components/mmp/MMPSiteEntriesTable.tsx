@@ -15,7 +15,7 @@ import { RequestDownPaymentButton } from '@/components/site-visit/RequestDownPay
 import { calculateEnumeratorFeeForUser } from '@/hooks/use-claim-fee-calculation';
 import { PostponementHistoryEntry } from '@/types/mmp/site';
 import { useUser } from '@/context/user/UserContext';
-import { isPdmActivity, isMdmRequired, calculatePdmSiteVisits, calculatePdmRemainder } from '@/utils/pdmMdmUtils';
+import { isPdmActivity, isMdmRequired, isWhmRequired, calculatePdmSiteVisits, calculatePdmRemainder } from '@/utils/pdmMdmUtils';
 
 interface MMPSiteEntriesTableProps {
   siteEntries: any[];
@@ -364,6 +364,7 @@ const MMPSiteEntriesTable = ({
       results = results.filter(({ norm }) => {
         if (activityTypeFilter === 'pdm') return isPdmActivity(norm.siteActivity || '');
         if (activityTypeFilter === 'mdm') return isMdmRequired(norm.useMarketDiversion);
+        if (activityTypeFilter === 'whm') return isWhmRequired(norm.useWarehouseMonitoring);
         return true;
       });
     }
@@ -537,6 +538,7 @@ const MMPSiteEntriesTable = ({
                     <SelectItem value="all">All Types</SelectItem>
                     <SelectItem value="pdm">PDM Sites Only</SelectItem>
                     <SelectItem value="mdm">MDM Sites Only</SelectItem>
+                    <SelectItem value="whm">WHM Sites Only</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -569,8 +571,8 @@ const MMPSiteEntriesTable = ({
                     </Badge>
                   )}
                   {activityTypeFilter !== 'all' && (
-                    <Badge variant="secondary" className={`gap-1 ${activityTypeFilter === 'pdm' ? 'bg-violet-100 text-violet-800' : 'bg-pink-100 text-pink-800'}`}>
-                      {activityTypeFilter === 'pdm' ? 'PDM Sites' : 'MDM Sites'}
+                    <Badge variant="secondary" className={`gap-1 ${activityTypeFilter === 'pdm' ? 'bg-violet-100 text-violet-800' : activityTypeFilter === 'whm' ? 'bg-teal-100 text-teal-800' : 'bg-pink-100 text-pink-800'}`}>
+                      {activityTypeFilter === 'pdm' ? 'PDM Sites' : activityTypeFilter === 'whm' ? 'WHM Sites' : 'MDM Sites'}
                       <X className="h-3 w-3 cursor-pointer" onClick={() => { setActivityTypeFilter("all"); setCurrentPage(1); }} />
                     </Badge>
                   )}
