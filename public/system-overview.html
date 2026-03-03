@@ -157,21 +157,44 @@ h1,h2,h3,h4,h5{font-family:'Space Grotesk',sans-serif;letter-spacing:-0.2px;}
 .c-card p{font-size:10.5px;opacity:0.38;line-height:1.3;}
 
 /* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-   SLIDE 6 — WORK TYPES
+   SLIDE 6 — WORK TYPES & AGENCY ACTIVITIES
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
 .s6{background:#06090f;}
 .s6 .b1{width:420px;height:420px;background:rgba(6,182,212,0.06);bottom:-120px;right:-80px;}
-.work-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;max-width:940px;width:100%;}
-.work-card{background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:15px;padding:18px;position:relative;overflow:hidden;}
-.work-card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;border-radius:15px 15px 0 0;}
+.act-split{display:flex;gap:22px;max-width:990px;width:100%;align-items:flex-start;}
+.act-left{flex:0.9;} .act-right{flex:1.1;}
+.work-type-pills{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:14px;}
+.wtp{padding:6px 14px;border-radius:99px;font-size:11.5px;font-weight:700;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.12);}
+.wtp-blue{border-color:rgba(59,130,246,0.35);background:rgba(59,130,246,0.1);color:#93c5fd;}
+.wtp-green{border-color:rgba(16,185,129,0.35);background:rgba(16,185,129,0.1);color:#6ee7b7;}
+.wtp-amber{border-color:rgba(245,158,11,0.35);background:rgba(245,158,11,0.1);color:#fcd34d;}
+.wtp-purple{border-color:rgba(139,92,246,0.35);background:rgba(139,92,246,0.1);color:#c4b5fd;}
+.wtp-red{border-color:rgba(239,68,68,0.35);background:rgba(239,68,68,0.1);color:#fca5a5;}
+.wtp-cyan{border-color:rgba(6,182,212,0.35);background:rgba(6,182,212,0.1);color:#67e8f9;}
+.work-grid-sm{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+.work-card-sm{background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:12px 14px;position:relative;overflow:hidden;}
+.work-card-sm::before{content:'';position:absolute;top:0;left:0;right:0;height:2.5px;}
 .wc-mmp::before{background:#3b82f6;} .wc-proj::before{background:#10b981;} .wc-task::before{background:#f59e0b;}
 .wc-assess::before{background:#8b5cf6;} .wc-survey::before{background:#ef4444;} .wc-biz::before{background:#06b6d4;}
+.work-card-sm h3{font-size:12.5px;font-weight:700;margin-bottom:3px;}
+.work-card-sm p{font-size:10.5px;opacity:0.42;line-height:1.4;}
+.work-tags{display:flex;flex-wrap:wrap;gap:4px;margin-top:7px;}
+.wt{padding:2px 7px;border-radius:99px;font-size:9px;font-weight:700;background:rgba(255,255,255,0.07);opacity:0.65;}
+.agency-row{background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:11px 14px;margin-bottom:8px;}
+.agency-row:last-child{margin-bottom:0;}
+.agency-top{display:flex;align-items:center;gap:10px;margin-bottom:7px;}
+.agency-logo{width:28px;height:28px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0;}
+.agency-top h4{font-size:12.5px;font-weight:700;}
+.agency-top .a-ar{font-size:10px;opacity:0.3;direction:rtl;margin-left:auto;}
+.act-tags{display:flex;flex-wrap:wrap;gap:4px;}
+.at{padding:2px 9px;border-radius:99px;font-size:9.5px;font-weight:700;}
+/* work cards (old references kept for other slides) */
+.work-card{background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:15px;padding:18px;position:relative;overflow:hidden;}
+.work-card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;border-radius:15px 15px 0 0;}
 .work-card .wi{font-size:24px;margin-bottom:9px;}
 .work-card h3{font-size:14px;font-weight:700;margin-bottom:4px;}
 .work-card .wa{font-size:10px;opacity:0.3;direction:rtl;margin-bottom:6px;}
 .work-card p{font-size:11.5px;opacity:0.45;line-height:1.4;}
-.work-tags{display:flex;flex-wrap:wrap;gap:5px;margin-top:8px;}
-.wt{padding:2px 8px;border-radius:99px;font-size:9.5px;font-weight:700;background:rgba(255,255,255,0.07);opacity:0.6;}
 
 /* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
    SLIDE 7 — WORKFLOWS
@@ -584,56 +607,110 @@ svg.smap{width:100%;max-width:350px;display:block;margin:0 auto;}
 </div>
 
 <!-- ═══════════════════════════════════════
-  SLIDE 06 — WORK TYPES
+  SLIDE 06 — WORK TYPES & AGENCY ACTIVITIES
 ═══════════════════════════════════════ -->
 <div class="slide s6" id="s6">
   <div class="blob b1"></div>
-  <div style="max-width:960px;width:100%;text-align:center">
-    <p class="eyebrow">Work Types · أنواع العمل</p>
-    <h2 class="h-display">Not just monitoring plans.<br/><em>Any type of field work.</em></h2>
-    <p class="h-ar">ليس فقط خطط المراقبة — كل أنواع العمل الميداني في منصة واحدة</p>
-    <div class="work-grid">
-      <div class="work-card wc-mmp">
-        <div class="wi">📋</div>
-        <h3>Monthly Monitoring Plans</h3>
-        <div class="wa">خطط المراقبة الشهرية</div>
-        <p>Structured site visit plans — uploaded, dispatched, and tracked per hub with GPS verification, coverage analytics, and automated fee calculation.</p>
-        <div class="work-tags"><span class="wt">GFA</span><span class="wt">CBT</span><span class="wt">e-BSFP</span><span class="wt">AIM</span><span class="wt">PDM</span><span class="wt">MDM</span><span class="wt">WHM</span></div>
+  <div style="max-width:990px;width:100%">
+    <p class="eyebrow" style="text-align:center">Activities by Client · الأنشطة حسب العميل</p>
+    <h2 class="h-display" style="text-align:center">Every client. <em>Their own activities.</em><br/>All in one platform.</h2>
+    <p class="h-ar" style="text-align:center">كل عميل — أنشطته الخاصة — في منصة واحدة تتعامل مع كل نوع عمل ميداني</p>
+    <div class="act-split">
+      <div class="act-left">
+        <p style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:2px;opacity:0.32;margin-bottom:10px">Work types supported</p>
+        <div class="work-type-pills" style="flex-direction:column;gap:7px">
+          <span class="wtp wtp-blue">📋 Monthly Monitoring Plans (MMPs)</span>
+          <span class="wtp wtp-green">🗂️ Projects &amp; Programmes</span>
+          <span class="wtp wtp-amber">✅ Tasks &amp; Assignment Control</span>
+          <span class="wtp wtp-purple">🔬 Needs &amp; Quality Assessments</span>
+          <span class="wtp wtp-red">📊 Market Surveys</span>
+          <span class="wtp wtp-cyan">💼 Business &amp; Landscape Studies</span>
+        </div>
+        <div class="card-hl" style="margin-top:12px">
+          <p style="font-size:11px;opacity:0.55;line-height:1.55">Each work type is fully configurable — custom forms, approval chains, fee structures, GPS radius, and reporting templates. Admins configure once; the system enforces everything.</p>
+          <p style="font-size:9.5px;opacity:0.25;direction:rtl;margin-top:5px">كل نوع عمل قابل للتخصيص بالكامل — نماذج، موافقات، رسوم، وتقارير</p>
+        </div>
       </div>
-      <div class="work-card wc-proj">
-        <div class="wi">🗂️</div>
-        <h3>Projects &amp; Programmes</h3>
-        <div class="wa">المشاريع والبرامج</div>
-        <p>Long-running programme management with milestone tracking, task assignment, team accountability, budget control, and reporting — per client or donor.</p>
-        <div class="work-tags"><span class="wt">WFP</span><span class="wt">UN Women</span><span class="wt">UNICEF</span><span class="wt">INGO</span></div>
-      </div>
-      <div class="work-card wc-task">
-        <div class="wi">✅</div>
-        <h3>Tasks &amp; Control</h3>
-        <div class="wa">المهام والتحكم</div>
-        <p>Assign, track, and close tasks across teams and hubs. Supervisors see live status, deadlines, and completion rates per enumerator or team member.</p>
-        <div class="work-tags"><span class="wt">Assign</span><span class="wt">Track</span><span class="wt">Approve</span><span class="wt">Close</span></div>
-      </div>
-      <div class="work-card wc-assess">
-        <div class="wi">🔬</div>
-        <h3>Assessments</h3>
-        <div class="wa">التقييمات</div>
-        <p>Structured field assessments with custom forms, scoring rubrics, photo evidence requirements, and AI-analyzed results — per community, site, or beneficiary group.</p>
-        <div class="work-tags"><span class="wt">Needs</span><span class="wt">Quality</span><span class="wt">Baseline</span><span class="wt">Endline</span></div>
-      </div>
-      <div class="work-card wc-survey">
-        <div class="wi">📊</div>
-        <h3>Market Surveys</h3>
-        <div class="wa">المسوحات السوقية</div>
-        <p>Price monitoring, commodity availability, trader interviews, and market access studies — with geo-tagged data points and trend dashboards.</p>
-        <div class="work-tags"><span class="wt">Price</span><span class="wt">Commodity</span><span class="wt">Trader</span><span class="wt">Access</span></div>
-      </div>
-      <div class="work-card wc-biz">
-        <div class="wi">💼</div>
-        <h3>Business Studies</h3>
-        <div class="wa">الدراسات التجارية</div>
-        <p>Stakeholder interviews, industry mapping, competitive landscape studies, and enterprise assessments commissioned by private sector and government clients.</p>
-        <div class="work-tags"><span class="wt">Stakeholder</span><span class="wt">Landscape</span><span class="wt">Enterprise</span></div>
+      <div class="act-right">
+        <p style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:2px;opacity:0.32;margin-bottom:10px">Agency-specific activities in Sudan</p>
+
+        <div class="agency-row">
+          <div class="agency-top">
+            <div class="agency-logo" style="background:rgba(0,114,206,0.18)">🌾</div>
+            <h4>WFP — World Food Programme</h4>
+            <span class="a-ar">برنامج الأغذية العالمي</span>
+          </div>
+          <div class="act-tags">
+            <span class="at" style="background:rgba(59,130,246,0.14);color:#93c5fd">GFA (In-Kind Food)</span>
+            <span class="at" style="background:rgba(59,130,246,0.14);color:#93c5fd">GFA CBT (Cash &amp; Voucher)</span>
+            <span class="at" style="background:rgba(59,130,246,0.14);color:#93c5fd">e-BSFP (Nutrition)</span>
+            <span class="at" style="background:rgba(59,130,246,0.14);color:#93c5fd">AIM (Asset Intensive)</span>
+            <span class="at" style="background:rgba(59,130,246,0.14);color:#93c5fd">PDM (Post-Distribution)</span>
+            <span class="at" style="background:rgba(59,130,246,0.14);color:#93c5fd">MDM (Market Diversion)</span>
+            <span class="at" style="background:rgba(59,130,246,0.14);color:#93c5fd">WHM (Warehouse)</span>
+          </div>
+        </div>
+
+        <div class="agency-row">
+          <div class="agency-top">
+            <div class="agency-logo" style="background:rgba(0,158,118,0.18)">👩</div>
+            <h4>UN Women</h4>
+            <span class="a-ar">هيئة الأمم للمرأة</span>
+          </div>
+          <div class="act-tags">
+            <span class="at" style="background:rgba(16,185,129,0.14);color:#6ee7b7">Women's Economic Empowerment</span>
+            <span class="at" style="background:rgba(16,185,129,0.14);color:#6ee7b7">Ending Violence Against Women (EVAW)</span>
+            <span class="at" style="background:rgba(16,185,129,0.14);color:#6ee7b7">Women's Access to Finance</span>
+            <span class="at" style="background:rgba(16,185,129,0.14);color:#6ee7b7">Gender Assessments</span>
+            <span class="at" style="background:rgba(16,185,129,0.14);color:#6ee7b7">Labour Market Surveys</span>
+            <span class="at" style="background:rgba(16,185,129,0.14);color:#6ee7b7">Female Enumerator Capacity</span>
+          </div>
+        </div>
+
+        <div class="agency-row">
+          <div class="agency-top">
+            <div class="agency-logo" style="background:rgba(0,174,239,0.18)">🧒</div>
+            <h4>UNICEF</h4>
+            <span class="a-ar">منظمة الأمم المتحدة لرعاية الطفولة</span>
+          </div>
+          <div class="act-tags">
+            <span class="at" style="background:rgba(6,182,212,0.14);color:#67e8f9">Child Nutrition Monitoring</span>
+            <span class="at" style="background:rgba(6,182,212,0.14);color:#67e8f9">WASH Assessments</span>
+            <span class="at" style="background:rgba(6,182,212,0.14);color:#67e8f9">Education Programme Monitoring</span>
+            <span class="at" style="background:rgba(6,182,212,0.14);color:#67e8f9">Child Protection Surveys</span>
+            <span class="at" style="background:rgba(6,182,212,0.14);color:#67e8f9">Immunization Coverage</span>
+            <span class="at" style="background:rgba(6,182,212,0.14);color:#67e8f9">Community Outreach Tracking</span>
+          </div>
+        </div>
+
+        <div class="agency-row">
+          <div class="agency-top">
+            <div class="agency-logo" style="background:rgba(0,100,200,0.18)">🌍</div>
+            <h4>UNDP — Sudan Office</h4>
+            <span class="a-ar">برنامج الأمم المتحدة الإنمائي</span>
+          </div>
+          <div class="act-tags">
+            <span class="at" style="background:rgba(139,92,246,0.14);color:#c4b5fd">Livelihood Restoration</span>
+            <span class="at" style="background:rgba(139,92,246,0.14);color:#c4b5fd">Governance Support</span>
+            <span class="at" style="background:rgba(139,92,246,0.14);color:#c4b5fd">Community Resilience</span>
+            <span class="at" style="background:rgba(139,92,246,0.14);color:#c4b5fd">Recovery Programme Monitoring</span>
+            <span class="at" style="background:rgba(139,92,246,0.14);color:#c4b5fd">Civil Society Engagement</span>
+          </div>
+        </div>
+
+        <div class="agency-row">
+          <div class="agency-top">
+            <div class="agency-logo" style="background:rgba(188,0,45,0.15)">🇯🇵</div>
+            <h4>JICA — Japan International Cooperation</h4>
+            <span class="a-ar">الوكالة اليابانية للتعاون الدولي</span>
+          </div>
+          <div class="act-tags">
+            <span class="at" style="background:rgba(245,158,11,0.14);color:#fcd34d">Agricultural Development Monitoring</span>
+            <span class="at" style="background:rgba(245,158,11,0.14);color:#fcd34d">Rural Infrastructure Assessment</span>
+            <span class="at" style="background:rgba(245,158,11,0.14);color:#fcd34d">Food Security Studies</span>
+            <span class="at" style="background:rgba(245,158,11,0.14);color:#fcd34d">Capacity Building Evaluation</span>
+          </div>
+        </div>
       </div>
     </div>
   </div>
