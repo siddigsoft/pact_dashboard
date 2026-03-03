@@ -733,53 +733,61 @@ function ProfileDetail({
                   <button
                     type="button"
                     onClick={() => setFinOpen(o => o === 'mmp' ? null : 'mmp')}
-                    className="w-full flex items-center gap-3 px-4 py-3 bg-violet-50 dark:bg-violet-950/30 hover:bg-violet-100 dark:hover:bg-violet-950/50 transition-colors text-left"
+                    className="w-full flex items-center gap-3 px-4 py-4 bg-violet-50 dark:bg-violet-950/30 hover:bg-violet-100 dark:hover:bg-violet-950/50 transition-colors text-left"
                   >
-                    <MapPin className="h-4 w-4 text-violet-600 shrink-0" />
+                    <MapPin className="h-5 w-5 text-violet-600 shrink-0" />
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-sm font-semibold text-foreground">MMP Site Costs</span>
-                        <span className="text-[10px] text-muted-foreground">تكاليف مواقع خطة الرصد</span>
+                        <span className="text-base font-semibold text-foreground">MMP Site Costs</span>
+                        <span className="text-xs text-muted-foreground">تكاليف مواقع خطة الرصد</span>
                       </div>
                       <div className="flex items-center gap-2 mt-1 flex-wrap">
-                        <span className="text-[10px] bg-slate-200 dark:bg-slate-700 text-foreground rounded px-1.5 py-0.5">{mmpRows.length} MMP{mmpRows.length !== 1 ? 's' : ''}</span>
-                        <span className="text-[10px] bg-violet-100 dark:bg-violet-900/50 text-violet-700 dark:text-violet-400 rounded px-1.5 py-0.5">
+                        <span className="text-xs bg-slate-200 dark:bg-slate-700 text-foreground rounded px-1.5 py-0.5">{mmpRows.length} MMP{mmpRows.length !== 1 ? 's' : ''}</span>
+                        <span className="text-xs bg-violet-100 dark:bg-violet-900/50 text-violet-700 dark:text-violet-400 rounded px-1.5 py-0.5">
                           {mmpRows.reduce((s, r) => s + r.siteCount, 0)} sites
                         </span>
                       </div>
                     </div>
                     <div className="text-right shrink-0">
-                      <p className="text-sm font-bold text-violet-700 dark:text-violet-400">
+                      <p className="text-base font-bold text-violet-700 dark:text-violet-400">
                         SDG {Math.round(mmpRows.reduce((s, r) => s + r.totalCost, 0)).toLocaleString()}
                       </p>
                       <ChevronDown className={`h-4 w-4 text-muted-foreground ml-auto mt-0.5 transition-transform ${finOpen === 'mmp' ? 'rotate-180' : ''}`} />
                     </div>
                   </button>
                   {finOpen === 'mmp' && (
-                    <div className="divide-y divide-border max-h-72 overflow-y-auto">
+                    <div className="divide-y divide-border max-h-96 overflow-y-auto">
                       {mmpRows.length === 0 ? (
-                        <p className="text-xs text-muted-foreground text-center py-4">No MMP site entries found</p>
+                        <p className="text-sm text-muted-foreground text-center py-6">No MMP site entries found</p>
                       ) : mmpRows.map(r => (
-                        <div key={r.mmpFileId} className="px-4 py-3 hover:bg-muted/30 transition-colors">
+                        <div key={r.mmpFileId} className="px-4 py-4 hover:bg-muted/30 transition-colors">
                           <div className="flex items-start justify-between gap-3">
                             <div className="min-w-0 flex-1">
-                              <div className="flex items-center gap-1.5 flex-wrap">
-                                <span className="text-[10px] font-bold text-foreground truncate max-w-[160px]">{r.mmpName}</span>
-                                {r.mmpId && <span className="text-[10px] text-muted-foreground font-mono">{r.mmpId}</span>}
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className="text-sm font-bold text-foreground">{r.mmpName}</span>
+                                {r.mmpId && <span className="text-xs text-muted-foreground font-mono">{r.mmpId}</span>}
                               </div>
-                              <div className="flex items-center gap-1.5 mt-1 flex-wrap">
-                                {r.month && <span className="text-[10px] bg-violet-100 dark:bg-violet-900/40 text-violet-700 dark:text-violet-400 rounded px-1.5 py-0.5">Month {r.month}</span>}
-                                <span className="text-[10px] bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 rounded px-1.5 py-0.5">{r.siteCount} sites</span>
-                                {r.mmpStatus && <span className="text-[10px] text-muted-foreground capitalize">{r.mmpStatus.replace(/_/g, ' ')}</span>}
+                              <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                                {r.month && <span className="text-xs bg-violet-100 dark:bg-violet-900/40 text-violet-700 dark:text-violet-400 rounded px-1.5 py-0.5">Month {r.month}</span>}
+                                <span className="text-xs bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 rounded px-1.5 py-0.5">{r.siteCount} sites</span>
+                                {r.mmpStatus && <span className="text-xs text-muted-foreground capitalize">{r.mmpStatus.replace(/_/g, ' ')}</span>}
                               </div>
                               {(r.enumFee > 0 || r.transportFee > 0) && (
-                                <div className="flex gap-3 mt-1.5">
-                                  {r.enumFee > 0 && <span className="text-[10px] text-muted-foreground">👤 Enum: SDG {Math.round(r.enumFee).toLocaleString()}</span>}
-                                  {r.transportFee > 0 && <span className="text-[10px] text-muted-foreground">🚗 Transport: SDG {Math.round(r.transportFee).toLocaleString()}</span>}
+                                <div className="flex flex-wrap gap-4 mt-2">
+                                  {r.enumFee > 0 && (
+                                    <span className="text-xs text-muted-foreground">
+                                      👤 <span className="font-medium">Enum:</span> SDG {Math.round(r.enumFee).toLocaleString()}
+                                    </span>
+                                  )}
+                                  {r.transportFee > 0 && (
+                                    <span className="text-xs text-muted-foreground">
+                                      🚗 <span className="font-medium">Transport:</span> SDG {Math.round(r.transportFee).toLocaleString()}
+                                    </span>
+                                  )}
                                 </div>
                               )}
                             </div>
-                            <p className="text-xs font-bold text-violet-700 dark:text-violet-400 shrink-0">
+                            <p className="text-sm font-bold text-violet-700 dark:text-violet-400 shrink-0">
                               SDG {Math.round(r.totalCost).toLocaleString()}
                             </p>
                           </div>
