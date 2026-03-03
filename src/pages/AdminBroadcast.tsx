@@ -260,7 +260,7 @@ export default function AdminBroadcastPage() {
       }
       if (audience === 'by_state') {
         if (!stateFilter) { setUserCount(null); return; }
-        const { count } = await supabase.from('profiles').select('id', { count: 'exact', head: true }).ilike('state', stateFilter).not('role', 'is', null);
+        const { count } = await supabase.from('profiles').select('id', { count: 'exact', head: true }).ilike('state_id', stateFilter).not('role', 'is', null);
         setUserCount(count ?? 0);
         return;
       }
@@ -478,16 +478,16 @@ export default function AdminBroadcastPage() {
   };
 
   const getTargetUsers = async (aud: string, sf: string) => {
-    const { data: users } = await supabase
+    const { data: users, error: usersError } = await supabase
       .from('profiles')
-      .select('id, bank_account, role, state, name, email')
+      .select('id, bank_account, role, state_id, full_name, email')
       .not('role', 'is', null);
-    if (!users) throw new Error('Could not load users');
+    if (usersError || !users) throw new Error('Could not load users');
     if (aud === 'no_bank_account') {
       return users.filter(u => { const ba = u.bank_account as any; return !ba?.accountNumber && !ba?.account_number; });
     }
     if (aud === 'by_state') {
-      return users.filter(u => (u as any).state?.toLowerCase() === sf.toLowerCase());
+      return users.filter(u => (u as any).state_id?.toLowerCase() === sf.toLowerCase());
     }
     if (aud !== 'all') {
       return users.filter(u => (u.role || '').toLowerCase() === aud);
