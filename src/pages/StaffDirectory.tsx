@@ -182,13 +182,14 @@ function ProfileDetail({
   const [advanceRows,    setAdvanceRows]    = useState<any[]>([]);
   const [costRows,       setCostRows]       = useState<any[]>([]);
   const [withdrawalRows, setWithdrawalRows] = useState<any[]>([]);
-  const [finOpen, setFinOpen] = useState<'advances' | 'costs' | 'withdrawals' | null>(null);
+  const [mmpRows,        setMmpRows]        = useState<any[]>([]);
+  const [finOpen, setFinOpen] = useState<'advances' | 'costs' | 'withdrawals' | 'mmp' | null>(null);
 
   useEffect(() => {
     if (!finRequested) return;
     const fetchUserFin = async () => {
       setFinLoading(true);
-      const [dpRes, ocRes, wrRes] = await Promise.all([
+      const [dpRes, ocRes, wrRes, mseRes] = await Promise.all([
         supabase.from('down_payment_requests')
           .select('id,status,requested_amount,requested_at,justification,hub_name,site_name')
           .eq('requested_by', profile.id)
@@ -204,13 +205,50 @@ function ProfileDetail({
           .eq('user_id', profile.id)
           .order('created_at', { ascending: false })
           .limit(100),
+        (supabase as any).from('mmp_site_entries')
+          .select('id,mmp_file_id,cost,enumerator_fee,transport_fee,status,site_name,state,main_activity')
+          .or(`claimed_by.eq.${profile.id},completed_by_user_id.eq.${profile.id},forwarded_to_user_id.eq.${profile.id}`)
+          .limit(500),
       ]);
-      if (dpRes.error) console.error('[StaffDirectory] down_payment_requests error:', dpRes.error);
-      if (ocRes.error) console.error('[StaffDirectory] operational_cost_submissions error:', ocRes.error);
-      if (wrRes.error) console.error('[StaffDirectory] withdrawal_requests error:', wrRes.error);
+      if (dpRes.error)  console.error('[StaffDirectory] down_payment_requests error:', dpRes.error);
+      if (ocRes.error)  console.error('[StaffDirectory] operational_cost_submissions error:', ocRes.error);
+      if (wrRes.error)  console.error('[StaffDirectory] withdrawal_requests error:', wrRes.error);
+      if (mseRes.error) console.error('[StaffDirectory] mmp_site_entries error:', mseRes.error);
       setAdvanceRows(dpRes.data || []);
       setCostRows(ocRes.data || []);
       setWithdrawalRows(wrRes.data || []);
+
+      /* ── Group mmp_site_entries by mmp_file_id ── */
+      const entries: any[] = mseRes.data || [];
+      const mmpFileIds = [...new Set(entries.map((e: any) => e.mmp_file_id).filter(Boolean))];
+      if (mmpFileIds.length > 0) {
+        const { data: mmpFilesData } = await (supabase as any)
+          .from('mmp_files')
+          .select('id,name,mmp_id,month,status')
+          .in('id', mmpFileIds);
+        const fileMap: Record<string, any> = {};
+        (mmpFilesData || []).forEach((f: any) => { fileMap[f.id] = f; });
+        const grouped: Record<string, any> = {};
+        entries.forEach((e: any) => {
+          const fid = e.mmp_file_id;
+          if (!fid) return;
+          if (!grouped[fid]) {
+            const f = fileMap[fid] || {};
+            grouped[fid] = {
+              mmpFileId: fid, mmpName: f.name || fid, mmpId: f.mmp_id || '',
+              month: f.month, mmpStatus: f.status || '', siteCount: 0,
+              totalCost: 0, enumFee: 0, transportFee: 0,
+            };
+          }
+          grouped[fid].siteCount += 1;
+          grouped[fid].totalCost    += Math.abs(Number(e.cost) || 0);
+          grouped[fid].enumFee      += Math.abs(Number(e.enumerator_fee) || 0);
+          grouped[fid].transportFee += Math.abs(Number(e.transport_fee) || 0);
+        });
+        setMmpRows(Object.values(grouped).sort((a, b) => b.totalCost - a.totalCost));
+      } else {
+        setMmpRows([]);
+      }
       setFinLoading(false);
     };
     fetchUserFin();
@@ -686,6 +724,67 @@ function ProfileDetail({
                           </div>
                         );
                       })}
+                    </div>
+                  )}
+                </div>
+
+                {/* ── MMP Cost Summary ── */}
+                <div className="rounded-lg border overflow-hidden">
+                  <button
+                    type="button"
+                    onClick={() => setFinOpen(o => o === 'mmp' ? null : 'mmp')}
+                    className="w-full flex items-center gap-3 px-4 py-3 bg-violet-50 dark:bg-violet-950/30 hover:bg-violet-100 dark:hover:bg-violet-950/50 transition-colors text-left"
+                  >
+                    <MapPin className="h-4 w-4 text-violet-600 shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-sm font-semibold text-foreground">MMP Site Costs</span>
+                        <span className="text-[10px] text-muted-foreground">تكاليف مواقع خطة الرصد</span>
+                      </div>
+                      <div className="flex items-center gap-2 mt-1 flex-wrap">
+                        <span className="text-[10px] bg-slate-200 dark:bg-slate-700 text-foreground rounded px-1.5 py-0.5">{mmpRows.length} MMP{mmpRows.length !== 1 ? 's' : ''}</span>
+                        <span className="text-[10px] bg-violet-100 dark:bg-violet-900/50 text-violet-700 dark:text-violet-400 rounded px-1.5 py-0.5">
+                          {mmpRows.reduce((s, r) => s + r.siteCount, 0)} sites
+                        </span>
+                      </div>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <p className="text-sm font-bold text-violet-700 dark:text-violet-400">
+                        SDG {Math.round(mmpRows.reduce((s, r) => s + r.totalCost, 0)).toLocaleString()}
+                      </p>
+                      <ChevronDown className={`h-4 w-4 text-muted-foreground ml-auto mt-0.5 transition-transform ${finOpen === 'mmp' ? 'rotate-180' : ''}`} />
+                    </div>
+                  </button>
+                  {finOpen === 'mmp' && (
+                    <div className="divide-y divide-border max-h-72 overflow-y-auto">
+                      {mmpRows.length === 0 ? (
+                        <p className="text-xs text-muted-foreground text-center py-4">No MMP site entries found</p>
+                      ) : mmpRows.map(r => (
+                        <div key={r.mmpFileId} className="px-4 py-3 hover:bg-muted/30 transition-colors">
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className="text-[10px] font-bold text-foreground truncate max-w-[160px]">{r.mmpName}</span>
+                                {r.mmpId && <span className="text-[10px] text-muted-foreground font-mono">{r.mmpId}</span>}
+                              </div>
+                              <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                                {r.month && <span className="text-[10px] bg-violet-100 dark:bg-violet-900/40 text-violet-700 dark:text-violet-400 rounded px-1.5 py-0.5">Month {r.month}</span>}
+                                <span className="text-[10px] bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 rounded px-1.5 py-0.5">{r.siteCount} sites</span>
+                                {r.mmpStatus && <span className="text-[10px] text-muted-foreground capitalize">{r.mmpStatus.replace(/_/g, ' ')}</span>}
+                              </div>
+                              {(r.enumFee > 0 || r.transportFee > 0) && (
+                                <div className="flex gap-3 mt-1.5">
+                                  {r.enumFee > 0 && <span className="text-[10px] text-muted-foreground">👤 Enum: SDG {Math.round(r.enumFee).toLocaleString()}</span>}
+                                  {r.transportFee > 0 && <span className="text-[10px] text-muted-foreground">🚗 Transport: SDG {Math.round(r.transportFee).toLocaleString()}</span>}
+                                </div>
+                              )}
+                            </div>
+                            <p className="text-xs font-bold text-violet-700 dark:text-violet-400 shrink-0">
+                              SDG {Math.round(r.totalCost).toLocaleString()}
+                            </p>
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   )}
                 </div>
