@@ -3,11 +3,11 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
-import { Camera, Upload, FileText, MapPin, Clock, User, AlertCircle, Navigation, Compass, ImageIcon, Save, Car, CheckCircle, X, ShoppingCart, ClipboardList } from 'lucide-react';
+import { Camera, Upload, FileText, MapPin, Clock, User, AlertCircle, Navigation, Compass, ImageIcon, Save, Car, CheckCircle, X, ShoppingCart, ClipboardList, Warehouse } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { MMPSiteEntry } from '@/types/mmp';
-import { isPdmActivity, isMdmRequired, calculatePdmSiteVisits, calculatePdmRemainder } from '@/utils/pdmMdmUtils';
+import { isPdmActivity, isMdmRequired, isWhmRequired, isDmActivity, isAimActivity, calculatePdmSiteVisits, calculatePdmRemainder } from '@/utils/pdmMdmUtils';
 
 interface VisitReportDialogProps {
   open: boolean;
@@ -63,10 +63,15 @@ export const VisitReportDialog: React.FC<VisitReportDialogProps> = ({
   const [locationError, setLocationError] = useState<string | null>(null);
   const [pdmQuestionnaires, setPdmQuestionnaires] = useState<string>('');
   const [mdmQuestionnaires, setMdmQuestionnaires] = useState<string>('');
+  const [whmQuestionnaires, setWhmQuestionnaires] = useState<string>('');
 
   const siteAny = site as any;
-  const isPDMActivity = isPdmActivity(site?.siteActivity || siteAny?.activity_at_site || '');
-  const hasMDM = isMdmRequired(site?.useMarketDiversion ?? siteAny?.use_market_diversion);
+  const siteActivityStr = site?.siteActivity || siteAny?.activity_at_site || '';
+  const isPDMActivity = isPdmActivity(siteActivityStr);
+  const isDMActivity = isDmActivity(siteActivityStr);
+  const isAIMActivity = isAimActivity(siteActivityStr);
+  const hasMDM = isMdmRequired(site?.useMarketDiversion ?? siteAny?.use_market_diversion) && isDMActivity;
+  const hasWHM = isWhmRequired(site?.useWarehouseMonitoring ?? siteAny?.use_warehouse_monitoring) && (isDMActivity || isAIMActivity);
   const pdmCount = Number(pdmQuestionnaires) || 0;
   const pdmSiteVisits = calculatePdmSiteVisits(pdmCount);
   const pdmRemainder = calculatePdmRemainder(pdmCount);
@@ -546,7 +551,7 @@ export const VisitReportDialog: React.FC<VisitReportDialogProps> = ({
         }
       }
 
-      if (isPDMActivity || hasMDM) {
+      if (isPDMActivity || hasMDM || hasWHM) {
         const extraData: Record<string, any> = {};
         if (isPDMActivity && pdmQuestionnaires) {
           extraData.pdm_questionnaires_submitted = Number(pdmQuestionnaires) || 0;
@@ -554,6 +559,9 @@ export const VisitReportDialog: React.FC<VisitReportDialogProps> = ({
         }
         if (hasMDM && mdmQuestionnaires) {
           extraData.mdm_questionnaires_submitted = Number(mdmQuestionnaires) || 0;
+        }
+        if (hasWHM && whmQuestionnaires) {
+          extraData.whm_questionnaires_submitted = Number(whmQuestionnaires) || 0;
         }
         if (Object.keys(extraData).length > 0) {
           await supabase
@@ -687,6 +695,9 @@ export const VisitReportDialog: React.FC<VisitReportDialogProps> = ({
       }
       if (hasMDM && mdmQuestionnaires) {
         draftData.mdm_questionnaires_submitted = Number(mdmQuestionnaires) || 0;
+      }
+      if (hasWHM && whmQuestionnaires) {
+        draftData.whm_questionnaires_submitted = Number(whmQuestionnaires) || 0;
       }
 
       const { error: updateError } = await supabase
@@ -970,6 +981,48 @@ export const VisitReportDialog: React.FC<VisitReportDialogProps> = ({
                 <div className="mt-3 bg-white dark:bg-neutral-800 rounded-xl p-3 border border-pink-100 dark:border-pink-700">
                   <p className="text-sm font-medium text-pink-700 dark:text-pink-300">
                     {mdmQuestionnaires} MDM questionnaire{Number(mdmQuestionnaires) !== 1 ? 's' : ''} recorded
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* WHM Questionnaire Input - When Warehouse Monitoring is required */}
+          {hasWHM && (
+            <div className="rounded-2xl p-5 shadow-lg bg-teal-50 dark:bg-teal-900/20 border border-teal-200 dark:border-teal-800">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-10 h-10 rounded-full bg-teal-600 dark:bg-teal-500 flex items-center justify-center">
+                  <Warehouse className="h-5 w-5 text-white" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-teal-900 dark:text-teal-100">
+                    WHM Questionnaires
+                  </h3>
+                  <p className="text-xs text-teal-700 dark:text-teal-300">
+                    Warehouse Monitoring — enter questionnaire count
+                  </p>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="whmCount" className="text-xs font-medium text-teal-800 dark:text-teal-200 uppercase">
+                  Total WHM Questionnaires Submitted
+                </Label>
+                <input
+                  id="whmCount"
+                  type="number"
+                  min="0"
+                  step="1"
+                  placeholder="Enter number..."
+                  value={whmQuestionnaires}
+                  onChange={(e) => setWhmQuestionnaires(e.target.value)}
+                  className="w-full h-12 rounded-xl border border-teal-200 dark:border-teal-700 bg-white dark:bg-neutral-800 px-4 text-lg font-bold text-teal-900 dark:text-teal-100 placeholder:text-teal-300 focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                  data-testid="input-whm-questionnaires"
+                />
+              </div>
+              {Number(whmQuestionnaires) > 0 && (
+                <div className="mt-3 bg-white dark:bg-neutral-800 rounded-xl p-3 border border-teal-100 dark:border-teal-700">
+                  <p className="text-sm font-medium text-teal-700 dark:text-teal-300">
+                    {whmQuestionnaires} WHM questionnaire{Number(whmQuestionnaires) !== 1 ? 's' : ''} recorded
                   </p>
                 </div>
               )}
