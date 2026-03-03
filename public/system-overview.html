@@ -109,14 +109,34 @@ h1,h2,h3,h4,h5{font-family:'Space Grotesk',sans-serif;letter-spacing:-0.2px;}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
 .s4{background:#06090f;}
 .s4 .b1{width:450px;height:450px;background:rgba(139,92,246,0.06);top:-150px;right:-120px;}
-.client-split{display:flex;gap:24px;max-width:960px;width:100%;align-items:flex-start;}
-.client-left{flex:1.1;} .client-right{flex:0.9;}
-.client-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;}
+.client-split{display:flex;gap:24px;max-width:980px;width:100%;align-items:flex-start;}
+.client-left{flex:1.15;} .client-right{flex:0.85;}
+.client-total-banner{
+  background:linear-gradient(135deg,rgba(37,99,235,0.12),rgba(139,92,246,0.09));
+  border:1px solid rgba(37,99,235,0.22);border-radius:14px;padding:14px 18px;
+  display:flex;align-items:center;gap:18px;margin-bottom:14px;
+}
+.client-total-banner .ctn{font-size:52px;font-weight:800;color:#60a5fa;font-family:'Space Grotesk',sans-serif;line-height:1;}
+.client-total-banner div p{font-size:13px;font-weight:700;margin-bottom:3px;}
+.client-total-banner div span{font-size:11.5px;opacity:0.45;}
+.client-category-grid{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-bottom:12px;}
+.cat-card{background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:12px 14px;}
+.cat-card .cat-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:7px;}
+.cat-card .cat-top h4{font-size:12px;font-weight:700;}
+.cat-card .cat-num{font-size:20px;font-weight:800;font-family:'Space Grotesk',sans-serif;}
+.cat-names{display:flex;flex-wrap:wrap;gap:4px;}
+.cn{padding:2px 8px;border-radius:99px;font-size:9.5px;font-weight:600;background:rgba(255,255,255,0.06);opacity:0.7;}
+.sector-row{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:12px;}
+.client-logos-strip{background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);border-radius:12px;padding:13px;margin-bottom:12px;}
+.client-logos-strip p{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:2px;opacity:0.3;margin-bottom:10px;}
+.logos-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:7px;}
+.logo-pill{display:flex;align-items:center;gap:8px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:6px 10px;}
+.logo-pill .lp-icon{font-size:18px;flex-shrink:0;}
+.logo-pill span{font-size:11px;font-weight:600;opacity:0.7;}
 .client-card{background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:14px;padding:14px;display:flex;gap:12px;align-items:center;}
 .client-logo{width:44px;height:44px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0;}
 .client-card h4{font-size:13px;font-weight:700;margin-bottom:2px;}
 .client-card p{font-size:11px;opacity:0.4;line-height:1.35;}
-.sector-row{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:12px;}
 
 /* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
    SLIDE 5 — GLOBAL REACH
@@ -436,20 +456,51 @@ svg.smap{width:100%;max-width:350px;display:block;margin:0 auto;}
 ═══════════════════════════════════════ -->
 <div class="slide s4" id="s4">
   <div class="blob b1"></div>
-  <div style="max-width:980px;width:100%">
+  <div style="max-width:990px;width:100%">
     <p class="eyebrow" style="text-align:center">Clients &amp; Partners · العملاء والشركاء</p>
-    <h2 class="h-display" style="text-align:center">Built for <em>every sector</em><br/>that depends on field data</h2>
-    <p class="h-ar" style="text-align:center">مصمم لكل قطاع يعتمد على البيانات الميدانية — من المنظمات الأممية إلى القطاع الخاص</p>
+    <h2 class="h-display" style="text-align:center">Trusted by <em>23+ organisations</em><br/>across every development sector</h2>
+    <p class="h-ar" style="text-align:center">ثقة أكثر من 23 منظمة عبر كل قطاعات التنمية والعمل الإنساني</p>
     <div class="client-split">
       <div class="client-left">
-        <div class="client-grid">
-          <div class="client-card"><div class="client-logo" style="background:rgba(0,114,206,0.15)">🌾</div><div><h4>WFP — World Food Programme</h4><p>TPM site visits, GFA, CBT, e-BSFP, PDM, MDM, WHM across Sudan</p></div></div>
-          <div class="client-card"><div class="client-logo" style="background:rgba(0,158,118,0.15)">👩</div><div><h4>UN Women</h4><p>Gender-focused assessments, women's economic empowerment programme monitoring</p></div></div>
-          <div class="client-card"><div class="client-logo" style="background:rgba(0,174,239,0.15)">🧒</div><div><h4>UNICEF</h4><p>Child nutrition &amp; protection activity monitoring, community-level surveys</p></div></div>
-          <div class="client-card"><div class="client-logo" style="background:rgba(245,158,11,0.15)">🏗️</div><div><h4>Other UN &amp; INGOs</h4><p>Customized monitoring frameworks for humanitarian and development partners</p></div></div>
+        <div class="client-total-banner">
+          <div class="ctn">23+</div>
+          <div>
+            <p>Clients &amp; Associate Organisations</p>
+            <span>Active across Sudan, Uganda, Rwanda, South Sudan, Qatar &amp; beyond</span>
+          </div>
         </div>
-        <div style="margin-top:12px">
-          <p style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:2px;opacity:0.35;margin-bottom:9px">Sectors &amp; Work Types</p>
+        <div class="client-category-grid">
+          <div class="cat-card">
+            <div class="cat-top"><h4>🌐 UN Agencies</h4><div class="cat-num" style="color:#3b82f6">7</div></div>
+            <div class="cat-names">
+              <span class="cn">WFP</span><span class="cn">UNICEF</span><span class="cn">UN Women</span>
+              <span class="cn">UNDP</span><span class="cn">IFAD</span><span class="cn">IOM</span><span class="cn">+ 1 more</span>
+            </div>
+          </div>
+          <div class="cat-card">
+            <div class="cat-top"><h4>🏦 Dev Finance &amp; Banks</h4><div class="cat-num" style="color:#10b981">6</div></div>
+            <div class="cat-names">
+              <span class="cn">World Bank</span><span class="cn">IsDB</span><span class="cn">Qatar Fund</span>
+              <span class="cn">JICA</span><span class="cn">AFR</span><span class="cn">SMDC</span>
+            </div>
+          </div>
+          <div class="cat-card">
+            <div class="cat-top"><h4>🏛️ Government Bodies</h4><div class="cat-num" style="color:#f59e0b">6</div></div>
+            <div class="cat-names">
+              <span class="cn">Govt of Sudan</span><span class="cn">CBOS</span><span class="cn">ABS</span>
+              <span class="cn">Darfur Authority</span><span class="cn">States of Sudan</span><span class="cn">UMRA</span>
+            </div>
+          </div>
+          <div class="cat-card">
+            <div class="cat-top"><h4>🤝 INGOs &amp; Other</h4><div class="cat-num" style="color:#a78bfa">4</div></div>
+            <div class="cat-names">
+              <span class="cn">British Council</span><span class="cn">AICS</span>
+              <span class="cn">Arigatou Intl</span><span class="cn">FECCLAHA</span>
+            </div>
+          </div>
+        </div>
+        <div style="margin-top:10px">
+          <p style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:2px;opacity:0.32;margin-bottom:8px">Sectors Served</p>
           <div class="sector-row">
             <span class="badge b-blue">🌾 Food Security</span>
             <span class="badge b-green">👩 Gender &amp; Women</span>
@@ -458,23 +509,33 @@ svg.smap{width:100%;max-width:350px;display:block;margin:0 auto;}
             <span class="badge b-purple">🏗️ Livelihoods</span>
             <span class="badge b-blue">🏪 Market Analysis</span>
             <span class="badge b-red">📊 Business Studies</span>
-            <span class="badge b-green">💧 WASH</span>
-            <span class="badge b-amber">🏛️ Governance</span>
-            <span class="badge b-cyan">📱 Digital Finance</span>
+            <span class="badge b-amber">💰 Microfinance</span>
+            <span class="badge b-green">🏛️ Governance</span>
           </div>
         </div>
       </div>
       <div class="client-right">
-        <div class="card" style="margin-bottom:12px">
-          <p style="font-size:12px;font-weight:700;color:#60a5fa;margin-bottom:10px">🤝 How PACT serves each client</p>
-          <div class="wf-row"><div class="wf-dot"></div><p><strong>Custom project setup</strong> — each client's activities configured independently: workflows, forms, fee structures, reporting templates</p></div>
-          <div class="wf-row"><div class="wf-dot"></div><p><strong>Dedicated analytics dashboards</strong> — per-project coverage reporting, quality scoring, and real-time gap alerts</p></div>
-          <div class="wf-row"><div class="wf-dot"></div><p><strong>Exportable compliance evidence</strong> — visit reports, photo evidence, GPS logs, and signed financial documents downloadable per project</p></div>
-          <div class="wf-row" style="margin-bottom:0"><div class="wf-dot"></div><p><strong>Multi-stakeholder access</strong> — donors, country directors, data teams, and supervisors each see exactly what they need</p></div>
+        <div class="client-logos-strip">
+          <p>Key clients (from pactorg.com/clients)</p>
+          <div class="logos-grid">
+            <div class="logo-pill"><div class="lp-icon">🌾</div><span>World Food Programme</span></div>
+            <div class="logo-pill"><div class="lp-icon">🧒</div><span>UNICEF</span></div>
+            <div class="logo-pill"><div class="lp-icon">👩</div><span>UN Women</span></div>
+            <div class="logo-pill"><div class="lp-icon">🌍</div><span>UNDP</span></div>
+            <div class="logo-pill"><div class="lp-icon">🏦</div><span>World Bank Group</span></div>
+            <div class="logo-pill"><div class="lp-icon">🇯🇵</div><span>JICA</span></div>
+            <div class="logo-pill"><div class="lp-icon">🇶🇦</div><span>Qatar Fund for Dev.</span></div>
+            <div class="logo-pill"><div class="lp-icon">🕌</div><span>Islamic Dev. Bank</span></div>
+            <div class="logo-pill"><div class="lp-icon">🇬🇧</div><span>British Council</span></div>
+            <div class="logo-pill"><div class="lp-icon">🚢</div><span>IOM</span></div>
+          </div>
         </div>
-        <div class="card-green">
-          <p style="font-size:11.5px;font-weight:700;color:#34d399;margin-bottom:6px">🌍 Expanding client base</p>
-          <p style="font-size:11px;opacity:0.55;line-height:1.5">Beyond UN agencies, PACT's platform serves private sector clients commissioning market surveys and business studies — with the same rigorous data collection, tracking, and reporting infrastructure.</p>
+        <div class="card">
+          <p style="font-size:11.5px;font-weight:700;color:#60a5fa;margin-bottom:9px">🤝 What every client gets</p>
+          <div class="wf-row"><div class="wf-dot"></div><p><strong>Custom project setup</strong> — unique workflows, forms, and fee structures per engagement</p></div>
+          <div class="wf-row"><div class="wf-dot"></div><p><strong>Dedicated reporting dashboards</strong> — real-time coverage, quality scores, and gap alerts</p></div>
+          <div class="wf-row"><div class="wf-dot"></div><p><strong>Exportable audit evidence</strong> — GPS logs, photos, signed receipts, and full reports</p></div>
+          <div class="wf-row" style="margin-bottom:0"><div class="wf-dot"></div><p><strong>Bilingual delivery</strong> — all reports, forms, and interfaces in English and Arabic</p></div>
         </div>
       </div>
     </div>
@@ -496,7 +557,7 @@ svg.smap{width:100%;max-width:350px;display:block;margin:0 auto;}
         <div class="stats-row">
           <div class="stat-box"><div class="n" style="color:#3b82f6">850+</div><div class="l">Enumerators in Sudan alone</div><div class="a">جامع بيانات في السودان وحده</div></div>
           <div class="stat-box"><div class="n" style="color:#10b981">7</div><div class="l">Countries &amp; Offices</div><div class="a">دول ومكاتب</div></div>
-          <div class="stat-box"><div class="n" style="color:#a78bfa">15+</div><div class="l">Active Projects &amp; Programmes</div><div class="a">مشاريع وبرامج نشطة</div></div>
+          <div class="stat-box"><div class="n" style="color:#a78bfa">23+</div><div class="l">Clients &amp; Partner Organisations</div><div class="a">عميل ومنظمة شريكة</div></div>
         </div>
         <div class="card" style="margin-bottom:12px">
           <p style="font-size:12px;font-weight:700;color:#60a5fa;margin-bottom:10px">🇸🇩 Sudan — The Core Operation</p>
