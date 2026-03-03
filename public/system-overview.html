@@ -493,6 +493,230 @@ body {
   font-weight: 500;
 }
 
+/* ════════════════════════════════
+   SLIDE 9 — FIELD OPERATIONS
+════════════════════════════════ */
+.s9fo { background: #060d1a; }
+.s9fo .blob1 { width: 400px; height: 400px; background: rgba(16,185,129,0.08); top:-100px; right:-80px; }
+
+.fo-split { display:flex; gap:28px; max-width:940px; width:100%; align-items:flex-start; }
+.fo-left  { flex:1.05; }
+.fo-right { flex:0.95; }
+
+.fo-metric-row { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:16px; }
+.fo-metric {
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 12px;
+  padding: 14px 16px;
+}
+.fo-metric .fm-num { font-size: 32px; font-weight:900; line-height:1; margin-bottom:4px; }
+.fo-metric .fm-lbl { font-size: 11px; opacity:0.5; font-weight:500; }
+.fo-metric .fm-ar  { font-size:10px; opacity:0.3; direction:rtl; }
+
+.fo-step {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 14px;
+  align-items: flex-start;
+}
+.fo-step-icon {
+  width: 36px; height: 36px;
+  border-radius: 10px;
+  background: rgba(59,130,246,0.15);
+  border: 1px solid rgba(59,130,246,0.3);
+  display: flex; align-items:center; justify-content:center;
+  font-size: 16px;
+  flex-shrink: 0;
+}
+.fo-step h4 { font-size: 13px; font-weight:700; margin-bottom:3px; }
+.fo-step p  { font-size: 11.5px; opacity:0.5; line-height:1.4; }
+
+.fo-offline-bar {
+  background: rgba(16,185,129,0.1);
+  border: 1px solid rgba(16,185,129,0.25);
+  border-radius: 12px;
+  padding: 12px 16px;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin-top: 14px;
+}
+.fo-offline-bar p { font-size: 12px; opacity:0.65; line-height:1.4; }
+
+/* ════════════════════════════════
+   SLIDE 10 — FINANCIAL UTILIZATION
+════════════════════════════════ */
+.s10fi { background: linear-gradient(145deg, #080f1e 0%, #0c1830 100%); }
+.s10fi .blob1 { width:380px; height:380px; background:rgba(245,158,11,0.07); bottom:-100px; left:-80px; }
+
+.fi-split { display:flex; gap:28px; max-width:940px; width:100%; align-items:flex-start; }
+.fi-left  { flex:1; }
+.fi-right { flex:1; }
+
+.fi-bar-row { margin-bottom:14px; }
+.fi-bar-label { display:flex; justify-content:space-between; margin-bottom:5px; }
+.fi-bar-label span:first-child { font-size:12px; font-weight:600; }
+.fi-bar-label span:last-child  { font-size:11px; opacity:0.5; }
+.fi-bar-bg {
+  height: 8px;
+  background: rgba(255,255,255,0.07);
+  border-radius: 99px;
+  overflow: hidden;
+}
+.fi-bar-fill {
+  height: 100%;
+  border-radius: 99px;
+}
+
+.fi-flow {
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.07);
+  border-radius: 14px;
+  padding: 16px;
+}
+.fi-flow h4 { font-size:13px; font-weight:700; margin-bottom:12px; color:#fbbf24; }
+.fi-flow-step {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 10px;
+  align-items: center;
+}
+.fi-flow-num {
+  width: 22px; height: 22px;
+  border-radius: 50%;
+  background: rgba(245,158,11,0.2);
+  border: 1px solid rgba(245,158,11,0.4);
+  display: flex; align-items:center; justify-content:center;
+  font-size: 10px; font-weight:800;
+  color: #fbbf24;
+  flex-shrink: 0;
+}
+.fi-flow-step p { font-size: 12px; opacity:0.6; line-height:1.4; }
+.fi-flow-step strong { color:white; opacity:1; }
+
+.fi-control-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:14px; }
+.fi-control {
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.07);
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+.fi-control .fc-icon { font-size:16px; margin-bottom:4px; }
+.fi-control h5 { font-size:11.5px; font-weight:700; margin-bottom:2px; }
+.fi-control p  { font-size:10.5px; opacity:0.45; line-height:1.3; }
+
+/* ════════════════════════════════
+   SLIDE 11 — HUB CAPACITY & MAP
+════════════════════════════════ */
+.s11map { background: #050b17; }
+.s11map .blob1 { width:350px; height:350px; background:rgba(59,130,246,0.07); top:-80px; left:-80px; }
+
+.map-split { display:flex; gap:24px; max-width:960px; width:100%; align-items:flex-start; }
+.map-area  { flex:1.4; position:relative; }
+.map-panel { flex:1; }
+
+.sudan-map-wrap {
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.07);
+  border-radius: 16px;
+  padding: 12px;
+  position: relative;
+}
+
+svg.sudan-svg { width:100%; max-width:360px; display:block; margin:0 auto; }
+
+/* Hub pulse dots */
+.hub-dot {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  cursor: default;
+}
+.hub-pulse {
+  width: 10px; height: 10px;
+  border-radius: 50%;
+  background: #3b82f6;
+  position: relative;
+  z-index: 2;
+}
+.hub-pulse::before {
+  content: '';
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%,-50%);
+  width: 20px; height: 20px;
+  border-radius: 50%;
+  background: rgba(59,130,246,0.3);
+  animation: hubPulse 2s ease-out infinite;
+}
+.hub-pulse.active { background: #10b981; }
+.hub-pulse.active::before { background: rgba(16,185,129,0.3); animation-delay: 0.3s; }
+.hub-pulse.low { background: #f59e0b; }
+.hub-pulse.low::before { background: rgba(245,158,11,0.3); animation-delay: 0.6s; }
+
+@keyframes hubPulse {
+  0%   { width:10px; height:10px; opacity:0.8; }
+  100% { width:32px; height:32px; opacity:0; }
+}
+
+.hub-label {
+  position: absolute;
+  font-size: 9px;
+  font-weight: 700;
+  white-space: nowrap;
+  color: rgba(255,255,255,0.75);
+  pointer-events: none;
+}
+
+.hub-cap-card {
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.07);
+  border-radius: 12px;
+  padding: 10px 12px;
+  margin-bottom: 8px;
+}
+.hub-cap-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+}
+.hub-cap-header h4 { font-size: 12px; font-weight: 700; }
+.hub-cap-header .hch-count { font-size: 11px; opacity: 0.5; }
+.hub-cap-bar-bg {
+  height: 5px;
+  background: rgba(255,255,255,0.07);
+  border-radius: 99px;
+  overflow: hidden;
+}
+.hub-cap-bar-fill {
+  height: 100%;
+  border-radius: 99px;
+}
+.hub-status-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 5px;
+}
+.hub-status-pill {
+  font-size: 10px;
+  padding: 2px 8px;
+  border-radius: 20px;
+  font-weight: 600;
+}
+.hsp-green  { background:rgba(16,185,129,0.15); color:#34d399; }
+.hsp-yellow { background:rgba(245,158,11,0.15); color:#fbbf24; }
+.hsp-blue   { background:rgba(59,130,246,0.15);  color:#60a5fa; }
+
+.map-legend {
+  display: flex;
+  gap: 14px;
+  margin-top: 10px;
+  flex-wrap: wrap;
+}
+.ml-item { display:flex; gap:6px; align-items:center; font-size:11px; opacity:0.55; }
+.ml-dot  { width:8px; height:8px; border-radius:50%; flex-shrink:0; }
+
 /* ── Nav dots ── */
 .nav-dots {
   position: fixed;
@@ -541,7 +765,7 @@ body {
     <span class="pill">🌐 English / Arabic</span>
     <span class="pill">📶 Full Offline</span>
   </div>
-  <div class="slide-num">01 / 10</div>
+  <div class="slide-num">01 / 13</div>
 </div>
 
 <!-- ══════════ SLIDE 2 — THE PROBLEM ══════════ -->
@@ -582,7 +806,7 @@ body {
       </div>
     </div>
   </div>
-  <div class="slide-num">02 / 10</div>
+  <div class="slide-num">02 / 13</div>
 </div>
 
 <!-- ══════════ SLIDE 3 — THE SOLUTION ══════════ -->
@@ -625,7 +849,7 @@ body {
       </div>
     </div>
   </div>
-  <div class="slide-num">03 / 10</div>
+  <div class="slide-num">03 / 13</div>
 </div>
 
 <!-- ══════════ SLIDE 4 — WHO BENEFITS ══════════ -->
@@ -668,7 +892,7 @@ body {
       </div>
     </div>
   </div>
-  <div class="slide-num">04 / 10</div>
+  <div class="slide-num">04 / 13</div>
 </div>
 
 <!-- ══════════ SLIDE 5 — KEY CAPABILITIES ══════════ -->
@@ -717,7 +941,7 @@ body {
       </div>
     </div>
   </div>
-  <div class="slide-num">05 / 10</div>
+  <div class="slide-num">05 / 13</div>
 </div>
 
 <!-- ══════════ SLIDE 6 — PROJECTS ══════════ -->
@@ -778,7 +1002,7 @@ body {
       </div>
     </div>
   </div>
-  <div class="slide-num">06 / 10</div>
+  <div class="slide-num">06 / 13</div>
 </div>
 
 <!-- ══════════ SLIDE 7 — CUSTOM WORKFLOWS PER PROJECT ══════════ -->
@@ -833,7 +1057,7 @@ body {
       </div>
     </div>
   </div>
-  <div class="slide-num">07 / 10</div>
+  <div class="slide-num">07 / 13</div>
 </div>
 
 <!-- ══════════ SLIDE 8 — HOW IT WORKS ══════════ -->
@@ -876,11 +1100,309 @@ body {
       </div>
     </div>
   </div>
-  <div class="slide-num">08 / 10</div>
+  <div class="slide-num">08 / 13</div>
 </div>
 
-<!-- ══════════ SLIDE 9 — THE IMPACT ══════════ -->
-<div class="slide s7" id="s9">
+<!-- ══════════ SLIDE 9 — FIELD OPERATIONS ══════════ -->
+<div class="slide s9fo" id="s9fo">
+  <div class="blob blob1"></div>
+  <div style="max-width:940px;width:100%">
+    <p class="slide-label" style="text-align:center">Field Operations · العمليات الميدانية</p>
+    <h2 class="slide-title" style="text-align:center;margin-bottom:6px">How visits happen in the field</h2>
+    <p class="slide-title-ar" style="text-align:center">كيف تتم الزيارات في الميدان</p>
+    <div class="fo-split">
+      <div class="fo-left">
+        <div class="fo-metric-row">
+          <div class="fo-metric">
+            <div class="fm-num" style="color:#3b82f6">Sites</div>
+            <div class="fm-lbl">Planned per MMP cycle</div>
+            <div class="fm-ar">المواقع المخططة لكل دورة</div>
+          </div>
+          <div class="fo-metric">
+            <div class="fm-num" style="color:#10b981">GPS</div>
+            <div class="fm-lbl">Verified on every visit</div>
+            <div class="fm-ar">تحقق GPS في كل زيارة</div>
+          </div>
+          <div class="fo-metric">
+            <div class="fm-num" style="color:#f59e0b">Photos</div>
+            <div class="fm-lbl">Mandatory per site visit</div>
+            <div class="fm-ar">صور إلزامية لكل موقع</div>
+          </div>
+          <div class="fo-metric">
+            <div class="fm-num" style="color:#a78bfa">Offline</div>
+            <div class="fm-lbl">Works without internet</div>
+            <div class="fm-ar">يعمل بدون إنترنت</div>
+          </div>
+        </div>
+        <div class="fo-offline-bar">
+          <span style="font-size:20px">📶</span>
+          <p><strong style="color:#34d399">Full offline mode:</strong> Enumerators complete visits, capture GPS &amp; photos, and submit reports — all stored locally on the device and synced automatically when connectivity is restored.</p>
+        </div>
+      </div>
+      <div class="fo-right">
+        <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:14px;padding:16px">
+          <p style="font-size:12px;font-weight:700;color:#60a5fa;margin-bottom:14px">📍 Visit Lifecycle</p>
+          <div class="fo-step">
+            <div class="fo-step-icon">📋</div>
+            <div><h4>Dispatch</h4><p>Site assigned from MMP to enumerator — with GPS coordinates, activity type, and required checklist</p></div>
+          </div>
+          <div class="fo-step">
+            <div class="fo-step-icon">🗺️</div>
+            <div><h4>Navigate &amp; Arrive</h4><p>App confirms proximity using GPS radius match — prevents false visits from wrong locations</p></div>
+          </div>
+          <div class="fo-step">
+            <div class="fo-step-icon">📸</div>
+            <div><h4>Complete &amp; Evidence</h4><p>Fill activity form, capture timestamped photos, record beneficiary counts and activity notes</p></div>
+          </div>
+          <div class="fo-step">
+            <div class="fo-step-icon">✅</div>
+            <div><h4>Submit &amp; Sync</h4><p>Report submitted — synced live to web dashboard; supervisor notified instantly for review</p></div>
+          </div>
+          <div class="fo-step" style="margin-bottom:0">
+            <div class="fo-step-icon" style="background:rgba(16,185,129,0.15);border-color:rgba(16,185,129,0.3)">💳</div>
+            <div><h4>Fee Calculated</h4><p>Visit fees auto-calculated by activity type (PDM ÷7, MDM ×2, WHM ×2) and credited to wallet</p></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="slide-num">09 / 13</div>
+</div>
+
+<!-- ══════════ SLIDE 10 — FINANCIAL UTILIZATION ══════════ -->
+<div class="slide s10fi" id="s10fi">
+  <div class="blob blob1"></div>
+  <div style="max-width:940px;width:100%">
+    <p class="slide-label" style="text-align:center">Financial Utilization · الاستخدام المالي</p>
+    <h2 class="slide-title" style="text-align:center;margin-bottom:6px">Every shilling tracked, every approval logged</h2>
+    <p class="slide-title-ar" style="text-align:center">تتبع كل مبلغ وتسجيل كل موافقة</p>
+    <div class="fi-split">
+      <div class="fi-left">
+        <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:14px;padding:16px;margin-bottom:14px">
+          <p style="font-size:12px;font-weight:700;color:#fbbf24;margin-bottom:14px">📊 Budget Utilization by Category</p>
+          <div class="fi-bar-row">
+            <div class="fi-bar-label"><span>Transportation Advances</span><span>78% utilized</span></div>
+            <div class="fi-bar-bg"><div class="fi-bar-fill" style="width:78%;background:#3b82f6"></div></div>
+          </div>
+          <div class="fi-bar-row">
+            <div class="fi-bar-label"><span>Operational Costs</span><span>65% utilized</span></div>
+            <div class="fi-bar-bg"><div class="fi-bar-fill" style="width:65%;background:#10b981"></div></div>
+          </div>
+          <div class="fi-bar-row">
+            <div class="fi-bar-label"><span>Enumerator Fees (Wallet)</span><span>91% disbursed</span></div>
+            <div class="fi-bar-bg"><div class="fi-bar-fill" style="width:91%;background:#a78bfa"></div></div>
+          </div>
+          <div class="fi-bar-row">
+            <div class="fi-bar-label"><span>Retainer Payments</span><span>54% disbursed</span></div>
+            <div class="fi-bar-bg"><div class="fi-bar-fill" style="width:54%;background:#f59e0b"></div></div>
+          </div>
+          <div class="fi-bar-row" style="margin-bottom:0">
+            <div class="fi-bar-label"><span>Pending Reconciliation</span><span>12% flagged</span></div>
+            <div class="fi-bar-bg"><div class="fi-bar-fill" style="width:12%;background:#ef4444"></div></div>
+          </div>
+        </div>
+        <div class="fi-control-grid">
+          <div class="fi-control">
+            <div class="fc-icon">🔐</div>
+            <h5>Two-Tier Approval</h5>
+            <p>Supervisor approves first, Admin authorizes disbursement</p>
+          </div>
+          <div class="fi-control">
+            <div class="fc-icon">✍️</div>
+            <h5>Digital Signatures</h5>
+            <p>SHA-256 signed receipts for every wallet transaction</p>
+          </div>
+          <div class="fi-control">
+            <div class="fc-icon">📋</div>
+            <h5>Audit Trail</h5>
+            <p>Every action timestamped, logged, and exportable to PDF</p>
+          </div>
+          <div class="fi-control">
+            <div class="fc-icon">⚠️</div>
+            <h5>Duplicate Detection</h5>
+            <p>Auto-flags duplicate payment submissions before approval</p>
+          </div>
+        </div>
+      </div>
+      <div class="fi-right">
+        <div class="fi-flow">
+          <h4>💸 Advance-to-Receipt Flow</h4>
+          <div class="fi-flow-step">
+            <div class="fi-flow-num">1</div>
+            <p><strong>Enumerator requests</strong> transport advance before field deployment</p>
+          </div>
+          <div class="fi-flow-step">
+            <div class="fi-flow-num">2</div>
+            <p><strong>Supervisor reviews</strong> — approves or rejects with reason</p>
+          </div>
+          <div class="fi-flow-step">
+            <div class="fi-flow-num">3</div>
+            <p><strong>Admin authorizes</strong> final disbursement from budget</p>
+          </div>
+          <div class="fi-flow-step">
+            <div class="fi-flow-num">4</div>
+            <p><strong>Funds transferred</strong> to enumerator wallet with signed receipt</p>
+          </div>
+          <div class="fi-flow-step">
+            <div class="fi-flow-num">5</div>
+            <p><strong>Enumerator confirms</strong> receipt on mobile — bilingual confirmation</p>
+          </div>
+          <div class="fi-flow-step" style="margin-bottom:0">
+            <div class="fi-flow-num">6</div>
+            <p><strong>Advance deducted</strong> from visit fees — auto-reconciled in system</p>
+          </div>
+        </div>
+        <div style="background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.2);border-radius:12px;padding:12px;margin-top:12px">
+          <p style="font-size:11.5px;font-weight:700;color:#f87171;margin-bottom:5px">🔁 Reclaim &amp; Gap Tracking</p>
+          <p style="font-size:11px;opacity:0.55;line-height:1.5">When a site is reclaimed, any disbursed advances linked to it are automatically flagged. Finance admins see a live reconciliation dashboard with pending exposure totals and bulk resolve tools.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="slide-num">10 / 13</div>
+</div>
+
+<!-- ══════════ SLIDE 11 — HUB CAPACITY & TEAM MAP ══════════ -->
+<div class="slide s11map" id="s11map">
+  <div class="blob blob1"></div>
+  <div style="max-width:960px;width:100%">
+    <p class="slide-label" style="text-align:center">Hub Capacity &amp; Team Location · سعة المحاور وموقع الفريق</p>
+    <h2 class="slide-title" style="text-align:center;margin-bottom:6px">Know your capacity — see your teams</h2>
+    <p class="slide-title-ar" style="text-align:center">اعرف طاقتك الاستيعابية — شاهد فرقك على الخريطة</p>
+    <div class="map-split">
+      <!-- SVG Map of Sudan with hub dots -->
+      <div class="map-area">
+        <div class="sudan-map-wrap">
+          <svg class="sudan-svg" viewBox="0 0 380 460" xmlns="http://www.w3.org/2000/svg">
+            <!-- Sudan outline (simplified) -->
+            <path d="
+              M 60 25
+              L 365 25
+              L 375 80
+              L 360 155
+              L 348 180
+              L 340 220
+              L 310 265
+              L 278 310
+              L 255 360
+              L 230 430
+              L 195 445
+              L 165 430
+              L 140 400
+              L 105 365
+              L 70 340
+              L 45 290
+              L 30 250
+              L 25 195
+              L 35 140
+              L 48 80
+              Z
+            " fill="rgba(59,130,246,0.06)" stroke="rgba(59,130,246,0.25)" stroke-width="1.5"/>
+
+            <!-- Nile River (decorative) -->
+            <path d="M 245 430 Q 248 380 255 330 Q 262 280 248 240 Q 238 210 242 177 Q 245 148 240 120 Q 235 95 230 70" fill="none" stroke="rgba(59,130,246,0.3)" stroke-width="1.5" stroke-dasharray="4,3"/>
+
+            <!-- Hub dots with labels -->
+            <!-- Khartoum -->
+            <circle cx="242" cy="245" r="7" fill="#3b82f6" opacity="0.9"/>
+            <circle cx="242" cy="245" r="14" fill="rgba(59,130,246,0.15)" class="pulse-ring"/>
+            <text x="252" y="242" font-size="9" fill="rgba(255,255,255,0.8)" font-weight="700">Khartoum</text>
+
+            <!-- Port Sudan -->
+            <circle cx="352" cy="138" r="5" fill="#10b981" opacity="0.9"/>
+            <circle cx="352" cy="138" r="10" fill="rgba(16,185,129,0.15)"/>
+            <text x="315" y="134" font-size="9" fill="rgba(255,255,255,0.7)" font-weight="700">Port Sudan</text>
+
+            <!-- Kassala -->
+            <circle cx="330" cy="210" r="5" fill="#10b981" opacity="0.9"/>
+            <circle cx="330" cy="210" r="10" fill="rgba(16,185,129,0.15)"/>
+            <text x="337" y="213" font-size="9" fill="rgba(255,255,255,0.7)" font-weight="700">Kassala</text>
+
+            <!-- Gedaref -->
+            <circle cx="307" cy="245" r="4" fill="#f59e0b" opacity="0.9"/>
+            <text x="312" y="248" font-size="9" fill="rgba(255,255,255,0.6)" font-weight="700">Gedaref</text>
+
+            <!-- Atbara -->
+            <circle cx="273" cy="185" r="4" fill="#10b981" opacity="0.9"/>
+            <text x="278" y="188" font-size="9" fill="rgba(255,255,255,0.6)" font-weight="700">Atbara</text>
+
+            <!-- Dongola -->
+            <circle cx="197" cy="148" r="4" fill="#f59e0b" opacity="0.9"/>
+            <text x="155" y="145" font-size="9" fill="rgba(255,255,255,0.6)" font-weight="700">Dongola</text>
+
+            <!-- Al Fashir -->
+            <circle cx="79" cy="265" r="6" fill="#3b82f6" opacity="0.9"/>
+            <circle cx="79" cy="265" r="12" fill="rgba(59,130,246,0.12)"/>
+            <text x="46" y="280" font-size="9" fill="rgba(255,255,255,0.7)" font-weight="700">Al Fashir</text>
+
+            <!-- Nyala -->
+            <circle cx="70" cy="308" r="5" fill="#10b981" opacity="0.9"/>
+            <text x="40" y="322" font-size="9" fill="rgba(255,255,255,0.65)" font-weight="700">Nyala</text>
+
+            <!-- El Obeid -->
+            <circle cx="190" cy="285" r="5" fill="#3b82f6" opacity="0.9"/>
+            <circle cx="190" cy="285" r="10" fill="rgba(59,130,246,0.12)"/>
+            <text x="153" y="298" font-size="9" fill="rgba(255,255,255,0.7)" font-weight="700">El Obeid</text>
+
+            <!-- Wad Madani -->
+            <circle cx="264" cy="270" r="4" fill="#a78bfa" opacity="0.9"/>
+            <text x="268" y="273" font-size="9" fill="rgba(255,255,255,0.6)" font-weight="700">Wad Madani</text>
+
+            <!-- Team movement dots (animated) -->
+            <circle cx="230" cy="255" r="3" fill="#34d399" opacity="0.8"><animate attributeName="opacity" values="0.8;0.2;0.8" dur="2.1s" repeatCount="indefinite"/></circle>
+            <circle cx="260" cy="240" r="3" fill="#34d399" opacity="0.6"><animate attributeName="opacity" values="0.6;0.1;0.6" dur="1.7s" repeatCount="indefinite"/></circle>
+            <circle cx="90" cy="270" r="3" fill="#34d399" opacity="0.8"><animate attributeName="opacity" values="0.8;0.2;0.8" dur="2.5s" repeatCount="indefinite"/></circle>
+            <circle cx="185" cy="295" r="3" fill="#34d399" opacity="0.7"><animate attributeName="opacity" values="0.7;0.1;0.7" dur="1.9s" repeatCount="indefinite"/></circle>
+            <circle cx="340" cy="215" r="3" fill="#34d399" opacity="0.8"><animate attributeName="opacity" values="0.8;0.2;0.8" dur="2.3s" repeatCount="indefinite"/></circle>
+          </svg>
+          <div class="map-legend">
+            <div class="ml-item"><div class="ml-dot" style="background:#3b82f6"></div>Hub (High activity)</div>
+            <div class="ml-item"><div class="ml-dot" style="background:#10b981"></div>Hub (Active)</div>
+            <div class="ml-item"><div class="ml-dot" style="background:#f59e0b"></div>Hub (Low capacity)</div>
+            <div class="ml-item"><div class="ml-dot" style="background:#34d399"></div>Active team in field</div>
+          </div>
+        </div>
+      </div>
+      <!-- Hub capacity panel -->
+      <div class="map-panel">
+        <p style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;opacity:0.4;margin-bottom:10px">Hub Capacity · based on data collector locations</p>
+        <div class="hub-cap-card">
+          <div class="hub-cap-header"><h4>🔵 Khartoum Hub</h4><span class="hch-count">18 / 24 deployed</span></div>
+          <div class="hub-cap-bar-bg"><div class="hub-cap-bar-fill" style="width:75%;background:#3b82f6"></div></div>
+          <div class="hub-status-row"><span class="hub-status-pill hsp-green">6 Available</span><span class="hub-status-pill hsp-blue">18 Deployed</span></div>
+        </div>
+        <div class="hub-cap-card">
+          <div class="hub-cap-header"><h4>🟢 Kassala Hub</h4><span class="hch-count">9 / 12 deployed</span></div>
+          <div class="hub-cap-bar-bg"><div class="hub-cap-bar-fill" style="width:75%;background:#10b981"></div></div>
+          <div class="hub-status-row"><span class="hub-status-pill hsp-green">3 Available</span><span class="hub-status-pill hsp-blue">9 Deployed</span></div>
+        </div>
+        <div class="hub-cap-card">
+          <div class="hub-cap-header"><h4>🔵 Al Fashir Hub</h4><span class="hch-count">11 / 14 deployed</span></div>
+          <div class="hub-cap-bar-bg"><div class="hub-cap-bar-fill" style="width:79%;background:#3b82f6"></div></div>
+          <div class="hub-status-row"><span class="hub-status-pill hsp-green">3 Available</span><span class="hub-status-pill hsp-blue">11 Deployed</span></div>
+        </div>
+        <div class="hub-cap-card">
+          <div class="hub-cap-header"><h4>🟢 Nyala Hub</h4><span class="hch-count">7 / 10 deployed</span></div>
+          <div class="hub-cap-bar-bg"><div class="hub-cap-bar-fill" style="width:70%;background:#10b981"></div></div>
+          <div class="hub-status-row"><span class="hub-status-pill hsp-green">3 Available</span><span class="hub-status-pill hsp-blue">7 Deployed</span></div>
+        </div>
+        <div class="hub-cap-card">
+          <div class="hub-cap-header"><h4>🟡 Dongola Hub</h4><span class="hch-count">4 / 8 deployed</span></div>
+          <div class="hub-cap-bar-bg"><div class="hub-cap-bar-fill" style="width:50%;background:#f59e0b"></div></div>
+          <div class="hub-status-row"><span class="hub-status-pill hsp-yellow">4 Available</span><span class="hub-status-pill hsp-blue">4 Deployed</span></div>
+        </div>
+        <div style="background:rgba(59,130,246,0.08);border:1px solid rgba(59,130,246,0.18);border-radius:10px;padding:10px;margin-top:4px">
+          <p style="font-size:11px;opacity:0.6;line-height:1.5">📍 Capacity is calculated live from <strong style="color:white">data collector GPS locations</strong> and active site assignments — giving supervisors real-time visibility into who is available and where.</p>
+          <p style="font-size:10px;opacity:0.3;direction:rtl;margin-top:4px">تُحسب الطاقة الاستيعابية بناءً على مواقع GPS للجامعين وتعيينات المواقع النشطة</p>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="slide-num">11 / 13</div>
+</div>
+
+<!-- ══════════ SLIDE 12 — THE IMPACT ══════════ -->
+<div class="slide s7" id="s12">
   <div class="blob blob1"></div>
   <div class="blob blob2"></div>
   <div style="max-width:820px;width:100%;text-align:center">
@@ -908,11 +1430,11 @@ body {
       "A single platform that connects field enumerators, supervisors, finance teams, and WFP management — replacing scattered spreadsheets with a transparent, accountable, and efficient monitoring system."
     </p>
   </div>
-  <div class="slide-num">09 / 10</div>
+  <div class="slide-num">12 / 13</div>
 </div>
 
-<!-- ══════════ SLIDE 10 — CLOSE ══════════ -->
-<div class="slide s8" id="s10">
+<!-- ══════════ SLIDE 13 — CLOSE ══════════ -->
+<div class="slide s8" id="s13">
   <div class="blob blob1"></div>
   <div class="blob blob2"></div>
   <div class="logo" style="width:72px;height:72px;border-radius:20px;font-size:32px;margin:0 auto 24px">🛡️</div>
@@ -926,7 +1448,7 @@ body {
     <span class="contact-pill">📶 Full Offline Support</span>
     <span class="contact-pill">🔒 Role-Based Access</span>
   </div>
-  <div class="slide-num">10 / 10</div>
+  <div class="slide-num">10 / 13</div>
 </div>
 
 <script>
