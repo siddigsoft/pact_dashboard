@@ -23,14 +23,17 @@ import { NotificationTriggerService } from '@/services/NotificationTriggerServic
 import { format } from 'date-fns';
 
 const AUDIENCE_OPTIONS = [
-  { value: 'all', labelEn: 'All Users', labelAr: 'جميع المستخدمين', icon: '👥' },
-  { value: 'no_bank_account', labelEn: 'No Bank Account', labelAr: 'بدون حساب بنكي', icon: '🏦' },
-  { value: 'data_collector', labelEn: 'Data Collectors', labelAr: 'جامعو البيانات', icon: '📋' },
-  { value: 'coordinator', labelEn: 'Coordinators', labelAr: 'المنسقون', icon: '🤝' },
-  { value: 'supervisor', labelEn: 'Supervisors', labelAr: 'المشرفون', icon: '👁' },
-  { value: 'admin', labelEn: 'Admins', labelAr: 'المدراء', icon: '⚙️' },
-  { value: 'financialadmin', labelEn: 'Financial Admins', labelAr: 'المدراء الماليون', icon: '💰' },
-  { value: 'by_state', labelEn: 'By State (Sudan)', labelAr: 'حسب الولاية', icon: '📍' },
+  { value: 'all',             labelEn: 'All Users',        labelAr: 'جميع المستخدمين',   icon: '👥' },
+  { value: 'no_bank_account', labelEn: 'No Bank Account',  labelAr: 'بدون حساب بنكي',    icon: '🏦' },
+  { value: 'data_collector',  labelEn: 'Data Collectors',  labelAr: 'جامعو البيانات',     icon: '📋' },
+  { value: 'coordinator',     labelEn: 'Coordinators',     labelAr: 'المنسقون',            icon: '🤝' },
+  { value: 'supervisor',      labelEn: 'Supervisors',      labelAr: 'المشرفون',            icon: '👁' },
+  { value: 'admin',           labelEn: 'Admins',           labelAr: 'المدراء',             icon: '⚙️' },
+  { value: 'financialadmin',  labelEn: 'Financial Admins', labelAr: 'المدراء الماليون',   icon: '💰' },
+  { value: 'by_state',        labelEn: 'By State',         labelAr: 'حسب الولاية',        icon: '📍' },
+  { value: 'by_hub',          labelEn: 'By Hub',           labelAr: 'حسب المركز',         icon: '🏢' },
+  { value: 'by_locality',     labelEn: 'By Locality',      labelAr: 'حسب المحلية',        icon: '🗺️' },
+  { value: 'specific_users',  labelEn: 'Specific Users',   labelAr: 'مستخدمون محددون',   icon: '🎯' },
 ];
 
 const SUDAN_STATES = [
@@ -102,6 +105,84 @@ const QUICK_TEMPLATES = [
     audience: 'data_collector',
     priority: 'high',
   },
+  {
+    id: 'mmp_available',
+    label: 'MMP Available',
+    labelAr: 'خطة رصد جديدة',
+    icon: '📂',
+    titleEn: 'New MMP Available for Assignment',
+    titleAr: 'خطة رصد جديدة متاحة للتخصيص',
+    messageEn: 'A new Monthly Monitoring Plan (MMP) has been uploaded and is now available. Please log in to review and claim your site visits.',
+    messageAr: 'تم رفع خطة رصد شهرية جديدة وهي متاحة الآن. يرجى تسجيل الدخول لمراجعة مواقعك المخصصة.',
+    link: '/site-visits',
+    audience: 'data_collector',
+    priority: 'high',
+  },
+  {
+    id: 'advance_ready',
+    label: 'Advance Approved',
+    labelAr: 'السلفة معتمدة',
+    icon: '💸',
+    titleEn: 'Transportation Advance Approved',
+    titleAr: 'تمت الموافقة على سلفة النقل',
+    messageEn: 'Your transportation advance request has been approved. Please coordinate with your hub office for fund disbursement.',
+    messageAr: 'تمت الموافقة على طلب سلفة النقل الخاص بك. يرجى التنسيق مع مكتب المركز لصرف الأموال.',
+    link: '/transportation-advances',
+    audience: 'data_collector',
+    priority: 'normal',
+  },
+  {
+    id: 'report_deadline',
+    label: 'Report Deadline',
+    labelAr: 'موعد التقرير',
+    icon: '⏰',
+    titleEn: 'Urgent: Report Submission Deadline Approaching',
+    titleAr: 'عاجل: اقتراب موعد تقديم التقرير',
+    messageEn: 'The deadline for submitting visit reports is approaching. Please ensure all your pending visits are completed and reports submitted immediately.',
+    messageAr: 'يقترب الموعد النهائي لتقديم تقارير الزيارات. يرجى التأكد من إكمال جميع زياراتك المعلقة وتقديم التقارير فوراً.',
+    link: '/site-visits',
+    audience: 'data_collector',
+    priority: 'urgent',
+  },
+  {
+    id: 'training',
+    label: 'Training Announcement',
+    labelAr: 'إعلان تدريب',
+    icon: '🎓',
+    titleEn: 'Training Session Scheduled',
+    titleAr: 'تم جدولة جلسة تدريبية',
+    messageEn: 'A mandatory training session has been scheduled. Please check your email for the date, time, and joining instructions.',
+    messageAr: 'تم جدولة جلسة تدريبية إلزامية. يرجى مراجعة بريدك الإلكتروني للاطلاع على التاريخ والوقت وتعليمات الانضمام.',
+    link: '',
+    audience: 'all',
+    priority: 'high',
+  },
+  {
+    id: 'security_alert',
+    label: 'Security Notice',
+    labelAr: 'تنبيه أمني',
+    icon: '🔒',
+    titleEn: 'Security Notice: Action Required',
+    titleAr: 'تنبيه أمني: إجراء مطلوب',
+    messageEn: 'Important security update. Please review the latest security guidelines and ensure your account credentials are up to date.',
+    messageAr: 'تحديث أمني مهم. يرجى مراجعة أحدث إرشادات الأمان والتأكد من أن بيانات اعتماد حسابك محدثة.',
+    link: '/settings?tab=profile',
+    audience: 'all',
+    priority: 'urgent',
+  },
+  {
+    id: 'financial_report',
+    label: 'Financial Report Due',
+    labelAr: 'التقرير المالي',
+    icon: '📊',
+    titleEn: 'Financial Report Submission Reminder',
+    titleAr: 'تذكير بتقديم التقرير المالي',
+    messageEn: 'Please ensure all pending cost submissions and transportation advance settlements are submitted before the financial period close.',
+    messageAr: 'يرجى التأكد من تقديم جميع طلبات التكاليف المعلقة وتسويات سلف النقل قبل إغلاق الفترة المالية.',
+    link: '/cost-submission',
+    audience: 'data_collector',
+    priority: 'high',
+  },
 ];
 
 type BroadcastHistory = {
@@ -164,13 +245,20 @@ export default function AdminBroadcastPage() {
   const [userCount, setUserCount] = useState<number | null>(null);
   const [stats, setStats] = useState<{ total: number; avgRead: number } | null>(null);
 
-  const [stateFilter, setStateFilter] = useState<string>('');
-  const [scheduleAt, setScheduleAt] = useState<string>('');
-  const [testSending, setTestSending] = useState(false);
-  const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [stateFilter,       setStateFilter]       = useState<string>('');
+  const [hubFilter,         setHubFilter]         = useState<string>('');
+  const [localityFilter,    setLocalityFilter]    = useState<string>('');
+  const [specificUserIds,   setSpecificUserIds]   = useState<string[]>([]);
+  const [userSearch,        setUserSearch]        = useState<string>('');
+  const [allUsers,          setAllUsers]          = useState<{ id: string; full_name: string; email: string; role: string; hub_id: string; locality_id: string }[]>([]);
+  const [allHubs,           setAllHubs]           = useState<string[]>([]);
+  const [allLocalities,     setAllLocalities]     = useState<string[]>([]);
+  const [scheduleAt,        setScheduleAt]        = useState<string>('');
+  const [testSending,       setTestSending]       = useState(false);
+  const [showConfirmModal,  setShowConfirmModal]  = useState(false);
   const [confirmTargetUsers, setConfirmTargetUsers] = useState<{ id: string; role: string }[]>([]);
-  const [draftRestored, setDraftRestored] = useState(false);
-  const [scheduledDrafts, setScheduledDrafts] = useState<any[]>([]);
+  const [draftRestored,     setDraftRestored]     = useState(false);
+  const [scheduledDrafts,   setScheduledDrafts]   = useState<any[]>([]);
 
   const role = (currentUser?.role || '').toLowerCase();
   const isAdmin = ['admin', 'superadmin', 'ict', 'financialadmin'].includes(role);
@@ -184,7 +272,23 @@ export default function AdminBroadcastPage() {
 
   useEffect(() => {
     loadUserCount();
-  }, [audience, stateFilter]);
+  }, [audience, stateFilter, hubFilter, localityFilter, specificUserIds]);
+
+  useEffect(() => {
+    const loadPeopleData = async () => {
+      const { data } = await (supabase as any)
+        .from('profiles')
+        .select('id, full_name, email, role, hub_id, locality_id')
+        .not('role', 'is', null)
+        .order('full_name');
+      if (data) {
+        setAllUsers(data);
+        setAllHubs([...new Set((data as any[]).map((u: any) => u.hub_id).filter(Boolean))].sort());
+        setAllLocalities([...new Set((data as any[]).map((u: any) => u.locality_id).filter((l: any) => l && l.trim()))].sort());
+      }
+    };
+    loadPeopleData();
+  }, []);
 
   // Draft auto-save
   useEffect(() => {
@@ -252,7 +356,10 @@ export default function AdminBroadcastPage() {
 
   const loadUserCount = async () => {
     try {
-      let query = supabase.from('profiles').select('id', { count: 'exact', head: true });
+      if (audience === 'specific_users') {
+        setUserCount(specificUserIds.length);
+        return;
+      }
       if (audience === 'no_bank_account') {
         const { count } = await supabase.from('profiles').select('id', { count: 'exact', head: true }).not('role', 'is', null);
         setUserCount(count ?? 0);
@@ -264,6 +371,19 @@ export default function AdminBroadcastPage() {
         setUserCount(count ?? 0);
         return;
       }
+      if (audience === 'by_hub') {
+        if (!hubFilter) { setUserCount(null); return; }
+        const { count } = await (supabase as any).from('profiles').select('id', { count: 'exact', head: true }).eq('hub_id', hubFilter).not('role', 'is', null);
+        setUserCount(count ?? 0);
+        return;
+      }
+      if (audience === 'by_locality') {
+        if (!localityFilter) { setUserCount(null); return; }
+        const { count } = await (supabase as any).from('profiles').select('id', { count: 'exact', head: true }).eq('locality_id', localityFilter).not('role', 'is', null);
+        setUserCount(count ?? 0);
+        return;
+      }
+      let query = supabase.from('profiles').select('id', { count: 'exact', head: true });
       if (audience !== 'all') {
         query = query.ilike('role', audience);
       } else {
@@ -478,19 +598,31 @@ export default function AdminBroadcastPage() {
   };
 
   const getTargetUsers = async (aud: string, sf: string) => {
-    const { data: users, error: usersError } = await supabase
+    if (aud === 'specific_users') {
+      if (specificUserIds.length === 0) return [];
+      const { data, error } = await (supabase as any).from('profiles').select('id, role').in('id', specificUserIds);
+      if (error) throw new Error('Could not load users');
+      return data || [];
+    }
+    const { data: users, error: usersError } = await (supabase as any)
       .from('profiles')
-      .select('id, bank_account, role, state_id, full_name, email')
+      .select('id, bank_account, role, state_id, hub_id, locality_id, full_name, email')
       .not('role', 'is', null);
     if (usersError || !users) throw new Error('Could not load users');
     if (aud === 'no_bank_account') {
-      return users.filter(u => { const ba = u.bank_account as any; return !ba?.accountNumber && !ba?.account_number; });
+      return users.filter((u: any) => { const ba = u.bank_account as any; return !ba?.accountNumber && !ba?.account_number; });
     }
     if (aud === 'by_state') {
-      return users.filter(u => (u as any).state_id?.toLowerCase() === sf.toLowerCase());
+      return users.filter((u: any) => u.state_id?.toLowerCase() === sf.toLowerCase());
+    }
+    if (aud === 'by_hub') {
+      return users.filter((u: any) => u.hub_id === hubFilter);
+    }
+    if (aud === 'by_locality') {
+      return users.filter((u: any) => u.locality_id === localityFilter);
     }
     if (aud !== 'all') {
-      return users.filter(u => (u.role || '').toLowerCase() === aud);
+      return users.filter((u: any) => (u.role || '').toLowerCase() === aud);
     }
     return users;
   };
@@ -554,6 +686,18 @@ export default function AdminBroadcastPage() {
     }
     if (audience === 'by_state' && !stateFilter) {
       toast({ title: 'Select a state', description: 'Please choose a Sudan state to target.', variant: 'destructive' });
+      return;
+    }
+    if (audience === 'by_hub' && !hubFilter) {
+      toast({ title: 'Select a hub', description: 'Please choose a hub to target.', variant: 'destructive' });
+      return;
+    }
+    if (audience === 'by_locality' && !localityFilter) {
+      toast({ title: 'Select a locality', description: 'Please choose a locality to target.', variant: 'destructive' });
+      return;
+    }
+    if (audience === 'specific_users' && specificUserIds.length === 0) {
+      toast({ title: 'Select users', description: 'Please select at least one user to target.', variant: 'destructive' });
       return;
     }
     setSending(true);
@@ -974,9 +1118,14 @@ export default function AdminBroadcastPage() {
                           ? `Up to ${userCount} users (filtered at send time)`
                           : audience === 'by_state' && !stateFilter
                             ? 'Select a state below'
-                            : `~${userCount} user(s) will receive this`}
+                            : audience === 'by_hub' && !hubFilter
+                              ? 'Select a hub below'
+                              : audience === 'by_locality' && !localityFilter
+                                ? 'Select a locality below'
+                                : `~${userCount} user(s) will receive this`}
                       </p>
                     )}
+                    {/* By State filter */}
                     {audience === 'by_state' && (
                       <div className="mt-2">
                         <Select value={stateFilter} onValueChange={setStateFilter}>
@@ -991,6 +1140,99 @@ export default function AdminBroadcastPage() {
                             ))}
                           </SelectContent>
                         </Select>
+                      </div>
+                    )}
+                    {/* By Hub filter */}
+                    {audience === 'by_hub' && (
+                      <div className="mt-2">
+                        <Select value={hubFilter} onValueChange={setHubFilter}>
+                          <SelectTrigger className="border-violet-300">
+                            <SelectValue placeholder="Select hub / اختر المركز..." />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {allHubs.map(h => (
+                              <SelectItem key={h} value={h}>
+                                <span className="flex items-center gap-2">🏢 {h}</span>
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
+                    {/* By Locality filter */}
+                    {audience === 'by_locality' && (
+                      <div className="mt-2 space-y-1.5">
+                        <Input
+                          placeholder="Search locality / ابحث عن المحلية..."
+                          value={localityFilter}
+                          onChange={e => setLocalityFilter(e.target.value)}
+                          className="border-violet-300 text-sm"
+                        />
+                        {localityFilter && (
+                          <div className="border rounded-lg max-h-40 overflow-y-auto bg-background shadow-sm">
+                            {allLocalities.filter(l => l.toLowerCase().includes(localityFilter.toLowerCase())).slice(0, 20).map(l => (
+                              <button
+                                key={l}
+                                type="button"
+                                onClick={() => setLocalityFilter(l)}
+                                className={`w-full text-left px-3 py-1.5 text-xs hover:bg-muted transition-colors flex items-center gap-2 ${localityFilter === l ? 'bg-violet-50 dark:bg-violet-950/40 text-violet-700 dark:text-violet-400 font-medium' : ''}`}
+                              >
+                                🗺️ {l}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    {/* Specific Users picker */}
+                    {audience === 'specific_users' && (
+                      <div className="mt-2 space-y-1.5">
+                        {specificUserIds.length > 0 && (
+                          <div className="flex flex-wrap gap-1 p-2 border rounded-lg bg-muted/30">
+                            {specificUserIds.map(uid => {
+                              const u = allUsers.find(x => x.id === uid);
+                              return (
+                                <span key={uid} className="inline-flex items-center gap-1 text-xs bg-violet-100 dark:bg-violet-900/40 text-violet-700 dark:text-violet-400 rounded-full px-2 py-0.5">
+                                  {u?.full_name || u?.email || uid.slice(0, 8)}
+                                  <button type="button" onClick={() => setSpecificUserIds(prev => prev.filter(id => id !== uid))} className="hover:text-red-500 ml-0.5">×</button>
+                                </span>
+                              );
+                            })}
+                          </div>
+                        )}
+                        <Input
+                          placeholder="Search by name or email / ابحث بالاسم أو البريد..."
+                          value={userSearch}
+                          onChange={e => setUserSearch(e.target.value)}
+                          className="border-violet-300 text-sm"
+                        />
+                        {userSearch && (
+                          <div className="border rounded-lg max-h-48 overflow-y-auto bg-background shadow-sm">
+                            {allUsers
+                              .filter(u => !specificUserIds.includes(u.id) && (
+                                u.full_name?.toLowerCase().includes(userSearch.toLowerCase()) ||
+                                u.email?.toLowerCase().includes(userSearch.toLowerCase())
+                              ))
+                              .slice(0, 20)
+                              .map(u => (
+                                <button
+                                  key={u.id}
+                                  type="button"
+                                  onClick={() => { setSpecificUserIds(prev => [...prev, u.id]); setUserSearch(''); }}
+                                  className="w-full text-left px-3 py-2 text-xs hover:bg-muted transition-colors flex items-center justify-between gap-2 border-b last:border-0"
+                                >
+                                  <span>
+                                    <span className="font-medium">{u.full_name || 'Unknown'}</span>
+                                    {u.email && <span className="text-muted-foreground ml-1.5">{u.email}</span>}
+                                  </span>
+                                  <span className="text-[10px] bg-slate-100 dark:bg-slate-800 rounded px-1.5 py-0.5 capitalize shrink-0">{u.role}</span>
+                                </button>
+                              ))}
+                            {allUsers.filter(u => !specificUserIds.includes(u.id) && (u.full_name?.toLowerCase().includes(userSearch.toLowerCase()) || u.email?.toLowerCase().includes(userSearch.toLowerCase()))).length === 0 && (
+                              <p className="text-xs text-muted-foreground text-center py-3">No users found</p>
+                            )}
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
