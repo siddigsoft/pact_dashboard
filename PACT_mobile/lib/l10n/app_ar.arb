@@ -1,0 +1,1834 @@
+{
+  "@@locale": "ar",
+  "appTitle": "PACT المحمول",
+  "@appTitle": {
+    "description": "The title of the application"
+  },
+  "availableTasks": "المهام المتاحة",
+  "@availableTasks": {
+    "description": "Title for the available tasks screen"
+  },
+  "fieldOperations": "عمليات الميدان",
+  "@fieldOperations": {
+    "description": "Title for the field operations screen"
+  },
+  "tasksInArea": "{count} مهام في منطقتك",
+  "@tasksInArea": {
+    "description": "Subtitle showing number of tasks in area",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "5"
+      }
+    }
+  },
+  "accept": "قبول",
+  "@accept": {
+    "description": "Button text for accepting a task"
+  },
+  "decline": "رفض",
+  "@decline": {
+    "description": "Button text for declining a task"
+  },
+  "noTasksAvailable": "لا توجد مهام متاحة",
+  "@noTasksAvailable": {
+    "description": "Message when no tasks are available"
+  },
+  "checkBackLater": "تحقق لاحقاً من المهام الجديدة في منطقتك",
+  "@checkBackLater": {
+    "description": "Message encouraging user to check back later"
+  },
+  "login": "تسجيل الدخول",
+  "@login": {
+    "description": "Login button text"
+  },
+  "register": "التسجيل",
+  "@register": {
+    "description": "Register button text"
+  },
+  "email": "البريد الإلكتروني",
+  "@email": {
+    "description": "Email field label"
+  },
+  "password": "كلمة المرور",
+  "@password": {
+    "description": "Password field label"
+  },
+  "confirmPassword": "تأكيد كلمة المرور",
+  "@confirmPassword": {
+    "description": "Confirm password field label"
+  },
+  "fullName": "الاسم الكامل",
+  "@fullName": {
+    "description": "Full name field label"
+  },
+  "phoneNumber": "رقم الهاتف",
+  "@phoneNumber": {
+    "description": "Phone number field label"
+  },
+  "welcome": "مرحباً",
+  "@welcome": {
+    "description": "Welcome message"
+  },
+  "welcomeBack": "مرحباً بعودتك",
+  "@welcomeBack": {
+    "description": "Welcome back message"
+  },
+  "signInToContinue": "سجل الدخول للمتابعة",
+  "@signInToContinue": {
+    "description": "Sign in prompt"
+  },
+  "createAccount": "إنشاء حساب",
+  "@createAccount": {
+    "description": "Create account prompt"
+  },
+  "showMap": "عرض الخريطة",
+  "@showMap": {
+    "description": "Button to show map view"
+  },
+  "showTasks": "عرض المهام",
+  "@showTasks": {
+    "description": "Button to show tasks view"
+  },
+  "refresh": "تحديث",
+  "@refresh": {
+    "description": "Refresh button text"
+  },
+  "menu": "القائمة",
+  "@menu": {
+    "description": "Menu button text"
+  },
+  "logout": "تسجيل الخروج",
+  "@logout": {
+    "description": "Logout button text"
+  },
+  "settings": "الإعدادات",
+  "@settings": {
+    "description": "Settings menu item"
+  },
+  "language": "اللغة",
+  "@language": {
+    "description": "Language setting"
+  },
+  "english": "English",
+  "@english": {
+    "description": "English language name"
+  },
+  "arabic": "العربية",
+  "@arabic": {
+    "description": "Arabic language name"
+  },
+  "high": "عالي",
+  "@high": {
+    "description": "High priority label"
+  },
+  "medium": "متوسط",
+  "@medium": {
+    "description": "Medium priority label"
+  },
+  "low": "منخفض",
+  "@low": {
+    "description": "Low priority label"
+  },
+  "due": "مستحق",
+  "@due": {
+    "description": "Due date prefix"
+  },
+  "kmAway": "كم بعيداً",
+  "@kmAway": {
+    "description": "Distance suffix"
+  },
+  "home": "الرئيسية",
+  "@home": {
+    "description": "Home navigation tab"
+  },
+  "forms": "النماذج",
+  "@forms": {
+    "description": "Forms navigation tab"
+  },
+  "equipment": "المعدات",
+  "@equipment": {
+    "description": "Equipment navigation tab"
+  },
+  "safety": "السلامة",
+  "@safety": {
+    "description": "Safety navigation tab"
+  },
+  "chat": "الدردشة",
+  "@chat": {
+    "description": "Chat navigation tab"
+  },
+  "forgotPassword": "نسيت كلمة المرور؟",
+  "@forgotPassword": {
+    "description": "Forgot password link text"
+  },
+  "dontHaveAccount": "ليس لديك حساب؟",
+  "@dontHaveAccount": {
+    "description": "Prompt to register"
+  },
+  "alreadyHaveAccount": "لديك حساب بالفعل؟",
+  "@alreadyHaveAccount": {
+    "description": "Prompt to login"
+  },
+  "signIn": "تسجيل الدخول",
+  "@signIn": {
+    "description": "Sign in button text"
+  },
+  "signUp": "إنشاء حساب",
+  "@signUp": {
+    "description": "Sign up button text"
+  },
+  "signInToAccount": "سجل الدخول إلى حسابك في شركة باكت للاستشارات",
+  "@signInToAccount": {
+    "description": "Login screen subtitle"
+  },
+  "signInCaps": "تسجيل الدخول",
+  "@signInCaps": {
+    "description": "Sign in button text in caps"
+  },
+  "createAccountCaps": "إنشاء حساب",
+  "@createAccountCaps": {
+    "description": "Create account button text in caps"
+  },
+  "mmpFiles": "ملفات MMP",
+  "@mmpFiles": {
+    "description": "Section title for MMP files"
+  },
+  "pleaseLogInToViewMMPFiles": "يرجى تسجيل الدخول لعرض ملفات MMP",
+  "@pleaseLogInToViewMMPFiles": {
+    "description": "Message when user needs to log in to view MMP files"
+  },
+  "logIn": "تسجيل الدخول",
+  "@logIn": {
+    "description": "Log in button text"
+  },
+  "noMMPFilesAvailable": "لا توجد ملفات MMP متاحة",
+  "@noMMPFilesAvailable": {
+    "description": "Message when no MMP files are available"
+  },
+  "noFileUrlAvailable": "لا يوجد رابط ملف متاح",
+  "@noFileUrlAvailable": {
+    "description": "Error message when file URL is not available"
+  },
+  "couldNotOpenFile": "لا يمكن فتح الملف",
+  "@couldNotOpenFile": {
+    "description": "Error message when file cannot be opened"
+  },
+  "invalidFileUrlFormat": "تنسيق رابط الملف غير صحيح",
+  "@invalidFileUrlFormat": {
+    "description": "Error message for invalid URL format"
+  },
+  "errorAccessingFileUrl": "خطأ في الوصول إلى رابط الملف",
+  "@errorAccessingFileUrl": {
+    "description": "Error message when accessing file URL fails"
+  },
+  "dismiss": "إغلاق",
+  "@dismiss": {
+    "description": "Dismiss button text for snackbar"
+  },
+  "addNewEquipment": "إضافة معدات جديدة",
+  "@addNewEquipment": {
+    "description": "Dialog title for adding new equipment"
+  },
+  "equipmentName": "اسم المعدات",
+  "@equipmentName": {
+    "description": "Equipment name field label"
+  },
+  "enterEquipmentName": "أدخل اسم المعدات",
+  "@enterEquipmentName": {
+    "description": "Equipment name field hint"
+  },
+  "status": "الحالة",
+  "@status": {
+    "description": "Status field label"
+  },
+  "nextMaintenanceDate": "تاريخ الصيانة التالية",
+  "@nextMaintenanceDate": {
+    "description": "Next maintenance date field label"
+  },
+  "yyyyMmDd": "YYYY-MM-DD",
+  "@yyyyMmDd": {
+    "description": "Date format hint"
+  },
+  "cancel": "إلغاء",
+  "@cancel": {
+    "description": "Cancel button text"
+  },
+  "add": "إضافة",
+  "@add": {
+    "description": "Add button text"
+  },
+  "inspectionForm": "نموذج الفحص",
+  "@inspectionForm": {
+    "description": "Inspection form dialog title"
+  },
+  "condition": "الحالة",
+  "@condition": {
+    "description": "Condition field label"
+  },
+  "enterCurrentCondition": "أدخل الحالة الحالية",
+  "@enterCurrentCondition": {
+    "description": "Condition field hint"
+  },
+  "concerns": "الملاحظات",
+  "@concerns": {
+    "description": "Concerns field label"
+  },
+  "enterAnyConcerns": "أدخل أي ملاحظات",
+  "@enterAnyConcerns": {
+    "description": "Concerns field hint"
+  },
+  "recommendations": "التوصيات",
+  "@recommendations": {
+    "description": "Recommendations field label"
+  },
+  "enterRecommendations": "أدخل التوصيات",
+  "@enterRecommendations": {
+    "description": "Recommendations field hint"
+  },
+  "submit": "إرسال",
+  "@submit": {
+    "description": "Submit button text"
+  },
+  "filterEquipment": "تصفية المعدات",
+  "@filterEquipment": {
+    "description": "Filter equipment bottom sheet title"
+  },
+  "searchEquipment": "البحث في المعدات",
+  "@searchEquipment": {
+    "description": "Search equipment dialog title"
+  },
+  "enterEquipmentNameSearch": "أدخل اسم المعدات",
+  "@enterEquipmentNameSearch": {
+    "description": "Search equipment field hint"
+  },
+  "close": "إغلاق",
+  "@close": {
+    "description": "Close button text"
+  },
+  "all": "الكل",
+  "@all": {
+    "description": "All filter option"
+  },
+  "available": "متاح",
+  "@available": {
+    "description": "Available filter option"
+  },
+  "inUse": "قيد الاستخدام",
+  "@inUse": {
+    "description": "In Use filter option"
+  },
+  "needsMaintenance": "يحتاج صيانة",
+  "@needsMaintenance": {
+    "description": "Needs Maintenance filter option"
+  },
+  "noEquipmentFound": "لم يتم العثور على معدات",
+  "@noEquipmentFound": {
+    "description": "Empty state message for no equipment"
+  },
+  "tapPlusButtonToAddEquipment": "اضغط على زر + لإضافة معدات",
+  "@tapPlusButtonToAddEquipment": {
+    "description": "Empty state instruction for adding equipment"
+  },
+  "next": "التالي",
+  "@next": {
+    "description": "Next prefix for maintenance date"
+  },
+  "checkedIn": "تم التحقق",
+  "@checkedIn": {
+    "description": "Checked-in status text"
+  },
+  "checkedOut": "تم الخروج",
+  "@checkedOut": {
+    "description": "Checked-out status text"
+  },
+  "nextMaintenance": "الصيانة التالية",
+  "@nextMaintenance": {
+    "description": "Next maintenance label"
+  },
+  "safetyHub": "مركز السلامة",
+  "@safetyHub": {
+    "description": "Safety hub screen title"
+  },
+  "information": "معلومات",
+  "@information": {
+    "description": "Information tooltip"
+  },
+  "quickAccess": "وصول سريع",
+  "@quickAccess": {
+    "description": "Quick access section title"
+  },
+  "safetyChecklist": "قائمة السلامة",
+  "@safetyChecklist": {
+    "description": "Safety checklist item title"
+  },
+  "incidentReport": "تقرير الحادث",
+  "@incidentReport": {
+    "description": "Incident report item title"
+  },
+  "reportIncident": "الإبلاغ عن حادث",
+  "@reportIncident": {
+    "description": "Report incident screen title"
+  },
+  "regionalHelplines": "خطوط المساعدة الإقليمية",
+  "@regionalHelplines": {
+    "description": "Regional helplines item title"
+  },
+  "safetyTipOfTheDay": "نصيحة السلامة اليومية",
+  "@safetyTipOfTheDay": {
+    "description": "Safety tip of the day title"
+  },
+  "ladderInspectionTip": "افحص دائماً سلمك قبل الاستخدام. تحقق من التلف، الأجزاء المفقودة، ووظيفة جميع المكونات بشكل صحيح.",
+  "@ladderInspectionTip": {
+    "description": "Safety tip content about ladder inspection"
+  },
+  "viewMoreTips": "عرض المزيد من النصائح",
+  "@viewMoreTips": {
+    "description": "View more tips button text"
+  },
+  "localPolice": "الشرطة المحلية:999",
+  "@localPolice": {
+    "description": "Local police emergency contact"
+  },
+  "pactEmergency": "طوارئ باكت:+256700000000",
+  "@pactEmergency": {
+    "description": "PACT emergency contact"
+  },
+  "medicalEmergency": "طوارئ طبية:911",
+  "@medicalEmergency": {
+    "description": "Medical emergency contact"
+  },
+  "hiHowCanIHelp": "مرحباً! كيف يمكنني مساعدتك اليوم؟",
+  "@hiHowCanIHelp": {
+    "description": "Chat greeting message"
+  },
+  "pactSupport": "دعم باكت",
+  "@pactSupport": {
+    "description": "Support sender name"
+  },
+  "needEquipmentInfo": "أحتاج معلومات حول صيانة المعدات.",
+  "@needEquipmentInfo": {
+    "description": "Sample chat message about equipment"
+  },
+  "sureWhatEquipment": "بالتأكيد! يمكنني مساعدتك في ذلك. ما المعدات المحددة التي تسأل عنها؟",
+  "@sureWhatEquipment": {
+    "description": "Support response asking for equipment details"
+  },
+  "excavatorSiteB": "الحفار في الموقع ب.",
+  "@excavatorSiteB": {
+    "description": "Sample message specifying equipment"
+  },
+  "maintenanceScheduleResponse": "لقد استخرجت جدول الصيانة لهذا الحفار. الصيانة التالية مستحقة في 20 سبتمبر. هل تريد مني إرسال تفاصيل الصيانة الكاملة؟",
+  "@maintenanceScheduleResponse": {
+    "description": "Support response with maintenance information"
+  },
+  "safetyAlert": "تنبيه السلامة",
+  "@safetyAlert": {
+    "description": "Safety alert title"
+  },
+  "weatherWarningSiteA": "تحذير طقس شديد للموقع أ. يجب على جميع الموظفين اتباع بروتوكولات السلامة والبقاء على اطلاع بالتحديثات.",
+  "@weatherWarningSiteA": {
+    "description": "Weather warning alert content"
+  },
+  "typeAMessage": "اكتب رسالة...",
+  "@typeAMessage": {
+    "description": "Message input hint text"
+  },
+  "wallet": "المحفظة",
+  "@wallet": {
+    "description": "Wallet navigation tab"
+  },
+  "helpAndSupport": "المساعدة والدعم",
+  "@helpAndSupport": {
+    "description": "Help and support menu item"
+  },
+  "sendFeedback": "إرسال ملاحظات",
+  "@sendFeedback": {
+    "description": "Send feedback menu item"
+  },
+  "aboutPact": "عن باكت",
+  "@aboutPact": {
+    "description": "About PACT menu item"
+  },
+  "syncData": "مزامنة البيانات",
+  "@syncData": {
+    "description": "Sync data menu item"
+  },
+  "signOut": "تسجيل الخروج",
+  "@signOut": {
+    "description": "Sign out button text"
+  },
+  "draft": "مسودة",
+  "@draft": {
+    "description": "Draft status label"
+  },
+  "complete": "إكمال",
+  "@complete": {
+    "description": "Complete button text"
+  },
+  "saveAsDraft": "حفظ كمسودة",
+  "@saveAsDraft": {
+    "description": "Save as draft button"
+  },
+  "submitNow": "إرسال الآن",
+  "@submitNow": {
+    "description": "Submit now button"
+  },
+  "pendingSync": "في انتظار المزامنة",
+  "@pendingSync": {
+    "description": "Pending sync status"
+  },
+  "synced": "تمت المزامنة",
+  "@synced": {
+    "description": "Synced status"
+  },
+  "offline": "غير متصل",
+  "@offline": {
+    "description": "Offline status"
+  },
+  "online": "متصل",
+  "@online": {
+    "description": "Online status"
+  },
+  "offlineMode": "وضع عدم الاتصال",
+  "@offlineMode": {
+    "description": "Offline mode label"
+  },
+  "siteVisit": "زيارة الموقع",
+  "@siteVisit": {
+    "description": "Site visit label"
+  },
+  "siteVisitHub": "مركز زيارة المواقع",
+  "@siteVisitHub": {
+    "description": "Site visit hub title"
+  },
+  "completedSites": "المواقع المكتملة",
+  "@completedSites": {
+    "description": "Completed sites counter label"
+  },
+  "pendingPayments": "المدفوعات المعلقة",
+  "@pendingPayments": {
+    "description": "Pending payments label"
+  },
+  "totalEarnings": "إجمالي الأرباح",
+  "@totalEarnings": {
+    "description": "Total earnings label"
+  },
+  "paymentMethods": "طرق الدفع",
+  "@paymentMethods": {
+    "description": "Payment methods section"
+  },
+  "costSubmissions": "تقديم التكاليف",
+  "@costSubmissions": {
+    "description": "Cost submissions tab"
+  },
+  "transactions": "المعاملات",
+  "@transactions": {
+    "description": "Transactions tab"
+  },
+  "havingTroubleSigningIn": "هل تواجه مشكلة في تسجيل الدخول؟",
+  "@havingTroubleSigningIn": {
+    "description": "Login help link"
+  },
+  "loginTroubleshooting": "حل مشاكل تسجيل الدخول",
+  "@loginTroubleshooting": {
+    "description": "Login troubleshooting dialog title"
+  },
+  "contactSupport": "اتصل بالدعم",
+  "@contactSupport": {
+    "description": "Contact support section"
+  },
+  "reportBug": "الإبلاغ عن خطأ",
+  "@reportBug": {
+    "description": "Report bug option"
+  },
+  "commonErrors": "الأخطاء الشائعة",
+  "@commonErrors": {
+    "description": "Common errors section"
+  },
+  "searchHelp": "البحث في المساعدة...",
+  "@searchHelp": {
+    "description": "Help search placeholder"
+  },
+  "noResultsFound": "لم يتم العثور على نتائج",
+  "@noResultsFound": {
+    "description": "No search results message"
+  },
+  "getHelpAndFindAnswers": "احصل على المساعدة وإجابات",
+  "@getHelpAndFindAnswers": {
+    "description": "Help subtitle"
+  },
+  "shareYourThoughts": "شاركنا رأيك",
+  "@shareYourThoughts": {
+    "description": "Feedback subtitle"
+  },
+  "learnMoreAboutUs": "تعرف علينا أكثر",
+  "@learnMoreAboutUs": {
+    "description": "About PACT subtitle"
+  },
+  "updateLocalData": "تحديث البيانات المحلية",
+  "@updateLocalData": {
+    "description": "Sync data subtitle"
+  },
+  "pactDashboard": "لوحة تحكم باكت",
+  "@pactDashboard": {
+    "description": "PACT Dashboard menu item"
+  },
+  "viewOnWeb": "عرض على الويب",
+  "@viewOnWeb": {
+    "description": "PACT Dashboard subtitle"
+  },
+  "version": "الإصدار",
+  "@version": {
+    "description": "Version label"
+  },
+  "build": "البناء",
+  "@build": {
+    "description": "Build label"
+  },
+  "voiceCall": "مكالمة صوتية",
+  "@voiceCall": {
+    "description": "Voice call button"
+  },
+  "videoCall": "مكالمة فيديو",
+  "@videoCall": {
+    "description": "Video call button"
+  },
+  "endCall": "إنهاء المكالمة",
+  "@endCall": {
+    "description": "End call button"
+  },
+  "incomingCall": "مكالمة واردة",
+  "@incomingCall": {
+    "description": "Incoming call notification"
+  },
+  "calling": "جاري الاتصال...",
+  "@calling": {
+    "description": "Calling status"
+  },
+  "ringing": "جاري الرنين...",
+  "@ringing": {
+    "description": "Ringing status"
+  },
+  "connected": "متصل",
+  "@connected": {
+    "description": "Call connected status"
+  },
+  "callEnded": "انتهت المكالمة",
+  "@callEnded": {
+    "description": "Call ended status"
+  },
+  "mute": "كتم",
+  "@mute": {
+    "description": "Mute button"
+  },
+  "unmute": "إلغاء الكتم",
+  "@unmute": {
+    "description": "Unmute button"
+  },
+  "speaker": "مكبر الصوت",
+  "@speaker": {
+    "description": "Speaker button"
+  },
+  "camera": "الكاميرا",
+  "@camera": {
+    "description": "Camera button"
+  },
+  "notifications": "الإشعارات",
+  "@notifications": {
+    "description": "Notifications screen title"
+  },
+  "markAllAsRead": "تحديد الكل كمقروء",
+  "@markAllAsRead": {
+    "description": "Mark all notifications as read"
+  },
+  "noNotifications": "لا توجد إشعارات",
+  "@noNotifications": {
+    "description": "No notifications message"
+  },
+  "today": "اليوم",
+  "@today": {
+    "description": "Today label"
+  },
+  "yesterday": "أمس",
+  "@yesterday": {
+    "description": "Yesterday label"
+  },
+  "earlier": "سابقاً",
+  "@earlier": {
+    "description": "Earlier label"
+  },
+  "reports": "التقارير",
+  "@reports": {
+    "description": "Reports screen title"
+  },
+  "visitReports": "تقارير الزيارات",
+  "@visitReports": {
+    "description": "Visit reports section"
+  },
+  "filterByDate": "تصفية حسب التاريخ",
+  "@filterByDate": {
+    "description": "Filter by date option"
+  },
+  "filterByMonth": "تصفية حسب الشهر",
+  "@filterByMonth": {
+    "description": "Filter by month option"
+  },
+  "filterByYear": "تصفية حسب السنة",
+  "@filterByYear": {
+    "description": "Filter by year option"
+  },
+  "date": "التاريخ",
+  "@date": {
+    "description": "Date label"
+  },
+  "month": "الشهر",
+  "@month": {
+    "description": "Month label"
+  },
+  "year": "السنة",
+  "@year": {
+    "description": "Year label"
+  },
+  "noReportsFound": "لم يتم العثور على تقارير",
+  "@noReportsFound": {
+    "description": "No reports message"
+  },
+  "downloadReport": "تنزيل التقرير",
+  "@downloadReport": {
+    "description": "Download report button"
+  },
+  "shareReport": "مشاركة التقرير",
+  "@shareReport": {
+    "description": "Share report button"
+  },
+  "duration": "المدة",
+  "@duration": {
+    "description": "Duration label"
+  },
+  "minutes": "دقائق",
+  "@minutes": {
+    "description": "Minutes unit"
+  },
+  "finalLocation": "الموقع النهائي",
+  "@finalLocation": {
+    "description": "Final location label"
+  },
+  "coordinates": "الإحداثيات",
+  "@coordinates": {
+    "description": "Coordinates label"
+  },
+  "accuracy": "الدقة",
+  "@accuracy": {
+    "description": "Accuracy label"
+  },
+  "notes": "ملاحظات",
+  "@notes": {
+    "description": "Notes label"
+  },
+  "noNotes": "لا توجد ملاحظات",
+  "@noNotes": {
+    "description": "No notes message"
+  },
+  "activities": "الأنشطة",
+  "@activities": {
+    "description": "Activities label"
+  },
+  "photos": "الصور",
+  "@photos": {
+    "description": "Photos label"
+  },
+  "generatedByPact": "تم إنشاؤه بواسطة PACT Mobile",
+  "@generatedByPact": {
+    "description": "Report footer"
+  },
+  "errorLoadingVisits": "خطأ في تحميل الزيارات",
+  "@errorLoadingVisits": {
+    "description": "Error loading visits message"
+  },
+  "errorDownloadingReport": "خطأ في تنزيل التقرير",
+  "@errorDownloadingReport": {
+    "description": "Error downloading report message"
+  },
+  "visitsThisMonth": "الزيارات هذا الشهر",
+  "@visitsThisMonth": {
+    "description": "Visits this month summary"
+  },
+  "visitsThisYear": "الزيارات هذه السنة",
+  "@visitsThisYear": {
+    "description": "Visits this year summary"
+  },
+  "totalVisits": "إجمالي الزيارات",
+  "@totalVisits": {
+    "description": "Total visits summary"
+  },
+  "viewDetails": "عرض التفاصيل",
+  "@viewDetails": {
+    "description": "View details button"
+  },
+  "completed": "مكتمل",
+  "@completed": {
+    "description": "Completed status"
+  },
+  "pending": "قيد الانتظار",
+  "@pending": {
+    "description": "Pending status"
+  },
+  "approved": "موافق عليه",
+  "@approved": {
+    "description": "Approved status"
+  },
+  "rejected": "مرفوض",
+  "@rejected": {
+    "description": "Rejected status"
+  },
+  "cancelled": "ملغى",
+  "@cancelled": {
+    "description": "Cancelled status"
+  },
+  "underReview": "قيد المراجعة",
+  "@underReview": {
+    "description": "Under review status"
+  },
+  "paid": "مدفوع",
+  "@paid": {
+    "description": "Paid status"
+  },
+  "balance": "الرصيد",
+  "@balance": {
+    "description": "Balance label"
+  },
+  "earnings": "الأرباح",
+  "@earnings": {
+    "description": "Earnings label"
+  },
+  "withdrawals": "السحوبات",
+  "@withdrawals": {
+    "description": "Withdrawals label"
+  },
+  "withdrawFunds": "سحب الأموال",
+  "@withdrawFunds": {
+    "description": "Withdraw funds button"
+  },
+  "requestWithdrawal": "طلب سحب",
+  "@requestWithdrawal": {
+    "description": "Request withdrawal button"
+  },
+  "amount": "المبلغ",
+  "@amount": {
+    "description": "Amount label"
+  },
+  "enterAmount": "أدخل المبلغ",
+  "@enterAmount": {
+    "description": "Enter amount hint"
+  },
+  "reason": "السبب",
+  "@reason": {
+    "description": "Reason label"
+  },
+  "enterReason": "أدخل السبب",
+  "@enterReason": {
+    "description": "Enter reason hint"
+  },
+  "selectPaymentMethod": "اختر طريقة الدفع",
+  "@selectPaymentMethod": {
+    "description": "Select payment method prompt"
+  },
+  "addPaymentMethod": "إضافة طريقة دفع",
+  "@addPaymentMethod": {
+    "description": "Add payment method button"
+  },
+  "noPaymentMethods": "لا توجد طرق دفع",
+  "@noPaymentMethods": {
+    "description": "No payment methods message"
+  },
+  "bankAccount": "حساب بنكي",
+  "@bankAccount": {
+    "description": "Bank account option"
+  },
+  "mobileMoney": "المال المحمول",
+  "@mobileMoney": {
+    "description": "Mobile money option"
+  },
+  "debitCard": "بطاقة الخصم/الائتمان",
+  "@debitCard": {
+    "description": "Debit card option"
+  },
+  "accountNumber": "رقم الحساب",
+  "@accountNumber": {
+    "description": "Account number label"
+  },
+  "bankName": "اسم البنك",
+  "@bankName": {
+    "description": "Bank name label"
+  },
+  "phoneNumberForMoney": "رقم الهاتف",
+  "@phoneNumberForMoney": {
+    "description": "Phone number for mobile money"
+  },
+  "providerName": "اسم المزود",
+  "@providerName": {
+    "description": "Provider name label"
+  },
+  "cardholderName": "اسم حامل البطاقة",
+  "@cardholderName": {
+    "description": "Cardholder name label"
+  },
+  "cardNumber": "رقم البطاقة",
+  "@cardNumber": {
+    "description": "Card number label"
+  },
+  "setAsDefault": "تعيين كافتراضي",
+  "@setAsDefault": {
+    "description": "Set as default button"
+  },
+  "defaultPayment": "افتراضي",
+  "@defaultPayment": {
+    "description": "Default payment indicator"
+  },
+  "remove": "إزالة",
+  "@remove": {
+    "description": "Remove button"
+  },
+  "unknown": "غير معروف",
+  "@unknown": {
+    "description": "Unknown label"
+  },
+  "confirmDelete": "تأكيد الحذف",
+  "@confirmDelete": {
+    "description": "Confirm delete dialog title"
+  },
+  "areYouSure": "هل أنت متأكد؟",
+  "@areYouSure": {
+    "description": "Are you sure prompt"
+  },
+  "delete": "حذف",
+  "@delete": {
+    "description": "Delete button"
+  },
+  "save": "حفظ",
+  "@save": {
+    "description": "Save button"
+  },
+  "edit": "تعديل",
+  "@edit": {
+    "description": "Edit button"
+  },
+  "search": "بحث",
+  "@search": {
+    "description": "Search button/label"
+  },
+  "filter": "تصفية",
+  "@filter": {
+    "description": "Filter button"
+  },
+  "sort": "ترتيب",
+  "@sort": {
+    "description": "Sort button"
+  },
+  "loading": "جاري التحميل...",
+  "@loading": {
+    "description": "Loading message"
+  },
+  "retry": "إعادة المحاولة",
+  "@retry": {
+    "description": "Retry button"
+  },
+  "error": "خطأ",
+  "@error": {
+    "description": "Error label"
+  },
+  "success": "نجاح",
+  "@success": {
+    "description": "Success label"
+  },
+  "warning": "تحذير",
+  "@warning": {
+    "description": "Warning label"
+  },
+  "info": "معلومات",
+  "@info": {
+    "description": "Info label"
+  },
+  "ok": "حسناً",
+  "@ok": {
+    "description": "OK button"
+  },
+  "yes": "نعم",
+  "@yes": {
+    "description": "Yes button"
+  },
+  "no": "لا",
+  "@no": {
+    "description": "No button"
+  },
+  "confirm": "تأكيد",
+  "@confirm": {
+    "description": "Confirm button"
+  },
+  "back": "رجوع",
+  "@back": {
+    "description": "Back button"
+  },
+  "done": "تم",
+  "@done": {
+    "description": "Done button"
+  },
+  "continueText": "متابعة",
+  "@continueText": {
+    "description": "Continue button"
+  },
+  "skip": "تخطي",
+  "@skip": {
+    "description": "Skip button"
+  },
+  "siteCode": "رمز الموقع",
+  "@siteCode": {
+    "description": "Site code label"
+  },
+  "siteName": "اسم الموقع",
+  "@siteName": {
+    "description": "Site name label"
+  },
+  "village": "القرية",
+  "@village": {
+    "description": "Village label"
+  },
+  "district": "المنطقة",
+  "@district": {
+    "description": "District label"
+  },
+  "region": "الإقليم",
+  "@region": {
+    "description": "Region label"
+  },
+  "household": "الأسرة",
+  "@household": {
+    "description": "Household label"
+  },
+  "mmpCode": "رمز MMP",
+  "@mmpCode": {
+    "description": "MMP code label"
+  },
+  "startVisit": "بدء الزيارة",
+  "@startVisit": {
+    "description": "Start visit button"
+  },
+  "continueVisit": "متابعة الزيارة",
+  "@continueVisit": {
+    "description": "Continue visit button"
+  },
+  "endVisit": "إنهاء الزيارة",
+  "@endVisit": {
+    "description": "End visit button"
+  },
+  "gpsAccuracy": "دقة GPS",
+  "@gpsAccuracy": {
+    "description": "GPS accuracy label"
+  },
+  "meters": "أمتار",
+  "@meters": {
+    "description": "Meters unit"
+  },
+  "requiredField": "هذا الحقل مطلوب",
+  "@requiredField": {
+    "description": "Required field validation message"
+  },
+  "invalidEmail": "عنوان بريد إلكتروني غير صالح",
+  "@invalidEmail": {
+    "description": "Invalid email validation message"
+  },
+  "passwordTooShort": "يجب أن تكون كلمة المرور 8 أحرف على الأقل",
+  "@passwordTooShort": {
+    "description": "Password too short validation message"
+  },
+  "passwordsDoNotMatch": "كلمات المرور غير متطابقة",
+  "@passwordsDoNotMatch": {
+    "description": "Passwords do not match validation message"
+  },
+  "statePermit": "تصريح الولاية",
+  "@statePermit": {
+    "description": "State permit label"
+  },
+  "localityPermit": "تصريح المحلية",
+  "@localityPermit": {
+    "description": "Locality permit label"
+  },
+  "federalPermit": "التصريح الفيدرالي",
+  "@federalPermit": {
+    "description": "Federal permit label"
+  },
+  "permitRequired": "التصريح مطلوب",
+  "@permitRequired": {
+    "description": "Permit required message"
+  },
+  "permitNotRequired": "التصريح غير مطلوب",
+  "@permitNotRequired": {
+    "description": "Permit not required message"
+  },
+  "uploadStatePermit": "رفع تصريح الولاية",
+  "@uploadStatePermit": {
+    "description": "Upload state permit button"
+  },
+  "uploadLocalityPermit": "رفع تصريح المحلية",
+  "@uploadLocalityPermit": {
+    "description": "Upload locality permit button"
+  },
+  "statePermitRequired": "تصريح الولاية مطلوب",
+  "@statePermitRequired": {
+    "description": "State permit required title"
+  },
+  "statePermitDescription": "تم رفع التصريح الفيدرالي فقط. يرجى رفع تصريح ولاية {state} للمتابعة.",
+  "@statePermitDescription": {
+    "description": "State permit required description",
+    "placeholders": {
+      "state": {
+        "type": "String",
+        "example": "Khartoum"
+      }
+    }
+  },
+  "localityPermitRequired": "تصريح المحلية مطلوب",
+  "@localityPermitRequired": {
+    "description": "Locality permit required title"
+  },
+  "localityPermitDescription": "يرجى رفع تصريح المحلية لـ {locality} للمتابعة.",
+  "@localityPermitDescription": {
+    "description": "Locality permit required description",
+    "placeholders": {
+      "locality": {
+        "type": "String",
+        "example": "Al-Jazirah"
+      }
+    }
+  },
+  "selectFile": "اختر ملف",
+  "@selectFile": {
+    "description": "Select file button"
+  },
+  "permitFile": "ملف التصريح",
+  "@permitFile": {
+    "description": "Permit file label"
+  },
+  "issueDate": "تاريخ الإصدار",
+  "@issueDate": {
+    "description": "Issue date label"
+  },
+  "expiryDate": "تاريخ الانتهاء",
+  "@expiryDate": {
+    "description": "Expiry date label"
+  },
+  "comments": "ملاحظات",
+  "@comments": {
+    "description": "Comments label"
+  },
+  "addCommentsOptional": "أضف ملاحظات (اختياري)",
+  "@addCommentsOptional": {
+    "description": "Add comments optional placeholder"
+  },
+  "uploadPermit": "رفع التصريح",
+  "@uploadPermit": {
+    "description": "Upload permit button"
+  },
+  "uploading": "جاري الرفع...",
+  "@uploading": {
+    "description": "Uploading status"
+  },
+  "permitUploadSuccess": "تم رفع التصريح بنجاح",
+  "@permitUploadSuccess": {
+    "description": "Permit upload success message"
+  },
+  "permitUploadError": "فشل رفع التصريح",
+  "@permitUploadError": {
+    "description": "Permit upload error message"
+  },
+  "invalidFileType": "نوع ملف غير صالح",
+  "@invalidFileType": {
+    "description": "Invalid file type error"
+  },
+  "fileTooLarge": "الملف كبير جداً",
+  "@fileTooLarge": {
+    "description": "File too large error"
+  },
+  "selectPdfOrImage": "يرجى اختيار ملف PDF أو صورة (JPG، PNG)",
+  "@selectPdfOrImage": {
+    "description": "Select PDF or image instruction"
+  },
+  "maxFileSize": "الحد الأقصى لحجم الملف: {size} ميجابايت",
+  "@maxFileSize": {
+    "description": "Max file size message",
+    "placeholders": {
+      "size": {
+        "type": "int",
+        "example": "10"
+      }
+    }
+  },
+  "datesRequired": "تاريخ الإصدار والانتهاء مطلوبان",
+  "@datesRequired": {
+    "description": "Dates required error"
+  },
+  "expiryAfterIssue": "يجب أن يكون تاريخ الانتهاء بعد تاريخ الإصدار",
+  "@expiryAfterIssue": {
+    "description": "Expiry after issue date error"
+  },
+  "showPreview": "عرض المعاينة",
+  "@showPreview": {
+    "description": "Show preview button"
+  },
+  "hidePreview": "إخفاء المعاينة",
+  "@hidePreview": {
+    "description": "Hide preview button"
+  },
+  "clearFile": "مسح الملف",
+  "@clearFile": {
+    "description": "Clear file button"
+  },
+  "permitVerification": "التحقق من التصريح",
+  "@permitVerification": {
+    "description": "Permit verification title"
+  },
+  "verifyPermits": "التحقق من التصاريح",
+  "@verifyPermits": {
+    "description": "Verify permits button"
+  },
+  "permitsAttached": "التصاريح مرفقة",
+  "@permitsAttached": {
+    "description": "Permits attached status"
+  },
+  "pendingVerification": "في انتظار التحقق",
+  "@pendingVerification": {
+    "description": "Pending verification status"
+  },
+  "verified": "تم التحقق",
+  "@verified": {
+    "description": "Verified status"
+  },
+  "statePermitAttached": "تصريح الولاية مرفق",
+  "@statePermitAttached": {
+    "description": "State permit attached status"
+  },
+  "localityPermitAttached": "تصريح المحلية مرفق",
+  "@localityPermitAttached": {
+    "description": "Locality permit attached status"
+  },
+  "doYouHaveStatePermit": "هل لديك تصريح الولاية لـ {state}؟",
+  "@doYouHaveStatePermit": {
+    "description": "Do you have state permit question",
+    "placeholders": {
+      "state": {
+        "type": "String",
+        "example": "Khartoum"
+      }
+    }
+  },
+  "doYouHaveLocalityPermit": "هل لديك تصريح المحلية لـ {locality}؟",
+  "@doYouHaveLocalityPermit": {
+    "description": "Do you have locality permit question",
+    "placeholders": {
+      "locality": {
+        "type": "String",
+        "example": "Al-Jazirah"
+      }
+    }
+  },
+  "yesHaveIt": "نعم، لدي التصريح",
+  "@yesHaveIt": {
+    "description": "Yes I have the permit option"
+  },
+  "noRequiredDontHave": "مطلوب ولكن ليس لدي",
+  "@noRequiredDontHave": {
+    "description": "Required but don't have option"
+  },
+  "notRequiredInLocality": "غير مطلوب في هذه المحلية",
+  "@notRequiredInLocality": {
+    "description": "Not required in this locality option"
+  },
+  "canProceedWithout": "هل يمكنك المتابعة بدون التصريح؟",
+  "@canProceedWithout": {
+    "description": "Can proceed without permit question"
+  },
+  "yesProceedWithout": "نعم، يمكنني المتابعة",
+  "@yesProceedWithout": {
+    "description": "Yes can proceed without option"
+  },
+  "noCannotProceed": "لا، أحتاج التصريح",
+  "@noCannotProceed": {
+    "description": "No cannot proceed without option"
+  },
+  "sendBackToFom": "إرسال إلى مدير العمليات",
+  "@sendBackToFom": {
+    "description": "Send back to FOM button"
+  },
+  "siteVerification": "التحقق من الموقع",
+  "@siteVerification": {
+    "description": "Site verification title"
+  },
+  "verifySite": "التحقق من الموقع",
+  "@verifySite": {
+    "description": "Verify site button"
+  },
+  "returnToFom": "إعادة إلى مدير العمليات",
+  "@returnToFom": {
+    "description": "Return to FOM button"
+  },
+  "pendingSites": "المواقع المعلقة",
+  "@pendingSites": {
+    "description": "Pending sites tab"
+  },
+  "cpVerification": "التحقق من التصاريح",
+  "@cpVerification": {
+    "description": "CP Verification tab"
+  },
+  "verifiedSites": "المواقع المتحقق منها",
+  "@verifiedSites": {
+    "description": "Verified sites tab"
+  },
+  "sitesNeedStatePermit": "{count} مواقع تحتاج تصريح الولاية",
+  "@sitesNeedStatePermit": {
+    "description": "Sites needing state permit count",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "5"
+      }
+    }
+  },
+  "sitesNeedLocalityPermit": "{count} مواقع تحتاج تصريح المحلية",
+  "@sitesNeedLocalityPermit": {
+    "description": "Sites needing locality permit count",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "3"
+      }
+    }
+  },
+  "step1SelectFile": "الخطوة 1: اختر الملف",
+  "@step1SelectFile": {
+    "description": "Step 1 select file"
+  },
+  "step2EnterDates": "الخطوة 2: أدخل التواريخ",
+  "@step2EnterDates": {
+    "description": "Step 2 enter dates"
+  },
+  "step3AddComments": "الخطوة 3: أضف ملاحظات (اختياري)",
+  "@step3AddComments": {
+    "description": "Step 3 add comments"
+  },
+  "step4Upload": "الخطوة 4: رفع التصريح",
+  "@step4Upload": {
+    "description": "Step 4 upload"
+  },
+  "tapToSelectFile": "اضغط لاختيار ملف",
+  "@tapToSelectFile": {
+    "description": "Tap to select file instruction"
+  },
+  "supportedFormats": "الصيغ المدعومة: PDF، JPG، PNG",
+  "@supportedFormats": {
+    "description": "Supported formats list"
+  },
+  "fileSelected": "تم اختيار الملف: {fileName}",
+  "@fileSelected": {
+    "description": "File selected message",
+    "placeholders": {
+      "fileName": {
+        "type": "String",
+        "example": "permit.pdf"
+      }
+    }
+  },
+  "gallery": "المعرض",
+  "@gallery": {
+    "description": "Gallery option for file picker"
+  },
+  "camera": "الكاميرا",
+  "@camera": {
+    "description": "Camera option for file picker"
+  },
+  "pdfDocument": "مستند PDF",
+  "@pdfDocument": {
+    "description": "PDF document option"
+  },
+  "willUploadPermit": "سأقوم برفع مستند التصريح",
+  "@willUploadPermit": {
+    "description": "Subtitle for yes have permit option"
+  },
+  "cannotProvideNow": "التصريح مطلوب لكن لا أستطيع توفيره الآن",
+  "@cannotProvideNow": {
+    "description": "Subtitle for required but don't have option"
+  },
+  "noPermitNeeded": "لا يلزم تصريح محلية للعمليات هنا",
+  "@noPermitNeeded": {
+    "description": "Subtitle for not required option"
+  },
+  "continueWithoutPermit": "المتابعة بدون تصريح المحلية",
+  "@continueWithoutPermit": {
+    "description": "Subtitle for yes proceed option"
+  },
+  "sendBackToManager": "إرسال إلى مدير العمليات الميدانية",
+  "@sendBackToManager": {
+    "description": "Subtitle for no cannot proceed option"
+  },
+  "chooseHowToProceed": "اختر كيفية المتابعة لـ {count} {sitesLabel} في {locality}:",
+  "@chooseHowToProceed": {
+    "description": "Follow up question description",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "5"
+      },
+      "sitesLabel": {
+        "type": "String",
+        "example": "مواقع"
+      },
+      "locality": {
+        "type": "String",
+        "example": "الجزيرة"
+      }
+    }
+  },
+  "site": "موقع",
+  "@site": {
+    "description": "Single site label"
+  },
+  "sites": "مواقع",
+  "@sites": {
+    "description": "Multiple sites label"
+  },
+  "back": "رجوع",
+  "@back": {
+    "description": "Back button"
+  },
+  "uploadFailed": "فشل الرفع",
+  "@uploadFailed": {
+    "description": "Upload failed message"
+  },
+  "databaseUpdateFailed": "فشل تحديث قاعدة البيانات. يرجى المحاولة مرة أخرى.",
+  "@databaseUpdateFailed": {
+    "description": "Database update failed message"
+  },
+  "selectDate": "اختر التاريخ",
+  "@selectDate": {
+    "description": "Select date placeholder"
+  },
+  "bulkStatePermitUpload": "رفع تصاريح الولايات بالجملة",
+  "@bulkStatePermitUpload": {
+    "description": "Title for bulk state permit upload dialog"
+  },
+  "bulkLocalityPermitUpload": "رفع تصاريح المحليات بالجملة",
+  "@bulkLocalityPermitUpload": {
+    "description": "Title for bulk locality permit upload dialog"
+  },
+  "statesSelected": "ولايات محددة",
+  "@statesSelected": {
+    "description": "Label for number of states selected"
+  },
+  "localitiesSelected": "محليات محددة",
+  "@localitiesSelected": {
+    "description": "Label for number of localities selected"
+  },
+  "bulkUploadInstructions": "حدد الملفات والتواريخ لكل ولاية. سيتم رفع الولايات ذات المعلومات الكاملة فقط.",
+  "@bulkUploadInstructions": {
+    "description": "Instructions for bulk upload"
+  },
+  "bulkLocalityUploadInstructions": "حدد الملفات والتواريخ لكل محلية. سيتم رفع المحليات ذات المعلومات الكاملة فقط.",
+  "@bulkLocalityUploadInstructions": {
+    "description": "Instructions for bulk locality upload"
+  },
+  "noPermitsReady": "لا توجد تصاريح جاهزة للرفع",
+  "@noPermitsReady": {
+    "description": "Error message when no permits are ready"
+  },
+  "ready": "جاهز",
+  "@ready": {
+    "description": "Status label for ready items"
+  },
+  "uploaded": "تم الرفع",
+  "@uploaded": {
+    "description": "Status label for uploaded items"
+  },
+  "failed": "فشل",
+  "@failed": {
+    "description": "Status label for failed items"
+  },
+  "uploadAll": "رفع الكل",
+  "@uploadAll": {
+    "description": "Button to upload all ready permits"
+  },
+  "selectFile": "اختر ملف",
+  "@selectFile": {
+    "description": "Button to select a file"
+  },
+  "notificationAppUpdateTitle": "تحديث التطبيق متاح",
+  "@notificationAppUpdateTitle": {
+    "description": "Notification title for app update"
+  },
+  "notificationAppUpdateBody": "إصدار جديد ({version}) جاهز. اضغط للتحديث!",
+  "@notificationAppUpdateBody": {
+    "description": "Notification body for app update",
+    "placeholders": {
+      "version": {"type": "String"}
+    }
+  },
+  "notificationDownloadingTitle": "جاري تحميل التحديث",
+  "@notificationDownloadingTitle": {
+    "description": "Notification title for downloading update"
+  },
+  "notificationDownloadingBody": "يرجى الانتظار...",
+  "@notificationDownloadingBody": {
+    "description": "Notification body for downloading update"
+  },
+  "notificationUpdateInstalledTitle": "تم تثبيت التحديث",
+  "@notificationUpdateInstalledTitle": {
+    "description": "Notification title for update installed"
+  },
+  "notificationUpdateInstalledBody": "تطبيقك محدث الآن. أعد التشغيل للتطبيق.",
+  "@notificationUpdateInstalledBody": {
+    "description": "Notification body for update installed"
+  },
+  "notificationCostApprovedTitle": "تمت الموافقة على التكلفة",
+  "@notificationCostApprovedTitle": {
+    "description": "Notification title for cost approved"
+  },
+  "notificationCostApprovedBody": "تمت الموافقة لزيارة الموقع {siteId}. المبلغ: {amount} {currency}",
+  "@notificationCostApprovedBody": {
+    "description": "Notification body for cost approved",
+    "placeholders": {
+      "siteId": {"type": "String"},
+      "amount": {"type": "String"},
+      "currency": {"type": "String"}
+    }
+  },
+  "notificationCostRejectedTitle": "تم رفض طلب التكلفة",
+  "@notificationCostRejectedTitle": {
+    "description": "Notification title for cost rejected"
+  },
+  "notificationCostRejectedBody": "تم الرفض لزيارة الموقع {siteId}. السبب: {reason}",
+  "@notificationCostRejectedBody": {
+    "description": "Notification body for cost rejected",
+    "placeholders": {
+      "siteId": {"type": "String"},
+      "reason": {"type": "String"}
+    }
+  },
+  "notificationRevisionTitle": "مطلوب مراجعة",
+  "@notificationRevisionTitle": {
+    "description": "Notification title for revision requested"
+  },
+  "notificationRevisionBody": "زيارة الموقع {siteId} تحتاج مراجعة. الملاحظات: {notes}",
+  "@notificationRevisionBody": {
+    "description": "Notification body for revision requested",
+    "placeholders": {
+      "siteId": {"type": "String"},
+      "notes": {"type": "String"}
+    }
+  },
+  "notificationSyncCompletedTitle": "اكتمل المزامنة",
+  "@notificationSyncCompletedTitle": {
+    "description": "Notification title for sync completed"
+  },
+  "notificationSyncCompletedBody": "تم مزامنة {count} طلب(ات) بنجاح.",
+  "@notificationSyncCompletedBody": {
+    "description": "Notification body for sync completed",
+    "placeholders": {
+      "count": {"type": "int"}
+    }
+  },
+  "notificationBudgetAlertTitle": "تنبيه الميزانية",
+  "@notificationBudgetAlertTitle": {
+    "description": "Notification title for budget alert"
+  },
+  "notificationBudgetAlertBody": "الميزانية المتبقية لـ {siteId}: {amount} {currency}",
+  "@notificationBudgetAlertBody": {
+    "description": "Notification body for budget alert",
+    "placeholders": {
+      "siteId": {"type": "String"},
+      "amount": {"type": "String"},
+      "currency": {"type": "String"}
+    }
+  },
+  "notificationNewMessageTitle": "رسالة جديدة",
+  "@notificationNewMessageTitle": {
+    "description": "Notification title for new message"
+  },
+  "notificationSignatureVerifiedTitle": "تم التحقق من التوقيع",
+  "@notificationSignatureVerifiedTitle": {
+    "description": "Notification title for signature verified"
+  },
+  "notificationSignatureVerifiedBody": "تم التحقق من توقيعك من قبل المسؤول.",
+  "@notificationSignatureVerifiedBody": {
+    "description": "Notification body for signature verified"
+  },
+  "notificationSignatureRejectedTitle": "تم رفض التوقيع",
+  "@notificationSignatureRejectedTitle": {
+    "description": "Notification title for signature rejected"
+  },
+  "notificationSignatureRejectedBody": "تم رفض توقيعك. يرجى تقديم توقيع جديد.",
+  "@notificationSignatureRejectedBody": {
+    "description": "Notification body for signature rejected"
+  },
+  "notificationSiteAssignedTitle": "تم تعيين زيارة موقع",
+  "@notificationSiteAssignedTitle": {
+    "description": "Notification title for site visit assigned"
+  },
+  "notificationSiteAssignedBody": "تم تعيينك لزيارة: {siteName}",
+  "@notificationSiteAssignedBody": {
+    "description": "Notification body for site visit assigned",
+    "placeholders": {
+      "siteName": {"type": "String"}
+    }
+  },
+  "notificationPaymentReceivedTitle": "تم استلام الدفعة",
+  "@notificationPaymentReceivedTitle": {
+    "description": "Notification title for payment received"
+  },
+  "notificationPaymentReceivedBody": "استلمت {amount} {currency}.",
+  "@notificationPaymentReceivedBody": {
+    "description": "Notification body for payment received",
+    "placeholders": {
+      "amount": {"type": "String"},
+      "currency": {"type": "String"}
+    }
+  },
+  "notificationApprovalRequiredTitle": "مطلوب موافقة",
+  "@notificationApprovalRequiredTitle": {
+    "description": "Notification title for approval required"
+  },
+  "notificationApprovalRequiredBody": "يتطلب {itemType} موافقتك.",
+  "@notificationApprovalRequiredBody": {
+    "description": "Notification body for approval required",
+    "placeholders": {
+      "itemType": {"type": "String"}
+    }
+  },
+  "notificationSupportTicketTitle": "تم تحديث تذكرة الدعم",
+  "@notificationSupportTicketTitle": {
+    "description": "Notification title for support ticket update"
+  },
+  "notificationSupportTicketBody": "تم تحديث تذكرة الدعم #{ticketId} الخاصة بك.",
+  "@notificationSupportTicketBody": {
+    "description": "Notification body for support ticket update",
+    "placeholders": {
+      "ticketId": {"type": "String"}
+    }
+  },
+  "notificationIncomingCallTitle": "مكالمة واردة",
+  "@notificationIncomingCallTitle": {
+    "description": "Notification title for incoming call"
+  },
+  "notificationIncomingCallBody": "{callerName} يتصل بك.",
+  "@notificationIncomingCallBody": {
+    "description": "Notification body for incoming call",
+    "placeholders": {
+      "callerName": {"type": "String"}
+    }
+  },
+  "notificationMissedCallTitle": "مكالمة فائتة",
+  "@notificationMissedCallTitle": {
+    "description": "Notification title for missed call"
+  },
+  "notificationMissedCallBody": "فاتتك مكالمة من {callerName}.",
+  "@notificationMissedCallBody": {
+    "description": "Notification body for missed call",
+    "placeholders": {
+      "callerName": {"type": "String"}
+    }
+  },
+  "mmpManagement": "إدارة خطة المراقبة الشهرية",
+  "accessDenied": "تم رفض الوصول",
+  "noPermission": "ليس لديك صلاحية للوصول إلى هذه الصفحة.",
+  "myAssignments": "مهامي",
+  "claimManageComplete": "المطالبة وإدارة وإكمال زيارات الموقع",
+  "searchSites": "البحث عن المواقع...",
+  "claimable": "قابل للمطالبة",
+  "assigned": "معين",
+  "mySites": "مواقعي",
+  "pending": "معلق",
+  "inProgress": "قيد التنفيذ",
+  "completed": "مكتمل",
+  "claimSite": "المطالبة بالموقع",
+  "reclaimSite": "استرداد",
+  "startVisit": "بدء الزيارة",
+  "completeVisit": "إكمال",
+  "viewReport": "عرض التقرير",
+  "requestAdvance": "طلب سلفة",
+  "acknowledgeCost": "الإقرار بالتكلفة",
+  "siteClaimedSuccess": "تمت المطالبة بالموقع بنجاح!",
+  "siteReclaimedSuccess": "تم استرداد الموقع بنجاح",
+  "visitStartedSuccess": "بدأت الزيارة بنجاح",
+  "visitCompletedSuccess": "اكتملت الزيارة وتم تقديم التقرير بنجاح",
+  "errorOccurred": "حدث خطأ",
+  "cancel": "إلغاء",
+  "confirm": "تأكيد",
+  "call": "اتصال",
+  "sms": "رسالة نصية",
+  "whatsapp": "واتساب",
+  "siteName": "اسم الموقع",
+  "siteCode": "رمز الموقع",
+  "state": "الولاية",
+  "locality": "المحلية",
+  "transportFee": "رسوم النقل",
+  "enumeratorFee": "رسوم الباحث",
+  "totalCost": "التكلفة الإجمالية",
+  "noSitesAvailable": "لا توجد مواقع متاحة",
+  "pullToRefresh": "اسحب للتحديث",
+  "offlineMode": "وضع عدم الاتصال",
+  "willSyncWhenOnline": "سيتم المزامنة عند الاتصال",
+  "dispatched": "تم الإرسال",
+  "onlyAdminsCanReclaim": "المسؤولون فقط يمكنهم استرداد المواقع",
+  "releaseSiteToPool": "إعادة هذا الموقع إلى مجموعة الإرسال؟",
+  "enterReason": "الرجاء إدخال السبب",
+  "reason": "السبب",
+  "siteDetails": "تفاصيل الموقع",
+  "visitDetails": "تفاصيل الزيارة",
+  "costSubmissions": "تقديم التكاليف",
+  "auditTrail": "سجل المراجعة",
+  "assignedTo": "معين إلى",
+  "visitDate": "تاريخ الزيارة",
+  "status": "الحالة",
+  "project": "المشروع",
+  "activity": "النشاط",
+  "cpName": "اسم الشريك",
+  "coordinates": "الإحداثيات",
+  "openInMaps": "فتح في الخرائط",
+  "noData": "لا توجد بيانات متاحة",
+  "loading": "جاري التحميل...",
+  "retry": "إعادة المحاولة",
+  "close": "إغلاق",
+  "save": "حفظ",
+  "submit": "إرسال",
+  "delete": "حذف",
+  "edit": "تعديل",
+  "view": "عرض",
+  "back": "رجوع",
+  "next": "التالي",
+  "done": "تم",
+  "yes": "نعم",
+  "no": "لا",
+  "ok": "موافق",
+  "overdue": "متأخر",
+  "cancelled": "ملغي",
+  "inbox": "الوارد",
+  "drafts": "المسودات",
+  "outbox": "الصادر",
+  "sent": "المرسلة",
+  "accepted": "مقبول",
+  "ongoing": "جاري",
+  "whatsNew": "ما الجديد",
+  "@whatsNew": {
+    "description": "Title for the What's New dialog"
+  },
+  "newFeatures": "ميزات جديدة",
+  "@newFeatures": {
+    "description": "Section header for new features"
+  },
+  "bugFixes": "إصلاح الأخطاء",
+  "@bugFixes": {
+    "description": "Section header for bug fixes"
+  },
+  "improvements": "التحسينات",
+  "@improvements": {
+    "description": "Section header for improvements"
+  },
+  "gotIt": "حسناً!",
+  "@gotIt": {
+    "description": "Button text to dismiss the What's New dialog"
+  },
+  "whatsNewFeature1": "🌍 دعم ثنائي اللغة كامل (الإنجليزية والعربية)",
+  "@whatsNewFeature1": {
+    "description": "What's New - Feature 1"
+  },
+  "whatsNewFeature2": "📋 زر التبديل اللغوي - التبديل فوراً في شريط التطبيق",
+  "@whatsNewFeature2": {
+    "description": "What's New - Feature 2"
+  },
+  "whatsNewFeature3": "🏭 قسم تفاصيل الخطة - عرض النشاط الرئيسي والحالة",
+  "@whatsNewFeature3": {
+    "description": "What's New - Feature 3"
+  },
+  "whatsNewFeature4": "⚠️ ملاحظة رسوم الفنيين - إرشادات مع متطلبات الموافقة",
+  "@whatsNewFeature4": {
+    "description": "What's New - Feature 4"
+  },
+  "whatsNewFix1": "تم إصلاح شاشة إكمال الزيارة - المدخلات المفقودة تظهر الآن",
+  "@whatsNewFix1": {
+    "description": "What's New - Bug Fix 1"
+  },
+  "whatsNewFix2": "تم إصلاح كشف اللغة في جميع الشاشات",
+  "@whatsNewFix2": {
+    "description": "What's New - Bug Fix 2"
+  },
+  "whatsNewFix3": "تم إصلاح دعم حقل النص RTL لإدخال اللغة العربية",
+  "@whatsNewFix3": {
+    "description": "What's New - Bug Fix 3"
+  },
+  "whatsNewImprovement1": "اختيار النشاط الآن يدرك السياق (GFA/CBT/PDM/MDM/WHM)",
+  "@whatsNewImprovement1": {
+    "description": "What's New - Improvement 1"
+  },
+  "whatsNewImprovement2": "تحسين رؤية مدخل المستودع (يظهر بعد ملخص الرسم)",
+  "@whatsNewImprovement2": {
+    "description": "What's New - Improvement 2"
+  },
+  "whatsNewImprovement3": "تنبيه رسالة الرسم الآن يتضمن متطلبات موافقة WFP AO",
+  "@whatsNewImprovement3": {
+    "description": "What's New - Improvement 3"
+  },
+  "bulkLocalityPermitVerification": "التحقق من تصاريح المحليات بالجملة",
+  "@bulkLocalityPermitVerification": {
+    "description": "Dialog title for bulk locality permit verification"
+  },
+  "verifyLocalityRequirements": "تحقق من متطلبات تصريح المحلية لـ {locality}، {state}",
+  "@verifyLocalityRequirements": {
+    "description": "Description in locality permit dialog",
+    "placeholders": {
+      "locality": {
+        "type": "String",
+        "example": "وسط المدينة"
+      },
+      "state": {
+        "type": "String",
+        "example": "كاليفورنيا"
+      }
+    }
+  },
+  "sitesWillBeAffected": "سيتأثر {count} موقع",
+  "@sitesWillBeAffected": {
+    "description": "Number of sites affected by locality permit",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "5"
+      }
+    }
+  },
+  "localityPermitQuestion": "هل تحتاج إلى تصريح محلية في هذه المحلية؟",
+  "@localityPermitQuestion": {
+    "description": "Question about locality permit requirement"
+  },
+  "requirePermitHaveIt": "نعم، مطلوب وسأرفعه",
+  "@requirePermitHaveIt": {
+    "description": "Option: permit is required and user has it"
+  },
+  "haveLocalityPermitWillUpload": "لدي تصريح المحلية وسأرفعه الآن",
+  "@haveLocalityPermitWillUpload": {
+    "description": "Description: user has permit and will upload"
+  },
+  "requirePermitDontHave": "نعم، مطلوب لكن ليس لدي",
+  "@requirePermitDontHave": {
+    "description": "Option: permit is required but user doesn't have it"
+  },
+  "permitRequiredNotAvailable": "التصريح مطلوب لكن غير متاح",
+  "@permitRequiredNotAvailable": {
+    "description": "Description: permit is required but not available"
+  },
+  "permitNotRequired": "لا، ليس مطلوباً",
+  "@permitNotRequired": {
+    "description": "Option: permit is not required"
+  },
+  "permitNotRequiredInLocality": "لا يوجد تصريح محلية مطلوب في هذه المحلية",
+  "@permitNotRequiredInLocality": {
+    "description": "Description: permit is not required"
+  }
+}

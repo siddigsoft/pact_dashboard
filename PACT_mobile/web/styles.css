@@ -1,0 +1,45 @@
+/* Flutter Map Web Styles */
+
+/* Ensure map canvas renders properly */
+canvas {
+  touch-action: none;
+}
+
+/* Fix map container sizing */
+.flutter-view {
+  width: 100%;
+  height: 100%;
+}
+
+/* Ensure proper rendering of map tiles */
+img {
+  image-rendering: auto;
+  -ms-interpolation-mode: bicubic;
+}
+
+/* Prevent text selection on map interaction */
+.flutter-map-container {
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+}
+
+/* Smooth scrolling for map */
+* {
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Fix for map tiles loading */
+.leaflet-tile-container {
+  pointer-events: none;
+}
+
+.leaflet-tile {
+  pointer-events: none;
+}
+
+/* Ensure map controls are clickable */
+.leaflet-control {
+  pointer-events: auto;
+}

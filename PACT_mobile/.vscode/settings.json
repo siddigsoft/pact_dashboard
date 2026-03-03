@@ -1,0 +1,10 @@
+{
+  "dart.flutterSdkPath": ".fvm/versions/3.27.0",
+  "chat.tools.terminal.autoApprove": {
+    "flutter": true,
+    "dart": true
+  },
+  "java.configuration.updateBuildConfiguration": "automatic",
+  "dart.showTodos": false,
+  "cmake.sourceDirectory": "C:/Users/PC/PACT_mobile/linux"
+}

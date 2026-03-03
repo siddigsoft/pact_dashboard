@@ -1,0 +1,89 @@
+Launching lib\main.dart on Chrome in debug mode...
+Waiting for connection from debug service on Chrome...             58.2s
+
+Flutter run key commands.
+r Hot reload. 
+R Hot restart.
+h List all available interactive commands.
+d Detach (terminate "flutter run" but leave application running).
+c Clear the screen
+q Quit (terminate the application on the device).
+
+Debug service listening on ws://127.0.0.1:51200/get_tP15QEQ=/ws
+A Dart VM Service on Chrome is available at: http://127.0.0.1:51200/get_tP15QEQ=
+The Flutter DevTools debugger and profiler on Chrome is available at: http://127.0.0.1:51200/get_tP15QEQ=/devtools/?uri=ws://127.0.0.1:51200/get_tP15QEQ=/ws
+Starting application from main method in: org-dartlang-app:/web_entrypoint.dart.
+Found an existing <meta name="viewport"> tag. Flutter Web uses its own viewport configuration for better compatibility with Flutter. This tag will be replaced.
+Firebase.initializeApp() failed or not configured: Assertion failed: file:///C:/Users/PC/AppData/Local/Pub/Cache/hosted/pub.dev/firebase_core_web-2.24.1/lib/src/firebase_core_web.dart:288:11
+options != null
+"FirebaseOptions cannot be null when creating the default app."
+≡ƒîÉ Running on web - background notification handler skipped
+Running on web - permissions not requested
+supabase.supabase_flutter: INFO: ***** Supabase init completed ***** 
+[AuthenticationService] Auth state changed: AuthChangeEvent.initialSession at 2026-03-03T02:08:48.797
+[AuthenticationService] Auth user for event AuthChangeEvent.initialSession: null
+Got object store box in database tasks.
+Got object store box in database equipments.
+Got object store box in database incidentreports.
+Got object store box in database safetychecklists.
+Got object store box in database userprofiles.
+Got object store box in database appsettings.
+Got object store box in database mapdata.
+Got object store box in database tasks_sync.
+Got object store box in database equipments_sync.
+Got object store box in database incidentreports_sync.
+Got object store box in database safetychecklists_sync.
+Got object store box in database userprofiles_sync.
+Got object store box in database pending_sync.
+Got object store box in database site_visits.
+Got object store box in database locations.
+Got object store box in database offline_requests.
+Got object store box in database site_cache.
+Got object store box in database mmp_cache.
+Got object store box in database notifications_cache.
+Got object store box in database chat_cache.
+Got object store box in database projects_cache.
+Got object store box in database wallet_cache.
+Got object store box in database budget_cache.
+Got object store box in database reports_cache.
+Got object store box in database profile_cache.
+Got object store box in database offline_metadata.
+≡ƒîÉ Web platform detected: Path URL strategy configured
+≡ƒÜÇ Starting PACT Consultancy app
+Connectivity changed: true
+Starting data migration from SharedPreferences to Hive...
+Data migration completed successfully
+[ShorebirdCodePush]: Shorebird Engine not available, using no-op implementation.
+This occurs when using package:shorebird_code_push in an app that does not
+contain the Shorebird Engine. Most commonly this is due to building with
+`flutter build` or `flutter run` instead of `shorebird release`.
+
+Shorebird is not available on this platform
+[Ringtone] Service initialized
+Got object store box in database settings.
+[NotificationRouting] Service initialized
+≡ƒô▒ Notification services initialized (enhanced with FCM + ringtones)
+≡ƒöæ No biometrics enabled and user not logged in, showing login screen
+≡ƒô▒ Biometric Check Results:
+  Available: false
+  Enabled: false
+  Has Enrolled: false
+  Device Credentials: Available via fallback in authentication
+Γ¥î Biometrics not available on this device
+≡ƒô▒ Biometric Check Results:
+  Available: false
+  Enabled: false
+  Has Enrolled: false
+  Device Credentials: Available via fallback in authentication
+Γ¥î Biometrics not available on this device
+≡ƒöæ No active session - showing login form
+≡ƒöæ No active session - showing login form
+[AuthenticationService] Auth state changed: AuthChangeEvent.signedIn at 2026-03-03T02:09:08.602
+[AuthenticationService] Auth user for event AuthChangeEvent.signedIn: 47c7d526-3b74-4178-8326-3d79a68e31a5
+[AuthenticationService] Session expired: false
+[AuthenticationService] Session expires at: 1772496548
+Auth data stored locally
+Note: Could not update last_active (column may not exist): PostgrestException(message: Could not find the 'last_active' column of 'profiles' in the schema cache, code: PGRST204, details: , hint: null)
+Failed to assign worker role: PostgrestException(message: new row violates row-level security policy for table "user_roles", code: 42501, details: , hint: null)
+Note: Could not insert dataCollector role (RLS may prevent): PostgrestException(message: new row violates row-level security policy for table "user_roles", code: 42501, details: , hint: null)
+02:09:10:833 %cAgora-SDK [DEBUG]:

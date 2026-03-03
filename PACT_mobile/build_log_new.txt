@@ -1,0 +1,38 @@
+
+Support for Android x86 targets will be removed in the next stable release after 3.27. See https://github.com/flutter/flutter/issues/157543 for details.
+Running Gradle task 'assembleDebug'...                          
+
+FAILURE: Build failed with an exception.
+
+* What went wrong:
+Execution failed for task ':app:processDebugResources'.
+> A failure occurred while executing com.android.build.gradle.internal.res.LinkApplicationAndroidResourcesTask$TaskAction
+   > Android resource linking failed
+     ERROR: C:\Users\PC\PACT_mobile\android\app\src\main\AndroidManifest.xml:5:5-89:19: AAPT: error: resource xml/network_security_config (aka com.example.pact_mobile:xml/network_security_config) not found.
+
+     ERROR: C:\Users\PC\PACT_mobile\android\app\src\main\AndroidManifest.xml:5:5-89:19: AAPT: error: resource mipmap/ic_launcher_round (aka com.example.pact_mobile:mipmap/ic_launcher_round) not found.
+
+     ERROR: C:\Users\PC\PACT_mobile\android\app\src\main\AndroidManifest.xml:5:5-89:19: AAPT: error: resource style/AppTheme (aka com.example.pact_mobile:style/AppTheme) not found.
+
+     ERROR: C:\Users\PC\PACT_mobile\android\app\src\main\AndroidManifest.xml:21:9-52:20: AAPT: error: resource string/title_activity_main (aka com.example.pact_mobile:string/title_activity_main) not found.
+
+     ERROR: C:\Users\PC\PACT_mobile\android\app\src\main\AndroidManifest.xml:21:9-52:20: AAPT: error: resource style/AppTheme.NoActionBarLaunch (aka com.example.pact_mobile:style/AppTheme.NoActionBarLaunch) not found.
+
+     ERROR: C:\Users\PC\PACT_mobile\android\app\src\main\AndroidManifest.xml:29:13-31:53: AAPT: error: resource xml/shortcuts (aka com.example.pact_mobile:xml/shortcuts) not found.
+
+     ERROR: C:\Users\PC\PACT_mobile\build\flutter_email_sender\intermediates\merged_manifest\debug\processDebugManifest\AndroidManifest.xml:13:13-15:61: AAPT: error: resource xml/file_paths (aka com.example.pact_mobile:xml/file_paths) not found.
+
+     ERROR: C:\Users\PC\PACT_mobile\android\app\src\main\AndroidManifest.xml:82:9-84:60: AAPT: error: resource drawable/ic_notification (aka com.example.pact_mobile:drawable/ic_notification) not found.
+
+     ERROR: C:\Users\PC\PACT_mobile\android\app\src\main\AndroidManifest.xml:86:9-88:54: AAPT: error: resource color/colorPrimary (aka com.example.pact_mobile:color/colorPrimary) not found.
+
+
+* Try:
+> Run with --stacktrace option to get the stack trace.
+> Run with --info or --debug option to get more log output.
+> Run with --scan to get full insights.
+> Get more help at https://help.gradle.org.
+
+BUILD FAILED in 1m 6s
+Running Gradle task 'assembleDebug'...                             67.4s
+Gradle task assembleDebug failed with exit code 1
