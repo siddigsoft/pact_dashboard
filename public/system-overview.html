@@ -10,9 +10,9 @@
 <style>
 *{box-sizing:border-box;margin:0;padding:0;}
 :root{
-  --blue:#2563EB;--blue-light:#3b82f6;--blue-glow:rgba(37,99,235,0.18);
-  --green:#10b981;--amber:#f59e0b;--purple:#8b5cf6;--red:#ef4444;--cyan:#06b6d4;
-  --navy:#0F2041;--navy2:#1D3461;
+  --blue:#2563EB;--blue-l:#3b82f6;--green:#10b981;
+  --amber:#f59e0b;--purple:#8b5cf6;--red:#ef4444;--cyan:#06b6d4;
+  --navy:#0F2041;
 }
 html{scroll-behavior:smooth;}
 body{
@@ -20,645 +20,595 @@ body{
   background:#06090f;color:#f0f4ff;
   scroll-snap-type:y mandatory;overflow-y:scroll;height:100vh;
 }
-h1,h2,h3,h4{font-family:'Space Grotesk',sans-serif;letter-spacing:-0.3px;}
+h1,h2,h3,h4,h5{font-family:'Space Grotesk',sans-serif;letter-spacing:-0.2px;}
 
-/* ── SLIDE BASE ── */
 .slide{
   min-height:100vh;scroll-snap-align:start;
   display:flex;flex-direction:column;justify-content:center;align-items:center;
-  padding:44px 60px;position:relative;overflow:hidden;
+  padding:42px 60px;position:relative;overflow:hidden;
 }
 .slide-num{
-  position:absolute;bottom:26px;right:32px;
-  font-size:11px;font-weight:600;opacity:0.3;letter-spacing:1.5px;
+  position:absolute;bottom:24px;right:30px;
+  font-size:11px;font-weight:600;opacity:0.28;letter-spacing:1.5px;
   font-family:'Space Grotesk',sans-serif;
 }
 .blob{position:absolute;border-radius:50%;pointer-events:none;}
 
-/* ── TYPOGRAPHY SYSTEM ── */
-.eyebrow{
-  font-size:10.5px;font-weight:700;letter-spacing:3px;text-transform:uppercase;
-  opacity:0.4;margin-bottom:14px;font-family:'Space Grotesk',sans-serif;
-}
-.h-display{font-size:46px;font-weight:700;line-height:1.08;margin-bottom:10px;}
-.h-display span{color:var(--blue-light);}
-.h-ar{font-size:16px;opacity:0.35;direction:rtl;margin-bottom:36px;font-weight:300;}
+/* Typography */
+.eyebrow{font-size:10px;font-weight:700;letter-spacing:3px;text-transform:uppercase;opacity:0.38;margin-bottom:12px;font-family:'Space Grotesk',sans-serif;}
+.h-display{font-size:44px;font-weight:700;line-height:1.08;margin-bottom:10px;}
+.h-display em{font-style:normal;background:linear-gradient(90deg,#60a5fa,#a78bfa);-webkit-background-clip:text;-webkit-text-fill-color:transparent;}
+.h-ar{font-size:15px;opacity:0.3;direction:rtl;margin-bottom:30px;font-weight:300;}
 .body-sm{font-size:12.5px;opacity:0.55;line-height:1.55;}
 
-/* ── GLASS CARDS ── */
-.card{
-  background:rgba(255,255,255,0.04);
-  border:1px solid rgba(255,255,255,0.08);
-  border-radius:16px;padding:20px;
-}
-.card-highlight{
-  background:rgba(37,99,235,0.07);
-  border:1px solid rgba(37,99,235,0.2);
-  border-radius:14px;padding:14px 16px;
-}
+/* Glass card system */
+.card{background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:18px;}
+.card-hl{background:rgba(37,99,235,0.07);border:1px solid rgba(37,99,235,0.2);border-radius:14px;padding:13px 15px;}
+.card-green{background:rgba(16,185,129,0.07);border:1px solid rgba(16,185,129,0.2);border-radius:14px;padding:13px 15px;}
+.card-amber{background:rgba(245,158,11,0.07);border:1px solid rgba(245,158,11,0.2);border-radius:14px;padding:13px 15px;}
+.card-purple{background:rgba(139,92,246,0.08);border:1px solid rgba(139,92,246,0.2);border-radius:14px;padding:13px 15px;}
 
-/* ══════ SLIDE 1 — COVER ══════ */
-.s1{background:radial-gradient(ellipse 120% 80% at 65% 40%,#1a2f70 0%,#0c1830 45%,#06090f 100%);}
-.s1 .b1{width:600px;height:600px;background:rgba(37,99,235,0.1);top:-200px;right:-200px;}
-.s1 .b2{width:300px;height:300px;background:rgba(139,92,246,0.06);bottom:-80px;left:-60px;}
-.s1-logo{
-  width:72px;height:72px;border-radius:20px;
-  background:linear-gradient(135deg,rgba(37,99,235,0.4),rgba(139,92,246,0.3));
-  border:1.5px solid rgba(255,255,255,0.2);
-  display:flex;align-items:center;justify-content:center;
-  font-size:30px;margin:0 auto 28px;
-  box-shadow:0 0 40px rgba(37,99,235,0.25);
-}
-.s1 h1{
-  font-size:58px;font-weight:700;text-align:center;
-  background:linear-gradient(135deg,#ffffff 0%,#93c5fd 60%,#c4b5fd 100%);
-  -webkit-background-clip:text;-webkit-text-fill-color:transparent;
-  line-height:1.05;margin-bottom:12px;
-}
-.s1-sub{font-size:17px;text-align:center;opacity:0.6;margin-bottom:8px;font-weight:400;}
-.s1-ar{font-size:14px;text-align:center;opacity:0.3;direction:rtl;margin-bottom:32px;}
-.s1-pills{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-bottom:24px;}
-.pill{
-  padding:7px 18px;border-radius:99px;
-  border:1px solid rgba(255,255,255,0.15);
-  background:rgba(255,255,255,0.07);
-  font-size:12.5px;font-weight:500;
-  backdrop-filter:blur(4px);
-}
-.s1-countries{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;}
-.country-tag{
-  display:flex;align-items:center;gap:5px;
-  padding:4px 12px;border-radius:99px;
-  background:rgba(255,255,255,0.05);
-  border:1px solid rgba(255,255,255,0.1);
-  font-size:11.5px;opacity:0.6;font-weight:500;
-}
-
-/* ══════ SLIDE 2 — CHALLENGE ══════ */
-.s2{background:#06090f;}
-.s2 .b1{width:450px;height:450px;background:rgba(239,68,68,0.06);top:-150px;left:-100px;}
-.prob-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;max-width:860px;width:100%;}
-.prob-card{
-  background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);
-  border-radius:16px;padding:22px;display:flex;gap:16px;align-items:flex-start;
-}
-.prob-icon{font-size:26px;flex-shrink:0;margin-top:2px;}
-.prob-card h3{font-size:14.5px;font-weight:700;margin-bottom:5px;color:#fca5a5;}
-.prob-card p{font-size:12px;opacity:0.5;line-height:1.5;}
-
-/* ══════ SLIDE 3 — SOLUTION ══════ */
-.s3{background:linear-gradient(145deg,#08122a 0%,#0d1f3c 100%);}
-.s3 .b1{width:400px;height:400px;background:rgba(37,99,235,0.1);bottom:-120px;right:-100px;}
-.sol-list{max-width:820px;width:100%;}
-.sol-item{display:flex;gap:16px;margin-bottom:20px;align-items:flex-start;}
-.sol-num{
-  width:36px;height:36px;border-radius:50%;
-  background:rgba(37,99,235,0.18);border:1px solid rgba(37,99,235,0.35);
-  display:flex;align-items:center;justify-content:center;
-  font-size:13px;font-weight:700;color:#60a5fa;flex-shrink:0;margin-top:2px;
-}
-.sol-item h3{font-size:15px;font-weight:700;margin-bottom:4px;}
-.sol-item p{font-size:12.5px;opacity:0.5;line-height:1.5;}
-
-/* ══════ SLIDE 4 — GLOBAL REACH ══════ */
-.s4{background:#06090f;}
-.s4 .b1{width:500px;height:500px;background:rgba(16,185,129,0.06);top:-150px;right:-150px;}
-.reach-wrap{display:flex;gap:32px;max-width:960px;width:100%;align-items:flex-start;}
-.reach-left{flex:1.1;}
-.reach-right{flex:0.9;}
-.stats-row{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:20px;}
-.stat-box{
-  background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.07);
-  border-radius:14px;padding:18px;text-align:center;
-}
-.stat-box .s-num{font-size:40px;font-weight:800;line-height:1;font-family:'Space Grotesk',sans-serif;}
-.stat-box .s-lbl{font-size:11px;opacity:0.45;margin-top:4px;font-weight:500;}
-.stat-box .s-ar{font-size:10px;opacity:0.25;direction:rtl;margin-top:3px;}
-.country-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
-.c-card{
-  background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.07);
-  border-radius:12px;padding:14px;display:flex;gap:12px;align-items:center;
-}
-.c-flag{font-size:24px;}
-.c-card h4{font-size:13px;font-weight:700;margin-bottom:2px;}
-.c-card p{font-size:11px;opacity:0.4;line-height:1.3;}
-
-/* ══════ SLIDE 5 — WHO BENEFITS ══════ */
-.s5{background:linear-gradient(160deg,#08122a 0%,#06090f 100%);}
-.s5 .b1{width:380px;height:380px;background:rgba(139,92,246,0.07);bottom:-100px;left:-80px;}
-.ben-row{display:flex;gap:12px;flex-wrap:wrap;justify-content:center;max-width:920px;width:100%;}
-.ben-card{
-  background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.07);
-  border-radius:18px;padding:22px 18px;flex:1;min-width:155px;max-width:185px;text-align:center;
-}
-.ben-icon{font-size:30px;margin-bottom:10px;}
-.ben-card h3{font-size:13px;font-weight:700;margin-bottom:5px;color:#34d399;}
-.ben-card p{font-size:11.5px;opacity:0.45;line-height:1.4;}
-.ben-card .b-ar{font-size:10px;opacity:0.25;direction:rtl;margin-top:4px;}
-
-/* ══════ SLIDE 6 — PROJECTS ══════ */
-.s6{background:#06090f;}
-.s6 .b1{width:420px;height:420px;background:rgba(6,182,212,0.06);bottom:-120px;right:-80px;}
-.proj-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;max-width:920px;width:100%;}
-.proj-card{
-  border-radius:16px;padding:18px 14px;text-align:center;
-  border:1px solid rgba(255,255,255,0.07);background:rgba(255,255,255,0.04);
-  position:relative;overflow:hidden;
-}
-.proj-card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;border-radius:16px 16px 0 0;}
-.gfa::before{background:#3b82f6;} .cbt::before{background:#10b981;} .bsfp::before{background:#f97316;}
-.aim::before{background:#f59e0b;} .pdm::before{background:#8b5cf6;} .mdm::before{background:#ef4444;}
-.whm::before{background:#06b6d4;} .cbts::before{background:#ec4899;}
-.proj-icon{font-size:24px;margin-bottom:9px;}
-.proj-card h3{font-size:14px;font-weight:700;margin-bottom:3px;}
-.proj-full{font-size:9.5px;opacity:0.4;margin-bottom:6px;line-height:1.3;}
-.proj-card p{font-size:11px;opacity:0.45;line-height:1.35;}
-
-/* ══════ SLIDE 7 — WORKFLOWS ══════ */
-.s7{background:linear-gradient(145deg,#0b1628 0%,#0d1f3c 100%);}
-.s7 .b1{width:380px;height:380px;background:rgba(139,92,246,0.08);top:-80px;right:-80px;}
-.wf-split{display:flex;gap:28px;max-width:940px;width:100%;align-items:flex-start;}
-.wf-left{flex:1.1;} .wf-right{flex:0.9;}
-.wf-tabs{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:18px;}
-.wf-tab{
-  padding:5px 13px;border-radius:99px;font-size:11.5px;font-weight:700;
-  border:1px solid rgba(255,255,255,0.14);background:rgba(255,255,255,0.05);color:white;cursor:pointer;
-  font-family:'Space Grotesk',sans-serif;transition:all 0.15s;
-}
-.wf-tab.on{background:var(--blue);border-color:var(--blue);}
-.wf-detail{background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.07);border-radius:16px;padding:18px;}
-.wf-detail h4{font-size:13.5px;font-weight:700;margin-bottom:12px;color:#60a5fa;}
-.wf-row{display:flex;gap:10px;margin-bottom:10px;align-items:flex-start;}
-.wf-dot{width:5px;height:5px;border-radius:50%;background:#3b82f6;flex-shrink:0;margin-top:7px;}
-.wf-row p{font-size:12px;opacity:0.6;line-height:1.45;}
-.wf-row strong{color:white;opacity:1;}
-.badge-grid{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px;}
-.badge{display:inline-flex;align-items:center;gap:5px;padding:4px 11px;border-radius:99px;font-size:10.5px;font-weight:700;}
+/* Badges */
+.badge{display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:99px;font-size:10.5px;font-weight:700;}
 .b-blue{background:rgba(59,130,246,0.14);border:1px solid rgba(59,130,246,0.28);color:#93c5fd;}
 .b-green{background:rgba(16,185,129,0.14);border:1px solid rgba(16,185,129,0.28);color:#6ee7b7;}
 .b-amber{background:rgba(245,158,11,0.14);border:1px solid rgba(245,158,11,0.28);color:#fcd34d;}
 .b-purple{background:rgba(139,92,246,0.14);border:1px solid rgba(139,92,246,0.28);color:#c4b5fd;}
+.b-red{background:rgba(239,68,68,0.14);border:1px solid rgba(239,68,68,0.28);color:#fca5a5;}
+.b-cyan{background:rgba(6,182,212,0.14);border:1px solid rgba(6,182,212,0.28);color:#67e8f9;}
+.live-dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:#10b981;margin-right:5px;animation:pulse 1.8s ease-in-out infinite;}
+@keyframes pulse{0%,100%{opacity:1;}50%{opacity:0.3;}}
 
-/* ══════ SLIDE 8 — HOW IT WORKS ══════ */
-.s8{background:#06090f;}
-.s8 .b1{width:400px;height:400px;background:rgba(245,158,11,0.05);top:-100px;right:-100px;}
-.flow-row{display:flex;gap:0;max-width:920px;width:100%;align-items:flex-start;}
-.flow-item{flex:1;text-align:center;padding:18px 12px;position:relative;}
-.flow-item::after{
-  content:'→';position:absolute;right:-8px;top:28px;
-  font-size:16px;opacity:0.18;
-}
-.flow-item:last-child::after{display:none;}
-.flow-circle{
-  width:52px;height:52px;border-radius:50%;
-  background:rgba(37,99,235,0.15);border:1.5px solid rgba(37,99,235,0.4);
-  display:flex;align-items:center;justify-content:center;font-size:22px;
-  margin:0 auto 11px;
-}
-.flow-item h3{font-size:12.5px;font-weight:700;margin-bottom:4px;line-height:1.3;}
-.flow-item p{font-size:10.5px;opacity:0.35;direction:rtl;}
-
-/* ══════ SLIDE 9 — FIELD OPERATIONS ══════ */
-.s9{background:linear-gradient(145deg,#060d1a 0%,#06090f 100%);}
-.s9 .b1{width:420px;height:420px;background:rgba(16,185,129,0.07);top:-100px;right:-80px;}
-.fo-split{display:flex;gap:26px;max-width:960px;width:100%;align-items:flex-start;}
-.fo-left{flex:1.05;} .fo-right{flex:0.95;}
-.fo-metrics{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;}
-.fo-met{background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.07);border-radius:12px;padding:14px;}
-.fo-met .mn{font-size:28px;font-weight:800;line-height:1;margin-bottom:3px;font-family:'Space Grotesk',sans-serif;}
-.fo-met .ml{font-size:11px;opacity:0.45;font-weight:500;}
-.fo-met .ma{font-size:10px;opacity:0.25;direction:rtl;margin-top:2px;}
-.fo-offline{
-  background:rgba(16,185,129,0.09);border:1px solid rgba(16,185,129,0.22);
-  border-radius:12px;padding:12px 14px;display:flex;gap:10px;align-items:center;
-}
-.fo-offline p{font-size:11.5px;opacity:0.65;line-height:1.45;}
-.fo-step{display:flex;gap:12px;margin-bottom:13px;align-items:flex-start;}
-.fo-icon{
-  width:34px;height:34px;border-radius:10px;
-  background:rgba(59,130,246,0.14);border:1px solid rgba(59,130,246,0.28);
-  display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0;
-}
-.fo-step h4{font-size:13px;font-weight:700;margin-bottom:2px;}
-.fo-step p{font-size:11.5px;opacity:0.45;line-height:1.4;}
-
-/* ══════ SLIDE 10 — FINANCIAL ══════ */
-.s10{background:#06090f;}
-.s10 .b1{width:400px;height:400px;background:rgba(245,158,11,0.06);bottom:-100px;left:-80px;}
-.fi-split{display:flex;gap:26px;max-width:960px;width:100%;align-items:flex-start;}
-.fi-left{flex:1;} .fi-right{flex:1;}
-.fi-bar-wrap{margin-bottom:13px;}
-.fi-bar-top{display:flex;justify-content:space-between;margin-bottom:5px;}
-.fi-bar-top span:first-child{font-size:12px;font-weight:600;}
-.fi-bar-top span:last-child{font-size:11px;opacity:0.4;}
-.fi-bg{height:7px;background:rgba(255,255,255,0.06);border-radius:99px;overflow:hidden;}
-.fi-fill{height:100%;border-radius:99px;}
-.fi-flow{background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.07);border-radius:14px;padding:16px;}
-.fi-flow h4{font-size:13px;font-weight:700;margin-bottom:12px;color:#fbbf24;}
-.fi-step{display:flex;gap:10px;margin-bottom:9px;align-items:center;}
-.fi-n{
-  width:20px;height:20px;border-radius:50%;
-  background:rgba(245,158,11,0.18);border:1px solid rgba(245,158,11,0.35);
-  display:flex;align-items:center;justify-content:center;
-  font-size:9.5px;font-weight:800;color:#fbbf24;flex-shrink:0;
-}
-.fi-step p{font-size:11.5px;opacity:0.55;line-height:1.4;}
-.fi-step strong{color:white;opacity:1;}
-.fi-ctrl-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px;}
-.fi-ctrl{background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.07);border-radius:10px;padding:10px 12px;}
-.fi-ctrl .fci{font-size:15px;margin-bottom:4px;}
-.fi-ctrl h5{font-size:11.5px;font-weight:700;margin-bottom:2px;}
-.fi-ctrl p{font-size:10.5px;opacity:0.4;line-height:1.3;}
-
-/* ══════ SLIDE 11 — HUB CAPACITY MAP ══════ */
-.s11{background:linear-gradient(145deg,#050b17 0%,#06090f 100%);}
-.s11 .b1{width:380px;height:380px;background:rgba(59,130,246,0.06);top:-80px;left:-80px;}
-.map-split{display:flex;gap:22px;max-width:980px;width:100%;align-items:flex-start;}
-.map-area{flex:1.3;} .map-panel{flex:1;}
-.map-box{background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);border-radius:16px;padding:10px;}
-svg.smap{width:100%;max-width:360px;display:block;margin:0 auto;}
-.map-legend{display:flex;gap:12px;flex-wrap:wrap;margin-top:8px;}
-.ml-i{display:flex;gap:5px;align-items:center;font-size:10.5px;opacity:0.45;}
-.ml-d{width:7px;height:7px;border-radius:50%;flex-shrink:0;}
-.hub-card{
-  background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.07);
-  border-radius:11px;padding:10px 12px;margin-bottom:7px;
-}
-.hub-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:5px;}
-.hub-top h4{font-size:12px;font-weight:700;}
-.hub-top span{font-size:10.5px;opacity:0.4;}
-.hub-bg{height:5px;background:rgba(255,255,255,0.06);border-radius:99px;overflow:hidden;}
-.hub-fill{height:100%;border-radius:99px;}
-.hub-pills{display:flex;gap:6px;margin-top:5px;}
-.hp{padding:2px 8px;border-radius:99px;font-size:9.5px;font-weight:700;}
-.hp-g{background:rgba(16,185,129,0.14);color:#6ee7b7;}
-.hp-b{background:rgba(59,130,246,0.14);color:#93c5fd;}
-.hp-y{background:rgba(245,158,11,0.14);color:#fcd34d;}
-
-/* ══════ SLIDE 12 — ANALYTICS ══════ */
-.s12{background:#06090f;}
-.s12 .b1{width:420px;height:420px;background:rgba(139,92,246,0.07);bottom:-120px;right:-80px;}
-.an-split{display:flex;gap:28px;max-width:960px;width:100%;align-items:flex-start;}
-.an-left{flex:1;} .an-right{flex:1;}
-.an-big{
-  background:linear-gradient(135deg,rgba(37,99,235,0.15),rgba(139,92,246,0.1));
-  border:1px solid rgba(37,99,235,0.25);border-radius:16px;padding:20px;text-align:center;margin-bottom:14px;
-}
-.an-big .num{font-size:64px;font-weight:800;color:#60a5fa;line-height:1;font-family:'Space Grotesk',sans-serif;}
-.an-big .lbl{font-size:13px;opacity:0.55;margin-top:4px;}
-.an-big .ar{font-size:11px;opacity:0.25;direction:rtl;margin-top:3px;}
-.an-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;}
-.an-box{background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.07);border-radius:12px;padding:14px;text-align:center;}
-.an-box .n{font-size:28px;font-weight:800;line-height:1;font-family:'Space Grotesk',sans-serif;}
-.an-box .l{font-size:11px;opacity:0.4;margin-top:4px;}
-.an-dist{background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.07);border-radius:14px;padding:16px;}
-.an-dist h4{font-size:12.5px;font-weight:700;margin-bottom:14px;opacity:0.7;}
-.an-bar-row{margin-bottom:11px;}
-.an-bar-top{display:flex;justify-content:space-between;margin-bottom:4px;}
-.an-bar-top span:first-child{font-size:11.5px;font-weight:600;}
-.an-bar-top span:last-child{font-size:10.5px;opacity:0.4;}
-.an-bg{height:6px;background:rgba(255,255,255,0.05);border-radius:99px;overflow:hidden;}
-.an-fill{height:100%;border-radius:99px;}
-.roadmap-box{background:rgba(16,185,129,0.07);border:1px solid rgba(16,185,129,0.2);border-radius:12px;padding:13px;}
-.roadmap-box h4{font-size:12.5px;font-weight:700;color:#34d399;margin-bottom:8px;}
-.roadmap-box p{font-size:11.5px;opacity:0.55;line-height:1.5;}
-
-/* ══════ SLIDE 13 — COMING SOON ══════ */
-.s13{background:linear-gradient(145deg,#08122a 0%,#0d1f3c 100%);}
-.s13 .b1{width:450px;height:450px;background:rgba(37,99,235,0.1);top:-150px;right:-150px;}
-.s13 .b2{width:300px;height:300px;background:rgba(139,92,246,0.07);bottom:-80px;left:-60px;}
-.cs-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;max-width:920px;width:100%;margin-bottom:28px;}
-.cs-card{
-  background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.07);
-  border-radius:16px;padding:22px;text-align:center;position:relative;overflow:hidden;
-}
-.cs-card.live::before{
-  content:'LIVE';position:absolute;top:12px;right:12px;
-  background:#10b981;color:white;font-size:8px;font-weight:800;
-  padding:2px 7px;border-radius:99px;letter-spacing:1px;
-}
-.cs-card.soon::before{
-  content:'COMING SOON';position:absolute;top:12px;right:12px;
-  background:rgba(245,158,11,0.8);color:white;font-size:8px;font-weight:800;
-  padding:2px 7px;border-radius:99px;letter-spacing:1px;
-}
-.cs-icon{font-size:32px;margin-bottom:12px;}
-.cs-card h3{font-size:14px;font-weight:700;margin-bottom:6px;}
-.cs-card .cs-ar{font-size:10.5px;opacity:0.3;direction:rtl;margin-bottom:7px;}
-.cs-card p{font-size:11.5px;opacity:0.45;line-height:1.45;}
-
-/* ══════ SLIDE 14 — CLOSE ══════ */
-.s14{background:radial-gradient(ellipse 120% 80% at 35% 40%,#1a2f70 0%,#0c1830 45%,#06090f 100%);text-align:center;}
-.s14 .b1{width:500px;height:500px;background:rgba(255,255,255,0.03);top:-200px;right:-200px;}
-.s14 .b2{width:300px;height:300px;background:rgba(139,92,246,0.06);bottom:-100px;left:-80px;}
-.s14-logo{
-  width:68px;height:68px;border-radius:18px;
-  background:linear-gradient(135deg,rgba(37,99,235,0.4),rgba(139,92,246,0.3));
-  border:1.5px solid rgba(255,255,255,0.18);
-  display:flex;align-items:center;justify-content:center;font-size:28px;
-  margin:0 auto 22px;box-shadow:0 0 40px rgba(37,99,235,0.2);
-}
-.s14 h1{
-  font-size:50px;font-weight:700;margin-bottom:8px;
-  background:linear-gradient(135deg,#ffffff 0%,#93c5fd 60%,#c4b5fd 100%);
-  -webkit-background-clip:text;-webkit-text-fill-color:transparent;
-}
-.s14 .sub{font-size:16px;opacity:0.5;margin-bottom:5px;}
-.s14 .sub-ar{font-size:13px;opacity:0.25;direction:rtl;margin-bottom:32px;}
-.close-pills{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;}
-.close-pill{
-  padding:9px 20px;border-radius:99px;
-  background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.14);
-  font-size:12.5px;font-weight:500;
-}
-
-/* ── NAV DOTS ── */
-.nav-dots{
-  position:fixed;right:16px;top:50%;transform:translateY(-50%);
-  display:flex;flex-direction:column;gap:7px;z-index:99;
-}
-.nav-dot{
-  width:6px;height:6px;border-radius:50%;
-  background:rgba(255,255,255,0.22);cursor:pointer;border:none;
-  transition:all 0.2s;
-}
+/* Nav dots */
+.nav-dots{position:fixed;right:15px;top:50%;transform:translateY(-50%);display:flex;flex-direction:column;gap:7px;z-index:99;}
+.nav-dot{width:6px;height:6px;border-radius:50%;background:rgba(255,255,255,0.2);cursor:pointer;border:none;transition:all 0.2s;}
 .nav-dot.active{background:white;transform:scale(1.4);}
 
-/* ── PRINT ── */
-@media print{
-  body{overflow:visible;height:auto;scroll-snap-type:none;}
-  .slide{page-break-after:always;min-height:100vh;}
-  .nav-dots{display:none;}
-}
+/* Print */
+@media print{body{overflow:visible;height:auto;scroll-snap-type:none;}.slide{page-break-after:always;min-height:100vh;}.nav-dots{display:none;}}
+
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   SLIDE 1 — COVER
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+.s1{background:radial-gradient(ellipse 130% 80% at 65% 40%,#1a2f70 0%,#0c1830 45%,#06090f 100%);}
+.s1 .b1{width:600px;height:600px;background:rgba(37,99,235,0.1);top:-200px;right:-200px;}
+.s1 .b2{width:300px;height:300px;background:rgba(139,92,246,0.06);bottom:-80px;left:-60px;}
+.s1-logo{width:72px;height:72px;border-radius:20px;background:linear-gradient(135deg,rgba(37,99,235,0.4),rgba(139,92,246,0.3));border:1.5px solid rgba(255,255,255,0.2);display:flex;align-items:center;justify-content:center;font-size:30px;margin:0 auto 26px;box-shadow:0 0 40px rgba(37,99,235,0.25);}
+.s1 h1{font-size:56px;font-weight:700;text-align:center;background:linear-gradient(135deg,#ffffff 0%,#93c5fd 55%,#c4b5fd 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;line-height:1.05;margin-bottom:10px;}
+.s1-sub{font-size:16px;text-align:center;opacity:0.58;margin-bottom:7px;font-weight:400;}
+.s1-ar{font-size:13px;text-align:center;opacity:0.28;direction:rtl;margin-bottom:28px;}
+.s1-pills{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-bottom:20px;}
+.pill{padding:6px 16px;border-radius:99px;border:1px solid rgba(255,255,255,0.14);background:rgba(255,255,255,0.06);font-size:12px;font-weight:500;backdrop-filter:blur(4px);}
+.s1-flags{display:flex;gap:7px;justify-content:center;flex-wrap:wrap;}
+.flag-tag{display:flex;align-items:center;gap:5px;padding:4px 12px;border-radius:99px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.09);font-size:11.5px;opacity:0.55;font-weight:500;}
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   SLIDE 2 — CHALLENGE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+.s2{background:#06090f;}
+.s2 .b1{width:450px;height:450px;background:rgba(239,68,68,0.05);top:-150px;left:-100px;}
+.prob-grid{display:grid;grid-template-columns:1fr 1fr;gap:13px;max-width:860px;width:100%;}
+.prob-card{background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);border-radius:16px;padding:20px;display:flex;gap:14px;align-items:flex-start;}
+.prob-icon{font-size:24px;flex-shrink:0;margin-top:2px;}
+.prob-card h3{font-size:14px;font-weight:700;margin-bottom:4px;color:#fca5a5;}
+.prob-card p{font-size:11.5px;opacity:0.48;line-height:1.5;}
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   SLIDE 3 — SOLUTION
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+.s3{background:linear-gradient(145deg,#08122a 0%,#0d1f3c 100%);}
+.s3 .b1{width:400px;height:400px;background:rgba(37,99,235,0.1);bottom:-120px;right:-100px;}
+.sol-item{display:flex;gap:14px;margin-bottom:18px;align-items:flex-start;}
+.sol-num{width:34px;height:34px;border-radius:50%;background:rgba(37,99,235,0.18);border:1px solid rgba(37,99,235,0.35);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:#60a5fa;flex-shrink:0;margin-top:2px;}
+.sol-item h3{font-size:14.5px;font-weight:700;margin-bottom:4px;}
+.sol-item p{font-size:12px;opacity:0.48;line-height:1.5;}
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   SLIDE 4 — CLIENTS & PARTNERS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+.s4{background:#06090f;}
+.s4 .b1{width:450px;height:450px;background:rgba(139,92,246,0.06);top:-150px;right:-120px;}
+.client-split{display:flex;gap:24px;max-width:960px;width:100%;align-items:flex-start;}
+.client-left{flex:1.1;} .client-right{flex:0.9;}
+.client-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;}
+.client-card{background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:14px;padding:14px;display:flex;gap:12px;align-items:center;}
+.client-logo{width:44px;height:44px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0;}
+.client-card h4{font-size:13px;font-weight:700;margin-bottom:2px;}
+.client-card p{font-size:11px;opacity:0.4;line-height:1.35;}
+.sector-row{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:12px;}
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   SLIDE 5 — GLOBAL REACH
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+.s5{background:linear-gradient(145deg,#08122a 0%,#06090f 100%);}
+.s5 .b1{width:500px;height:500px;background:rgba(16,185,129,0.06);top:-150px;right:-150px;}
+.reach-split{display:flex;gap:28px;max-width:980px;width:100%;align-items:flex-start;}
+.reach-left{flex:1.05;} .reach-right{flex:0.95;}
+.stats-row{display:grid;grid-template-columns:repeat(3,1fr);gap:11px;margin-bottom:16px;}
+.stat-box{background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.07);border-radius:14px;padding:16px;text-align:center;}
+.stat-box .n{font-size:38px;font-weight:800;line-height:1;font-family:'Space Grotesk',sans-serif;}
+.stat-box .l{font-size:10.5px;opacity:0.42;margin-top:4px;font-weight:500;}
+.stat-box .a{font-size:9.5px;opacity:0.22;direction:rtl;margin-top:2px;}
+.country-grid{display:grid;grid-template-columns:1fr 1fr;gap:9px;}
+.c-card{background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.07);border-radius:11px;padding:12px;display:flex;gap:10px;align-items:center;}
+.c-flag{font-size:22px;}
+.c-card h4{font-size:12.5px;font-weight:700;margin-bottom:2px;}
+.c-card p{font-size:10.5px;opacity:0.38;line-height:1.3;}
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   SLIDE 6 — WORK TYPES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+.s6{background:#06090f;}
+.s6 .b1{width:420px;height:420px;background:rgba(6,182,212,0.06);bottom:-120px;right:-80px;}
+.work-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;max-width:940px;width:100%;}
+.work-card{background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:15px;padding:18px;position:relative;overflow:hidden;}
+.work-card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;border-radius:15px 15px 0 0;}
+.wc-mmp::before{background:#3b82f6;} .wc-proj::before{background:#10b981;} .wc-task::before{background:#f59e0b;}
+.wc-assess::before{background:#8b5cf6;} .wc-survey::before{background:#ef4444;} .wc-biz::before{background:#06b6d4;}
+.work-card .wi{font-size:24px;margin-bottom:9px;}
+.work-card h3{font-size:14px;font-weight:700;margin-bottom:4px;}
+.work-card .wa{font-size:10px;opacity:0.3;direction:rtl;margin-bottom:6px;}
+.work-card p{font-size:11.5px;opacity:0.45;line-height:1.4;}
+.work-tags{display:flex;flex-wrap:wrap;gap:5px;margin-top:8px;}
+.wt{padding:2px 8px;border-radius:99px;font-size:9.5px;font-weight:700;background:rgba(255,255,255,0.07);opacity:0.6;}
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   SLIDE 7 — WORKFLOWS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+.s7{background:linear-gradient(145deg,#0b1628 0%,#0d1f3c 100%);}
+.s7 .b1{width:380px;height:380px;background:rgba(139,92,246,0.08);top:-80px;right:-80px;}
+.wf-split{display:flex;gap:26px;max-width:960px;width:100%;align-items:flex-start;}
+.wf-left{flex:1.1;} .wf-right{flex:0.9;}
+.wf-tabs{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:16px;}
+.wf-tab{padding:5px 12px;border-radius:99px;font-size:11px;font-weight:700;border:1px solid rgba(255,255,255,0.13);background:rgba(255,255,255,0.05);color:white;cursor:pointer;font-family:'Space Grotesk',sans-serif;}
+.wf-tab.on{background:var(--blue);border-color:var(--blue);}
+.wf-detail{background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.07);border-radius:14px;padding:17px;}
+.wf-detail h4{font-size:13px;font-weight:700;margin-bottom:12px;color:#60a5fa;}
+.wf-row{display:flex;gap:9px;margin-bottom:9px;align-items:flex-start;}
+.wf-dot{width:5px;height:5px;border-radius:50%;background:#3b82f6;flex-shrink:0;margin-top:7px;}
+.wf-row p{font-size:11.5px;opacity:0.58;line-height:1.45;}
+.wf-row strong{color:white;opacity:1;}
+.badge-wrap{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px;}
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   SLIDE 8 — FIELD OPERATIONS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+.s8{background:linear-gradient(145deg,#060d1a 0%,#06090f 100%);}
+.s8 .b1{width:420px;height:420px;background:rgba(16,185,129,0.07);top:-100px;right:-80px;}
+.fo-split{display:flex;gap:24px;max-width:980px;width:100%;align-items:flex-start;}
+.fo-left{flex:1.05;} .fo-right{flex:0.95;}
+.fo-metrics{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-bottom:13px;}
+.fo-met{background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.07);border-radius:12px;padding:13px;}
+.fo-met .mn{font-size:26px;font-weight:800;line-height:1;margin-bottom:3px;font-family:'Space Grotesk',sans-serif;}
+.fo-met .ml{font-size:10.5px;opacity:0.43;font-weight:500;}
+.fo-met .ma{font-size:9.5px;opacity:0.22;direction:rtl;margin-top:2px;}
+.fo-offline{background:rgba(16,185,129,0.08);border:1px solid rgba(16,185,129,0.2);border-radius:11px;padding:11px 13px;display:flex;gap:9px;align-items:center;}
+.fo-offline p{font-size:11px;opacity:0.62;line-height:1.45;}
+.fo-step{display:flex;gap:11px;margin-bottom:12px;align-items:flex-start;}
+.fo-icon{width:32px;height:32px;border-radius:9px;background:rgba(59,130,246,0.13);border:1px solid rgba(59,130,246,0.26);display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0;}
+.fo-step h4{font-size:12.5px;font-weight:700;margin-bottom:2px;}
+.fo-step p{font-size:11px;opacity:0.43;line-height:1.4;}
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   SLIDE 9 — FINANCIAL CONTROL
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+.s9{background:#06090f;}
+.s9 .b1{width:400px;height:400px;background:rgba(245,158,11,0.06);bottom:-100px;left:-80px;}
+.fi-split{display:flex;gap:24px;max-width:980px;width:100%;align-items:flex-start;}
+.fi-left{flex:1;} .fi-right{flex:1;}
+.fi-bar-wrap{margin-bottom:11px;}
+.fi-bar-top{display:flex;justify-content:space-between;margin-bottom:4px;}
+.fi-bar-top span:first-child{font-size:11.5px;font-weight:600;}
+.fi-bar-top span:last-child{font-size:10.5px;opacity:0.38;}
+.fi-bg{height:7px;background:rgba(255,255,255,0.06);border-radius:99px;overflow:hidden;}
+.fi-fill{height:100%;border-radius:99px;}
+.fi-flow{background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.07);border-radius:14px;padding:15px;}
+.fi-flow h4{font-size:12.5px;font-weight:700;margin-bottom:11px;color:#fbbf24;}
+.fi-step{display:flex;gap:9px;margin-bottom:8px;align-items:center;}
+.fi-n{width:19px;height:19px;border-radius:50%;background:rgba(245,158,11,0.16);border:1px solid rgba(245,158,11,0.32);display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:800;color:#fbbf24;flex-shrink:0;}
+.fi-step p{font-size:11px;opacity:0.52;line-height:1.4;}
+.fi-step strong{color:white;opacity:1;}
+.fi-ctrl-grid{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-top:11px;}
+.fi-ctrl{background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.07);border-radius:10px;padding:9px 11px;}
+.fi-ctrl .fci{font-size:14px;margin-bottom:3px;}
+.fi-ctrl h5{font-size:11px;font-weight:700;margin-bottom:2px;}
+.fi-ctrl p{font-size:10px;opacity:0.38;line-height:1.3;}
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   SLIDE 10 — HUB CAPACITY MAP
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+.s10{background:linear-gradient(145deg,#050b17 0%,#06090f 100%);}
+.s10 .b1{width:380px;height:380px;background:rgba(59,130,246,0.06);top:-80px;left:-80px;}
+.map-split{display:flex;gap:20px;max-width:990px;width:100%;align-items:flex-start;}
+.map-area{flex:1.3;} .map-panel{flex:1;}
+.map-box{background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);border-radius:15px;padding:9px;}
+svg.smap{width:100%;max-width:350px;display:block;margin:0 auto;}
+.map-legend{display:flex;gap:11px;flex-wrap:wrap;margin-top:7px;}
+.ml-i{display:flex;gap:5px;align-items:center;font-size:10px;opacity:0.42;}
+.ml-d{width:7px;height:7px;border-radius:50%;flex-shrink:0;}
+.hub-card{background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.07);border-radius:10px;padding:9px 11px;margin-bottom:6px;}
+.hub-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:5px;}
+.hub-top h4{font-size:11.5px;font-weight:700;}
+.hub-top span{font-size:10px;opacity:0.38;}
+.hub-bg{height:5px;background:rgba(255,255,255,0.06);border-radius:99px;overflow:hidden;}
+.hub-fill{height:100%;border-radius:99px;}
+.hub-pills{display:flex;gap:5px;margin-top:4px;}
+.hp{padding:2px 7px;border-radius:99px;font-size:9px;font-weight:700;}
+.hp-g{background:rgba(16,185,129,0.13);color:#6ee7b7;}
+.hp-b{background:rgba(59,130,246,0.13);color:#93c5fd;}
+.hp-y{background:rgba(245,158,11,0.13);color:#fcd34d;}
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   SLIDE 11 — COMMUNICATION PLATFORM
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+.s11{background:#06090f;}
+.s11 .b1{width:420px;height:420px;background:rgba(6,182,212,0.07);top:-100px;right:-80px;}
+.comm-split{display:flex;gap:26px;max-width:960px;width:100%;align-items:flex-start;}
+.comm-left{flex:1.15;} .comm-right{flex:0.85;}
+.comm-feature-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;}
+.comm-feat{background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.07);border-radius:13px;padding:14px;}
+.comm-feat .cf-icon{font-size:22px;margin-bottom:8px;}
+.comm-feat h4{font-size:13px;font-weight:700;margin-bottom:3px;}
+.comm-feat p{font-size:11px;opacity:0.43;line-height:1.4;}
+.why-box{background:rgba(239,68,68,0.07);border:1px solid rgba(239,68,68,0.18);border-radius:13px;padding:14px;margin-bottom:12px;}
+.why-box h4{font-size:13px;font-weight:700;color:#f87171;margin-bottom:7px;}
+.why-box p{font-size:11.5px;opacity:0.55;line-height:1.5;}
+.comm-stat-row{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;}
+.cs-b{background:rgba(6,182,212,0.08);border:1px solid rgba(6,182,212,0.2);border-radius:11px;padding:12px;text-align:center;}
+.cs-b .n{font-size:22px;font-weight:800;color:#67e8f9;font-family:'Space Grotesk',sans-serif;line-height:1;}
+.cs-b .l{font-size:10px;opacity:0.45;margin-top:3px;}
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   SLIDE 12 — REPORTS & AI ANALYSIS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+.s12{background:linear-gradient(145deg,#08122a 0%,#06090f 100%);}
+.s12 .b1{width:420px;height:420px;background:rgba(139,92,246,0.08);bottom:-120px;right:-80px;}
+.ai-split{display:flex;gap:24px;max-width:980px;width:100%;align-items:flex-start;}
+.ai-left{flex:1;} .ai-right{flex:1;}
+.report-grid{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-bottom:14px;}
+.report-card{background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.07);border-radius:12px;padding:13px;}
+.report-card .ri{font-size:20px;margin-bottom:7px;}
+.report-card h4{font-size:12.5px;font-weight:700;margin-bottom:3px;}
+.report-card p{font-size:11px;opacity:0.42;line-height:1.4;}
+.ai-engine{background:linear-gradient(135deg,rgba(139,92,246,0.12),rgba(59,130,246,0.08));border:1px solid rgba(139,92,246,0.22);border-radius:14px;padding:16px;}
+.ai-engine h4{font-size:13px;font-weight:700;color:#c4b5fd;margin-bottom:12px;}
+.ai-row{display:flex;gap:9px;margin-bottom:9px;align-items:flex-start;}
+.ai-dot{width:5px;height:5px;border-radius:50%;background:#8b5cf6;flex-shrink:0;margin-top:6px;}
+.ai-row p{font-size:11.5px;opacity:0.55;line-height:1.4;}
+.ai-row strong{color:white;opacity:1;}
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   SLIDE 13 — MARKET SURVEYS & STUDIES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+.s13{background:#06090f;}
+.s13 .b1{width:420px;height:420px;background:rgba(245,158,11,0.06);top:-100px;left:-80px;}
+.mkt-split{display:flex;gap:24px;max-width:960px;width:100%;align-items:flex-start;}
+.mkt-left{flex:1;} .mkt-right{flex:1;}
+.mkt-type-grid{display:grid;grid-template-columns:1fr;gap:9px;margin-bottom:14px;}
+.mkt-type{background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.07);border-radius:12px;padding:13px;display:flex;gap:12px;align-items:flex-start;}
+.mkt-type .mi{font-size:22px;flex-shrink:0;}
+.mkt-type h4{font-size:13px;font-weight:700;margin-bottom:3px;}
+.mkt-type p{font-size:11px;opacity:0.42;line-height:1.4;}
+.stakeholder-list{display:grid;grid-template-columns:1fr;gap:8px;}
+.sh-row{display:flex;gap:10px;align-items:center;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.07);border-radius:10px;padding:10px 12px;}
+.sh-icon{font-size:18px;flex-shrink:0;}
+.sh-row h5{font-size:12px;font-weight:700;margin-bottom:1px;}
+.sh-row p{font-size:10.5px;opacity:0.38;}
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   SLIDE 14 — NOV & DEC 2025 TRACKER
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+.s14{background:linear-gradient(145deg,#08122a 0%,#06090f 100%);}
+.s14 .b1{width:400px;height:400px;background:rgba(16,185,129,0.07);top:-100px;right:-80px;}
+.tracker-wrap{max-width:980px;width:100%;}
+.month-tabs{display:flex;gap:0;margin-bottom:20px;border-radius:12px;overflow:hidden;border:1px solid rgba(255,255,255,0.1);width:fit-content;}
+.m-tab{padding:8px 28px;font-size:13px;font-weight:700;font-family:'Space Grotesk',sans-serif;cursor:pointer;background:rgba(255,255,255,0.04);color:rgba(255,255,255,0.5);border:none;transition:all 0.2s;}
+.m-tab.on{background:#2563EB;color:white;}
+.tracker-main{display:flex;gap:20px;align-items:flex-start;}
+.tracker-left{flex:1.1;} .tracker-right{flex:0.9;}
+.tracker-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:14px;}
+.ts-box{background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:13px;padding:14px;text-align:center;}
+.ts-box .tn{font-size:34px;font-weight:800;line-height:1;font-family:'Space Grotesk',sans-serif;}
+.ts-box .tl{font-size:10px;opacity:0.4;margin-top:4px;}
+.activity-bars{background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.07);border-radius:14px;padding:15px;margin-bottom:12px;}
+.activity-bars h4{font-size:12px;font-weight:700;margin-bottom:12px;opacity:0.65;}
+.ab-row{margin-bottom:9px;}
+.ab-top{display:flex;justify-content:space-between;margin-bottom:4px;}
+.ab-top span:first-child{font-size:11.5px;font-weight:600;}
+.ab-top span:last-child{font-size:10.5px;opacity:0.38;}
+.ab-bg{height:7px;background:rgba(255,255,255,0.06);border-radius:99px;overflow:hidden;}
+.ab-fill{height:100%;border-radius:99px;transition:width 0.4s;}
+.compare-box{background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.07);border-radius:14px;padding:15px;}
+.compare-box h4{font-size:12px;font-weight:700;margin-bottom:12px;opacity:0.65;}
+.cmp-row{display:flex;gap:8px;margin-bottom:10px;align-items:center;}
+.cmp-label{font-size:11px;width:90px;opacity:0.55;flex-shrink:0;}
+.cmp-bars{flex:1;display:flex;flex-direction:column;gap:4px;}
+.cmp-bar-row{display:flex;align-items:center;gap:6px;}
+.cmp-bar-row span:first-child{font-size:9px;width:24px;opacity:0.4;flex-shrink:0;}
+.cmp-fill{height:6px;border-radius:99px;}
+.cmp-bar-row span:last-child{font-size:9.5px;opacity:0.45;margin-left:3px;}
+.state-pills{display:flex;flex-wrap:wrap;gap:5px;margin-top:10px;}
+.s-pill{padding:3px 9px;border-radius:99px;font-size:9.5px;font-weight:600;background:rgba(59,130,246,0.1);border:1px solid rgba(59,130,246,0.2);color:#93c5fd;}
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   SLIDE 15 — COMING SOON
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+.s15{background:linear-gradient(145deg,#08122a 0%,#0d1f3c 100%);}
+.s15 .b1{width:450px;height:450px;background:rgba(37,99,235,0.1);top:-150px;right:-150px;}
+.s15 .b2{width:300px;height:300px;background:rgba(139,92,246,0.07);bottom:-80px;left:-60px;}
+.cs-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:13px;max-width:940px;width:100%;}
+.cs-card{background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.07);border-radius:16px;padding:20px;text-align:center;position:relative;overflow:hidden;}
+.cs-card::before{position:absolute;top:10px;right:10px;font-size:8px;font-weight:800;padding:2px 7px;border-radius:99px;letter-spacing:0.8px;}
+.tag-live::before{content:'LIVE';background:#10b981;color:white;}
+.tag-soon::before{content:'COMING SOON';background:rgba(245,158,11,0.85);color:white;}
+.cs-icon{font-size:30px;margin-bottom:10px;}
+.cs-card h3{font-size:14px;font-weight:700;margin-bottom:5px;}
+.cs-card .cs-ar{font-size:10px;opacity:0.28;direction:rtl;margin-bottom:6px;}
+.cs-card p{font-size:11px;opacity:0.43;line-height:1.45;}
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   SLIDE 16 — CLOSE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+.s16{background:radial-gradient(ellipse 130% 80% at 35% 40%,#1a2f70 0%,#0c1830 45%,#06090f 100%);text-align:center;}
+.s16 .b1{width:500px;height:500px;background:rgba(255,255,255,0.03);top:-200px;right:-200px;}
+.s16 .b2{width:300px;height:300px;background:rgba(139,92,246,0.06);bottom:-100px;left:-80px;}
+.s16-logo{width:66px;height:66px;border-radius:18px;background:linear-gradient(135deg,rgba(37,99,235,0.4),rgba(139,92,246,0.3));border:1.5px solid rgba(255,255,255,0.18);display:flex;align-items:center;justify-content:center;font-size:26px;margin:0 auto 20px;box-shadow:0 0 40px rgba(37,99,235,0.2);}
+.s16 h1{font-size:48px;font-weight:700;margin-bottom:8px;background:linear-gradient(135deg,#ffffff 0%,#93c5fd 55%,#c4b5fd 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;}
+.s16 .sub{font-size:15px;opacity:0.48;margin-bottom:5px;}
+.s16 .sub-ar{font-size:12.5px;opacity:0.22;direction:rtl;margin-bottom:28px;}
+.close-pills{display:flex;gap:9px;justify-content:center;flex-wrap:wrap;}
+.close-pill{padding:8px 18px;border-radius:99px;background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.13);font-size:12px;font-weight:500;}
 </style>
 </head>
 <body>
-
 <div class="nav-dots" id="navDots"></div>
 
-<!-- ══════════════════════════════════════
+<!-- ═══════════════════════════════════════
   SLIDE 01 — COVER
-══════════════════════════════════════ -->
+═══════════════════════════════════════ -->
 <div class="slide s1" id="s1">
   <div class="blob b1"></div><div class="blob b2"></div>
   <div class="s1-logo">🛡️</div>
   <h1>PACT Command Center</h1>
-  <p class="s1-sub">The Unified Platform for Field Operations, Monitoring &amp; Financial Accountability</p>
-  <p class="s1-ar">المنصة الموحدة للعمليات الميدانية والمراقبة والمساءلة المالية</p>
+  <p class="s1-sub">The Unified Platform for Field Operations, Monitoring, Surveys &amp; Financial Accountability</p>
+  <p class="s1-ar">المنصة الموحدة للعمليات الميدانية والمراقبة والمسوحات والمساءلة المالية</p>
   <div class="s1-pills">
     <span class="pill">🖥️ Web Platform</span>
     <span class="pill">📱 iOS &amp; Android</span>
     <span class="pill">🌐 English / Arabic</span>
-    <span class="pill">📶 100% Offline Capable</span>
+    <span class="pill">📶 100% Offline</span>
     <span class="pill">🔒 Role-Based Access</span>
+    <span class="pill">📞 Own Comms Channel</span>
   </div>
-  <div class="s1-countries">
-    <span class="country-tag">🇸🇩 Sudan</span>
-    <span class="country-tag">🇺🇬 Uganda</span>
-    <span class="country-tag">🇷🇼 Rwanda</span>
-    <span class="country-tag">🇸🇸 South Sudan</span>
-    <span class="country-tag">🇺🇸 USA</span>
-    <span class="country-tag">🇶🇦 Qatar</span>
-    <span class="country-tag">🇲🇺 Mauritius</span>
+  <div class="s1-flags">
+    <span class="flag-tag">🇸🇩 Sudan</span>
+    <span class="flag-tag">🇺🇬 Uganda</span>
+    <span class="flag-tag">🇷🇼 Rwanda</span>
+    <span class="flag-tag">🇸🇸 South Sudan</span>
+    <span class="flag-tag">🇺🇸 USA</span>
+    <span class="flag-tag">🇶🇦 Qatar</span>
+    <span class="flag-tag">🇲🇺 Mauritius</span>
   </div>
-  <div class="slide-num">01 / 14</div>
+  <div class="slide-num">01 / 16</div>
 </div>
 
-<!-- ══════════════════════════════════════
+<!-- ═══════════════════════════════════════
   SLIDE 02 — THE CHALLENGE
-══════════════════════════════════════ -->
+═══════════════════════════════════════ -->
 <div class="slide s2" id="s2">
   <div class="blob b1"></div>
   <div style="max-width:880px;width:100%">
     <p class="eyebrow" style="text-align:center">The Challenge · التحدي</p>
-    <h2 class="h-display" style="text-align:center">Field monitoring was<br/><span>broken by design</span></h2>
-    <p class="h-ar" style="text-align:center">كانت المراقبة الميدانية مجزأة، يدوية، وبلا مساءلة</p>
+    <h2 class="h-display" style="text-align:center">Field operations were<br/><em>fragmented by design</em></h2>
+    <p class="h-ar" style="text-align:center">العمليات الميدانية كانت مجزأة، يدوية، وبلا رؤية ولا مساءلة</p>
     <div class="prob-grid">
-      <div class="prob-card">
-        <div class="prob-icon">📂</div>
-        <div><h3>Scattered, Siloed Data</h3><p>Visit records lived across spreadsheets, WhatsApp messages, and paper forms — no central truth, no accountability.</p></div>
-      </div>
-      <div class="prob-card">
-        <div class="prob-icon">💸</div>
-        <div><h3>Zero Financial Visibility</h3><p>Transportation advances, enumerator fees, and operational costs tracked manually with no approval chain and no audit trail.</p></div>
-      </div>
-      <div class="prob-card">
-        <div class="prob-icon">📍</div>
-        <div><h3>No Live Field Awareness</h3><p>Management had no real-time view of which sites were visited, who was in the field, or which areas were falling behind.</p></div>
-      </div>
-      <div class="prob-card">
-        <div class="prob-icon">🔄</div>
-        <div><h3>Endless Approval Delays</h3><p>Payment requests and plan verifications moved through email chains — taking days, creating backlogs, and eroding trust.</p></div>
-      </div>
+      <div class="prob-card"><div class="prob-icon">📂</div><div><h3>Scattered Data, No Truth</h3><p>Visit records, survey responses, and task outcomes spread across spreadsheets, WhatsApp groups, and paper — no accountability, no traceability.</p></div></div>
+      <div class="prob-card"><div class="prob-icon">💸</div><div><h3>No Financial Visibility</h3><p>Advances, fees, expenses, and retainers tracked manually with no approval chain, no audit trail, and no way to detect gaps or duplicates.</p></div></div>
+      <div class="prob-card"><div class="prob-icon">🚫</div><div><h3>Communication Blackout</h3><p>WhatsApp, Telegram, and most tools banned in Sudan. Field teams had no secure, reliable channel to coordinate with management in real time.</p></div></div>
+      <div class="prob-card"><div class="prob-icon">📊</div><div><h3>No Analytics or Intelligence</h3><p>Questionnaire results, market surveys, and assessment data were never analyzed in real time — value was lost between collection and reporting.</p></div></div>
     </div>
   </div>
-  <div class="slide-num">02 / 14</div>
+  <div class="slide-num">02 / 16</div>
 </div>
 
-<!-- ══════════════════════════════════════
+<!-- ═══════════════════════════════════════
   SLIDE 03 — THE SOLUTION
-══════════════════════════════════════ -->
+═══════════════════════════════════════ -->
 <div class="slide s3" id="s3">
   <div class="blob b1"></div>
   <div style="max-width:860px;width:100%">
     <p class="eyebrow" style="text-align:center">The Solution · الحل</p>
-    <h2 class="h-display" style="text-align:center">One platform.<br/><span>End to end.</span></h2>
-    <p class="h-ar" style="text-align:center">منصة واحدة — من الخطة إلى الدفع — رقمياً وآمناً وبشفافية كاملة</p>
-    <div class="sol-list">
-      <div class="sol-item">
-        <div class="sol-num">01</div>
-        <div><h3>Structured Monthly Monitoring Plans</h3><p>Upload site lists in any format, auto-detect activity types (GFA, PDM, MDM, WHM), assign to hubs and field teams instantly — no manual reformatting.</p></div>
-      </div>
-      <div class="sol-item">
-        <div class="sol-num">02</div>
-        <div><h3>Live Field Tracking &amp; Evidence Collection</h3><p>Enumerators complete GPS-verified visits on mobile with photo evidence, activity checklists, and beneficiary counts — fully offline-capable in remote areas.</p></div>
-      </div>
-      <div class="sol-item">
-        <div class="sol-num">03</div>
-        <div><h3>End-to-End Financial Control</h3><p>Advances, wallet credits, operational expenses, and retainer payments — all with two-tier approval, digital signatures, and a tamper-proof audit trail.</p></div>
-      </div>
-      <div class="sol-item" style="margin-bottom:0">
-        <div class="sol-num">04</div>
-        <div><h3>Real-Time Dashboards for Every Level</h3><p>Coverage gaps, financial alerts, hub performance scorecards, and team location maps — giving management the visibility they need, when they need it.</p></div>
-      </div>
+    <h2 class="h-display" style="text-align:center">One platform.<br/><em>End to end. Country to country.</em></h2>
+    <p class="h-ar" style="text-align:center">منصة واحدة — من المهمة إلى التقرير — عبر كل المشاريع والدول</p>
+    <div style="max-width:860px;width:100%">
+      <div class="sol-item"><div class="sol-num">01</div><div><h3>Manage Any Work Type — Projects, Tasks, Assessments, Surveys, MMPs</h3><p>Not just monitoring plans. PACT Command Center manages the full spectrum of field work — from structured monthly monitoring to ad-hoc assessments, market surveys, business studies, and task-based assignments.</p></div></div>
+      <div class="sol-item"><div class="sol-num">02</div><div><h3>Live Field Tracking with GPS, Photos &amp; Offline Capability</h3><p>Enumerators complete work on mobile with GPS verification, photo evidence, and structured data forms — fully offline in areas with no connectivity.</p></div></div>
+      <div class="sol-item"><div class="sol-num">03</div><div><h3>Own Communication Channel — Built for Sudan's Reality</h3><p>Since most apps are restricted, PACT built its own encrypted messaging and voice call platform — integrated directly into the field workflow, accessible to all team members.</p></div></div>
+      <div class="sol-item" style="margin-bottom:0"><div class="sol-num">04</div><div><h3>AI-Powered Analytics — From Raw Data to Decision-Ready Insights</h3><p>Questionnaire responses, survey results, and visit data are analyzed in real time. Dashboards, trend reports, coverage gaps, and predictive alerts — all built in.</p></div></div>
     </div>
   </div>
-  <div class="slide-num">03 / 14</div>
+  <div class="slide-num">03 / 16</div>
 </div>
 
-<!-- ══════════════════════════════════════
-  SLIDE 04 — GLOBAL REACH
-══════════════════════════════════════ -->
+<!-- ═══════════════════════════════════════
+  SLIDE 04 — CLIENTS & PARTNERS
+═══════════════════════════════════════ -->
 <div class="slide s4" id="s4">
   <div class="blob b1"></div>
   <div style="max-width:980px;width:100%">
+    <p class="eyebrow" style="text-align:center">Clients &amp; Partners · العملاء والشركاء</p>
+    <h2 class="h-display" style="text-align:center">Built for <em>every sector</em><br/>that depends on field data</h2>
+    <p class="h-ar" style="text-align:center">مصمم لكل قطاع يعتمد على البيانات الميدانية — من المنظمات الأممية إلى القطاع الخاص</p>
+    <div class="client-split">
+      <div class="client-left">
+        <div class="client-grid">
+          <div class="client-card"><div class="client-logo" style="background:rgba(0,114,206,0.15)">🌾</div><div><h4>WFP — World Food Programme</h4><p>TPM site visits, GFA, CBT, e-BSFP, PDM, MDM, WHM across Sudan</p></div></div>
+          <div class="client-card"><div class="client-logo" style="background:rgba(0,158,118,0.15)">👩</div><div><h4>UN Women</h4><p>Gender-focused assessments, women's economic empowerment programme monitoring</p></div></div>
+          <div class="client-card"><div class="client-logo" style="background:rgba(0,174,239,0.15)">🧒</div><div><h4>UNICEF</h4><p>Child nutrition &amp; protection activity monitoring, community-level surveys</p></div></div>
+          <div class="client-card"><div class="client-logo" style="background:rgba(245,158,11,0.15)">🏗️</div><div><h4>Other UN &amp; INGOs</h4><p>Customized monitoring frameworks for humanitarian and development partners</p></div></div>
+        </div>
+        <div style="margin-top:12px">
+          <p style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:2px;opacity:0.35;margin-bottom:9px">Sectors &amp; Work Types</p>
+          <div class="sector-row">
+            <span class="badge b-blue">🌾 Food Security</span>
+            <span class="badge b-green">👩 Gender &amp; Women</span>
+            <span class="badge b-cyan">🧒 Child Protection</span>
+            <span class="badge b-amber">🏥 Nutrition</span>
+            <span class="badge b-purple">🏗️ Livelihoods</span>
+            <span class="badge b-blue">🏪 Market Analysis</span>
+            <span class="badge b-red">📊 Business Studies</span>
+            <span class="badge b-green">💧 WASH</span>
+            <span class="badge b-amber">🏛️ Governance</span>
+            <span class="badge b-cyan">📱 Digital Finance</span>
+          </div>
+        </div>
+      </div>
+      <div class="client-right">
+        <div class="card" style="margin-bottom:12px">
+          <p style="font-size:12px;font-weight:700;color:#60a5fa;margin-bottom:10px">🤝 How PACT serves each client</p>
+          <div class="wf-row"><div class="wf-dot"></div><p><strong>Custom project setup</strong> — each client's activities configured independently: workflows, forms, fee structures, reporting templates</p></div>
+          <div class="wf-row"><div class="wf-dot"></div><p><strong>Dedicated analytics dashboards</strong> — per-project coverage reporting, quality scoring, and real-time gap alerts</p></div>
+          <div class="wf-row"><div class="wf-dot"></div><p><strong>Exportable compliance evidence</strong> — visit reports, photo evidence, GPS logs, and signed financial documents downloadable per project</p></div>
+          <div class="wf-row" style="margin-bottom:0"><div class="wf-dot"></div><p><strong>Multi-stakeholder access</strong> — donors, country directors, data teams, and supervisors each see exactly what they need</p></div>
+        </div>
+        <div class="card-green">
+          <p style="font-size:11.5px;font-weight:700;color:#34d399;margin-bottom:6px">🌍 Expanding client base</p>
+          <p style="font-size:11px;opacity:0.55;line-height:1.5">Beyond UN agencies, PACT's platform serves private sector clients commissioning market surveys and business studies — with the same rigorous data collection, tracking, and reporting infrastructure.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="slide-num">04 / 16</div>
+</div>
+
+<!-- ═══════════════════════════════════════
+  SLIDE 05 — GLOBAL REACH
+═══════════════════════════════════════ -->
+<div class="slide s5" id="s5">
+  <div class="blob b1"></div>
+  <div style="max-width:980px;width:100%">
     <p class="eyebrow" style="text-align:center">Our Reach · نطاق عملنا</p>
-    <h2 class="h-display" style="text-align:center">Built for PACT.<br/><span>Deployed across 7 countries.</span></h2>
-    <p class="h-ar" style="text-align:center">مصمم لـ PACT — منتشر عبر 7 دول حول العالم</p>
-    <div class="reach-wrap">
+    <h2 class="h-display" style="text-align:center">Built for PACT.<br/><em>Deployed across 7 countries.</em></h2>
+    <p class="h-ar" style="text-align:center">مصمم لـ PACT — منتشر عبر 7 دول مع أكثر من 850 جامع بيانات في السودان وحده</p>
+    <div class="reach-split">
       <div class="reach-left">
         <div class="stats-row">
-          <div class="stat-box">
-            <div class="s-num" style="color:#3b82f6">850+</div>
-            <div class="s-lbl">Enumerators in Sudan alone</div>
-            <div class="s-ar">جامع بيانات في السودان فقط</div>
-          </div>
-          <div class="stat-box">
-            <div class="s-num" style="color:#10b981">7</div>
-            <div class="s-lbl">Countries &amp; Offices</div>
-            <div class="s-ar">دول ومكاتب</div>
-          </div>
-          <div class="stat-box">
-            <div class="s-num" style="color:#a78bfa">12+</div>
-            <div class="s-lbl">WFP &amp; Partner Projects</div>
-            <div class="s-ar">مشاريع شركاء</div>
-          </div>
+          <div class="stat-box"><div class="n" style="color:#3b82f6">850+</div><div class="l">Enumerators in Sudan alone</div><div class="a">جامع بيانات في السودان وحده</div></div>
+          <div class="stat-box"><div class="n" style="color:#10b981">7</div><div class="l">Countries &amp; Offices</div><div class="a">دول ومكاتب</div></div>
+          <div class="stat-box"><div class="n" style="color:#a78bfa">15+</div><div class="l">Active Projects &amp; Programmes</div><div class="a">مشاريع وبرامج نشطة</div></div>
         </div>
         <div class="card" style="margin-bottom:12px">
-          <p style="font-size:12px;font-weight:700;color:#60a5fa;margin-bottom:10px">🌍 Sudan Operations — The Core Hub</p>
-          <p style="font-size:12px;opacity:0.55;line-height:1.55">Sudan hosts PACT's largest field operation — with <strong style="color:white">850+ active enumerators</strong> deployed across <strong style="color:white">18 states</strong>, managing visits for GFA, CBT, e-BSFP, AIM, and PDM projects simultaneously. The platform was built to handle this scale — and it does.</p>
+          <p style="font-size:12px;font-weight:700;color:#60a5fa;margin-bottom:10px">🇸🇩 Sudan — The Core Operation</p>
+          <p style="font-size:12px;opacity:0.52;line-height:1.55">Sudan hosts PACT's largest field operation — with <strong style="color:white">850+ active enumerators</strong> deployed across <strong style="color:white">18 states</strong>, managing concurrent projects for WFP, UN Women, UNICEF, and private sector clients. The platform was built to handle this scale — and it does, with full offline support in conflict-affected areas.</p>
         </div>
-        <div class="card-highlight">
-          <p style="font-size:11.5px;opacity:0.65;line-height:1.55">🚀 The same platform extends to Uganda, Rwanda, South Sudan, USA HQ, Qatar, and Mauritius — adapted per country's project mix, workflows, and team structure. One codebase. One data standard. Fully configurable per office.</p>
+        <div class="card-hl">
+          <p style="font-size:11.5px;opacity:0.6;line-height:1.55">🚀 The same platform extends to Uganda, Rwanda, South Sudan, USA HQ, Qatar, and Mauritius — each office configured independently with its own project mix, workflows, team structure, and reporting standards.</p>
         </div>
       </div>
       <div class="reach-right">
         <div class="country-grid">
-          <div class="c-card">
-            <div class="c-flag">🇸🇩</div>
-            <div><h4>Sudan</h4><p>Primary hub · 850+ enumerators · WFP TPM</p></div>
-          </div>
-          <div class="c-card">
-            <div class="c-flag">🇺🇬</div>
-            <div><h4>Uganda</h4><p>Active · Partner monitoring ops</p></div>
-          </div>
-          <div class="c-card">
-            <div class="c-flag">🇷🇼</div>
-            <div><h4>Rwanda</h4><p>Active · Field data collection</p></div>
-          </div>
-          <div class="c-card">
-            <div class="c-flag">🇸🇸</div>
-            <div><h4>South Sudan</h4><p>Active · Humanitarian monitoring</p></div>
-          </div>
-          <div class="c-card">
-            <div class="c-flag">🇺🇸</div>
-            <div><h4>USA</h4><p>HQ · Strategy &amp; oversight</p></div>
-          </div>
-          <div class="c-card">
-            <div class="c-flag">🇶🇦</div>
-            <div><h4>Qatar</h4><p>Regional · Donor coordination</p></div>
-          </div>
-          <div class="c-card" style="grid-column:1/-1">
-            <div class="c-flag">🇲🇺</div>
-            <div><h4>Mauritius</h4><p>Regional office · Programme support &amp; management</p></div>
-          </div>
+          <div class="c-card"><div class="c-flag">🇸🇩</div><div><h4>Sudan</h4><p>Core hub · 850+ enumerators · WFP, UN Women, UNICEF, private clients</p></div></div>
+          <div class="c-card"><div class="c-flag">🇺🇬</div><div><h4>Uganda</h4><p>Active · Partner programme monitoring</p></div></div>
+          <div class="c-card"><div class="c-flag">🇷🇼</div><div><h4>Rwanda</h4><p>Active · Field data collection programmes</p></div></div>
+          <div class="c-card"><div class="c-flag">🇸🇸</div><div><h4>South Sudan</h4><p>Active · Humanitarian field monitoring</p></div></div>
+          <div class="c-card"><div class="c-flag">🇺🇸</div><div><h4>USA</h4><p>HQ · Strategy, oversight &amp; donor relations</p></div></div>
+          <div class="c-card"><div class="c-flag">🇶🇦</div><div><h4>Qatar</h4><p>Regional · Donor coordination</p></div></div>
+          <div class="c-card" style="grid-column:1/-1"><div class="c-flag">🇲🇺</div><div><h4>Mauritius</h4><p>Regional office · Programme support &amp; management coordination</p></div></div>
         </div>
       </div>
     </div>
   </div>
-  <div class="slide-num">04 / 14</div>
+  <div class="slide-num">05 / 16</div>
 </div>
 
-<!-- ══════════════════════════════════════
-  SLIDE 05 — WHO BENEFITS
-══════════════════════════════════════ -->
-<div class="slide s5" id="s5">
-  <div class="blob b1"></div>
-  <div style="max-width:940px;width:100%;text-align:center">
-    <p class="eyebrow">Who Benefits · من يستفيد</p>
-    <h2 class="h-display">Designed for <span>every level</span> of the operation</h2>
-    <p class="h-ar">مصمم لكل مستوى في العملية — من الميدان إلى الإدارة العليا</p>
-    <div class="ben-row">
-      <div class="ben-card">
-        <div class="ben-icon">🏛️</div>
-        <h3>Donors &amp; Partners</h3>
-        <p>Real-time compliance reporting, coverage dashboards, and downloadable audit evidence.</p>
-        <p class="b-ar">تقارير الامتثال والأدلة</p>
-      </div>
-      <div class="ben-card">
-        <div class="ben-icon">👤</div>
-        <h3>Country Director</h3>
-        <p>Strategic dashboards, financial period close, broadcast tools, and cross-hub analytics.</p>
-        <p class="b-ar">لوحات استراتيجية وإدارة مالية</p>
-      </div>
-      <div class="ben-card">
-        <div class="ben-icon">📋</div>
-        <h3>Admin &amp; Data Team</h3>
-        <p>MMP upload, verification, bulk export, quality scoring, and team management.</p>
-        <p class="b-ar">رفع الخطط والتحقق والتحليلات</p>
-      </div>
-      <div class="ben-card">
-        <div class="ben-icon">🔍</div>
-        <h3>Supervisor</h3>
-        <p>Approve advances, track field teams live, review site visit reports, and manage wallets.</p>
-        <p class="b-ar">إشراف على الفريق والموافقات</p>
-      </div>
-      <div class="ben-card">
-        <div class="ben-icon">📱</div>
-        <h3>Enumerator</h3>
-        <p>Complete visits on mobile, manage wallet, confirm fund receipts — online or offline.</p>
-        <p class="b-ar">الزيارات والمحفظة وتأكيد الاستلام</p>
-      </div>
-    </div>
-  </div>
-  <div class="slide-num">05 / 14</div>
-</div>
-
-<!-- ══════════════════════════════════════
-  SLIDE 06 — PROJECTS
-══════════════════════════════════════ -->
+<!-- ═══════════════════════════════════════
+  SLIDE 06 — WORK TYPES
+═══════════════════════════════════════ -->
 <div class="slide s6" id="s6">
   <div class="blob b1"></div>
-  <div style="max-width:940px;width:100%;text-align:center">
-    <p class="eyebrow">Projects · المشاريع</p>
-    <h2 class="h-display">Every activity type.<br/><span>Fully supported.</span></h2>
-    <p class="h-ar">كل نوع نشاط مدعوم بالكامل — من توزيع الغذاء إلى المراقبة الميدانية</p>
-    <div class="proj-grid">
-      <div class="proj-card gfa"><div class="proj-icon">🌾</div><h3>GFA</h3><div class="proj-full">General Food Assistance</div><p>In-kind food distribution monitoring at beneficiary sites</p></div>
-      <div class="proj-card cbt"><div class="proj-icon">💳</div><h3>GFA CBT</h3><div class="proj-full">Cash-Based Transfer</div><p>Cash &amp; voucher assistance with market-linkage verification</p></div>
-      <div class="proj-card bsfp"><div class="proj-icon">🍼</div><h3>e-BSFP</h3><div class="proj-full">Blanket Supplementary Feeding</div><p>Nutrition programme monitoring for children &amp; mothers</p></div>
-      <div class="proj-card aim"><div class="proj-icon">🏗️</div><h3>AIM</h3><div class="proj-full">Asset Intensive Monitoring</div><p>Infrastructure &amp; asset-based activity oversight</p></div>
-      <div class="proj-card pdm"><div class="proj-icon">📊</div><h3>PDM</h3><div class="proj-full">Post Distribution Monitoring</div><p>Beneficiary surveys post-distribution — independent cycle</p></div>
-      <div class="proj-card mdm"><div class="proj-icon">🏪</div><h3>MDM</h3><div class="proj-full">Market Diversion Monitoring</div><p>Market surveillance add-on — enabled per project as needed</p></div>
-      <div class="proj-card whm"><div class="proj-icon">🏭</div><h3>WHM</h3><div class="proj-full">Warehouse Monitoring</div><p>Storage facility inspection — configurable per MMP cycle</p></div>
-      <div class="proj-card cbts"><div class="proj-icon">📦</div><h3>CBT-S</h3><div class="proj-full">CBT Supplementary</div><p>Supplementary cash monitoring with custom visit criteria</p></div>
+  <div style="max-width:960px;width:100%;text-align:center">
+    <p class="eyebrow">Work Types · أنواع العمل</p>
+    <h2 class="h-display">Not just monitoring plans.<br/><em>Any type of field work.</em></h2>
+    <p class="h-ar">ليس فقط خطط المراقبة — كل أنواع العمل الميداني في منصة واحدة</p>
+    <div class="work-grid">
+      <div class="work-card wc-mmp">
+        <div class="wi">📋</div>
+        <h3>Monthly Monitoring Plans</h3>
+        <div class="wa">خطط المراقبة الشهرية</div>
+        <p>Structured site visit plans — uploaded, dispatched, and tracked per hub with GPS verification, coverage analytics, and automated fee calculation.</p>
+        <div class="work-tags"><span class="wt">GFA</span><span class="wt">CBT</span><span class="wt">e-BSFP</span><span class="wt">AIM</span><span class="wt">PDM</span><span class="wt">MDM</span><span class="wt">WHM</span></div>
+      </div>
+      <div class="work-card wc-proj">
+        <div class="wi">🗂️</div>
+        <h3>Projects &amp; Programmes</h3>
+        <div class="wa">المشاريع والبرامج</div>
+        <p>Long-running programme management with milestone tracking, task assignment, team accountability, budget control, and reporting — per client or donor.</p>
+        <div class="work-tags"><span class="wt">WFP</span><span class="wt">UN Women</span><span class="wt">UNICEF</span><span class="wt">INGO</span></div>
+      </div>
+      <div class="work-card wc-task">
+        <div class="wi">✅</div>
+        <h3>Tasks &amp; Control</h3>
+        <div class="wa">المهام والتحكم</div>
+        <p>Assign, track, and close tasks across teams and hubs. Supervisors see live status, deadlines, and completion rates per enumerator or team member.</p>
+        <div class="work-tags"><span class="wt">Assign</span><span class="wt">Track</span><span class="wt">Approve</span><span class="wt">Close</span></div>
+      </div>
+      <div class="work-card wc-assess">
+        <div class="wi">🔬</div>
+        <h3>Assessments</h3>
+        <div class="wa">التقييمات</div>
+        <p>Structured field assessments with custom forms, scoring rubrics, photo evidence requirements, and AI-analyzed results — per community, site, or beneficiary group.</p>
+        <div class="work-tags"><span class="wt">Needs</span><span class="wt">Quality</span><span class="wt">Baseline</span><span class="wt">Endline</span></div>
+      </div>
+      <div class="work-card wc-survey">
+        <div class="wi">📊</div>
+        <h3>Market Surveys</h3>
+        <div class="wa">المسوحات السوقية</div>
+        <p>Price monitoring, commodity availability, trader interviews, and market access studies — with geo-tagged data points and trend dashboards.</p>
+        <div class="work-tags"><span class="wt">Price</span><span class="wt">Commodity</span><span class="wt">Trader</span><span class="wt">Access</span></div>
+      </div>
+      <div class="work-card wc-biz">
+        <div class="wi">💼</div>
+        <h3>Business Studies</h3>
+        <div class="wa">الدراسات التجارية</div>
+        <p>Stakeholder interviews, industry mapping, competitive landscape studies, and enterprise assessments commissioned by private sector and government clients.</p>
+        <div class="work-tags"><span class="wt">Stakeholder</span><span class="wt">Landscape</span><span class="wt">Enterprise</span></div>
+      </div>
     </div>
   </div>
-  <div class="slide-num">06 / 14</div>
+  <div class="slide-num">06 / 16</div>
 </div>
 
-<!-- ══════════════════════════════════════
+<!-- ═══════════════════════════════════════
   SLIDE 07 — CUSTOM WORKFLOWS
-══════════════════════════════════════ -->
+═══════════════════════════════════════ -->
 <div class="slide s7" id="s7">
   <div class="blob b1"></div>
   <div style="max-width:960px;width:100%">
     <p class="eyebrow" style="text-align:center">Flexible Workflows · سير عمل مرن</p>
-    <h2 class="h-display" style="text-align:center">Each project.<br/><span>Its own workflow.</span></h2>
-    <p class="h-ar" style="text-align:center">كل مشروع له سير عمل خاص به — قابل للتخصيص بالكامل دون الحاجة إلى برمجة</p>
+    <h2 class="h-display" style="text-align:center">Each project.<br/><em>Its own rules.</em></h2>
+    <p class="h-ar" style="text-align:center">كل مشروع له قواعده الخاصة — قابلة للتخصيص دون برمجة</p>
     <div class="wf-split">
       <div class="wf-left">
         <div class="wf-tabs">
-          <span class="wf-tab on">GFA</span><span class="wf-tab">GFA CBT</span>
-          <span class="wf-tab">e-BSFP</span><span class="wf-tab">AIM</span>
-          <span class="wf-tab">PDM</span><span class="wf-tab">MDM</span><span class="wf-tab">WHM</span>
+          <span class="wf-tab on">MMP</span><span class="wf-tab">Project</span><span class="wf-tab">Task</span>
+          <span class="wf-tab">Assessment</span><span class="wf-tab">Survey</span><span class="wf-tab">Business Study</span>
         </div>
         <div class="wf-detail">
-          <h4>⚙️ What admins configure per project</h4>
-          <div class="wf-row"><div class="wf-dot"></div><p><strong>Activity Type &amp; Checklist</strong> — visit category, evidence requirements, and beneficiary count fields defined per project</p></div>
-          <div class="wf-row"><div class="wf-dot"></div><p><strong>Add-On Modules</strong> — MDM and WHM toggled independently per MMP — no additional systems needed</p></div>
-          <div class="wf-row"><div class="wf-dot"></div><p><strong>Fee Formula</strong> — flat rate, ×2 multiplier (MDM/WHM), or ÷7 per-cycle (PDM) — set per activity</p></div>
-          <div class="wf-row"><div class="wf-dot"></div><p><strong>Approval Chain</strong> — single-tier or two-tier (Supervisor → Admin) based on project rules</p></div>
-          <div class="wf-row"><div class="wf-dot"></div><p><strong>Permit Requirements</strong> — certain localities require a permit before dispatch — toggled per MMP</p></div>
-          <div class="wf-row" style="margin-bottom:0"><div class="wf-dot"></div><p><strong>Reporting Template</strong> — each project generates its own analytics views and export formats</p></div>
+          <h4>⚙️ What admins configure per work type</h4>
+          <div class="wf-row"><div class="wf-dot"></div><p><strong>Form &amp; Checklist</strong> — custom data collection form, required fields, evidence types, and scoring rules per work type</p></div>
+          <div class="wf-row"><div class="wf-dot"></div><p><strong>Add-On Modules</strong> — MDM, WHM, and other monitoring layers toggled per project — no additional systems needed</p></div>
+          <div class="wf-row"><div class="wf-dot"></div><p><strong>Fee &amp; Compensation</strong> — flat rate, multiplier (×2), or per-cycle (÷7) — set per activity and work type independently</p></div>
+          <div class="wf-row"><div class="wf-dot"></div><p><strong>Approval Chain</strong> — one or two-tier approval (Supervisor → Admin) based on project-specific requirements</p></div>
+          <div class="wf-row"><div class="wf-dot"></div><p><strong>Team &amp; Hub Assignment</strong> — each work item assigned to a specific hub, supervisor, and enumerator with GPS zone matching</p></div>
+          <div class="wf-row" style="margin-bottom:0"><div class="wf-dot"></div><p><strong>Reporting Template</strong> — each work type generates its own analytics view, export format, and client-specific report layout</p></div>
         </div>
       </div>
       <div class="wf-right">
-        <p style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:2px;opacity:0.35;margin-bottom:10px">Customizable parameters</p>
-        <div class="badge-grid">
-          <span class="badge b-blue">📋 Visit Type</span>
-          <span class="badge b-green">✅ MDM Add-On</span>
-          <span class="badge b-green">🏭 WHM Add-On</span>
+        <p style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:2px;opacity:0.32;margin-bottom:9px">Configurable per project</p>
+        <div class="badge-wrap">
+          <span class="badge b-blue">📋 Form &amp; Checklist</span>
+          <span class="badge b-green">✅ Add-On Modules</span>
           <span class="badge b-amber">💰 Fee Rate</span>
           <span class="badge b-purple">🔐 Approval Tiers</span>
           <span class="badge b-blue">📍 GPS Radius</span>
@@ -666,89 +616,68 @@ svg.smap{width:100%;max-width:360px;display:block;margin:0 auto;}
           <span class="badge b-purple">📊 Report Format</span>
           <span class="badge b-green">📅 Visit Frequency</span>
           <span class="badge b-blue">👥 Team Assignment</span>
+          <span class="badge b-cyan">🌐 Client Branding</span>
         </div>
-        <div class="card-highlight" style="margin-top:12px">
+        <div class="card-hl" style="margin-top:12px">
           <p style="font-size:12px;font-weight:700;color:#60a5fa;margin-bottom:7px">💡 Why this architecture matters</p>
-          <p style="font-size:11.5px;opacity:0.55;line-height:1.55">PACT runs multiple concurrent programmes across different countries. Each has unique operational rules. Command Center lets each office configure their projects independently — without building separate systems or writing code.</p>
-          <p style="font-size:10.5px;opacity:0.28;direction:rtl;margin-top:6px">يمكن لكل مكتب تكوين مشاريعه بشكل مستقل دون بناء أنظمة منفصلة</p>
+          <p style="font-size:11px;opacity:0.52;line-height:1.55">PACT runs WFP monitoring, UN Women assessments, UNICEF surveys, and private business studies simultaneously — each with different rules, teams, and reporting needs. One platform. Fully configurable. Zero duplication of systems.</p>
         </div>
       </div>
     </div>
   </div>
-  <div class="slide-num">07 / 14</div>
+  <div class="slide-num">07 / 16</div>
 </div>
 
-<!-- ══════════════════════════════════════
-  SLIDE 08 — HOW IT WORKS
-══════════════════════════════════════ -->
+<!-- ═══════════════════════════════════════
+  SLIDE 08 — FIELD OPERATIONS
+═══════════════════════════════════════ -->
 <div class="slide s8" id="s8">
-  <div class="blob b1"></div>
-  <div style="max-width:940px;width:100%;text-align:center">
-    <p class="eyebrow">The Workflow · مسار العمل</p>
-    <h2 class="h-display">From plan to payment.<br/><span>Fully digital. Fully accountable.</span></h2>
-    <p class="h-ar">من الخطة إلى الدفع — رقمياً بالكامل وبمساءلة شفافة في كل خطوة</p>
-    <div class="flow-row">
-      <div class="flow-item"><div class="flow-circle">📋</div><h3>Admin uploads MMP</h3><p>ترفع الخطة الشهرية</p></div>
-      <div class="flow-item"><div class="flow-circle">📲</div><h3>Sites dispatched to teams</h3><p>توزيع المواقع على الفرق</p></div>
-      <div class="flow-item"><div class="flow-circle">📍</div><h3>Enumerator visits on mobile</h3><p>إكمال الزيارة ميدانياً</p></div>
-      <div class="flow-item"><div class="flow-circle">✅</div><h3>Supervisor reviews &amp; approves</h3><p>المراجعة والموافقة</p></div>
-      <div class="flow-item"><div class="flow-circle">💳</div><h3>Fees auto-credited to wallet</h3><p>إضافة الرسوم للمحفظة</p></div>
-      <div class="flow-item"><div class="flow-circle">🧾</div><h3>Receipt confirmed &amp; audited</h3><p>تأكيد الاستلام والمراجعة</p></div>
-    </div>
-  </div>
-  <div class="slide-num">08 / 14</div>
-</div>
-
-<!-- ══════════════════════════════════════
-  SLIDE 09 — FIELD OPERATIONS
-══════════════════════════════════════ -->
-<div class="slide s9" id="s9">
   <div class="blob b1"></div>
   <div style="max-width:980px;width:100%">
     <p class="eyebrow" style="text-align:center">Field Operations · العمليات الميدانية</p>
-    <h2 class="h-display" style="text-align:center">The field team's<br/><span>command in their pocket</span></h2>
-    <p class="h-ar" style="text-align:center">المنصة الميدانية في جيب كل جامع بيانات — أونلاين وأوفلاين</p>
+    <h2 class="h-display" style="text-align:center">The field team's command<br/><em>in their pocket</em></h2>
+    <p class="h-ar" style="text-align:center">أداة الفريق الميداني الكاملة — أونلاين وأوفلاين — في جيب كل جامع بيانات</p>
     <div class="fo-split">
       <div class="fo-left">
         <div class="fo-metrics">
           <div class="fo-met"><div class="mn" style="color:#3b82f6">GPS</div><div class="ml">Verified on every visit</div><div class="ma">تحقق GPS في كل زيارة</div></div>
-          <div class="fo-met"><div class="mn" style="color:#10b981">📸</div><div class="ml">Photo evidence mandatory</div><div class="ma">صور إلزامية لكل موقع</div></div>
-          <div class="fo-met"><div class="mn" style="color:#f59e0b">100%</div><div class="ml">Offline capable</div><div class="ma">يعمل بدون إنترنت كلياً</div></div>
-          <div class="fo-met"><div class="mn" style="color:#a78bfa">Live</div><div class="ml">Sync when connected</div><div class="ma">مزامنة فورية عند الاتصال</div></div>
+          <div class="fo-met"><div class="mn" style="color:#10b981">📸</div><div class="ml">Photo evidence mandatory</div><div class="ma">صور إلزامية</div></div>
+          <div class="fo-met"><div class="mn" style="color:#f59e0b">100%</div><div class="ml">Offline capable</div><div class="ma">يعمل بدون إنترنت</div></div>
+          <div class="fo-met"><div class="mn" style="color:#a78bfa">Live</div><div class="ml">Auto-sync on reconnect</div><div class="ma">مزامنة فورية</div></div>
         </div>
         <div class="fo-offline">
-          <span style="font-size:18px">📶</span>
-          <p><strong style="color:#34d399">Full offline mode:</strong> Enumerators complete visits, capture GPS &amp; photos, and submit reports — stored locally, auto-synced the moment connectivity returns. No data is ever lost.</p>
+          <span style="font-size:17px">📶</span>
+          <p><strong style="color:#34d399">Full offline mode:</strong> Complete visits, capture GPS &amp; photos, and submit reports — stored locally and auto-synced the moment connectivity returns. No data lost, ever.</p>
         </div>
       </div>
       <div class="fo-right">
         <div class="card">
-          <p style="font-size:12px;font-weight:700;color:#60a5fa;margin-bottom:14px">📍 Visit Lifecycle — Step by Step</p>
-          <div class="fo-step"><div class="fo-icon">📋</div><div><h4>Dispatch</h4><p>Site assigned with GPS coordinates, activity type, and required checklist — pushed to enumerator's app instantly</p></div></div>
-          <div class="fo-step"><div class="fo-icon">🗺️</div><div><h4>Navigate &amp; Arrive</h4><p>GPS proximity match confirms the enumerator is at the correct site — prevents false or fraudulent visits</p></div></div>
-          <div class="fo-step"><div class="fo-icon">📸</div><div><h4>Evidence &amp; Complete</h4><p>Timestamped photos, beneficiary counts, activity checklist, and notes — all captured in-app</p></div></div>
-          <div class="fo-step"><div class="fo-icon">✅</div><div><h4>Submit &amp; Sync</h4><p>Report synced live to dashboard — supervisor notified immediately for review and approval</p></div></div>
-          <div class="fo-step" style="margin-bottom:0"><div class="fo-icon" style="background:rgba(16,185,129,0.14);border-color:rgba(16,185,129,0.28)">💳</div><div><h4>Fee Auto-Calculated</h4><p>Visit fee calculated by activity type and credited directly to the enumerator's wallet — no manual processing</p></div></div>
+          <p style="font-size:11.5px;font-weight:700;color:#60a5fa;margin-bottom:13px">📍 Visit Lifecycle — Step by Step</p>
+          <div class="fo-step"><div class="fo-icon">📋</div><div><h4>Dispatch</h4><p>Work item assigned with GPS coordinates, activity type, and required form — pushed to app instantly</p></div></div>
+          <div class="fo-step"><div class="fo-icon">🗺️</div><div><h4>Navigate &amp; Arrive</h4><p>GPS proximity confirms the team is at the correct location — prevents fraudulent or false submissions</p></div></div>
+          <div class="fo-step"><div class="fo-icon">📸</div><div><h4>Collect &amp; Document</h4><p>Timestamped photos, structured data form, beneficiary counts, and notes — all in-app</p></div></div>
+          <div class="fo-step"><div class="fo-icon">✅</div><div><h4>Submit &amp; Notify</h4><p>Report syncs live to dashboard — supervisor notified immediately for review and approval</p></div></div>
+          <div class="fo-step" style="margin-bottom:0"><div class="fo-icon" style="background:rgba(16,185,129,0.13);border-color:rgba(16,185,129,0.26)">💳</div><div><h4>Fee Auto-Calculated</h4><p>Compensation calculated by activity type and credited to wallet — no manual processing required</p></div></div>
         </div>
       </div>
     </div>
   </div>
-  <div class="slide-num">09 / 14</div>
+  <div class="slide-num">08 / 16</div>
 </div>
 
-<!-- ══════════════════════════════════════
-  SLIDE 10 — FINANCIAL UTILIZATION
-══════════════════════════════════════ -->
-<div class="slide s10" id="s10">
+<!-- ═══════════════════════════════════════
+  SLIDE 09 — FINANCIAL CONTROL
+═══════════════════════════════════════ -->
+<div class="slide s9" id="s9">
   <div class="blob b1"></div>
   <div style="max-width:980px;width:100%">
     <p class="eyebrow" style="text-align:center">Financial Control · الإدارة المالية</p>
-    <h2 class="h-display" style="text-align:center">Every shilling tracked.<br/><span>Every approval logged.</span></h2>
+    <h2 class="h-display" style="text-align:center">Every shilling tracked.<br/><em>Every approval logged.</em></h2>
     <p class="h-ar" style="text-align:center">كل مبلغ مُتتبَّع — كل موافقة مُسجَّلة — صفر فجوات مالية غير مبررة</p>
     <div class="fi-split">
       <div class="fi-left">
-        <div class="card" style="margin-bottom:13px">
-          <p style="font-size:12px;font-weight:700;color:#fbbf24;margin-bottom:13px">📊 Budget Utilization by Category</p>
+        <div class="card" style="margin-bottom:12px">
+          <p style="font-size:11.5px;font-weight:700;color:#fbbf24;margin-bottom:12px">📊 Budget Utilization by Category</p>
           <div class="fi-bar-wrap"><div class="fi-bar-top"><span>Transportation Advances</span><span>78% utilized</span></div><div class="fi-bg"><div class="fi-fill" style="width:78%;background:#3b82f6"></div></div></div>
           <div class="fi-bar-wrap"><div class="fi-bar-top"><span>Operational Costs</span><span>65% utilized</span></div><div class="fi-bg"><div class="fi-fill" style="width:65%;background:#10b981"></div></div></div>
           <div class="fi-bar-wrap"><div class="fi-bar-top"><span>Enumerator Wallet Fees</span><span>91% disbursed</span></div><div class="fi-bg"><div class="fi-fill" style="width:91%;background:#a78bfa"></div></div></div>
@@ -766,263 +695,424 @@ svg.smap{width:100%;max-width:360px;display:block;margin:0 auto;}
         <div class="fi-flow">
           <h4>💸 Advance-to-Receipt Flow</h4>
           <div class="fi-step"><div class="fi-n">1</div><p><strong>Enumerator requests</strong> transport advance before field deployment</p></div>
-          <div class="fi-step"><div class="fi-n">2</div><p><strong>Supervisor reviews</strong> — approves or rejects with documented reason</p></div>
+          <div class="fi-step"><div class="fi-n">2</div><p><strong>Supervisor reviews</strong> and approves or rejects with documented reason</p></div>
           <div class="fi-step"><div class="fi-n">3</div><p><strong>Admin authorizes</strong> final disbursement from budget allocation</p></div>
-          <div class="fi-step"><div class="fi-n">4</div><p><strong>Funds transferred</strong> to enumerator wallet with signed digital receipt</p></div>
-          <div class="fi-step"><div class="fi-n">5</div><p><strong>Enumerator confirms</strong> receipt on mobile — bilingual confirmation screen</p></div>
-          <div class="fi-step" style="margin-bottom:0"><div class="fi-n">6</div><p><strong>Advance auto-deducted</strong> from visit fees — reconciled in system with zero manual entry</p></div>
+          <div class="fi-step"><div class="fi-n">4</div><p><strong>Funds credited</strong> to enumerator wallet with signed digital receipt</p></div>
+          <div class="fi-step"><div class="fi-n">5</div><p><strong>Enumerator confirms</strong> receipt on mobile — bilingual confirmation</p></div>
+          <div class="fi-step" style="margin-bottom:0"><div class="fi-n">6</div><p><strong>Advance auto-deducted</strong> from visit fees — reconciled with zero manual entry</p></div>
         </div>
-        <div style="background:rgba(239,68,68,0.07);border:1px solid rgba(239,68,68,0.18);border-radius:12px;padding:12px;margin-top:11px">
-          <p style="font-size:11.5px;font-weight:700;color:#f87171;margin-bottom:5px">🔁 Reclaim &amp; Financial Gap Tracking</p>
-          <p style="font-size:11px;opacity:0.5;line-height:1.5">When a site is reclaimed, disbursed advances linked to it are automatically flagged. Finance admins see a live reconciliation dashboard with bulk resolve and write-off tools — with PDF certificates generated per case.</p>
+        <div style="background:rgba(239,68,68,0.07);border:1px solid rgba(239,68,68,0.17);border-radius:12px;padding:11px;margin-top:10px">
+          <p style="font-size:11px;font-weight:700;color:#f87171;margin-bottom:4px">🔁 Reclaim &amp; Financial Gap Tracking</p>
+          <p style="font-size:10.5px;opacity:0.48;line-height:1.5">When a site is reclaimed, disbursed advances are auto-flagged. Finance admins see a live reconciliation dashboard with bulk resolve and PDF write-off certificate tools.</p>
         </div>
       </div>
     </div>
   </div>
-  <div class="slide-num">10 / 14</div>
+  <div class="slide-num">09 / 16</div>
 </div>
 
-<!-- ══════════════════════════════════════
-  SLIDE 11 — HUB CAPACITY & MAP
-══════════════════════════════════════ -->
-<div class="slide s11" id="s11">
+<!-- ═══════════════════════════════════════
+  SLIDE 10 — HUB CAPACITY & MAP
+═══════════════════════════════════════ -->
+<div class="slide s10" id="s10">
   <div class="blob b1"></div>
   <div style="max-width:990px;width:100%">
     <p class="eyebrow" style="text-align:center">Hub Capacity &amp; Live Teams · سعة المحاور والفرق الحية</p>
-    <h2 class="h-display" style="text-align:center">Know your capacity.<br/><span>See your teams in real time.</span></h2>
-    <p class="h-ar" style="text-align:center">اعرف طاقتك الاستيعابية — شاهد فرقك على الخريطة في الوقت الفعلي</p>
+    <h2 class="h-display" style="text-align:center">Know your capacity.<br/><em>See your teams in real time.</em></h2>
+    <p class="h-ar" style="text-align:center">اعرف طاقتك الاستيعابية وشاهد فرقك على الخريطة — محسوبة من مواقع GPS الحقيقية</p>
     <div class="map-split">
       <div class="map-area">
         <div class="map-box">
           <svg class="smap" viewBox="0 0 380 460" xmlns="http://www.w3.org/2000/svg">
             <path d="M 60 25 L 365 25 L 375 80 L 360 155 L 348 180 L 340 220 L 310 265 L 278 310 L 255 360 L 230 430 L 195 445 L 165 430 L 140 400 L 105 365 L 70 340 L 45 290 L 30 250 L 25 195 L 35 140 L 48 80 Z" fill="rgba(37,99,235,0.06)" stroke="rgba(59,130,246,0.2)" stroke-width="1.5"/>
             <path d="M 245 430 Q 248 380 255 330 Q 262 280 248 240 Q 238 210 242 177 Q 245 148 240 120 Q 235 95 230 70" fill="none" stroke="rgba(59,130,246,0.25)" stroke-width="1.5" stroke-dasharray="4,3"/>
-            <!-- Khartoum (largest hub) -->
             <circle cx="242" cy="245" r="9" fill="#3b82f6" opacity="0.85"/>
             <circle cx="242" cy="245" r="18" fill="rgba(59,130,246,0.12)"><animate attributeName="r" values="12;22;12" dur="2.5s" repeatCount="indefinite"/><animate attributeName="opacity" values="0.2;0;0.2" dur="2.5s" repeatCount="indefinite"/></circle>
             <text x="253" y="243" font-size="9" fill="rgba(255,255,255,0.8)" font-weight="700" font-family="sans-serif">Khartoum</text>
-            <!-- Port Sudan -->
             <circle cx="352" cy="138" r="5" fill="#10b981" opacity="0.85"/>
             <text x="316" y="135" font-size="8.5" fill="rgba(255,255,255,0.65)" font-weight="700" font-family="sans-serif">Port Sudan</text>
-            <!-- Kassala -->
             <circle cx="330" cy="210" r="6" fill="#10b981" opacity="0.85"/>
             <circle cx="330" cy="210" r="11" fill="rgba(16,185,129,0.12)"><animate attributeName="r" values="8;14;8" dur="2.1s" repeatCount="indefinite"/><animate attributeName="opacity" values="0.2;0;0.2" dur="2.1s" repeatCount="indefinite"/></circle>
             <text x="337" y="213" font-size="8.5" fill="rgba(255,255,255,0.7)" font-weight="700" font-family="sans-serif">Kassala</text>
-            <!-- Gedaref -->
             <circle cx="307" cy="248" r="4" fill="#f59e0b" opacity="0.85"/>
             <text x="312" y="251" font-size="8.5" fill="rgba(255,255,255,0.6)" font-family="sans-serif">Gedaref</text>
-            <!-- Atbara -->
             <circle cx="273" cy="185" r="4" fill="#10b981" opacity="0.85"/>
             <text x="278" y="188" font-size="8.5" fill="rgba(255,255,255,0.6)" font-family="sans-serif">Atbara</text>
-            <!-- Dongola -->
             <circle cx="197" cy="148" r="4" fill="#f59e0b" opacity="0.85"/>
             <text x="154" y="145" font-size="8.5" fill="rgba(255,255,255,0.6)" font-family="sans-serif">Dongola</text>
-            <!-- Al Fashir (active large) -->
             <circle cx="79" cy="265" r="7" fill="#3b82f6" opacity="0.85"/>
             <circle cx="79" cy="265" r="14" fill="rgba(59,130,246,0.1)"><animate attributeName="r" values="10;18;10" dur="2.8s" repeatCount="indefinite"/><animate attributeName="opacity" values="0.18;0;0.18" dur="2.8s" repeatCount="indefinite"/></circle>
             <text x="46" y="282" font-size="8.5" fill="rgba(255,255,255,0.7)" font-weight="700" font-family="sans-serif">Al Fashir</text>
-            <!-- Nyala -->
             <circle cx="70" cy="308" r="6" fill="#10b981" opacity="0.85"/>
             <text x="40" y="323" font-size="8.5" fill="rgba(255,255,255,0.65)" font-family="sans-serif">Nyala</text>
-            <!-- El Obeid -->
             <circle cx="190" cy="285" r="6" fill="#3b82f6" opacity="0.85"/>
             <circle cx="190" cy="285" r="11" fill="rgba(59,130,246,0.1)"><animate attributeName="r" values="8;14;8" dur="2.3s" repeatCount="indefinite"/><animate attributeName="opacity" values="0.15;0;0.15" dur="2.3s" repeatCount="indefinite"/></circle>
             <text x="152" y="300" font-size="8.5" fill="rgba(255,255,255,0.7)" font-weight="700" font-family="sans-serif">El Obeid</text>
-            <!-- Wad Madani -->
             <circle cx="264" cy="270" r="4" fill="#a78bfa" opacity="0.85"/>
             <text x="268" y="273" font-size="8.5" fill="rgba(255,255,255,0.6)" font-family="sans-serif">Wad Madani</text>
-            <!-- Active field team dots -->
             <circle cx="230" cy="255" r="3" fill="#34d399"><animate attributeName="opacity" values="1;0.2;1" dur="2.1s" repeatCount="indefinite"/></circle>
             <circle cx="258" cy="241" r="3" fill="#34d399"><animate attributeName="opacity" values="1;0.2;1" dur="1.7s" repeatCount="indefinite"/></circle>
             <circle cx="90" cy="272" r="3" fill="#34d399"><animate attributeName="opacity" values="1;0.2;1" dur="2.5s" repeatCount="indefinite"/></circle>
             <circle cx="185" cy="295" r="3" fill="#34d399"><animate attributeName="opacity" values="1;0.2;1" dur="1.9s" repeatCount="indefinite"/></circle>
             <circle cx="340" cy="215" r="3" fill="#34d399"><animate attributeName="opacity" values="1;0.2;1" dur="2.3s" repeatCount="indefinite"/></circle>
             <circle cx="75" cy="315" r="3" fill="#34d399"><animate attributeName="opacity" values="1;0.2;1" dur="1.6s" repeatCount="indefinite"/></circle>
-            <circle cx="265" cy="260" r="3" fill="#34d399"><animate attributeName="opacity" values="1;0.2;1" dur="2.7s" repeatCount="indefinite"/></circle>
           </svg>
           <div class="map-legend">
-            <div class="ml-i"><div class="ml-d" style="background:#3b82f6"></div>High activity hub</div>
+            <div class="ml-i"><div class="ml-d" style="background:#3b82f6"></div>High capacity hub</div>
             <div class="ml-i"><div class="ml-d" style="background:#10b981"></div>Active hub</div>
             <div class="ml-i"><div class="ml-d" style="background:#f59e0b"></div>Low capacity</div>
-            <div class="ml-i"><div class="ml-d" style="background:#34d399"></div>Live team in field</div>
+            <div class="ml-i"><div class="ml-d" style="background:#34d399"></div><span class="live-dot"></span>Live team in field</div>
           </div>
         </div>
       </div>
       <div class="map-panel">
-        <p style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:2px;opacity:0.3;margin-bottom:10px">Hub Capacity — based on data collector GPS &amp; assignments</p>
-        <div class="hub-card">
-          <div class="hub-top"><h4>🔵 Khartoum Hub</h4><span>320 / 380 deployed</span></div>
-          <div class="hub-bg"><div class="hub-fill" style="width:84%;background:#3b82f6"></div></div>
-          <div class="hub-pills"><span class="hp hp-g">60 Available</span><span class="hp hp-b">320 Deployed</span></div>
-        </div>
-        <div class="hub-card">
-          <div class="hub-top"><h4>🟢 Kassala Hub</h4><span>95 / 115 deployed</span></div>
-          <div class="hub-bg"><div class="hub-fill" style="width:83%;background:#10b981"></div></div>
-          <div class="hub-pills"><span class="hp hp-g">20 Available</span><span class="hp hp-b">95 Deployed</span></div>
-        </div>
-        <div class="hub-card">
-          <div class="hub-top"><h4>🔵 Al Fashir Hub</h4><span>110 / 130 deployed</span></div>
-          <div class="hub-bg"><div class="hub-fill" style="width:85%;background:#3b82f6"></div></div>
-          <div class="hub-pills"><span class="hp hp-g">20 Available</span><span class="hp hp-b">110 Deployed</span></div>
-        </div>
-        <div class="hub-card">
-          <div class="hub-top"><h4>🟢 Nyala Hub</h4><span>85 / 100 deployed</span></div>
-          <div class="hub-bg"><div class="hub-fill" style="width:85%;background:#10b981"></div></div>
-          <div class="hub-pills"><span class="hp hp-g">15 Available</span><span class="hp hp-b">85 Deployed</span></div>
-        </div>
-        <div class="hub-card">
-          <div class="hub-top"><h4>🟡 El Obeid Hub</h4><span>55 / 80 deployed</span></div>
-          <div class="hub-bg"><div class="hub-fill" style="width:69%;background:#f59e0b"></div></div>
-          <div class="hub-pills"><span class="hp hp-y">25 Available</span><span class="hp hp-b">55 Deployed</span></div>
-        </div>
-        <div class="card-highlight" style="margin-top:8px">
-          <p style="font-size:11px;opacity:0.6;line-height:1.55">📍 Capacity is calculated live from <strong style="color:white">data collector GPS locations</strong> and active site assignments — giving supervisors instant visibility into who is available, where, and how many sites each hub can absorb.</p>
-          <p style="font-size:10px;opacity:0.25;direction:rtl;margin-top:5px">تُحسب الطاقة الاستيعابية بناءً على مواقع GPS للجامعين وتعيينات المواقع النشطة في الوقت الفعلي</p>
+        <p style="font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:2px;opacity:0.28;margin-bottom:9px">Hub Capacity — live from GPS &amp; site assignments</p>
+        <div class="hub-card"><div class="hub-top"><h4>🔵 Khartoum Hub</h4><span>320 / 380 deployed</span></div><div class="hub-bg"><div class="hub-fill" style="width:84%;background:#3b82f6"></div></div><div class="hub-pills"><span class="hp hp-g">60 Available</span><span class="hp hp-b">320 Deployed</span></div></div>
+        <div class="hub-card"><div class="hub-top"><h4>🟢 Kassala Hub</h4><span>95 / 115 deployed</span></div><div class="hub-bg"><div class="hub-fill" style="width:83%;background:#10b981"></div></div><div class="hub-pills"><span class="hp hp-g">20 Available</span><span class="hp hp-b">95 Deployed</span></div></div>
+        <div class="hub-card"><div class="hub-top"><h4>🔵 Al Fashir Hub</h4><span>110 / 130 deployed</span></div><div class="hub-bg"><div class="hub-fill" style="width:85%;background:#3b82f6"></div></div><div class="hub-pills"><span class="hp hp-g">20 Available</span><span class="hp hp-b">110 Deployed</span></div></div>
+        <div class="hub-card"><div class="hub-top"><h4>🟢 Nyala Hub</h4><span>85 / 100 deployed</span></div><div class="hub-bg"><div class="hub-fill" style="width:85%;background:#10b981"></div></div><div class="hub-pills"><span class="hp hp-g">15 Available</span><span class="hp hp-b">85 Deployed</span></div></div>
+        <div class="hub-card"><div class="hub-top"><h4>🟡 El Obeid Hub</h4><span>55 / 80 deployed</span></div><div class="hub-bg"><div class="hub-fill" style="width:69%;background:#f59e0b"></div></div><div class="hub-pills"><span class="hp hp-y">25 Available</span><span class="hp hp-b">55 Deployed</span></div></div>
+        <div class="card-hl" style="margin-top:8px">
+          <p style="font-size:10.5px;opacity:0.58;line-height:1.55">📍 Capacity is calculated live from <strong style="color:white">data collector GPS locations</strong> and active assignments — giving supervisors real-time visibility into who is available, where, and how much field capacity each hub can absorb for new assignments.</p>
         </div>
       </div>
     </div>
   </div>
-  <div class="slide-num">11 / 14</div>
+  <div class="slide-num">10 / 16</div>
 </div>
 
-<!-- ══════════════════════════════════════
-  SLIDE 12 — ANALYTICS
-══════════════════════════════════════ -->
+<!-- ═══════════════════════════════════════
+  SLIDE 11 — COMMUNICATION PLATFORM
+═══════════════════════════════════════ -->
+<div class="slide s11" id="s11">
+  <div class="blob b1"></div>
+  <div style="max-width:960px;width:100%">
+    <p class="eyebrow" style="text-align:center">Communication Platform · منصة الاتصالات</p>
+    <h2 class="h-display" style="text-align:center">When every app is banned,<br/><em>we built our own.</em></h2>
+    <p class="h-ar" style="text-align:center">لأن معظم التطبيقات محظورة في السودان — بنينا قناة اتصالات خاصة بنا ومشفرة وآمنة</p>
+    <div class="comm-split">
+      <div class="comm-left">
+        <div class="why-box">
+          <h4>🚫 The Sudan Communication Reality</h4>
+          <p>WhatsApp, Telegram, Signal, and most third-party communication apps are restricted or intermittently blocked in Sudan. This created a critical operational gap — field teams had no reliable, secure channel to coordinate with supervisors and management. PACT's response: build an integrated communication platform from the ground up, embedded directly in the same system field teams already use.</p>
+        </div>
+        <div class="comm-feature-grid">
+          <div class="comm-feat">
+            <div class="cf-icon">💬</div>
+            <h4>Encrypted Messaging</h4>
+            <p>One-on-one and group messaging between enumerators, supervisors, and admins — end-to-end encrypted and hosted within PACT's own infrastructure</p>
+          </div>
+          <div class="comm-feat">
+            <div class="cf-icon">📞</div>
+            <h4>Voice Calls</h4>
+            <p>In-app voice calling between team members — works over data connections without relying on any third-party platform or carrier restrictions</p>
+          </div>
+          <div class="comm-feat">
+            <div class="cf-icon">📢</div>
+            <h4>Broadcast Center</h4>
+            <p>Admins send bilingual announcements to all users, by role, or by hub — with urgency levels, action links, and full delivery tracking</p>
+          </div>
+          <div class="comm-feat">
+            <div class="cf-icon">🔔</div>
+            <h4>Smart Notifications</h4>
+            <p>Real-time in-app alerts, push notifications on mobile, and bilingual email digests — all tied directly to field events and approvals</p>
+          </div>
+        </div>
+      </div>
+      <div class="comm-right">
+        <div class="comm-stat-row" style="margin-bottom:14px">
+          <div class="cs-b"><div class="n">100%</div><div class="l">Owned infrastructure</div></div>
+          <div class="cs-b"><div class="n">E2E</div><div class="l">Encrypted messages</div></div>
+          <div class="cs-b"><div class="n">Live</div><div class="l">Push notifications</div></div>
+        </div>
+        <div class="card" style="margin-bottom:12px">
+          <p style="font-size:12px;font-weight:700;color:#67e8f9;margin-bottom:10px">📱 What's integrated</p>
+          <div class="wf-row"><div class="wf-dot" style="background:#06b6d4"></div><p><strong>WebRTC voice calls</strong> — browser and mobile app based, no PSTN dependency</p></div>
+          <div class="wf-row"><div class="wf-dot" style="background:#06b6d4"></div><p><strong>Bilingual messaging UI</strong> — full Arabic RTL support in all message threads</p></div>
+          <div class="wf-row"><div class="wf-dot" style="background:#06b6d4"></div><p><strong>Admin support contacts</strong> — managed help &amp; support directory for field staff</p></div>
+          <div class="wf-row" style="margin-bottom:0"><div class="wf-dot" style="background:#06b6d4"></div><p><strong>Activity-linked messaging</strong> — conversations tied to specific site visits or tasks</p></div>
+        </div>
+        <div class="card-amber">
+          <p style="font-size:11px;font-weight:700;color:#fbbf24;margin-bottom:5px">📞 Coming Soon: IVR Integration</p>
+          <p style="font-size:10.5px;opacity:0.52;line-height:1.5">Interactive voice response for beneficiary verification and data collection via phone — enabling participation from communities without smartphones or data connectivity.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="slide-num">11 / 16</div>
+</div>
+
+<!-- ═══════════════════════════════════════
+  SLIDE 12 — REPORTS & AI ANALYSIS
+═══════════════════════════════════════ -->
 <div class="slide s12" id="s12">
   <div class="blob b1"></div>
   <div style="max-width:980px;width:100%">
-    <p class="eyebrow" style="text-align:center">Data &amp; Analytics · البيانات والتحليلات</p>
-    <h2 class="h-display" style="text-align:center">850+ enumerators.<br/><span>One unified picture.</span></h2>
-    <p class="h-ar" style="text-align:center">أكثر من 850 جامع بيانات في السودان — صورة موحدة وشاملة في لوحة تحكم واحدة</p>
-    <div class="an-split">
-      <div class="an-left">
-        <div class="an-big">
-          <div class="num">850+</div>
-          <div class="lbl">Active Enumerators — Sudan operations alone</div>
-          <div class="ar">جامع بيانات نشط في العمليات السودانية فقط</div>
-        </div>
-        <div class="an-grid">
-          <div class="an-box"><div class="n" style="color:#10b981">18</div><div class="l">States covered in Sudan</div></div>
-          <div class="an-box"><div class="n" style="color:#f59e0b">8+</div><div class="l">Concurrent project types</div></div>
-          <div class="an-box"><div class="n" style="color:#a78bfa">Real-time</div><div class="l">Coverage gap detection</div></div>
-          <div class="an-box"><div class="n" style="color:#3b82f6">100%</div><div class="l">Digital audit trail</div></div>
+    <p class="eyebrow" style="text-align:center">Reports &amp; AI Analysis · التقارير والتحليل بالذكاء الاصطناعي</p>
+    <h2 class="h-display" style="text-align:center">From raw field data<br/><em>to decision-ready intelligence</em></h2>
+    <p class="h-ar" style="text-align:center">من البيانات الميدانية الخام إلى ذكاء قابل للتنفيذ — في الوقت الفعلي</p>
+    <div class="ai-split">
+      <div class="ai-left">
+        <div class="report-grid">
+          <div class="report-card"><div class="ri">🗺️</div><h4>Coverage Analytics</h4><p>Live coverage gaps by state, locality, and hub — with predictive alerts before deadlines are missed</p></div>
+          <div class="report-card"><div class="ri">💰</div><h4>Financial Reports</h4><p>Budget vs. actual, advance aging, reconciliation dashboard, cash flow forecasting, and period close</p></div>
+          <div class="report-card"><div class="ri">⭐</div><h4>Quality Scoring</h4><p>Every visit scored automatically on GPS accuracy, photo quality, form completeness, and timing</p></div>
+          <div class="report-card"><div class="ri">📈</div><h4>Cycle Comparison</h4><p>Month-over-month and cross-cycle performance tracking per hub, state, project, and enumerator</p></div>
+          <div class="report-card"><div class="ri">📊</div><h4>Questionnaire Analytics</h4><p>Responses analyzed in real time — response rates, distribution by activity, outliers flagged automatically</p></div>
+          <div class="report-card"><div class="ri">📤</div><h4>Data Export Center</h4><p>Bulk export to Excel and PDF — per project, per date range, per hub — with client-branded report templates</p></div>
         </div>
       </div>
-      <div class="an-right">
-        <div class="an-dist">
-          <h4>📊 Enumerator Distribution by Hub (Sudan)</h4>
-          <div class="an-bar-row"><div class="an-bar-top"><span>Khartoum</span><span>380 enumerators</span></div><div class="an-bg"><div class="an-fill" style="width:100%;background:#3b82f6"></div></div></div>
-          <div class="an-bar-row"><div class="an-bar-top"><span>Al Fashir (Darfur)</span><span>130 enumerators</span></div><div class="an-bg"><div class="an-fill" style="width:34%;background:#3b82f6"></div></div></div>
-          <div class="an-bar-row"><div class="an-bar-top"><span>Kassala</span><span>115 enumerators</span></div><div class="an-bg"><div class="an-fill" style="width:30%;background:#10b981"></div></div></div>
-          <div class="an-bar-row"><div class="an-bar-top"><span>Nyala</span><span>100 enumerators</span></div><div class="an-bg"><div class="an-fill" style="width:26%;background:#10b981"></div></div></div>
-          <div class="an-bar-row"><div class="an-bar-top"><span>El Obeid</span><span>80 enumerators</span></div><div class="an-bg"><div class="an-fill" style="width:21%;background:#f59e0b"></div></div></div>
-          <div class="an-bar-row" style="margin-bottom:0"><div class="an-bar-top"><span>Other Hubs</span><span>45 enumerators</span></div><div class="an-bg"><div class="an-fill" style="width:12%;background:#a78bfa"></div></div></div>
+      <div class="ai-right">
+        <div class="ai-engine">
+          <h4>🤖 AI Analysis Engine</h4>
+          <div class="ai-row"><div class="ai-dot"></div><p><strong>Anomaly Detection</strong> — flags unusual patterns in field reports: duplicate GPS coordinates, implausible visit times, or identical photo submissions across different sites</p></div>
+          <div class="ai-row"><div class="ai-dot"></div><p><strong>Predictive Coverage Alerts</strong> — forecasts which states or localities are at risk of falling below coverage targets before the cycle ends</p></div>
+          <div class="ai-row"><div class="ai-dot"></div><p><strong>Questionnaire Intelligence</strong> — identifies response clusters, outliers, and trends in survey data — surfaced as visual charts and summary cards in the dashboard</p></div>
+          <div class="ai-row"><div class="ai-dot"></div><p><strong>Market Price Intelligence</strong> — tracks commodity price trends across survey sites, flags significant deviations, and correlates with distribution activity data</p></div>
+          <div class="ai-row" style="margin-bottom:0"><div class="ai-dot"></div><p><strong>Performance Scorecards</strong> — per-hub and per-enumerator AI scoring based on consistency, quality, and timeliness across all work types</p></div>
         </div>
-        <div class="roadmap-box" style="margin-top:12px">
-          <h4>📈 What analytics gives you</h4>
-          <p>Coverage gap alerts by state &amp; locality · Budget vs. actual per project · Visit quality scoring · Site cycle comparison · Predictive coverage alerts · Per-hub performance scorecards · Bulk Excel/PDF export</p>
+        <div class="card-hl" style="margin-top:12px">
+          <p style="font-size:11px;opacity:0.58;line-height:1.5">All reports are available in <strong style="color:white">English and Arabic</strong>, exportable to PDF and Excel, and accessible to authorized roles only — with role-based data filtering so each stakeholder sees only what they need.</p>
         </div>
       </div>
     </div>
   </div>
-  <div class="slide-num">12 / 14</div>
+  <div class="slide-num">12 / 16</div>
 </div>
 
-<!-- ══════════════════════════════════════
-  SLIDE 13 — COMING SOON
-══════════════════════════════════════ -->
+<!-- ═══════════════════════════════════════
+  SLIDE 13 — MARKET SURVEYS & BUSINESS STUDIES
+═══════════════════════════════════════ -->
 <div class="slide s13" id="s13">
+  <div class="blob b1"></div>
+  <div style="max-width:960px;width:100%">
+    <p class="eyebrow" style="text-align:center">Market Surveys &amp; Business Studies · المسوحات السوقية والدراسات التجارية</p>
+    <h2 class="h-display" style="text-align:center">Beyond humanitarian work.<br/><em>Data for any stakeholder.</em></h2>
+    <p class="h-ar" style="text-align:center">ما وراء العمل الإنساني — بيانات موثوقة لأي عميل أو قطاع أو صانع قرار</p>
+    <div class="mkt-split">
+      <div class="mkt-left">
+        <div class="mkt-type-grid">
+          <div class="mkt-type"><div class="mi">🏪</div><div><h4>Market Price Monitoring</h4><p>Regular commodity price surveys across urban and rural markets — tracking food, fuel, and essential goods. Data collected by geo-tagged enumerators and analyzed for price volatility, supply disruption, and access trends.</p></div></div>
+          <div class="mkt-type"><div class="mi">📦</div><div><h4>Commodity Availability Studies</h4><p>Systematic assessment of goods availability at market level — quantities, quality grades, trader sources, and seasonal variation — informing procurement and distribution decisions for UN agencies and government.</p></div></div>
+          <div class="mkt-type"><div class="mi">💼</div><div><h4>Business Landscape Studies</h4><p>Enterprise mapping, competitive analysis, and industry assessments commissioned by private sector clients, development finance institutions, and government ministries — delivered with full data trail.</p></div></div>
+          <div class="mkt-type"><div class="mi">🤝</div><div><h4>Stakeholder &amp; KII Interviews</h4><p>Key Informant Interviews with traders, community leaders, local authorities, and service providers — structured, recorded, and analyzed within the same platform used for all other field data.</p></div></div>
+        </div>
+      </div>
+      <div class="mkt-right">
+        <p style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:2px;opacity:0.32;margin-bottom:10px">Who we serve</p>
+        <div class="stakeholder-list">
+          <div class="sh-row"><div class="sh-icon">🌾</div><div><h5>UN Agencies (WFP, UN Women, UNICEF)</h5><p>TPM, assessments, programme monitoring, beneficiary surveys</p></div></div>
+          <div class="sh-row"><div class="sh-icon">🏛️</div><div><h5>Government Ministries</h5><p>Market studies, price monitoring, economic data for policy</p></div></div>
+          <div class="sh-row"><div class="sh-icon">💼</div><div><h5>Private Sector &amp; Investors</h5><p>Business landscape studies, market entry assessments, due diligence</p></div></div>
+          <div class="sh-row"><div class="sh-icon">🏦</div><div><h5>Development Finance Institutions</h5><p>Project feasibility, baseline studies, socioeconomic assessments</p></div></div>
+          <div class="sh-row"><div class="sh-icon">🔬</div><div><h5>Research Organizations</h5><p>Data collection, survey management, field validation for research studies</p></div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="slide-num">13 / 16</div>
+</div>
+
+<!-- ═══════════════════════════════════════
+  SLIDE 14 — NOV & DEC 2025 QUESTIONNAIRE TRACKER
+═══════════════════════════════════════ -->
+<div class="slide s14" id="s14">
+  <div class="blob b1"></div>
+  <div style="max-width:990px;width:100%">
+    <p class="eyebrow" style="text-align:center">Questionnaire Analytics · تحليلات الاستبيانات</p>
+    <h2 class="h-display" style="text-align:center"><em>November &amp; December 2025</em><br/>— Last Two Months Tracker</h2>
+    <p class="h-ar" style="text-align:center">متتبع الاستبيانات لآخر شهرين — نوفمبر وديسمبر 2025</p>
+    <div class="tracker-wrap">
+      <div class="month-tabs">
+        <button class="m-tab on" onclick="showMonth('nov',this)">📅 November 2025</button>
+        <button class="m-tab" onclick="showMonth('dec',this)">📅 December 2025</button>
+        <button class="m-tab" onclick="showMonth('cmp',this)">📊 Comparison</button>
+      </div>
+      <!-- NOVEMBER -->
+      <div id="nov-view" class="tracker-main">
+        <div class="tracker-left">
+          <div class="tracker-stats">
+            <div class="ts-box"><div class="tn" style="color:#3b82f6">4,280</div><div class="tl">Total questionnaires completed</div></div>
+            <div class="ts-box"><div class="tn" style="color:#10b981">94%</div><div class="tl">Response rate achieved</div></div>
+            <div class="ts-box"><div class="tn" style="color:#a78bfa">14</div><div class="tl">States covered</div></div>
+          </div>
+          <div class="activity-bars">
+            <h4>📋 Completed by Activity Type — November 2025</h4>
+            <div class="ab-row"><div class="ab-top"><span>GFA Monitoring</span><span>1,840</span></div><div class="ab-bg"><div class="ab-fill" style="width:100%;background:#3b82f6"></div></div></div>
+            <div class="ab-row"><div class="ab-top"><span>PDM (Post-Distribution)</span><span>720</span></div><div class="ab-bg"><div class="ab-fill" style="width:39%;background:#8b5cf6"></div></div></div>
+            <div class="ab-row"><div class="ab-top"><span>GFA CBT</span><span>620</span></div><div class="ab-bg"><div class="ab-fill" style="width:34%;background:#10b981"></div></div></div>
+            <div class="ab-row"><div class="ab-top"><span>e-BSFP (Nutrition)</span><span>480</span></div><div class="ab-bg"><div class="ab-fill" style="width:26%;background:#f97316"></div></div></div>
+            <div class="ab-row"><div class="ab-top"><span>AIM</span><span>310</span></div><div class="ab-bg"><div class="ab-fill" style="width:17%;background:#f59e0b"></div></div></div>
+            <div class="ab-row"><div class="ab-top"><span>MDM + WHM Add-Ons</span><span>310</span></div><div class="ab-bg"><div class="ab-fill" style="width:17%;background:#ef4444"></div></div></div>
+          </div>
+        </div>
+        <div class="tracker-right">
+          <div class="compare-box" style="margin-bottom:12px">
+            <h4>🗺️ Top States — November</h4>
+            <div class="cmp-row"><div class="cmp-label">Khartoum</div><div class="cmp-bars"><div class="cmp-bar-row"><span></span><div class="cmp-fill" style="width:100%;background:#3b82f6;height:6px;border-radius:99px"></div><span>1,050</span></div></div></div>
+            <div class="cmp-row"><div class="cmp-label">Al Fashir</div><div class="cmp-bars"><div class="cmp-bar-row"><span></span><div class="cmp-fill" style="width:62%;background:#3b82f6;height:6px;border-radius:99px"></div><span>650</span></div></div></div>
+            <div class="cmp-row"><div class="cmp-label">Kassala</div><div class="cmp-bars"><div class="cmp-bar-row"><span></span><div class="cmp-fill" style="width:52%;background:#10b981;height:6px;border-radius:99px"></div><span>545</span></div></div></div>
+            <div class="cmp-row"><div class="cmp-label">Nyala</div><div class="cmp-bars"><div class="cmp-bar-row"><span></span><div class="cmp-fill" style="width:45%;background:#10b981;height:6px;border-radius:99px"></div><span>472</span></div></div></div>
+            <div class="cmp-row" style="margin-bottom:0"><div class="cmp-label">El Obeid</div><div class="cmp-bars"><div class="cmp-bar-row"><span></span><div class="cmp-fill" style="width:38%;background:#f59e0b;height:6px;border-radius:99px"></div><span>398</span></div></div></div>
+          </div>
+          <div class="state-pills">
+            <span class="s-pill">Khartoum</span><span class="s-pill">Al Fashir</span><span class="s-pill">Kassala</span>
+            <span class="s-pill">Nyala</span><span class="s-pill">El Obeid</span><span class="s-pill">Gedaref</span>
+            <span class="s-pill">Port Sudan</span><span class="s-pill">Wad Madani</span><span class="s-pill">Atbara</span>
+            <span class="s-pill">Dongola</span><span class="s-pill">Al Geneina</span><span class="s-pill">Zalingei</span>
+            <span class="s-pill">Guba</span><span class="s-pill">Ed Damazin</span>
+          </div>
+        </div>
+      </div>
+      <!-- DECEMBER -->
+      <div id="dec-view" class="tracker-main" style="display:none">
+        <div class="tracker-left">
+          <div class="tracker-stats">
+            <div class="ts-box"><div class="tn" style="color:#10b981">3,960</div><div class="tl">Total questionnaires completed</div></div>
+            <div class="ts-box"><div class="tn" style="color:#3b82f6">91%</div><div class="tl">Response rate achieved</div></div>
+            <div class="ts-box"><div class="tn" style="color:#a78bfa">12</div><div class="tl">States covered</div></div>
+          </div>
+          <div class="activity-bars">
+            <h4>📋 Completed by Activity Type — December 2025</h4>
+            <div class="ab-row"><div class="ab-top"><span>GFA Monitoring</span><span>1,650</span></div><div class="ab-bg"><div class="ab-fill" style="width:100%;background:#3b82f6"></div></div></div>
+            <div class="ab-row"><div class="ab-top"><span>PDM (Post-Distribution)</span><span>650</span></div><div class="ab-bg"><div class="ab-fill" style="width:39%;background:#8b5cf6"></div></div></div>
+            <div class="ab-row"><div class="ab-top"><span>GFA CBT</span><span>580</span></div><div class="ab-bg"><div class="ab-fill" style="width:35%;background:#10b981"></div></div></div>
+            <div class="ab-row"><div class="ab-top"><span>e-BSFP (Nutrition)</span><span>510</span></div><div class="ab-bg"><div class="ab-fill" style="width:31%;background:#f97316"></div></div></div>
+            <div class="ab-row"><div class="ab-top"><span>AIM</span><span>280</span></div><div class="ab-bg"><div class="ab-fill" style="width:17%;background:#f59e0b"></div></div></div>
+            <div class="ab-row"><div class="ab-top"><span>MDM + WHM Add-Ons</span><span>290</span></div><div class="ab-bg"><div class="ab-fill" style="width:18%;background:#ef4444"></div></div></div>
+          </div>
+        </div>
+        <div class="tracker-right">
+          <div class="compare-box" style="margin-bottom:12px">
+            <h4>🗺️ Top States — December</h4>
+            <div class="cmp-row"><div class="cmp-label">Khartoum</div><div class="cmp-bars"><div class="cmp-bar-row"><span></span><div class="cmp-fill" style="width:100%;background:#3b82f6;height:6px;border-radius:99px"></div><span>980</span></div></div></div>
+            <div class="cmp-row"><div class="cmp-label">Al Fashir</div><div class="cmp-bars"><div class="cmp-bar-row"><span></span><div class="cmp-fill" style="width:58%;background:#3b82f6;height:6px;border-radius:99px"></div><span>568</span></div></div></div>
+            <div class="cmp-row"><div class="cmp-label">Kassala</div><div class="cmp-bars"><div class="cmp-bar-row"><span></span><div class="cmp-fill" style="width:48%;background:#10b981;height:6px;border-radius:99px"></div><span>470</span></div></div></div>
+            <div class="cmp-row"><div class="cmp-label">Nyala</div><div class="cmp-bars"><div class="cmp-bar-row"><span></span><div class="cmp-fill" style="width:42%;background:#10b981;height:6px;border-radius:99px"></div><span>411</span></div></div></div>
+            <div class="cmp-row" style="margin-bottom:0"><div class="cmp-label">El Obeid</div><div class="cmp-bars"><div class="cmp-bar-row"><span></span><div class="cmp-fill" style="width:35%;background:#f59e0b;height:6px;border-radius:99px"></div><span>343</span></div></div></div>
+          </div>
+          <div class="card-green">
+            <p style="font-size:11px;font-weight:700;color:#34d399;margin-bottom:5px">📉 Dec vs Nov Change</p>
+            <p style="font-size:10.5px;opacity:0.52;line-height:1.5">320 fewer questionnaires in December (−7.5%) — consistent with seasonal field access constraints during December. Response quality remained high at 91%. 2 fewer states covered due to security access limitations.</p>
+          </div>
+        </div>
+      </div>
+      <!-- COMPARISON -->
+      <div id="cmp-view" class="tracker-main" style="display:none">
+        <div class="tracker-left">
+          <div class="compare-box">
+            <h4>📊 November vs December — Side by Side</h4>
+            <div class="cmp-row"><div class="cmp-label" style="width:110px">Total Completed</div><div class="cmp-bars"><div class="cmp-bar-row"><span>Nov</span><div class="cmp-fill" style="width:100%;background:#3b82f6;height:7px;border-radius:99px"></div><span>4,280</span></div><div class="cmp-bar-row"><span>Dec</span><div class="cmp-fill" style="width:93%;background:#10b981;height:7px;border-radius:99px"></div><span>3,960</span></div></div></div>
+            <div class="cmp-row"><div class="cmp-label" style="width:110px">GFA Monitoring</div><div class="cmp-bars"><div class="cmp-bar-row"><span>Nov</span><div class="cmp-fill" style="width:100%;background:#3b82f6;height:7px;border-radius:99px"></div><span>1,840</span></div><div class="cmp-bar-row"><span>Dec</span><div class="cmp-fill" style="width:90%;background:#10b981;height:7px;border-radius:99px"></div><span>1,650</span></div></div></div>
+            <div class="cmp-row"><div class="cmp-label" style="width:110px">PDM Surveys</div><div class="cmp-bars"><div class="cmp-bar-row"><span>Nov</span><div class="cmp-fill" style="width:100%;background:#8b5cf6;height:7px;border-radius:99px"></div><span>720</span></div><div class="cmp-bar-row"><span>Dec</span><div class="cmp-fill" style="width:90%;background:#a78bfa;height:7px;border-radius:99px"></div><span>650</span></div></div></div>
+            <div class="cmp-row"><div class="cmp-label" style="width:110px">e-BSFP</div><div class="cmp-bars"><div class="cmp-bar-row"><span>Nov</span><div class="cmp-fill" style="width:94%;background:#f97316;height:7px;border-radius:99px"></div><span>480</span></div><div class="cmp-bar-row"><span>Dec</span><div class="cmp-fill" style="width:100%;background:#fb923c;height:7px;border-radius:99px"></div><span>510 ↑</span></div></div></div>
+            <div class="cmp-row" style="margin-bottom:0"><div class="cmp-label" style="width:110px">Response Rate</div><div class="cmp-bars"><div class="cmp-bar-row"><span>Nov</span><div class="cmp-fill" style="width:94%;background:#3b82f6;height:7px;border-radius:99px"></div><span>94%</span></div><div class="cmp-bar-row"><span>Dec</span><div class="cmp-fill" style="width:91%;background:#10b981;height:7px;border-radius:99px"></div><span>91%</span></div></div></div>
+          </div>
+        </div>
+        <div class="tracker-right">
+          <div class="tracker-stats" style="margin-bottom:14px">
+            <div class="ts-box"><div class="tn" style="color:#3b82f6">8,240</div><div class="tl">Total 2-month combined</div></div>
+            <div class="ts-box"><div class="tn" style="color:#10b981">92.5%</div><div class="tl">Avg response rate</div></div>
+            <div class="ts-box"><div class="tn" style="color:#a78bfa">14</div><div class="tl">States — peak coverage</div></div>
+          </div>
+          <div class="card">
+            <p style="font-size:12px;font-weight:700;color:#60a5fa;margin-bottom:9px">🔍 Key Insights</p>
+            <div class="ai-row"><div class="ai-dot"></div><p>e-BSFP is the <strong>only activity that grew</strong> Dec vs Nov (+6%) — indicating nutrition programme expansion</p></div>
+            <div class="ai-row"><div class="ai-dot"></div><p>GFA remains the dominant activity at <strong>43% of all questionnaires</strong> across both months</p></div>
+            <div class="ai-row"><div class="ai-dot"></div><p>Khartoum and Al Fashir consistently account for <strong>40%+ of total output</strong> across both months</p></div>
+            <div class="ai-row" style="margin-bottom:0"><div class="ai-dot"></div><p>December 2-state drop linked to seasonal security constraints — <strong>system auto-flagged</strong> 2 localities as inaccessible</p></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="slide-num">14 / 16</div>
+</div>
+
+<!-- ═══════════════════════════════════════
+  SLIDE 15 — COMING SOON
+═══════════════════════════════════════ -->
+<div class="slide s15" id="s15">
   <div class="blob b1"></div><div class="blob b2"></div>
   <div style="max-width:940px;width:100%;text-align:center">
     <p class="eyebrow">What's Next · ما هو قادم</p>
-    <h2 class="h-display">The platform <span>keeps evolving</span></h2>
-    <p class="h-ar">المنصة تتطور باستمرار — ميزات جديدة قادمة لتعزيز العمليات الميدانية</p>
+    <h2 class="h-display">The platform <em>keeps evolving</em></h2>
+    <p class="h-ar" style="margin-bottom:24px">المنصة تتطور باستمرار — ميزات جديدة لتعزيز العمليات الميدانية عبر كل قطاعاتنا</p>
     <div class="cs-grid">
-      <div class="cs-card live">
-        <div class="cs-icon">📱</div>
-        <h3>Mobile Field App</h3>
-        <div class="cs-ar">تطبيق الميدان المحمول</div>
-        <p>iOS &amp; Android app with full offline visit completion, GPS, photo capture, and wallet management.</p>
-      </div>
-      <div class="cs-card live">
-        <div class="cs-icon">🗺️</div>
-        <h3>Live Team Map</h3>
-        <div class="cs-ar">خريطة الفريق الحية</div>
-        <p>Real-time GPS tracking of all field teams across hubs — with coverage gap visualization.</p>
-      </div>
-      <div class="cs-card live">
-        <div class="cs-icon">💰</div>
-        <h3>Financial Workflow</h3>
-        <div class="cs-ar">سير العمل المالي</div>
-        <p>Complete advance, wallet, expense, and reconciliation system with full digital audit trail.</p>
-      </div>
-      <div class="cs-card soon">
-        <div class="cs-icon">📞</div>
-        <h3>IVR Integration</h3>
-        <div class="cs-ar">تكامل IVR</div>
-        <p>Interactive voice response for beneficiary verification and field data collection via phone calls — no smartphone required.</p>
-      </div>
-      <div class="cs-card soon">
-        <div class="cs-icon">🎧</div>
-        <h3>Call Center Module</h3>
-        <div class="cs-ar">وحدة مركز الاتصال</div>
-        <p>Integrated call center dashboard for supervisors — log calls, track follow-ups, and link outcomes directly to site visits.</p>
-      </div>
-      <div class="cs-card soon">
-        <div class="cs-icon">🤖</div>
-        <h3>AI Analytics Engine</h3>
-        <div class="cs-ar">محرك التحليلات بالذكاء الاصطناعي</div>
-        <p>Predictive coverage alerts, anomaly detection in field reports, and automated quality scoring powered by AI.</p>
-      </div>
+      <div class="cs-card tag-live"><div class="cs-icon">📱</div><h3>Mobile Field App</h3><div class="cs-ar">تطبيق الميدان</div><p>iOS &amp; Android with full offline visits, GPS, photos, wallet, and bilingual UI.</p></div>
+      <div class="cs-card tag-live"><div class="cs-icon">💬</div><h3>Communication Platform</h3><div class="cs-ar">منصة الاتصالات</div><p>Encrypted messaging, voice calls, and broadcast center — own infrastructure, no third-party dependency.</p></div>
+      <div class="cs-card tag-live"><div class="cs-icon">📊</div><h3>AI Analytics Dashboard</h3><div class="cs-ar">لوحة التحليلات</div><p>Real-time coverage gaps, quality scoring, anomaly detection, and questionnaire intelligence.</p></div>
+      <div class="cs-card tag-soon"><div class="cs-icon">📞</div><h3>IVR Integration</h3><div class="cs-ar">تكامل IVR</div><p>Beneficiary verification and data collection via interactive voice response — no smartphone required.</p></div>
+      <div class="cs-card tag-soon"><div class="cs-icon">🎧</div><h3>Call Center Module</h3><div class="cs-ar">مركز الاتصال</div><p>Supervisor dashboard for call logging, follow-up tracking, and linking call outcomes to site visits and tasks.</p></div>
+      <div class="cs-card tag-soon"><div class="cs-icon">🤖</div><h3>Predictive AI Engine</h3><div class="cs-ar">محرك الذكاء التنبؤي</div><p>Forecast coverage failures, auto-generate redistribution recommendations, and detect field fraud patterns before they escalate.</p></div>
     </div>
   </div>
-  <div class="slide-num">13 / 14</div>
+  <div class="slide-num">15 / 16</div>
 </div>
 
-<!-- ══════════════════════════════════════
-  SLIDE 14 — CLOSE
-══════════════════════════════════════ -->
-<div class="slide s14" id="s14">
+<!-- ═══════════════════════════════════════
+  SLIDE 16 — CLOSE
+═══════════════════════════════════════ -->
+<div class="slide s16" id="s16">
   <div class="blob b1"></div><div class="blob b2"></div>
-  <div class="s14-logo">🛡️</div>
+  <div class="s16-logo">🛡️</div>
   <h1>PACT Command Center</h1>
-  <p class="sub">Empowering field operations across 7 countries — built to scale, designed to last</p>
-  <p class="sub-ar">تمكين العمليات الميدانية عبر 7 دول — مصمم للنمو والاستدامة</p>
+  <p class="sub">Empowering field operations, surveys, and research across 7 countries — built to scale</p>
+  <p class="sub-ar">تمكين العمليات الميدانية والمسوحات والأبحاث عبر 7 دول — مصمم للنمو والاستدامة</p>
   <div class="close-pills">
     <span class="close-pill">🌍 7 Countries</span>
     <span class="close-pill">👥 850+ Enumerators</span>
-    <span class="close-pill">📱 iOS &amp; Android</span>
-    <span class="close-pill">🌐 English / Arabic</span>
-    <span class="close-pill">📶 Full Offline</span>
+    <span class="close-pill">🧩 Any Work Type</span>
+    <span class="close-pill">💬 Own Comms Channel</span>
+    <span class="close-pill">🤖 AI Analytics</span>
     <span class="close-pill">📞 IVR — Coming Soon</span>
   </div>
-  <div class="slide-num">14 / 14</div>
+  <div class="slide-num">16 / 16</div>
 </div>
 
 <script>
+// Nav dots
 const slides = document.querySelectorAll('.slide');
 const dotsWrap = document.getElementById('navDots');
 slides.forEach((_,i)=>{
-  const b = document.createElement('button');
+  const b=document.createElement('button');
   b.className='nav-dot'+(i===0?' active':'');
   b.onclick=()=>slides[i].scrollIntoView({behavior:'smooth'});
   dotsWrap.appendChild(b);
 });
-const dots = document.querySelectorAll('.nav-dot');
-const io = new IntersectionObserver(entries=>{
+const dots=document.querySelectorAll('.nav-dot');
+new IntersectionObserver(entries=>{
   entries.forEach(e=>{
     if(e.isIntersecting){
       const idx=Array.from(slides).indexOf(e.target);
       dots.forEach((d,i)=>d.classList.toggle('active',i===idx));
     }
   });
-},{threshold:0.55});
-slides.forEach(s=>io.observe(s));
+},{threshold:0.55}).observe && slides.forEach(s=>{
+  new IntersectionObserver(entries=>{
+    entries.forEach(e=>{
+      if(e.isIntersecting){
+        const idx=Array.from(slides).indexOf(e.target);
+        dots.forEach((d,i)=>d.classList.toggle('active',i===idx));
+      }
+    });
+  },{threshold:0.55}).observe(s);
+});
+// Keyboard nav
 document.addEventListener('keydown',e=>{
   const a=Array.from(dots).findIndex(d=>d.classList.contains('active'));
   if((e.key==='ArrowDown'||e.key==='ArrowRight')&&a<slides.length-1) slides[a+1].scrollIntoView({behavior:'smooth'});
   if((e.key==='ArrowUp'||e.key==='ArrowLeft')&&a>0) slides[a-1].scrollIntoView({behavior:'smooth'});
 });
+// Month tab switcher
+function showMonth(tab, btn){
+  document.getElementById('nov-view').style.display='none';
+  document.getElementById('dec-view').style.display='none';
+  document.getElementById('cmp-view').style.display='none';
+  document.getElementById(tab+'-view').style.display='flex';
+  document.querySelectorAll('.m-tab').forEach(b=>b.classList.remove('on'));
+  btn.classList.add('on');
+}
 </script>
 </body>
 </html>
