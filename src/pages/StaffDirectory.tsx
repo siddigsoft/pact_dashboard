@@ -190,9 +190,9 @@ function ProfileDetail({
       setFinLoading(true);
       const [dpRes, ocRes, wrRes] = await Promise.all([
         supabase.from('down_payment_requests')
-          .select('id,status,requested_amount,created_at,notes,hub,state')
-          .eq('user_id', profile.id)
-          .order('created_at', { ascending: false })
+          .select('id,status,requested_amount,requested_at,justification,hub_name,site_name')
+          .eq('requested_by', profile.id)
+          .order('requested_at', { ascending: false })
           .limit(100),
         supabase.from('operational_cost_submissions')
           .select('id,tier1_status,tier2_status,amount_cents,expense_category,description,submitted_at,created_at')
@@ -205,6 +205,9 @@ function ProfileDetail({
           .order('created_at', { ascending: false })
           .limit(100),
       ]);
+      if (dpRes.error) console.error('[StaffDirectory] down_payment_requests error:', dpRes.error);
+      if (ocRes.error) console.error('[StaffDirectory] operational_cost_submissions error:', ocRes.error);
+      if (wrRes.error) console.error('[StaffDirectory] withdrawal_requests error:', wrRes.error);
       setAdvanceRows(dpRes.data || []);
       setCostRows(ocRes.data || []);
       setWithdrawalRows(wrRes.data || []);
@@ -541,11 +544,11 @@ function ProfileDetail({
                                 <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${isApproved ? 'bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400' : isPending ? 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400' : isRejected ? 'bg-red-100 dark:bg-red-900/40 text-red-600 dark:text-red-400' : 'bg-muted text-muted-foreground'}`}>
                                   {r.status}
                                 </span>
-                                {r.hub && <span className="text-[10px] text-muted-foreground">{r.hub}</span>}
-                                {r.state && <span className="text-[10px] text-muted-foreground">· {r.state}</span>}
+                                {r.hub_name && <span className="text-[10px] text-muted-foreground">{r.hub_name}</span>}
+                                {r.site_name && <span className="text-[10px] text-muted-foreground">· {r.site_name}</span>}
                               </div>
-                              {r.notes && <p className="text-[10px] text-muted-foreground mt-0.5 truncate">{r.notes}</p>}
-                              <p className="text-[10px] text-muted-foreground mt-0.5">{r.created_at ? format(parseISO(r.created_at), 'dd MMM yyyy') : '—'}</p>
+                              {r.justification && <p className="text-[10px] text-muted-foreground mt-0.5 truncate">{r.justification}</p>}
+                              <p className="text-[10px] text-muted-foreground mt-0.5">{r.requested_at ? format(parseISO(r.requested_at), 'dd MMM yyyy') : '—'}</p>
                             </div>
                             <p className="text-xs font-bold text-foreground shrink-0">SDG {Number(r.requested_amount || 0).toLocaleString()}</p>
                           </div>
