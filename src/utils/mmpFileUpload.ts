@@ -698,9 +698,15 @@ export async function parseAndCountEntries(file: File, sheetName?: string): Prom
       'usemarketdiversion': 'useMarketDiversion',
       'use market diversion monitoring': 'useMarketDiversion',
       'use market diversion monitorir': 'useMarketDiversion',
+      'market diversion': 'useMarketDiversion',
+      'market diversion monitoring': 'useMarketDiversion',
+      'marketdiversion': 'useMarketDiversion',
+      'marketdiversionmonitoring': 'useMarketDiversion',
       'usewarehousemonitoring': 'useWarehouseMonitoring',
       'use warehouse monitoring': 'useWarehouseMonitoring',
       'use warehouse monitorin': 'useWarehouseMonitoring',
+      'warehouse monitoring': 'useWarehouseMonitoring',
+      'warehousemonitoring': 'useWarehouseMonitoring',
     };
 
     // Normalize the header map keys once

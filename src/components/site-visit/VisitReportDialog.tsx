@@ -75,6 +75,7 @@ export const VisitReportDialog: React.FC<VisitReportDialogProps> = ({
   const pdmCount = Number(pdmQuestionnaires) || 0;
   const pdmSiteVisits = calculatePdmSiteVisits(pdmCount);
   const pdmRemainder = calculatePdmRemainder(pdmCount);
+  const totalDisplayFees = (isPDMActivity ? pdmSiteVisits : 1) + (hasMDM ? 2 : 0) + (hasWHM ? 2 : 0);
 
   const locationTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const LAST_KNOWN_LOCATION_KEY = 'visitReport.lastKnownLocation';
@@ -551,7 +552,7 @@ export const VisitReportDialog: React.FC<VisitReportDialogProps> = ({
         }
       }
 
-      if (isPDMActivity || hasMDM || hasWHM) {
+      {
         const extraData: Record<string, any> = {};
         if (isPDMActivity && pdmQuestionnaires) {
           extraData.pdm_questionnaires_submitted = Number(pdmQuestionnaires) || 0;
@@ -559,10 +560,23 @@ export const VisitReportDialog: React.FC<VisitReportDialogProps> = ({
         }
         if (hasMDM && mdmQuestionnaires) {
           extraData.mdm_questionnaires_submitted = Number(mdmQuestionnaires) || 0;
+          extraData.mdm_site_visits = 2;
         }
         if (hasWHM && whmQuestionnaires) {
           extraData.whm_questionnaires_submitted = Number(whmQuestionnaires) || 0;
+          extraData.whm_site_visits = 2;
         }
+        // Calculate total visit fees matching mobile formula:
+        // PDM = floor(questionnaires/7), MDM = 2, WHM = 2, base activity = 1
+        let totalVisitFees = 0;
+        if (isPDMActivity) {
+          totalVisitFees += Math.floor((Number(pdmQuestionnaires) || 0) / 7);
+        } else {
+          totalVisitFees += 1;
+        }
+        if (hasMDM) totalVisitFees += 2;
+        if (hasWHM) totalVisitFees += 2;
+        extraData.total_visit_fees = totalVisitFees;
         if (Object.keys(extraData).length > 0) {
           await supabase
             .from('mmp_site_entries')
@@ -977,13 +991,19 @@ export const VisitReportDialog: React.FC<VisitReportDialogProps> = ({
                   data-testid="input-mdm-questionnaires"
                 />
               </div>
-              {Number(mdmQuestionnaires) > 0 && (
-                <div className="mt-3 bg-white dark:bg-neutral-800 rounded-xl p-3 border border-pink-100 dark:border-pink-700">
+              <div className="mt-3 bg-white dark:bg-neutral-800 rounded-xl p-3 border border-pink-100 dark:border-pink-700">
+                <div className="flex items-center justify-between">
                   <p className="text-sm font-medium text-pink-700 dark:text-pink-300">
-                    {mdmQuestionnaires} MDM questionnaire{Number(mdmQuestionnaires) !== 1 ? 's' : ''} recorded
+                    MDM = Fixed <span className="font-black text-lg">2</span> site visit fees
                   </p>
+                  <span className="px-2 py-1 bg-pink-600 text-white text-xs font-bold rounded-full">× 2 visits</span>
                 </div>
-              )}
+                {Number(mdmQuestionnaires) > 0 && (
+                  <p className="text-xs text-pink-500 dark:text-pink-400 mt-1">
+                    {mdmQuestionnaires} questionnaire{Number(mdmQuestionnaires) !== 1 ? 's' : ''} recorded
+                  </p>
+                )}
+              </div>
             </div>
           )}
 
@@ -1019,13 +1039,40 @@ export const VisitReportDialog: React.FC<VisitReportDialogProps> = ({
                   data-testid="input-whm-questionnaires"
                 />
               </div>
-              {Number(whmQuestionnaires) > 0 && (
-                <div className="mt-3 bg-white dark:bg-neutral-800 rounded-xl p-3 border border-teal-100 dark:border-teal-700">
+              <div className="mt-3 bg-white dark:bg-neutral-800 rounded-xl p-3 border border-teal-100 dark:border-teal-700">
+                <div className="flex items-center justify-between">
                   <p className="text-sm font-medium text-teal-700 dark:text-teal-300">
-                    {whmQuestionnaires} WHM questionnaire{Number(whmQuestionnaires) !== 1 ? 's' : ''} recorded
+                    WHM = Fixed <span className="font-black text-lg">2</span> site visit fees
                   </p>
+                  <span className="px-2 py-1 bg-teal-600 text-white text-xs font-bold rounded-full">× 2 visits</span>
                 </div>
-              )}
+                {Number(whmQuestionnaires) > 0 && (
+                  <p className="text-xs text-teal-500 dark:text-teal-400 mt-1">
+                    {whmQuestionnaires} questionnaire{Number(whmQuestionnaires) !== 1 ? 's' : ''} recorded
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Total Fee Summary — shown when any add-on (MDM/WHM) is present */}
+          {(hasMDM || hasWHM || isPDMActivity) && (
+            <div className="rounded-2xl p-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-700 flex items-center gap-3">
+              <div className="w-9 h-9 rounded-full bg-green-600 flex items-center justify-center shrink-0">
+                <span className="text-white text-sm font-black">{totalDisplayFees}</span>
+              </div>
+              <div>
+                <p className="text-sm font-bold text-green-800 dark:text-green-200">
+                  Expected site visit fees: {totalDisplayFees} visit{totalDisplayFees !== 1 ? 's' : ''}
+                </p>
+                <p className="text-xs text-green-600 dark:text-green-400 mt-0.5">
+                  {[
+                    !isPDMActivity ? '1 base activity' : pdmSiteVisits > 0 ? `PDM: ${pdmSiteVisits} (${pdmCount}÷7)` : 'PDM: 0 (enter questionnaires)',
+                    hasMDM ? 'MDM: +2' : null,
+                    hasWHM ? 'WHM: +2' : null,
+                  ].filter(Boolean).join(' · ')}
+                </p>
+              </div>
             </div>
           )}
 
