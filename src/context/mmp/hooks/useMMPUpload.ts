@@ -19,6 +19,10 @@ export const useMMPUpload = (addMMPFile: (mmp: MMPFile) => void) => {
       return { success: false, error: session.error || 'Session expired' };
     }
 
+    // Timeout scales with file size: 2 min base + ~1s per 100 entries, cap 10 min (large MMPs e.g. 6000+ sites)
+    const estimatedEntries = Math.min(10000, Math.max(100, (file.size / 1024) * 2));
+    const uploadTimeoutMs = Math.min(600000, 120000 + Math.ceil(estimatedEntries / 100) * 1000);
+
     try {
       const result = await withTimeout(
         (async () => {
@@ -54,8 +58,8 @@ export const useMMPUpload = (addMMPFile: (mmp: MMPFile) => void) => {
 
       return { success: false, error: 'Upload finished without returning data', validationReport, validationErrors, validationWarnings };
         })(),
-        15000,
-        'MMP upload timed out'
+        uploadTimeoutMs,
+        `MMP upload timed out after ${Math.round(uploadTimeoutMs / 60000)} minutes. Try a smaller file or try again.`
       );
 
       return result;

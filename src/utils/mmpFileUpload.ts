@@ -422,7 +422,7 @@ async function ensureSitesInRegistry(
   }
 
   try {
-    // Fetch all existing registry sites for matching
+    // Fetch existing registry sites (only columns needed for matching and mmp_count)
     console.log('[Sites Registry] Fetching existing sites from registry...');
     const { data: existingRegistrySites, error: fetchError } = await supabase
       .from('sites_registry')
@@ -564,34 +564,34 @@ async function ensureSitesInRegistry(
       }
     }
 
-    // Update mmp_count for all sites based on their occurrences in this upload
-    // For existing sites: increment by number of occurrences
-    // For new sites: they already have mmp_count=1, increment by additional occurrences
+    // Update mmp_count for all sites in parallel chunks to avoid thousands of sequential round-trips
+    const updates: Array<{ id: string; finalMmpCount: number }> = [];
     for (const [siteKey, result] of siteRegistryMap.entries()) {
       const duplicateCount = duplicateCountsInUpload.get(siteKey) || 1;
-      
-      // For existing sites, mmpCount already has +1. If there are duplicates, add more.
-      // For new sites, they start at 1. Add duplicates - 1 if there are any.
       const additionalCount = result.isNew ? (duplicateCount - 1) : (duplicateCount - 1);
-      
       if (additionalCount > 0 || !result.isNew) {
-        // Calculate the final count
-        const finalMmpCount = result.isNew 
-          ? (result.mmpCount + additionalCount)  // New: 1 + (duplicateCount - 1) = duplicateCount
-          : (result.mmpCount + additionalCount); // Existing: existing+1 + (duplicateCount - 1) = existing+duplicateCount
-        
-        const { error: updateError } = await supabase
-          .from('sites_registry')
-          .update({ 
-            mmp_count: finalMmpCount,
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', result.registrySiteId);
-
-        if (updateError) {
-          console.error('Error updating mmp_count for site:', result.registrySiteId, updateError);
-        }
+        const finalMmpCount = result.isNew
+          ? (result.mmpCount + additionalCount)
+          : (result.mmpCount + additionalCount);
+        updates.push({ id: result.registrySiteId, finalMmpCount });
       }
+    }
+    const UPDATE_CHUNK = 30;
+    const now = new Date().toISOString();
+    for (let i = 0; i < updates.length; i += UPDATE_CHUNK) {
+      const chunk = updates.slice(i, i + UPDATE_CHUNK);
+      const results = await Promise.allSettled(
+        chunk.map(({ id, finalMmpCount }) =>
+          supabase
+            .from('sites_registry')
+            .update({ mmp_count: finalMmpCount, updated_at: now })
+            .eq('id', id)
+        )
+      );
+      results.forEach((outcome, idx) => {
+        if (outcome.status === 'rejected') console.error('Error updating mmp_count for site:', chunk[idx]?.id, outcome.reason);
+        else if (outcome.value?.error) console.error('Error updating mmp_count for site:', chunk[idx]?.id, outcome.value.error);
+      });
     }
 
     // Print detailed summary
@@ -1307,8 +1307,8 @@ export async function uploadMMPFile(
 
     console.log('MMP file record created successfully:', insertedRow);
 
-    // Now insert site entries in batches to avoid database limits
-    const BATCH_SIZE = 50;
+    // Now insert site entries in batches (larger batches = fewer round-trips for big MMPs e.g. 6000 sites)
+    const BATCH_SIZE = 200;
     const mmpId = insertedRow.id;
     const totalBatches = Math.ceil(entries.length / BATCH_SIZE);
 
