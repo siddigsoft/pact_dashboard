@@ -2,6 +2,10 @@ import { useMemo } from 'react';
 import { useMMP } from '@/context/mmp/MMPContext';
 import { useAppContext } from '@/context/AppContext';
 import { useUserProjects } from '@/hooks/useUserProjects';
+import {
+  useCoordinatorSiteEntriesQuery,
+  type CoordinatorSiteEntryRow,
+} from '@/context/mmp/mmpQueries';
 
 export interface SiteEntryCounts {
   new: number;
@@ -77,24 +81,67 @@ function computeCounts(sites: SiteVisit[]): SiteEntryCounts {
   return counts;
 }
 
+function mapCoordinatorRowToSiteVisit(row: CoordinatorSiteEntryRow): SiteVisit {
+  const ad = row.additional_data || {};
+  const isUnverified = ['Pending', 'Dispatched', 'assigned', 'inProgress', 'in_progress'].includes(row.status || '');
+  const visitDate = isUnverified ? null : (row.visit_date ?? null);
+  const activityAtSite = row.activity_at_site;
+  const activityArray = activityAtSite
+    ? (typeof activityAtSite === 'string' ? activityAtSite.split(', ').filter((a: string) => a.trim() !== '') : [])
+    : [];
+
+  return {
+    id: row.id,
+    site_name: row.site_name ?? '',
+    site_code: row.site_code ?? '',
+    status: row.status ?? '',
+    state: row.state ?? '',
+    locality: row.locality ?? '',
+    activity: activityAtSite ?? row.main_activity ?? '',
+    main_activity: row.main_activity ?? '',
+    activity_at_site: activityArray,
+    visit_date: visitDate,
+    assigned_at: (ad as any).assigned_at ?? '',
+    comments: row.comments ?? '',
+    mmp_file_id: row.mmp_file_id,
+    mmp_name: row.mmp_name ?? 'Unknown MMP',
+    hub_office: row.hub_office ?? '',
+    cp_name: row.cp_name ?? undefined,
+    monitoring_by: row.monitoring_by ?? undefined,
+    survey_tool: row.survey_tool ?? undefined,
+    use_market_diversion: row.use_market_diversion ?? false,
+    use_warehouse_monitoring: row.use_warehouse_monitoring ?? false,
+    verified_at: row.verified_at ?? undefined,
+    verified_by: row.verified_by ?? undefined,
+    verification_notes: row.verification_notes ?? undefined,
+    additional_data: ad,
+  };
+}
+
 /**
- * Custom hook to filter and transform coordinator-specific sites from MMP context data.
- * Matches backup behavior: sites come from MMP context (all MMPs + site entries loaded
- * in context), then filtered client-side by assignment to current user.
+ * Custom hook for coordinator-specific sites. Uses RPC get_coordinator_site_entries when
+ * possible (fewer rows, no client-side filter); falls back to MMP context for compatibility.
  */
 export const useCoordinatorSites = () => {
   const { currentUser } = useAppContext();
   const { mmpFiles: contextMmpFiles, loading: contextLoading, refreshMMPFiles } = useMMP();
-  const { userProjectIds, isAdminOrSuperUser } = useUserProjects();
+  const { isAdminOrSuperUser } = useUserProjects();
+
+  const {
+    data: coordinatorRows,
+    isLoading: coordinatorQueryLoading,
+    refetch: refetchCoordinatorQuery,
+  } = useCoordinatorSiteEntriesQuery(currentUser?.id ?? null, isAdminOrSuperUser ?? false);
 
   const coordinatorSites = useMemo(() => {
+    if (coordinatorRows && coordinatorRows.length >= 0) {
+      return coordinatorRows.map(mapCoordinatorRowToSiteVisit);
+    }
     if (!currentUser?.id || !contextMmpFiles || contextLoading) return [];
 
     const allSites: SiteVisit[] = [];
-
     contextMmpFiles.forEach((mmp: any) => {
       if (!mmp.siteEntries || !Array.isArray(mmp.siteEntries)) return;
-
       mmp.siteEntries.forEach((entry: any) => {
         if (!isAdminOrSuperUser) {
           const forwardedToMe = entry.forwardedToUserId === currentUser.id;
@@ -102,14 +149,10 @@ export const useCoordinatorSites = () => {
           const acceptedByMe = entry.accepted_by === currentUser.id;
           if (!forwardedToMe && !assignedToMe && !acceptedByMe) return;
         }
-
-        // Keep returned_to_fom sites for the Returned to FOM tab
-
         const isUnverified = entry.status === 'Pending' || entry.status === 'Dispatched' ||
                             entry.status === 'assigned' || entry.status === 'inProgress' ||
                             entry.status === 'in_progress';
         const visitDate = isUnverified ? null : (entry.visitDate ?? entry.visit_date);
-
         allSites.push({
           id: entry.id,
           site_name: entry.siteName || entry.site_name,
@@ -140,17 +183,19 @@ export const useCoordinatorSites = () => {
         });
       });
     });
-
     return allSites;
-  }, [contextMmpFiles, contextLoading, currentUser?.id, isAdminOrSuperUser]);
+  }, [coordinatorRows, contextMmpFiles, contextLoading, currentUser?.id, isAdminOrSuperUser]);
 
   const siteCounts = useMemo(() => computeCounts(coordinatorSites), [coordinatorSites]);
 
+  const loading = coordinatorRows !== undefined ? coordinatorQueryLoading : contextLoading;
+  const refetch = refetchCoordinatorQuery;
+
   return {
     coordinatorSites,
-    loading: contextLoading,
+    loading,
     error: null,
     siteCounts,
-    refetch: refreshMMPFiles,
+    refetch,
   };
 };

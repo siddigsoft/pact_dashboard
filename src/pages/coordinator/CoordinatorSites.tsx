@@ -896,22 +896,22 @@ const CoordinatorSites: React.FC = () => {
 
 
 
-  // Build locality data from coordinator sites (filtered by MMP if selected)
-  useEffect(() => {
+  // Build locality data from coordinator sites (useMemo to avoid blocking; sync to state in effect)
+  const localitiesDataResult = useMemo(() => {
     const sitesForLocalities = mmpFilter !== 'all'
       ? coordinatorSites.filter((s: SiteVisit) => s.mmp_file_id === mmpFilter)
       : coordinatorSites;
 
     if (!sitesForLocalities || sitesForLocalities.length === 0) {
-      setLocalitiesData([]);
-      setStatePermitRequiredCount(0);
-      setLocalPermitRequiredCount(0);
-      return;
+      return {
+        localitiesData: [] as any[],
+        statePermitRequiredCount: 0,
+        localPermitRequiredCount: 0,
+        suggestedSubTab: 'ready' as const,
+      };
     }
 
-    // Group sites by state first, then by locality within each state
     const statesMap = new Map<string, any>();
-    
     sitesForLocalities.forEach((site: any) => {
       const stateKey = site.state;
       if (!statesMap.has(stateKey)) {
@@ -922,14 +922,12 @@ const CoordinatorSites: React.FC = () => {
           hasStatePermit: false,
           statePermitUploadedAt: null,
           statePermitVerified: false,
-          mmpNames: new Set<string>()
+          mmpNames: new Set<string>(),
         });
       }
-      
       const stateData = statesMap.get(stateKey);
       if (site.mmp_name) stateData.mmpNames.add(site.mmp_name);
       const localityKey = site.locality;
-      
       if (!stateData.localities.has(localityKey)) {
         stateData.localities.set(localityKey, {
           state: site.state,
@@ -937,22 +935,19 @@ const CoordinatorSites: React.FC = () => {
           sites: [],
           hasPermit: false,
           permitId: null,
-          permitUploadedAt: null
+          permitUploadedAt: null,
         });
       }
-      
       stateData.localities.get(localityKey).sites.push(site);
       stateData.totalSites++;
     });
 
-    // Build state/locality aggregates (per-site logic aligned with mobile app)
-    // Use same "new" definition as useCoordinatorSites so permit sub-tabs sum matches New Sites badge
     const prePipelineStatuses = ['pending', 'inprogress', 'in_progress', 'forwarded', 'forwarded_to_coordinator', 'forwarded_to_coordinators', 'new'];
     const isPending = (site: any) => {
       const status = (site?.status || '').toLowerCase().trim().replace(/\s+/g, '_');
       if (prePipelineStatuses.includes(status)) return true;
       if (['dispatched', 'assigned', 'accepted', 'permits_attached', 'cp_verified', 'cp_verification', 'verified', 'approved', 'costed', 'approved_and_costed', 'completed', 'rejected'].includes(status)) return false;
-      return true; // else branch: unknown status counts as new (match hook)
+      return true;
     };
 
     const statesArray = Array.from(statesMap.values()).map((stateData: any) => {
@@ -960,16 +955,13 @@ const CoordinatorSites: React.FC = () => {
         ...locality,
         hasPermit: false,
         permitId: null,
-        permitUploadedAt: null
+        permitUploadedAt: null,
       }));
-
       const allSitesInState = localitiesArray.flatMap((loc: any) => loc.sites || []);
       const pendingSitesInState = allSitesInState.filter(isPending);
       const sitesNeedingStatePermitInState = pendingSitesInState.filter((s: any) => siteNeedsStatePermit(s));
-      // State goes in "State Permit" tab if at least one pending site needs state permit (mobile logic)
       const anySiteNeedsStatePermit = sitesNeedingStatePermitInState.length > 0;
       const hasStatePermitForTab = !anySiteNeedsStatePermit;
-
       return {
         ...stateData,
         localities: localitiesArray,
@@ -977,49 +969,35 @@ const CoordinatorSites: React.FC = () => {
         statePermitUploadedAt: null,
         statePermitVerified: false,
         statePermitRequiredCount: sitesNeedingStatePermitInState.length,
-        mmpNames: Array.from(stateData.mmpNames || [])
+        mmpNames: Array.from(stateData.mmpNames || []),
       };
     });
 
-    // Update permit statuses by checking MMP context (display only; do not overwrite hasStatePermit for tab)
     const enrichedStatesArray = statesArray.map((stateData: any) => {
       const firstLocality = stateData.localities[0];
       const mmpFileId = firstLocality?.sites?.[0]?.mmp_file_id;
       if (mmpFileId) {
-        const mmpFile = contextMmpFiles.find(m => m.id === mmpFileId);
+        const mmpFile = contextMmpFiles.find((m: any) => m.id === mmpFileId);
         if (mmpFile?.permits?.statePermits) {
           const statePermit = (mmpFile.permits.statePermits as any[]).find((sp: any) => sp.state === stateData.state);
           if (statePermit) {
             stateData.statePermitVerified = !!statePermit.verified;
             stateData.statePermitUploadedAt = statePermit.uploadedAt || null;
-            // Do not set hasStatePermit from MMP; tab/count use per-site flags only (match mobile)
           }
         }
       }
-
-      // Check locality permits
       const stateNameToId = new Map(hubStates.map((hs: any) => [hs.state_name, hs.state_id]));
       const localityKeyToId = new Map(localities.map((l: any) => [`${l.state_id}|${l.name}`, l.id]));
       const permitKeySet = new Set(permits.map((p: any) => `${p.stateId}|${p.localityId}`));
-
       stateData.localities = stateData.localities.map((locality: any) => {
         const resolvedStateId = stateNameToId.get(locality.state);
         const resolvedLocalityId = resolvedStateId ? localityKeyToId.get(`${resolvedStateId}|${locality.locality}`) : undefined;
         const hasPermit = resolvedStateId && resolvedLocalityId ? permitKeySet.has(`${resolvedStateId}|${resolvedLocalityId}`) : false;
-        return {
-          ...locality,
-          hasPermit,
-          permitId: null,
-          permitUploadedAt: null
-        };
+        return { ...locality, hasPermit, permitId: null, permitUploadedAt: null };
       });
-
       return stateData;
     });
 
-    setLocalitiesData(enrichedStatesArray);
-
-    // Calculate subcategory counts (per-site logic, aligned with mobile app)
     const allPendingSites = enrichedStatesArray.flatMap((state: any) =>
       state.localities.flatMap((loc: any) => (loc.sites || [])).filter(isPending)
     );
@@ -1027,48 +1005,22 @@ const CoordinatorSites: React.FC = () => {
     const sitesNeedingLocalityPermit = allPendingSites.filter((site: any) => siteNeedsLocalityPermit(site));
     const statePermitRequired = sitesNeedingStatePermit.length;
     const localPermitRequired = sitesNeedingLocalityPermit.length;
+    const suggestedSubTab = statePermitRequired > 0 ? 'state_required' : localPermitRequired > 0 ? 'local_required' : 'ready';
 
-    // Console logs for permit tab counts (Site Verification)
-    if (allPendingSites.length > 0) {
-      const stateBreakdown = enrichedStatesArray
-        .filter((s: any) => !s.hasStatePermit)
-        .map((s: any) => ({ state: s.state, count: s.localities.flatMap((l: any) => (l.sites || []).filter(isPending).filter((site: any) => siteNeedsStatePermit(site))).length }))
-        .filter((x: { count: number }) => x.count > 0);
-      const localityBreakdown = enrichedStatesArray
-        .filter((s: any) => s.hasStatePermit)
-        .flatMap((s: any) => s.localities.map((l: any) => ({ state: s.state, locality: l.locality, count: (l.sites || []).filter(isPending).filter((site: any) => siteNeedsLocalityPermit(site)).length })))
-        .filter((x: { count: number }) => x.count > 0);
-      const newSitesFromHook = coordinatorSites.filter((e: any) => {
-        const status = (e.status || '').toLowerCase().trim().replace(/\s+/g, '_');
-        if (prePipelineStatuses.includes(status)) return true;
-        if (['dispatched', 'assigned', 'accepted', 'permits_attached', 'cp_verified', 'cp_verification', 'verified', 'approved', 'costed', 'completed', 'rejected'].includes(status)) return false;
-        return true;
-      }).length;
-      const needsState = (s: any) => siteNeedsStatePermit(s);
-      const needsLocality = (s: any) => siteNeedsLocalityPermit(s);
-      const permitsAlreadyDone = allPendingSites.filter((s: any) => !needsState(s) && !needsLocality(s));
-      console.log('[Site Verification – Permit counts]', {
-        totalPendingSites: allPendingSites.length,
-        statePermitRequired,
-        localPermitRequired,
-        statePlusLocality: statePermitRequired + localPermitRequired,
-        newSitesBadgeShouldBe: newSitesFromHook,
-        match: allPendingSites.length === newSitesFromHook ? 'yes' : `no (${newSitesFromHook - allPendingSites.length} difference)`,
-        permitsAlreadyDoneCount: permitsAlreadyDone.length,
-        permitsAlreadyDoneSites: permitsAlreadyDone.length > 0 ? permitsAlreadyDone.map((s: any) => ({ id: s.id, site_code: s.site_code, state: s.state, locality: s.locality })) : undefined,
-        stateTabBreakdown: stateBreakdown,
-        localityTabBreakdown: localityBreakdown,
-      });
-    }
-
-    if (statePermitRequired > 0) {
-      setNewSitesSubTab('state_required');
-    } else if (localPermitRequired > 0) {
-      setNewSitesSubTab('local_required');
-    } else {
-      setNewSitesSubTab('ready');
-    }
+    return {
+      localitiesData: enrichedStatesArray,
+      statePermitRequiredCount: statePermitRequired,
+      localPermitRequiredCount: localPermitRequired,
+      suggestedSubTab,
+    };
   }, [coordinatorSites, contextMmpFiles, hubStates, localities, permits, mmpFilter]);
+
+  useEffect(() => {
+    setLocalitiesData(localitiesDataResult.localitiesData);
+    setStatePermitRequiredCount(localitiesDataResult.statePermitRequiredCount);
+    setLocalPermitRequiredCount(localitiesDataResult.localPermitRequiredCount);
+    setNewSitesSubTab(localitiesDataResult.suggestedSubTab);
+  }, [localitiesDataResult]);
 
   const mmpGroupedStatesData = useMemo(() => {
     if (!localitiesData.length) return [];
@@ -1216,7 +1168,7 @@ const CoordinatorSites: React.FC = () => {
         title: 'Returned to State Permit',
         description: `${updated} site${updated !== 1 ? 's' : ''} moved back to State Permit tab for verification.`,
       });
-      await refreshAll();
+      refreshAll().catch((err) => console.warn('Background refresh after return to state permit:', err));
     } catch (error: any) {
       toast({
         title: 'Error',
@@ -1395,10 +1347,7 @@ const CoordinatorSites: React.FC = () => {
         await checkAndUpdateMMPStatus(site.mmp_file_id);
       }
       
-      // Refresh both MMP files and coordinator sites to reflect the changes (single refresh after all updates)
-      await refreshAll();
-      
-      // Badge counts will update automatically from coordinatorSites
+      refreshAll().catch((err) => console.warn('Background refresh after verify:', err));
       setActiveTab('verified');
       setVerifyDialogOpen(false);
       setVerificationNotes('');
@@ -1509,9 +1458,7 @@ const CoordinatorSites: React.FC = () => {
         console.warn('Failed to notify hub supervisor:', supervisorErr);
       }
 
-      // Refresh both MMP files and coordinator sites to reflect the changes
-      await refreshAll();
-      // Badge counts will update automatically from coordinatorSites
+      refreshAll().catch((err) => console.warn('Background refresh after reject:', err));
       setRejectDialogOpen(false);
       setVerificationNotes('');
       setSelectedSiteId(null);
@@ -1573,7 +1520,7 @@ const CoordinatorSites: React.FC = () => {
         description: `${site.site_name} has been sent back to FOM.`,
       });
 
-      await refreshAll();
+      refreshAll().catch((err) => console.warn('Background refresh after return site:', err));
       setReturnSiteDialogOpen(false);
       setReturnSiteReason('');
       setReturnSiteTargetId(null);
@@ -1651,12 +1598,13 @@ const CoordinatorSites: React.FC = () => {
         title: 'Sites Returned to FOM',
         description: `${eligibleSiteIds.length} pending sites in ${selectedStateForReturn.state} (${selectedMmpNameForReturn}) have been returned to FOM.`,
       });
-      await refreshAll();
+      // Close dialog and stop spinner immediately; refresh data in background so UI doesn't hang
       setReturnStateToFOMDialogOpen(false);
       setReturnStateToFOMReason('');
       setSelectedStateForReturn(null);
       setSelectedMmpIdForReturn(null);
       setSelectedMmpNameForReturn('');
+      refreshAll().catch((err) => console.warn('Background refresh after return to FOM:', err));
     } catch (error) {
       console.error('Error returning state sites to FOM:', error);
       toast({ title: 'Error', description: 'Failed to return sites. Please try again.', variant: 'destructive' });
@@ -1774,7 +1722,7 @@ const CoordinatorSites: React.FC = () => {
         // Close dialogs and reload
         setPermitVerificationDialogOpen(false);
         setStateForPermitVerification(null);
-        await refreshAll();
+        refreshAll().catch((err) => console.warn('Background refresh after permit verification:', err));
         return;
       } catch (error) {
         console.error('Error sending sites back to FOM:', error);
@@ -2048,9 +1996,9 @@ const CoordinatorSites: React.FC = () => {
           await checkAndUpdateMMPStatus(mmpId);
         }
       }
-      
-      await refreshAll();
-      
+
+      refreshAll().catch((err) => console.warn('Background refresh after site without permit:', err));
+
       // Switch to appropriate tab
       if (statePermitJustUploaded || statePermitNotRequired) {
         // Move to locality permit tab to upload locality permits
@@ -2243,8 +2191,7 @@ const CoordinatorSites: React.FC = () => {
         await checkAndUpdateMMPStatus(mmpId);
       }
       
-      // Single refresh after all updates
-      await refreshAll();
+      refreshAll().catch((err) => console.warn('Background refresh after verification complete:', err));
     } catch (error) {
       console.error('Error completing verification:', error);
       toast({
@@ -2322,7 +2269,7 @@ const CoordinatorSites: React.FC = () => {
       setSelectedSites(new Set());
       setBulkVisitDate('');
       setBulkAssignDateDialogOpen(false);
-      await refreshAll();
+      refreshAll().catch((err) => console.warn('Background refresh after bulk assign visit date:', err));
     } catch (error) {
       console.error('Error bulk assigning visit dates:', error);
       toast({
@@ -2483,9 +2430,8 @@ const CoordinatorSites: React.FC = () => {
         await checkAndUpdateMMPStatus(mmpId);
       }
       
-      // Single refresh after all updates
-      await refreshAll();
-      
+      refreshAll().catch((err) => console.warn('Background refresh after bulk verify:', err));
+
       // Badge counts will update automatically from coordinatorSites
       setActiveTab('approved');
     } catch (error) {
@@ -2642,8 +2588,7 @@ const CoordinatorSites: React.FC = () => {
         await checkAndUpdateMMPStatus(mmpId);
       }
       
-      // Single refresh after all updates
-      await refreshAll();
+      refreshAll().catch((err) => console.warn('Background refresh after locality verify:', err));
     } catch (error) {
       console.error('Error verifying locality sites:', error);
       toast({
@@ -2685,8 +2630,7 @@ const CoordinatorSites: React.FC = () => {
         description: `Sites in ${selectedLocalityForWorkflow.locality} are now ready for verification.`,
       });
 
-      // Refresh data and move to Permits Attached tab
-      await refreshAll();
+      refreshAll().catch((err) => console.warn('Background refresh after locality proceed:', err));
       setActiveTab('permits_attached');
     } catch (e) {
       console.warn('Error proceeding without local permit:', e);
@@ -2753,9 +2697,7 @@ const CoordinatorSites: React.FC = () => {
           description: `${selectedSiteForWithoutPermit.site_name} has been moved to "Permits Attached" and is ready for verification.`,
         });
 
-        // Reload sites and badge counts
-        await refreshAll();
-        // Badge counts will update automatically from coordinatorSites
+        refreshAll().catch((err) => console.warn('Background refresh after edit:', err));
 
         // Navigate to "Permits Attached" tab
         setActiveTab('permits_attached');
@@ -4857,12 +4799,8 @@ const CoordinatorSites: React.FC = () => {
                   if (shouldVerify && selectedSiteForEdit?.mmp_file_id) {
                     await checkAndUpdateMMPStatus(selectedSiteForEdit.mmp_file_id);
                   }
-                  
-                  // Single refresh after all updates
-                  await refreshAll();
-                  
-                  // Badge counts will update automatically from coordinatorSites
 
+                  refreshAll().catch((err) => console.warn('Background refresh after edit:', err));
                   setEditDialogOpen(false);
                   setSelectedSiteForEdit(null);
                 } catch (error) {
@@ -5151,7 +5089,7 @@ const CoordinatorSites: React.FC = () => {
                 onComplete={async () => {
                   setSequentialPermitDialogOpen(false);
                   setSelectedStateForSequentialUpload(null);
-                  await refreshAll();
+                  refreshAll().catch((err) => console.warn('Background refresh after permit upload:', err));
                   toast({
                     title: "Permits uploaded",
                     description: `Permits for ${selectedStateForSequentialUpload.state} have been processed.`,

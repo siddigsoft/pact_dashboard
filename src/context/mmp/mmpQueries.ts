@@ -12,6 +12,7 @@ export const mmpQueryKeys = {
   all: ['mmp'] as const,
   files: () => [...mmpQueryKeys.all, 'files'] as const,
   siteEntryCounts: () => [...mmpQueryKeys.all, 'siteEntryCounts'] as const,
+  coordinatorSiteEntries: (userId: string | null) => [...mmpQueryKeys.all, 'coordinatorSiteEntries', userId] as const,
 };
 
 export const defaultSiteEntryCounts: SiteEntryCounts = {
@@ -90,6 +91,57 @@ async function fetchSiteEntryCounts(): Promise<SiteEntryCounts> {
   return { dispatched, accepted, smartAssigned, ongoing, completed, rejected, approvedCosted, total };
 }
 
+/** Row shape returned by get_coordinator_site_entries RPC */
+export interface CoordinatorSiteEntryRow {
+  id: string;
+  mmp_file_id: string;
+  mmp_name: string;
+  site_code: string;
+  hub_office: string;
+  state: string;
+  locality: string;
+  site_name: string;
+  cp_name: string | null;
+  visit_type: string | null;
+  visit_date: string | null;
+  main_activity: string | null;
+  activity_at_site: string | null;
+  monitoring_by: string | null;
+  survey_tool: string | null;
+  use_market_diversion: boolean | null;
+  use_warehouse_monitoring: boolean | null;
+  comments: string | null;
+  additional_data: Record<string, unknown> | null;
+  status: string;
+  verified_at: string | null;
+  verified_by: string | null;
+  verification_notes: string | null;
+  cost: number | null;
+  enumerator_fee: number | null;
+  transport_fee: number | null;
+  accepted_by: string | null;
+  accepted_at: string | null;
+  forwarded_to_user_id: string | null;
+  created_at: string;
+}
+
+async function fetchCoordinatorSiteEntries(userId: string | null): Promise<CoordinatorSiteEntryRow[]> {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) return [];
+
+  if (!navigator.onLine) return [];
+
+  const { data, error } = await supabase.rpc('get_coordinator_site_entries', {
+    p_user_id: userId,
+  });
+
+  if (error) {
+    console.warn('[fetchCoordinatorSiteEntries] RPC error:', error.message);
+    return [];
+  }
+  return (data ?? []) as CoordinatorSiteEntryRow[];
+}
+
 const MMP_FILES_STALE_MS = 60 * 1000;   // 1 minute
 const COUNTS_STALE_MS = 30 * 1000;      // 30 seconds
 
@@ -118,6 +170,23 @@ export function useMMPSiteEntryCountsQuery() {
 }
 
 /**
+ * Fetches coordinator-relevant site entries only (RPC). Use for coordinator page to avoid loading all MMP + entries.
+ * When isAdmin is true, pass userId = null to get all entries.
+ */
+const COORDINATOR_SITES_STALE_MS = 60 * 1000;
+
+export function useCoordinatorSiteEntriesQuery(userId: string | null, isAdmin: boolean) {
+  const effectiveUserId = isAdmin ? null : userId;
+  return useQuery({
+    queryKey: mmpQueryKeys.coordinatorSiteEntries(effectiveUserId),
+    queryFn: () => fetchCoordinatorSiteEntries(effectiveUserId),
+    enabled: isAdmin || !!userId,
+    staleTime: COORDINATOR_SITES_STALE_MS,
+    placeholderData: (previousData) => previousData,
+  });
+}
+
+/**
  * Invalidate MMP files and counts (e.g. after mutations). Use from context or components.
  */
 export function useInvalidateMMPQueries() {
@@ -125,5 +194,6 @@ export function useInvalidateMMPQueries() {
   return () => {
     queryClient.invalidateQueries({ queryKey: mmpQueryKeys.files() });
     queryClient.invalidateQueries({ queryKey: mmpQueryKeys.siteEntryCounts() });
+    queryClient.invalidateQueries({ queryKey: [...mmpQueryKeys.all, 'coordinatorSiteEntries'] });
   };
 }
