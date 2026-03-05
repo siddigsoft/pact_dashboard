@@ -1,7 +1,11 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
-const url = import.meta.env.VITE_SUPABASE_URL as string | undefined;
-const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
+const rawUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
+const rawAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
+const url = rawUrl?.trim();
+const anonKey = rawAnonKey?.trim();
+const isDev = import.meta.env.DEV;
+const CLIENT_REPLACE_COOLDOWN_MS = 30_000;
 
 export const isSupabaseConfigured = Boolean(url && anonKey);
 
@@ -28,15 +32,32 @@ function createSupabaseClient(): SupabaseClient {
 }
 
 let _client = createSupabaseClient();
+let lastClientReplacementAt = 0;
 
 /**
  * Replace the Supabase client with a fresh instance.
  * Call after session recovery when the client is frozen - the new instance
  * reads tokens from localStorage and works for subsequent mutations.
  */
-export function replaceSupabaseClient(): void {
+export function replaceSupabaseClient(force = false): void {
+  const now = Date.now();
+  if (!force && now - lastClientReplacementAt < CLIENT_REPLACE_COOLDOWN_MS) {
+    if (isDev) {
+      console.warn('[Supabase] Client replacement skipped (cooldown active)');
+    }
+    return;
+  }
+
+  try {
+    _client.realtime.disconnect();
+  } catch {
+  }
+
   _client = createSupabaseClient();
-  console.log('[Supabase] Client replaced (recovery from frozen state)');
+  lastClientReplacementAt = now;
+  if (isDev) {
+    console.log('[Supabase] Client replaced (recovery from frozen state)');
+  }
 }
 
 export const supabase = new Proxy({} as SupabaseClient, {

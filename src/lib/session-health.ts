@@ -1,6 +1,8 @@
 import { replaceSupabaseClient, supabase } from '@/integrations/supabase/client';
 import { withTimeout } from '@/utils/promise-with-timeout';
 
+const isDev = import.meta.env.DEV;
+
 /**
  * Tests Supabase connection using native fetch (bypasses frozen Supabase client)
  * This prevents hanging when the Supabase client is in a frozen/zombie state
@@ -88,14 +90,13 @@ export async function isClientFrozen(): Promise<boolean> {
     // Try to get session with a timeout
     const sessionPromise = supabase.auth.getSession();
     const timeoutPromise = new Promise<never>((_, reject) => {
-      setTimeout(() => reject(new Error('Timeout')), 2000);
+      setTimeout(() => reject(new Error('Timeout')), 4000);
     });
 
     await Promise.race([sessionPromise, timeoutPromise]);
     return false; // Client responded, not frozen
-  } catch (error) {
-    // If timeout or error, client might be frozen
-    return true;
+  } catch (error: any) {
+    return error?.message === 'Timeout';
   }
 }
 
@@ -111,8 +112,10 @@ export async function ensureValidSession(): Promise<{
   user?: { id: string; email?: string };
   error?: string;
 }> {
-  const SESSION_TIMEOUT_MS = 10000;
-  console.log('[SessionHealth] ensureValidSession() called (likely from mutation or SessionGuard)');
+  const SESSION_TIMEOUT_MS = 25000;
+  if (isDev) {
+    console.log('[SessionHealth] ensureValidSession() called (likely from mutation or SessionGuard)');
+  }
   try {
     return await withTimeout(
       ensureValidSessionCore(),
@@ -123,6 +126,13 @@ export async function ensureValidSession(): Promise<{
     const msg = err instanceof Error ? err.message : 'Session check failed.';
     if (msg.includes('Session check timed out')) {
       console.error('[SessionHealth] ⏱️ Session check timed out after', SESSION_TIMEOUT_MS, 'ms - refreshSession() likely hung (Supabase client frozen)');
+      const recovered = await recoverFromFrozenClient();
+      if (recovered.success) {
+        return {
+          success: true,
+          user: recovered.user,
+        };
+      }
     }
     return {
       success: false,
@@ -145,17 +155,41 @@ async function ensureValidSessionCore(): Promise<{
   error?: string;
 }> {
   try {
-    const startedAt = Date.now();
-    console.log('[SessionHealth] 🔐 Session check started');
+    if (isDev) {
+      console.log('[SessionHealth] 🔐 Session check started');
+    }
+
+    const now = Math.floor(Date.now() / 1000);
+    const minRemainingSeconds = 60;
+
+    // Fast path: use current session if still valid enough.
+    const sessionRead = await withTimeout(
+      supabase.auth.getSession(),
+      3000,
+      'Session read timed out'
+    );
+
+    const currentSession = sessionRead.data.session;
+    if (currentSession?.user?.id && currentSession.expires_at && currentSession.expires_at - now > minRemainingSeconds) {
+      return {
+        success: true,
+        user: {
+          id: currentSession.user.id,
+          email: currentSession.user.email,
+        },
+      };
+    }
 
     // Quick check: is the Supabase client already frozen before we call refreshSession?
     const frozen = await isClientFrozen();
     if (frozen) {
       // Skip refreshSession() and getSession() - both hang on frozen client. Use recovery only.
-      console.warn('[SessionHealth] ⚠️ Supabase client frozen - skipping refreshSession(), using recovery path');
+      console.warn('[SessionHealth] ⚠️ Supabase client frozen - using recovery path');
       const recovered = await recoverFromFrozenClient();
       if (recovered.success) {
-        console.log('[SessionHealth] ✅ Session recovered (bypassed frozen client)');
+        if (isDev) {
+          console.log('[SessionHealth] ✅ Session recovered (bypassed frozen client)');
+        }
         return {
           success: true,
           user: recovered.user,
@@ -167,24 +201,19 @@ async function ensureValidSessionCore(): Promise<{
       };
     }
 
-    console.log('[SessionHealth] 📞 Calling supabase.auth.refreshSession()...');
-    const { data: sessionData, error: refreshError } = await supabase.auth.refreshSession();
-    console.log('[SessionHealth] 📞 refreshSession returned after', Date.now() - startedAt, 'ms', {
-      hasSession: !!sessionData?.session,
-      hasError: !!refreshError,
-      errorMessage: refreshError?.message,
-    });
+    if (isDev) {
+      console.log('[SessionHealth] 📞 Calling supabase.auth.refreshSession()...');
+    }
+    const { data: sessionData, error: refreshError } = await withTimeout(
+      supabase.auth.refreshSession(),
+      5000,
+      'refreshSession timed out'
+    );
 
     if (!refreshError && sessionData?.session) {
-      console.log('[SessionHealth] ✅ Session valid/refreshed:', {
-        userId: sessionData.session.user?.id,
-        expiresAt: sessionData.session.expires_at 
-          ? new Date(sessionData.session.expires_at * 1000).toISOString() 
-          : 'unknown',
-        expiresIn: sessionData.session.expires_at 
-          ? `${sessionData.session.expires_at - Math.floor(Date.now() / 1000)}s` 
-          : 'unknown',
-      });
+      if (isDev) {
+        console.log('[SessionHealth] ✅ Session valid/refreshed');
+      }
       return {
         success: true,
         user: {
@@ -199,7 +228,9 @@ async function ensureValidSessionCore(): Promise<{
     const recovered = await recoverFromFrozenClient();
 
     if (recovered.success) {
-      console.log('[SessionHealth] ✅ Session recovered successfully');
+      if (isDev) {
+        console.log('[SessionHealth] ✅ Session recovered successfully');
+      }
       return {
         success: true,
         user: recovered.user,
@@ -230,7 +261,9 @@ export type RecoverResult =
  * Returns user info so callers never need to call getSession() on the frozen client.
  */
 export async function recoverFromFrozenClient(): Promise<RecoverResult> {
-  console.warn('[SessionHealth] Attempting to recover from frozen client...');
+  if (isDev) {
+    console.warn('[SessionHealth] Attempting to recover from frozen client...');
+  }
 
   const connectionOk = await testConnection(3000);
   if (!connectionOk) {
@@ -255,13 +288,15 @@ export async function recoverFromFrozenClient(): Promise<RecoverResult> {
     const parsed = JSON.parse(storedSession);
     const refreshToken = parsed?.refresh_token;
 
-    console.log('[SessionHealth] 🔄 Recovery attempt - Token info:', {
-      hasRefreshToken: !!refreshToken,
-      refreshTokenPreview: refreshToken ? `${refreshToken.substring(0, 20)}...` : null,
-      currentAccessToken: parsed?.access_token ? `${parsed.access_token.substring(0, 20)}...` : null,
-      expiresAt: parsed?.expires_at ? new Date(parsed.expires_at * 1000).toISOString() : null,
-      expiresIn: parsed?.expires_at ? `${parsed.expires_at - Math.floor(Date.now() / 1000)}s` : null,
-    });
+    if (isDev) {
+      console.log('[SessionHealth] 🔄 Recovery attempt - Token info:', {
+        hasRefreshToken: !!refreshToken,
+        refreshTokenPreview: refreshToken ? `${refreshToken.substring(0, 20)}...` : null,
+        currentAccessToken: parsed?.access_token ? `${parsed.access_token.substring(0, 20)}...` : null,
+        expiresAt: parsed?.expires_at ? new Date(parsed.expires_at * 1000).toISOString() : null,
+        expiresIn: parsed?.expires_at ? `${parsed.expires_at - Math.floor(Date.now() / 1000)}s` : null,
+      });
+    }
 
     if (!refreshToken) return { success: false };
 
@@ -298,18 +333,13 @@ export async function recoverFromFrozenClient(): Promise<RecoverResult> {
       user: resolvedUser,
     };
     localStorage.setItem(supabaseKey, JSON.stringify(newSession));
-    console.log('[SessionHealth] ✅ Session refreshed successfully:', {
-      userId: resolvedUser?.id,
-      newAccessToken: `${data.access_token.substring(0, 20)}...`,
-      newExpiresAt: data.expires_at ? new Date(data.expires_at * 1000).toISOString() : null,
-      newExpiresIn: data.expires_at ? `${data.expires_at - Math.floor(Date.now() / 1000)}s` : null,
-      hasRefreshToken: !!data.refresh_token,
-      tokenType: data.token_type,
-    });
+    if (isDev) {
+      console.log('[SessionHealth] ✅ Session refreshed successfully');
+    }
 
     // Replace frozen client with fresh instance so mutations (supabase.from().update())
     // use the new client that reads tokens from localStorage
-    replaceSupabaseClient();
+    replaceSupabaseClient(true);
 
     const userObj = resolvedUser as { id: string; email?: string; user_metadata?: { email?: string } };
     return {

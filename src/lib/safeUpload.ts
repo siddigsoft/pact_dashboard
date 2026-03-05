@@ -1,5 +1,5 @@
 import { supabase } from '@/integrations/supabase/client';
-import { testConnection } from '@/lib/session-health';
+import { ensureValidSession, testConnection } from '@/lib/session-health';
 
 /**
  * Safe file upload utility with validation, progress tracking, and error handling
@@ -10,6 +10,7 @@ export interface UploadOptions {
   allowedTypes?: string[];
   bucket?: string;
   path?: string;
+  uploadTimeoutMs?: number;
   onProgress?: (progress: number) => void;
 }
 
@@ -82,10 +83,12 @@ export async function safeUploadFile(
   file: File,
   options: UploadOptions = {}
 ): Promise<UploadResult> {
+  const isDev = import.meta.env.DEV;
   try {
     const {
       bucket = 'uploads',
       path = '',
+      uploadTimeoutMs,
       onProgress
     } = options;
 
@@ -98,17 +101,29 @@ export async function safeUploadFile(
       };
     }
 
+    const session = await ensureValidSession();
+    if (!session.success) {
+      return {
+        success: false,
+        error: session.error || 'Session check failed. Please refresh the page and sign in again.'
+      };
+    }
+
     // 🔐 CRITICAL: Test connection first to detect frozen Supabase client
     // This prevents the upload from hanging forever
-    console.log('[SafeUpload] Testing connection before upload...');
-    const connectionOk = await testConnection(3000);
+    if (isDev) {
+      console.log('[SafeUpload] Testing connection before upload...');
+    }
+    const connectionOk = await testConnection(5000);
     if (!connectionOk) {
       return {
         success: false,
         error: 'Connection test failed. The Supabase client may be frozen. Please refresh the page and try again.'
       };
     }
-    console.log('[SafeUpload] Connection test passed, proceeding with upload...');
+    if (isDev) {
+      console.log('[SafeUpload] Connection test passed, proceeding with upload...');
+    }
 
     // Generate safe filename
     const safeFileName = generateSafeFileName(file.name);
@@ -124,13 +139,36 @@ export async function safeUploadFile(
       });
 
     // Add timeout as backup (though testConnection should catch frozen client)
+    const defaultTimeoutMs = 300000; // 5 minutes
+    const effectiveTimeoutMs = Math.max(60000, uploadTimeoutMs ?? defaultTimeoutMs);
     const timeoutPromise = new Promise<{ data: null; error: { message: string } }>((_, reject) => {
       setTimeout(() => {
-        reject(new Error('Upload timed out after 60 seconds'));
-      }, 60000); // 60 second timeout for large files
+        reject(new Error(`Upload timed out after ${Math.round(effectiveTimeoutMs / 1000)} seconds`));
+      }, effectiveTimeoutMs);
     });
 
-    const { data, error } = await Promise.race([uploadPromise, timeoutPromise]);
+    let { data, error } = await Promise.race([uploadPromise, timeoutPromise]);
+
+    const isRlsError = !!error?.message && /row-level security|policy/i.test(error.message);
+    if (isRlsError) {
+      console.warn('[SafeUpload] RLS error on first upload attempt, re-validating session and retrying once...');
+      const retrySession = await ensureValidSession();
+      if (!retrySession.success) {
+        return {
+          success: false,
+          error: retrySession.error || 'Session expired. Please refresh the page and sign in again.'
+        };
+      }
+
+      const retryUploadPromise = supabase.storage
+        .from(bucket)
+        .upload(filePath, file, {
+          cacheControl: '3600',
+          upsert: false
+        });
+
+      ({ data, error } = await Promise.race([retryUploadPromise, timeoutPromise]));
+    }
 
     if (error) {
       console.error('Upload error:', error);

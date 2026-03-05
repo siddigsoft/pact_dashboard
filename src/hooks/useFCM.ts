@@ -3,7 +3,7 @@ import { useAppContext } from '@/context/AppContext';
 import { useServiceWorker } from '@/hooks/use-service-worker';
 import { FCMService } from '@/services/FCMService';
 import { firebaseConfig, firebaseVapidPublicKey, isFirebaseConfigured } from '@/config/firebase';
-import { NotificationService } from '@/services/NotificationService';
+import { toast } from 'sonner';
 
 export function useFCM() {
   const { currentUser, authReady } = useAppContext();
@@ -50,7 +50,23 @@ export function useFCM() {
         const title = payload.notification?.title || payload.data?.title || 'Notification';
         const body = payload.notification?.body || payload.data?.body || '';
         const type = (payload.data?.type as any) || 'info';
-        NotificationService.send({ title, message: body, type, showToast: true });
+
+        if (type === 'error') {
+          toast.error(title, { description: body });
+          return;
+        }
+
+        if (type === 'success') {
+          toast.success(title, { description: body });
+          return;
+        }
+
+        if (type === 'warning') {
+          toast.warning(title, { description: body });
+          return;
+        }
+
+        toast(title, { description: body });
       });
 
       return () => {

@@ -1,5 +1,4 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
-import { useToast } from '@/hooks/use-toast';
 import { testConnection, isClientFrozen, recoverFromFrozenClient } from '@/lib/session-health';
 import { supabase } from '@/integrations/supabase/client';
 
@@ -18,13 +17,17 @@ interface SessionManagerProps {
  * - Protects all pages from session issues
  */
 const SessionManager: React.FC<SessionManagerProps> = ({ children }) => {
-  const { toast } = useToast();
+  const isDev = import.meta.env.DEV;
   const [isHealthy, setIsHealthy] = useState(true);
   const [isChecking, setIsChecking] = useState(false);
   const checkIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const lastCheckRef = useRef<number>(0);
   const consecutiveFailuresRef = useRef<number>(0);
+  const isCheckingRef = useRef(false);
+  const isHealthyRef = useRef(true);
+  const lastRecoveryAttemptRef = useRef(0);
   const healthCheckFnRef = useRef<(() => void) | null>(null);
+  const RECOVERY_COOLDOWN_MS = 2 * 60 * 1000;
   
   // Expose placeholder immediately so function exists even before useEffect runs
   if (typeof window !== 'undefined' && !(window as any).__checkSessionHealth) {
@@ -38,49 +41,65 @@ const SessionManager: React.FC<SessionManagerProps> = ({ children }) => {
   
   // Log when component mounts
   useEffect(() => {
-    console.log('[SessionManager] Component mounted and active');
+    if (isDev) {
+      console.log('[SessionManager] Component mounted and active');
+    }
   }, []);
+
+  useEffect(() => {
+    isHealthyRef.current = isHealthy;
+  }, [isHealthy]);
 
   /**
    * Performs a health check on the Supabase connection
    */
   const performHealthCheck = useCallback(async (silent: boolean = false) => {
-    // Throttle checks - don't check more than once every 10 seconds
+    // Throttle checks - don't check more than once every 20 seconds
     const now = Date.now();
-    if (now - lastCheckRef.current < 10000 && !silent) {
+    if (now - lastCheckRef.current < 20000) {
       return;
     }
     lastCheckRef.current = now;
 
-    if (isChecking) return;
+    if (isCheckingRef.current) return;
+    isCheckingRef.current = true;
     setIsChecking(true);
 
     try {
       // First, test if client is frozen
       const frozen = await isClientFrozen();
       if (frozen) {
-        console.warn('[SessionManager] Client appears frozen, attempting recovery...');
-        const recovered = await recoverFromFrozenClient();
-        if (!recovered.success) {
-          consecutiveFailuresRef.current += 1;
-          // Just log the issue - don't show intrusive UI for connection problems
-          console.warn('[SessionManager] Connection recovery failed, attempt:', consecutiveFailuresRef.current);
-          if (consecutiveFailuresRef.current >= 5) {
-            setIsHealthy(false);
+        const canAttemptRecovery = now - lastRecoveryAttemptRef.current > RECOVERY_COOLDOWN_MS;
+        if (consecutiveFailuresRef.current >= 2 && canAttemptRecovery) {
+          if (isDev) {
+            console.warn('[SessionManager] Client appears frozen, attempting guarded recovery...');
           }
-          setIsChecking(false);
-          return;
+          lastRecoveryAttemptRef.current = now;
+          const recovered = await recoverFromFrozenClient();
+          if (!recovered.success) {
+            consecutiveFailuresRef.current += 1;
+            if (isDev) {
+              console.warn('[SessionManager] Connection recovery failed, attempt:', consecutiveFailuresRef.current);
+            }
+            if (consecutiveFailuresRef.current >= 5) {
+              setIsHealthy(false);
+            }
+            return;
+          }
+          if (isDev) {
+            console.log('[SessionManager] Successfully recovered from frozen state');
+          }
+          consecutiveFailuresRef.current = 0;
         }
-        console.log('[SessionManager] Successfully recovered from frozen state');
-        consecutiveFailuresRef.current = 0;
       }
 
       // Test actual connection
-      const connectionOk = await testConnection(3000);
+      const connectionOk = await testConnection(5000);
       if (!connectionOk) {
         consecutiveFailuresRef.current += 1;
-        // Just log - don't show intrusive UI
-        console.warn('[SessionManager] Connection test failed, attempt:', consecutiveFailuresRef.current);
+        if (isDev) {
+          console.warn('[SessionManager] Connection test failed, attempt:', consecutiveFailuresRef.current);
+        }
         if (consecutiveFailuresRef.current >= 5) {
           setIsHealthy(false);
         }
@@ -89,15 +108,18 @@ const SessionManager: React.FC<SessionManagerProps> = ({ children }) => {
         setIsHealthy(true);
       }
     } catch (error) {
-      console.error('[SessionManager] Health check error:', error);
+      if (isDev) {
+        console.error('[SessionManager] Health check error:', error);
+      }
       consecutiveFailuresRef.current += 1;
       if (consecutiveFailuresRef.current >= 5) {
         setIsHealthy(false);
       }
     } finally {
+      isCheckingRef.current = false;
       setIsChecking(false);
     }
-  }, [isChecking, toast]);
+  }, []);
 
   /**
    * Intercepts Supabase calls to test connection before execution
@@ -108,32 +130,34 @@ const SessionManager: React.FC<SessionManagerProps> = ({ children }) => {
       performHealthCheck(true); // Silent initial check
     }, 5000);
 
-    // Set up periodic health checks every 30 seconds
+    // Set up periodic health checks every 90 seconds
     checkIntervalRef.current = setInterval(() => {
       performHealthCheck(true); // Silent periodic checks
-    }, 30000);
+    }, 90000);
 
     // Listen for Supabase auth state changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      console.log('[SessionManager] 🔐 Auth state changed:', {
-        event,
-        hasSession: !!session,
-        userId: session?.user?.id || null,
-        expiresAt: session?.expires_at ? new Date(session.expires_at * 1000).toISOString() : null,
-        expiresIn: session?.expires_at ? `${session.expires_at - Math.floor(Date.now() / 1000)}s` : null,
-        accessToken: session?.access_token ? `${session.access_token.substring(0, 20)}...` : null,
-        hasRefreshToken: !!session?.refresh_token,
-      });
+      if (isDev) {
+        console.log('[SessionManager] 🔐 Auth state changed:', {
+          event,
+          hasSession: !!session,
+          userId: session?.user?.id || null,
+        });
+      }
       
       if (event === 'SIGNED_OUT' || !session) {
         setIsHealthy(true); // Reset on logout
         consecutiveFailuresRef.current = 0;
-        console.log('[SessionManager] User signed out, resetting health status');
+        if (isDev) {
+          console.log('[SessionManager] User signed out, resetting health status');
+        }
       } else if (event === 'TOKEN_REFRESHED') {
         // Token refreshed successfully, connection is healthy
         setIsHealthy(true);
         consecutiveFailuresRef.current = 0;
-        console.log('[SessionManager] ✅ Token refreshed successfully, connection healthy');
+        if (isDev) {
+          console.log('[SessionManager] ✅ Token refreshed successfully, connection healthy');
+        }
       }
     });
 
@@ -148,7 +172,9 @@ const SessionManager: React.FC<SessionManagerProps> = ({ children }) => {
 
     // Check connection when network comes back online
     const handleOnline = () => {
-      console.log('[SessionManager] Network came back online, checking connection...');
+      if (isDev) {
+        console.log('[SessionManager] Network came back online, checking connection...');
+      }
       performHealthCheck(false);
     };
     window.addEventListener('online', handleOnline);
@@ -162,7 +188,7 @@ const SessionManager: React.FC<SessionManagerProps> = ({ children }) => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       window.removeEventListener('online', handleOnline);
     };
-  }, [performHealthCheck]);
+  }, [performHealthCheck, isDev]);
 
   /**
    * Expose health check function globally for manual triggers
@@ -171,7 +197,9 @@ const SessionManager: React.FC<SessionManagerProps> = ({ children }) => {
   useEffect(() => {
     // Store the function in a ref so it's always current
     healthCheckFnRef.current = () => {
-      console.log('[SessionManager] Manual health check triggered');
+      if (isDev) {
+        console.log('[SessionManager] Manual health check triggered');
+      }
       performHealthCheck(false);
     };
     
@@ -187,8 +215,8 @@ const SessionManager: React.FC<SessionManagerProps> = ({ children }) => {
     // Expose status function
     (window as any).__sessionHealthStatus = () => {
       return {
-        isHealthy,
-        isChecking,
+        isHealthy: isHealthyRef.current,
+        isChecking: isCheckingRef.current,
         consecutiveFailures: consecutiveFailuresRef.current,
         lastCheck: new Date(lastCheckRef.current).toISOString(),
       };
@@ -235,21 +263,23 @@ const SessionManager: React.FC<SessionManagerProps> = ({ children }) => {
       }
     };
     
-    console.log('[SessionManager] ✅ Health check functions exposed:');
-    console.log('  - window.__checkSessionHealth() - Run manual health check');
-    console.log('  - window.__sessionHealthStatus() - Get current status');
-    console.log('  - window.__getTokenInfo() - Get detailed token information');
+    if (isDev) {
+      console.log('[SessionManager] ✅ Health check functions exposed:');
+      console.log('  - window.__checkSessionHealth() - Run manual health check');
+      console.log('  - window.__sessionHealthStatus() - Get current status');
+      console.log('  - window.__getTokenInfo() - Get detailed token information');
+    }
     
     // Log token info on mount
     setTimeout(() => {
       const tokenInfo = (window as any).__getTokenInfo();
-      if (tokenInfo && !tokenInfo.error) {
+      if (isDev && tokenInfo && !tokenInfo.error) {
         console.log('[SessionManager] 📋 Current Token Info:', tokenInfo);
       }
     }, 1000);
     
     // Don't delete on unmount - keep it available for debugging
-  }, [performHealthCheck, isHealthy, isChecking]);
+  }, [performHealthCheck, isDev]);
 
   // Connection issues don't block the app - just log them for debugging
   // The app works fine even without realtime connections
