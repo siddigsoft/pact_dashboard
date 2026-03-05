@@ -1,0 +1,1141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>PACT Command Center — Full Platform Proposal & Manual</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+:root{
+  --blue:#2563EB;--blue-l:#3b82f6;--green:#10b981;
+  --amber:#f59e0b;--purple:#8b5cf6;--red:#ef4444;--cyan:#06b6d4;
+  --navy:#0F2041;--navy2:#1D3461;
+}
+html{scroll-behavior:smooth;}
+body{
+  font-family:'Inter',system-ui,sans-serif;
+  background:#06090f;color:#f0f4ff;
+  scroll-snap-type:y mandatory;overflow-y:scroll;height:100vh;
+}
+h1,h2,h3,h4,h5{font-family:'Space Grotesk',sans-serif;letter-spacing:-0.2px;}
+
+.slide{
+  min-height:100vh;scroll-snap-align:start;
+  display:flex;flex-direction:column;justify-content:center;align-items:center;
+  padding:42px 60px;position:relative;overflow:hidden;
+}
+.slide-num{position:absolute;bottom:24px;right:30px;font-size:11px;font-weight:600;opacity:0.28;letter-spacing:1.5px;font-family:'Space Grotesk',sans-serif;}
+.blob{position:absolute;border-radius:50%;pointer-events:none;}
+
+/* Typography */
+.eyebrow{font-size:10px;font-weight:700;letter-spacing:3px;text-transform:uppercase;opacity:0.38;margin-bottom:12px;font-family:'Space Grotesk',sans-serif;}
+.h-display{font-size:44px;font-weight:700;line-height:1.08;margin-bottom:10px;}
+.h-display em{font-style:normal;background:linear-gradient(90deg,#60a5fa,#a78bfa);-webkit-background-clip:text;-webkit-text-fill-color:transparent;}
+.h-display .g-green{font-style:normal;background:linear-gradient(90deg,#34d399,#06b6d4);-webkit-background-clip:text;-webkit-text-fill-color:transparent;}
+.h-display .g-amber{font-style:normal;background:linear-gradient(90deg,#fbbf24,#f87171);-webkit-background-clip:text;-webkit-text-fill-color:transparent;}
+.h-ar{font-size:15px;opacity:0.3;direction:rtl;margin-bottom:30px;font-weight:300;}
+.body-sm{font-size:12.5px;opacity:0.55;line-height:1.55;}
+.sub{font-size:15px;opacity:0.6;line-height:1.7;margin-bottom:8px;}
+.sub-ar{font-size:12px;opacity:0.28;direction:rtl;margin-bottom:22px;}
+
+/* Glass cards */
+.card{background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:18px;}
+.card-hl{background:rgba(37,99,235,0.07);border:1px solid rgba(37,99,235,0.2);border-radius:14px;padding:13px 15px;}
+.card-green{background:rgba(16,185,129,0.07);border:1px solid rgba(16,185,129,0.2);border-radius:14px;padding:13px 15px;}
+.card-amber{background:rgba(245,158,11,0.07);border:1px solid rgba(245,158,11,0.2);border-radius:14px;padding:13px 15px;}
+.card-purple{background:rgba(139,92,246,0.08);border:1px solid rgba(139,92,246,0.2);border-radius:14px;padding:13px 15px;}
+.card-cyan{background:rgba(6,182,212,0.07);border:1px solid rgba(6,182,212,0.2);border-radius:14px;padding:13px 15px;}
+.card-red{background:rgba(239,68,68,0.07);border:1px solid rgba(239,68,68,0.2);border-radius:14px;padding:13px 15px;}
+
+/* Badges */
+.badge{display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:99px;font-size:10.5px;font-weight:700;}
+.b-blue{background:rgba(59,130,246,0.14);border:1px solid rgba(59,130,246,0.28);color:#93c5fd;}
+.b-green{background:rgba(16,185,129,0.14);border:1px solid rgba(16,185,129,0.28);color:#6ee7b7;}
+.b-amber{background:rgba(245,158,11,0.14);border:1px solid rgba(245,158,11,0.28);color:#fcd34d;}
+.b-purple{background:rgba(139,92,246,0.14);border:1px solid rgba(139,92,246,0.28);color:#c4b5fd;}
+.b-red{background:rgba(239,68,68,0.14);border:1px solid rgba(239,68,68,0.28);color:#fca5a5;}
+.b-cyan{background:rgba(6,182,212,0.14);border:1px solid rgba(6,182,212,0.28);color:#67e8f9;}
+.live-dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:#10b981;margin-right:5px;animation:pulse 1.8s ease-in-out infinite;}
+@keyframes pulse{0%,100%{opacity:1;}50%{opacity:0.3;}}
+
+/* Nav dots */
+.nav-dots{position:fixed;right:15px;top:50%;transform:translateY(-50%);display:flex;flex-direction:column;gap:7px;z-index:99;}
+.nav-dot{width:6px;height:6px;border-radius:50%;background:rgba(255,255,255,0.2);cursor:pointer;border:none;transition:all 0.2s;}
+.nav-dot.active{background:white;transform:scale(1.4);}
+
+/* Wide content grid */
+.w-grid{display:grid;gap:14px;width:100%;max-width:1100px;}
+.g2{grid-template-columns:1fr 1fr;}
+.g3{grid-template-columns:1fr 1fr 1fr;}
+.g4{grid-template-columns:1fr 1fr 1fr 1fr;}
+.ga{grid-template-columns:1.6fr 1fr;}
+.gb{grid-template-columns:1fr 1.6fr;}
+
+/* Stat row */
+.stats{display:flex;gap:28px;flex-wrap:wrap;margin-bottom:28px;}
+.stat{text-align:center;}
+.stat .n{font-family:'Space Grotesk',sans-serif;font-size:38px;font-weight:700;background:linear-gradient(135deg,#60a5fa,#a78bfa);-webkit-background-clip:text;-webkit-text-fill-color:transparent;line-height:1;}
+.stat .l{font-size:11px;opacity:0.45;margin-top:4px;letter-spacing:.3px;}
+
+/* Module tag */
+.mod-tag{font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;margin-bottom:8px;opacity:0.5;}
+
+/* Feature list */
+.feat-list{list-style:none;display:flex;flex-direction:column;gap:7px;}
+.feat-list li{display:flex;align-items:flex-start;gap:8px;font-size:13px;opacity:0.8;line-height:1.4;}
+.feat-list li::before{content:'→';color:#60a5fa;font-weight:700;flex-shrink:0;margin-top:1px;}
+.feat-list li.green::before{color:#34d399;}
+.feat-list li.amber::before{color:#fbbf24;}
+.feat-list li.purple::before{color:#c4b5fd;}
+.feat-list li.red::before{color:#f87171;}
+.feat-list li.cyan::before{color:#67e8f9;}
+
+/* DB table */
+.db-table{width:100%;border-collapse:collapse;font-size:12px;}
+.db-table th{background:rgba(255,255,255,0.06);padding:8px 12px;text-align:left;font-size:10px;font-weight:600;letter-spacing:.5px;text-transform:uppercase;opacity:0.6;border-bottom:1px solid rgba(255,255,255,0.08);}
+.db-table td{padding:8px 12px;border-bottom:1px solid rgba(255,255,255,0.05);opacity:0.75;vertical-align:top;}
+.db-table td code{font-family:'JetBrains Mono',monospace;font-size:11px;background:rgba(255,255,255,0.07);padding:1px 5px;border-radius:3px;color:#93c5fd;}
+.db-table tr:last-child td{border-bottom:none;}
+
+/* Timeline / steps */
+.timeline{display:flex;flex-direction:column;gap:14px;width:100%;}
+.tl-item{display:flex;gap:14px;align-items:flex-start;}
+.tl-dot{width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;flex-shrink:0;font-family:'Space Grotesk',sans-serif;}
+.tl-blue{background:rgba(37,99,235,0.3);border:1px solid rgba(59,130,246,0.5);color:#93c5fd;}
+.tl-green{background:rgba(16,185,129,0.25);border:1px solid rgba(16,185,129,0.4);color:#6ee7b7;}
+.tl-amber{background:rgba(245,158,11,0.25);border:1px solid rgba(245,158,11,0.4);color:#fcd34d;}
+.tl-body h4{font-size:13px;font-weight:600;margin-bottom:2px;}
+.tl-body p{font-size:12px;opacity:0.55;line-height:1.4;}
+
+/* Print */
+@media print{body{overflow:visible;height:auto;scroll-snap-type:none;}.slide{page-break-after:always;min-height:100vh;}.nav-dots{display:none;}}
+
+/* ━━━━━━ SLIDE BACKGROUNDS ━━━━━━ */
+.s1{background:radial-gradient(ellipse 130% 80% at 65% 40%,#1a2f70 0%,#0c1830 45%,#06090f 100%);}
+.s2{background:radial-gradient(ellipse 100% 80% at 30% 50%,#0d1f4a 0%,#06090f 80%);}
+.s3{background:radial-gradient(ellipse 120% 90% at 70% 30%,#1c0a3a 0%,#06090f 80%);}
+.s4{background:radial-gradient(ellipse 110% 80% at 40% 60%,#0a2a1a 0%,#06090f 80%);}
+.s5{background:radial-gradient(ellipse 110% 80% at 60% 40%,#1a1a0a 0%,#06090f 80%);}
+.s6{background:radial-gradient(ellipse 120% 80% at 30% 40%,#0a1a2a 0%,#06090f 80%);}
+.s7{background:radial-gradient(ellipse 110% 80% at 65% 50%,#1a0a2a 0%,#06090f 80%);}
+.s8{background:radial-gradient(ellipse 110% 90% at 35% 55%,#0a2220 0%,#06090f 80%);}
+.s9{background:radial-gradient(ellipse 120% 80% at 60% 40%,#1a1200 0%,#06090f 80%);}
+.s10{background:radial-gradient(ellipse 110% 80% at 40% 50%,#0f0a2a 0%,#06090f 80%);}
+.s11{background:radial-gradient(ellipse 110% 90% at 55% 40%,#001a1a 0%,#06090f 80%);}
+.s12{background:radial-gradient(ellipse 100% 80% at 35% 60%,#1a0a0a 0%,#06090f 80%);}
+.s13{background:radial-gradient(ellipse 120% 80% at 60% 40%,#0a1a30 0%,#06090f 80%);}
+.s14{background:radial-gradient(ellipse 110% 80% at 30% 40%,#0d0a2a 0%,#06090f 80%);}
+.s15{background:radial-gradient(ellipse 110% 80% at 65% 50%,#0a2210 0%,#06090f 80%);}
+.s16{background:radial-gradient(ellipse 130% 80% at 50% 50%,#1a2f70 0%,#0c1830 60%,#06090f 100%);}
+.s17{background:radial-gradient(ellipse 110% 80% at 40% 60%,#1a0a1a 0%,#06090f 80%);}
+.s18{background:radial-gradient(ellipse 120% 90% at 60% 40%,#0a1a20 0%,#06090f 80%);}
+.s19{background:radial-gradient(ellipse 110% 80% at 35% 50%,#0d1d0a 0%,#06090f 80%);}
+.s20{background:radial-gradient(ellipse 130% 80% at 50% 50%,#1a2f70 0%,#0c1830 60%,#06090f 100%);}
+
+/* Cover specifics */
+.s1 .logo-icon{width:76px;height:76px;border-radius:22px;background:linear-gradient(135deg,rgba(37,99,235,0.4),rgba(139,92,246,0.3));border:1.5px solid rgba(255,255,255,0.2);display:flex;align-items:center;justify-content:center;font-size:32px;margin:0 auto 26px;box-shadow:0 0 50px rgba(37,99,235,0.3);}
+.s1 h1{font-size:56px;font-weight:700;text-align:center;background:linear-gradient(135deg,#fff 0%,#93c5fd 55%,#c4b5fd 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;line-height:1.05;margin-bottom:10px;}
+.s1 .s1-sub{font-size:16px;text-align:center;opacity:0.55;margin-bottom:6px;}
+.s1 .s1-ar{font-size:13px;text-align:center;opacity:0.25;direction:rtl;margin-bottom:28px;}
+.meta-row{display:flex;gap:32px;justify-content:center;flex-wrap:wrap;}
+.meta-item label{display:block;font-size:9px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;opacity:0.35;margin-bottom:3px;}
+.meta-item span{font-size:13px;opacity:0.75;}
+
+/* Close slide */
+.s20 h1{font-size:52px;font-weight:700;text-align:center;background:linear-gradient(135deg,#fff 0%,#93c5fd 50%,#c4b5fd 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;margin-bottom:10px;}
+.close-pills{display:flex;flex-wrap:wrap;gap:10px;justify-content:center;margin-top:26px;}
+.close-pill{background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);border-radius:99px;padding:8px 18px;font-size:13px;font-weight:500;}
+
+/* User manual section header */
+.manual-header{background:linear-gradient(135deg,rgba(16,185,129,0.15),rgba(6,182,212,0.08));border:1px solid rgba(16,185,129,0.25);border-radius:12px;padding:14px 20px;margin-bottom:20px;width:100%;max-width:1100px;}
+.manual-header .mh-tag{font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:#34d399;margin-bottom:4px;}
+.manual-header h2{font-size:22px;font-weight:700;color:#fff;}
+</style>
+</head>
+<body>
+
+<!-- Nav dots -->
+<div class="nav-dots" id="navDots"></div>
+
+<!-- ═══════════════════════════════ SLIDE 1 — COVER -->
+<div class="slide s1" id="s1">
+  <div class="blob" style="width:700px;height:700px;background:rgba(37,99,235,0.08);top:-250px;right:-250px;border-radius:50%;"></div>
+  <div class="blob" style="width:400px;height:400px;background:rgba(139,92,246,0.06);bottom:-100px;left:-100px;border-radius:50%;"></div>
+  <div class="logo-icon">🛡️</div>
+  <h1>PACT Command Center</h1>
+  <p class="s1-sub">Full Platform Proposal, System Architecture & User Manual</p>
+  <p class="s1-ar">مركز القيادة — منصة متكاملة لإدارة العمليات الميدانية الإنسانية</p>
+  <div class="meta-row">
+    <div class="meta-item"><label>Organisation</label><span>PACT Consultancy</span></div>
+    <div class="meta-item"><label>Version</label><span>2026 — Latest</span></div>
+    <div class="meta-item"><label>Coverage</label><span>Sudan Field Operations</span></div>
+    <div class="meta-item"><label>Classification</label><span>Confidential — Internal</span></div>
+    <div class="meta-item"><label>Status</label><span><span class="live-dot"></span>Live Production</span></div>
+  </div>
+  <div class="slide-num">1 / 20</div>
+</div>
+
+<!-- ═══════════════════════════════ SLIDE 2 — EXECUTIVE SUMMARY -->
+<div class="slide s2" id="s2">
+  <div class="blob" style="width:500px;height:500px;background:rgba(37,99,235,0.07);top:-150px;left:-150px;border-radius:50%;"></div>
+  <div style="width:100%;max-width:1100px;">
+    <div class="eyebrow">01 — Executive Summary</div>
+    <div class="h-display">One platform.<br/><em>Every field operation.</em></div>
+    <p class="h-ar">منصة واحدة — كل العمليات الميدانية</p>
+    <p class="sub" style="max-width:680px;margin-bottom:28px;">PACT Command Center is a comprehensive web + mobile platform purpose-built for humanitarian and development field operations in Sudan. It unifies planning, coordination, execution, financial management, and reporting into a single integrated system — accessible from any device, online or offline.</p>
+    <div class="w-grid g4" style="margin-bottom:22px;">
+      <div class="card-hl"><div style="font-size:26px;font-weight:700;color:#60a5fa;font-family:'Space Grotesk',sans-serif;">15+</div><div class="body-sm" style="margin-top:4px;">Integrated modules covering the full operational lifecycle</div></div>
+      <div class="card-green"><div style="font-size:26px;font-weight:700;color:#34d399;font-family:'Space Grotesk',sans-serif;">850+</div><div class="body-sm" style="margin-top:4px;">Field data collectors and enumerators managed on the platform</div></div>
+      <div class="card-purple"><div style="font-size:26px;font-weight:700;color:#c4b5fd;font-family:'Space Grotesk',sans-serif;">7</div><div class="body-sm" style="margin-top:4px;">Countries with active operations coordinated through the system</div></div>
+      <div class="card-amber"><div style="font-size:26px;font-weight:700;color:#fcd34d;font-family:'Space Grotesk',sans-serif;">99.9%</div><div class="body-sm" style="margin-top:4px;">Platform uptime — guaranteed by Supabase + Vercel infrastructure</div></div>
+    </div>
+    <div class="w-grid g3">
+      <div class="card"><div class="mod-tag">CORE CAPABILITY</div><h4 style="font-size:14px;margin-bottom:6px;">Monthly Monitoring Plans</h4><p class="body-sm">Full lifecycle management of MMPs — from upload and validation to site assignment, dispatch, visit execution, verification, and cycle close.</p></div>
+      <div class="card"><div class="mod-tag">CORE CAPABILITY</div><h4 style="font-size:14px;margin-bottom:6px;">Financial Management</h4><p class="body-sm">Multi-tier approval workflows for advances, operational costs, transportation, retainers, and reconciliation — with digital signatures and PDF certificates.</p></div>
+      <div class="card"><div class="mod-tag">CORE CAPABILITY</div><h4 style="font-size:14px;margin-bottom:6px;">AI-Powered Tools</h4><p class="body-sm">Transaction screenshot OCR, predictive coverage alerts, quality scoring analytics, and smart dispatch — all powered by Google Gemini and Meta Llama AI.</p></div>
+    </div>
+  </div>
+  <div class="slide-num">2 / 20</div>
+</div>
+
+<!-- ═══════════════════════════════ SLIDE 3 — PROBLEM STATEMENT -->
+<div class="slide s3" id="s3">
+  <div class="blob" style="width:600px;height:600px;background:rgba(139,92,246,0.07);top:-200px;right:-200px;border-radius:50%;"></div>
+  <div style="width:100%;max-width:1100px;">
+    <div class="eyebrow">02 — Problem Statement</div>
+    <div class="h-display">Sudan field operations<br/>face <span class="g-amber">unique compounding</span> challenges</div>
+    <p class="h-ar">التحديات الفريدة للعمليات الميدانية في السودان</p>
+    <div class="w-grid g3" style="margin-top:10px;">
+      <div class="card-red">
+        <div style="font-size:22px;margin-bottom:8px;">📋</div>
+        <h4 style="font-size:14px;margin-bottom:6px;color:#fca5a5;">Fragmented Planning</h4>
+        <p class="body-sm">MMP data scattered across Excel files, WhatsApp groups, and email chains. No single source of truth for site coverage, visit status, or team assignments across multiple geographic hubs.</p>
+      </div>
+      <div class="card-red">
+        <div style="font-size:22px;margin-bottom:8px;">💸</div>
+        <h4 style="font-size:14px;margin-bottom:6px;color:#fca5a5;">Manual Financial Reconciliation</h4>
+        <p class="body-sm">Bank transfer receipts processed manually — 5+ minutes per receipt, high error rates in Arabic account numbers, no duplicate detection, and no audit trail for donor reporting.</p>
+      </div>
+      <div class="card-red">
+        <div style="font-size:22px;margin-bottom:8px;">📡</div>
+        <h4 style="font-size:14px;margin-bottom:6px;color:#fca5a5;">Connectivity &amp; Offline Gaps</h4>
+        <p class="body-sm">Field teams in remote locations (North Darfur, South Kordofan, Blue Nile) have intermittent or no internet access during site visits — standard web tools completely fail here.</p>
+      </div>
+      <div class="card-red">
+        <div style="font-size:22px;margin-bottom:8px;">👁️</div>
+        <h4 style="font-size:14px;margin-bottom:6px;color:#fca5a5;">No Real-Time Visibility</h4>
+        <p class="body-sm">Programme managers have no live view of which sites are covered, which teams are in the field, where bottlenecks are forming, or what the financial position is at any given moment.</p>
+      </div>
+      <div class="card-red">
+        <div style="font-size:22px;margin-bottom:8px;">📑</div>
+        <h4 style="font-size:14px;margin-bottom:6px;color:#fca5a5;">Compliance &amp; Audit Risk</h4>
+        <p class="body-sm">Donor requirements (USAID, EU, UNOCHA) demand structured transaction records, geographic coverage evidence, quality scores, and timestamped approvals — impossible to produce from paper-based systems.</p>
+      </div>
+      <div class="card-red">
+        <div style="font-size:22px;margin-bottom:8px;">🔄</div>
+        <h4 style="font-size:14px;margin-bottom:6px;color:#fca5a5;">Complex Multi-Role Workflows</h4>
+        <p class="body-sm">Operations involve Super Admins, Hub Managers, Coordinators, Data Collectors, Finance Officers, and external validators — with no shared system to track approvals, assignments, and handoffs.</p>
+      </div>
+    </div>
+  </div>
+  <div class="slide-num">3 / 20</div>
+</div>
+
+<!-- ═══════════════════════════════ SLIDE 4 — ARCHITECTURE OVERVIEW -->
+<div class="slide s4" id="s4">
+  <div class="blob" style="width:500px;height:500px;background:rgba(16,185,129,0.07);bottom:-150px;right:-100px;border-radius:50%;"></div>
+  <div style="width:100%;max-width:1100px;">
+    <div class="eyebrow">03 — System Architecture</div>
+    <div class="h-display"><span class="g-green">Modern cloud-native</span><br/>architecture built for scale</div>
+    <p class="h-ar">بنية سحابية حديثة مصممة للنمو</p>
+    <div class="w-grid ga" style="margin-top:8px;">
+      <div style="display:flex;flex-direction:column;gap:12px;">
+        <div class="card-hl">
+          <div class="mod-tag">FRONTEND</div>
+          <h4 style="font-size:14px;margin-bottom:8px;">React 18 + TypeScript</h4>
+          <ul class="feat-list">
+            <li>Vite build — fast hot-reload development</li>
+            <li>Tailwind CSS v3 + Shadcn UI components</li>
+            <li>TanStack Query for server state management</li>
+            <li>React Context API for global state</li>
+            <li>Mobile-first responsive design</li>
+            <li>PWA-ready with offline support</li>
+          </ul>
+        </div>
+        <div class="card-green">
+          <div class="mod-tag">MOBILE APP</div>
+          <h4 style="font-size:14px;margin-bottom:8px;">Flutter (iOS &amp; Android)</h4>
+          <ul class="feat-list">
+            <li class="green">Full offline capability with Hive local storage</li>
+            <li class="green">Supabase Flutter for real-time sync</li>
+            <li class="green">WebRTC voice/video communication</li>
+            <li class="green">Shorebird OTA updates (no app store wait)</li>
+            <li class="green">GPS tracking + flutter_map</li>
+          </ul>
+        </div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:12px;">
+        <div class="card-purple">
+          <div class="mod-tag">BACKEND &amp; DATABASE</div>
+          <h4 style="font-size:14px;margin-bottom:8px;">Supabase (PostgreSQL)</h4>
+          <ul class="feat-list">
+            <li class="purple">PostgreSQL with Row Level Security (RLS)</li>
+            <li class="purple">Supabase Auth — JWT sessions, TOTP 2FA</li>
+            <li class="purple">Realtime subscriptions via WebSocket</li>
+            <li class="purple">Supabase Storage for file/photo uploads</li>
+            <li class="purple">Edge Functions for server-side logic</li>
+          </ul>
+        </div>
+        <div class="card-amber">
+          <div class="mod-tag">INFRASTRUCTURE &amp; AI</div>
+          <h4 style="font-size:14px;margin-bottom:8px;">Vercel + Multi-AI Pipeline</h4>
+          <ul class="feat-list">
+            <li class="amber">Vercel — global CDN, auto-deploy on push</li>
+            <li class="amber">Firebase Cloud Messaging — push notifications</li>
+            <li class="amber">Google Gemini AI — OCR + analytics</li>
+            <li class="amber">Groq + Meta Llama 4 — AI fallback</li>
+            <li class="amber">IONOS SMTP — email notifications</li>
+          </ul>
+        </div>
+        <div class="card-cyan">
+          <div class="mod-tag">EXTERNAL INTEGRATIONS</div>
+          <ul class="feat-list" style="margin-top:6px;">
+            <li class="cyan">MoDa webhook for survey data ingestion</li>
+            <li class="cyan">Bank of Khartoum receipt OCR</li>
+            <li class="cyan">Leaflet.js interactive maps</li>
+            <li class="cyan">jsPDF + XLSX for document exports</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="slide-num">4 / 20</div>
+</div>
+
+<!-- ═══════════════════════════════ SLIDE 5 — MMP & SITE VISITS -->
+<div class="slide s5" id="s5">
+  <div class="blob" style="width:500px;height:500px;background:rgba(245,158,11,0.07);top:-150px;left:-150px;border-radius:50%;"></div>
+  <div style="width:100%;max-width:1100px;">
+    <div class="eyebrow">04 — Core Module</div>
+    <div class="h-display">Monthly Monitoring Plans<br/>&amp; <em>Site Visit Management</em></div>
+    <p class="h-ar">خطط المراقبة الشهرية وإدارة الزيارات الميدانية</p>
+    <div class="w-grid g3" style="margin-top:8px;">
+      <div class="card">
+        <div class="mod-tag" style="color:#fbbf24;">MMP LIFECYCLE</div>
+        <ul class="feat-list">
+          <li>Excel MMP upload with Zod validation</li>
+          <li>Partial MMP update system</li>
+          <li>Multi-tier MMP Recall System</li>
+          <li>MMP Reclaim from Coordinators</li>
+          <li>MMP Verification Workflow</li>
+          <li>Cycle comparison &amp; close approval</li>
+          <li>Auto-flagging of uncovered sites</li>
+          <li>Predictive coverage alerts</li>
+        </ul>
+      </div>
+      <div class="card">
+        <div class="mod-tag" style="color:#60a5fa;">SITE VISITS</div>
+        <ul class="feat-list">
+          <li>Data collector-specific views</li>
+          <li>Geographic filtering by hub/locality</li>
+          <li>GPS proximity matching for site verification</li>
+          <li>First-claim dispatch system</li>
+          <li>Auto-Release System for visits</li>
+          <li>Visit Postponement System</li>
+          <li>Date Range Visits support</li>
+          <li>Follow-up action tracking</li>
+        </ul>
+      </div>
+      <div class="card">
+        <div class="mod-tag" style="color:#34d399;">SMART TOOLS</div>
+        <ul class="feat-list">
+          <li class="green">Smart Dispatch System</li>
+          <li class="green">Coverage Gap Notification System</li>
+          <li class="green">Unified Site Management System</li>
+          <li class="green">Site Normalization &amp; MoDa integration</li>
+          <li class="green">Interactive Leaflet map for all sites</li>
+          <li class="green">Sudan administrative structure (full)</li>
+          <li class="green">Locality Permit Requirement Workflow</li>
+          <li class="green">Daily reminders for outstanding visits</li>
+        </ul>
+      </div>
+    </div>
+    <div class="w-grid g3" style="margin-top:12px;">
+      <div class="card-amber"><span class="badge b-amber">Live</span><p class="body-sm" style="margin-top:6px;">Real-time visit status across all hubs — dispatched, in-progress, completed, postponed</p></div>
+      <div class="card-hl"><span class="badge b-blue">Quality</span><p class="body-sm" style="margin-top:6px;">Per-visit quality scoring with analytics dashboard — identify underperforming enumerators</p></div>
+      <div class="card-green"><span class="badge b-green">Reports</span><p class="body-sm" style="margin-top:6px;">Comprehensive Coverage Analytics — cycle vs. target, gaps, trend charts, exportable</p></div>
+    </div>
+  </div>
+  <div class="slide-num">5 / 20</div>
+</div>
+
+<!-- ═══════════════════════════════ SLIDE 6 — FINANCIAL MANAGEMENT -->
+<div class="slide s6" id="s6">
+  <div class="blob" style="width:600px;height:600px;background:rgba(37,99,235,0.07);bottom:-200px;right:-200px;border-radius:50%;"></div>
+  <div style="width:100%;max-width:1100px;">
+    <div class="eyebrow">05 — Core Module</div>
+    <div class="h-display">Advanced <em>Financial</em><br/>Management System</div>
+    <p class="h-ar">نظام إدارة مالية متقدم</p>
+    <div class="w-grid g3" style="margin-top:8px;">
+      <div class="card">
+        <div class="mod-tag" style="color:#fbbf24;">ADVANCES &amp; PAYMENTS</div>
+        <ul class="feat-list">
+          <li>Transportation cost tracking &amp; approval</li>
+          <li>Down-payment system (two-tier approval)</li>
+          <li>Retainer management &amp; processing</li>
+          <li>Staff wallet system with balance tracking</li>
+          <li>Digital signature for all transactions</li>
+          <li>Automated advance deduction on settlement</li>
+          <li>Fund Receipt Confirmation system</li>
+        </ul>
+      </div>
+      <div class="card">
+        <div class="mod-tag" style="color:#60a5fa;">OPERATIONAL COSTS</div>
+        <ul class="feat-list">
+          <li>9 expense categories (transport, accommodation…)</li>
+          <li>Two-tier approval workflow</li>
+          <li>Digital signatures on cost submissions</li>
+          <li>PDF certificate generation per submission</li>
+          <li>Aging reports for outstanding approvals</li>
+          <li>Budget vs. actual comparison</li>
+          <li>Duplicate payment detection</li>
+        </ul>
+      </div>
+      <div class="card">
+        <div class="mod-tag" style="color:#34d399;">REPORTING &amp; CONTROL</div>
+        <ul class="feat-list">
+          <li class="green">Cash flow forecasting</li>
+          <li class="green">Financial period close &amp; reconciliation</li>
+          <li class="green">Reconciliation dashboard with auto-matching</li>
+          <li class="green">Consolidated financial statement</li>
+          <li class="green">Approval audit summary</li>
+          <li class="green">Wallet reports with pagination</li>
+          <li class="green">Financial trend indicators</li>
+          <li class="green">Unified Financial Alerts center</li>
+        </ul>
+      </div>
+    </div>
+    <div class="w-grid g3" style="margin-top:12px;">
+      <div class="card-purple">
+        <div class="mod-tag" style="color:#c4b5fd;">RECLAIM GAP SYSTEM</div>
+        <p class="body-sm">Tracks advances affected by site reclaims — write-off workflows and comprehensive gap reporting for auditors</p>
+      </div>
+      <div class="card-amber">
+        <div class="mod-tag" style="color:#fcd34d;">TASK BUDGET TRACKING</div>
+        <p class="body-sm">Granular budget management at task level — variance analysis, utilisation alerts, project selector</p>
+      </div>
+      <div class="card-cyan">
+        <div class="mod-tag" style="color:#67e8f9;">EXCHANGE RATES</div>
+        <p class="body-sm">Shared exchange rate service across all financial modules — SDG to USD conversion with date-stamped rates</p>
+      </div>
+    </div>
+  </div>
+  <div class="slide-num">6 / 20</div>
+</div>
+
+<!-- ═══════════════════════════════ SLIDE 7 — AI TRANSACTION SCANNER -->
+<div class="slide s7" id="s7">
+  <div class="blob" style="width:500px;height:500px;background:rgba(139,92,246,0.09);top:-150px;right:-150px;border-radius:50%;"></div>
+  <div style="width:100%;max-width:1100px;">
+    <div class="eyebrow">06 — AI Module</div>
+    <div class="h-display">Transaction Screenshot<br/><em>Scanner &amp; OCR</em></div>
+    <p class="h-ar">ماسح الإيصالات بالذكاء الاصطناعي — العربية والإنجليزية</p>
+    <div class="w-grid ga" style="margin-top:8px;">
+      <div style="display:flex;flex-direction:column;gap:12px;">
+        <div class="card-purple">
+          <div class="mod-tag" style="color:#c4b5fd;">HOW IT WORKS</div>
+          <div class="timeline">
+            <div class="tl-item"><div class="tl-dot tl-blue">1</div><div class="tl-body"><h4>Upload receipts</h4><p>Drag &amp; drop or select PNG/JPG/WebP screenshots — Bank of Khartoum green style or Bankak mobile format</p></div></div>
+            <div class="tl-item"><div class="tl-dot tl-blue">2</div><div class="tl-body"><h4>AI processes in batches</h4><p>Gemini 2.0 Flash (primary) → Llama 4 Scout via Groq (fallback) — automatic failover, ~12,000 receipts/day capacity</p></div></div>
+            <div class="tl-item"><div class="tl-dot tl-green">3</div><div class="tl-body"><h4>9 fields extracted per receipt</h4><p>Transaction ID, date/time, from/to account, recipient name (Arabic), mobile, comment, amount in SDG</p></div></div>
+            <div class="tl-item"><div class="tl-dot tl-green">4</div><div class="tl-body"><h4>Duplicate detection</h4><p>Real-time amber flagging of any repeated Transaction ID — prevents double-counting before export</p></div></div>
+            <div class="tl-item"><div class="tl-dot tl-amber">5</div><div class="tl-body"><h4>Save &amp; export</h4><p>Save named sessions to database, append more receipts across days, export formatted Excel with 2 sheets</p></div></div>
+          </div>
+        </div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:12px;">
+        <div class="card-hl">
+          <div class="mod-tag">KEY INNOVATIONS</div>
+          <ul class="feat-list">
+            <li>True Arabic OCR — RTL banking terminology</li>
+            <li>Multi-model AI redundancy (zero downtime)</li>
+            <li>Session persistence across days</li>
+            <li>"Add to existing session" append workflow</li>
+            <li>Export by Account filter dialog</li>
+            <li>Recipients Summary sheet (sorted by total)</li>
+            <li>Individual receipt delete + in-table review</li>
+          </ul>
+        </div>
+        <div class="card-green">
+          <div class="mod-tag" style="color:#34d399;">IMPACT</div>
+          <div style="display:flex;gap:20px;flex-wrap:wrap;margin-top:4px;">
+            <div><div style="font-size:22px;font-weight:700;color:#34d399;font-family:'Space Grotesk',sans-serif;">~30s</div><p class="body-sm">per receipt<br/>(vs 5+ min manual)</p></div>
+            <div><div style="font-size:22px;font-weight:700;color:#34d399;font-family:'Space Grotesk',sans-serif;">99%</div><p class="body-sm">accuracy with<br/>human spot-check</p></div>
+            <div><div style="font-size:22px;font-weight:700;color:#34d399;font-family:'Space Grotesk',sans-serif;">0</div><p class="body-sm">duplicate payments<br/>reach the export</p></div>
+          </div>
+        </div>
+        <div class="card-amber">
+          <div class="mod-tag" style="color:#fcd34d;">EXCEL OUTPUT (2 SHEETS)</div>
+          <ul class="feat-list" style="margin-top:6px;">
+            <li class="amber">Sheet 1: Transactions — date-grouped, subtotals, grand total</li>
+            <li class="amber">Sheet 2: Recipients Summary — by account, sorted by total</li>
+            <li class="amber">Colour-coded, formatted — donor-ready on Day 1</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="slide-num">7 / 20</div>
+</div>
+
+<!-- ═══════════════════════════════ SLIDE 8 — MOBILE APP -->
+<div class="slide s8" id="s8">
+  <div class="blob" style="width:550px;height:550px;background:rgba(16,185,129,0.08);top:-150px;right:-100px;border-radius:50%;"></div>
+  <div style="width:100%;max-width:1100px;">
+    <div class="eyebrow">07 — Mobile Platform</div>
+    <div class="h-display">Flutter Mobile App<br/><span class="g-green">Full Offline Capability</span></div>
+    <p class="h-ar">التطبيق المحمول — يعمل بالكامل بدون إنترنت</p>
+    <div class="w-grid g3" style="margin-top:8px;">
+      <div class="card-green">
+        <div class="mod-tag" style="color:#34d399;">OFFLINE FIELD OPERATIONS</div>
+        <ul class="feat-list">
+          <li class="green">Complete site visit workflows offline</li>
+          <li class="green">Hive local database for data persistence</li>
+          <li class="green">IndexedDB + Service Worker sync</li>
+          <li class="green">Auto-sync when connectivity restored</li>
+          <li class="green">Conflict resolution on sync</li>
+        </ul>
+      </div>
+      <div class="card-hl">
+        <div class="mod-tag">FIELD TEAM FEATURES</div>
+        <ul class="feat-list">
+          <li>GPS location sharing (real-time)</li>
+          <li>Mobile Field Team Map</li>
+          <li>Report photos upload</li>
+          <li>Digital signatures on mobile</li>
+          <li>Mobile Operational Cost Submission</li>
+          <li>Bilingual welcome screen (Arabic/English)</li>
+        </ul>
+      </div>
+      <div class="card-purple">
+        <div class="mod-tag" style="color:#c4b5fd;">COMMUNICATION &amp; UPDATES</div>
+        <ul class="feat-list">
+          <li class="purple">WebRTC voice &amp; video calls</li>
+          <li class="purple">Unified Communications Screen</li>
+          <li class="purple">Firebase push notifications (FCM)</li>
+          <li class="purple">Shorebird OTA updates</li>
+          <li class="purple">Admin-Managed Support Contacts</li>
+          <li class="purple">Help &amp; Support System</li>
+        </ul>
+      </div>
+    </div>
+    <div class="w-grid g3" style="margin-top:12px;">
+      <div class="card-amber"><span class="badge b-amber">Admin</span><p class="body-sm" style="margin-top:6px;">Mobile Admin Dashboard — full management view on phone, including approvals and dispatching</p></div>
+      <div class="card-cyan"><span class="badge b-cyan">Intelligence</span><p class="body-sm" style="margin-top:6px;">View mode auto-detects device type — automatically shows the mobile-optimised interface on phones</p></div>
+      <div class="card-green"><span class="badge b-green">Delivery</span><p class="body-sm" style="margin-top:6px;">Shorebird OTA — new features delivered instantly without waiting for App Store/Play Store review</p></div>
+    </div>
+  </div>
+  <div class="slide-num">8 / 20</div>
+</div>
+
+<!-- ═══════════════════════════════ SLIDE 9 — COMMUNICATIONS & NOTIFICATIONS -->
+<div class="slide s9" id="s9">
+  <div class="blob" style="width:500px;height:500px;background:rgba(245,158,11,0.07);bottom:-150px;left:-150px;border-radius:50%;"></div>
+  <div style="width:100%;max-width:1100px;">
+    <div class="eyebrow">08 — Communications</div>
+    <div class="h-display">Built-in <span class="g-amber">Communication</span><br/>&amp; Notification Platform</div>
+    <p class="h-ar">منصة الاتصالات والإشعارات المدمجة</p>
+    <div class="w-grid g3" style="margin-top:8px;">
+      <div class="card-amber">
+        <div class="mod-tag" style="color:#fcd34d;">NOTIFICATIONS (3 CHANNELS)</div>
+        <ul class="feat-list">
+          <li class="amber">In-app real-time notifications</li>
+          <li class="amber">WhatsApp-style persistent notifications</li>
+          <li class="amber">Firebase push (mobile, even when app closed)</li>
+          <li class="amber">Email via IONOS SMTP</li>
+          <li class="amber">Broadcast Center for admin announcements</li>
+        </ul>
+      </div>
+      <div class="card-hl">
+        <div class="mod-tag">REAL-TIME COLLABORATION</div>
+        <ul class="feat-list">
+          <li>Supabase Realtime subscriptions</li>
+          <li>Live Dashboard — zero-refresh updates</li>
+          <li>Real-time GPS location sharing</li>
+          <li>Live visit status across all teams</li>
+          <li>Multi-session support (same user, many devices)</li>
+        </ul>
+      </div>
+      <div class="card-purple">
+        <div class="mod-tag" style="color:#c4b5fd;">VOICE &amp; VIDEO</div>
+        <ul class="feat-list">
+          <li class="purple">WebRTC peer-to-peer calls — no external dependency</li>
+          <li class="purple">Own infrastructure — no Zoom/Teams licensing</li>
+          <li class="purple">Encrypted end-to-end communication</li>
+          <li class="purple">Unified Communications Screen</li>
+          <li class="purple">Call logging and field team coordination</li>
+        </ul>
+      </div>
+    </div>
+    <div style="margin-top:16px;" class="card-green">
+      <div class="mod-tag" style="color:#34d399;">PASSWORD &amp; SECURITY MANAGEMENT</div>
+      <div class="w-grid g3" style="margin-top:8px;">
+        <div><h4 style="font-size:13px;margin-bottom:4px;">Custom OTP System</h4><p class="body-sm">Password reset via OTP delivered by email — no dependency on Supabase's email limits</p></div>
+        <div><h4 style="font-size:13px;margin-bottom:4px;">TOTP Two-Factor Auth</h4><p class="body-sm">TOTP-based 2FA for all admin accounts — compatible with Google Authenticator, Authy</p></div>
+        <div><h4 style="font-size:13px;margin-bottom:4px;">Security-Hardened Activity Tracking</h4><p class="body-sm">Every sensitive action is logged with user, timestamp, IP, and full audit trail</p></div>
+      </div>
+    </div>
+  </div>
+  <div class="slide-num">9 / 20</div>
+</div>
+
+<!-- ═══════════════════════════════ SLIDE 10 — ANALYTICS & REPORTING -->
+<div class="slide s10" id="s10">
+  <div class="blob" style="width:550px;height:550px;background:rgba(139,92,246,0.08);top:-150px;right:-150px;border-radius:50%;"></div>
+  <div style="width:100%;max-width:1100px;">
+    <div class="eyebrow">09 — Analytics & Reporting</div>
+    <div class="h-display"><em>AI-Powered</em> Analytics<br/>&amp; Reporting Suite</div>
+    <p class="h-ar">مجموعة التحليلات والتقارير المدعومة بالذكاء الاصطناعي</p>
+    <div class="w-grid g3" style="margin-top:8px;">
+      <div class="card-purple">
+        <div class="mod-tag" style="color:#c4b5fd;">COVERAGE ANALYTICS</div>
+        <ul class="feat-list">
+          <li class="purple">Real-time coverage percentage by hub</li>
+          <li class="purple">Cycle vs. target gap analysis</li>
+          <li class="purple">Site visit completion trend charts</li>
+          <li class="purple">Predictive coverage failure alerts</li>
+          <li class="purple">Auto-flagging of uncovered critical sites</li>
+          <li class="purple">Recharts interactive visualisations</li>
+        </ul>
+      </div>
+      <div class="card-hl">
+        <div class="mod-tag">QUALITY SCORING</div>
+        <ul class="feat-list">
+          <li>Per-visit quality score calculation</li>
+          <li>Enumerator performance ranking</li>
+          <li>Quality trend analytics over cycles</li>
+          <li>GPS verification scoring</li>
+          <li>Photo completeness scoring</li>
+          <li>Questionnaire compliance metrics</li>
+        </ul>
+      </div>
+      <div class="card-green">
+        <div class="mod-tag" style="color:#34d399;">DATA EXPORTS</div>
+        <ul class="feat-list">
+          <li class="green">Data Export Center — any module, any date range</li>
+          <li class="green">Excel exports (xlsx) with full formatting</li>
+          <li class="green">PDF certificates with digital signatures</li>
+          <li class="green">Financial period reports</li>
+          <li class="green">Coverage summary exports for donors</li>
+          <li class="green">Wallet and transaction reports</li>
+        </ul>
+      </div>
+    </div>
+    <div class="w-grid g3" style="margin-top:12px;">
+      <div class="card-amber">
+        <div class="mod-tag" style="color:#fcd34d;">MISSION CONTROL DASHBOARD</div>
+        <p class="body-sm">Global MMP filter — persistent multi-select across all dashboard widgets. Live counts, maps, and status feeds updated in real-time without page refresh.</p>
+      </div>
+      <div class="card-cyan">
+        <div class="mod-tag" style="color:#67e8f9;">STAFF DIRECTORY</div>
+        <p class="body-sm">Admin page with staff profiles, bank account details, field capacity ratings, online/offline status, and activity history for all team members.</p>
+      </div>
+      <div class="card-red">
+        <div class="mod-tag" style="color:#fca5a5;">SUPER ADMIN CENTRE</div>
+        <p class="body-sm">Full data management — edit site visits, wallets, transactions, and MMPs with advanced search, audit logging, and a Role Perspective Viewer.</p>
+      </div>
+    </div>
+  </div>
+  <div class="slide-num">10 / 20</div>
+</div>
+
+<!-- ═══════════════════════════════ SLIDE 11 — DATABASE ARCHITECTURE -->
+<div class="slide s11" id="s11">
+  <div class="blob" style="width:500px;height:500px;background:rgba(6,182,212,0.07);bottom:-150px;right:-100px;border-radius:50%;"></div>
+  <div style="width:100%;max-width:1100px;">
+    <div class="eyebrow">10 — Database Architecture</div>
+    <div class="h-display">Supabase PostgreSQL<br/><span class="g-green">— Unified &amp; Secure</span></div>
+    <p class="h-ar">قاعدة بيانات PostgreSQL موحدة وآمنة</p>
+    <div class="w-grid ga" style="margin-top:8px;">
+      <div style="display:flex;flex-direction:column;gap:10px;">
+        <div class="card-cyan">
+          <div class="mod-tag" style="color:#67e8f9;">CORE TABLES (KEY SELECTION)</div>
+          <table class="db-table" style="margin-top:8px;">
+            <thead><tr><th>Table</th><th>Purpose</th></tr></thead>
+            <tbody>
+              <tr><td><code>mmp_files</code></td><td>MMP metadata, status, cycle dates</td></tr>
+              <tr><td><code>mmp_site_entries</code></td><td>Individual sites within each MMP</td></tr>
+              <tr><td><code>site_visits</code></td><td>All field visits — status, GPS, photos</td></tr>
+              <tr><td><code>wallets</code></td><td>Staff wallet balances &amp; histories</td></tr>
+              <tr><td><code>wallet_transactions</code></td><td>Every financial movement with signatures</td></tr>
+              <tr><td><code>operational_costs</code></td><td>Cost submissions with 9 categories</td></tr>
+              <tr><td><code>bank_transaction_scans</code></td><td>AI-scanned receipt sessions (JSONB)</td></tr>
+              <tr><td><code>projects</code></td><td>Project/sub-activity hierarchy</td></tr>
+              <tr><td><code>users / profiles</code></td><td>Staff profiles, roles, bank accounts</td></tr>
+              <tr><td><code>notifications</code></td><td>All notification records &amp; read state</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:12px;">
+        <div class="card-green">
+          <div class="mod-tag" style="color:#34d399;">SECURITY MODEL</div>
+          <ul class="feat-list" style="margin-top:6px;">
+            <li class="green">Row Level Security (RLS) on all tables</li>
+            <li class="green">Role-based policies — each role sees only its data</li>
+            <li class="green">JWT session tokens — auto-refresh</li>
+            <li class="green">TOTP 2FA for admin accounts</li>
+            <li class="green">All mutations logged with user + timestamp</li>
+          </ul>
+        </div>
+        <div class="card-hl">
+          <div class="mod-tag">REAL-TIME CAPABILITIES</div>
+          <ul class="feat-list" style="margin-top:6px;">
+            <li>Supabase Realtime on all critical tables</li>
+            <li>WebSocket subscriptions per module</li>
+            <li>Live dashboard updates without polling</li>
+            <li>Multi-tab / multi-device session support</li>
+            <li>Session health monitoring &amp; auto-recovery</li>
+          </ul>
+        </div>
+        <div class="card-purple">
+          <div class="mod-tag" style="color:#c4b5fd;">DATA STRATEGY</div>
+          <ul class="feat-list" style="margin-top:6px;">
+            <li class="purple">JSONB for flexible nested data (receipts, photos)</li>
+            <li class="purple">Full Sudan admin structure (states → localities)</li>
+            <li class="purple">Supabase daily automated backups</li>
+            <li class="purple">Read-only prod DB access for safe analytics</li>
+            <li class="purple">Point-in-time recovery available</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="slide-num">11 / 20</div>
+</div>
+
+<!-- ═══════════════════════════════ SLIDE 12 — USER ROLES & PERMISSIONS -->
+<div class="slide s12" id="s12">
+  <div class="blob" style="width:500px;height:500px;background:rgba(239,68,68,0.07);top:-150px;left:-150px;border-radius:50%;"></div>
+  <div style="width:100%;max-width:1100px;">
+    <div class="eyebrow">11 — Access Control</div>
+    <div class="h-display">Multi-Tier <span class="g-amber">Role-Based</span><br/>Access Control</div>
+    <p class="h-ar">نظام التحكم في الوصول متعدد المستويات</p>
+    <div class="w-grid g3" style="margin-top:8px;">
+      <div class="card-red">
+        <div class="mod-tag" style="color:#fca5a5;">ADMINISTRATION</div>
+        <div class="timeline">
+          <div class="tl-item"><div class="tl-dot" style="background:rgba(239,68,68,0.3);border:1px solid rgba(239,68,68,0.5);color:#fca5a5;font-size:10px;width:28px;height:28px;">SA</div><div class="tl-body"><h4>Super Admin</h4><p>Full platform access — all data, all settings, all users, audit logs, data management centre</p></div></div>
+          <div class="tl-item"><div class="tl-dot" style="background:rgba(239,68,68,0.2);border:1px solid rgba(239,68,68,0.4);color:#fca5a5;font-size:10px;width:28px;height:28px;">AD</div><div class="tl-body"><h4>Admin</h4><p>Platform management, user creation, MMP approval, financial oversight, broadcast</p></div></div>
+        </div>
+      </div>
+      <div class="card-hl">
+        <div class="mod-tag">OPERATIONS</div>
+        <div class="timeline">
+          <div class="tl-item"><div class="tl-dot tl-blue" style="font-size:10px;width:28px;height:28px;">HM</div><div class="tl-body"><h4>Hub Manager</h4><p>Manages all operations within their geographic hub — site visits, teams, budgets</p></div></div>
+          <div class="tl-item"><div class="tl-dot tl-blue" style="font-size:10px;width:28px;height:28px;">CO</div><div class="tl-body"><h4>Coordinator</h4><p>Dispatches visits, manages data collectors, submits operational costs</p></div></div>
+          <div class="tl-item"><div class="tl-dot tl-blue" style="font-size:10px;width:28px;height:28px;">DC</div><div class="tl-body"><h4>Data Collector</h4><p>Claims and executes site visits, uploads reports, GPS check-in/out</p></div></div>
+        </div>
+      </div>
+      <div class="card-green">
+        <div class="mod-tag" style="color:#34d399;">FINANCE &amp; VERIFICATION</div>
+        <div class="timeline">
+          <div class="tl-item"><div class="tl-dot tl-green" style="font-size:10px;width:28px;height:28px;">FO</div><div class="tl-body"><h4>Finance Officer</h4><p>Manages wallets, approves payments, reconciles accounts, generates financial reports</p></div></div>
+          <div class="tl-item"><div class="tl-dot tl-green" style="font-size:10px;width:28px;height:28px;">VR</div><div class="tl-body"><h4>Verifier</h4><p>Quality-checks completed site visits — can reject for re-submission</p></div></div>
+          <div class="tl-item"><div class="tl-dot tl-green" style="font-size:10px;width:28px;height:28px;">EX</div><div class="tl-body"><h4>External Reviewer</h4><p>Read-only access to specific modules for donor oversight</p></div></div>
+        </div>
+      </div>
+    </div>
+    <div class="card-purple" style="margin-top:12px;">
+      <div class="mod-tag" style="color:#c4b5fd;">ROLE PERSPECTIVE VIEWER</div>
+      <p class="body-sm">Super Admins can switch to any user's role perspective — see exactly what that role sees — for support, auditing, and training purposes. No impersonation risk — read-only view switch.</p>
+    </div>
+  </div>
+  <div class="slide-num">12 / 20</div>
+</div>
+
+<!-- ═══════════════════════════════ SLIDE 13 — INNOVATION HIGHLIGHTS -->
+<div class="slide s13" id="s13">
+  <div class="blob" style="width:600px;height:600px;background:rgba(37,99,235,0.07);top:-200px;right:-200px;border-radius:50%;"></div>
+  <div style="width:100%;max-width:1100px;">
+    <div class="eyebrow">12 — Innovation</div>
+    <div class="h-display">What makes PACT<br/><em>Command Center unique</em></div>
+    <p class="h-ar">ما يميز مركز القيادة عن أي منصة أخرى</p>
+    <div class="w-grid g3" style="margin-top:8px;">
+      <div class="card-purple"><span class="badge b-purple">AI First</span><h4 style="font-size:14px;margin:8px 0 6px;">Multi-Model AI Redundancy</h4><p class="body-sm">Two independent AI providers (Google + Meta/Groq) with automatic failover — OCR never stops mid-session. Combined: ~12,000 receipts/day free capacity.</p></div>
+      <div class="card-green"><span class="badge b-green">Offline</span><h4 style="font-size:14px;margin:8px 0 6px;">True Offline Field Operations</h4><p class="body-sm">The only platform in its class that works completely without internet — site visits, data entry, photos, GPS — all sync automatically when connectivity returns.</p></div>
+      <div class="card-hl"><span class="badge b-blue">Bilingual</span><h4 style="font-size:14px;margin:8px 0 6px;">Native Arabic + English</h4><p class="body-sm">Every interface, receipt, report, and notification supports Arabic and English seamlessly — including RTL Arabic in OCR extraction and form fields.</p></div>
+      <div class="card-amber"><span class="badge b-amber">Own Infra</span><h4 style="font-size:14px;margin:8px 0 6px;">Own Communications Channel</h4><p class="body-sm">WebRTC voice/video calls run on PACT's own infrastructure — no Zoom, Teams, or WhatsApp dependency. Encrypted, logged, and always available.</p></div>
+      <div class="card-cyan"><span class="badge b-cyan">Live</span><h4 style="font-size:14px;margin:8px 0 6px;">Real-Time Everything</h4><p class="body-sm">Supabase Realtime subscriptions mean that when a visit is completed in the field, the dashboard in Khartoum updates within seconds — no refresh needed.</p></div>
+      <div class="card-red"><span class="badge b-red">Instant</span><h4 style="font-size:14px;margin:8px 0 6px;">Shorebird OTA Updates</h4><p class="body-sm">Mobile app updates deployed instantly to all field phones without App Store review delays. Critical fixes reach the field within minutes of deployment.</p></div>
+    </div>
+    <div class="w-grid g3" style="margin-top:12px;">
+      <div class="card"><span class="badge b-purple">Smart</span><p class="body-sm" style="margin-top:6px;">Smart Dispatch System — automatically suggests the best-matched data collector for each site based on location, capacity, and availability</p></div>
+      <div class="card"><span class="badge b-green">Integrity</span><p class="body-sm" style="margin-top:6px;">Digital signatures on all financial documents — legally binding, tamper-evident, PDF-embedded — for all wallets, costs, and certificates</p></div>
+      <div class="card"><span class="badge b-amber">Predict</span><p class="body-sm" style="margin-top:6px;">Predictive coverage alerts — the AI flags sites at risk of being missed 3–5 days before the cycle deadline, allowing proactive redeployment</p></div>
+    </div>
+  </div>
+  <div class="slide-num">13 / 20</div>
+</div>
+
+<!-- ═══════════════════════════════ SLIDE 14 — DATA COLLECTION USE CASES -->
+<div class="slide s14" id="s14">
+  <div class="blob" style="width:500px;height:500px;background:rgba(139,92,246,0.08);bottom:-150px;right:-100px;border-radius:50%;"></div>
+  <div style="width:100%;max-width:1100px;">
+    <div class="eyebrow">13 — Use Cases</div>
+    <div class="h-display">Field <em>Data Collection</em><br/>Scenarios</div>
+    <p class="h-ar">حالات استخدام جمع البيانات الميدانية</p>
+    <div class="w-grid g3" style="margin-top:10px;">
+      <div class="card-hl">
+        <div class="mod-tag">HUMANITARIAN DISTRIBUTIONS</div>
+        <ul class="feat-list">
+          <li>Upload site list → assign data collectors → dispatch</li>
+          <li>Field teams claim sites via mobile app (offline)</li>
+          <li>GPS check-in verifies physical presence at site</li>
+          <li>Photos, headcount, questionnaire submitted offline</li>
+          <li>Finance scans transfer receipts → export by beneficiary</li>
+          <li>Supervisor verifies quality scores → closes cycle</li>
+        </ul>
+      </div>
+      <div class="card-green">
+        <div class="mod-tag" style="color:#34d399;">SURVEY &amp; RESEARCH</div>
+        <ul class="feat-list">
+          <li class="green">MoDa webhook — survey submissions auto-ingested</li>
+          <li class="green">Site normalization links surveys to master registry</li>
+          <li class="green">Coverage tracking per survey question set</li>
+          <li class="green">Enumerator workload balancing via capacity flags</li>
+          <li class="green">Quality scoring on questionnaire completeness</li>
+          <li class="green">Export analytics for donor M&amp;E reports</li>
+        </ul>
+      </div>
+      <div class="card-purple">
+        <div class="mod-tag" style="color:#c4b5fd;">FINANCIAL FIELD OPERATIONS</div>
+        <ul class="feat-list">
+          <li class="purple">Advance requests → coordinator approval → disbursement</li>
+          <li class="purple">Field expense submission with 9 categories</li>
+          <li class="purple">Two-tier finance approval (hub → HQ)</li>
+          <li class="purple">Receipt scanning → session save → Excel report</li>
+          <li class="purple">Reconciliation against approved budget</li>
+          <li class="purple">Period close with consolidated statement</li>
+        </ul>
+      </div>
+      <div class="card-amber">
+        <div class="mod-tag" style="color:#fcd34d;">MULTI-CYCLE MONITORING</div>
+        <ul class="feat-list">
+          <li class="amber">Compare coverage across consecutive MMP cycles</li>
+          <li class="amber">Identify persistently uncovered sites</li>
+          <li class="amber">Track follow-up actions from previous cycles</li>
+          <li class="amber">Predictive alerts for sites at risk this cycle</li>
+          <li class="amber">Automated daily reminders to coordinators</li>
+        </ul>
+      </div>
+      <div class="card-cyan">
+        <div class="mod-tag" style="color:#67e8f9;">REMOTE LOCATION OPERATIONS</div>
+        <ul class="feat-list">
+          <li class="cyan">Full offline mode — no connectivity required</li>
+          <li class="cyan">GPS location shared when connected</li>
+          <li class="cyan">Background sync when signal returns</li>
+          <li class="cyan">OTA updates via Shorebird — no manual update</li>
+        </ul>
+      </div>
+      <div class="card-red">
+        <div class="mod-tag" style="color:#fca5a5;">DONOR REPORTING</div>
+        <ul class="feat-list">
+          <li class="red">Coverage Analytics export (PDF &amp; Excel)</li>
+          <li class="red">Recipients Summary from transaction scanner</li>
+          <li class="red">Financial period consolidated statement</li>
+          <li class="red">Digital-signed cost certificates as attachments</li>
+          <li class="red">Quality score trending for M&amp;E evidence</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+  <div class="slide-num">14 / 20</div>
+</div>
+
+<!-- ═══════════════════════════════ SLIDE 15 — ROADMAP -->
+<div class="slide s15" id="s15">
+  <div class="blob" style="width:550px;height:550px;background:rgba(16,185,129,0.07);top:-150px;left:-100px;border-radius:50%;"></div>
+  <div style="width:100%;max-width:1100px;">
+    <div class="eyebrow">14 — Roadmap</div>
+    <div class="h-display">What's <span class="g-green">coming next</span><br/>for the platform</div>
+    <p class="h-ar">ما هو قادم — خارطة طريق التطوير</p>
+    <div class="w-grid g3" style="margin-top:12px;">
+      <div class="card-green">
+        <span class="badge b-green">High Priority</span>
+        <h4 style="font-size:14px;margin:10px 0 8px;">In-Cell Editing for Scanner</h4>
+        <p class="body-sm">Click any extracted receipt field to correct it inline — essential for when AI misreads an Arabic name or SDG amount. No re-scan required.</p>
+      </div>
+      <div class="card-green">
+        <span class="badge b-green">High Priority</span>
+        <h4 style="font-size:14px;margin:10px 0 8px;">Receipt Image Preview</h4>
+        <p class="body-sm">Hover over a scanner row to see the original receipt thumbnail — instant visual verification without switching windows.</p>
+      </div>
+      <div class="card-hl">
+        <span class="badge b-blue">Planned</span>
+        <h4 style="font-size:14px;margin:10px 0 8px;">Beneficiary Registry Matching</h4>
+        <p class="body-sm">Auto-link scanned transfers to beneficiary profiles — flag payments to accounts not in the approved beneficiary list.</p>
+      </div>
+      <div class="card-hl">
+        <span class="badge b-blue">Planned</span>
+        <h4 style="font-size:14px;margin:10px 0 8px;">IVR Integration</h4>
+        <p class="body-sm">Beneficiary verification and data collection via interactive voice response — no smartphone required. Widens reach to non-literate populations.</p>
+      </div>
+      <div class="card-amber">
+        <span class="badge b-amber">Innovation</span>
+        <h4 style="font-size:14px;margin:10px 0 8px;">WhatsApp Webhook for Receipts</h4>
+        <p class="body-sm">Finance officers send receipt screenshots to a WhatsApp Business number → auto-ingested into the scanner → zero manual upload step.</p>
+      </div>
+      <div class="card-amber">
+        <span class="badge b-amber">Innovation</span>
+        <h4 style="font-size:14px;margin:10px 0 8px;">Predictive AI Engine</h4>
+        <p class="body-sm">Forecast coverage failures, auto-generate redistribution recommendations, detect field fraud patterns before they escalate to financial loss.</p>
+      </div>
+      <div class="card-purple">
+        <span class="badge b-purple">Future</span>
+        <h4 style="font-size:14px;margin:10px 0 8px;">Call Centre Module</h4>
+        <p class="body-sm">Supervisor dashboard for call logging, follow-up tracking, and linking call outcomes to site visits and tasks — replacing informal WhatsApp coordination.</p>
+      </div>
+      <div class="card-purple">
+        <span class="badge b-purple">Future</span>
+        <h4 style="font-size:14px;margin:10px 0 8px;">Multi-Country Rollout</h4>
+        <p class="body-sm">Expand the platform architecture to handle multi-tenancy for PACT's 7 active countries — shared infrastructure, isolated data, country-specific configurations.</p>
+      </div>
+      <div class="card-cyan">
+        <span class="badge b-cyan">Research</span>
+        <h4 style="font-size:14px;margin:10px 0 8px;">Offline AI on Device</h4>
+        <p class="body-sm">Run lightweight ML models directly on the phone — enabling receipt OCR, GPS verification, and quality scoring with zero connectivity.</p>
+      </div>
+    </div>
+  </div>
+  <div class="slide-num">15 / 20</div>
+</div>
+
+<!-- ══════════════════════ SLIDES 16–19: USER MANUAL ════════════════════ -->
+
+<!-- ═══════════════════════════════ SLIDE 16 — MANUAL: GETTING STARTED -->
+<div class="slide s16" id="s16">
+  <div class="blob" style="width:600px;height:600px;background:rgba(37,99,235,0.07);top:-200px;right:-200px;border-radius:50%;"></div>
+  <div style="width:100%;max-width:1100px;">
+    <div class="manual-header">
+      <div class="mh-tag">User Manual — Section 1</div>
+      <h2>Getting Started with PACT Command Center</h2>
+    </div>
+    <div class="w-grid g3">
+      <div class="card-hl">
+        <div class="mod-tag">ACCESSING THE PLATFORM</div>
+        <div class="timeline">
+          <div class="tl-item"><div class="tl-dot tl-blue">1</div><div class="tl-body"><h4>Open the platform</h4><p>Go to <strong>app.pactorg.com</strong> in any modern browser (Chrome recommended). Works on desktop, tablet, and mobile.</p></div></div>
+          <div class="tl-item"><div class="tl-dot tl-blue">2</div><div class="tl-body"><h4>Sign in</h4><p>Enter your PACT email and password. If 2FA is enabled on your account, enter the 6-digit code from your authenticator app.</p></div></div>
+          <div class="tl-item"><div class="tl-dot tl-blue">3</div><div class="tl-body"><h4>Navigate via sidebar</h4><p>The left sidebar shows all modules available to your role. Click any item to navigate. Favourite items pin to the top of the sidebar.</p></div></div>
+        </div>
+      </div>
+      <div class="card-green">
+        <div class="mod-tag" style="color:#34d399;">THE DASHBOARD</div>
+        <div class="timeline">
+          <div class="tl-item"><div class="tl-dot tl-green">→</div><div class="tl-body"><h4>Mission Control</h4><p>The home screen shows live coverage %, active visits, team status, and financial alerts — all updating in real time.</p></div></div>
+          <div class="tl-item"><div class="tl-dot tl-green">→</div><div class="tl-body"><h4>Global MMP Filter</h4><p>Use the persistent multi-select MMP filter at the top of the dashboard to focus all widgets on specific MMPs or cycles.</p></div></div>
+          <div class="tl-item"><div class="tl-dot tl-green">→</div><div class="tl-body"><h4>Notifications bell</h4><p>The bell icon shows unread notifications. Click to see the full notification centre — in-app and WhatsApp-style alerts.</p></div></div>
+        </div>
+      </div>
+      <div class="card-purple">
+        <div class="mod-tag" style="color:#c4b5fd;">SIDEBAR CUSTOMISATION</div>
+        <div class="timeline">
+          <div class="tl-item"><div class="tl-dot" style="background:rgba(139,92,246,0.3);border:1px solid rgba(139,92,246,0.5);color:#c4b5fd;">★</div><div class="tl-body"><h4>Favourite modules</h4><p>Hover over any sidebar item and click the star icon to pin it to your Favourites section at the top of the sidebar.</p></div></div>
+          <div class="tl-item"><div class="tl-dot" style="background:rgba(139,92,246,0.3);border:1px solid rgba(139,92,246,0.5);color:#c4b5fd;">👤</div><div class="tl-body"><h4>Profile &amp; settings</h4><p>Click your name/avatar at the bottom of the sidebar to access your profile, change password, enable 2FA, or switch themes.</p></div></div>
+          <div class="tl-item"><div class="tl-dot" style="background:rgba(139,92,246,0.3);border:1px solid rgba(139,92,246,0.5);color:#c4b5fd;">📱</div><div class="tl-body"><h4>Mobile app</h4><p>Download the PACT mobile app from your app store. Log in with the same credentials. Data syncs automatically between web and mobile.</p></div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="slide-num">16 / 20</div>
+</div>
+
+<!-- ═══════════════════════════════ SLIDE 17 — MANUAL: MMP & SITE VISITS -->
+<div class="slide s17" id="s17">
+  <div class="blob" style="width:500px;height:500px;background:rgba(139,92,246,0.07);bottom:-150px;left:-100px;border-radius:50%;"></div>
+  <div style="width:100%;max-width:1100px;">
+    <div class="manual-header">
+      <div class="mh-tag">User Manual — Section 2</div>
+      <h2>MMP Upload, Dispatch & Site Visits</h2>
+    </div>
+    <div class="w-grid g3">
+      <div class="card">
+        <div class="mod-tag" style="color:#fbbf24;">MMP UPLOAD (ADMIN / HUB MANAGER)</div>
+        <div class="timeline">
+          <div class="tl-item"><div class="tl-dot tl-amber">1</div><div class="tl-body"><h4>Prepare Excel MMP file</h4><p>Format the site list to PACT's MMP template. Required columns: Site Name, Location, State, Locality, Coordinates.</p></div></div>
+          <div class="tl-item"><div class="tl-dot tl-amber">2</div><div class="tl-body"><h4>Upload via MMP section</h4><p>Go to <strong>Operations → MMP Files → Upload New</strong>. The system validates every row — errors are listed for correction before saving.</p></div></div>
+          <div class="tl-item"><div class="tl-dot tl-amber">3</div><div class="tl-body"><h4>Assign to hubs</h4><p>After upload, assign site groups to Hub Managers. They see only their assigned sites.</p></div></div>
+          <div class="tl-item"><div class="tl-dot tl-amber">4</div><div class="tl-body"><h4>Open for dispatch</h4><p>Activate the MMP cycle. Coordinators can now dispatch sites to data collectors.</p></div></div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="mod-tag" style="color:#60a5fa;">DISPATCH (COORDINATOR)</div>
+        <div class="timeline">
+          <div class="tl-item"><div class="tl-dot tl-blue">1</div><div class="tl-body"><h4>Open site list</h4><p>Go to <strong>Operations → Site Visits → Dispatch</strong>. Filter by hub, state, or locality. The map view shows all unassigned sites.</p></div></div>
+          <div class="tl-item"><div class="tl-dot tl-blue">2</div><div class="tl-body"><h4>Assign to data collector</h4><p>Select a site → choose a data collector from the dropdown (filtered by availability and capacity). The Smart Dispatch system highlights the best match.</p></div></div>
+          <div class="tl-item"><div class="tl-dot tl-blue">3</div><div class="tl-body"><h4>Data collector notified</h4><p>The data collector receives a push notification on their phone — the visit appears in their task list immediately.</p></div></div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="mod-tag" style="color:#34d399;">FIELD VISIT (DATA COLLECTOR)</div>
+        <div class="timeline">
+          <div class="tl-item"><div class="tl-dot tl-green">1</div><div class="tl-body"><h4>Claim or receive site</h4><p>Open the mobile app → My Visits → tap the assigned site. First-claim sites can be self-assigned from the available pool.</p></div></div>
+          <div class="tl-item"><div class="tl-dot tl-green">2</div><div class="tl-body"><h4>GPS check-in at site</h4><p>On arrival, tap <strong>Check In</strong>. The GPS coordinates are recorded. If not within the required proximity, a warning is shown.</p></div></div>
+          <div class="tl-item"><div class="tl-dot tl-green">3</div><div class="tl-body"><h4>Complete the form</h4><p>Fill questionnaire fields, upload photos, record beneficiary count. Works fully offline — data saved locally until sync.</p></div></div>
+          <div class="tl-item"><div class="tl-dot tl-green">4</div><div class="tl-body"><h4>Submit &amp; sync</h4><p>Tap Submit. If online — immediate sync. If offline — syncs automatically when connectivity returns. Supervisor notified.</p></div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="slide-num">17 / 20</div>
+</div>
+
+<!-- ═══════════════════════════════ SLIDE 18 — MANUAL: FINANCE -->
+<div class="slide s18" id="s18">
+  <div class="blob" style="width:550px;height:550px;background:rgba(6,182,212,0.07);top:-150px;right:-100px;border-radius:50%;"></div>
+  <div style="width:100%;max-width:1100px;">
+    <div class="manual-header">
+      <div class="mh-tag">User Manual — Section 3</div>
+      <h2>Financial Workflows — Advances, Costs & Scanner</h2>
+    </div>
+    <div class="w-grid g3">
+      <div class="card">
+        <div class="mod-tag" style="color:#fbbf24;">ADVANCE REQUESTS</div>
+        <div class="timeline">
+          <div class="tl-item"><div class="tl-dot tl-amber">1</div><div class="tl-body"><h4>Submit advance request</h4><p>Go to <strong>Finance → Advances → New Request</strong>. Enter amount, purpose, and expected return date. Attach supporting documents.</p></div></div>
+          <div class="tl-item"><div class="tl-dot tl-amber">2</div><div class="tl-body"><h4>Two-tier approval</h4><p>Hub Manager approves first → Finance Officer approves second. You receive a notification at each stage.</p></div></div>
+          <div class="tl-item"><div class="tl-dot tl-amber">3</div><div class="tl-body"><h4>Fund disbursement</h4><p>On final approval, the amount is added to your wallet. A signed digital certificate is generated automatically.</p></div></div>
+          <div class="tl-item"><div class="tl-dot tl-amber">4</div><div class="tl-body"><h4>Settlement</h4><p>Submit operational cost receipts against the advance. The system auto-deducts from your wallet balance. Remaining balance is returned.</p></div></div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="mod-tag" style="color:#60a5fa;">OPERATIONAL COST SUBMISSION</div>
+        <div class="timeline">
+          <div class="tl-item"><div class="tl-dot tl-blue">1</div><div class="tl-body"><h4>Create submission</h4><p>Go to <strong>Finance → Operational Costs → New</strong>. Select category (transport / accommodation / fuel / per diem, etc.) and enter amount.</p></div></div>
+          <div class="tl-item"><div class="tl-dot tl-blue">2</div><div class="tl-body"><h4>Attach evidence</h4><p>Upload receipt photos. For bank transfers, use the Transaction Scanner to extract details — paste the transaction ID.</p></div></div>
+          <div class="tl-item"><div class="tl-dot tl-blue">3</div><div class="tl-body"><h4>Sign &amp; submit</h4><p>Draw your digital signature on the submission form. Submit — the Coordinator and Finance Officer are notified immediately.</p></div></div>
+          <div class="tl-item"><div class="tl-dot tl-blue">4</div><div class="tl-body"><h4>Track approval status</h4><p>View the approval chain status in real time. Once approved, a PDF certificate with your digital signature is downloadable.</p></div></div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="mod-tag" style="color:#34d399;">TRANSACTION SCANNER</div>
+        <div class="timeline">
+          <div class="tl-item"><div class="tl-dot tl-green">1</div><div class="tl-body"><h4>Open scanner</h4><p>Go to <strong>Finance → Transaction Scanner</strong>. Drag &amp; drop receipt screenshots into the upload zone — or click to browse.</p></div></div>
+          <div class="tl-item"><div class="tl-dot tl-green">2</div><div class="tl-body"><h4>Wait for AI extraction</h4><p>Each receipt is processed in ~30 seconds. Watch the live status per row (Waiting → Reading → Done). Errors show a Retry button.</p></div></div>
+          <div class="tl-item"><div class="tl-dot tl-green">3</div><div class="tl-body"><h4>Review &amp; clean</h4><p>Check the table. Remove duplicates (amber rows) using the × button. Add more images if needed — batches can be combined.</p></div></div>
+          <div class="tl-item"><div class="tl-dot tl-green">4</div><div class="tl-body"><h4>Save &amp; export</h4><p>Click <strong>Save</strong> to store in the database. Click <strong>All (N)</strong> to export full Excel, or <strong>Export by Account</strong> to filter by recipient.</p></div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="slide-num">18 / 20</div>
+</div>
+
+<!-- ═══════════════════════════════ SLIDE 19 — MANUAL: TROUBLESHOOT -->
+<div class="slide s19" id="s19">
+  <div class="blob" style="width:500px;height:500px;background:rgba(16,185,129,0.07);bottom:-150px;left:-100px;border-radius:50%;"></div>
+  <div style="width:100%;max-width:1100px;">
+    <div class="manual-header">
+      <div class="mh-tag">User Manual — Section 4</div>
+      <h2>Troubleshooting & Common Questions</h2>
+    </div>
+    <div class="w-grid g3" style="margin-top:4px;">
+      <div class="card-red">
+        <div class="mod-tag" style="color:#fca5a5;">COMMON ISSUES</div>
+        <ul class="feat-list" style="gap:10px;">
+          <li class="red"><span><strong>Can't log in</strong> — Check caps lock; reset password via "Forgot Password". If 2FA fails, use backup codes from your profile settings.</span></li>
+          <li class="red"><span><strong>Site visit not syncing</strong> — Open the app, go to Settings → Force Sync. If still stuck, check connectivity and retry.</span></li>
+          <li class="red"><span><strong>Scanner AI quota exhausted</strong> — Wait until midnight Pacific (08:00 Sudan time). Your images are preserved — click Retry All tomorrow.</span></li>
+          <li class="red"><span><strong>Excel export doesn't download</strong> — Allow downloads in browser settings. Try Chrome if using another browser.</span></li>
+          <li class="red"><span><strong>Approval stuck</strong> — Contact the next approver — they may not have seen the notification. Admins can escalate via the Super Admin panel.</span></li>
+        </ul>
+      </div>
+      <div class="card-amber">
+        <div class="mod-tag" style="color:#fcd34d;">FREQUENTLY ASKED</div>
+        <ul class="feat-list" style="gap:10px;">
+          <li class="amber"><span><strong>Can I use the platform on my phone?</strong> Yes — the web app is fully mobile-responsive. The Flutter app offers full offline capabilities.</span></li>
+          <li class="amber"><span><strong>What happens if internet cuts out mid-visit?</strong> The mobile app saves all data locally. When connectivity returns, it syncs automatically — no data is lost.</span></li>
+          <li class="amber"><span><strong>Can two people work on the same session?</strong> Yes — the platform supports multiple concurrent sessions. Real-time updates are visible to all users.</span></li>
+          <li class="amber"><span><strong>How do I add a new staff member?</strong> Admins go to Staff Directory → Add New Staff. Assign a role, hub, and email. The system sends onboarding instructions.</span></li>
+          <li class="amber"><span><strong>Can I correct AI-extracted data?</strong> Inline editing is on the roadmap. Currently, correct the value in the exported Excel file after download.</span></li>
+        </ul>
+      </div>
+      <div class="card-green">
+        <div class="mod-tag" style="color:#34d399;">GETTING HELP</div>
+        <ul class="feat-list" style="gap:10px;">
+          <li class="green"><span><strong>In-app Help</strong> — Click the ? icon in the sidebar to open the Help &amp; Support System with guided walkthroughs.</span></li>
+          <li class="green"><span><strong>Support Contacts</strong> — Admin-managed contact list accessible from the mobile app home screen and the web sidebar.</span></li>
+          <li class="green"><span><strong>Broadcast Announcements</strong> — Check the Notifications panel for important updates from PACT HQ broadcast by admins.</span></li>
+          <li class="green"><span><strong>Activity Audit</strong> — Super Admins can view any user's recent activity log from the Super Admin Data Management Centre.</span></li>
+          <li class="green"><span><strong>System status</strong> — The "All Systems Operational" indicator on the login page shows real-time platform health.</span></li>
+        </ul>
+        <div class="card-hl" style="margin-top:14px;">
+          <div class="mod-tag">SECURITY TIPS</div>
+          <ul class="feat-list" style="gap:6px;margin-top:6px;">
+            <li>Enable TOTP 2FA on your account for maximum security</li>
+            <li>Never share your password — use the built-in password reset</li>
+            <li>Log out from shared devices — session persists until logout</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="slide-num">19 / 20</div>
+</div>
+
+<!-- ═══════════════════════════════ SLIDE 20 — CLOSE -->
+<div class="slide s20" id="s20">
+  <div class="blob" style="width:700px;height:700px;background:rgba(37,99,235,0.08);top:-250px;right:-250px;border-radius:50%;"></div>
+  <div class="blob" style="width:400px;height:400px;background:rgba(139,92,246,0.06);bottom:-100px;left:-100px;border-radius:50%;"></div>
+  <div style="font-size:48px;margin-bottom:20px;">🛡️</div>
+  <h1>PACT Command Center</h1>
+  <p class="sub">Empowering humanitarian field operations across Sudan and beyond —<br/>built to scale, designed for the field, trusted by teams.</p>
+  <p class="sub-ar">تمكين العمليات الإنسانية الميدانية في السودان وخارجه</p>
+  <div class="close-pills">
+    <span class="close-pill">🌍 7 Countries Active</span>
+    <span class="close-pill">👥 850+ Field Staff</span>
+    <span class="close-pill">🤖 Multi-AI Pipeline</span>
+    <span class="close-pill">📴 Full Offline Mode</span>
+    <span class="close-pill">🔒 RLS + 2FA Security</span>
+    <span class="close-pill">💬 Own Comms Channel</span>
+    <span class="close-pill">📊 Real-Time Analytics</span>
+    <span class="close-pill">📱 iOS &amp; Android App</span>
+    <span class="close-pill">🏦 AI Receipt Scanner</span>
+    <span class="close-pill">🗺️ Interactive Maps</span>
+  </div>
+  <p style="margin-top:36px;font-size:12px;opacity:0.3;letter-spacing:.5px;">PACT Consultancy — Command Center Platform — Confidential — March 2026 — Version 2.0</p>
+  <div class="slide-num">20 / 20</div>
+</div>
+
+<script>
+const slides = document.querySelectorAll('.slide');
+const dotsWrap = document.getElementById('navDots');
+slides.forEach((_,i)=>{
+  const b=document.createElement('button');
+  b.className='nav-dot'+(i===0?' active':'');
+  b.title='Slide '+(i+1);
+  b.onclick=()=>slides[i].scrollIntoView({behavior:'smooth'});
+  dotsWrap.appendChild(b);
+});
+const dots=document.querySelectorAll('.nav-dot');
+slides.forEach(s=>{
+  new IntersectionObserver(entries=>{
+    entries.forEach(e=>{
+      if(e.isIntersecting){
+        const idx=Array.from(slides).indexOf(e.target);
+        dots.forEach((d,i)=>d.classList.toggle('active',i===idx));
+      }
+    });
+  },{threshold:0.55}).observe(s);
+});
+document.addEventListener('keydown',e=>{
+  const a=Array.from(dots).findIndex(d=>d.classList.contains('active'));
+  if((e.key==='ArrowDown'||e.key==='PageDown')&&a<slides.length-1) slides[a+1].scrollIntoView({behavior:'smooth'});
+  if((e.key==='ArrowUp'||e.key==='PageUp')&&a>0) slides[a-1].scrollIntoView({behavior:'smooth'});
+});
+</script>
+</body>
+</html>
