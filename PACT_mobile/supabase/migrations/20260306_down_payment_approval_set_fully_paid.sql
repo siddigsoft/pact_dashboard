@@ -66,7 +66,7 @@ BEGIN
       NOW()
     ) RETURNING id INTO transaction_record;
 
-    -- Update wallet balance (support balance_cents and/or balances jsonb)
+    -- Update wallet balance and total_earned (advance is part of earnings; balance is physical cash given).
     UPDATE wallets
     SET
       balances = jsonb_set(

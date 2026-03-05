@@ -10,13 +10,14 @@ export interface Wallet {
 
 // Transaction types allowed by production Supabase database
 export type WalletTransactionType = 
-  | 'earning'          // Earnings from completed site visits (current)
-  | 'site_visit_fee'   // Legacy: Earnings from completed site visits
-  | 'withdrawal'       // Money withdrawn from wallet (negative)
-  | 'adjustment'       // Manual admin adjustments (can be +/-)
-  | 'bonus'            // Performance rewards (positive)
-  | 'penalty'          // Deductions for violations (negative)
-  | 'down_payment';    // Down payment for transportation budget
+  | 'earning'            // Earnings from completed site visits (current)
+  | 'site_visit_fee'     // Legacy: Earnings from completed site visits
+  | 'withdrawal'         // Money withdrawn from wallet (negative)
+  | 'adjustment'         // Manual admin adjustments (can be +/-)
+  | 'bonus'              // Performance rewards (positive)
+  | 'penalty'            // Deductions for violations (negative)
+  | 'down_payment'       // Down payment for transportation budget
+  | 'down_payment_advance'; // Advance disbursed (approved/fully_paid/partially_paid)
 
 export interface WalletTransaction {
   id: string;

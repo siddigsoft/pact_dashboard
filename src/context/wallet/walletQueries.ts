@@ -26,6 +26,7 @@ export const walletQueryKeys = {
   transactions: (userId: string) => ['wallet-transactions', userId] as const,
   withdrawalRequests: (userId: string) => ['withdrawal-requests', userId] as const,
   supervisedWithdrawalRequests: (userId: string) => ['supervised-withdrawal-requests', userId] as const,
+  disbursedAdvanceRequestIds: (userId: string) => ['disbursed-advance-request-ids', userId] as const,
 };
 
 function transformWalletFromDB(data: any): Wallet {
@@ -145,6 +146,18 @@ async function fetchWithdrawalRequests(userId: string): Promise<WithdrawalReques
   return (data || []).map(transformWithdrawalRequestFromDB);
 }
 
+/** IDs of down_payment_requests in approved/fully_paid/partially_paid (disbursed advances). */
+async function fetchDisbursedAdvanceRequestIds(userId: string): Promise<string[]> {
+  const { data, error } = await supabase
+    .from('down_payment_requests')
+    .select('id')
+    .eq('requested_by', userId)
+    .in('status', ['approved', 'fully_paid', 'partially_paid']);
+
+  if (error) return [];
+  return (data || []).map((r: { id: string }) => r.id);
+}
+
 async function fetchSupervisedWithdrawalRequests(user: UserForWallet): Promise<SupervisedWithdrawalRequest[]> {
   const userRole = user.role?.toLowerCase();
   const isSupervisorRole = userRole === 'supervisor' || userRole === 'hubsupervisor' || userRole === 'fom';
@@ -252,6 +265,16 @@ export function useWithdrawalRequestsQuery(userId: string | undefined) {
   });
 }
 
+export function useDisbursedAdvanceRequestIdsQuery(userId: string | undefined) {
+  return useQuery({
+    queryKey: walletQueryKeys.disbursedAdvanceRequestIds(userId!),
+    queryFn: () => fetchDisbursedAdvanceRequestIds(userId!),
+    staleTime: STALE_MS,
+    placeholderData: (prev) => prev,
+    enabled: !!userId,
+  });
+}
+
 export function useSupervisedWithdrawalRequestsQuery(user: UserForWallet | null) {
   const userRole = user?.role?.toLowerCase();
   const isSupervisorRole = userRole === 'supervisor' || userRole === 'hubsupervisor' || userRole === 'fom';
@@ -283,6 +306,7 @@ export function useInvalidateWalletQueries() {
       queryClient.invalidateQueries({ queryKey: ['wallet-transactions'] });
       queryClient.invalidateQueries({ queryKey: ['withdrawal-requests'] });
       queryClient.invalidateQueries({ queryKey: ['supervised-withdrawal-requests'] });
+      queryClient.invalidateQueries({ queryKey: ['disbursed-advance-request-ids'] });
     },
   };
 }

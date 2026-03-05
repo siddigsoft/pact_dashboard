@@ -13,6 +13,7 @@ import {
   useTransactionsQuery,
   useWithdrawalRequestsQuery,
   useSupervisedWithdrawalRequestsQuery,
+  useDisbursedAdvanceRequestIdsQuery,
   useInvalidateWalletQueries,
   walletQueryKeys,
   type UserForWallet,
@@ -177,11 +178,13 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const transactionsQuery = useTransactionsQuery(userId);
   const withdrawalRequestsQuery = useWithdrawalRequestsQuery(userId);
   const supervisedQuery = useSupervisedWithdrawalRequestsQuery(userForSupervised);
+  const disbursedAdvanceIdsQuery = useDisbursedAdvanceRequestIdsQuery(userId);
 
   const wallet = walletQuery.data ?? null;
   const transactions = transactionsQuery.data ?? [];
   const withdrawalRequests = withdrawalRequestsQuery.data ?? [];
   const supervisedWithdrawalRequests = supervisedQuery.data ?? [];
+  const disbursedAdvanceRequestIds = disbursedAdvanceIdsQuery.data ?? [];
 
   const loading = !authReady || (!!userId && (walletQuery.isLoading || transactionsQuery.isLoading || withdrawalRequestsQuery.isLoading));
 
@@ -204,21 +207,33 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     const dayOfWeek = new Date(utcNow).getUTCDay();
     const weekStartMs = utcNow - (dayOfWeek * 24 * 60 * 60 * 1000);
 
-    const weeklyEarnings = earningTransactions
+    // This week = full total (earnings + disbursed advances this week), no subtraction.
+    const disbursedIdSet = new Set(disbursedAdvanceRequestIds);
+    const advancesThisWeek = transactions
+      .filter(t => t.type === 'down_payment_advance' && disbursedIdSet.has(t.metadata?.down_payment_request_id))
       .filter(t => new Date(t.createdAt).getTime() >= weekStartMs)
       .reduce((sum, t) => sum + t.amount, 0);
+    const weeklyEarnings =
+      earningTransactions
+        .filter(t => new Date(t.createdAt).getTime() >= weekStartMs)
+        .reduce((sum, t) => sum + t.amount, 0) + advancesThisWeek;
 
     const monthStartMs = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1);
-    const monthlyEarnings = earningTransactions
+    const advancesThisMonth = transactions
+      .filter(t => t.type === 'down_payment_advance' && disbursedIdSet.has(t.metadata?.down_payment_request_id))
       .filter(t => new Date(t.createdAt).getTime() >= monthStartMs)
       .reduce((sum, t) => sum + t.amount, 0);
+    const monthlyEarnings =
+      earningTransactions
+        .filter(t => new Date(t.createdAt).getTime() >= monthStartMs)
+        .reduce((sum, t) => sum + t.amount, 0) + advancesThisMonth;
 
     const weeklySiteVisits = earningTransactions
       .filter(t => new Date(t.createdAt).getTime() >= weekStartMs)
       .length;
 
     const calculatedEarned = transactions
-      .filter(t => t.type === 'earning' || t.type === 'site_visit_fee' || t.type === 'adjustment')
+      .filter(t => t.type === 'earning' || t.type === 'site_visit_fee' || t.type === 'adjustment' || t.type === 'down_payment_advance')
       .filter(t => t.amount > 0)
       .reduce((sum, t) => sum + t.amount, 0);
 
@@ -226,21 +241,28 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       .filter(t => t.type === 'withdrawal')
       .reduce((sum, t) => sum + Math.abs(t.amount), 0);
 
-    const totalEarned = Math.max(wallet.totalEarned, calculatedEarned);
+    const totalEarned = Math.max(wallet.totalEarned ?? 0, calculatedEarned);
+
+    // Balance = money not yet received (total earned minus advances already paid out).
+    // Only count advances whose request is in approved / fully_paid / partially_paid.
+    const advancesReceived = transactions
+      .filter(t => t.type === 'down_payment_advance' && disbursedIdSet.has(t.metadata?.down_payment_request_id))
+      .reduce((sum, t) => sum + t.amount, 0);
+    const balanceNotYetReceived = Math.max(0, totalEarned - advancesReceived);
     const totalWithdrawn = Math.max(wallet.totalWithdrawn, calculatedWithdrawn);
 
     return {
       totalEarned,
       totalWithdrawn,
       pendingWithdrawals,
-      currentBalance: wallet.balances.SDG || 0,
+      currentBalance: balanceNotYetReceived,
       totalTransactions: transactions.length,
       completedSiteVisits,
       weeklyEarnings,
       monthlyEarnings,
       weeklySiteVisits,
     };
-  }, [wallet, transactions, withdrawalRequests]);
+  }, [wallet, transactions, withdrawalRequests, disbursedAdvanceRequestIds]);
 
   const refreshWallet = useCallback(async (_showErrorToast?: boolean) => {
     await invalidate.invalidateAll(userId);
@@ -792,6 +814,20 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
   const getBalance = (currency: string = 'SDG'): number => {
     if (!wallet) return 0;
+    if (currency === 'SDG' && transactions?.length) {
+      const earned = Math.max(
+        wallet.totalEarned ?? 0,
+        transactions
+          .filter(t => ['earning', 'site_visit_fee', 'adjustment', 'down_payment_advance'].includes(t.type))
+          .filter(t => t.amount > 0)
+          .reduce((s, t) => s + t.amount, 0)
+      );
+      const disbursedIdSet = new Set(disbursedAdvanceRequestIds);
+      const advances = transactions
+        .filter(t => t.type === 'down_payment_advance' && disbursedIdSet.has(t.metadata?.down_payment_request_id))
+        .reduce((s, t) => s + t.amount, 0);
+      return Math.max(0, earned - advances);
+    }
     return wallet.balances[currency] || 0;
   };
 
