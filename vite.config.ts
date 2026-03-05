@@ -93,7 +93,12 @@ export default defineConfig(({ mode }) => ({
       'xlsx',
       'docx',
       'html2canvas',
-      '@octokit/rest'
+      '@octokit/rest',
+      '@google/genai',
+      'p-limit',
+      'p-retry',
+      'drizzle-zod',
+      'zod-validation-error'
     ]
   },
   esbuild: {
