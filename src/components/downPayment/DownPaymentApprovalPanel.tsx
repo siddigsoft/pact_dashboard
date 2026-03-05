@@ -1,5 +1,4 @@
 import { useState, useMemo, useRef, useEffect, type ReactNode } from 'react';
-import { useVirtualizer } from '@tanstack/react-virtual';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -107,37 +106,14 @@ function VirtualizedRequestList({
   requests: DownPaymentRequest[];
   renderCard: (request: DownPaymentRequest) => ReactNode;
 }) {
-  const parentRef = useRef<HTMLDivElement>(null);
-  const virtualizer = useVirtualizer({
-    count: requests.length,
-    getScrollElement: () => parentRef.current,
-    estimateSize: () => 210,
-    overscan: 5,
-  });
   if (requests.length === 0) return null;
   return (
-    <div ref={parentRef} className="min-h-[400px] max-h-[70vh] overflow-auto rounded-md">
-      <div style={{ height: virtualizer.getTotalSize(), position: 'relative' }}>
-        {virtualizer.getVirtualItems().map((virtualRow) => {
-          const request = requests[virtualRow.index];
-          return (
-            <div
-              key={request.id}
-              style={{
-                position: 'absolute',
-                top: 0,
-                left: 0,
-                width: '100%',
-                height: `${virtualRow.size}px`,
-                transform: `translateY(${virtualRow.start}px)`,
-                paddingBottom: 12,
-              }}
-            >
-              {renderCard(request)}
-            </div>
-          );
-        })}
-      </div>
+    <div className="max-h-[70vh] overflow-y-auto rounded-md space-y-3 pr-1">
+      {requests.map((request) => (
+        <div key={request.id}>
+          {renderCard(request)}
+        </div>
+      ))}
     </div>
   );
 }
@@ -375,7 +351,11 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
 
     setProcessing(true);
     try {
-      const success = userRole === 'supervisor'
+      const useSupervisorPath =
+      userRole === 'supervisor' ||
+      selectedRequest.status === 'pending_supervisor';
+
+    const success = useSupervisorPath
         ? await supervisorApprove({
             requestId: selectedRequest.id,
             approvedBy: currentUser.id,
@@ -1876,6 +1856,28 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
                 >
                   <Undo2 className="h-4 w-4 mr-1" />
                   Revert
+                </Button>
+              </>
+            )}
+
+            {userRole === 'admin' && request.status === 'pending_supervisor' && (
+              <>
+                <Button
+                  size="sm"
+                  onClick={() => openActionDialog(request, 'approve')}
+                  data-testid={`button-admin-override-approve-${request.id}`}
+                >
+                  <CheckCircle2 className="h-4 w-4 mr-1" />
+                  Approve (Override)
+                </Button>
+                <Button
+                  size="sm"
+                  variant="destructive"
+                  onClick={() => openActionDialog(request, 'reject')}
+                  data-testid={`button-admin-override-reject-${request.id}`}
+                >
+                  <XCircle className="h-4 w-4 mr-1" />
+                  Reject
                 </Button>
               </>
             )}
