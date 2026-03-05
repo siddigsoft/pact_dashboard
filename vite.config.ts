@@ -37,12 +37,13 @@ function geminiOcrPlugin() {
             const { base64, mimeType } = JSON.parse(body);
             const { GoogleGenAI } = await import('@google/genai');
 
+            const apiKey = process.env.GOOGLE_AI_API_KEY || process.env.AI_INTEGRATIONS_GEMINI_API_KEY || '';
+            const baseUrl = process.env.AI_INTEGRATIONS_GEMINI_BASE_URL;
             const ai = new GoogleGenAI({
-              apiKey: process.env.AI_INTEGRATIONS_GEMINI_API_KEY || '_DUMMY_API_KEY_',
-              httpOptions: {
-                apiVersion: '',
-                baseUrl: process.env.AI_INTEGRATIONS_GEMINI_BASE_URL || 'http://localhost:1106/modelfarm/gemini',
-              } as any,
+              apiKey,
+              ...(baseUrl && baseUrl !== 'http://localhost:1106/modelfarm/gemini' ? {
+                httpOptions: { apiVersion: '', baseUrl } as any,
+              } : {}),
             });
 
             const response = await ai.models.generateContent({
