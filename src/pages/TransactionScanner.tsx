@@ -52,42 +52,63 @@ function amountNum(v: number | string): number {
   return isNaN(n) ? 0 : n;
 }
 
-async function extractFromImage(base64: string, mimeType: string): Promise<Partial<TxRow>> {
-  const res = await fetch('/api/extract-transaction', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ base64, mimeType }),
-  });
+function sleep(ms: number) { return new Promise(r => setTimeout(r, ms)); }
 
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({ error: res.statusText }));
-    throw new Error(`Extraction failed (${res.status}): ${data.error || res.statusText}`);
+async function extractFromImageWithRetry(base64: string, mimeType: string, maxRetries = 4): Promise<Partial<TxRow>> {
+  let lastError: Error | null = null;
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    if (attempt > 0) {
+      const wait = Math.min(2000 * Math.pow(2, attempt - 1), 16000);
+      await sleep(wait);
+    }
+    try {
+      const res = await fetch('/api/extract-transaction', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ base64, mimeType }),
+      });
+
+      if (res.status === 429 || res.status === 503) {
+        const data = await res.json().catch(() => ({}));
+        lastError = new Error(`Rate limited — retrying… (${data.error || res.statusText})`);
+        continue;
+      }
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({ error: res.statusText }));
+        throw new Error(`Extraction failed (${res.status}): ${data.error || res.statusText}`);
+      }
+
+      const { text, error } = await res.json();
+      if (error) throw new Error(error);
+
+      let extracted: any = {};
+      try {
+        const clean = (text || '{}').replace(/```json\n?|```\n?/g, '').trim();
+        extracted = JSON.parse(clean);
+      } catch {
+        throw new Error('Could not parse AI response as JSON');
+      }
+
+      const { date, time } = parseDateTime(extracted.date_time || '');
+      return {
+        transaction_id: extracted.transaction_id || '',
+        transaction_date: date,
+        transaction_time: time,
+        from_account: extracted.from_account || '',
+        to_account: extracted.to_account || '',
+        recipient_name: extracted.recipient_name || '',
+        mobile_number: extracted.mobile_number || 'N/A',
+        comment: extracted.comment || 'N/A',
+        amount: extracted.amount ?? 0,
+        currency: 'SDG',
+      };
+    } catch (err: any) {
+      if (err.message?.includes('Rate limited')) { lastError = err; continue; }
+      throw err;
+    }
   }
-
-  const { text, error } = await res.json();
-  if (error) throw new Error(error);
-
-  let extracted: any = {};
-  try {
-    const clean = (text || '{}').replace(/```json\n?|```\n?/g, '').trim();
-    extracted = JSON.parse(clean);
-  } catch {
-    throw new Error('Could not parse AI response as JSON');
-  }
-
-  const { date, time } = parseDateTime(extracted.date_time || '');
-  return {
-    transaction_id: extracted.transaction_id || '',
-    transaction_date: date,
-    transaction_time: time,
-    from_account: extracted.from_account || '',
-    to_account: extracted.to_account || '',
-    recipient_name: extracted.recipient_name || '',
-    mobile_number: extracted.mobile_number || 'N/A',
-    comment: extracted.comment || 'N/A',
-    amount: extracted.amount ?? 0,
-    currency: 'SDG',
-  };
+  throw lastError || new Error('Max retries exceeded');
 }
 
 function fileToBase64(file: File): Promise<{ base64: string; mimeType: string }> {
@@ -209,9 +230,27 @@ export default function TransactionScanner() {
   const [savedBatch, setSavedBatch] = useState<string | null>(null);
   const dropRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const fileMapRef = useRef<Map<string, File>>(new Map());
 
   const updateRow = (id: string, patch: Partial<TxRow>) =>
     setRows(prev => prev.map(r => r.id === id ? { ...r, ...patch } : r));
+
+  const processOneRow = useCallback(async (rowId: string, file: File) => {
+    updateRow(rowId, { status: 'processing', error: undefined });
+    try {
+      const { base64, mimeType } = await fileToBase64(file);
+      const extracted = await extractFromImageWithRetry(base64, mimeType);
+      updateRow(rowId, { status: 'done', ...extracted });
+    } catch (err: any) {
+      updateRow(rowId, { status: 'error', error: err.message || 'Extraction failed' });
+    }
+  }, []);
+
+  const retryRow = useCallback(async (rowId: string) => {
+    const file = fileMapRef.current.get(rowId);
+    if (!file) return;
+    await processOneRow(rowId, file);
+  }, [processOneRow]);
 
   const processFiles = useCallback(async (files: File[]) => {
     const newRows: TxRow[] = files.map(f => ({
@@ -222,21 +261,14 @@ export default function TransactionScanner() {
       from_account: '', to_account: '', recipient_name: '',
       mobile_number: 'N/A', comment: 'N/A', amount: 0, currency: 'SDG',
     }));
+    newRows.forEach((r, i) => fileMapRef.current.set(r.id, files[i]));
     setRows(prev => [...prev, ...newRows]);
 
     for (let i = 0; i < files.length; i++) {
-      const file = files[i];
-      const row = newRows[i];
-      updateRow(row.id, { status: 'processing' });
-      try {
-        const { base64, mimeType } = await fileToBase64(file);
-        const extracted = await extractFromImage(base64, mimeType);
-        updateRow(row.id, { status: 'done', ...extracted });
-      } catch (err: any) {
-        updateRow(row.id, { status: 'error', error: err.message || 'Extraction failed' });
-      }
+      await processOneRow(newRows[i].id, files[i]);
+      if (i < files.length - 1) await sleep(1200);
     }
-  }, []);
+  }, [processOneRow]);
 
   const onDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -365,7 +397,7 @@ export default function TransactionScanner() {
       {totalCount > 0 && (
         <Card className="border-[#1D3461]/20">
           <CardContent className="py-4 space-y-3">
-            <div className="flex items-center justify-between text-sm">
+            <div className="flex items-center justify-between text-sm flex-wrap gap-2">
               <span className="font-medium">
                 {processing ? (
                   <span className="flex items-center gap-2 text-[#1D3461]">
@@ -377,7 +409,17 @@ export default function TransactionScanner() {
                   </span>
                 )}
               </span>
-              <span className="text-muted-foreground">{processedCount} / {totalCount} files</span>
+              <div className="flex items-center gap-3">
+                {!processing && rows.some(r => r.status === 'error') && (
+                  <button
+                    onClick={() => rows.filter(r => r.status === 'error').forEach(r => retryRow(r.id))}
+                    className="flex items-center gap-1 text-xs text-amber-600 hover:text-amber-700 font-medium"
+                  >
+                    <RefreshCw className="h-3 w-3" /> Retry all failed
+                  </button>
+                )}
+                <span className="text-muted-foreground">{processedCount} / {totalCount} files</span>
+              </div>
             </div>
             <Progress value={totalCount > 0 ? (processedCount / totalCount) * 100 : 0} className="h-2" />
             <div className="flex flex-wrap gap-2">
@@ -391,9 +433,9 @@ export default function TransactionScanner() {
                   {r.status === 'done' && <CheckCircle2 className="h-3 w-3" />}
                   {r.status === 'error' && <AlertCircle className="h-3 w-3" />}
                   {r.status === 'processing' && <Loader2 className="h-3 w-3 animate-spin" />}
-                  <span className="max-w-[120px] truncate">{r.fileName}</span>
+                  <span className="max-w-[120px] truncate" title={r.fileName}>{r.fileName}</span>
                   {r.status === 'error' && (
-                    <button onClick={e => { e.stopPropagation(); /* retry */ }} title={r.error}>
+                    <button onClick={e => { e.stopPropagation(); retryRow(r.id); }} title={`Retry: ${r.error}`}>
                       <RefreshCw className="h-3 w-3" />
                     </button>
                   )}
@@ -470,7 +512,7 @@ export default function TransactionScanner() {
                       <td className="px-3 py-2 text-muted-foreground text-xs">{idx + 1}</td>
                       <td className="px-3 py-2">
                         <Input value={row.transaction_id} onChange={e => updateRow(row.id, { transaction_id: e.target.value })}
-                          className="h-7 text-xs w-32 font-mono" />
+                          className="h-7 text-xs min-w-[11rem] font-mono" />
                       </td>
                       <td className="px-3 py-2">
                         <Input value={row.transaction_time} onChange={e => updateRow(row.id, { transaction_time: e.target.value })}
@@ -478,30 +520,30 @@ export default function TransactionScanner() {
                       </td>
                       <td className="px-3 py-2">
                         <Input value={row.from_account} onChange={e => updateRow(row.id, { from_account: e.target.value })}
-                          className="h-7 text-xs w-40 font-mono" />
+                          className="h-7 text-xs min-w-[13rem] font-mono" />
                       </td>
                       <td className="px-3 py-2">
                         <Input value={row.to_account} onChange={e => updateRow(row.id, { to_account: e.target.value })}
-                          className="h-7 text-xs w-40 font-mono" />
+                          className="h-7 text-xs min-w-[13rem] font-mono" />
                       </td>
                       <td className="px-3 py-2">
                         <Input value={row.recipient_name} onChange={e => updateRow(row.id, { recipient_name: e.target.value })}
-                          className="h-7 text-xs w-44" />
+                          className="h-7 text-xs min-w-[14rem]" dir="auto" />
                       </td>
                       <td className="px-3 py-2">
                         <Input value={row.mobile_number} onChange={e => updateRow(row.id, { mobile_number: e.target.value })}
-                          className="h-7 text-xs w-28" />
+                          className="h-7 text-xs w-32" />
                       </td>
                       <td className="px-3 py-2">
                         <Input value={row.comment} onChange={e => updateRow(row.id, { comment: e.target.value })}
-                          className="h-7 text-xs w-32" />
+                          className="h-7 text-xs min-w-[10rem]" dir="auto" />
                       </td>
                       <td className="px-3 py-2">
                         <Input
                           type="number"
                           value={amountNum(row.amount)}
                           onChange={e => updateRow(row.id, { amount: parseFloat(e.target.value) || 0 })}
-                          className="h-7 text-xs w-32 text-right font-mono"
+                          className="h-7 text-xs w-36 text-right font-mono"
                         />
                       </td>
                       <td className="px-3 py-2">

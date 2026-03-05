@@ -62,9 +62,11 @@ function geminiOcrPlugin() {
             res.end(JSON.stringify({ text }));
           } catch (err: any) {
             console.error('[Gemini OCR] Error:', err.message);
-            res.statusCode = 500;
+            const msg = err.message || 'Gemini API call failed';
+            const isRateLimit = msg.includes('429') || msg.includes('RESOURCE_EXHAUSTED') || msg.toLowerCase().includes('quota');
+            res.statusCode = isRateLimit ? 429 : 500;
             res.setHeader('Content-Type', 'application/json');
-            res.end(JSON.stringify({ error: err.message || 'Gemini API call failed' }));
+            res.end(JSON.stringify({ error: msg }));
           }
         });
       });
