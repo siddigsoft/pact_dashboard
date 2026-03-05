@@ -11,11 +11,10 @@ config();
 // Models tried in order — each has its own daily quota
 // Server rotates through them internally, so the client never has to retry for model switching
 const GEMINI_MODELS = [
-  'gemini-2.0-flash-lite',              // 1500 RPD, 30 RPM
-  'gemini-2.0-flash',                   // 1500 RPD, 15 RPM
-  'gemini-2.5-flash-preview-04-17',     // 500 RPD, separate quota
-  'gemini-2.0-flash-exp',               // experimental, separate quota
-  'gemini-2.0-flash-thinking-exp-01-21',// thinking model, separate quota
+  'gemini-2.0-flash-lite',   // 1500 RPD free — primary
+  'gemini-2.0-flash',        // 1500 RPD free — secondary
+  'gemini-2.5-pro-exp-03-25',// experimental pro, separate quota
+  'gemini-2.0-pro-exp',      // experimental pro fallback
 ];
 // Track which models are unavailable this server session (exhausted daily OR 404/not-found)
 const unavailableModels = new Set<string>();
