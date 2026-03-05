@@ -136,9 +136,10 @@ async function extractBatch(
   throw new Error('All AI models at daily quota. Quotas reset at midnight Pacific time.');
 }
 
-function exportToExcel(rows: TxRow[], sessionName?: string) {
-  const done = rows.filter(r => r.status === 'done');
-  if (!done.length) return;
+function exportToExcel(rows: Array<Partial<TxRow> & Record<string, any>>, sessionName?: string) {
+  // Accept rows that have status === 'done', or rows that have no status field at all (loaded from DB)
+  const done = rows.filter(r => r.status === 'done' || r.status === undefined);
+  if (!done.length) { console.warn('[Export] No rows to export'); return; }
 
   const sorted = [...done].sort((a, b) => {
     if (a.transaction_date < b.transaction_date) return -1;
@@ -332,7 +333,24 @@ function exportToExcel(rows: TxRow[], sessionName?: string) {
   const fname = sessionName
     ? `PACT_Transfers_${sessionName.replace(/[^a-zA-Z0-9_-]/g, '_')}_${format(new Date(), 'yyyyMMdd')}.xlsx`
     : `PACT_Bank_Transfers_${format(new Date(), 'yyyyMMdd_HHmm')}.xlsx`;
-  XLSXStyle.writeFile(wb, fname);
+
+  try {
+    // In browser environments, writeFile (which relies on fs) is disabled.
+    // Always use Blob + object URL to trigger download.
+    const buf: ArrayBuffer = XLSXStyle.write(wb, { bookType: 'xlsx', type: 'array' });
+    const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = fname;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 2000);
+  } catch (err: any) {
+    console.error('[Export] Download error:', err);
+    alert(`Export failed: ${err?.message || 'Unknown error'}. Please try again.`);
+  }
 }
 
 function fmtDate(iso: string) {
