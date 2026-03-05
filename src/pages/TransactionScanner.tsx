@@ -5,7 +5,10 @@ import {
   Download, CheckCircle2, AlertCircle, Loader2, ScanLine,
   RefreshCw, Trash2, Upload, Clock
 } from 'lucide-react';
-import XLSXStyle from 'xlsx-js-style';
+// xlsx-js-style is CJS; Vite converts it — grab whichever export form is available
+import * as _XLSXStyleNS from 'xlsx-js-style';
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const XLSXStyle: any = (_XLSXStyleNS as any).default ?? _XLSXStyleNS;
 import { format, parse, isValid } from 'date-fns';
 
 type TxRow = {

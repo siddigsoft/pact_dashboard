@@ -184,7 +184,6 @@ export default defineConfig(({ mode }) => ({
       'jspdf',
       'jspdf-autotable',
       'xlsx',
-      'xlsx-js-style',
       'docx',
       'html2canvas',
       '@octokit/rest',
@@ -270,6 +269,9 @@ export default defineConfig(({ mode }) => ({
           }
           
           // Excel/CSV export
+          if (id.includes('xlsx-js-style')) {
+            return 'xlsx';
+          }
           if (id.includes('xlsx')) {
             return 'xlsx';
           }
