@@ -2581,6 +2581,44 @@ const MMP = () => {
     resolveOriginalCoordinatorId,
   ]);
 
+  const canRedispatchReturnedSite = (site: any): boolean => {
+    if (!site) return false;
+    const ad = site.additional_data || site.additionalData || {};
+    const normalizedStatus = normalizeStatus(site.status);
+
+    const wasDispatched = Boolean(
+      site.dispatched_at ||
+      site.dispatchedAt ||
+      site.dispatched_by ||
+      site.dispatchedBy ||
+      ad.dispatched_at ||
+      ad.dispatchedAt ||
+      ad.dispatched_by ||
+      ad.dispatchedBy
+    );
+
+    const hasApprovedAndCostedMarker = Boolean(
+      ad.approved_and_costed_at ||
+      ad.approvedAndCostedAt ||
+      ad.approved_and_costed_by ||
+      ad.approvedAndCostedBy ||
+      ad.costed_at ||
+      ad.costedAt ||
+      ad.costed_by ||
+      ad.costedBy ||
+      site.approved_and_costed_at ||
+      site.approvedAndCostedAt ||
+      site.costed_at ||
+      site.costedAt
+    );
+
+    const isApprovedAndCostedStatus =
+      normalizedStatus === 'costed' ||
+      normalizedStatus === 'approvedandcosted';
+
+    return wasDispatched && (hasApprovedAndCostedMarker || isApprovedAndCostedStatus);
+  };
+
   useEffect(() => {
     if (!returnedSiteActionDialog.open) {
       setShowReturnedBatchSiteList(false);
@@ -4794,20 +4832,22 @@ const MMP = () => {
                                                                 )}
                                                               </div>
                                                               <div className="flex items-center gap-1 flex-shrink-0">
-                                                                <Button
-                                                                  size="sm"
-                                                                  variant="outline"
-                                                                  className="text-xs h-7"
-                                                                  data-testid={`button-redispatch-${site.id}`}
-                                                                  onClick={(e) => {
-                                                                    e.stopPropagation();
-                                                                    setReturnedSiteActionDialog({ open: true, site, action: 'redispatch' });
-                                                                    setReturnedActionNotes('');
-                                                                  }}
-                                                                >
-                                                                  <RefreshCw className="h-3 w-3 mr-1" />
-                                                                  Re-dispatch
-                                                                </Button>
+                                                                {canRedispatchReturnedSite(site) && (
+                                                                  <Button
+                                                                    size="sm"
+                                                                    variant="outline"
+                                                                    className="text-xs h-7"
+                                                                    data-testid={`button-redispatch-${site.id}`}
+                                                                    onClick={(e) => {
+                                                                      e.stopPropagation();
+                                                                      setReturnedSiteActionDialog({ open: true, site, action: 'redispatch' });
+                                                                      setReturnedActionNotes('');
+                                                                    }}
+                                                                  >
+                                                                    <RefreshCw className="h-3 w-3 mr-1" />
+                                                                    Re-dispatch
+                                                                  </Button>
+                                                                )}
                                                                 <Button
                                                                   size="sm"
                                                                   variant="outline"
