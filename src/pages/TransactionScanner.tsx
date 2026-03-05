@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import {
   Download, CheckCircle2, AlertCircle, Loader2, ScanLine,
-  RefreshCw, Trash2, Upload, Clock, Save, FolderOpen, Database, CopyX
+  RefreshCw, Trash2, Upload, Clock, Save, FolderOpen, Database, CopyX, Filter, UserCheck
 } from 'lucide-react';
 import * as _XLSXStyleNS from 'xlsx-js-style';
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -356,6 +356,8 @@ export default function TransactionScanner() {
   const [saveName, setSaveName] = useState('');
   const [saving, setSaving] = useState(false);
   const [autoSaved, setAutoSaved] = useState(false);
+  const [filterExportOpen, setFilterExportOpen] = useState(false);
+  const [selectedAccounts, setSelectedAccounts] = useState<Set<string>>(new Set());
   const dropRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const fileMapRef = useRef<Map<string, File>>(new Map());
@@ -378,6 +380,18 @@ export default function TransactionScanner() {
     const dupes = new Set<string>();
     counts.forEach((count, id) => { if (count > 1) dupes.add(id); });
     return dupes;
+  }, [doneRows]);
+
+  // Unique recipients for the filtered export dialog — keyed by to_account
+  const uniqueRecipients = useMemo(() => {
+    const map = new Map<string, { name: string; account: string; count: number; total: number }>();
+    doneRows.forEach(r => {
+      const key = r.to_account || r.recipient_name || 'Unknown';
+      const ex = map.get(key);
+      if (ex) { ex.count++; ex.total += amountNum(r.amount); }
+      else map.set(key, { name: r.recipient_name || '', account: r.to_account || '', count: 1, total: amountNum(r.amount) });
+    });
+    return Array.from(map.values()).sort((a, b) => b.total - a.total);
   }, [doneRows]);
   const grandTotal = doneRows.reduce((s, r) => s + amountNum(r.amount), 0);
   const progressPct = rows.length > 0 ? (doneRows.length / rows.length) * 100 : 0;
@@ -573,11 +587,23 @@ export default function TransactionScanner() {
             </Button>
           )}
           {doneRows.length > 0 && (
-            <Button onClick={() => exportToExcel(rows)} className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white h-8 text-sm">
-              <Download className="h-4 w-4" />
-              Download Excel
-              <span className="bg-white/20 rounded px-1.5 py-0.5 text-xs font-mono">{doneCount}</span>
-            </Button>
+            <>
+              <Button
+                onClick={() => {
+                  setSelectedAccounts(new Set(uniqueRecipients.map(r => r.account || r.name)));
+                  setFilterExportOpen(true);
+                }}
+                variant="outline"
+                className="gap-2 h-8 text-sm border-emerald-600/40 text-emerald-700 hover:bg-emerald-50"
+              >
+                <Filter className="h-3.5 w-3.5" />
+                Export by Account
+              </Button>
+              <Button onClick={() => exportToExcel(rows)} className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white h-8 text-sm">
+                <Download className="h-4 w-4" />
+                All ({doneCount})
+              </Button>
+            </>
           )}
           {rows.length > 0 && !processing && (
             <Button variant="ghost" size="icon" onClick={clearAll} title="Clear all" className="h-8 w-8">
@@ -880,6 +906,111 @@ export default function TransactionScanner() {
         </div>
 
       </div>
+
+      {/* Filter Export Dialog */}
+      <Dialog open={filterExportOpen} onOpenChange={setFilterExportOpen}>
+        <DialogContent className="sm:max-w-lg max-h-[80vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <UserCheck className="h-5 w-5 text-emerald-600" />
+              Export by Account
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="flex-1 overflow-y-auto space-y-1 py-2 min-h-0">
+            {/* Select / Deselect all */}
+            <div className="flex items-center justify-between px-1 pb-2 border-b mb-2">
+              <span className="text-xs text-muted-foreground">
+                {selectedAccounts.size} of {uniqueRecipients.length} selected
+              </span>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setSelectedAccounts(new Set(uniqueRecipients.map(r => r.account || r.name)))}
+                  className="text-xs text-[#1D3461] hover:underline font-medium"
+                >Select all</button>
+                <span className="text-muted-foreground text-xs">·</span>
+                <button
+                  onClick={() => setSelectedAccounts(new Set())}
+                  className="text-xs text-muted-foreground hover:underline"
+                >Clear</button>
+              </div>
+            </div>
+
+            {/* Recipient list with checkboxes */}
+            {uniqueRecipients.map(rec => {
+              const key = rec.account || rec.name;
+              const checked = selectedAccounts.has(key);
+              const toggle = () => {
+                setSelectedAccounts(prev => {
+                  const next = new Set(prev);
+                  if (next.has(key)) next.delete(key); else next.add(key);
+                  return next;
+                });
+              };
+              return (
+                <label
+                  key={key}
+                  className={`flex items-center gap-3 px-3 py-2.5 rounded-lg cursor-pointer transition-colors ${
+                    checked ? 'bg-emerald-50 dark:bg-emerald-950/20' : 'hover:bg-muted/50'
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    onChange={toggle}
+                    className="accent-emerald-600 h-4 w-4 shrink-0"
+                  />
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium text-sm truncate" dir="auto">{rec.name || '—'}</p>
+                    <p className="text-xs text-muted-foreground font-mono">{rec.account}</p>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <p className="text-xs font-semibold text-[#0F2041]">
+                      {rec.total.toLocaleString('en', { minimumFractionDigits: 2 })}
+                    </p>
+                    <p className="text-xs text-muted-foreground">{rec.count} tx</p>
+                  </div>
+                </label>
+              );
+            })}
+          </div>
+
+          {/* Selected total preview */}
+          {selectedAccounts.size > 0 && (() => {
+            const selTotal = doneRows
+              .filter(r => selectedAccounts.has(r.to_account || r.recipient_name || 'Unknown'))
+              .reduce((s, r) => s + amountNum(r.amount), 0);
+            const selCount = doneRows.filter(r => selectedAccounts.has(r.to_account || r.recipient_name || 'Unknown')).length;
+            return (
+              <div className="border-t pt-3 flex items-center justify-between text-sm">
+                <span className="text-muted-foreground">{selCount} transactions · {selectedAccounts.size} accounts</span>
+                <span className="font-bold text-[#0F2041]">{selTotal.toLocaleString('en', { minimumFractionDigits: 2 })} SDG</span>
+              </div>
+            );
+          })()}
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setFilterExportOpen(false)}>Cancel</Button>
+            <Button
+              disabled={selectedAccounts.size === 0}
+              onClick={() => {
+                const filtered = rows.filter(r =>
+                  r.status === 'done' && selectedAccounts.has(r.to_account || r.recipient_name || 'Unknown')
+                );
+                const label = selectedAccounts.size === 1
+                  ? Array.from(selectedAccounts)[0].slice(-8)
+                  : `${selectedAccounts.size}_accounts`;
+                exportToExcel(filtered.map(r => ({ ...r, status: 'done' as const })), label);
+                setFilterExportOpen(false);
+              }}
+              className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white"
+            >
+              <Download className="h-4 w-4" />
+              Export {selectedAccounts.size > 0 ? `(${selectedAccounts.size} account${selectedAccounts.size !== 1 ? 's' : ''})` : ''}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Save Session Dialog */}
       <Dialog open={saveDialogOpen} onOpenChange={setSaveDialogOpen}>
