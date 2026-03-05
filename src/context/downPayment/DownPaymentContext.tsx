@@ -1032,28 +1032,44 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
 
     let success = 0;
     let failed = 0;
+    const failureReasons: string[] = [];
 
     // Use individual updates (not upsert) — upsert requires INSERT permission
     // which RLS may not grant; update only needs UPDATE permission
     const allRows = [...supervisorRows, ...adminRows];
 
-    if (allRows.length > 0) {
-      const results = await Promise.all(
-        allRows.map(({ id, ...updateData }) =>
-          supabase
-            .from('down_payment_requests')
-            .update(updateData)
-            .eq('id', id)
-        )
-      );
+    if (allRows.length === 0) {
+      toastRef.current({
+        title: 'No Eligible Requests / لا توجد طلبات مؤهلة',
+        description: `None of the selected requests match your role's approval tier. Check your tier selection (Tier 1 / Tier 2).`,
+        variant: 'destructive',
+      });
+      await refreshRequests();
+      return { success: 0, failed: data.requestIds.length };
+    }
 
-      for (const { error } of results) {
-        if (error) {
-          console.error('[BulkApprove] update failed:', error.message);
-          failed += 1;
-        } else {
-          success += 1;
-        }
+    const results = await Promise.all(
+      allRows.map(async ({ id, ...updateData }) => {
+        const { data: updated, error } = await supabase
+          .from('down_payment_requests')
+          .update(updateData)
+          .eq('id', id)
+          .select('id');
+        return { id, error, rowCount: updated?.length ?? 0 };
+      })
+    );
+
+    for (const { id, error, rowCount } of results) {
+      if (error) {
+        console.error('[BulkApprove] update failed for', id, ':', error.message, error.details, error.hint);
+        failureReasons.push(error.message || 'Unknown error');
+        failed += 1;
+      } else if (rowCount === 0) {
+        console.warn('[BulkApprove] 0 rows updated for', id, '— likely RLS or request already changed');
+        failureReasons.push(`Request ${id.substring(0, 8).toUpperCase()}: no rows updated (permission or status mismatch)`);
+        failed += 1;
+      } else {
+        success += 1;
       }
     }
 
@@ -1079,9 +1095,16 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
     }
 
     if (failed > 0 && success === 0) {
+      const reason = failureReasons[0] || 'Permission denied or status mismatch';
       toastRef.current({
         title: 'Approval Failed / فشل الموافقة',
-        description: `${failed} request${failed > 1 ? 's' : ''} could not be approved`,
+        description: `${failed} request${failed > 1 ? 's' : ''} could not be approved. ${reason}`,
+        variant: 'destructive',
+      });
+    } else if (failed > 0) {
+      toastRef.current({
+        title: 'Partial Failure / فشل جزئي',
+        description: `${failed} of ${allRows.length} request${failed > 1 ? 's' : ''} failed: ${failureReasons[0] || 'Permission or status mismatch'}`,
         variant: 'destructive',
       });
     }
