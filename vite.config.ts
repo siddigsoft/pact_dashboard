@@ -111,9 +111,8 @@ async function callGeminiWithRotation(
 // ─── Groq fallback (free, Llama 3.2 Vision) ───────────────────────────────
 // Models: llama-3.2-11b-vision-preview (7000 RPD), llama-3.2-90b-vision-preview (3500 RPD)
 const GROQ_MODELS = [
-  'llama-3.2-11b-vision-preview',  // 7000 req/day, 30 RPM — primary
-  'llama-3.2-90b-vision-preview',  // 3500 req/day, 15 RPM — secondary
-  'meta-llama/llama-4-scout-17b-16e-instruct', // Llama 4 if available
+  'meta-llama/llama-4-scout-17b-16e-instruct',   // Llama 4 Scout — vision capable, primary
+  'meta-llama/llama-4-maverick-17b-128e-instruct', // Llama 4 Maverick — vision capable, fallback
 ];
 const unavailableGroqModels = new Set<string>();
 
