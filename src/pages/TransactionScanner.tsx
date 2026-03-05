@@ -5,7 +5,7 @@ import {
   Download, CheckCircle2, AlertCircle, Loader2, ScanLine,
   RefreshCw, Trash2, Upload, Clock
 } from 'lucide-react';
-import * as XLSX from 'xlsx';
+import XLSXStyle from 'xlsx-js-style';
 import { format, parse, isValid } from 'date-fns';
 
 type TxRow = {
@@ -98,8 +98,11 @@ async function extractBatch(
     const data = await res.json().catch(() => ({ error: res.statusText }));
 
     if (res.status === 429) {
-      const waitSec = data.retryAfterSec ?? 60;
-      onStatus?.(`Waiting ${waitSec}s — all AI models at quota…`);
+      if (data.isDailyExhausted) {
+        throw new Error('All AI models at daily quota. Quotas reset at midnight Pacific time.');
+      }
+      const waitSec = Math.min(data.retryAfterSec ?? 30, 60);
+      onStatus?.(`Rate limited — waiting ${waitSec}s…`);
       await sleep(waitSec * 1000);
       continue;
     }
@@ -126,88 +129,116 @@ function exportToExcel(rows: TxRow[]) {
   });
 
   const groups: Record<string, TxRow[]> = {};
-  sorted.forEach(r => {
-    const d = r.transaction_date || 'Unknown';
+  sorted.forEach(row => {
+    const d = row.transaction_date || 'Unknown';
     if (!groups[d]) groups[d] = [];
-    groups[d].push(r);
+    groups[d].push(row);
   });
 
-  const G = { font: { bold: true, color: { rgb: 'FFFFFF' }, sz: 13 }, fill: { fgColor: { rgb: '0F2041' } } };
-  const H = { font: { bold: true, color: { rgb: 'FFFFFF' }, sz: 11 }, fill: { fgColor: { rgb: '1D3461' } }, alignment: { horizontal: 'center' } };
-  const D = { font: { bold: true, sz: 11, color: { rgb: '1D3461' } }, fill: { fgColor: { rgb: 'D9E8FF' } } };
-  const S = { font: { bold: true, sz: 11 }, fill: { fgColor: { rgb: 'E8F5E9' } } };
-  const SUM = { font: { bold: true, sz: 10, color: { rgb: '1D3461' } }, fill: { fgColor: { rgb: 'EEF3FB' } } };
+  // Style definitions
+  const sTitle  = { font: { bold: true, sz: 14, color: { rgb: '0F2041' } }, fill: { patternType: 'solid', fgColor: { rgb: 'FFFFFF' } } };
+  const sMeta   = { font: { italic: true, sz: 9, color: { rgb: '888888' } }, fill: { patternType: 'solid', fgColor: { rgb: 'FFFFFF' } } };
+  const sGrand  = { font: { bold: true, sz: 12, color: { rgb: 'FFFFFF' } }, fill: { patternType: 'solid', fgColor: { rgb: '0F2041' } }, alignment: { horizontal: 'center', vertical: 'center' } };
+  const sGrandN = { font: { bold: true, sz: 13, color: { rgb: 'FFFFFF' } }, fill: { patternType: 'solid', fgColor: { rgb: '0F2041' } }, alignment: { horizontal: 'right', vertical: 'center' }, numFmt: '#,##0.00' };
+  const sSumLbl = { font: { bold: true, sz: 10, color: { rgb: '1D3461' } }, fill: { patternType: 'solid', fgColor: { rgb: 'DCE8FF' } } };
+  const sSumNum = { font: { bold: true, sz: 10, color: { rgb: '1D3461' } }, fill: { patternType: 'solid', fgColor: { rgb: 'DCE8FF' } }, alignment: { horizontal: 'right' }, numFmt: '#,##0.00' };
+  const sHdr    = { font: { bold: true, sz: 10, color: { rgb: 'FFFFFF' } }, fill: { patternType: 'solid', fgColor: { rgb: '1D3461' } }, alignment: { horizontal: 'center', vertical: 'center', wrapText: true }, border: { bottom: { style: 'medium', color: { rgb: '0F2041' } } } };
+  const sDate   = { font: { bold: true, sz: 10, color: { rgb: 'FFFFFF' } }, fill: { patternType: 'solid', fgColor: { rgb: '1D3461' } }, alignment: { horizontal: 'left', vertical: 'center' } };
+  const sSeq    = { font: { sz: 10, color: { rgb: '888888' } }, fill: { patternType: 'solid', fgColor: { rgb: 'FAFAFA' } }, alignment: { horizontal: 'center' } };
+  const sTx     = { font: { sz: 10, name: 'Courier New' }, fill: { patternType: 'solid', fgColor: { rgb: 'FAFAFA' } } };
+  const sTxAmt  = { font: { bold: true, sz: 10, name: 'Courier New', color: { rgb: '0F2041' } }, fill: { patternType: 'solid', fgColor: { rgb: 'FAFAFA' } }, alignment: { horizontal: 'right' }, numFmt: '#,##0.00' };
+  const sTxAlt  = { font: { sz: 10, name: 'Courier New' }, fill: { patternType: 'solid', fgColor: { rgb: 'F2F6FF' } } };
+  const sTxAltAmt = { font: { bold: true, sz: 10, name: 'Courier New', color: { rgb: '0F2041' } }, fill: { patternType: 'solid', fgColor: { rgb: 'F2F6FF' } }, alignment: { horizontal: 'right' }, numFmt: '#,##0.00' };
+  const sSub    = { font: { bold: true, sz: 10, color: { rgb: '1D3461' } }, fill: { patternType: 'solid', fgColor: { rgb: 'E0ECF8' } }, alignment: { horizontal: 'right' }, numFmt: '#,##0.00' };
+  const sSubLbl = { font: { bold: true, sz: 10, color: { rgb: '1D3461' } }, fill: { patternType: 'solid', fgColor: { rgb: 'E0ECF8' } } };
 
-  const ws: XLSX.WorkSheet = {};
-  const cols = ['#', 'Transaction ID', 'Date', 'Time', 'From Account', 'To Account', 'Recipient Name', 'Mobile', 'Comment', 'Amount (SDG)'];
-  const colWidths = [5, 20, 14, 10, 24, 24, 32, 18, 22, 18];
+  const ws: any = {};
+  const COLS = ['#', 'Transaction ID', 'Date', 'Time', 'From Account', 'To Account', 'Recipient Name', 'Mobile', 'Comment', 'Amount (SDG)'];
+  const colWidths = [5, 22, 14, 10, 22, 22, 34, 16, 22, 18];
 
   let r = 0;
-  const setCell = (row: number, col: number, v: any, s?: any) => {
-    const addr = XLSX.utils.encode_cell({ r: row, c: col });
-    ws[addr] = { v, t: typeof v === 'number' ? 'n' : 's', s };
+  const setCell = (row: number, col: number, v: any, s?: any, t?: string) => {
+    const addr = XLSXStyle.utils.encode_cell({ r: row, c: col });
+    ws[addr] = { v, t: t ?? (typeof v === 'number' ? 'n' : 's'), s };
   };
-  const merge = (r1: number, c1: number, r2: number, c2: number) => {
+  const addMerge = (r1: number, c1: number, r2: number, c2: number) => {
     if (!ws['!merges']) ws['!merges'] = [];
     ws['!merges'].push({ s: { r: r1, c: c1 }, e: { r: r2, c: c2 } });
   };
-
-  setCell(r, 0, 'PACT Command Center — Bank Transfer Report', { font: { bold: true, sz: 14, color: { rgb: '0F2041' } } });
-  merge(r, 0, r, 9); r++;
-  setCell(r, 0, `Generated: ${format(new Date(), 'dd MMM yyyy HH:mm')}  |  Total transactions: ${done.length}`, { font: { italic: true, sz: 10, color: { rgb: '666666' } } });
-  merge(r, 0, r, 9); r++; r++;
+  const setRow = (row: number, ht: number) => {
+    if (!ws['!rows']) ws['!rows'] = [];
+    ws['!rows'][row] = { hpt: ht };
+  };
 
   const grandTotal = done.reduce((s, x) => s + amountNum(x.amount), 0);
-  setCell(r, 0, 'GRAND TOTAL', G); merge(r, 0, r, 8);
-  setCell(r, 9, grandTotal, { ...G, numFmt: '#,##0.00' }); r++;
 
+  // Row 0 — Title
+  setCell(r, 0, 'PACT Command Center — Bank Transfer Report', sTitle);
+  addMerge(r, 0, r, 9); setRow(r, 22); r++;
+
+  // Row 1 — Meta
+  setCell(r, 0, `Generated: ${format(new Date(), 'dd MMM yyyy HH:mm')}   |   Total: ${done.length} transactions`, sMeta);
+  addMerge(r, 0, r, 9); r++; r++;
+
+  // Row 3 — Grand Total banner
+  setCell(r, 0, '★  GRAND TOTAL', sGrand); addMerge(r, 0, r, 8);
+  setCell(r, 9, grandTotal, sGrandN); setRow(r, 26); r++;
+
+  // Rows 4..n — Per-date summary
   Object.entries(groups).forEach(([date, items]) => {
     let d = date; try { d = format(new Date(date), 'dd MMM yyyy'); } catch {}
     const sub = items.reduce((s, x) => s + amountNum(x.amount), 0);
-    setCell(r, 0, `  ${d}`, SUM); merge(r, 0, r, 7);
-    setCell(r, 8, `${items.length} txn`, { ...SUM, alignment: { horizontal: 'center' } });
-    setCell(r, 9, sub, { ...SUM, numFmt: '#,##0.00', alignment: { horizontal: 'right' } }); r++;
+    setCell(r, 0, `  ${d}  ·  ${items.length} transaction${items.length !== 1 ? 's' : ''}`, sSumLbl);
+    addMerge(r, 0, r, 8);
+    setCell(r, 9, sub, sSumNum); r++;
   });
   r++;
 
-  cols.forEach((h, c) => setCell(r, c, h, H)); r++;
+  // Column headers
+  COLS.forEach((h, c) => setCell(r, c, h, sHdr)); setRow(r, 20); r++;
 
+  // Data rows grouped by date
   let seq = 1;
   let runningTotal = 0;
   Object.entries(groups).forEach(([date, items]) => {
     let d = date; try { d = format(new Date(date), 'dd MMM yyyy'); } catch {}
-    setCell(r, 0, d, D); merge(r, 0, r, 9); r++;
+    setCell(r, 0, `  ${d}`, sDate); addMerge(r, 0, r, 9); setRow(r, 16); r++;
 
     let sub = 0;
-    items.forEach(tx => {
+    items.forEach((tx, i) => {
       const amt = amountNum(tx.amount);
       sub += amt;
-      setCell(r, 0, seq++);
-      setCell(r, 1, tx.transaction_id);
-      setCell(r, 2, d);
-      setCell(r, 3, tx.transaction_time);
-      setCell(r, 4, tx.from_account);
-      setCell(r, 5, tx.to_account);
-      setCell(r, 6, tx.recipient_name);
-      setCell(r, 7, tx.mobile_number);
-      setCell(r, 8, tx.comment);
-      setCell(r, 9, amt); r++;
+      const base = i % 2 === 0 ? sTx : sTxAlt;
+      const amtStyle = i % 2 === 0 ? sTxAmt : sTxAltAmt;
+      setCell(r, 0, seq++, { ...sSeq, fill: base.fill });
+      setCell(r, 1, tx.transaction_id, base);
+      setCell(r, 2, d, base);
+      setCell(r, 3, tx.transaction_time, base);
+      setCell(r, 4, tx.from_account, base);
+      setCell(r, 5, tx.to_account, base);
+      setCell(r, 6, tx.recipient_name, base);
+      setCell(r, 7, tx.mobile_number, base);
+      setCell(r, 8, tx.comment, base);
+      setCell(r, 9, amt, amtStyle);
+      r++;
     });
 
-    setCell(r, 0, `Subtotal — ${d}`, S); merge(r, 0, r, 8);
-    setCell(r, 9, sub, { ...S, numFmt: '#,##0.00' });
+    // Subtotal row
+    setCell(r, 0, `Subtotal  —  ${d}`, sSubLbl); addMerge(r, 0, r, 8);
+    setCell(r, 9, sub, sSub);
     runningTotal += sub; r++; r++;
   });
 
-  setCell(r, 0, 'GRAND TOTAL', G); merge(r, 0, r, 8);
-  setCell(r, 9, runningTotal, { ...G, numFmt: '#,##0.00' }); r++;
+  // Grand Total at bottom
+  setCell(r, 0, '★  GRAND TOTAL', sGrand); addMerge(r, 0, r, 8);
+  setCell(r, 9, runningTotal, sGrandN); setRow(r, 26); r++;
 
-  ws['!ref'] = XLSX.utils.encode_range({ r: 0, c: 0 }, { r, c: 9 });
+  ws['!ref'] = XLSXStyle.utils.encode_range({ r: 0, c: 0 }, { r, c: 9 });
   ws['!cols'] = colWidths.map(w => ({ wch: w }));
 
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, 'Transactions');
-  XLSX.writeFile(wb, `PACT_Bank_Transfers_${format(new Date(), 'yyyyMMdd_HHmm')}.xlsx`);
+  const wb = XLSXStyle.utils.book_new();
+  XLSXStyle.utils.book_append_sheet(wb, ws, 'Transactions');
+  XLSXStyle.writeFile(wb, `PACT_Bank_Transfers_${format(new Date(), 'yyyyMMdd_HHmm')}.xlsx`);
 }
 
 function fmtDate(iso: string) {

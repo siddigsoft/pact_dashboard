@@ -184,6 +184,7 @@ export default defineConfig(({ mode }) => ({
       'jspdf',
       'jspdf-autotable',
       'xlsx',
+      'xlsx-js-style',
       'docx',
       'html2canvas',
       '@octokit/rest',
