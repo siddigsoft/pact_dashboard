@@ -390,6 +390,8 @@ export default function TransactionScanner() {
   const [selectedAccounts, setSelectedAccounts] = useState<Set<string>>(new Set());
   const [filterExportSource, setFilterExportSource] = useState<Array<any>>([]);
   const [filterExportSessionName, setFilterExportSessionName] = useState<string | undefined>();
+  const [saveMode, setSaveMode] = useState<'new' | 'append'>('new');
+  const [appendTargetId, setAppendTargetId] = useState<string>('');
   const dropRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const fileMapRef = useRef<Map<string, File>>(new Map());
@@ -476,6 +478,52 @@ export default function TransactionScanner() {
     } catch (err: any) {
       console.error('[TransactionScanner] Save caught error:', err);
       toast({ title: 'Save failed', description: err.message || 'Unknown error', variant: 'destructive' });
+    } finally {
+      setSaving(false);
+    }
+  }, [doneRows, loadSessions, toast]);
+
+  const appendToSession = useCallback(async (targetId: string) => {
+    if (!doneRows.length || !targetId) return;
+    setSaving(true);
+    try {
+      const { data: existing, error: fetchErr } = await supabase
+        .from('bank_transaction_scans')
+        .select('receipts, receipt_count, total_amount, session_name')
+        .eq('id', targetId)
+        .single();
+      if (fetchErr) throw new Error(fetchErr.message);
+
+      const existingReceipts: any[] = existing.receipts || [];
+      const existingIds = new Set(existingReceipts.map((r: any) => r.transaction_id).filter(Boolean));
+      const newReceipts = doneRows.map(({ id: _id, fileName: _fn, status: _st, error: _er, ...rest }) => rest);
+
+      let addedCount = 0;
+      const merged = [...existingReceipts];
+      for (const r of newReceipts) {
+        if (!r.transaction_id || !existingIds.has(r.transaction_id)) {
+          merged.push(r);
+          addedCount++;
+        }
+      }
+
+      const newTotal = merged.reduce((s: number, r: any) => s + amountNum(r.amount), 0);
+      const { error: updateErr } = await supabase
+        .from('bank_transaction_scans')
+        .update({ receipts: merged, receipt_count: merged.length, total_amount: newTotal })
+        .eq('id', targetId);
+      if (updateErr) throw new Error(updateErr.message);
+
+      const skipped = newReceipts.length - addedCount;
+      toast({
+        title: 'Session updated',
+        description: `Added ${addedCount} receipt${addedCount !== 1 ? 's' : ''}${skipped > 0 ? ` · ${skipped} duplicate${skipped !== 1 ? 's' : ''} skipped` : ''} to "${existing.session_name || 'Untitled scan'}"`,
+      });
+      setAutoSaved(true);
+      await loadSessions();
+    } catch (err: any) {
+      console.error('[TransactionScanner] Append error:', err);
+      toast({ title: 'Update failed', description: err.message || 'Unknown error', variant: 'destructive' });
     } finally {
       setSaving(false);
     }
@@ -1091,30 +1139,102 @@ export default function TransactionScanner() {
           <DialogHeader>
             <DialogTitle>Save Scan Session</DialogTitle>
           </DialogHeader>
-          <div className="space-y-3 py-2">
-            <p className="text-sm text-muted-foreground">
-              Give this scan a name so you can find it later. Optional — you can leave it blank.
-            </p>
-            <Input
-              placeholder={`e.g. March batch — ${doneRows.length} receipts`}
-              value={saveName}
-              onChange={e => setSaveName(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter') { setSaveDialogOpen(false); saveSession(saveName); } }}
-              autoFocus
-            />
+          <div className="space-y-4 py-2">
+
+            {/* Mode toggle */}
+            <div className="flex gap-2">
+              <button
+                onClick={() => setSaveMode('new')}
+                className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium border transition-colors ${
+                  saveMode === 'new'
+                    ? 'bg-[#1D3461] text-white border-[#1D3461]'
+                    : 'border-border text-muted-foreground hover:bg-muted'
+                }`}
+              >
+                New session
+              </button>
+              <button
+                onClick={() => {
+                  setSaveMode('append');
+                  if (!appendTargetId && savedSessions.length > 0) setAppendTargetId(savedSessions[0].id);
+                }}
+                disabled={savedSessions.length === 0}
+                className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium border transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
+                  saveMode === 'append'
+                    ? 'bg-[#1D3461] text-white border-[#1D3461]'
+                    : 'border-border text-muted-foreground hover:bg-muted'
+                }`}
+              >
+                Add to existing
+              </button>
+            </div>
+
+            {saveMode === 'new' ? (
+              <>
+                <p className="text-sm text-muted-foreground">
+                  Give this scan a name so you can find it later. Optional — you can leave it blank.
+                </p>
+                <Input
+                  placeholder={`e.g. March batch — ${doneRows.length} receipts`}
+                  value={saveName}
+                  onChange={e => setSaveName(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') { setSaveDialogOpen(false); saveSession(saveName); } }}
+                  autoFocus
+                />
+              </>
+            ) : (
+              <>
+                <p className="text-sm text-muted-foreground">
+                  Pick an existing session to add these receipts to. Duplicate transaction IDs will be skipped automatically.
+                </p>
+                <div className="space-y-1 max-h-52 overflow-y-auto border rounded-lg p-1">
+                  {savedSessions.map(s => (
+                    <label
+                      key={s.id}
+                      className={`flex items-center gap-3 px-3 py-2.5 rounded-md cursor-pointer transition-colors ${
+                        appendTargetId === s.id
+                          ? 'bg-[#1D3461]/8 border border-[#1D3461]/30'
+                          : 'hover:bg-muted border border-transparent'
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="appendTarget"
+                        checked={appendTargetId === s.id}
+                        onChange={() => setAppendTargetId(s.id)}
+                        className="accent-[#1D3461] shrink-0"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium text-sm truncate">
+                          {s.session_name || <span className="italic text-muted-foreground">Untitled scan</span>}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {fmtDate(s.scanned_at)} · {s.receipt_count} receipts · {Number(s.total_amount).toLocaleString('en', { minimumFractionDigits: 0 })} SDG
+                        </p>
+                      </div>
+                    </label>
+                  ))}
+                </div>
+              </>
+            )}
+
             <p className="text-xs text-muted-foreground">
-              {doneRows.length} receipts · Total: {grandTotal.toLocaleString('en', { minimumFractionDigits: 2 })} SDG
+              {doneRows.length} receipts ready · Total: {grandTotal.toLocaleString('en', { minimumFractionDigits: 2 })} SDG
             </p>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setSaveDialogOpen(false)}>Cancel</Button>
             <Button
-              onClick={() => { setSaveDialogOpen(false); saveSession(saveName); }}
-              disabled={saving}
+              onClick={() => {
+                setSaveDialogOpen(false);
+                if (saveMode === 'new') saveSession(saveName);
+                else appendToSession(appendTargetId);
+              }}
+              disabled={saving || (saveMode === 'append' && !appendTargetId)}
               className="gap-2 bg-[#1D3461] hover:bg-[#0F2041]"
             >
               {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-              Save
+              {saveMode === 'new' ? 'Save' : 'Add Receipts'}
             </Button>
           </DialogFooter>
         </DialogContent>
