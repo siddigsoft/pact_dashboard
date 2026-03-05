@@ -175,6 +175,7 @@ function exportToExcel(rows: TxRow[]) {
     ws['!merges'].push({ s, e });
   };
 
+  // ── Title block ──────────────────────────────────────────────
   setCell(r, 0, 'PACT Command Center — Bank Transfer Report', { font: { bold: true, sz: 14, color: { rgb: '0F2041' } } });
   setMerge({ r, c: 0 }, { r, c: 9 });
   r++;
@@ -183,9 +184,32 @@ function exportToExcel(rows: TxRow[]) {
   r++;
   r++;
 
+  // ── Grand Total summary at the top ────────────────────────────
+  const preGrandTotal = done.reduce((s, tx) => s + amountNum(tx.amount), 0);
+  setCell(r, 0, 'GRAND TOTAL', grandStyle);
+  setMerge({ r, c: 0 }, { r, c: 8 });
+  setCell(r, 9, preGrandTotal, { ...grandStyle, numFmt: '#,##0.00' });
+  r++;
+
+  // Date summary rows
+  const summaryTitleStyle = { font: { bold: true, sz: 10, color: { rgb: '1D3461' } }, fill: { fgColor: { rgb: 'EEF3FB' } } };
+  Object.entries(groups).forEach(([date, items]) => {
+    let displayDate = date;
+    try { displayDate = format(new Date(date), 'dd MMM yyyy'); } catch {}
+    const sub = items.reduce((s, tx) => s + amountNum(tx.amount), 0);
+    setCell(r, 0, `  ${displayDate}`, summaryTitleStyle);
+    setMerge({ r, c: 0 }, { r, c: 7 });
+    setCell(r, 8, `${items.length} txn`, { ...summaryTitleStyle, alignment: { horizontal: 'center' } });
+    setCell(r, 9, sub, { ...summaryTitleStyle, numFmt: '#,##0.00', alignment: { horizontal: 'right' } });
+    r++;
+  });
+  r++;
+
+  // ── Column headers ─────────────────────────────────────────────
   cols.forEach((h, c) => setCell(r, c, h, headerStyle));
   r++;
 
+  // ── Data rows grouped by date ──────────────────────────────────
   let grandTotal = 0;
   let seq = 1;
 
@@ -193,7 +217,7 @@ function exportToExcel(rows: TxRow[]) {
     let displayDate = date;
     try { displayDate = format(new Date(date), 'dd MMM yyyy'); } catch {}
 
-    setCell(r, 0, `📅 ${displayDate}`, dateHeaderStyle);
+    setCell(r, 0, `${displayDate}`, dateHeaderStyle);
     setMerge({ r, c: 0 }, { r, c: 9 });
     r++;
 
@@ -222,6 +246,7 @@ function exportToExcel(rows: TxRow[]) {
     r++;
   });
 
+  // ── Grand Total at the bottom too ─────────────────────────────
   setCell(r, 0, 'GRAND TOTAL', grandStyle);
   setMerge({ r, c: 0 }, { r, c: 8 });
   setCell(r, 9, grandTotal, { ...grandStyle, numFmt: '#,##0.00' });
@@ -614,14 +639,24 @@ export default function TransactionScanner() {
         );
       })}
 
-      {/* Grand Total row */}
-      {doneRows.length > 0 && Object.keys(groups).length > 1 && (
+      {/* Grand Total — always visible when there are results */}
+      {doneRows.length > 0 && (
         <Card className="border-[#0F2041] bg-[#0F2041] text-white">
-          <CardContent className="py-4 flex items-center justify-between px-6">
-            <span className="font-bold text-lg">GRAND TOTAL — {doneRows.length} transactions across {Object.keys(groups).length} dates</span>
-            <span className="font-bold text-2xl font-mono">
-              SDG {grandTotal.toLocaleString('en', { minimumFractionDigits: 2 })}
-            </span>
+          <CardContent className="py-4 px-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-white/70 text-xs uppercase tracking-widest mb-0.5">Grand Total</p>
+                <p className="font-semibold text-sm text-white/90">
+                  {doneRows.length} transaction{doneRows.length !== 1 ? 's' : ''} across {Object.keys(groups).length} date{Object.keys(groups).length !== 1 ? 's' : ''}
+                </p>
+              </div>
+              <div className="text-right">
+                <p className="text-white/70 text-xs uppercase tracking-widest mb-0.5">SDG</p>
+                <p className="font-bold text-2xl font-mono">
+                  {grandTotal.toLocaleString('en', { minimumFractionDigits: 2 })}
+                </p>
+              </div>
+            </div>
           </CardContent>
         </Card>
       )}
