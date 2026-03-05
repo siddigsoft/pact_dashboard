@@ -62,13 +62,6 @@ async function extractFromImageWithRetry(
 ): Promise<Partial<TxRow>> {
   let lastError: Error | null = null;
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
-    if (attempt > 0) {
-      const wait = Math.min(12000 * Math.pow(2, attempt - 1), 60000);
-      const waitSec = Math.round(wait / 1000);
-      onStatus?.(`Rate limited — waiting ${waitSec}s before retry ${attempt}/${maxRetries}…`);
-      await sleep(wait);
-      onStatus?.(`Retrying (attempt ${attempt}/${maxRetries})…`);
-    }
     try {
       const res = await fetch('/api/extract-transaction', {
         method: 'POST',
@@ -77,6 +70,12 @@ async function extractFromImageWithRetry(
       });
 
       if (res.status === 429 || res.status === 503) {
+        const data = await res.json().catch(() => ({}));
+        const waitMs = data.retryAfterSec ? data.retryAfterSec * 1000 : Math.min(12000 * Math.pow(2, attempt), 60000);
+        const waitSec = Math.round(waitMs / 1000);
+        onStatus?.(`Rate limited — waiting ${waitSec}s before retry ${attempt + 1}/${maxRetries}…`);
+        await sleep(waitMs);
+        onStatus?.(`Retrying (attempt ${attempt + 1}/${maxRetries})…`);
         lastError = new Error('Gemini rate limit reached — please retry this image manually');
         continue;
       }
@@ -276,7 +275,7 @@ export default function TransactionScanner() {
 
     for (let i = 0; i < files.length; i++) {
       await processOneRow(newRows[i].id, files[i]);
-      if (i < files.length - 1) await sleep(7000);
+      if (i < files.length - 1) await sleep(4000);
     }
   }, [processOneRow]);
 

@@ -47,7 +47,7 @@ function geminiOcrPlugin() {
             });
 
             const response = await ai.models.generateContent({
-              model: 'gemini-2.5-flash',
+              model: 'gemini-2.0-flash',
               contents: [{
                 role: 'user',
                 parts: [
@@ -66,7 +66,11 @@ function geminiOcrPlugin() {
             const isRateLimit = msg.includes('429') || msg.includes('RESOURCE_EXHAUSTED') || msg.toLowerCase().includes('quota');
             res.statusCode = isRateLimit ? 429 : 500;
             res.setHeader('Content-Type', 'application/json');
-            res.end(JSON.stringify({ error: msg }));
+            // Extract the retryDelay from the error message (e.g. "Please retry in 19.1s")
+            let retryAfterSec = 0;
+            const retryMatch = msg.match(/retry in (\d+(?:\.\d+)?)s/i);
+            if (retryMatch) retryAfterSec = Math.ceil(parseFloat(retryMatch[1])) + 2;
+            res.end(JSON.stringify({ error: msg, retryAfterSec }));
           }
         });
       });
