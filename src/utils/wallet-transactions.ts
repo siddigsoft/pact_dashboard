@@ -176,16 +176,18 @@ export async function createSiteVisitWalletTransaction(
     const grossAmount = amount;
 
     // Step 3b: Check for approved/paid transportation advances (down payments) for this site
+    // Include 'approved' so advances that were disbursed at approval (but never marked fully_paid) are still deducted.
+    // Amount to deduct: total_paid_amount if set, else approved_amount, else requested_amount.
     // Only deduct advances that haven't been reconciled yet (no advance_reconciled_at)
-    // After deducting, we mark them as reconciled to prevent double-deduction
     let advancesToReconcile: string[] = [];
+    const advanceStatuses = ['partially_paid', 'fully_paid', 'approved'];
     try {
       // Primary lookup: match by mmp_site_entry_id or site_visit_id (explicit link)
       const { data: advancesByLink, error: advanceError } = await supabase
         .from('down_payment_requests')
-        .select('id, site_name, total_paid_amount, status, mmp_site_entry_id, requested_by, metadata')
+        .select('id, site_name, total_paid_amount, approved_amount, requested_amount, status, mmp_site_entry_id, requested_by, metadata')
         .or(`mmp_site_entry_id.eq.${siteVisitId},site_visit_id.eq.${siteVisitId}`)
-        .in('status', ['partially_paid', 'fully_paid'])
+        .in('status', advanceStatuses)
         .eq('requested_by', userIdToPay);
 
       // Fallback lookup: match by site_name when no explicit link exists
@@ -196,17 +198,17 @@ export async function createSiteVisitWalletTransaction(
         // Try 1: exact ilike
         let { data: advancesByName } = await supabase
           .from('down_payment_requests')
-          .select('id, site_name, total_paid_amount, status, mmp_site_entry_id, requested_by, metadata')
+          .select('id, site_name, total_paid_amount, approved_amount, requested_amount, status, mmp_site_entry_id, requested_by, metadata')
           .ilike('site_name', cleanName)
-          .in('status', ['partially_paid', 'fully_paid'])
+          .in('status', advanceStatuses)
           .eq('requested_by', userIdToPay);
         // Try 2: contains match (handles "AL ALWIAAB" matching "AL ALWIAAB - Khartoum")
         if (!advancesByName || advancesByName.length === 0) {
           const { data: advancesByContains } = await supabase
             .from('down_payment_requests')
-            .select('id, site_name, total_paid_amount, status, mmp_site_entry_id, requested_by, metadata')
+            .select('id, site_name, total_paid_amount, approved_amount, requested_amount, status, mmp_site_entry_id, requested_by, metadata')
             .ilike('site_name', `%${cleanName}%`)
-            .in('status', ['partially_paid', 'fully_paid'])
+            .in('status', advanceStatuses)
             .eq('requested_by', userIdToPay);
           advancesByName = advancesByContains;
         }
@@ -225,7 +227,10 @@ export async function createSiteVisitWalletTransaction(
             console.log(`[WalletTransaction] Skipping already-reconciled advance ${adv.id}`);
             continue;
           }
-          const paidAmount = Number(adv.total_paid_amount || 0);
+          // Use total_paid_amount when set (partially_paid/fully_paid); else approved_amount or requested_amount for approved-only rows
+          const paidAmount = Number(
+            adv.total_paid_amount ?? adv.approved_amount ?? adv.requested_amount ?? 0
+          );
           if (paidAmount > 0) {
             advanceDeducted += paidAmount;
             advanceDetails.push({
