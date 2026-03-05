@@ -134,10 +134,10 @@ export const useCoordinatorSites = () => {
   } = useCoordinatorSiteEntriesQuery(currentUser?.id ?? null, isAdminOrSuperUser ?? false);
 
   const coordinatorSites = useMemo(() => {
-    if (coordinatorRows && coordinatorRows.length >= 0) {
-      return coordinatorRows.map(mapCoordinatorRowToSiteVisit);
+    const rpcSites = (coordinatorRows ?? []).map(mapCoordinatorRowToSiteVisit);
+    if (!currentUser?.id || !contextMmpFiles || contextLoading) {
+      return rpcSites;
     }
-    if (!currentUser?.id || !contextMmpFiles || contextLoading) return [];
 
     const allSites: SiteVisit[] = [];
     contextMmpFiles.forEach((mmp: any) => {
@@ -147,7 +147,12 @@ export const useCoordinatorSites = () => {
           const forwardedToMe = entry.forwardedToUserId === currentUser.id;
           const assignedToMe = (entry.additionalData?.assigned_to || entry.additional_data?.assigned_to) === currentUser.id;
           const acceptedByMe = entry.accepted_by === currentUser.id;
-          if (!forwardedToMe && !assignedToMe && !acceptedByMe) return;
+          const workflow = entry.workflow || {};
+          const forwardedIds: string[] = Array.isArray(workflow.forwardedToCoordinatorIds)
+            ? workflow.forwardedToCoordinatorIds
+            : [];
+          const listedInWorkflow = forwardedIds.includes(currentUser.id);
+          if (!forwardedToMe && !assignedToMe && !acceptedByMe && !listedInWorkflow) return;
         }
         const isUnverified = entry.status === 'Pending' || entry.status === 'Dispatched' ||
                             entry.status === 'assigned' || entry.status === 'inProgress' ||
@@ -183,7 +188,14 @@ export const useCoordinatorSites = () => {
         });
       });
     });
-    return allSites;
+    if (rpcSites.length === 0) {
+      return allSites;
+    }
+
+    const merged = new Map<string, SiteVisit>();
+    rpcSites.forEach((site) => merged.set(site.id, site));
+    allSites.forEach((site) => merged.set(site.id, site));
+    return Array.from(merged.values());
   }, [coordinatorRows, contextMmpFiles, contextLoading, currentUser?.id, isAdminOrSuperUser]);
 
   const siteCounts = useMemo(() => computeCounts(coordinatorSites), [coordinatorSites]);

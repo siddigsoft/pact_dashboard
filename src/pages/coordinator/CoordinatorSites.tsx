@@ -946,7 +946,7 @@ const CoordinatorSites: React.FC = () => {
     const isPending = (site: any) => {
       const status = (site?.status || '').toLowerCase().trim().replace(/\s+/g, '_');
       if (prePipelineStatuses.includes(status)) return true;
-      if (['dispatched', 'assigned', 'accepted', 'permits_attached', 'cp_verified', 'cp_verification', 'verified', 'approved', 'costed', 'approved_and_costed', 'completed', 'rejected'].includes(status)) return false;
+      if (['dispatched', 'assigned', 'accepted', 'permits_attached', 'cp_verified', 'cp_verification', 'verified', 'approved', 'costed', 'approved_and_costed', 'completed', 'rejected', 'returned_to_fom'].includes(status)) return false;
       return true;
     };
 
@@ -1053,14 +1053,14 @@ const CoordinatorSites: React.FC = () => {
           return sum + (l.sites || []).filter((s: any) => {
             const st = (s?.status || '').toLowerCase().trim().replace(/\s+/g, '_');
             if (prePipelineStatusesForCount.includes(st)) return true;
-            if (['dispatched', 'assigned', 'accepted', 'permits_attached', 'cp_verified', 'cp_verification', 'verified', 'approved', 'costed', 'approved_and_costed', 'completed', 'rejected'].includes(st)) return false;
+            if (['dispatched', 'assigned', 'accepted', 'permits_attached', 'cp_verified', 'cp_verification', 'verified', 'approved', 'costed', 'approved_and_costed', 'completed', 'rejected', 'returned_to_fom'].includes(st)) return false;
             return true;
           }).length;
         }, 0);
         const pendingNeedingStatePermit = localitiesArray.reduce((sum: number, l: any) => {
           return sum + (l.sites || []).filter((s: any) => {
             const st = (s?.status || '').toLowerCase().trim().replace(/\s+/g, '_');
-            const isPendingSite = prePipelineStatusesForCount.includes(st) || !['dispatched', 'assigned', 'accepted', 'permits_attached', 'cp_verified', 'cp_verification', 'verified', 'approved', 'costed', 'approved_and_costed', 'completed', 'rejected'].includes(st);
+            const isPendingSite = prePipelineStatusesForCount.includes(st) || !['dispatched', 'assigned', 'accepted', 'permits_attached', 'cp_verified', 'cp_verification', 'verified', 'approved', 'costed', 'approved_and_costed', 'completed', 'rejected', 'returned_to_fom'].includes(st);
             return isPendingSite && siteNeedsStatePermit(s);
           }).length;
         }, 0);
@@ -1094,7 +1094,7 @@ const CoordinatorSites: React.FC = () => {
               const st = (s?.status || '').toLowerCase().trim().replace(/\s+/g, '_');
               const prePipeline = ['pending', 'inprogress', 'in_progress', 'forwarded', 'forwarded_to_coordinator', 'forwarded_to_coordinators', 'new'];
               if (prePipeline.includes(st)) return true;
-              if (['dispatched', 'assigned', 'accepted', 'permits_attached', 'cp_verified', 'cp_verification', 'verified', 'approved', 'costed', 'approved_and_costed', 'completed', 'rejected'].includes(st)) return false;
+              if (['dispatched', 'assigned', 'accepted', 'permits_attached', 'cp_verified', 'cp_verification', 'verified', 'approved', 'costed', 'approved_and_costed', 'completed', 'rejected', 'returned_to_fom'].includes(st)) return false;
               return true;
             });
             pendingInLoc.forEach((site: any) => {
@@ -4414,6 +4414,52 @@ const CoordinatorSites: React.FC = () => {
                                   {site.state && <span>{site.state}</span>}
                                   {site.locality && <span>• {site.locality}</span>}
                                   {mmpName && <span>• {mmpName}</span>}
+                                {(siteNeedsStatePermit(site) || siteNeedsLocalityPermit(site)) && (
+                                  <div className="flex flex-wrap items-center gap-2 mt-3">
+                                    {siteNeedsStatePermit(site) && (
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        className="text-xs h-8"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setStateForPermitVerification({
+                                            state: site.state || '',
+                                            locality: site.locality || '',
+                                            mmpFileId: site.mmp_file_id || ''
+                                          });
+                                          setBulkVerificationMode('single');
+                                          setPermitVerificationDialogOpen(true);
+                                        }}
+                                        data-testid={`button-upload-state-permit-returned-${site.id}`}
+                                      >
+                                        <Upload className="h-3 w-3 mr-1" />
+                                        Upload State Permit
+                                      </Button>
+                                    )}
+                                    {siteNeedsLocalityPermit(site) && (
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        className="text-xs h-8"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setSelectedLocalityForWorkflow({
+                                            state: site.state || '',
+                                            stateName: site.state || '',
+                                            locality: site.locality || '',
+                                            sites: [site]
+                                          });
+                                          setLocalityPermitUploadDialogOpen(true);
+                                        }}
+                                        data-testid={`button-upload-locality-permit-returned-${site.id}`}
+                                      >
+                                        <Upload className="h-3 w-3 mr-1" />
+                                        Upload Locality Permit
+                                      </Button>
+                                    )}
+                                  </div>
+                                )}
                                 </div>
                                 {returnReason && (
                                   <div className="mt-2 p-2 bg-orange-50 dark:bg-orange-950/20 rounded-md border border-orange-200 dark:border-orange-800">

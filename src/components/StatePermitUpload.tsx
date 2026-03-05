@@ -254,7 +254,10 @@ export const StatePermitUpload: React.FC<StatePermitUploadProps> = ({
             {uploading ? (
               <><div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current mr-2"></div> Uploading...</>
             ) : (
-              <><CheckCircle2 className="h-4 w-4 mr-2" /> Verify & Upload State Permit</>
+              <>
+                <CheckCircle2 className="h-4 w-4 mr-2" />
+                {userType === 'fom' ? 'Upload State Permit & send back to coordinator' : 'Verify & Upload State Permit'}
+              </>
             )}
           </Button>
           {onCancel && <Button variant="outline" onClick={onCancel}>Cancel</Button>}

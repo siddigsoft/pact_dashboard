@@ -436,7 +436,11 @@ const MMP = () => {
   const [selectedSupervisorForReturned, setSelectedSupervisorForReturned] = useState<string>('');
   // Returned sites action dialogs
   const [returnedSiteActionDialog, setReturnedSiteActionDialog] = useState<{ open: boolean; site: any; action: 'sendback' | 'report' | 'redispatch' }>({ open: false, site: null, action: 'sendback' });
+  const [returnedSiteActionBatchSites, setReturnedSiteActionBatchSites] = useState<any[]>([]);
+  const [showReturnedBatchSiteList, setShowReturnedBatchSiteList] = useState(false);
   const [returnedActionNotes, setReturnedActionNotes] = useState('');
+  const [selectedCoordinatorForSendBack, setSelectedCoordinatorForSendBack] = useState<string>('');
+  const [selectedReturnedActionType, setSelectedReturnedActionType] = useState<'sendback' | 'allow_without_state_permit' | 'upload_state_permit'>('sendback');
   const [coordinatorsList, setCoordinatorsList] = useState<any[]>([]);
   const [supervisorsList, setSupervisorsList] = useState<any[]>([]);
   const [hubStatesList, setHubStatesList] = useState<any[]>([]);
@@ -590,7 +594,7 @@ const MMP = () => {
   }, [currentUser?.id, toast, refreshMMPFiles]);
 
   // Handle sending back available site to coordinator
-  const handleSendBackToCoordinator = useCallback(async (site: any, comments: string) => {
+  const handleSendBackToCoordinator = useCallback(async (site: any, comments: string, selectedCoordinatorId?: string, options?: { suppressToast?: boolean; skipRefresh?: boolean }) => {
     if (!comments.trim()) {
       toast({
         title: 'Comments Required',
@@ -606,7 +610,8 @@ const MMP = () => {
       
       // Identify coordinator to notify (from forwarded_to_user_id)
       // Note: dispatched_by is text (name), not UUID, so we use forwarded_to_user_id which is UUID
-      const coordinatorId = site.forwarded_to_user_id || 
+      const coordinatorId = selectedCoordinatorId ||
+               site.forwarded_to_user_id || 
                            existingAdditionalData.assigned_to || 
                            existingAdditionalData.dispatched_by_user_id ||
                            existingAdditionalData.forwarded_to_user_id;
@@ -615,20 +620,24 @@ const MMP = () => {
       const { error: updateError } = await supabase
         .from('mmp_site_entries')
         .update({
-          status: 'Rejected',
+          status: 'Pending',
+          forwarded_to_user_id: coordinatorId || null,
+          forwarded_at: now,
+          forwarded_by_user_id: currentUser?.id,
           rejection_comments: comments.trim(),
-          rejected_by: currentUser?.id,
-          rejected_at: now,
+          rejected_by: null,
+          rejected_at: null,
           updated_at: now,
           // Also store in additional_data for backward compatibility and audit trail
           additional_data: {
             ...existingAdditionalData,
             rejection_comments: comments.trim(),
-            rejected_by: currentUser?.id,
-            rejected_at: now,
+            rejected_by: undefined,
+            rejected_at: undefined,
             rejection_reason: comments.trim(), // Alternative key for compatibility
             sent_back_by: currentUser?.id,
-            sent_back_at: now
+            sent_back_at: now,
+            sent_back_to_coordinator_id: coordinatorId || null
           }
         })
         .eq('id', site.id);
@@ -661,23 +670,101 @@ const MMP = () => {
         }
       }
 
-      toast({
-        title: 'Site Sent Back',
-        description: 'The site has been sent back to the coordinator for editing.',
-        variant: 'default'
-      });
+      if (!options?.suppressToast) {
+        toast({
+          title: 'Site Sent Back',
+          description: 'The site has been sent back to the coordinator for editing.',
+          variant: 'default'
+        });
+      }
 
       // Refresh context to ensure real-time updates propagate
-      await refreshMMPFiles();
+      if (!options?.skipRefresh) {
+        await refreshMMPFiles();
+      }
     } catch (error: any) {
       console.error('Failed to send back site:', error);
-      toast({
-        title: 'Send Back Failed',
-        description: error.message || 'Failed to send the site back. Please try again.',
-        variant: 'destructive'
-      });
+      if (!options?.suppressToast) {
+        toast({
+          title: 'Send Back Failed',
+          description: error.message || 'Failed to send the site back. Please try again.',
+          variant: 'destructive'
+        });
+      }
     }
   }, [currentUser?.id, toast, refreshMMPFiles]);
+
+  const handleAllowCoordinatorWithoutStatePermit = useCallback(async (site: any, coordinatorId: string, comments?: string, options?: { suppressToast?: boolean; skipRefresh?: boolean }) => {
+    if (!coordinatorId) {
+      toast({
+        title: 'Coordinator Required',
+        description: 'Please select a coordinator.',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    try {
+      const now = new Date().toISOString();
+      const existingAdditionalData = site.additional_data || site.additionalData || {};
+
+      const { error } = await supabase
+        .from('mmp_site_entries')
+        .update({
+          status: 'Pending',
+          forwarded_to_user_id: coordinatorId,
+          forwarded_at: now,
+          forwarded_by_user_id: currentUser?.id,
+          updated_at: now,
+          additional_data: {
+            ...existingAdditionalData,
+            state_permit_waived: true,
+            state_permit_waived_by: currentUser?.id,
+            state_permit_waived_at: now,
+            state_permit_waived_notes: comments?.trim() || undefined,
+            sent_back_to_coordinator_id: coordinatorId,
+          }
+        })
+        .eq('id', site.id);
+
+      if (error) throw error;
+
+      const siteName = site.site_name || site.siteName || site.site_code || 'Site';
+      await insertNotifications([{
+        recipient_id: coordinatorId,
+        title_en: 'Site returned without state permit',
+        title_ar: 'تم إرجاع الموقع بدون تصريح الولاية',
+        message_en: `${siteName} was returned to you and can continue without state permit.${comments?.trim() ? ` Note: ${comments.trim().substring(0, 120)}${comments.trim().length > 120 ? '...' : ''}` : ''}`,
+        message_ar: `تم إرجاع ${siteName} إليك ويمكن المتابعة بدون تصريح الولاية.${comments?.trim() ? ` ملاحظة: ${comments.trim().substring(0, 120)}${comments.trim().length > 120 ? '...' : ''}` : ''}`,
+        event_type: 'approvals',
+        entity_id: site.id,
+        entity_type: 'mmpFile',
+        action_url: '/coordinator/sites',
+        priority: 'high',
+        status: 'pending'
+      }]);
+
+      if (!options?.suppressToast) {
+        toast({
+          title: 'Coordinator Allowed to Continue',
+          description: 'Site was sent back and coordinator can continue without state permit.',
+        });
+      }
+
+      if (!options?.skipRefresh) {
+        await refreshMMPFiles();
+      }
+    } catch (err: any) {
+      console.error('Failed to allow coordinator without state permit:', err);
+      if (!options?.suppressToast) {
+        toast({
+          title: 'Action Failed',
+          description: err.message || 'Failed to update site. Please try again.',
+          variant: 'destructive'
+        });
+      }
+    }
+  }, [currentUser?.id, refreshMMPFiles, toast]);
 
   // Handle re-dispatching a returned site (reset to approved and costed status)
   const handleRedispatchReturnedSite = useCallback(async (site: any, notes: string) => {
@@ -1478,15 +1565,12 @@ const MMP = () => {
           const { error: photosError } = await supabase
             .from('report_photos')
             .insert(reportPhotos);
-
           if (photosError) {
-            console.error('❌ Error linking photos to site visit:', photosError);
             // Don't throw - report is already created, just log the error
           } else {
             console.log('✅ Photos linked to site visit:', photoUrls.length);
           }
         }
-
         // Generate PDF report
         console.log('📄 Generating PDF report...');
         await generateVisitReportPDF(site, reportData, report, photoUrls);
@@ -2375,7 +2459,7 @@ const MMP = () => {
     if (!isFOM && !isSupervisor && !isAdmin && !isICT) return;
     
     // Filter coordinators from context users
-    const coords = contextUsers.filter(u => u.role === 'coordinator');
+    const coords = contextUsers.filter(u => String(u.role || '').trim().toLowerCase() === 'coordinator');
     setCoordinatorsList(coords.map(c => ({
       id: c.id,
       fullName: c.fullName || c.name || c.email,
@@ -2386,7 +2470,7 @@ const MMP = () => {
     })));
     
     // Filter supervisors from context users
-    const sups = contextUsers.filter(u => u.role === 'supervisor');
+    const sups = contextUsers.filter(u => String(u.role || '').trim().toLowerCase() === 'supervisor');
     setSupervisorsList(sups.map(s => ({
       id: s.id,
       fullName: s.fullName || s.name || s.email,
@@ -2409,6 +2493,103 @@ const MMP = () => {
     };
     loadHubStates();
   }, [isFOM, isSupervisor, isAdmin, isICT, contextUsers]);
+
+  const resolveOriginalCoordinatorId = useCallback((site: any): string => {
+    if (!site) return '';
+
+    const ad = site.additional_data || site.additionalData || {};
+    const coordinatorIds = new Set((coordinatorsList || []).map((c: any) => String(c.id)));
+
+    const idCandidates = [
+      site.verified_by,
+      site.verifiedBy,
+      ad.sent_back_by,
+      site.rejected_by,
+      site.rejectedBy,
+      ad.rejected_by,
+      ad.returned_by_user_id,
+      site.forwarded_to_user_id,
+      site.forwardedToUserId,
+      ad.assigned_to,
+      ad.assignedTo,
+      ad.forwarded_to_user_id,
+      ad.forwardedToUserId,
+      ad.sent_back_to_coordinator_id,
+      ad.sentBackToCoordinatorId,
+    ].filter(Boolean);
+
+    for (const candidate of idCandidates) {
+      const normalizedCandidate = String(candidate);
+      if (coordinatorIds.has(normalizedCandidate)) return normalizedCandidate;
+    }
+
+    const returnedByName = String(
+      ad.returned_by_name ||
+      ad.sent_back_by_name ||
+      ad.returnedByName ||
+      ad.sentBackByName ||
+      ''
+    ).trim().toLowerCase();
+
+    const returnedByEmail = String(
+      ad.returned_by_email ||
+      ad.sent_back_by_email ||
+      ad.returnedByEmail ||
+      ad.sentBackByEmail ||
+      ''
+    ).trim().toLowerCase();
+
+    if (returnedByName) {
+      const byName = coordinatorsList.find((c: any) => {
+        const fullName = String(c.fullName || '').trim().toLowerCase();
+        const name = String(c.name || '').trim().toLowerCase();
+        const email = String(c.email || '').trim().toLowerCase();
+        return fullName === returnedByName ||
+               name === returnedByName ||
+               fullName.includes(returnedByName) ||
+               returnedByName.includes(fullName) ||
+               name.includes(returnedByName) ||
+               returnedByName.includes(name) ||
+               email === returnedByName ||
+               (returnedByEmail && email === returnedByEmail);
+      });
+      if (byName?.id) return String(byName.id);
+    }
+
+    if (returnedByEmail) {
+      const byEmail = coordinatorsList.find((c: any) => String(c.email || '').trim().toLowerCase() === returnedByEmail);
+      if (byEmail?.id) return String(byEmail.id);
+    }
+
+    return '';
+  }, [coordinatorsList]);
+
+  useEffect(() => {
+    if (!returnedSiteActionDialog.open || returnedSiteActionDialog.action !== 'sendback') return;
+    if (!returnedSiteActionDialog.site) return;
+    if (selectedCoordinatorForSendBack) return;
+
+    const resolved = resolveOriginalCoordinatorId(returnedSiteActionDialog.site);
+    if (resolved) {
+      setSelectedCoordinatorForSendBack(resolved);
+    }
+  }, [
+    returnedSiteActionDialog.open,
+    returnedSiteActionDialog.action,
+    returnedSiteActionDialog.site,
+    selectedCoordinatorForSendBack,
+    resolveOriginalCoordinatorId,
+  ]);
+
+  useEffect(() => {
+    if (!returnedSiteActionDialog.open) {
+      setShowReturnedBatchSiteList(false);
+      return;
+    }
+    if (returnedSiteActionBatchSites.length <= 1) {
+      setShowReturnedBatchSiteList(false);
+    }
+  }, [returnedSiteActionDialog.open, returnedSiteActionBatchSites.length]);
 
   // Pre-compute which MMP IDs have sites with verified/dispatched/etc statuses
   // This runs before categorization and updates when siteEntries are loaded
@@ -4541,39 +4722,18 @@ const MMP = () => {
                                           size="sm"
                                           onClick={(e) => {
                                             e.stopPropagation();
-                                            // Get mmp_file_id from one of the sites
-                                            const mmpFileId = stateGroup.sites[0]?.mmp_file_id;
-                                            // Find stateId from hubStatesList
-                                            const stateMatch = hubStatesList.find(hs => 
-                                              hs.state_name?.toLowerCase() === stateGroup.state.toLowerCase()
-                                            );
-                                            const stateId = stateMatch?.state_id;
-                                            
-                                            setSelectedReturnedState({
-                                              state: stateGroup.state,
-                                              sites: stateGroup.sites,
-                                              mmpFileId,
-                                              stateId
-                                            });
-                                            
-                                            // Auto-select coordinator for this state
-                                            const recommendedCoord = coordinatorsList.find(c => c.stateId === stateId);
-                                            setSelectedCoordinatorForReturned(recommendedCoord?.id || '');
-                                            
-                                            // Auto-select supervisor for the hub that has this state
-                                            if (stateId) {
-                                              const hubForState = hubStatesList.find(hs => hs.state_id === stateId);
-                                              if (hubForState) {
-                                                const supervisorForHub = supervisorsList.find(s => s.hubId === hubForState.hub_id);
-                                                setSelectedSupervisorForReturned(supervisorForHub?.id || '');
-                                              }
-                                            }
-                                            
-                                            setReturnedStatePermitDialogOpen(true);
+                                            const sitesForBatch = stateGroup.sites || [];
+                                            if (!sitesForBatch.length) return;
+                                            const firstSite = sitesForBatch[0];
+                                            setReturnedSiteActionBatchSites(sitesForBatch);
+                                            setReturnedSiteActionDialog({ open: true, site: firstSite, action: 'sendback' });
+                                            setSelectedReturnedActionType('sendback');
+                                            setReturnedActionNotes('');
+                                            setSelectedCoordinatorForSendBack(resolveOriginalCoordinatorId(firstSite));
                                           }}
                                         >
                                           <Upload className="h-3 w-3 mr-1" />
-                                          Upload Permits
+                                          Send Back
                                         </Button>
                                       </div>
                                     </div>
@@ -4657,6 +4817,9 @@ const MMP = () => {
                                                                     e.stopPropagation();
                                                                     setReturnedSiteActionDialog({ open: true, site, action: 'sendback' });
                                                                     setReturnedActionNotes('');
+                                                                    setSelectedCoordinatorForSendBack(
+                                                                      resolveOriginalCoordinatorId(site)
+                                                                    );
                                                                   }}
                                                                 >
                                                                   <Send className="h-3 w-3 mr-1" />
@@ -6821,25 +6984,58 @@ const MMP = () => {
         onOpenChange={(open) => {
           if (!open) {
             setReturnedSiteActionDialog({ open: false, site: null, action: 'sendback' });
+            setReturnedSiteActionBatchSites([]);
+            setShowReturnedBatchSiteList(false);
             setReturnedActionNotes('');
+            setSelectedCoordinatorForSendBack('');
+            setSelectedReturnedActionType('sendback');
           }
         }}
       >
         <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>
-              {returnedSiteActionDialog.action === 'sendback' && 'Send Site Back to Coordinator'}
+              {returnedSiteActionDialog.action === 'sendback' && (returnedSiteActionBatchSites.length > 1
+                ? `Send Back ${returnedSiteActionBatchSites.length} Sites to Coordinator`
+                : 'Send Site Back to Coordinator')}
               {returnedSiteActionDialog.action === 'redispatch' && 'Re-dispatch Site'}
               {returnedSiteActionDialog.action === 'report' && 'Report Issue with Returned Site'}
             </DialogTitle>
             <DialogDescription>
-              {returnedSiteActionDialog.action === 'sendback' && 'Send this site back to the coordinator with your comments.'}
+              {returnedSiteActionDialog.action === 'sendback' && (returnedSiteActionBatchSites.length > 0
+                ? `Send ${returnedSiteActionBatchSites.length} site(s) back to the coordinator with your comments.`
+                : 'Send this site back to the coordinator with your comments.')}
               {returnedSiteActionDialog.action === 'redispatch' && 'Move this site back to Approved & Costed so it can be dispatched again.'}
               {returnedSiteActionDialog.action === 'report' && 'Report an issue with this returned site to administrators.'}
             </DialogDescription>
           </DialogHeader>
           {returnedSiteActionDialog.site && (
             <div className="space-y-4 py-2">
+              {returnedSiteActionDialog.action === 'sendback' && returnedSiteActionBatchSites.length > 1 && (
+                <div className="rounded-md border border-blue-200 bg-blue-50 dark:border-blue-900 dark:bg-blue-950/30 p-3">
+                  <button
+                    type="button"
+                    onClick={() => setShowReturnedBatchSiteList(prev => !prev)}
+                    className="w-full text-left"
+                  >
+                    <p className="text-sm font-medium text-blue-800 dark:text-blue-200 underline underline-offset-2">
+                      {returnedSiteActionBatchSites.length} site(s) will be sent back. Click to {showReturnedBatchSiteList ? 'hide' : 'view'} list.
+                    </p>
+                  </button>
+                  {showReturnedBatchSiteList && (
+                    <div className="mt-2 max-h-48 overflow-y-auto rounded-md border border-blue-200/70 dark:border-blue-800/70 bg-white/70 dark:bg-blue-950/20">
+                      {returnedSiteActionBatchSites.map((batchSite: any, index: number) => (
+                        <div key={batchSite.id || `${batchSite.site_code || 'site'}-${index}`} className="px-3 py-2 text-xs border-b last:border-b-0 border-blue-100 dark:border-blue-900/50">
+                          <p className="font-medium text-foreground">{batchSite.site_name || batchSite.siteName || 'Unknown Site'}</p>
+                          <p className="text-muted-foreground">
+                            {(batchSite.site_code || batchSite.siteCode || 'No code')} • {(batchSite.state || '')}{batchSite.locality ? ` - ${batchSite.locality}` : ''}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
               <div className="bg-muted/50 rounded-md p-3 space-y-1">
                 <p className="text-sm font-medium">{returnedSiteActionDialog.site.site_name || returnedSiteActionDialog.site.siteName || 'Unknown Site'}</p>
                 {returnedSiteActionDialog.site.site_code && (
@@ -6848,6 +7044,30 @@ const MMP = () => {
                 <p className="text-xs text-muted-foreground">
                   {returnedSiteActionDialog.site.state || ''}{returnedSiteActionDialog.site.locality ? ` - ${returnedSiteActionDialog.site.locality}` : ''}
                 </p>
+                {(() => {
+                  const returnedByRaw =
+                    returnedSiteActionDialog.site.verified_by ||
+                    returnedSiteActionDialog.site.additional_data?.sent_back_by ||
+                    returnedSiteActionDialog.site.rejected_by ||
+                    returnedSiteActionDialog.site.additional_data?.rejected_by ||
+                    returnedSiteActionDialog.site.additional_data?.returned_by_name ||
+                    returnedSiteActionDialog.site.additional_data?.sent_back_by_name ||
+                    '';
+
+                  const coordinatorName =
+                    coordinatorsList.find(c => c.id === returnedByRaw)?.fullName ||
+                    returnedSiteActionDialog.site.additional_data?.returned_by_name ||
+                    returnedSiteActionDialog.site.additional_data?.sent_back_by_name ||
+                    returnedByRaw;
+
+                  if (!coordinatorName) return null;
+
+                  return (
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Returned by Coordinator: <span className="font-medium text-foreground">{coordinatorName}</span>
+                    </p>
+                  );
+                })()}
                 {(returnedSiteActionDialog.site.verification_notes || returnedSiteActionDialog.site.additional_data?.rejection_comments || returnedSiteActionDialog.site.additional_data?.rejection_reason || returnedSiteActionDialog.site.additional_data?.return_reason || returnedSiteActionDialog.site.rejection_comments) && (
                   <div className="mt-2 pt-2 border-t border-border">
                     <p className="text-xs font-medium text-orange-700 dark:text-orange-400">Original Return Reason:</p>
@@ -6857,8 +7077,40 @@ const MMP = () => {
               </div>
               
               <div className="space-y-2">
+                {returnedSiteActionDialog.action === 'sendback' && (
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Action *</label>
+                    <Select value={selectedReturnedActionType} onValueChange={(v: any) => setSelectedReturnedActionType(v)}>
+                      <SelectTrigger data-testid="select-sendback-action">
+                        <SelectValue placeholder="Select action" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="sendback">Send Site Back to Coordinator to upload state permit</SelectItem>
+                        <SelectItem value="allow_without_state_permit">Allow coordinator to continue without state permit</SelectItem>
+                        <SelectItem value="upload_state_permit">Upload state permit</SelectItem>
+                      </SelectContent>
+                    </Select>
+
+                    <label className="text-sm font-medium">Coordinator *</label>
+                    <Select value={selectedCoordinatorForSendBack} onValueChange={setSelectedCoordinatorForSendBack}>
+                      <SelectTrigger data-testid="select-sendback-coordinator">
+                        <SelectValue placeholder="Select coordinator" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {coordinatorsList.map(coord => (
+                          <SelectItem key={coord.id} value={coord.id}>
+                            {coord.fullName || coord.email || 'Coordinator'}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground">Defaults to the original coordinator who returned this site. You can choose a different coordinator.</p>
+                  </div>
+                )}
                 <label className="text-sm font-medium">
-                  {returnedSiteActionDialog.action === 'sendback' && 'Comments for Coordinator *'}
+                  {returnedSiteActionDialog.action === 'sendback' && selectedReturnedActionType === 'sendback' && 'Comments for Coordinator *'}
+                  {returnedSiteActionDialog.action === 'sendback' && selectedReturnedActionType === 'allow_without_state_permit' && 'Comments (Optional)'}
+                  {returnedSiteActionDialog.action === 'sendback' && selectedReturnedActionType === 'upload_state_permit' && 'Notes (Optional)'}
                   {returnedSiteActionDialog.action === 'redispatch' && 'Notes (Optional)'}
                   {returnedSiteActionDialog.action === 'report' && 'Report Details *'}
                 </label>
@@ -6866,7 +7118,9 @@ const MMP = () => {
                   value={returnedActionNotes}
                   onChange={(e) => setReturnedActionNotes(e.target.value)}
                   placeholder={
-                    returnedSiteActionDialog.action === 'sendback' ? 'Explain why this site needs to go back to the coordinator...' :
+                    returnedSiteActionDialog.action === 'sendback' && selectedReturnedActionType === 'sendback' ? 'Explain why this site needs to go back to the coordinator...' :
+                    returnedSiteActionDialog.action === 'sendback' && selectedReturnedActionType === 'allow_without_state_permit' ? 'Optional note to coordinator...' :
+                    returnedSiteActionDialog.action === 'sendback' && selectedReturnedActionType === 'upload_state_permit' ? 'Optional note before uploading state permit...' :
                     returnedSiteActionDialog.action === 'redispatch' ? 'Add any notes for re-dispatching this site...' :
                     'Describe the issue you want to report...'
                   }
@@ -6881,7 +7135,11 @@ const MMP = () => {
               variant="outline"
               onClick={() => {
                 setReturnedSiteActionDialog({ open: false, site: null, action: 'sendback' });
+                setReturnedSiteActionBatchSites([]);
+                setShowReturnedBatchSiteList(false);
                 setReturnedActionNotes('');
+                setSelectedCoordinatorForSendBack('');
+                setSelectedReturnedActionType('sendback');
               }}
               data-testid="button-cancel-returned-action"
             >
@@ -6892,9 +7150,56 @@ const MMP = () => {
                 const site = returnedSiteActionDialog.site;
                 const action = returnedSiteActionDialog.action;
                 if (!site) return;
+                const targetSites = returnedSiteActionBatchSites.length > 0 ? returnedSiteActionBatchSites : [site];
                 
                 if (action === 'sendback') {
-                  await handleSendBackToCoordinator(site, returnedActionNotes);
+                  if (selectedReturnedActionType === 'sendback') {
+                    if (targetSites.length > 1) {
+                      for (const targetSite of targetSites) {
+                        await handleSendBackToCoordinator(targetSite, returnedActionNotes, selectedCoordinatorForSendBack || undefined, { suppressToast: true, skipRefresh: true });
+                      }
+                      await refreshMMPFiles();
+                      toast({
+                        title: 'Sites Sent Back',
+                        description: `${targetSites.length} site(s) have been sent back to the coordinator for editing.`,
+                        variant: 'default'
+                      });
+                    } else {
+                      await handleSendBackToCoordinator(site, returnedActionNotes, selectedCoordinatorForSendBack || undefined);
+                    }
+                  } else if (selectedReturnedActionType === 'allow_without_state_permit') {
+                    if (targetSites.length > 1) {
+                      for (const targetSite of targetSites) {
+                        await handleAllowCoordinatorWithoutStatePermit(targetSite, selectedCoordinatorForSendBack, returnedActionNotes, { suppressToast: true, skipRefresh: true });
+                      }
+                      await refreshMMPFiles();
+                      toast({
+                        title: 'Sites Updated',
+                        description: `${targetSites.length} site(s) were sent back and coordinator can continue without state permit.`,
+                        variant: 'default'
+                      });
+                    } else {
+                      await handleAllowCoordinatorWithoutStatePermit(site, selectedCoordinatorForSendBack, returnedActionNotes);
+                    }
+                  } else if (selectedReturnedActionType === 'upload_state_permit') {
+                    const firstTargetSite = targetSites[0] || site;
+                    const siteStateId = firstTargetSite.state_id || firstTargetSite.stateId;
+                    setSelectedReturnedState({
+                      state: firstTargetSite.state || '',
+                      sites: targetSites,
+                      mmpFileId: firstTargetSite.mmp_file_id || firstTargetSite.mmpFileId,
+                      stateId: siteStateId,
+                    });
+                    setSelectedCoordinatorForReturned(selectedCoordinatorForSendBack || resolveOriginalCoordinatorId(firstTargetSite));
+                    if (siteStateId) {
+                      const hubForState = hubStatesList.find((hs: any) => hs.state_id === siteStateId);
+                      if (hubForState) {
+                        const supervisorForHub = supervisorsList.find((s: any) => s.hubId === hubForState.hub_id);
+                        setSelectedSupervisorForReturned(supervisorForHub?.id || '');
+                      }
+                    }
+                    setReturnedStatePermitDialogOpen(true);
+                  }
                 } else if (action === 'redispatch') {
                   await handleRedispatchReturnedSite(site, returnedActionNotes);
                 } else if (action === 'report') {
@@ -6902,10 +7207,15 @@ const MMP = () => {
                 }
                 
                 setReturnedSiteActionDialog({ open: false, site: null, action: 'sendback' });
+                setReturnedSiteActionBatchSites([]);
+                setShowReturnedBatchSiteList(false);
                 setReturnedActionNotes('');
+                setSelectedCoordinatorForSendBack('');
+                setSelectedReturnedActionType('sendback');
               }}
               disabled={
-                (returnedSiteActionDialog.action === 'sendback' && !returnedActionNotes.trim()) ||
+                (returnedSiteActionDialog.action === 'sendback' && !selectedCoordinatorForSendBack) ||
+                (returnedSiteActionDialog.action === 'sendback' && selectedReturnedActionType === 'sendback' && !returnedActionNotes.trim()) ||
                 (returnedSiteActionDialog.action === 'report' && !returnedActionNotes.trim())
               }
               className={
@@ -6917,7 +7227,13 @@ const MMP = () => {
               }
               data-testid="button-confirm-returned-action"
             >
-              {returnedSiteActionDialog.action === 'sendback' && 'Send Back'}
+              {returnedSiteActionDialog.action === 'sendback' && selectedReturnedActionType === 'sendback' && (returnedSiteActionBatchSites.length > 1
+                ? `Send Back (${returnedSiteActionBatchSites.length})`
+                : 'Send Back')}
+              {returnedSiteActionDialog.action === 'sendback' && selectedReturnedActionType === 'allow_without_state_permit' && (returnedSiteActionBatchSites.length > 1
+                ? `Allow Continue (${returnedSiteActionBatchSites.length})`
+                : 'Allow Continue')}
+              {returnedSiteActionDialog.action === 'sendback' && selectedReturnedActionType === 'upload_state_permit' && 'Proceed to Upload Permit'}
               {returnedSiteActionDialog.action === 'redispatch' && 'Re-dispatch'}
               {returnedSiteActionDialog.action === 'report' && 'Submit Report'}
             </Button>

@@ -128,6 +128,7 @@ function mapSiteEntry(migrated: any, projectName?: string) {
     additionalData: migrated.additional_data || {},
     status: migrated.status,
     forwardedToUserId: migrated.forwarded_to_user_id,
+    workflow: migrated.workflow,
   };
 }
 
