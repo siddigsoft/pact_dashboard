@@ -352,6 +352,7 @@ export default function TransactionScanner() {
   const [quotaError, setQuotaError] = useState<string | null>(null);
   const [savedSessions, setSavedSessions] = useState<SavedSession[]>([]);
   const [sessionsLoading, setSessionsLoading] = useState(true);
+  const [sessionsError, setSessionsError] = useState<string | null>(null);
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
   const [saveName, setSaveName] = useState('');
   const [saving, setSaving] = useState(false);
@@ -400,16 +401,22 @@ export default function TransactionScanner() {
 
   const loadSessions = useCallback(async () => {
     setSessionsLoading(true);
+    setSessionsError(null);
     try {
       const { data, error } = await supabase
         .from('bank_transaction_scans')
         .select('id, session_name, scanned_at, receipt_count, total_amount, receipts')
         .order('scanned_at', { ascending: false })
         .limit(50);
-      if (error) throw error;
+      if (error) {
+        console.error('[TransactionScanner] loadSessions error:', error.code, error.message, error.details);
+        setSessionsError(`${error.message}${error.details ? ` — ${error.details}` : ''}`);
+        return;
+      }
       setSavedSessions((data || []) as SavedSession[]);
     } catch (err: any) {
-      console.error('Failed to load sessions:', err.message);
+      console.error('[TransactionScanner] loadSessions caught:', err);
+      setSessionsError(err.message || 'Unknown error loading records');
     } finally {
       setSessionsLoading(false);
     }
@@ -423,19 +430,30 @@ export default function TransactionScanner() {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       const totalAmt = doneRows.reduce((s, r) => s + amountNum(r.amount), 0);
-      const { error } = await supabase.from('bank_transaction_scans').insert({
+
+      // Strip frontend-only fields before saving
+      const receiptsToSave = doneRows.map(({ id: _id, fileName: _fn, status: _st, error: _er, ...rest }) => rest);
+
+      const { data, error } = await supabase.from('bank_transaction_scans').insert({
         session_name: name.trim() || null,
         scanned_by: user?.id || null,
-        receipts: doneRows,
+        receipts: receiptsToSave,
         receipt_count: doneRows.length,
         total_amount: totalAmt,
-      });
-      if (error) throw error;
+      }).select('id');
+
+      if (error) {
+        console.error('[TransactionScanner] Save error:', error.code, error.message, error.details, error.hint);
+        throw new Error(error.message || error.details || 'Database insert failed');
+      }
+
+      console.log('[TransactionScanner] Saved successfully, id:', data?.[0]?.id);
       toast({ title: 'Session saved', description: `${doneRows.length} receipts saved${name ? ` as "${name}"` : ''}.` });
       setAutoSaved(true);
       await loadSessions();
     } catch (err: any) {
-      toast({ title: 'Save failed', description: err.message, variant: 'destructive' });
+      console.error('[TransactionScanner] Save caught error:', err);
+      toast({ title: 'Save failed', description: err.message || 'Unknown error', variant: 'destructive' });
     } finally {
       setSaving(false);
     }
@@ -451,10 +469,18 @@ export default function TransactionScanner() {
 
   const loadSession = useCallback((session: SavedSession) => {
     const restored: TxRow[] = (session.receipts || []).map((r: any) => ({
-      ...r,
+      transaction_id: r.transaction_id || '',
+      transaction_date: r.transaction_date || '',
+      transaction_time: r.transaction_time || '',
+      from_account: r.from_account || '',
+      to_account: r.to_account || '',
+      recipient_name: r.recipient_name || '',
+      mobile_number: r.mobile_number || 'N/A',
+      comment: r.comment || 'N/A',
+      amount: r.amount ?? 0,
       id: crypto.randomUUID(),
       status: 'done' as const,
-      fileName: r.fileName || '',
+      fileName: '',
     }));
     setRows(restored);
     setAutoSaved(true);
@@ -822,6 +848,14 @@ export default function TransactionScanner() {
           {sessionsLoading ? (
             <div className="flex items-center justify-center py-10 gap-2 text-muted-foreground text-sm">
               <Loader2 className="h-4 w-4 animate-spin" /> Loading saved records…
+            </div>
+          ) : sessionsError ? (
+            <div className="flex items-start gap-3 p-4 text-sm text-red-700 bg-red-50 dark:bg-red-950/20">
+              <AlertCircle className="h-4 w-4 shrink-0 mt-0.5 text-red-500" />
+              <div>
+                <p className="font-semibold">Could not load saved records</p>
+                <p className="text-xs mt-0.5 font-mono">{sessionsError}</p>
+              </div>
             </div>
           ) : savedSessions.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-12 gap-2 text-muted-foreground">
