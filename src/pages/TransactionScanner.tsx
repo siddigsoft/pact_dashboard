@@ -54,12 +54,20 @@ function amountNum(v: number | string): number {
 
 function sleep(ms: number) { return new Promise(r => setTimeout(r, ms)); }
 
-async function extractFromImageWithRetry(base64: string, mimeType: string, maxRetries = 4): Promise<Partial<TxRow>> {
+async function extractFromImageWithRetry(
+  base64: string,
+  mimeType: string,
+  onStatus?: (msg: string) => void,
+  maxRetries = 4,
+): Promise<Partial<TxRow>> {
   let lastError: Error | null = null;
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     if (attempt > 0) {
-      const wait = Math.min(2000 * Math.pow(2, attempt - 1), 16000);
+      const wait = Math.min(12000 * Math.pow(2, attempt - 1), 60000);
+      const waitSec = Math.round(wait / 1000);
+      onStatus?.(`Rate limited — waiting ${waitSec}s before retry ${attempt}/${maxRetries}…`);
       await sleep(wait);
+      onStatus?.(`Retrying (attempt ${attempt}/${maxRetries})…`);
     }
     try {
       const res = await fetch('/api/extract-transaction', {
@@ -69,8 +77,7 @@ async function extractFromImageWithRetry(base64: string, mimeType: string, maxRe
       });
 
       if (res.status === 429 || res.status === 503) {
-        const data = await res.json().catch(() => ({}));
-        lastError = new Error(`Rate limited — retrying… (${data.error || res.statusText})`);
+        lastError = new Error('Gemini rate limit reached — please retry this image manually');
         continue;
       }
 
@@ -104,11 +111,13 @@ async function extractFromImageWithRetry(base64: string, mimeType: string, maxRe
         currency: 'SDG',
       };
     } catch (err: any) {
-      if (err.message?.includes('Rate limited')) { lastError = err; continue; }
+      if (err.message?.includes('rate limit') || err.message?.includes('Rate limited')) {
+        lastError = err; continue;
+      }
       throw err;
     }
   }
-  throw lastError || new Error('Max retries exceeded');
+  throw lastError || new Error('Gemini rate limit reached — please retry this image manually');
 }
 
 function fileToBase64(file: File): Promise<{ base64: string; mimeType: string }> {
@@ -239,8 +248,9 @@ export default function TransactionScanner() {
     updateRow(rowId, { status: 'processing', error: undefined });
     try {
       const { base64, mimeType } = await fileToBase64(file);
-      const extracted = await extractFromImageWithRetry(base64, mimeType);
-      updateRow(rowId, { status: 'done', ...extracted });
+      const onStatus = (msg: string) => updateRow(rowId, { error: msg });
+      const extracted = await extractFromImageWithRetry(base64, mimeType, onStatus);
+      updateRow(rowId, { status: 'done', error: undefined, ...extracted });
     } catch (err: any) {
       updateRow(rowId, { status: 'error', error: err.message || 'Extraction failed' });
     }
@@ -266,7 +276,7 @@ export default function TransactionScanner() {
 
     for (let i = 0; i < files.length; i++) {
       await processOneRow(newRows[i].id, files[i]);
-      if (i < files.length - 1) await sleep(2500);
+      if (i < files.length - 1) await sleep(7000);
     }
   }, [processOneRow]);
 
@@ -400,9 +410,15 @@ export default function TransactionScanner() {
             <div className="flex items-center justify-between text-sm flex-wrap gap-2">
               <span className="font-medium">
                 {processing ? (
-                  <span className="flex items-center gap-2 text-[#1D3461]">
-                    <Loader2 className="h-4 w-4 animate-spin" /> Extracting transactions with AI…
-                  </span>
+                  rows.some(r => r.status === 'processing' && !!r.error) ? (
+                    <span className="flex items-center gap-2 text-amber-600">
+                      <RefreshCw className="h-4 w-4 animate-spin" /> Rate limited — auto-retrying with backoff…
+                    </span>
+                  ) : (
+                    <span className="flex items-center gap-2 text-[#1D3461]">
+                      <Loader2 className="h-4 w-4 animate-spin" /> Extracting transactions with AI…
+                    </span>
+                  )
                 ) : (
                   <span className="flex items-center gap-2 text-emerald-600">
                     <CheckCircle2 className="h-4 w-4" /> Processing complete
@@ -423,24 +439,29 @@ export default function TransactionScanner() {
             </div>
             <Progress value={totalCount > 0 ? (processedCount / totalCount) * 100 : 0} className="h-2" />
             <div className="flex flex-wrap gap-2">
-              {rows.map(r => (
-                <div key={r.id} className={`flex items-center gap-1.5 text-xs px-2 py-1 rounded-full border ${
-                  r.status === 'done' ? 'bg-emerald-50 border-emerald-200 text-emerald-700' :
-                  r.status === 'error' ? 'bg-red-50 border-red-200 text-red-600' :
-                  r.status === 'processing' ? 'bg-blue-50 border-blue-200 text-blue-600' :
-                  'bg-muted border-border text-muted-foreground'
-                }`}>
-                  {r.status === 'done' && <CheckCircle2 className="h-3 w-3" />}
-                  {r.status === 'error' && <AlertCircle className="h-3 w-3" />}
-                  {r.status === 'processing' && <Loader2 className="h-3 w-3 animate-spin" />}
-                  <span className="max-w-[120px] truncate" title={r.fileName}>{r.fileName}</span>
-                  {r.status === 'error' && (
-                    <button onClick={e => { e.stopPropagation(); retryRow(r.id); }} title={`Retry: ${r.error}`}>
-                      <RefreshCw className="h-3 w-3" />
-                    </button>
-                  )}
-                </div>
-              ))}
+              {rows.map(r => {
+                const isRateWaiting = r.status === 'processing' && !!r.error;
+                return (
+                  <div key={r.id} title={r.error || r.fileName} className={`flex items-center gap-1.5 text-xs px-2 py-1 rounded-full border ${
+                    r.status === 'done' ? 'bg-emerald-50 border-emerald-200 text-emerald-700' :
+                    r.status === 'error' ? 'bg-red-50 border-red-200 text-red-600' :
+                    isRateWaiting ? 'bg-amber-50 border-amber-200 text-amber-700' :
+                    r.status === 'processing' ? 'bg-blue-50 border-blue-200 text-blue-600' :
+                    'bg-muted border-border text-muted-foreground'
+                  }`}>
+                    {r.status === 'done' && <CheckCircle2 className="h-3 w-3" />}
+                    {r.status === 'error' && <AlertCircle className="h-3 w-3" />}
+                    {isRateWaiting && <RefreshCw className="h-3 w-3 animate-spin" />}
+                    {r.status === 'processing' && !isRateWaiting && <Loader2 className="h-3 w-3 animate-spin" />}
+                    <span className="max-w-[140px] truncate">{isRateWaiting ? (r.error || r.fileName) : r.fileName}</span>
+                    {r.status === 'error' && (
+                      <button onClick={e => { e.stopPropagation(); retryRow(r.id); }} title="Retry this image">
+                        <RefreshCw className="h-3 w-3" />
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           </CardContent>
         </Card>
