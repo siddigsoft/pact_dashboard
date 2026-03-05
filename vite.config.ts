@@ -21,12 +21,28 @@ const GEMINI_MODELS = [
 const unavailableModels = new Set<string>();
 
 function buildBatchPrompt(count: number): string {
-  return `You are a bank transaction OCR expert. I will show you ${count} Bank of Khartoum transfer screenshot${count > 1 ? 's' : ''} (Arabic or English).
-Extract transaction data from EACH image. Return ONLY a valid JSON array with exactly ${count} objects in order, one per image. No markdown, no extra text.
-Each object must have exactly these fields:
-{"transaction_id":"","date_time":"DD-Mon-YYYY HH:MM:SS","from_account":"","to_account":"","recipient_name":"","mobile_number":"N/A","comment":"N/A","amount":0.00}
-Arabic labels: رقم العملية=transaction_id, التاريخ والوقت/التاريخ و الزمن=date_time, من حساب/من=from_account, الى حساب/إلى=to_account, إسم المرسل اليه=recipient_name, رقم الموبايل=mobile_number, التعليق=comment, المبلغ=amount.
-Rules: Use N/A for missing text fields. Amount must be a plain number. Return exactly ${count} objects in the JSON array.`;
+  return `You are a Bank of Khartoum transfer receipt OCR expert. Analyze ${count} screenshot${count > 1 ? 's' : ''} of Bank of Khartoum تحويلات (transfer) receipts — the green app UI or printed receipts, in Arabic or English.
+
+Extract EXACTLY these 8 fields from EACH image and return ONLY a valid JSON array of ${count} objects. No markdown, no explanation, no extra text.
+
+Field mapping (Arabic label → JSON key):
+- رقم العملية → transaction_id  (the long numeric code, e.g. "20024933620")
+- التاريخ و الزمن / التاريخ والوقت → date_time  (keep exactly as shown, e.g. "04-Mar-2026 19:13:16")
+- من حساب → from_account  (digits only, remove spaces, e.g. "08131231711700001")
+- الى حساب / إلى حساب → to_account  (digits only, remove spaces)
+- اسم المرسل اليه / إسم المرسل اليه → recipient_name  (full Arabic name as shown)
+- رقم الموبايل → mobile_number  (use "N/A" if shown as N/A or blank)
+- التعليق → comment  (use "N/A" if shown as N/A or blank)
+- المبلغ → amount  (plain number, remove commas, e.g. 3000000.00)
+
+Rules:
+1. Remove all spaces from account numbers (from_account and to_account).
+2. If a field shows "N/A" in the image, use the string "N/A".
+3. amount must be a numeric value (no currency symbols, no commas).
+4. Return exactly ${count} JSON objects in order, one per image.
+
+Example output for one image:
+[{"transaction_id":"20024933620","date_time":"04-Mar-2026 19:13:16","from_account":"08131231711700001","to_account":"03431595497500001","recipient_name":"محمد بابكر الجزولي عثمان","mobile_number":"N/A","comment":"N/A","amount":3000000.00}]`;
 }
 
 async function callGeminiWithRotation(
@@ -110,8 +126,26 @@ function geminiOcrPlugin() {
             const ai = new GoogleGenAI({ apiKey });
 
             const { text, model } = await callGeminiWithRotation(ai, images);
+
+            // Post-process: strip spaces from account numbers in case AI didn't follow instructions
+            let cleanedText = text;
+            try {
+              const arr = JSON.parse(text);
+              if (Array.isArray(arr)) {
+                arr.forEach((obj: any) => {
+                  if (obj.from_account) obj.from_account = String(obj.from_account).replace(/\s+/g, '');
+                  if (obj.to_account) obj.to_account = String(obj.to_account).replace(/\s+/g, '');
+                  if (obj.amount != null) {
+                    const n = parseFloat(String(obj.amount).replace(/,/g, ''));
+                    obj.amount = isNaN(n) ? 0 : n;
+                  }
+                });
+                cleanedText = JSON.stringify(arr);
+              }
+            } catch { /* leave text as-is if parse fails */ }
+
             res.setHeader('Content-Type', 'application/json');
-            res.end(JSON.stringify({ text, model }));
+            res.end(JSON.stringify({ text: cleanedText, model }));
 
           } catch (err: any) {
             const msg = err.message || 'Gemini API call failed';
