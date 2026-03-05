@@ -1,15 +1,18 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
+import { Input } from '@/components/ui/input';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import {
   Download, CheckCircle2, AlertCircle, Loader2, ScanLine,
-  RefreshCw, Trash2, Upload, Clock
+  RefreshCw, Trash2, Upload, Clock, Save, FolderOpen, Database
 } from 'lucide-react';
-// xlsx-js-style is CJS; Vite converts it — grab whichever export form is available
 import * as _XLSXStyleNS from 'xlsx-js-style';
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const XLSXStyle: any = (_XLSXStyleNS as any).default ?? _XLSXStyleNS;
 import { format, parse, isValid } from 'date-fns';
+import { supabase } from '@/integrations/supabase/client';
+import { useToast } from '@/hooks/use-toast';
 
 type TxRow = {
   id: string;
@@ -25,6 +28,15 @@ type TxRow = {
   mobile_number: string;
   comment: string;
   amount: number | string;
+};
+
+type SavedSession = {
+  id: string;
+  session_name: string | null;
+  scanned_at: string;
+  receipt_count: number;
+  total_amount: number;
+  receipts: TxRow[];
 };
 
 function parseDateTime(raw: string): { date: string; time: string } {
@@ -124,7 +136,7 @@ async function extractBatch(
   throw new Error('All AI models at daily quota. Quotas reset at midnight Pacific time.');
 }
 
-function exportToExcel(rows: TxRow[]) {
+function exportToExcel(rows: TxRow[], sessionName?: string) {
   const done = rows.filter(r => r.status === 'done');
   if (!done.length) return;
 
@@ -141,7 +153,6 @@ function exportToExcel(rows: TxRow[]) {
     groups[d].push(row);
   });
 
-  // Style definitions
   const sTitle  = { font: { bold: true, sz: 14, color: { rgb: '0F2041' } }, fill: { patternType: 'solid', fgColor: { rgb: 'FFFFFF' } } };
   const sMeta   = { font: { italic: true, sz: 9, color: { rgb: '888888' } }, fill: { patternType: 'solid', fgColor: { rgb: 'FFFFFF' } } };
   const sGrand  = { font: { bold: true, sz: 12, color: { rgb: 'FFFFFF' } }, fill: { patternType: 'solid', fgColor: { rgb: '0F2041' } }, alignment: { horizontal: 'center', vertical: 'center' } };
@@ -178,19 +189,16 @@ function exportToExcel(rows: TxRow[]) {
 
   const grandTotal = done.reduce((s, x) => s + amountNum(x.amount), 0);
 
-  // Row 0 — Title
   setCell(r, 0, 'PACT Command Center — Bank Transfer Report', sTitle);
   addMerge(r, 0, r, 9); setRow(r, 22); r++;
 
-  // Row 1 — Meta
-  setCell(r, 0, `Generated: ${format(new Date(), 'dd MMM yyyy HH:mm')}   |   Total: ${done.length} transactions`, sMeta);
+  const label = sessionName ? `Session: ${sessionName}   |   ` : '';
+  setCell(r, 0, `${label}Generated: ${format(new Date(), 'dd MMM yyyy HH:mm')}   |   Total: ${done.length} transactions`, sMeta);
   addMerge(r, 0, r, 9); r++; r++;
 
-  // Row 3 — Grand Total banner
   setCell(r, 0, '★  GRAND TOTAL', sGrand); addMerge(r, 0, r, 8);
   setCell(r, 9, grandTotal, sGrandN); setRow(r, 26); r++;
 
-  // Rows 4..n — Per-date summary
   Object.entries(groups).forEach(([date, items]) => {
     let d = date; try { d = format(new Date(date), 'dd MMM yyyy'); } catch {}
     const sub = items.reduce((s, x) => s + amountNum(x.amount), 0);
@@ -200,10 +208,8 @@ function exportToExcel(rows: TxRow[]) {
   });
   r++;
 
-  // Column headers
   COLS.forEach((h, c) => setCell(r, c, h, sHdr)); setRow(r, 20); r++;
 
-  // Data rows grouped by date
   let seq = 1;
   let runningTotal = 0;
   Object.entries(groups).forEach(([date, items]) => {
@@ -229,13 +235,11 @@ function exportToExcel(rows: TxRow[]) {
       r++;
     });
 
-    // Subtotal row
     setCell(r, 0, `Subtotal  —  ${d}`, sSubLbl); addMerge(r, 0, r, 8);
     setCell(r, 9, sub, sSub);
     runningTotal += sub; r++; r++;
   });
 
-  // Grand Total at bottom
   setCell(r, 0, '★  GRAND TOTAL', sGrand); addMerge(r, 0, r, 8);
   setCell(r, 9, runningTotal, sGrandN); setRow(r, 26); r++;
 
@@ -244,7 +248,10 @@ function exportToExcel(rows: TxRow[]) {
 
   const wb = XLSXStyle.utils.book_new();
   XLSXStyle.utils.book_append_sheet(wb, ws, 'Transactions');
-  XLSXStyle.writeFile(wb, `PACT_Bank_Transfers_${format(new Date(), 'yyyyMMdd_HHmm')}.xlsx`);
+  const fname = sessionName
+    ? `PACT_Transfers_${sessionName.replace(/[^a-zA-Z0-9_-]/g, '_')}_${format(new Date(), 'yyyyMMdd')}.xlsx`
+    : `PACT_Bank_Transfers_${format(new Date(), 'yyyyMMdd_HHmm')}.xlsx`;
+  XLSXStyle.writeFile(wb, fname);
 }
 
 function fmtDate(iso: string) {
@@ -259,8 +266,15 @@ function fmtAcct(acct: string) {
 }
 
 export default function TransactionScanner() {
+  const { toast } = useToast();
   const [rows, setRows] = useState<TxRow[]>([]);
   const [quotaError, setQuotaError] = useState<string | null>(null);
+  const [savedSessions, setSavedSessions] = useState<SavedSession[]>([]);
+  const [sessionsLoading, setSessionsLoading] = useState(true);
+  const [saveDialogOpen, setSaveDialogOpen] = useState(false);
+  const [saveName, setSaveName] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [autoSaved, setAutoSaved] = useState(false);
   const dropRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const fileMapRef = useRef<Map<string, File>>(new Map());
@@ -273,12 +287,81 @@ export default function TransactionScanner() {
   const pendingRows = rows.filter(r => r.status === 'pending' || r.status === 'processing');
   const processing = pendingRows.length > 0;
   const statusMsg = rows.find(r => r.status === 'processing' && r.error)?.error;
+  const grandTotal = doneRows.reduce((s, r) => s + amountNum(r.amount), 0);
+  const progressPct = rows.length > 0 ? (doneRows.length / rows.length) * 100 : 0;
+  const doneCount = doneRows.length;
+  const totalCount = rows.length;
+
+  const loadSessions = useCallback(async () => {
+    setSessionsLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('bank_transaction_scans')
+        .select('id, session_name, scanned_at, receipt_count, total_amount, receipts')
+        .order('scanned_at', { ascending: false })
+        .limit(50);
+      if (error) throw error;
+      setSavedSessions((data || []) as SavedSession[]);
+    } catch (err: any) {
+      console.error('Failed to load sessions:', err.message);
+    } finally {
+      setSessionsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { loadSessions(); }, [loadSessions]);
+
+  const saveSession = useCallback(async (name: string) => {
+    if (!doneRows.length) return;
+    setSaving(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      const totalAmt = doneRows.reduce((s, r) => s + amountNum(r.amount), 0);
+      const { error } = await supabase.from('bank_transaction_scans').insert({
+        session_name: name.trim() || null,
+        scanned_by: user?.id || null,
+        receipts: doneRows,
+        receipt_count: doneRows.length,
+        total_amount: totalAmt,
+      });
+      if (error) throw error;
+      toast({ title: 'Session saved', description: `${doneRows.length} receipts saved${name ? ` as "${name}"` : ''}.` });
+      setAutoSaved(true);
+      await loadSessions();
+    } catch (err: any) {
+      toast({ title: 'Save failed', description: err.message, variant: 'destructive' });
+    } finally {
+      setSaving(false);
+    }
+  }, [doneRows, loadSessions, toast]);
+
+  const deleteSession = useCallback(async (id: string) => {
+    if (!confirm('Delete this saved scan session?')) return;
+    const { error } = await supabase.from('bank_transaction_scans').delete().eq('id', id);
+    if (error) { toast({ title: 'Delete failed', description: error.message, variant: 'destructive' }); return; }
+    toast({ title: 'Session deleted' });
+    setSavedSessions(prev => prev.filter(s => s.id !== id));
+  }, [toast]);
+
+  const loadSession = useCallback((session: SavedSession) => {
+    const restored: TxRow[] = (session.receipts || []).map((r: any) => ({
+      ...r,
+      id: crypto.randomUUID(),
+      status: 'done' as const,
+      fileName: r.fileName || '',
+    }));
+    setRows(restored);
+    setAutoSaved(true);
+    setQuotaError(null);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    toast({ title: 'Session loaded', description: `${restored.length} receipts from "${session.session_name || format(new Date(session.scanned_at), 'dd MMM yyyy HH:mm')}"` });
+  }, [toast]);
 
   useEffect(() => {
-    if (rows.length >= 2 && doneRows.length === rows.length && errorRows.length === 0) {
+    if (rows.length >= 1 && doneRows.length === rows.length && errorRows.length === 0 && !autoSaved && !processing) {
       exportToExcel(rows);
     }
-  }, [doneRows.length, rows.length, errorRows.length]);
+  }, [doneRows.length, rows.length, errorRows.length, autoSaved, processing]);
 
   const processBatch = useCallback(async (batchRowIds: string[], batchFiles: File[]): Promise<boolean> => {
     batchRowIds.forEach(id => updateRow(id, { status: 'processing', error: undefined }));
@@ -310,6 +393,7 @@ export default function TransactionScanner() {
 
   const processFiles = useCallback(async (files: File[]) => {
     setQuotaError(null);
+    setAutoSaved(false);
     const newRows: TxRow[] = files.map(f => ({
       id: crypto.randomUUID(), fileName: f.name, status: 'pending',
       transaction_id: '', transaction_date: '', transaction_time: '',
@@ -324,7 +408,6 @@ export default function TransactionScanner() {
       const batchFiles = files.slice(i, i + BATCH_SIZE);
       const canContinue = await processBatch(batchRows.map(r => r.id), batchFiles);
       if (!canContinue) {
-        // Quota exhausted — mark all remaining pending rows as cancelled
         const remaining = newRows.slice(i + BATCH_SIZE);
         if (remaining.length > 0) {
           setRows(prev => prev.map(r =>
@@ -363,12 +446,7 @@ export default function TransactionScanner() {
     }
   }, [rows, processBatch]);
 
-  const clearAll = () => { setRows([]); fileMapRef.current.clear(); setQuotaError(null); };
-
-  const totalCount = rows.length;
-  const doneCount = doneRows.length;
-  const grandTotal = doneRows.reduce((s, r) => s + amountNum(r.amount), 0);
-  const progressPct = totalCount > 0 ? (doneCount / totalCount) * 100 : 0;
+  const clearAll = () => { setRows([]); fileMapRef.current.clear(); setQuotaError(null); setAutoSaved(false); };
 
   return (
     <div className="min-h-screen bg-background">
@@ -391,6 +469,17 @@ export default function TransactionScanner() {
           )}
         </div>
         <div className="flex items-center gap-2">
+          {doneRows.length > 0 && !processing && (
+            <Button
+              onClick={() => { setSaveName(''); setSaveDialogOpen(true); }}
+              variant="outline"
+              className="gap-2 h-8 text-sm border-[#1D3461]/30 text-[#1D3461]"
+              disabled={saving}
+            >
+              <Save className="h-3.5 w-3.5" />
+              Save
+            </Button>
+          )}
           {doneRows.length > 0 && (
             <Button onClick={() => exportToExcel(rows)} className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white h-8 text-sm">
               <Download className="h-4 w-4" />
@@ -508,79 +597,30 @@ export default function TransactionScanner() {
                           'bg-muted/20'
                         }`}
                       >
-                        {/* # */}
                         <td className="px-3 py-2 text-muted-foreground font-mono">{idx + 1}</td>
-
-                        {/* Status */}
                         <td className="px-3 py-2">
-                          {isDone && (
-                            <span className="inline-flex items-center gap-1 text-emerald-600 font-medium">
-                              <CheckCircle2 className="h-3.5 w-3.5" /> Done
-                            </span>
-                          )}
-                          {isProcessing && (
-                            <span className="inline-flex items-center gap-1 text-blue-600">
-                              <Loader2 className="h-3.5 w-3.5 animate-spin" /> Reading…
-                            </span>
-                          )}
-                          {isPending && (
-                            <span className="inline-flex items-center gap-1 text-muted-foreground">
-                              <Clock className="h-3.5 w-3.5" /> Waiting
-                            </span>
-                          )}
+                          {isDone && <span className="inline-flex items-center gap-1 text-emerald-600 font-medium"><CheckCircle2 className="h-3.5 w-3.5" /> Done</span>}
+                          {isProcessing && <span className="inline-flex items-center gap-1 text-blue-600"><Loader2 className="h-3.5 w-3.5 animate-spin" /> Reading…</span>}
+                          {isPending && <span className="inline-flex items-center gap-1 text-muted-foreground"><Clock className="h-3.5 w-3.5" /> Waiting</span>}
                           {isErr && (
-                            <button
-                              onClick={() => retryRow(row.id)}
-                              className="inline-flex items-center gap-1 text-red-600 hover:text-red-700 font-medium"
-                              title={row.error}
-                            >
+                            <button onClick={() => retryRow(row.id)} className="inline-flex items-center gap-1 text-red-600 hover:text-red-700 font-medium" title={row.error}>
                               <RefreshCw className="h-3.5 w-3.5" /> Retry
                             </button>
                           )}
                         </td>
-
-                        {/* Transaction ID */}
                         <td className="px-3 py-2 font-mono">
-                          {isDone ? (
-                            <span>{row.transaction_id}</span>
-                          ) : (
+                          {isDone ? <span>{row.transaction_id}</span> : (
                             <span className="text-muted-foreground italic truncate max-w-[120px] block" title={row.fileName}>
                               {isErr ? row.error?.slice(0, 40) + (row.error && row.error.length > 40 ? '…' : '') : row.fileName.replace(/\.[^.]+$/, '')}
                             </span>
                           )}
                         </td>
-
-                        {/* Date */}
-                        <td className="px-3 py-2 whitespace-nowrap">
-                          {isDone ? fmtDate(row.transaction_date) : ''}
-                        </td>
-
-                        {/* Time */}
-                        <td className="px-3 py-2 font-mono whitespace-nowrap">
-                          {isDone ? row.transaction_time : ''}
-                        </td>
-
-                        {/* From Account */}
-                        <td className="px-3 py-2 font-mono" title={row.from_account}>
-                          {isDone ? fmtAcct(row.from_account) : ''}
-                        </td>
-
-                        {/* To Account */}
-                        <td className="px-3 py-2 font-mono" title={row.to_account}>
-                          {isDone ? fmtAcct(row.to_account) : ''}
-                        </td>
-
-                        {/* Recipient */}
-                        <td className="px-3 py-2" dir="auto">
-                          {isDone ? row.recipient_name : ''}
-                        </td>
-
-                        {/* Comment */}
-                        <td className="px-3 py-2 text-muted-foreground" dir="auto">
-                          {isDone && row.comment !== 'N/A' ? row.comment : ''}
-                        </td>
-
-                        {/* Amount */}
+                        <td className="px-3 py-2 whitespace-nowrap">{isDone ? fmtDate(row.transaction_date) : ''}</td>
+                        <td className="px-3 py-2 font-mono whitespace-nowrap">{isDone ? row.transaction_time : ''}</td>
+                        <td className="px-3 py-2 font-mono" title={row.from_account}>{isDone ? fmtAcct(row.from_account) : ''}</td>
+                        <td className="px-3 py-2 font-mono" title={row.to_account}>{isDone ? fmtAcct(row.to_account) : ''}</td>
+                        <td className="px-3 py-2" dir="auto">{isDone ? row.recipient_name : ''}</td>
+                        <td className="px-3 py-2 text-muted-foreground" dir="auto">{isDone && row.comment !== 'N/A' ? row.comment : ''}</td>
                         <td className="px-3 py-2 text-right font-mono font-semibold">
                           {isDone ? amountNum(row.amount).toLocaleString('en', { minimumFractionDigits: 2 }) : ''}
                         </td>
@@ -588,8 +628,6 @@ export default function TransactionScanner() {
                     );
                   })}
                 </tbody>
-
-                {/* Grand total footer */}
                 {doneRows.length > 0 && (
                   <tfoot>
                     <tr className="bg-[#0F2041] text-white">
@@ -614,17 +652,156 @@ export default function TransactionScanner() {
           </div>
         )}
 
-        {/* Download hint */}
         {!processing && doneRows.length > 0 && (
           <p className="text-center text-xs text-muted-foreground pb-2">
-            Excel auto-downloads when all images complete ·{' '}
             <button onClick={() => exportToExcel(rows)} className="text-[#1D3461] hover:underline font-medium">
-              Download now
+              Download Excel
+            </button>
+            {' '}·{' '}
+            <button onClick={() => { setSaveName(''); setSaveDialogOpen(true); }} className="text-[#1D3461] hover:underline font-medium">
+              Save to records
             </button>
           </p>
         )}
 
+        {/* ── Saved Sessions ──────────────────────────────────────────── */}
+        <div className="rounded-xl border bg-card shadow-sm overflow-hidden">
+          <div className="flex items-center justify-between px-4 py-3 border-b bg-muted/30">
+            <div className="flex items-center gap-2">
+              <Database className="h-4 w-4 text-[#1D3461]" />
+              <span className="font-semibold text-sm text-[#1D3461]">Saved Scan Records</span>
+              {!sessionsLoading && (
+                <span className="text-xs text-muted-foreground">({savedSessions.length})</span>
+              )}
+            </div>
+            <Button variant="ghost" size="sm" onClick={loadSessions} className="h-7 text-xs gap-1">
+              <RefreshCw className="h-3 w-3" /> Refresh
+            </Button>
+          </div>
+
+          {sessionsLoading ? (
+            <div className="flex items-center justify-center py-10 gap-2 text-muted-foreground text-sm">
+              <Loader2 className="h-4 w-4 animate-spin" /> Loading saved records…
+            </div>
+          ) : savedSessions.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-12 gap-2 text-muted-foreground">
+              <FolderOpen className="h-8 w-8 opacity-30" />
+              <p className="text-sm">No saved scans yet</p>
+              <p className="text-xs">Scan receipts and click <strong>Save</strong> to build your records</p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="bg-[#1D3461]/10 text-[#1D3461]">
+                    <th className="px-4 py-2.5 text-left font-semibold w-8">#</th>
+                    <th className="px-4 py-2.5 text-left font-semibold">Session Name</th>
+                    <th className="px-4 py-2.5 text-left font-semibold">Date Saved</th>
+                    <th className="px-4 py-2.5 text-right font-semibold">Receipts</th>
+                    <th className="px-4 py-2.5 text-right font-semibold">Total (SDG)</th>
+                    <th className="px-4 py-2.5 text-center font-semibold">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {savedSessions.map((session, idx) => (
+                    <tr key={session.id} className="hover:bg-muted/30 transition-colors">
+                      <td className="px-4 py-2.5 text-muted-foreground font-mono">{idx + 1}</td>
+                      <td className="px-4 py-2.5 font-medium">
+                        {session.session_name || (
+                          <span className="text-muted-foreground italic">Untitled scan</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-2.5 text-muted-foreground whitespace-nowrap">
+                        {format(new Date(session.scanned_at), 'dd MMM yyyy  HH:mm')}
+                      </td>
+                      <td className="px-4 py-2.5 text-right font-mono">
+                        {session.receipt_count}
+                      </td>
+                      <td className="px-4 py-2.5 text-right font-mono font-semibold text-[#0F2041]">
+                        {Number(session.total_amount).toLocaleString('en', { minimumFractionDigits: 2 })}
+                      </td>
+                      <td className="px-4 py-2.5">
+                        <div className="flex items-center justify-center gap-1.5">
+                          <button
+                            onClick={() => loadSession(session)}
+                            className="inline-flex items-center gap-1 px-2 py-1 rounded text-[#1D3461] bg-[#1D3461]/10 hover:bg-[#1D3461]/20 transition-colors font-medium"
+                            title="Load this session"
+                          >
+                            <FolderOpen className="h-3 w-3" /> Load
+                          </button>
+                          <button
+                            onClick={() => exportToExcel(session.receipts, session.session_name || undefined)}
+                            className="inline-flex items-center gap-1 px-2 py-1 rounded text-emerald-700 bg-emerald-50 hover:bg-emerald-100 transition-colors font-medium"
+                            title="Download Excel"
+                          >
+                            <Download className="h-3 w-3" /> Excel
+                          </button>
+                          <button
+                            onClick={() => deleteSession(session.id)}
+                            className="inline-flex items-center gap-1 px-2 py-1 rounded text-red-600 bg-red-50 hover:bg-red-100 transition-colors font-medium"
+                            title="Delete this session"
+                          >
+                            <Trash2 className="h-3 w-3" /> Delete
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr className="bg-[#0F2041] text-white">
+                    <td colSpan={3} className="px-4 py-2.5 font-bold text-xs">ALL SESSIONS TOTAL</td>
+                    <td className="px-4 py-2.5 text-right font-mono font-bold">
+                      {savedSessions.reduce((s, x) => s + x.receipt_count, 0)}
+                    </td>
+                    <td className="px-4 py-2.5 text-right font-mono font-bold tabular-nums">
+                      {savedSessions.reduce((s, x) => s + Number(x.total_amount), 0).toLocaleString('en', { minimumFractionDigits: 2 })}
+                    </td>
+                    <td />
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          )}
+        </div>
+
       </div>
+
+      {/* Save Session Dialog */}
+      <Dialog open={saveDialogOpen} onOpenChange={setSaveDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Save Scan Session</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <p className="text-sm text-muted-foreground">
+              Give this scan a name so you can find it later. Optional — you can leave it blank.
+            </p>
+            <Input
+              placeholder={`e.g. March batch — ${doneRows.length} receipts`}
+              value={saveName}
+              onChange={e => setSaveName(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') { setSaveDialogOpen(false); saveSession(saveName); } }}
+              autoFocus
+            />
+            <p className="text-xs text-muted-foreground">
+              {doneRows.length} receipts · Total: {grandTotal.toLocaleString('en', { minimumFractionDigits: 2 })} SDG
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setSaveDialogOpen(false)}>Cancel</Button>
+            <Button
+              onClick={() => { setSaveDialogOpen(false); saveSession(saveName); }}
+              disabled={saving}
+              className="gap-2 bg-[#1D3461] hover:bg-[#0F2041]"
+            >
+              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+              Save
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
     </div>
   );
 }
