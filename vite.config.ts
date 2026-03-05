@@ -8,20 +8,37 @@ import type { IncomingMessage, ServerResponse } from 'http';
 // Load environment variables from .env file
 config();
 
-const GEMINI_OCR_PROMPT = `You are a bank transaction OCR assistant. Analyze this Bank of Khartoum transfer confirmation screenshot.
-The screen may be in Arabic or English. Extract these fields and return ONLY valid JSON (no markdown, no extra text):
-{
-  "transaction_id": "the transaction/operation number",
-  "date_time": "DD-Mon-YYYY HH:MM:SS format if possible",
-  "from_account": "source account number",
-  "to_account": "destination account number",
-  "recipient_name": "recipient full name",
-  "mobile_number": "mobile number or N/A",
-  "comment": "comment/note or N/A",
-  "amount": 0.00
+// Models in priority order — each has its own daily quota; rotate through them
+const GEMINI_MODELS = [
+  'gemini-1.5-flash',
+  'gemini-1.5-flash-8b',
+  'gemini-2.0-flash',
+  'gemini-1.5-pro',
+];
+// Track which models hit daily quota exhaustion (resets when server restarts)
+const exhaustedModels = new Set<string>();
+let currentModelIdx = 0;
+
+function getNextModel(): string | null {
+  for (let i = 0; i < GEMINI_MODELS.length; i++) {
+    const idx = (currentModelIdx + i) % GEMINI_MODELS.length;
+    const model = GEMINI_MODELS[idx];
+    if (!exhaustedModels.has(model)) {
+      currentModelIdx = idx;
+      return model;
+    }
+  }
+  return null; // all exhausted
 }
-Arabic label mapping: رقم العملية=transaction_id, التاريخ و الزمن/التاريخ والوقت=date_time, من حساب/من=from_account, الى حساب/إلى=to_account, إسم المرسل اليه=recipient_name, رقم الموبايل=mobile_number, التعليق=comment, المبلغ=amount.
-Rules: Return N/A for missing text fields. Amount must be a plain number (e.g. 1000000.00). Do NOT include any markdown fences.`;
+
+function buildBatchPrompt(count: number): string {
+  return `You are a bank transaction OCR expert. I will show you ${count} Bank of Khartoum transfer screenshot${count > 1 ? 's' : ''} (Arabic or English).
+Extract transaction data from EACH image. Return ONLY a valid JSON array with exactly ${count} objects in order, one per image. No markdown, no extra text.
+Each object must have exactly these fields:
+{"transaction_id":"","date_time":"DD-Mon-YYYY HH:MM:SS","from_account":"","to_account":"","recipient_name":"","mobile_number":"N/A","comment":"N/A","amount":0.00}
+Arabic labels: رقم العملية=transaction_id, التاريخ والوقت/التاريخ و الزمن=date_time, من حساب/من=from_account, الى حساب/إلى=to_account, إسم المرسل اليه=recipient_name, رقم الموبايل=mobile_number, التعليق=comment, المبلغ=amount.
+Rules: Use N/A for missing text fields. Amount must be a plain number. Return exactly ${count} objects in the JSON array.`;
+}
 
 function geminiOcrPlugin() {
   return {
@@ -34,43 +51,61 @@ function geminiOcrPlugin() {
         req.on('data', (chunk: Buffer) => { body += chunk.toString(); });
         req.on('end', async () => {
           try {
-            const { base64, mimeType } = JSON.parse(body);
-            const { GoogleGenAI } = await import('@google/genai');
+            const parsed = JSON.parse(body);
+            // Support both single image {base64, mimeType} and batch {images:[{base64,mimeType}]}
+            const images: Array<{ base64: string; mimeType: string }> = parsed.images
+              ? parsed.images
+              : [{ base64: parsed.base64, mimeType: parsed.mimeType || 'image/jpeg' }];
 
-            const apiKey = process.env.GOOGLE_AI_API_KEY || process.env.AI_INTEGRATIONS_GEMINI_API_KEY || '';
-            const baseUrl = process.env.AI_INTEGRATIONS_GEMINI_BASE_URL;
-            const ai = new GoogleGenAI({
-              apiKey,
-              ...(baseUrl && baseUrl !== 'http://localhost:1106/modelfarm/gemini' ? {
-                httpOptions: { apiVersion: '', baseUrl } as any,
-              } : {}),
+            const { GoogleGenAI } = await import('@google/genai');
+            const apiKey = process.env.GOOGLE_AI_API_KEY || '';
+            const ai = new GoogleGenAI({ apiKey });
+
+            const model = getNextModel();
+            if (!model) {
+              res.statusCode = 429;
+              res.setHeader('Content-Type', 'application/json');
+              res.end(JSON.stringify({ error: 'All Gemini models daily quota exhausted — resets at midnight Pacific time', retryAfterSec: 3600 }));
+              return;
+            }
+
+            console.log(`[Gemini OCR] Using model: ${model}, batch size: ${images.length}`);
+
+            const parts: any[] = [{ text: buildBatchPrompt(images.length) }];
+            images.forEach((img, i) => {
+              if (images.length > 1) parts.push({ text: `Image ${i + 1}:` });
+              parts.push({ inlineData: { mimeType: img.mimeType || 'image/jpeg', data: img.base64 } });
             });
 
             const response = await ai.models.generateContent({
-              model: 'gemini-2.0-flash',
-              contents: [{
-                role: 'user',
-                parts: [
-                  { text: GEMINI_OCR_PROMPT },
-                  { inlineData: { mimeType: mimeType || 'image/jpeg', data: base64 } },
-                ],
-              }],
+              model,
+              contents: [{ role: 'user', parts }],
             });
 
-            const text = response.text || '{}';
+            const text = (response.text || '').replace(/```json\n?|```\n?/g, '').trim();
             res.setHeader('Content-Type', 'application/json');
-            res.end(JSON.stringify({ text }));
+            res.end(JSON.stringify({ text, model }));
+
           } catch (err: any) {
-            console.error('[Gemini OCR] Error:', err.message);
             const msg = err.message || 'Gemini API call failed';
+            const isDailyExhausted = msg.includes('GenerateRequestsPerDay') || (msg.includes('limit: 0') && msg.includes('PerDay'));
             const isRateLimit = msg.includes('429') || msg.includes('RESOURCE_EXHAUSTED') || msg.toLowerCase().includes('quota');
+
+            if (isDailyExhausted) {
+              // Mark current model as exhausted and move to next
+              const failed = GEMINI_MODELS[currentModelIdx];
+              exhaustedModels.add(failed);
+              console.log(`[Gemini OCR] Model ${failed} daily quota exhausted — switching. Remaining: ${GEMINI_MODELS.filter(m => !exhaustedModels.has(m)).join(', ') || 'none'}`);
+            }
+
+            console.error(`[Gemini OCR] Error (${GEMINI_MODELS[currentModelIdx]}):`, msg.slice(0, 200));
             res.statusCode = isRateLimit ? 429 : 500;
             res.setHeader('Content-Type', 'application/json');
-            // Extract the retryDelay from the error message (e.g. "Please retry in 19.1s")
-            let retryAfterSec = 0;
+            let retryAfterSec = 5;
             const retryMatch = msg.match(/retry in (\d+(?:\.\d+)?)s/i);
-            if (retryMatch) retryAfterSec = Math.ceil(parseFloat(retryMatch[1])) + 2;
-            res.end(JSON.stringify({ error: msg, retryAfterSec }));
+            if (retryMatch) retryAfterSec = Math.ceil(parseFloat(retryMatch[1])) + 1;
+            else if (isDailyExhausted) retryAfterSec = 1; // retry immediately with next model
+            res.end(JSON.stringify({ error: isDailyExhausted ? 'Model quota exhausted — switching to next model' : msg, retryAfterSec, isDailyExhausted }));
           }
         });
       });

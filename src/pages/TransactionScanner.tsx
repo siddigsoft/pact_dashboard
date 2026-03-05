@@ -54,82 +54,104 @@ function amountNum(v: number | string): number {
 
 function sleep(ms: number) { return new Promise(r => setTimeout(r, ms)); }
 
-async function extractFromImageWithRetry(
-  base64: string,
-  mimeType: string,
+const BATCH_SIZE = 3; // images per Gemini API call
+
+// Compress + resize image in browser before sending (reduces token usage significantly)
+function compressImage(file: File): Promise<{ base64: string; mimeType: string }> {
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        const MAX = 1024;
+        let { width, height } = img;
+        if (width > MAX || height > MAX) {
+          if (width > height) { height = Math.round(height * MAX / width); width = MAX; }
+          else { width = Math.round(width * MAX / height); height = MAX; }
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        canvas.getContext('2d')!.drawImage(img, 0, 0, width, height);
+        const base64 = canvas.toDataURL('image/jpeg', 0.82).split(',')[1];
+        resolve({ base64, mimeType: 'image/jpeg' });
+      };
+      img.src = e.target!.result as string;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+function parseTxResult(extracted: any): Partial<TxRow> {
+  const { date, time } = parseDateTime(extracted?.date_time || '');
+  return {
+    transaction_id: extracted?.transaction_id || '',
+    transaction_date: date,
+    transaction_time: time,
+    from_account: extracted?.from_account || '',
+    to_account: extracted?.to_account || '',
+    recipient_name: extracted?.recipient_name || '',
+    mobile_number: extracted?.mobile_number || 'N/A',
+    comment: extracted?.comment || 'N/A',
+    amount: extracted?.amount ?? 0,
+    currency: 'SDG',
+  };
+}
+
+// Send a batch of up to BATCH_SIZE images in one API call; returns array of results
+async function extractBatch(
+  images: Array<{ base64: string; mimeType: string }>,
   onStatus?: (msg: string) => void,
-  maxRetries = 4,
-): Promise<Partial<TxRow>> {
+  maxRetries = 6,
+): Promise<Array<Partial<TxRow>>> {
   let lastError: Error | null = null;
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
       const res = await fetch('/api/extract-transaction', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ base64, mimeType }),
+        body: JSON.stringify({ images }),
       });
 
+      const data = await res.json().catch(() => ({}));
+
       if (res.status === 429 || res.status === 503) {
-        const data = await res.json().catch(() => ({}));
-        const waitMs = data.retryAfterSec ? data.retryAfterSec * 1000 : Math.min(12000 * Math.pow(2, attempt), 60000);
+        if (data.isDailyExhausted) {
+          // Model switched on server side — retry immediately with the new model
+          onStatus?.('Switching to next AI model…');
+          await sleep(1000);
+          lastError = new Error(data.error || 'Model quota exhausted');
+          continue;
+        }
+        const waitMs = data.retryAfterSec ? data.retryAfterSec * 1000 : 30000;
         const waitSec = Math.round(waitMs / 1000);
-        onStatus?.(`Rate limited — waiting ${waitSec}s before retry ${attempt + 1}/${maxRetries}…`);
+        onStatus?.(`Rate limited — waiting ${waitSec}s (attempt ${attempt + 1}/${maxRetries})…`);
         await sleep(waitMs);
-        onStatus?.(`Retrying (attempt ${attempt + 1}/${maxRetries})…`);
-        lastError = new Error('Gemini rate limit reached — please retry this image manually');
+        lastError = new Error(data.error || 'Rate limited');
         continue;
       }
 
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({ error: res.statusText }));
-        throw new Error(`Extraction failed (${res.status}): ${data.error || res.statusText}`);
-      }
+      if (!res.ok) throw new Error(`API error ${res.status}: ${data.error || res.statusText}`);
+      if (data.error) throw new Error(data.error);
 
-      const { text, error } = await res.json();
-      if (error) throw new Error(error);
-
-      let extracted: any = {};
-      try {
-        const clean = (text || '{}').replace(/```json\n?|```\n?/g, '').trim();
-        extracted = JSON.parse(clean);
-      } catch {
+      const clean = (data.text || '').replace(/```json\n?|```\n?/g, '').trim();
+      let parsed: any;
+      try { parsed = JSON.parse(clean); } catch {
         throw new Error('Could not parse AI response as JSON');
       }
 
-      const { date, time } = parseDateTime(extracted.date_time || '');
-      return {
-        transaction_id: extracted.transaction_id || '',
-        transaction_date: date,
-        transaction_time: time,
-        from_account: extracted.from_account || '',
-        to_account: extracted.to_account || '',
-        recipient_name: extracted.recipient_name || '',
-        mobile_number: extracted.mobile_number || 'N/A',
-        comment: extracted.comment || 'N/A',
-        amount: extracted.amount ?? 0,
-        currency: 'SDG',
-      };
+      // Always return an array
+      const arr = Array.isArray(parsed) ? parsed : [parsed];
+      return arr.slice(0, images.length).map(parseTxResult);
+
     } catch (err: any) {
-      if (err.message?.includes('rate limit') || err.message?.includes('Rate limited')) {
+      if (err.message?.includes('quota') || err.message?.includes('Rate limited') || err.message?.includes('Switching')) {
         lastError = err; continue;
       }
       throw err;
     }
   }
-  throw lastError || new Error('Gemini rate limit reached — please retry this image manually');
-}
-
-function fileToBase64(file: File): Promise<{ base64: string; mimeType: string }> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      const result = reader.result as string;
-      const base64 = result.split(',')[1];
-      resolve({ base64, mimeType: file.type || 'image/jpeg' });
-    };
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
+  throw lastError || new Error('All retry attempts failed');
 }
 
 function exportToExcel(rows: TxRow[]) {
@@ -243,23 +265,29 @@ export default function TransactionScanner() {
   const updateRow = (id: string, patch: Partial<TxRow>) =>
     setRows(prev => prev.map(r => r.id === id ? { ...r, ...patch } : r));
 
-  const processOneRow = useCallback(async (rowId: string, file: File) => {
-    updateRow(rowId, { status: 'processing', error: undefined });
+  const processBatch = useCallback(async (batchRowIds: string[], batchFiles: File[]) => {
+    // Mark all as processing
+    batchRowIds.forEach(id => updateRow(id, { status: 'processing', error: undefined }));
+    const onStatus = (msg: string) => batchRowIds.forEach(id => updateRow(id, { error: msg }));
     try {
-      const { base64, mimeType } = await fileToBase64(file);
-      const onStatus = (msg: string) => updateRow(rowId, { error: msg });
-      const extracted = await extractFromImageWithRetry(base64, mimeType, onStatus);
-      updateRow(rowId, { status: 'done', error: undefined, ...extracted });
+      // Compress all images in parallel
+      const images = await Promise.all(batchFiles.map(compressImage));
+      const results = await extractBatch(images, onStatus);
+      batchRowIds.forEach((id, i) => {
+        const r = results[i];
+        if (r) updateRow(id, { status: 'done', error: undefined, ...r });
+        else updateRow(id, { status: 'error', error: 'No result returned for this image' });
+      });
     } catch (err: any) {
-      updateRow(rowId, { status: 'error', error: err.message || 'Extraction failed' });
+      batchRowIds.forEach(id => updateRow(id, { status: 'error', error: err.message || 'Extraction failed' }));
     }
   }, []);
 
   const retryRow = useCallback(async (rowId: string) => {
     const file = fileMapRef.current.get(rowId);
     if (!file) return;
-    await processOneRow(rowId, file);
-  }, [processOneRow]);
+    await processBatch([rowId], [file]);
+  }, [processBatch]);
 
   const processFiles = useCallback(async (files: File[]) => {
     const newRows: TxRow[] = files.map(f => ({
@@ -273,11 +301,14 @@ export default function TransactionScanner() {
     newRows.forEach((r, i) => fileMapRef.current.set(r.id, files[i]));
     setRows(prev => [...prev, ...newRows]);
 
-    for (let i = 0; i < files.length; i++) {
-      await processOneRow(newRows[i].id, files[i]);
-      if (i < files.length - 1) await sleep(4000);
+    // Process in batches of BATCH_SIZE
+    for (let i = 0; i < newRows.length; i += BATCH_SIZE) {
+      const batchRows = newRows.slice(i, i + BATCH_SIZE);
+      const batchFiles = files.slice(i, i + BATCH_SIZE);
+      await processBatch(batchRows.map(r => r.id), batchFiles);
+      if (i + BATCH_SIZE < newRows.length) await sleep(4000);
     }
-  }, [processOneRow]);
+  }, [processBatch]);
 
   const onDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -427,7 +458,15 @@ export default function TransactionScanner() {
               <div className="flex items-center gap-3">
                 {!processing && rows.some(r => r.status === 'error') && (
                   <button
-                    onClick={() => rows.filter(r => r.status === 'error').forEach(r => retryRow(r.id))}
+                    onClick={async () => {
+                      const failed = rows.filter(r => r.status === 'error');
+                      for (let i = 0; i < failed.length; i += BATCH_SIZE) {
+                        const batch = failed.slice(i, i + BATCH_SIZE);
+                        const batchFiles = batch.map(r => fileMapRef.current.get(r.id)!).filter(Boolean);
+                        await processBatch(batch.map(r => r.id), batchFiles);
+                        if (i + BATCH_SIZE < failed.length) await sleep(4000);
+                      }
+                    }}
                     className="flex items-center gap-1 text-xs text-amber-600 hover:text-amber-700 font-medium"
                   >
                     <RefreshCw className="h-3 w-3" /> Retry all failed
