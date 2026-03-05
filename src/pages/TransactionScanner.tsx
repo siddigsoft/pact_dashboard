@@ -1,11 +1,11 @@
-import React, { useState, useRef, useCallback, useEffect } from 'react';
+import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import {
   Download, CheckCircle2, AlertCircle, Loader2, ScanLine,
-  RefreshCw, Trash2, Upload, Clock, Save, FolderOpen, Database
+  RefreshCw, Trash2, Upload, Clock, Save, FolderOpen, Database, CopyX
 } from 'lucide-react';
 import * as _XLSXStyleNS from 'xlsx-js-style';
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -287,6 +287,17 @@ export default function TransactionScanner() {
   const pendingRows = rows.filter(r => r.status === 'pending' || r.status === 'processing');
   const processing = pendingRows.length > 0;
   const statusMsg = rows.find(r => r.status === 'processing' && r.error)?.error;
+
+  // Duplicate detection — find transaction_ids that appear more than once among done rows
+  const duplicateIds = useMemo<Set<string>>(() => {
+    const counts = new Map<string, number>();
+    doneRows.forEach(r => {
+      if (r.transaction_id) counts.set(r.transaction_id, (counts.get(r.transaction_id) || 0) + 1);
+    });
+    const dupes = new Set<string>();
+    counts.forEach((count, id) => { if (count > 1) dupes.add(id); });
+    return dupes;
+  }, [doneRows]);
   const grandTotal = doneRows.reduce((s, r) => s + amountNum(r.amount), 0);
   const progressPct = rows.length > 0 ? (doneRows.length / rows.length) * 100 : 0;
   const doneCount = doneRows.length;
@@ -561,6 +572,21 @@ export default function TransactionScanner() {
           )
         )}
 
+        {/* Duplicate warning banner */}
+        {duplicateIds.size > 0 && (
+          <div className="rounded-xl border border-amber-400 bg-amber-50 dark:bg-amber-950/20 p-4 flex items-start gap-3">
+            <CopyX className="h-5 w-5 text-amber-500 shrink-0 mt-0.5" />
+            <div>
+              <p className="font-semibold text-amber-800 dark:text-amber-300 text-sm">
+                {duplicateIds.size} duplicate transaction{duplicateIds.size !== 1 ? 's' : ''} detected
+              </p>
+              <p className="text-amber-700 dark:text-amber-400 text-xs mt-0.5">
+                The same receipt was scanned more than once. Duplicates are highlighted in amber below — remove extras before saving or exporting.
+              </p>
+            </div>
+          </div>
+        )}
+
         {/* Receipts table — all rows, live status */}
         {rows.length > 0 && (
           <div className="rounded-xl border bg-card overflow-hidden shadow-sm">
@@ -586,20 +612,27 @@ export default function TransactionScanner() {
                     const isErr = row.status === 'error';
                     const isPending = row.status === 'pending';
                     const isProcessing = row.status === 'processing';
+                    const isDuplicate = isDone && !!row.transaction_id && duplicateIds.has(row.transaction_id);
 
                     return (
                       <tr
                         key={row.id}
                         className={`transition-colors ${
+                          isDuplicate ? 'bg-amber-50 dark:bg-amber-950/20 hover:bg-amber-100/60 dark:hover:bg-amber-950/30' :
                           isDone ? 'hover:bg-emerald-50/40 dark:hover:bg-emerald-950/10' :
                           isErr ? 'bg-red-50/60 dark:bg-red-950/10 hover:bg-red-50 dark:hover:bg-red-950/20' :
                           isProcessing ? 'bg-blue-50/40 dark:bg-blue-950/10' :
                           'bg-muted/20'
                         }`}
                       >
-                        <td className="px-3 py-2 text-muted-foreground font-mono">{idx + 1}</td>
+                        <td className={`px-3 py-2 text-muted-foreground font-mono${isDuplicate ? ' border-l-2 border-amber-400' : ''}`}>{idx + 1}</td>
                         <td className="px-3 py-2">
-                          {isDone && <span className="inline-flex items-center gap-1 text-emerald-600 font-medium"><CheckCircle2 className="h-3.5 w-3.5" /> Done</span>}
+                          {isDone && !isDuplicate && <span className="inline-flex items-center gap-1 text-emerald-600 font-medium"><CheckCircle2 className="h-3.5 w-3.5" /> Done</span>}
+                          {isDuplicate && (
+                            <span className="inline-flex items-center gap-1 text-amber-600 font-semibold">
+                              <CopyX className="h-3.5 w-3.5" /> Duplicate
+                            </span>
+                          )}
                           {isProcessing && <span className="inline-flex items-center gap-1 text-blue-600"><Loader2 className="h-3.5 w-3.5 animate-spin" /> Reading…</span>}
                           {isPending && <span className="inline-flex items-center gap-1 text-muted-foreground"><Clock className="h-3.5 w-3.5" /> Waiting</span>}
                           {isErr && (
