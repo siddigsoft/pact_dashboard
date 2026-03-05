@@ -45,7 +45,8 @@
     PenTool,
     PhoneCall,
     RefreshCw,
-    Megaphone
+    Megaphone,
+    ScanLine
   } from "lucide-react";
   import { RealtimeStatusDot } from '@/components/realtime';
   import { useSiteVisitReminders } from "@/hooks/use-site-visit-reminders";
@@ -470,6 +471,9 @@
       }
       if (!isHidden('/admin/broadcast')) {
         superAdminItems.push({ id: 'admin-broadcast', title: "Broadcast Center", url: "/admin/broadcast", icon: Megaphone, priority: 7, isPinned: isPinned('/admin/broadcast') });
+      }
+      if (!isHidden('/admin/transaction-scanner')) {
+        superAdminItems.push({ id: 'transaction-scanner', title: "Transaction Scanner", url: "/admin/transaction-scanner", icon: ScanLine, priority: 7.5, isPinned: isPinned('/admin/transaction-scanner') });
       }
       if (!isHidden('/mobile-help-articles')) {
         superAdminItems.push({ id: 'mobile-help-articles', title: "Mobile Help Articles", url: "/mobile-help-articles", icon: HelpCircle, priority: 8, isPinned: isPinned('/mobile-help-articles') });

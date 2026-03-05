@@ -13,6 +13,15 @@ export default defineConfig(({ mode }) => ({
     host: "0.0.0.0",
     port: 5000,
     allowedHosts: true,
+    proxy: {
+      '/api/gemini': {
+        target: process.env.AI_INTEGRATIONS_GEMINI_BASE_URL
+          ? process.env.AI_INTEGRATIONS_GEMINI_BASE_URL.replace('/modelfarm/gemini', '')
+          : 'http://localhost:1106',
+        rewrite: (path: string) => path.replace(/^\/api\/gemini/, '/modelfarm/gemini'),
+        changeOrigin: true,
+      },
+    },
   },
   plugins: [
     react(),
