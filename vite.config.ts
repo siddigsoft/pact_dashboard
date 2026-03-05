@@ -21,28 +21,32 @@ const GEMINI_MODELS = [
 const unavailableModels = new Set<string>();
 
 function buildBatchPrompt(count: number): string {
-  return `You are a Bank of Khartoum transfer receipt OCR expert. Analyze ${count} screenshot${count > 1 ? 's' : ''} of Bank of Khartoum تحويلات (transfer) receipts — the green app UI or printed receipts, in Arabic or English.
+  return `You are a Bank of Khartoum transfer receipt OCR expert. Analyze ${count} screenshot${count > 1 ? 's' : ''} of Bank of Khartoum transfer receipts. There are TWO receipt styles — handle both:
 
-Extract EXACTLY these 8 fields from EACH image and return ONLY a valid JSON array of ${count} objects. No markdown, no explanation, no extra text.
+STYLE 1 — Green app (تحويلات): labels are رقم العملية, التاريخ و الزمن, من حساب, الى حساب, اسم المرسل اليه / إسم المرسل اليه, رقم الموبايل, التعليق, المبلغ.
+STYLE 2 — Bankak white/red app (تفاصيل المعاملة): labels are رقم العملية, التاريخ والوقت, المبلغ, من, إلى, إسم المرسل اليه / اسم المرسل اليه, التعليق. (No mobile number field — use "N/A".)
+
+Extract EXACTLY these 8 fields from EACH image and return ONLY a valid JSON array of ${count} objects. No markdown, no explanation, no extra text. Ignore any extra fields like نوع العملية, الحالة, etc.
 
 Field mapping (Arabic label → JSON key):
-- رقم العملية → transaction_id  (the long numeric code, e.g. "20024933620")
-- التاريخ و الزمن / التاريخ والوقت → date_time  (keep exactly as shown, e.g. "04-Mar-2026 19:13:16")
-- من حساب → from_account  (digits only, remove spaces, e.g. "08131231711700001")
-- الى حساب / إلى حساب → to_account  (digits only, remove spaces)
-- اسم المرسل اليه / إسم المرسل اليه → recipient_name  (full Arabic name as shown)
-- رقم الموبايل → mobile_number  (use "N/A" if shown as N/A or blank)
-- التعليق → comment  (use "N/A" if shown as N/A or blank)
-- المبلغ → amount  (plain number, remove commas, e.g. 3000000.00)
+- رقم العملية → transaction_id
+- التاريخ و الزمن / التاريخ والوقت → date_time  (keep exactly as shown, e.g. "04-Mar-2026 16:24:02")
+- من حساب / من → from_account  (digits only, remove all spaces)
+- الى حساب / إلى حساب / إلى → to_account  (digits only, remove all spaces)
+- اسم المرسل اليه / إسم المرسل اليه / اسم المرسل اليه → recipient_name  (full Arabic name)
+- رقم الموبايل → mobile_number  (use "N/A" if not present or shown as N/A)
+- التعليق → comment  (use "N/A" if not present or shown as N/A)
+- المبلغ → amount  (plain number, no commas, no currency symbols)
 
 Rules:
-1. Remove all spaces from account numbers (from_account and to_account).
-2. If a field shows "N/A" in the image, use the string "N/A".
-3. amount must be a numeric value (no currency symbols, no commas).
+1. Remove ALL spaces from account numbers (from_account and to_account).
+2. Use "N/A" for any missing or blank text field.
+3. amount must be a plain numeric value (e.g. 2000000.00).
 4. Return exactly ${count} JSON objects in order, one per image.
 
-Example output for one image:
-[{"transaction_id":"20024933620","date_time":"04-Mar-2026 19:13:16","from_account":"08131231711700001","to_account":"03431595497500001","recipient_name":"محمد بابكر الجزولي عثمان","mobile_number":"N/A","comment":"N/A","amount":3000000.00}]`;
+Examples:
+Style 1: {"transaction_id":"20024933620","date_time":"04-Mar-2026 19:13:16","from_account":"08131231711700001","to_account":"03431595497500001","recipient_name":"محمد بابكر الجزولي عثمان","mobile_number":"N/A","comment":"N/A","amount":3000000.00}
+Style 2: {"transaction_id":"20090302958","date_time":"04-Mar-2026 16:24:02","from_account":"00130319603000001","to_account":"03431595497500001","recipient_name":"محمد بابكر الجزولى عثمان","mobile_number":"N/A","comment":"N/A","amount":2000000.00}`;
 }
 
 async function callGeminiWithRotation(
