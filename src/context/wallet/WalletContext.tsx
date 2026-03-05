@@ -232,30 +232,17 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       .filter(t => new Date(t.createdAt).getTime() >= weekStartMs)
       .length;
 
-    const calculatedEarned = transactions
-      .filter(t => t.type === 'earning' || t.type === 'site_visit_fee' || t.type === 'adjustment' || t.type === 'down_payment_advance')
-      .filter(t => t.amount > 0)
-      .reduce((sum, t) => sum + t.amount, 0);
-
     const calculatedWithdrawn = transactions
       .filter(t => t.type === 'withdrawal')
       .reduce((sum, t) => sum + Math.abs(t.amount), 0);
 
-    const totalEarned = Math.max(wallet.totalEarned ?? 0, calculatedEarned);
-
-    // Balance = money not yet received (total earned minus advances already paid out).
-    // Only count advances whose request is in approved / fully_paid / partially_paid.
-    const advancesReceived = transactions
-      .filter(t => t.type === 'down_payment_advance' && disbursedIdSet.has(t.metadata?.down_payment_request_id))
-      .reduce((sum, t) => sum + t.amount, 0);
-    const balanceNotYetReceived = Math.max(0, totalEarned - advancesReceived);
-    const totalWithdrawn = Math.max(wallet.totalWithdrawn, calculatedWithdrawn);
+    const totalWithdrawn = Math.max(wallet.totalWithdrawn ?? 0, calculatedWithdrawn);
 
     return {
-      totalEarned,
+      totalEarned: wallet.totalEarned ?? 0,
       totalWithdrawn,
       pendingWithdrawals,
-      currentBalance: balanceNotYetReceived,
+      currentBalance: wallet.balances?.SDG ?? 0,
       totalTransactions: transactions.length,
       completedSiteVisits,
       weeklyEarnings,
@@ -814,21 +801,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
   const getBalance = (currency: string = 'SDG'): number => {
     if (!wallet) return 0;
-    if (currency === 'SDG' && transactions?.length) {
-      const earned = Math.max(
-        wallet.totalEarned ?? 0,
-        transactions
-          .filter(t => ['earning', 'site_visit_fee', 'adjustment', 'down_payment_advance'].includes(t.type))
-          .filter(t => t.amount > 0)
-          .reduce((s, t) => s + t.amount, 0)
-      );
-      const disbursedIdSet = new Set(disbursedAdvanceRequestIds);
-      const advances = transactions
-        .filter(t => t.type === 'down_payment_advance' && disbursedIdSet.has(t.metadata?.down_payment_request_id))
-        .reduce((s, t) => s + t.amount, 0);
-      return Math.max(0, earned - advances);
-    }
-    return wallet.balances[currency] || 0;
+    return wallet.balances[currency] ?? 0;
   };
 
   const getSiteVisitCost = async (siteVisitId: string): Promise<SiteVisitCost | null> => {

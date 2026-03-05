@@ -57,7 +57,7 @@ BEGIN
         (user_wallet.balance_cents::numeric / 100.0),
         (user_wallet.balances->>'SDG')::numeric,
         0
-      ) + NEW.requested_amount,
+      ),
       jsonb_build_object(
         'down_payment_request_id', NEW.id,
         'site_name', NEW.site_name,
@@ -66,20 +66,11 @@ BEGIN
       NOW()
     ) RETURNING id INTO transaction_record;
 
-    -- Update wallet balance and total_earned (advance is part of earnings; balance is physical cash given).
+    -- Add to total_earned only. Do NOT add to balance: balance = money not yet received (DB source of truth).
     UPDATE wallets
     SET
-      balances = jsonb_set(
-        COALESCE(balances, '{"SDG": 0}'::jsonb),
-        '{SDG}',
-        to_jsonb((
-          COALESCE(balance_cents::numeric / 100.0, (balances->>'SDG')::numeric, 0)
-          + NEW.requested_amount
-        )::text::numeric)
-      ),
       total_earned = COALESCE(total_earned, 0) + NEW.requested_amount,
       total_earned_cents = COALESCE(total_earned_cents, 0) + (NEW.requested_amount * 100)::bigint,
-      balance_cents = (COALESCE(balance_cents, 0) + (NEW.requested_amount * 100)::bigint),
       updated_at = NOW()
     WHERE id = user_wallet.id;
 
