@@ -248,6 +248,87 @@ function exportToExcel(rows: TxRow[], sessionName?: string) {
 
   const wb = XLSXStyle.utils.book_new();
   XLSXStyle.utils.book_append_sheet(wb, ws, 'Transactions');
+
+  // ── Sheet 2: Recipients Summary ─────────────────────────────────────────
+  const recipientMap = new Map<string, { name: string; account: string; mobile: string; count: number; total: number }>();
+  done.forEach(tx => {
+    const key = tx.to_account || tx.recipient_name || 'Unknown';
+    const existing = recipientMap.get(key);
+    if (existing) {
+      existing.count += 1;
+      existing.total += amountNum(tx.amount);
+      if (!existing.name && tx.recipient_name) existing.name = tx.recipient_name;
+      if (existing.mobile === 'N/A' && tx.mobile_number !== 'N/A') existing.mobile = tx.mobile_number;
+    } else {
+      recipientMap.set(key, {
+        name: tx.recipient_name || '',
+        account: tx.to_account || '',
+        mobile: tx.mobile_number || 'N/A',
+        count: 1,
+        total: amountNum(tx.amount),
+      });
+    }
+  });
+
+  const recipients = Array.from(recipientMap.values()).sort((a, b) => b.total - a.total);
+  const grandRecipientTotal = recipients.reduce((s, x) => s + x.total, 0);
+
+  const ws2: any = {};
+  let r2 = 0;
+
+  const sc = (row: number, col: number, v: any, s?: any) => {
+    ws2[XLSXStyle.utils.encode_cell({ r: row, c: col })] = { v, t: typeof v === 'number' ? 'n' : 's', s };
+  };
+  const sm2 = (r1: number, c1: number, r2e: number, c2: number) => {
+    if (!ws2['!merges']) ws2['!merges'] = [];
+    ws2['!merges'].push({ s: { r: r1, c: c1 }, e: { r: r2e, c: c2 } });
+  };
+
+  // Title
+  sc(r2, 0, 'PACT Command Center — Recipients Summary', sTitle);
+  sm2(r2, 0, r2, 5); ws2[XLSXStyle.utils.encode_cell({ r: r2, c: 0 })].s = { ...sTitle };
+  if (!ws2['!rows']) ws2['!rows'] = [];
+  ws2['!rows'][r2] = { hpt: 22 }; r2++;
+
+  const lbl2 = sessionName ? `Session: ${sessionName}   |   ` : '';
+  sc(r2, 0, `${lbl2}Generated: ${format(new Date(), 'dd MMM yyyy HH:mm')}   |   ${recipients.length} unique recipients`, sMeta);
+  sm2(r2, 0, r2, 5); r2++; r2++;
+
+  // Grand total banner
+  sc(r2, 0, '★  GRAND TOTAL', sGrand); sm2(r2, 0, r2, 4);
+  sc(r2, 5, grandRecipientTotal, sGrandN);
+  ws2['!rows'][r2] = { hpt: 26 }; r2++; r2++;
+
+  // Column headers
+  const RCOLS = ['#', 'Recipient Name', 'Account Number', 'Mobile', '# Transactions', 'Total (SDG)'];
+  const rWidths = [5, 36, 24, 18, 14, 20];
+  RCOLS.forEach((h, c) => sc(r2, c, h, sHdr));
+  ws2['!rows'][r2] = { hpt: 20 }; r2++;
+
+  // Recipient rows
+  recipients.forEach((rec, i) => {
+    const base = i % 2 === 0 ? sTx : sTxAlt;
+    const amtStyle = i % 2 === 0 ? sTxAmt : sTxAltAmt;
+    sc(r2, 0, i + 1, { ...sSeq, fill: base.fill });
+    sc(r2, 1, rec.name, { ...base, alignment: { horizontal: 'left' } });
+    sc(r2, 2, rec.account, base);
+    sc(r2, 3, rec.mobile, base);
+    sc(r2, 4, rec.count, { ...base, alignment: { horizontal: 'center' } });
+    sc(r2, 5, rec.total, amtStyle);
+    r2++;
+  });
+
+  r2++;
+  // Bottom grand total
+  sc(r2, 0, '★  GRAND TOTAL', sGrand); sm2(r2, 0, r2, 4);
+  sc(r2, 5, grandRecipientTotal, sGrandN);
+  ws2['!rows'][r2] = { hpt: 26 }; r2++;
+
+  ws2['!ref'] = XLSXStyle.utils.encode_range({ r: 0, c: 0 }, { r: r2, c: 5 });
+  ws2['!cols'] = rWidths.map(w => ({ wch: w }));
+
+  XLSXStyle.utils.book_append_sheet(wb, ws2, 'Recipients Summary');
+
   const fname = sessionName
     ? `PACT_Transfers_${sessionName.replace(/[^a-zA-Z0-9_-]/g, '_')}_${format(new Date(), 'yyyyMMdd')}.xlsx`
     : `PACT_Bank_Transfers_${format(new Date(), 'yyyyMMdd_HHmm')}.xlsx`;
