@@ -254,6 +254,7 @@ function fmtAcct(acct: string) {
 
 export default function TransactionScanner() {
   const [rows, setRows] = useState<TxRow[]>([]);
+  const [quotaError, setQuotaError] = useState<string | null>(null);
   const dropRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const fileMapRef = useRef<Map<string, File>>(new Map());
@@ -273,7 +274,7 @@ export default function TransactionScanner() {
     }
   }, [doneRows.length, rows.length, errorRows.length]);
 
-  const processBatch = useCallback(async (batchRowIds: string[], batchFiles: File[]) => {
+  const processBatch = useCallback(async (batchRowIds: string[], batchFiles: File[]): Promise<boolean> => {
     batchRowIds.forEach(id => updateRow(id, { status: 'processing', error: undefined }));
     const onStatus = (msg: string) => batchRowIds.forEach(id => updateRow(id, { error: msg }));
     try {
@@ -284,8 +285,13 @@ export default function TransactionScanner() {
         if (r) updateRow(id, { status: 'done', error: undefined, ...r });
         else updateRow(id, { status: 'error', error: 'No result for this image' });
       });
+      return true;
     } catch (err: any) {
-      batchRowIds.forEach(id => updateRow(id, { status: 'error', error: err.message }));
+      const msg: string = err.message || 'Extraction failed';
+      const isQuota = msg.includes('daily quota') || msg.includes('All AI models');
+      batchRowIds.forEach(id => updateRow(id, { status: 'error', error: msg }));
+      if (isQuota) setQuotaError(msg);
+      return !isQuota;
     }
   }, [updateRow]);
 
@@ -295,6 +301,7 @@ export default function TransactionScanner() {
   }, [processBatch]);
 
   const processFiles = useCallback(async (files: File[]) => {
+    setQuotaError(null);
     const newRows: TxRow[] = files.map(f => ({
       id: crypto.randomUUID(), fileName: f.name, status: 'pending',
       transaction_id: '', transaction_date: '', transaction_time: '',
@@ -307,7 +314,19 @@ export default function TransactionScanner() {
     for (let i = 0; i < newRows.length; i += BATCH_SIZE) {
       const batchRows = newRows.slice(i, i + BATCH_SIZE);
       const batchFiles = files.slice(i, i + BATCH_SIZE);
-      await processBatch(batchRows.map(r => r.id), batchFiles);
+      const canContinue = await processBatch(batchRows.map(r => r.id), batchFiles);
+      if (!canContinue) {
+        // Quota exhausted — mark all remaining pending rows as cancelled
+        const remaining = newRows.slice(i + BATCH_SIZE);
+        if (remaining.length > 0) {
+          setRows(prev => prev.map(r =>
+            remaining.some(nr => nr.id === r.id && r.status === 'pending')
+              ? { ...r, status: 'error', error: 'Quota exhausted — will work tomorrow after midnight Pacific time' }
+              : r
+          ));
+        }
+        break;
+      }
       if (i + BATCH_SIZE < newRows.length) await sleep(3000);
     }
   }, [processBatch]);
@@ -325,16 +344,18 @@ export default function TransactionScanner() {
   }, [processFiles]);
 
   const retryAllFailed = useCallback(async () => {
+    setQuotaError(null);
     const failed = rows.filter(r => r.status === 'error');
     for (let i = 0; i < failed.length; i += BATCH_SIZE) {
       const batch = failed.slice(i, i + BATCH_SIZE);
       const files = batch.map(r => fileMapRef.current.get(r.id)!).filter(Boolean);
-      await processBatch(batch.map(r => r.id), files);
+      const canContinue = await processBatch(batch.map(r => r.id), files);
+      if (!canContinue) break;
       if (i + BATCH_SIZE < failed.length) await sleep(3000);
     }
   }, [rows, processBatch]);
 
-  const clearAll = () => { setRows([]); fileMapRef.current.clear(); };
+  const clearAll = () => { setRows([]); fileMapRef.current.clear(); setQuotaError(null); };
 
   const totalCount = rows.length;
   const doneCount = doneRows.length;
@@ -410,6 +431,21 @@ export default function TransactionScanner() {
             </>
           )}
         </div>
+
+        {/* Quota exhausted banner */}
+        {quotaError && (
+          <div className="rounded-xl border border-amber-300 bg-amber-50 dark:bg-amber-950/20 p-4 flex items-start gap-3">
+            <AlertCircle className="h-5 w-5 text-amber-500 shrink-0 mt-0.5" />
+            <div>
+              <p className="font-semibold text-amber-800 dark:text-amber-300 text-sm">AI quota exhausted for today</p>
+              <p className="text-amber-700 dark:text-amber-400 text-xs mt-1">
+                All Gemini AI models have reached their daily request limit from today's testing.
+                Quotas reset at <strong>midnight Pacific time</strong> (08:00 Sudan time tomorrow).
+                Your images are saved — click <strong>Retry All</strong> tomorrow to process them.
+              </p>
+            </div>
+          </div>
+        )}
 
         {/* Receipts table — all rows, live status */}
         {rows.length > 0 && (
