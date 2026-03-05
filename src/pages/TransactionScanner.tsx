@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import {
   Download, CheckCircle2, AlertCircle, Loader2, ScanLine,
-  RefreshCw, Trash2, Upload
+  RefreshCw, Trash2, Upload, Clock
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { format, parse, isValid } from 'date-fns';
@@ -70,7 +70,7 @@ function compressImage(file: File): Promise<{ base64: string; mimeType: string }
   });
 }
 
-function parseTxResult(x: any, fileName: string): Partial<TxRow> {
+function parseTxResult(x: any): Partial<TxRow> {
   const { date, time } = parseDateTime(x?.date_time || '');
   return {
     transaction_id: x?.transaction_id || '',
@@ -110,7 +110,7 @@ async function extractBatch(
     try { parsed = JSON.parse(clean); } catch { throw new Error('Could not parse AI response'); }
 
     const arr = Array.isArray(parsed) ? parsed : [parsed];
-    return arr.slice(0, images.length).map((x: any) => parseTxResult(x, ''));
+    return arr.slice(0, images.length).map((x: any) => parseTxResult(x));
   }
   throw new Error('All AI models at daily quota. Quotas reset at midnight Pacific time.');
 }
@@ -152,18 +152,15 @@ function exportToExcel(rows: TxRow[]) {
     ws['!merges'].push({ s: { r: r1, c: c1 }, e: { r: r2, c: c2 } });
   };
 
-  // Title
   setCell(r, 0, 'PACT Command Center — Bank Transfer Report', { font: { bold: true, sz: 14, color: { rgb: '0F2041' } } });
   merge(r, 0, r, 9); r++;
   setCell(r, 0, `Generated: ${format(new Date(), 'dd MMM yyyy HH:mm')}  |  Total transactions: ${done.length}`, { font: { italic: true, sz: 10, color: { rgb: '666666' } } });
   merge(r, 0, r, 9); r++; r++;
 
-  // Grand Total at top
   const grandTotal = done.reduce((s, x) => s + amountNum(x.amount), 0);
   setCell(r, 0, 'GRAND TOTAL', G); merge(r, 0, r, 8);
   setCell(r, 9, grandTotal, { ...G, numFmt: '#,##0.00' }); r++;
 
-  // Per-date summary
   Object.entries(groups).forEach(([date, items]) => {
     let d = date; try { d = format(new Date(date), 'dd MMM yyyy'); } catch {}
     const sub = items.reduce((s, x) => s + amountNum(x.amount), 0);
@@ -173,10 +170,8 @@ function exportToExcel(rows: TxRow[]) {
   });
   r++;
 
-  // Column headers
   cols.forEach((h, c) => setCell(r, c, h, H)); r++;
 
-  // Data
   let seq = 1;
   let runningTotal = 0;
   Object.entries(groups).forEach(([date, items]) => {
@@ -204,7 +199,6 @@ function exportToExcel(rows: TxRow[]) {
     runningTotal += sub; r++; r++;
   });
 
-  // Grand Total at bottom
   setCell(r, 0, 'GRAND TOTAL', G); merge(r, 0, r, 8);
   setCell(r, 9, runningTotal, { ...G, numFmt: '#,##0.00' }); r++;
 
@@ -214,6 +208,17 @@ function exportToExcel(rows: TxRow[]) {
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Transactions');
   XLSX.writeFile(wb, `PACT_Bank_Transfers_${format(new Date(), 'yyyyMMdd_HHmm')}.xlsx`);
+}
+
+function fmtDate(iso: string) {
+  if (!iso) return '';
+  try { return format(new Date(iso), 'dd MMM yyyy'); } catch { return iso; }
+}
+
+function fmtAcct(acct: string) {
+  if (!acct) return '';
+  const d = acct.replace(/\s/g, '');
+  return d.length > 8 ? `${d.slice(0, 4)} ··· ${d.slice(-4)}` : d;
 }
 
 export default function TransactionScanner() {
@@ -231,7 +236,6 @@ export default function TransactionScanner() {
   const processing = pendingRows.length > 0;
   const statusMsg = rows.find(r => r.status === 'processing' && r.error)?.error;
 
-  // Auto-download Excel when all done (no errors) and >= 2 files
   useEffect(() => {
     if (rows.length >= 2 && doneRows.length === rows.length && errorRows.length === 0) {
       exportToExcel(rows);
@@ -306,65 +310,43 @@ export default function TransactionScanner() {
   const grandTotal = doneRows.reduce((s, r) => s + amountNum(r.amount), 0);
   const progressPct = totalCount > 0 ? (doneCount / totalCount) * 100 : 0;
 
-  // Group done rows by date for display
-  const sorted = [...doneRows].sort((a, b) => {
-    if (a.transaction_date < b.transaction_date) return -1;
-    if (a.transaction_date > b.transaction_date) return 1;
-    return (a.transaction_time || '').localeCompare(b.transaction_time || '');
-  });
-  const groups: Record<string, TxRow[]> = {};
-  sorted.forEach(r => {
-    const d = r.transaction_date || 'Unknown';
-    if (!groups[d]) groups[d] = [];
-    groups[d].push(r);
-  });
-
   return (
     <div className="min-h-screen bg-background">
+
       {/* Top bar */}
       <div className="sticky top-0 z-10 bg-background/95 backdrop-blur border-b px-4 md:px-6 py-3 flex items-center justify-between gap-4">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-3">
           <ScanLine className="h-5 w-5 text-[#1D3461]" />
           <span className="font-bold text-[#1D3461]">Bank Transfer Scanner</span>
           {rows.length > 0 && (
-            <span className="text-xs text-muted-foreground ml-2">
-              {doneCount}/{totalCount} processed
+            <span className="text-xs text-muted-foreground">
+              {doneCount} of {totalCount} extracted
             </span>
+          )}
+          {processing && (
+            <div className="flex items-center gap-1.5 text-xs text-blue-600">
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              <span>Processing…</span>
+            </div>
           )}
         </div>
         <div className="flex items-center gap-2">
           {doneRows.length > 0 && (
-            <Button onClick={() => exportToExcel(rows)} className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white">
+            <Button onClick={() => exportToExcel(rows)} className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white h-8 text-sm">
               <Download className="h-4 w-4" />
               Download Excel
-              {doneCount > 0 && <span className="bg-white/20 rounded px-1.5 py-0.5 text-xs font-mono">{doneCount}</span>}
+              <span className="bg-white/20 rounded px-1.5 py-0.5 text-xs font-mono">{doneCount}</span>
             </Button>
           )}
           {rows.length > 0 && !processing && (
-            <Button variant="ghost" size="icon" onClick={clearAll} title="Clear all">
+            <Button variant="ghost" size="icon" onClick={clearAll} title="Clear all" className="h-8 w-8">
               <Trash2 className="h-4 w-4 text-muted-foreground" />
             </Button>
           )}
         </div>
       </div>
 
-      <div className="max-w-6xl mx-auto px-4 md:px-6 py-6 space-y-4">
-
-        {/* Grand total banner — shown when there are results */}
-        {doneRows.length > 0 && (
-          <div className="rounded-xl bg-[#0F2041] text-white p-5 flex items-center justify-between">
-            <div>
-              <p className="text-white/60 text-xs uppercase tracking-wider mb-1">Grand Total</p>
-              <p className="text-sm text-white/80">{doneCount} transaction{doneCount !== 1 ? 's' : ''} · {Object.keys(groups).length} date{Object.keys(groups).length !== 1 ? 's' : ''}</p>
-            </div>
-            <div className="text-right">
-              <p className="text-white/60 text-xs uppercase tracking-wider mb-1">SDG</p>
-              <p className="font-bold text-3xl font-mono tabular-nums">
-                {grandTotal.toLocaleString('en', { minimumFractionDigits: 2 })}
-              </p>
-            </div>
-          </div>
-        )}
+      <div className="max-w-7xl mx-auto px-4 md:px-6 py-5 space-y-4">
 
         {/* Upload zone */}
         <div
@@ -376,155 +358,178 @@ export default function TransactionScanner() {
             processing
               ? 'border-[#1D3461]/30 bg-[#1D3461]/5 cursor-default'
               : 'border-[#1D3461]/40 hover:border-[#1D3461] hover:bg-[#1D3461]/5 cursor-pointer'
-          } ${rows.length === 0 ? 'py-16' : 'py-6'} flex flex-col items-center justify-center gap-2`}
+          } ${rows.length === 0 ? 'py-16' : 'py-4'} flex flex-col items-center justify-center gap-2`}
         >
           <input ref={inputRef} type="file" accept="image/*" multiple className="hidden" onChange={onFileChange} />
           {processing ? (
-            <div className="w-full max-w-sm px-4 space-y-3">
-              <div className="flex items-center justify-center gap-2 text-[#1D3461]">
-                <Loader2 className="h-4 w-4 animate-spin" />
-                <span className="text-sm font-medium">Extracting transactions…</span>
-              </div>
-              <Progress value={progressPct} className="h-2" />
-              <p className="text-center text-xs text-muted-foreground">
-                {doneCount} of {totalCount} images processed
-              </p>
+            <div className="w-full max-w-sm px-4 space-y-2">
+              <Progress value={progressPct} className="h-1.5" />
+              <p className="text-center text-xs text-muted-foreground">{doneCount} of {totalCount} images processed</p>
               {statusMsg && (
                 <p className="text-center text-xs text-amber-600 bg-amber-50 rounded px-3 py-1.5">{statusMsg}</p>
               )}
             </div>
           ) : (
             <>
-              <Upload className="h-8 w-8 text-[#1D3461]/50" />
+              <Upload className="h-7 w-7 text-[#1D3461]/50" />
               <p className="text-sm font-medium text-[#1D3461]">
                 {rows.length > 0 ? 'Drop more screenshots to add' : 'Drop screenshots here or click to upload'}
               </p>
-              <p className="text-xs text-muted-foreground">PNG, JPG, WebP · Multiple files · Arabic or English</p>
+              <p className="text-xs text-muted-foreground">PNG · JPG · WebP · Multiple files · Arabic or English</p>
             </>
           )}
         </div>
 
-        {/* Progress chips */}
+        {/* Receipts table — all rows, live status */}
         {rows.length > 0 && (
-          <div className="flex flex-wrap items-center gap-2">
-            {rows.map(r => (
-              <div
-                key={r.id}
-                title={r.fileName + (r.error ? `\n${r.error}` : '')}
-                className={`flex items-center gap-1 px-2 py-1 rounded-full text-xs border max-w-[160px] ${
-                  r.status === 'done' ? 'bg-emerald-50 border-emerald-200 text-emerald-700' :
-                  r.status === 'error' ? 'bg-red-50 border-red-200 text-red-600' :
-                  r.status === 'processing' ? 'bg-blue-50 border-blue-200 text-blue-700' :
-                  'bg-muted border-border text-muted-foreground'
-                }`}
-              >
-                {r.status === 'done' && <CheckCircle2 className="h-3 w-3 shrink-0" />}
-                {r.status === 'error' && (
-                  <button onClick={() => retryRow(r.id)} title="Retry">
-                    <RefreshCw className="h-3 w-3 shrink-0 hover:text-red-700" />
-                  </button>
-                )}
-                {r.status === 'processing' && <Loader2 className="h-3 w-3 shrink-0 animate-spin" />}
-                {r.status === 'pending' && <div className="h-3 w-3 shrink-0 rounded-full border-2 border-current opacity-40" />}
-                <span className="truncate">{r.fileName.replace(/\.[^.]+$/, '')}</span>
-              </div>
-            ))}
-
-            {!processing && errorRows.length > 0 && (
-              <button
-                onClick={retryAllFailed}
-                className="flex items-center gap-1 text-xs text-amber-600 hover:text-amber-700 font-medium px-2 py-1 rounded-full border border-amber-200 bg-amber-50"
-              >
-                <RefreshCw className="h-3 w-3" /> Retry {errorRows.length} failed
-              </button>
-            )}
-          </div>
-        )}
-
-        {/* Results table — compact, read-only, grouped by date */}
-        {doneRows.length > 0 && (
-          <div className="rounded-xl border bg-card overflow-hidden">
+          <div className="rounded-xl border bg-card overflow-hidden shadow-sm">
             <div className="overflow-x-auto">
               <table className="w-full text-xs">
                 <thead>
-                  <tr className="bg-[#1D3461] text-white">
-                    <th className="text-left px-3 py-2 font-medium w-8">#</th>
-                    <th className="text-left px-3 py-2 font-medium">Transaction ID</th>
-                    <th className="text-left px-3 py-2 font-medium">Date</th>
-                    <th className="text-left px-3 py-2 font-medium">Time</th>
-                    <th className="text-left px-3 py-2 font-medium">From Account</th>
-                    <th className="text-left px-3 py-2 font-medium">To Account</th>
-                    <th className="text-left px-3 py-2 font-medium">Recipient</th>
-                    <th className="text-left px-3 py-2 font-medium">Comment</th>
-                    <th className="text-right px-3 py-2 font-medium">Amount (SDG)</th>
+                  <tr className="bg-[#0F2041] text-white">
+                    <th className="px-3 py-2.5 text-left font-medium w-8">#</th>
+                    <th className="px-3 py-2.5 text-left font-medium w-24">Status</th>
+                    <th className="px-3 py-2.5 text-left font-medium">Transaction ID</th>
+                    <th className="px-3 py-2.5 text-left font-medium">Date</th>
+                    <th className="px-3 py-2.5 text-left font-medium">Time</th>
+                    <th className="px-3 py-2.5 text-left font-medium">From Account</th>
+                    <th className="px-3 py-2.5 text-left font-medium">To Account</th>
+                    <th className="px-3 py-2.5 text-left font-medium">Recipient</th>
+                    <th className="px-3 py-2.5 text-left font-medium">Comment</th>
+                    <th className="px-3 py-2.5 text-right font-medium">Amount (SDG)</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
-                  {Object.entries(groups).map(([date, items]) => {
-                    let d = date; try { d = format(new Date(date), 'dd MMM yyyy'); } catch {}
-                    const sub = items.reduce((s, r) => s + amountNum(r.amount), 0);
+                  {rows.map((row, idx) => {
+                    const isDone = row.status === 'done';
+                    const isErr = row.status === 'error';
+                    const isPending = row.status === 'pending';
+                    const isProcessing = row.status === 'processing';
+
                     return (
-                      <React.Fragment key={date}>
-                        <tr className="bg-blue-50/60 dark:bg-blue-950/20">
-                          <td colSpan={9} className="px-3 py-1.5 font-semibold text-[#1D3461] text-xs">
-                            {d} · {items.length} transaction{items.length !== 1 ? 's' : ''} · SDG {sub.toLocaleString('en', { minimumFractionDigits: 2 })}
-                          </td>
-                        </tr>
-                        {items.map((row, idx) => (
-                          <tr key={row.id} className="hover:bg-muted/30">
-                            <td className="px-3 py-1.5 text-muted-foreground">{idx + 1}</td>
-                            <td className="px-3 py-1.5 font-mono">{row.transaction_id}</td>
-                            <td className="px-3 py-1.5">{d}</td>
-                            <td className="px-3 py-1.5 font-mono">{row.transaction_time}</td>
-                            <td className="px-3 py-1.5 font-mono">{row.from_account}</td>
-                            <td className="px-3 py-1.5 font-mono">{row.to_account}</td>
-                            <td className="px-3 py-1.5" dir="auto">{row.recipient_name}</td>
-                            <td className="px-3 py-1.5 text-muted-foreground" dir="auto">{row.comment}</td>
-                            <td className="px-3 py-1.5 text-right font-mono font-medium">
-                              {amountNum(row.amount).toLocaleString('en', { minimumFractionDigits: 2 })}
-                            </td>
-                          </tr>
-                        ))}
-                      </React.Fragment>
+                      <tr
+                        key={row.id}
+                        className={`transition-colors ${
+                          isDone ? 'hover:bg-emerald-50/40 dark:hover:bg-emerald-950/10' :
+                          isErr ? 'bg-red-50/60 dark:bg-red-950/10 hover:bg-red-50 dark:hover:bg-red-950/20' :
+                          isProcessing ? 'bg-blue-50/40 dark:bg-blue-950/10' :
+                          'bg-muted/20'
+                        }`}
+                      >
+                        {/* # */}
+                        <td className="px-3 py-2 text-muted-foreground font-mono">{idx + 1}</td>
+
+                        {/* Status */}
+                        <td className="px-3 py-2">
+                          {isDone && (
+                            <span className="inline-flex items-center gap-1 text-emerald-600 font-medium">
+                              <CheckCircle2 className="h-3.5 w-3.5" /> Done
+                            </span>
+                          )}
+                          {isProcessing && (
+                            <span className="inline-flex items-center gap-1 text-blue-600">
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" /> Reading…
+                            </span>
+                          )}
+                          {isPending && (
+                            <span className="inline-flex items-center gap-1 text-muted-foreground">
+                              <Clock className="h-3.5 w-3.5" /> Waiting
+                            </span>
+                          )}
+                          {isErr && (
+                            <button
+                              onClick={() => retryRow(row.id)}
+                              className="inline-flex items-center gap-1 text-red-600 hover:text-red-700 font-medium"
+                              title={row.error}
+                            >
+                              <RefreshCw className="h-3.5 w-3.5" /> Retry
+                            </button>
+                          )}
+                        </td>
+
+                        {/* Transaction ID */}
+                        <td className="px-3 py-2 font-mono">
+                          {isDone ? (
+                            <span>{row.transaction_id}</span>
+                          ) : (
+                            <span className="text-muted-foreground italic truncate max-w-[120px] block" title={row.fileName}>
+                              {isErr ? row.error?.slice(0, 40) + (row.error && row.error.length > 40 ? '…' : '') : row.fileName.replace(/\.[^.]+$/, '')}
+                            </span>
+                          )}
+                        </td>
+
+                        {/* Date */}
+                        <td className="px-3 py-2 whitespace-nowrap">
+                          {isDone ? fmtDate(row.transaction_date) : ''}
+                        </td>
+
+                        {/* Time */}
+                        <td className="px-3 py-2 font-mono whitespace-nowrap">
+                          {isDone ? row.transaction_time : ''}
+                        </td>
+
+                        {/* From Account */}
+                        <td className="px-3 py-2 font-mono" title={row.from_account}>
+                          {isDone ? fmtAcct(row.from_account) : ''}
+                        </td>
+
+                        {/* To Account */}
+                        <td className="px-3 py-2 font-mono" title={row.to_account}>
+                          {isDone ? fmtAcct(row.to_account) : ''}
+                        </td>
+
+                        {/* Recipient */}
+                        <td className="px-3 py-2" dir="auto">
+                          {isDone ? row.recipient_name : ''}
+                        </td>
+
+                        {/* Comment */}
+                        <td className="px-3 py-2 text-muted-foreground" dir="auto">
+                          {isDone && row.comment !== 'N/A' ? row.comment : ''}
+                        </td>
+
+                        {/* Amount */}
+                        <td className="px-3 py-2 text-right font-mono font-semibold">
+                          {isDone ? amountNum(row.amount).toLocaleString('en', { minimumFractionDigits: 2 }) : ''}
+                        </td>
+                      </tr>
                     );
                   })}
                 </tbody>
-                <tfoot>
-                  <tr className="bg-[#0F2041] text-white font-bold">
-                    <td colSpan={8} className="px-3 py-2 text-sm">GRAND TOTAL</td>
-                    <td className="px-3 py-2 text-right text-sm font-mono tabular-nums">
-                      {grandTotal.toLocaleString('en', { minimumFractionDigits: 2 })}
-                    </td>
-                  </tr>
-                </tfoot>
+
+                {/* Grand total footer */}
+                {doneRows.length > 0 && (
+                  <tfoot>
+                    <tr className="bg-[#0F2041] text-white">
+                      <td colSpan={2} className="px-3 py-2.5 font-bold text-sm">TOTAL</td>
+                      <td colSpan={6} className="px-3 py-2.5 text-white/60 text-xs">
+                        {doneCount} transaction{doneCount !== 1 ? 's' : ''}
+                        {errorRows.length > 0 && (
+                          <span className="ml-3 text-red-300">
+                            · {errorRows.length} failed —{' '}
+                            <button onClick={retryAllFailed} className="underline hover:no-underline">retry all</button>
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2.5 text-right font-bold text-sm font-mono tabular-nums">
+                        {grandTotal.toLocaleString('en', { minimumFractionDigits: 2 })}
+                      </td>
+                    </tr>
+                  </tfoot>
+                )}
               </table>
             </div>
           </div>
         )}
 
-        {/* Error details */}
-        {errorRows.length > 0 && (
-          <div className="rounded-xl border border-red-200 bg-red-50 dark:bg-red-950/20 p-4 space-y-2">
-            <p className="text-sm font-semibold text-red-700 flex items-center gap-2">
-              <AlertCircle className="h-4 w-4" /> {errorRows.length} failed extraction{errorRows.length !== 1 ? 's' : ''}
-            </p>
-            {errorRows.map(r => (
-              <div key={r.id} className="flex items-start justify-between gap-3 text-xs text-red-600">
-                <span className="font-medium shrink-0">{r.fileName}</span>
-                <span className="text-red-500 text-right">{r.error}</span>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* Done message */}
-        {!processing && rows.length > 0 && doneRows.length > 0 && (
-          <div className="text-center py-2">
-            <p className="text-xs text-muted-foreground">
-              Excel file auto-downloads when all images complete.
-              <button onClick={() => exportToExcel(rows)} className="ml-1 text-[#1D3461] hover:underline font-medium">Download now</button>
-            </p>
-          </div>
+        {/* Download hint */}
+        {!processing && doneRows.length > 0 && (
+          <p className="text-center text-xs text-muted-foreground pb-2">
+            Excel auto-downloads when all images complete ·{' '}
+            <button onClick={() => exportToExcel(rows)} className="text-[#1D3461] hover:underline font-medium">
+              Download now
+            </button>
+          </p>
         )}
 
       </div>
