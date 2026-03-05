@@ -108,6 +108,114 @@ async function callGeminiWithRotation(
   throw new Error('All Gemini models unavailable — daily quotas exhausted. Quotas reset at midnight Pacific time.');
 }
 
+// ─── Groq fallback (free, Llama 3.2 Vision) ───────────────────────────────
+// Models: llama-3.2-11b-vision-preview (7000 RPD), llama-3.2-90b-vision-preview (3500 RPD)
+const GROQ_MODELS = [
+  'llama-3.2-11b-vision-preview',  // 7000 req/day, 30 RPM — primary
+  'llama-3.2-90b-vision-preview',  // 3500 req/day, 15 RPM — secondary
+  'meta-llama/llama-4-scout-17b-16e-instruct', // Llama 4 if available
+];
+const unavailableGroqModels = new Set<string>();
+
+async function callGroqOCR(
+  images: Array<{ base64: string; mimeType: string }>,
+): Promise<{ text: string; model: string }> {
+  const apiKey = process.env.GROQ_API_KEY || '';
+  if (!apiKey) throw new Error('GROQ_API_KEY not configured');
+
+  const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
+  const prompt = buildBatchPrompt(images.length);
+
+  for (const model of GROQ_MODELS) {
+    if (unavailableGroqModels.has(model)) {
+      console.log(`[Groq OCR] Skipping ${model} (unavailable)`);
+      continue;
+    }
+
+    // Build message content — text prompt + all images
+    const content: any[] = [{ type: 'text', text: prompt }];
+    images.forEach((img, i) => {
+      if (images.length > 1) content.push({ type: 'text', text: `Image ${i + 1}:` });
+      content.push({
+        type: 'image_url',
+        image_url: { url: `data:${img.mimeType || 'image/jpeg'};base64,${img.base64}` },
+      });
+    });
+
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        console.log(`[Groq OCR] Trying model: ${model}, batch: ${images.length}, attempt: ${attempt + 1}`);
+        const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${apiKey}`,
+          },
+          body: JSON.stringify({
+            model,
+            messages: [{ role: 'user', content }],
+            temperature: 0,
+            max_tokens: 2048,
+          }),
+        });
+
+        if (!res.ok) {
+          const errBody = await res.json().catch(() => ({}));
+          const errMsg = errBody?.error?.message || `HTTP ${res.status}`;
+          const isNotFound = res.status === 404 || errMsg.includes('not found') || errMsg.includes('does not exist');
+          const isDailyLimit = res.status === 429 && errMsg.toLowerCase().includes('day');
+          const isMinuteLimit = res.status === 429 && !isDailyLimit;
+
+          if (isNotFound || isDailyLimit) {
+            console.log(`[Groq OCR] Model ${model} unavailable (${isNotFound ? '404' : 'daily limit'}) — rotating`);
+            unavailableGroqModels.add(model);
+            break;
+          }
+          if (isMinuteLimit) {
+            const retryAfter = parseInt(res.headers.get('retry-after') || '10', 10);
+            console.log(`[Groq OCR] Minute rate limit — waiting ${retryAfter}s`);
+            await sleep(retryAfter * 1000);
+            continue;
+          }
+          throw new Error(`Groq API error: ${errMsg}`);
+        }
+
+        const data = await res.json();
+        const text = (data.choices?.[0]?.message?.content || '')
+          .replace(/```json\n?|```\n?/g, '').trim();
+        console.log(`[Groq OCR] Success with ${model}`);
+        return { text, model: `groq/${model}` };
+
+      } catch (err: any) {
+        if (err.message?.startsWith('Groq API error') || err.message?.startsWith('GROQ_API_KEY')) throw err;
+        // Network error — retry
+        console.warn(`[Groq OCR] Network error attempt ${attempt + 1}:`, err.message?.slice(0, 100));
+        await sleep(3000);
+      }
+    }
+  }
+
+  throw new Error('All Groq models unavailable. Check GROQ_API_KEY or try again later.');
+}
+
+function postProcess(text: string): string {
+  try {
+    const arr = JSON.parse(text);
+    if (Array.isArray(arr)) {
+      arr.forEach((obj: any) => {
+        if (obj.from_account) obj.from_account = String(obj.from_account).replace(/\s+/g, '');
+        if (obj.to_account) obj.to_account = String(obj.to_account).replace(/\s+/g, '');
+        if (obj.amount != null) {
+          const n = parseFloat(String(obj.amount).replace(/,/g, ''));
+          obj.amount = isNaN(n) ? 0 : n;
+        }
+      });
+      return JSON.stringify(arr);
+    }
+  } catch { /* leave as-is */ }
+  return text;
+}
+
 function geminiOcrPlugin() {
   return {
     name: 'gemini-ocr-api',
@@ -124,39 +232,44 @@ function geminiOcrPlugin() {
               ? parsed.images
               : [{ base64: parsed.base64, mimeType: parsed.mimeType || 'image/jpeg' }];
 
-            const { GoogleGenAI } = await import('@google/genai');
-            const apiKey = process.env.GOOGLE_AI_API_KEY || '';
-            const ai = new GoogleGenAI({ apiKey });
+            // ── Try Gemini first ─────────────────────────────────────────
+            let text = '';
+            let model = '';
+            let geminiExhausted = false;
 
-            const { text, model } = await callGeminiWithRotation(ai, images);
-
-            // Post-process: strip spaces from account numbers in case AI didn't follow instructions
-            let cleanedText = text;
             try {
-              const arr = JSON.parse(text);
-              if (Array.isArray(arr)) {
-                arr.forEach((obj: any) => {
-                  if (obj.from_account) obj.from_account = String(obj.from_account).replace(/\s+/g, '');
-                  if (obj.to_account) obj.to_account = String(obj.to_account).replace(/\s+/g, '');
-                  if (obj.amount != null) {
-                    const n = parseFloat(String(obj.amount).replace(/,/g, ''));
-                    obj.amount = isNaN(n) ? 0 : n;
-                  }
-                });
-                cleanedText = JSON.stringify(arr);
-              }
-            } catch { /* leave text as-is if parse fails */ }
+              const { GoogleGenAI } = await import('@google/genai');
+              const ai = new GoogleGenAI({ apiKey: process.env.GOOGLE_AI_API_KEY || '' });
+              ({ text, model } = await callGeminiWithRotation(ai, images));
+            } catch (geminiErr: any) {
+              geminiExhausted = geminiErr.message?.includes('All Gemini models unavailable');
+              if (!geminiExhausted) throw geminiErr; // real error, not quota
+              console.log('[OCR] Gemini exhausted — trying Groq fallback');
+            }
+
+            // ── Groq fallback if Gemini exhausted ────────────────────────
+            if (geminiExhausted) {
+              ({ text, model } = await callGroqOCR(images));
+            }
 
             res.setHeader('Content-Type', 'application/json');
-            res.end(JSON.stringify({ text: cleanedText, model }));
+            res.end(JSON.stringify({ text: postProcess(text), model }));
 
           } catch (err: any) {
-            const msg = err.message || 'Gemini API call failed';
-            const allExhausted = msg.includes('All Gemini models unavailable');
-            console.error('[Gemini OCR] Fatal:', msg.slice(0, 300));
-            res.statusCode = 429;
+            const msg = err.message || 'OCR failed';
+            const noKey = msg.includes('GROQ_API_KEY not configured');
+            const allExhausted = msg.includes('All Gemini') || msg.includes('All Groq');
+            console.error('[OCR] Fatal:', msg.slice(0, 300));
+            res.statusCode = noKey ? 503 : 429;
             res.setHeader('Content-Type', 'application/json');
-            res.end(JSON.stringify({ error: msg, retryAfterSec: allExhausted ? 3600 : 30, isDailyExhausted: allExhausted }));
+            res.end(JSON.stringify({
+              error: noKey
+                ? 'Gemini daily quota exhausted and no Groq API key configured. Add GROQ_API_KEY to use the free Groq fallback.'
+                : msg,
+              retryAfterSec: allExhausted ? 3600 : 30,
+              isDailyExhausted: allExhausted && !noKey,
+              needsGroqKey: noKey,
+            }));
           }
         });
       });

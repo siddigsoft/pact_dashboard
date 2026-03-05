@@ -100,6 +100,9 @@ async function extractBatch(
     });
     const data = await res.json().catch(() => ({ error: res.statusText }));
 
+    if (res.status === 503 && data.needsGroqKey) {
+      throw new Error('__NEEDS_GROQ_KEY__');
+    }
     if (res.status === 429) {
       if (data.isDailyExhausted) {
         throw new Error('All AI models at daily quota. Quotas reset at midnight Pacific time.');
@@ -291,9 +294,11 @@ export default function TransactionScanner() {
       return true;
     } catch (err: any) {
       const msg: string = err.message || 'Extraction failed';
-      const isQuota = msg.includes('daily quota') || msg.includes('All AI models');
-      batchRowIds.forEach(id => updateRow(id, { status: 'error', error: msg }));
-      if (isQuota) setQuotaError(msg);
+      const isGroqKeyMissing = msg === '__NEEDS_GROQ_KEY__';
+      const isQuota = isGroqKeyMissing || msg.includes('daily quota') || msg.includes('All AI models');
+      const displayMsg = isGroqKeyMissing ? 'Gemini quota exhausted — add GROQ_API_KEY to continue' : msg;
+      batchRowIds.forEach(id => updateRow(id, { status: 'error', error: displayMsg }));
+      if (isQuota) setQuotaError(isGroqKeyMissing ? '__NEEDS_GROQ_KEY__' : msg);
       return !isQuota;
     }
   }, [updateRow]);
@@ -435,19 +440,36 @@ export default function TransactionScanner() {
           )}
         </div>
 
-        {/* Quota exhausted banner */}
+        {/* Quota / Groq key banner */}
         {quotaError && (
-          <div className="rounded-xl border border-amber-300 bg-amber-50 dark:bg-amber-950/20 p-4 flex items-start gap-3">
-            <AlertCircle className="h-5 w-5 text-amber-500 shrink-0 mt-0.5" />
-            <div>
-              <p className="font-semibold text-amber-800 dark:text-amber-300 text-sm">AI quota exhausted for today</p>
-              <p className="text-amber-700 dark:text-amber-400 text-xs mt-1">
-                All Gemini AI models have reached their daily request limit from today's testing.
-                Quotas reset at <strong>midnight Pacific time</strong> (08:00 Sudan time tomorrow).
-                Your images are saved — click <strong>Retry All</strong> tomorrow to process them.
-              </p>
+          quotaError === '__NEEDS_GROQ_KEY__' ? (
+            <div className="rounded-xl border border-blue-300 bg-blue-50 dark:bg-blue-950/20 p-4 flex items-start gap-3">
+              <AlertCircle className="h-5 w-5 text-blue-500 shrink-0 mt-0.5" />
+              <div className="space-y-1.5">
+                <p className="font-semibold text-blue-800 dark:text-blue-300 text-sm">Gemini quota exhausted — activate free Groq fallback</p>
+                <p className="text-blue-700 dark:text-blue-400 text-xs">
+                  Groq offers <strong>7,000 free requests/day</strong> with no credit card. Follow these steps:
+                </p>
+                <ol className="text-blue-700 dark:text-blue-400 text-xs list-decimal list-inside space-y-0.5">
+                  <li>Go to <strong>console.groq.com</strong> → sign up free → API Keys → Create key</li>
+                  <li>In Replit: open <strong>Secrets</strong> (lock icon) → add key <code className="bg-blue-100 dark:bg-blue-900 px-1 rounded">GROQ_API_KEY</code></li>
+                  <li>Restart the app, then click <strong>Retry All</strong></li>
+                </ol>
+              </div>
             </div>
-          </div>
+          ) : (
+            <div className="rounded-xl border border-amber-300 bg-amber-50 dark:bg-amber-950/20 p-4 flex items-start gap-3">
+              <AlertCircle className="h-5 w-5 text-amber-500 shrink-0 mt-0.5" />
+              <div>
+                <p className="font-semibold text-amber-800 dark:text-amber-300 text-sm">AI quota exhausted for today</p>
+                <p className="text-amber-700 dark:text-amber-400 text-xs mt-1">
+                  All AI models have reached their daily limit.
+                  Quotas reset at <strong>midnight Pacific time</strong> (08:00 Sudan time tomorrow).
+                  Your images are saved — click <strong>Retry All</strong> tomorrow.
+                </p>
+              </div>
+            </div>
+          )
         )}
 
         {/* Receipts table — all rows, live status */}
