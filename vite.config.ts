@@ -8,28 +8,15 @@ import type { IncomingMessage, ServerResponse } from 'http';
 // Load environment variables from .env file
 config();
 
-// Models in priority order — each has its own daily quota; rotate through them
+// Models tried in order — each has its own daily quota
+// Server rotates through them internally, so the client never has to retry for model switching
 const GEMINI_MODELS = [
   'gemini-1.5-flash',
-  'gemini-1.5-flash-8b',
   'gemini-2.0-flash',
   'gemini-1.5-pro',
 ];
-// Track which models hit daily quota exhaustion (resets when server restarts)
-const exhaustedModels = new Set<string>();
-let currentModelIdx = 0;
-
-function getNextModel(): string | null {
-  for (let i = 0; i < GEMINI_MODELS.length; i++) {
-    const idx = (currentModelIdx + i) % GEMINI_MODELS.length;
-    const model = GEMINI_MODELS[idx];
-    if (!exhaustedModels.has(model)) {
-      currentModelIdx = idx;
-      return model;
-    }
-  }
-  return null; // all exhausted
-}
+// Track which models are unavailable this server session (exhausted daily OR 404/not-found)
+const unavailableModels = new Set<string>();
 
 function buildBatchPrompt(count: number): string {
   return `You are a bank transaction OCR expert. I will show you ${count} Bank of Khartoum transfer screenshot${count > 1 ? 's' : ''} (Arabic or English).
@@ -38,6 +25,66 @@ Each object must have exactly these fields:
 {"transaction_id":"","date_time":"DD-Mon-YYYY HH:MM:SS","from_account":"","to_account":"","recipient_name":"","mobile_number":"N/A","comment":"N/A","amount":0.00}
 Arabic labels: رقم العملية=transaction_id, التاريخ والوقت/التاريخ و الزمن=date_time, من حساب/من=from_account, الى حساب/إلى=to_account, إسم المرسل اليه=recipient_name, رقم الموبايل=mobile_number, التعليق=comment, المبلغ=amount.
 Rules: Use N/A for missing text fields. Amount must be a plain number. Return exactly ${count} objects in the JSON array.`;
+}
+
+async function callGeminiWithRotation(
+  ai: any,
+  images: Array<{ base64: string; mimeType: string }>,
+): Promise<{ text: string; model: string }> {
+  const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
+
+  // Try each model in order, skipping ones we know are unavailable
+  for (const model of GEMINI_MODELS) {
+    if (unavailableModels.has(model)) {
+      console.log(`[Gemini OCR] Skipping ${model} (unavailable)`);
+      continue;
+    }
+
+    const parts: any[] = [{ text: buildBatchPrompt(images.length) }];
+    images.forEach((img, i) => {
+      if (images.length > 1) parts.push({ text: `Image ${i + 1}:` });
+      parts.push({ inlineData: { mimeType: img.mimeType || 'image/jpeg', data: img.base64 } });
+    });
+
+    // Try this model up to 3 times (for per-minute rate limits)
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        console.log(`[Gemini OCR] Trying model: ${model}, batch: ${images.length}, attempt: ${attempt + 1}`);
+        const response = await ai.models.generateContent({
+          model,
+          contents: [{ role: 'user', parts }],
+        });
+        const text = (response.text || '').replace(/```json\n?|```\n?/g, '').trim();
+        console.log(`[Gemini OCR] Success with ${model}`);
+        return { text, model };
+      } catch (err: any) {
+        const msg = err.message || '';
+        const isModelNotFound = msg.includes('404') || msg.includes('not found') || msg.includes('NOT_FOUND');
+        const isDailyExhausted = msg.includes('GenerateRequestsPerDay') && msg.includes('limit: 0');
+        const isMinuteLimit = (msg.includes('429') || msg.includes('RESOURCE_EXHAUSTED')) && !isDailyExhausted;
+
+        if (isModelNotFound || isDailyExhausted) {
+          console.log(`[Gemini OCR] Model ${model} unavailable (${isModelNotFound ? '404' : 'daily exhausted'}) — rotating`);
+          unavailableModels.add(model);
+          break; // try next model
+        }
+
+        if (isMinuteLimit) {
+          // Per-minute rate limit — wait and retry same model
+          const retryMatch = msg.match(/retry in (\d+(?:\.\d+)?)s/i);
+          const waitMs = retryMatch ? (Math.ceil(parseFloat(retryMatch[1])) + 2) * 1000 : 15000;
+          console.log(`[Gemini OCR] ${model} minute rate limit — waiting ${Math.round(waitMs / 1000)}s`);
+          await sleep(waitMs);
+          continue;
+        }
+
+        // Other error — rethrow
+        throw err;
+      }
+    }
+  }
+
+  throw new Error('All Gemini models unavailable — daily quotas exhausted. Quotas reset at midnight Pacific time.');
 }
 
 function geminiOcrPlugin() {
@@ -52,7 +99,6 @@ function geminiOcrPlugin() {
         req.on('end', async () => {
           try {
             const parsed = JSON.parse(body);
-            // Support both single image {base64, mimeType} and batch {images:[{base64,mimeType}]}
             const images: Array<{ base64: string; mimeType: string }> = parsed.images
               ? parsed.images
               : [{ base64: parsed.base64, mimeType: parsed.mimeType || 'image/jpeg' }];
@@ -61,51 +107,17 @@ function geminiOcrPlugin() {
             const apiKey = process.env.GOOGLE_AI_API_KEY || '';
             const ai = new GoogleGenAI({ apiKey });
 
-            const model = getNextModel();
-            if (!model) {
-              res.statusCode = 429;
-              res.setHeader('Content-Type', 'application/json');
-              res.end(JSON.stringify({ error: 'All Gemini models daily quota exhausted — resets at midnight Pacific time', retryAfterSec: 3600 }));
-              return;
-            }
-
-            console.log(`[Gemini OCR] Using model: ${model}, batch size: ${images.length}`);
-
-            const parts: any[] = [{ text: buildBatchPrompt(images.length) }];
-            images.forEach((img, i) => {
-              if (images.length > 1) parts.push({ text: `Image ${i + 1}:` });
-              parts.push({ inlineData: { mimeType: img.mimeType || 'image/jpeg', data: img.base64 } });
-            });
-
-            const response = await ai.models.generateContent({
-              model,
-              contents: [{ role: 'user', parts }],
-            });
-
-            const text = (response.text || '').replace(/```json\n?|```\n?/g, '').trim();
+            const { text, model } = await callGeminiWithRotation(ai, images);
             res.setHeader('Content-Type', 'application/json');
             res.end(JSON.stringify({ text, model }));
 
           } catch (err: any) {
             const msg = err.message || 'Gemini API call failed';
-            const isDailyExhausted = msg.includes('GenerateRequestsPerDay') || (msg.includes('limit: 0') && msg.includes('PerDay'));
-            const isRateLimit = msg.includes('429') || msg.includes('RESOURCE_EXHAUSTED') || msg.toLowerCase().includes('quota');
-
-            if (isDailyExhausted) {
-              // Mark current model as exhausted and move to next
-              const failed = GEMINI_MODELS[currentModelIdx];
-              exhaustedModels.add(failed);
-              console.log(`[Gemini OCR] Model ${failed} daily quota exhausted — switching. Remaining: ${GEMINI_MODELS.filter(m => !exhaustedModels.has(m)).join(', ') || 'none'}`);
-            }
-
-            console.error(`[Gemini OCR] Error (${GEMINI_MODELS[currentModelIdx]}):`, msg.slice(0, 200));
-            res.statusCode = isRateLimit ? 429 : 500;
+            const allExhausted = msg.includes('All Gemini models unavailable');
+            console.error('[Gemini OCR] Fatal:', msg.slice(0, 300));
+            res.statusCode = 429;
             res.setHeader('Content-Type', 'application/json');
-            let retryAfterSec = 5;
-            const retryMatch = msg.match(/retry in (\d+(?:\.\d+)?)s/i);
-            if (retryMatch) retryAfterSec = Math.ceil(parseFloat(retryMatch[1])) + 1;
-            else if (isDailyExhausted) retryAfterSec = 1; // retry immediately with next model
-            res.end(JSON.stringify({ error: isDailyExhausted ? 'Model quota exhausted — switching to next model' : msg, retryAfterSec, isDailyExhausted }));
+            res.end(JSON.stringify({ error: msg, retryAfterSec: allExhausted ? 3600 : 30, isDailyExhausted: allExhausted }));
           }
         });
       });

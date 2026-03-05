@@ -98,60 +98,43 @@ function parseTxResult(extracted: any): Partial<TxRow> {
   };
 }
 
-// Send a batch of up to BATCH_SIZE images in one API call; returns array of results
+// Send a batch of images — server handles model rotation + per-minute retry internally
+// Client only needs to handle "all models exhausted" (rare) with a long wait
 async function extractBatch(
   images: Array<{ base64: string; mimeType: string }>,
   onStatus?: (msg: string) => void,
-  maxRetries = 6,
 ): Promise<Array<Partial<TxRow>>> {
-  let lastError: Error | null = null;
-  for (let attempt = 0; attempt <= maxRetries; attempt++) {
-    try {
-      const res = await fetch('/api/extract-transaction', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ images }),
-      });
+  // Retry up to 2 times in case of transient network errors or all-quota-exhausted
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const res = await fetch('/api/extract-transaction', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ images }),
+    });
 
-      const data = await res.json().catch(() => ({}));
+    const data = await res.json().catch(() => ({ error: res.statusText }));
 
-      if (res.status === 429 || res.status === 503) {
-        if (data.isDailyExhausted) {
-          // Model switched on server side — retry immediately with the new model
-          onStatus?.('Switching to next AI model…');
-          await sleep(1000);
-          lastError = new Error(data.error || 'Model quota exhausted');
-          continue;
-        }
-        const waitMs = data.retryAfterSec ? data.retryAfterSec * 1000 : 30000;
-        const waitSec = Math.round(waitMs / 1000);
-        onStatus?.(`Rate limited — waiting ${waitSec}s (attempt ${attempt + 1}/${maxRetries})…`);
-        await sleep(waitMs);
-        lastError = new Error(data.error || 'Rate limited');
-        continue;
-      }
-
-      if (!res.ok) throw new Error(`API error ${res.status}: ${data.error || res.statusText}`);
-      if (data.error) throw new Error(data.error);
-
-      const clean = (data.text || '').replace(/```json\n?|```\n?/g, '').trim();
-      let parsed: any;
-      try { parsed = JSON.parse(clean); } catch {
-        throw new Error('Could not parse AI response as JSON');
-      }
-
-      // Always return an array
-      const arr = Array.isArray(parsed) ? parsed : [parsed];
-      return arr.slice(0, images.length).map(parseTxResult);
-
-    } catch (err: any) {
-      if (err.message?.includes('quota') || err.message?.includes('Rate limited') || err.message?.includes('Switching')) {
-        lastError = err; continue;
-      }
-      throw err;
+    if (res.status === 429) {
+      // All models exhausted on server side
+      const waitMs = (data.retryAfterSec ?? 60) * 1000;
+      const waitSec = Math.round(waitMs / 1000);
+      onStatus?.(`All AI models at quota limit — waiting ${waitSec}s…`);
+      await sleep(waitMs);
+      continue;
     }
+
+    if (!res.ok) throw new Error(data.error || `Server error ${res.status}`);
+
+    const clean = (data.text || '').replace(/```json\n?|```\n?/g, '').trim();
+    let parsed: any;
+    try { parsed = JSON.parse(clean); } catch {
+      throw new Error('Could not parse AI response');
+    }
+
+    const arr = Array.isArray(parsed) ? parsed : [parsed];
+    return arr.slice(0, images.length).map(parseTxResult);
   }
-  throw lastError || new Error('All retry attempts failed');
+  throw new Error('All Gemini AI models are at their daily limit. Try again tomorrow or check your API quota.');
 }
 
 function exportToExcel(rows: TxRow[]) {
