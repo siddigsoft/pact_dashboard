@@ -193,8 +193,8 @@ export const useCoordinatorSites = () => {
     }
 
     const merged = new Map<string, SiteVisit>();
-    rpcSites.forEach((site) => merged.set(site.id, site));
     allSites.forEach((site) => merged.set(site.id, site));
+    rpcSites.forEach((site) => merged.set(site.id, site));
     return Array.from(merged.values());
   }, [coordinatorRows, contextMmpFiles, contextLoading, currentUser?.id, isAdminOrSuperUser]);
 

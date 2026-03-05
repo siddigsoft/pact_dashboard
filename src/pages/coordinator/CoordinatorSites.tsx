@@ -60,14 +60,44 @@ function getParsedAdditionalData(site: any): Record<string, any> {
   }
   return ad || {};
 }
+
+function isTruthyFlag(value: any): boolean {
+  if (value === true) return true;
+  if (typeof value === 'number') return value === 1;
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    return normalized === 'true' || normalized === '1' || normalized === 'yes' || normalized === 'y';
+  }
+  return false;
+}
+
 function siteNeedsStatePermit(site: any): boolean {
   const ad = getParsedAdditionalData(site);
-  return ad.state_permit_attached !== true && ad.state_permit_not_required !== true;
+  const hasStatePermitAttached = isTruthyFlag(ad.state_permit_attached);
+  const statePermitNotRequired = isTruthyFlag(ad.state_permit_not_required);
+  return !hasStatePermitAttached && !statePermitNotRequired;
 }
 function siteNeedsLocalityPermit(site: any): boolean {
   const ad = getParsedAdditionalData(site);
-  const hasState = ad.state_permit_attached === true || ad.state_permit_not_required === true;
-  return hasState && ad.locality_permit_attached !== true;
+  const hasStatePermitAttached = isTruthyFlag(ad.state_permit_attached);
+  const statePermitNotRequired = isTruthyFlag(ad.state_permit_not_required);
+  const hasState = hasStatePermitAttached || statePermitNotRequired;
+  const hasLocalityPermit = isTruthyFlag(ad.locality_permit_attached);
+  return hasState && !hasLocalityPermit;
+}
+
+function getFomSendBackComment(site: any): string {
+  if (!site) return '';
+  const ad = getParsedAdditionalData(site);
+  return String(
+    site.rejection_comments ||
+    ad.rejection_comments ||
+    ad.rejection_reason ||
+    ad.return_reason ||
+    ad.state_permit_waived_notes ||
+    site.verification_notes ||
+    ''
+  ).trim();
 }
 
 const SURVEY_TOOL_OPTIONS = [
@@ -1084,28 +1114,27 @@ const CoordinatorSites: React.FC = () => {
     let stateCount = 0;
     let localityCount = 0;
     let readyCount = 0;
+    const prePipeline = ['pending', 'inprogress', 'in_progress', 'forwarded', 'forwarded_to_coordinator', 'forwarded_to_coordinators', 'new', 'dispatched', 'assigned', 'accepted'];
+
+    const isPendingSite = (site: any) => {
+      const st = (site?.status || '').toLowerCase().trim().replace(/\s+/g, '_');
+      return prePipeline.includes(st);
+    };
+
     mmpGroupedStatesData.forEach(mmpGroup => {
       mmpGroup.states.forEach((state: any) => {
-        if (!state.hasStatePermit) {
-          stateCount += state.pendingSitesCount ?? state.statePermitRequiredCount ?? state.totalSites;
-        } else {
-          state.localities.forEach((loc: any) => {
-            const pendingInLoc = (loc.sites || []).filter((s: any) => {
-              const st = (s?.status || '').toLowerCase().trim().replace(/\s+/g, '_');
-              const prePipeline = ['pending', 'inprogress', 'in_progress', 'forwarded', 'forwarded_to_coordinator', 'forwarded_to_coordinators', 'new'];
-              if (prePipeline.includes(st)) return true;
-              if (['dispatched', 'assigned', 'accepted', 'permits_attached', 'cp_verified', 'cp_verification', 'verified', 'approved', 'costed', 'approved_and_costed', 'completed', 'rejected', 'returned_to_fom'].includes(st)) return false;
-              return true;
-            });
-            pendingInLoc.forEach((site: any) => {
-              if (siteNeedsLocalityPermit(site)) {
-                localityCount++;
-              } else if (!siteNeedsStatePermit(site)) {
-                readyCount++;
-              }
-            });
+        state.localities.forEach((loc: any) => {
+          const pendingInLoc = (loc.sites || []).filter((s: any) => isPendingSite(s));
+          pendingInLoc.forEach((site: any) => {
+            if (siteNeedsStatePermit(site)) {
+              stateCount++;
+            } else if (siteNeedsLocalityPermit(site)) {
+              localityCount++;
+            } else {
+              readyCount++;
+            }
           });
-        }
+        });
       });
     });
     return { stateCount, localityCount, readyCount };
@@ -3114,8 +3143,26 @@ const CoordinatorSites: React.FC = () => {
   const renderStateCard = (stateData: any, mmpId?: string, mmpName?: string) => {
     const isExpanded = expandedStates.has(stateData.state);
 
+    const prePipelineStatuses = ['pending', 'inprogress', 'in_progress', 'forwarded', 'forwarded_to_coordinator', 'forwarded_to_coordinators', 'new', 'dispatched', 'assigned', 'accepted'];
+    const terminalStatuses = ['permits_attached', 'cp_verified', 'cp_verification', 'verified', 'approved', 'costed', 'approved_and_costed', 'completed', 'rejected', 'returned_to_fom'];
+    const isPendingStateRequiredSite = (site: any) => {
+      const status = (site?.status || '').toLowerCase().trim().replace(/\s+/g, '_');
+      const isPending = prePipelineStatuses.includes(status) || !terminalStatuses.includes(status);
+      return isPending && siteNeedsStatePermit(site);
+    };
+
+    const filteredLocalities = (stateData.localities || [])
+      .map((locality: any) => {
+        const filteredSites = (locality.sites || []).filter(isPendingStateRequiredSite);
+        return {
+          ...locality,
+          sites: filteredSites,
+        };
+      })
+      .filter((locality: any) => locality.sites.length > 0);
+
     // Get first site from first locality to get state, locality, and mmp_file_id
-    const firstLocality = stateData.localities?.[0];
+    const firstLocality = filteredLocalities?.[0];
     const firstSite = firstLocality?.sites?.[0];
 
     const handleStateCardClick = () => {
@@ -3154,7 +3201,7 @@ const CoordinatorSites: React.FC = () => {
                       ))}
                     </div>
                   )}
-                  <p className="text-sm text-muted-foreground">{stateData.localities.length} localit{stateData.localities.length !== 1 ? 'ies' : 'y'}</p>
+                  <p className="text-sm text-muted-foreground">{filteredLocalities.length} localit{filteredLocalities.length !== 1 ? 'ies' : 'y'}</p>
                   <p className="text-sm text-muted-foreground">
                     {stateData.hasStatePermit
                       ? `${stateData.pendingSitesCount ?? stateData.totalSites} site${(stateData.pendingSitesCount ?? stateData.totalSites) !== 1 ? 's' : ''} assigned`
@@ -3226,7 +3273,7 @@ const CoordinatorSites: React.FC = () => {
                     Localities in this state:
                   </div>
                   <div className="space-y-3">
-                    {stateData.localities.map((locality: any) => {
+                    {filteredLocalities.map((locality: any) => {
                       const localityKey = `state-${stateData.state}-${locality.locality}`;
                       const isLocalityExpanded = expandedLocalities.has(localityKey);
                       return (
@@ -3270,6 +3317,15 @@ const CoordinatorSites: React.FC = () => {
                                     <span className="font-medium">{site.site_name}</span>
                                     <span className="text-muted-foreground ml-1.5 text-xs">({site.site_code})</span>
                                     {site.hub_office && <span className="text-muted-foreground ml-1.5 text-xs">• {site.hub_office}</span>}
+                                    {(() => {
+                                      const fomComment = getFomSendBackComment(site);
+                                      if (!fomComment) return null;
+                                      return (
+                                        <p className="text-xs text-orange-700 dark:text-orange-300 mt-1 line-clamp-2">
+                                          <span className="font-medium">FOM Comment:</span> {fomComment}
+                                        </p>
+                                      );
+                                    })()}
                                   </div>
                                   <div className="flex items-center gap-2">
                                     <Badge variant="secondary" className="text-xs capitalize">
@@ -3737,23 +3793,25 @@ const CoordinatorSites: React.FC = () => {
                 const validStatuses = ['pending', 'dispatched', 'assigned', 'inprogress', 'in_progress', 'new', 'forwarded'];
                 const mmpLocalityGroups = mmpGroupedStatesData.map(mmpGroup => {
                   const localities = mmpGroup.states
-                    .filter((state: any) => state.hasStatePermit)
                     .flatMap((state: any) =>
-                      state.localities.map((locality: any) => ({
-                        state: state.state,
-                        locality: locality.locality,
-                        siteCount: locality.sites?.length || 0,
-                        sites: locality.sites || [],
-                        hasPermit: locality.hasPermit || false,
-                        mmpFileId: locality.sites?.[0]?.mmp_file_id || ''
-                      }))
+                      state.localities
+                        .map((locality: any) => {
+                          const filteredLocalitySites = (locality.sites || []).filter((site: SiteVisit) => {
+                            const status = (site.status || '').toLowerCase().replace(/\s+/g, '_');
+                            return validStatuses.includes(status) && !siteNeedsStatePermit(site) && siteNeedsLocalityPermit(site);
+                          });
+                          return {
+                            state: state.state,
+                            locality: locality.locality,
+                            siteCount: filteredLocalitySites.length,
+                            sites: filteredLocalitySites,
+                            hasPermit: locality.hasPermit || false,
+                            mmpFileId: filteredLocalitySites?.[0]?.mmp_file_id || ''
+                          };
+                        })
+                        .filter((locality: any) => locality.sites.length > 0)
                     )
-                    .filter((locality: any) =>
-                      locality.sites.some((site: SiteVisit) => {
-                        const status = (site.status || '').toLowerCase().replace(/\s+/g, '_');
-                        return validStatuses.includes(status) && siteNeedsLocalityPermit(site);
-                      })
-                    );
+                    ;
                   return { ...mmpGroup, localities };
                 }).filter(g => g.localities.length > 0);
 
@@ -3808,6 +3866,15 @@ const CoordinatorSites: React.FC = () => {
                                           {site._locality && <span>{site._locality}</span>}
                                           {site._state && <span> - {site._state}</span>}
                                         </div>
+                                        {(() => {
+                                          const fomComment = getFomSendBackComment(site);
+                                          if (!fomComment) return null;
+                                          return (
+                                            <p className="text-xs text-orange-700 dark:text-orange-300 mt-1 line-clamp-2">
+                                              <span className="font-medium">FOM Comment:</span> {fomComment}
+                                            </p>
+                                          );
+                                        })()}
                                       </div>
                                       <Button
                                         size="sm"

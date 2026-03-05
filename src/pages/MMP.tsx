@@ -718,6 +718,8 @@ const MMP = () => {
           updated_at: now,
           additional_data: {
             ...existingAdditionalData,
+            state_permit_not_required: true,
+            state_permit_attached: false,
             state_permit_waived: true,
             state_permit_waived_by: currentUser?.id,
             state_permit_waived_at: now,
@@ -6938,21 +6940,35 @@ const MMP = () => {
                       try {
                         const siteIds = selectedReturnedState.sites.map(s => s.id);
                         const now = new Date().toISOString();
-                        
-                        // Update sites: clear returned status and forward to new coordinator
-                        const { error } = await supabase
-                          .from('mmp_site_entries')
-                          .update({
-                            status: 'Pending',
-                            forwarded_to_user_id: selectedCoordinatorForReturned,
-                            forwarded_at: now,
-                            forwarded_by_user_id: currentUser?.id,
-                            verification_notes: null, // Clear old notes
-                            updated_at: now
-                          })
-                          .in('id', siteIds);
 
-                        if (error) throw error;
+                        // Update sites: clear returned status, mark state permit attached, and forward to coordinator
+                        const updateResults = await Promise.all(
+                          selectedReturnedState.sites.map((site: any) => {
+                            const existingAdditionalData = site.additional_data || site.additionalData || {};
+                            return supabase
+                              .from('mmp_site_entries')
+                              .update({
+                                status: 'Pending',
+                                forwarded_to_user_id: selectedCoordinatorForReturned,
+                                forwarded_at: now,
+                                forwarded_by_user_id: currentUser?.id,
+                                verification_notes: null,
+                                updated_at: now,
+                                additional_data: {
+                                  ...existingAdditionalData,
+                                  state_permit_attached: true,
+                                  state_permit_not_required: false,
+                                  state_permit_uploaded_at: now,
+                                  state_permit_uploaded_by: currentUser?.id,
+                                  sent_back_to_coordinator_id: selectedCoordinatorForReturned,
+                                }
+                              })
+                              .eq('id', site.id);
+                          })
+                        );
+
+                        const failedUpdate = updateResults.find((res: any) => res.error);
+                        if (failedUpdate?.error) throw failedUpdate.error;
 
                         // Create notifications
                         const notifications: any[] = [{
