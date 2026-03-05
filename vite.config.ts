@@ -3,9 +3,73 @@ import react from "@vitejs/plugin-react-swc";
 import path from "path";
 import { componentTagger } from "lovable-tagger";
 import { config } from 'dotenv';
+import type { IncomingMessage, ServerResponse } from 'http';
 
 // Load environment variables from .env file
 config();
+
+const GEMINI_OCR_PROMPT = `You are a bank transaction OCR assistant. Analyze this Bank of Khartoum transfer confirmation screenshot.
+The screen may be in Arabic or English. Extract these fields and return ONLY valid JSON (no markdown, no extra text):
+{
+  "transaction_id": "the transaction/operation number",
+  "date_time": "DD-Mon-YYYY HH:MM:SS format if possible",
+  "from_account": "source account number",
+  "to_account": "destination account number",
+  "recipient_name": "recipient full name",
+  "mobile_number": "mobile number or N/A",
+  "comment": "comment/note or N/A",
+  "amount": 0.00
+}
+Arabic label mapping: رقم العملية=transaction_id, التاريخ و الزمن/التاريخ والوقت=date_time, من حساب/من=from_account, الى حساب/إلى=to_account, إسم المرسل اليه=recipient_name, رقم الموبايل=mobile_number, التعليق=comment, المبلغ=amount.
+Rules: Return N/A for missing text fields. Amount must be a plain number (e.g. 1000000.00). Do NOT include any markdown fences.`;
+
+function geminiOcrPlugin() {
+  return {
+    name: 'gemini-ocr-api',
+    configureServer(server: any) {
+      server.middlewares.use('/api/extract-transaction', async (req: IncomingMessage, res: ServerResponse, next: () => void) => {
+        if (req.method !== 'POST') return next();
+
+        let body = '';
+        req.on('data', (chunk: Buffer) => { body += chunk.toString(); });
+        req.on('end', async () => {
+          try {
+            const { base64, mimeType } = JSON.parse(body);
+            const { GoogleGenAI } = await import('@google/genai');
+
+            const ai = new GoogleGenAI({
+              apiKey: process.env.AI_INTEGRATIONS_GEMINI_API_KEY || '_DUMMY_API_KEY_',
+              httpOptions: {
+                apiVersion: '',
+                baseUrl: process.env.AI_INTEGRATIONS_GEMINI_BASE_URL || 'http://localhost:1106/modelfarm/gemini',
+              } as any,
+            });
+
+            const response = await ai.models.generateContent({
+              model: 'gemini-2.5-flash',
+              contents: [{
+                role: 'user',
+                parts: [
+                  { text: GEMINI_OCR_PROMPT },
+                  { inlineData: { mimeType: mimeType || 'image/jpeg', data: base64 } },
+                ],
+              }],
+            });
+
+            const text = response.text || '{}';
+            res.setHeader('Content-Type', 'application/json');
+            res.end(JSON.stringify({ text }));
+          } catch (err: any) {
+            console.error('[Gemini OCR] Error:', err.message);
+            res.statusCode = 500;
+            res.setHeader('Content-Type', 'application/json');
+            res.end(JSON.stringify({ error: err.message || 'Gemini API call failed' }));
+          }
+        });
+      });
+    },
+  };
+}
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => ({
@@ -13,18 +77,10 @@ export default defineConfig(({ mode }) => ({
     host: "0.0.0.0",
     port: 5000,
     allowedHosts: true,
-    proxy: {
-      '/api/gemini': {
-        target: process.env.AI_INTEGRATIONS_GEMINI_BASE_URL
-          ? process.env.AI_INTEGRATIONS_GEMINI_BASE_URL.replace('/modelfarm/gemini', '')
-          : 'http://localhost:1106',
-        rewrite: (path: string) => path.replace(/^\/api\/gemini/, '/modelfarm/gemini'),
-        changeOrigin: true,
-      },
-    },
   },
   plugins: [
     react(),
+    geminiOcrPlugin(),
     mode === 'development' &&
     componentTagger(),
   ].filter(Boolean),

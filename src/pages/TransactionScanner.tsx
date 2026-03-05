@@ -14,8 +14,6 @@ import {
 import * as XLSX from 'xlsx';
 import { format, parse, isValid } from 'date-fns';
 
-const GEMINI_API_KEY = '_DUMMY_API_KEY_';
-
 type TxRow = {
   id: string;
   fileName: string;
@@ -55,55 +53,26 @@ function amountNum(v: number | string): number {
 }
 
 async function extractFromImage(base64: string, mimeType: string): Promise<Partial<TxRow>> {
-  const prompt = `You are a bank transaction OCR assistant. Analyze this Bank of Khartoum transfer confirmation screenshot.
-The screen may be in Arabic or English. Extract these fields and return ONLY a JSON object (no markdown, no extra text):
-{
-  "transaction_id": "the transaction/operation number",
-  "date_time": "DD-Mon-YYYY HH:MM:SS format",
-  "from_account": "source account number",
-  "to_account": "destination account number",
-  "recipient_name": "recipient full name",
-  "mobile_number": "mobile number or N/A",
-  "comment": "comment/note or N/A",
-  "amount": 0.00
-}
-
-Arabic label mapping:
-- رقم العملية = transaction_id
-- التاريخ و الزمن / التاريخ والوقت = date_time
-- من حساب / من = from_account
-- الى حساب / إلى = to_account
-- إسم المرسل اليه / اسم المرسل اليه = recipient_name
-- رقم الموبايل = mobile_number
-- التعليق = comment
-- المبلغ = amount (numeric value, no commas)
-
-Rules: Return N/A for missing text fields. Amount must be a plain number (e.g. 1000000.00).`;
-
-  const body = {
-    contents: [{ parts: [{ text: prompt }, { inline_data: { mime_type: mimeType, data: base64 } }] }],
-    generationConfig: { responseMimeType: 'application/json', maxOutputTokens: 8192 },
-  };
-
-  const res = await fetch('/api/gemini/v1beta/models/gemini-2.5-flash:generateContent', {
+  const res = await fetch('/api/extract-transaction', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'x-goog-api-key': GEMINI_API_KEY },
-    body: JSON.stringify(body),
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ base64, mimeType }),
   });
 
   if (!res.ok) {
-    const txt = await res.text();
-    throw new Error(`Gemini API error ${res.status}: ${txt.slice(0, 200)}`);
+    const data = await res.json().catch(() => ({ error: res.statusText }));
+    throw new Error(`Extraction failed (${res.status}): ${data.error || res.statusText}`);
   }
 
-  const data = await res.json();
-  const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
+  const { text, error } = await res.json();
+  if (error) throw new Error(error);
+
   let extracted: any = {};
   try {
-    const clean = text.replace(/```json\n?|```\n?/g, '').trim();
+    const clean = (text || '{}').replace(/```json\n?|```\n?/g, '').trim();
     extracted = JSON.parse(clean);
   } catch {
-    throw new Error('Could not parse Gemini response as JSON');
+    throw new Error('Could not parse AI response as JSON');
   }
 
   const { date, time } = parseDateTime(extracted.date_time || '');
