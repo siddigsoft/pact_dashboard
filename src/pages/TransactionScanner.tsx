@@ -399,6 +399,9 @@ export default function TransactionScanner() {
   const updateRow = useCallback((id: string, patch: Partial<TxRow>) =>
     setRows(prev => prev.map(r => r.id === id ? { ...r, ...patch } : r)), []);
 
+  const removeRow = useCallback((id: string) =>
+    setRows(prev => prev.filter(r => r.id !== id)), []);
+
   const doneRows = rows.filter(r => r.status === 'done');
   const errorRows = rows.filter(r => r.status === 'error');
   const pendingRows = rows.filter(r => r.status === 'pending' || r.status === 'processing');
@@ -810,6 +813,7 @@ export default function TransactionScanner() {
                     <th className="px-3 py-2.5 text-left font-medium">Recipient</th>
                     <th className="px-3 py-2.5 text-left font-medium">Comment</th>
                     <th className="px-3 py-2.5 text-right font-medium">Amount (SDG)</th>
+                    <th className="px-2 py-2.5 w-8"></th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
@@ -863,6 +867,15 @@ export default function TransactionScanner() {
                         <td className="px-3 py-2 text-right font-mono font-semibold">
                           {isDone ? amountNum(row.amount).toLocaleString('en', { minimumFractionDigits: 2 }) : ''}
                         </td>
+                        <td className="px-2 py-2 text-center">
+                          <button
+                            onClick={() => removeRow(row.id)}
+                            title="Remove this receipt"
+                            className="text-muted-foreground/40 hover:text-red-500 transition-colors rounded p-0.5 hover:bg-red-50 dark:hover:bg-red-950/20"
+                          >
+                            ×
+                          </button>
+                        </td>
                       </tr>
                     );
                   })}
@@ -883,6 +896,7 @@ export default function TransactionScanner() {
                       <td className="px-3 py-2.5 text-right font-bold text-sm font-mono tabular-nums">
                         {grandTotal.toLocaleString('en', { minimumFractionDigits: 2 })}
                       </td>
+                      <td />
                     </tr>
                   </tfoot>
                 )}
@@ -891,16 +905,23 @@ export default function TransactionScanner() {
           </div>
         )}
 
-        {!processing && doneRows.length > 0 && (
-          <p className="text-center text-xs text-muted-foreground pb-2">
+        {rows.length > 0 && !processing && (
+          <div className="flex items-center justify-center gap-4 text-xs text-muted-foreground pb-1">
+            <button
+              onClick={() => inputRef.current?.click()}
+              className="inline-flex items-center gap-1.5 text-[#1D3461] hover:underline font-medium"
+            >
+              <Upload className="h-3 w-3" /> Add more images
+            </button>
+            <span>·</span>
             <button onClick={() => exportToExcel(rows)} className="text-[#1D3461] hover:underline font-medium">
               Download Excel
             </button>
-            {' '}·{' '}
-            <button onClick={() => { setSaveName(''); setSaveDialogOpen(true); }} className="text-[#1D3461] hover:underline font-medium">
+            <span>·</span>
+            <button onClick={() => { setSaveName(''); setSaveMode('new'); setSaveDialogOpen(true); }} className="text-[#1D3461] hover:underline font-medium">
               Save to records
             </button>
-          </p>
+          </div>
         )}
 
         {/* ── Saved Sessions ──────────────────────────────────────────── */}
