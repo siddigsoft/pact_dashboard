@@ -364,6 +364,17 @@ function fmtAcct(acct: string) {
   return d.length > 8 ? `${d.slice(0, 4)} ··· ${d.slice(-4)}` : d;
 }
 
+function computeUniqueRecipients(sourceRows: Array<any>) {
+  const map = new Map<string, { name: string; account: string; count: number; total: number }>();
+  sourceRows.forEach(r => {
+    const key = r.to_account || r.recipient_name || 'Unknown';
+    const ex = map.get(key);
+    if (ex) { ex.count++; ex.total += amountNum(r.amount); }
+    else map.set(key, { name: r.recipient_name || '', account: r.to_account || '', count: 1, total: amountNum(r.amount) });
+  });
+  return Array.from(map.values()).sort((a, b) => b.total - a.total);
+}
+
 export default function TransactionScanner() {
   const { toast } = useToast();
   const [rows, setRows] = useState<TxRow[]>([]);
@@ -377,6 +388,8 @@ export default function TransactionScanner() {
   const [autoSaved, setAutoSaved] = useState(false);
   const [filterExportOpen, setFilterExportOpen] = useState(false);
   const [selectedAccounts, setSelectedAccounts] = useState<Set<string>>(new Set());
+  const [filterExportSource, setFilterExportSource] = useState<Array<any>>([]);
+  const [filterExportSessionName, setFilterExportSessionName] = useState<string | undefined>();
   const dropRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const fileMapRef = useRef<Map<string, File>>(new Map());
@@ -401,17 +414,8 @@ export default function TransactionScanner() {
     return dupes;
   }, [doneRows]);
 
-  // Unique recipients for the filtered export dialog — keyed by to_account
-  const uniqueRecipients = useMemo(() => {
-    const map = new Map<string, { name: string; account: string; count: number; total: number }>();
-    doneRows.forEach(r => {
-      const key = r.to_account || r.recipient_name || 'Unknown';
-      const ex = map.get(key);
-      if (ex) { ex.count++; ex.total += amountNum(r.amount); }
-      else map.set(key, { name: r.recipient_name || '', account: r.to_account || '', count: 1, total: amountNum(r.amount) });
-    });
-    return Array.from(map.values()).sort((a, b) => b.total - a.total);
-  }, [doneRows]);
+  // Unique recipients for the filtered export dialog — derived from filterExportSource
+  const filterUniqueRecipients = useMemo(() => computeUniqueRecipients(filterExportSource), [filterExportSource]);
   const grandTotal = doneRows.reduce((s, r) => s + amountNum(r.amount), 0);
   const progressPct = rows.length > 0 ? (doneRows.length / rows.length) * 100 : 0;
   const doneCount = doneRows.length;
@@ -634,7 +638,10 @@ export default function TransactionScanner() {
             <>
               <Button
                 onClick={() => {
-                  setSelectedAccounts(new Set(uniqueRecipients.map(r => r.account || r.name)));
+                  const recs = computeUniqueRecipients(doneRows);
+                  setFilterExportSource(doneRows);
+                  setFilterExportSessionName(undefined);
+                  setSelectedAccounts(new Set(recs.map(r => r.account || r.name)));
                   setFilterExportOpen(true);
                 }}
                 variant="outline"
@@ -922,9 +929,23 @@ export default function TransactionScanner() {
                             <FolderOpen className="h-3 w-3" /> Load
                           </button>
                           <button
-                            onClick={() => exportToExcel(session.receipts, session.session_name || undefined)}
+                            onClick={() => {
+                              const src = session.receipts || [];
+                              const recs = computeUniqueRecipients(src);
+                              setFilterExportSource(src);
+                              setFilterExportSessionName(session.session_name || undefined);
+                              setSelectedAccounts(new Set(recs.map(r => r.account || r.name)));
+                              setFilterExportOpen(true);
+                            }}
                             className="inline-flex items-center gap-1 px-2 py-1 rounded text-emerald-700 bg-emerald-50 hover:bg-emerald-100 transition-colors font-medium"
-                            title="Download Excel"
+                            title="Filter export by account"
+                          >
+                            <Filter className="h-3 w-3" /> Filter
+                          </button>
+                          <button
+                            onClick={() => exportToExcel(session.receipts, session.session_name || undefined)}
+                            className="inline-flex items-center gap-1 px-2 py-1 rounded text-[#1D3461] bg-[#1D3461]/10 hover:bg-[#1D3461]/20 transition-colors font-medium"
+                            title="Download all as Excel"
                           >
                             <Download className="h-3 w-3" /> Excel
                           </button>
@@ -973,11 +994,11 @@ export default function TransactionScanner() {
             {/* Select / Deselect all */}
             <div className="flex items-center justify-between px-1 pb-2 border-b mb-2">
               <span className="text-xs text-muted-foreground">
-                {selectedAccounts.size} of {uniqueRecipients.length} selected
+                {selectedAccounts.size} of {filterUniqueRecipients.length} selected
               </span>
               <div className="flex gap-2">
                 <button
-                  onClick={() => setSelectedAccounts(new Set(uniqueRecipients.map(r => r.account || r.name)))}
+                  onClick={() => setSelectedAccounts(new Set(filterUniqueRecipients.map(r => r.account || r.name)))}
                   className="text-xs text-[#1D3461] hover:underline font-medium"
                 >Select all</button>
                 <span className="text-muted-foreground text-xs">·</span>
@@ -989,7 +1010,7 @@ export default function TransactionScanner() {
             </div>
 
             {/* Recipient list with checkboxes */}
-            {uniqueRecipients.map(rec => {
+            {filterUniqueRecipients.map(rec => {
               const key = rec.account || rec.name;
               const checked = selectedAccounts.has(key);
               const toggle = () => {
@@ -1029,10 +1050,10 @@ export default function TransactionScanner() {
 
           {/* Selected total preview */}
           {selectedAccounts.size > 0 && (() => {
-            const selTotal = doneRows
+            const selTotal = filterExportSource
               .filter(r => selectedAccounts.has(r.to_account || r.recipient_name || 'Unknown'))
-              .reduce((s, r) => s + amountNum(r.amount), 0);
-            const selCount = doneRows.filter(r => selectedAccounts.has(r.to_account || r.recipient_name || 'Unknown')).length;
+              .reduce((s: number, r: any) => s + amountNum(r.amount), 0);
+            const selCount = filterExportSource.filter(r => selectedAccounts.has(r.to_account || r.recipient_name || 'Unknown')).length;
             return (
               <div className="border-t pt-3 flex items-center justify-between text-sm">
                 <span className="text-muted-foreground">{selCount} transactions · {selectedAccounts.size} accounts</span>
@@ -1046,13 +1067,13 @@ export default function TransactionScanner() {
             <Button
               disabled={selectedAccounts.size === 0}
               onClick={() => {
-                const filtered = rows.filter(r =>
-                  r.status === 'done' && selectedAccounts.has(r.to_account || r.recipient_name || 'Unknown')
+                const filtered = filterExportSource.filter(r =>
+                  selectedAccounts.has(r.to_account || r.recipient_name || 'Unknown')
                 );
                 const label = selectedAccounts.size === 1
                   ? Array.from(selectedAccounts)[0].slice(-8)
                   : `${selectedAccounts.size}_accounts`;
-                exportToExcel(filtered.map(r => ({ ...r, status: 'done' as const })), label);
+                exportToExcel(filtered, filterExportSessionName);
                 setFilterExportOpen(false);
               }}
               className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white"
