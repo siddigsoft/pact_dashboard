@@ -266,7 +266,7 @@ export default function TransactionScanner() {
 
     for (let i = 0; i < files.length; i++) {
       await processOneRow(newRows[i].id, files[i]);
-      if (i < files.length - 1) await sleep(1200);
+      if (i < files.length - 1) await sleep(2500);
     }
   }, [processOneRow]);
 
@@ -491,7 +491,7 @@ export default function TransactionScanner() {
               </span>
             </CardHeader>
             <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+              <table className="min-w-max text-sm border-collapse">
                 <thead>
                   <tr className="bg-muted/40 text-xs text-muted-foreground">
                     <th className="text-left px-3 py-2 font-medium">#</th>
@@ -512,7 +512,7 @@ export default function TransactionScanner() {
                       <td className="px-3 py-2 text-muted-foreground text-xs">{idx + 1}</td>
                       <td className="px-3 py-2">
                         <Input value={row.transaction_id} onChange={e => updateRow(row.id, { transaction_id: e.target.value })}
-                          className="h-7 text-xs min-w-[11rem] font-mono" />
+                          className="h-7 text-xs w-48 font-mono" />
                       </td>
                       <td className="px-3 py-2">
                         <Input value={row.transaction_time} onChange={e => updateRow(row.id, { transaction_time: e.target.value })}
@@ -520,23 +520,23 @@ export default function TransactionScanner() {
                       </td>
                       <td className="px-3 py-2">
                         <Input value={row.from_account} onChange={e => updateRow(row.id, { from_account: e.target.value })}
-                          className="h-7 text-xs min-w-[13rem] font-mono" />
+                          className="h-7 text-xs w-52 font-mono" />
                       </td>
                       <td className="px-3 py-2">
                         <Input value={row.to_account} onChange={e => updateRow(row.id, { to_account: e.target.value })}
-                          className="h-7 text-xs min-w-[13rem] font-mono" />
+                          className="h-7 text-xs w-52 font-mono" />
                       </td>
                       <td className="px-3 py-2">
                         <Input value={row.recipient_name} onChange={e => updateRow(row.id, { recipient_name: e.target.value })}
-                          className="h-7 text-xs min-w-[14rem]" dir="auto" />
+                          className="h-7 text-xs w-56" dir="auto" />
                       </td>
                       <td className="px-3 py-2">
                         <Input value={row.mobile_number} onChange={e => updateRow(row.id, { mobile_number: e.target.value })}
-                          className="h-7 text-xs w-32" />
+                          className="h-7 text-xs w-36" />
                       </td>
                       <td className="px-3 py-2">
                         <Input value={row.comment} onChange={e => updateRow(row.id, { comment: e.target.value })}
-                          className="h-7 text-xs min-w-[10rem]" dir="auto" />
+                          className="h-7 text-xs w-44" dir="auto" />
                       </td>
                       <td className="px-3 py-2">
                         <Input
