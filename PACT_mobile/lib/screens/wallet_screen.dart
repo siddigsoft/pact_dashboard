@@ -92,6 +92,7 @@ class _WalletScreenState extends State<WalletScreen> {
   List<Map<String, dynamic>> _advances = [];
   List<Map<String, dynamic>> _costPayments = [];
   List<Map<String, dynamic>> _pendingReceiptConfirmations = [];
+  List<Map<String, dynamic>> _pendingAdvanceConfirmations = [];
   final Map<String, bool> _expandedCostItems =
       {}; // Track which cost items are expanded
   bool _costPaymentsLoading = false;
@@ -197,9 +198,14 @@ class _WalletScreenState extends State<WalletScreen> {
         _setupRealtimeSubscription();
         setState(() => _isLoading = false);
 
-        // Show blocking dialog if pending receipts exist
+        // Show blocking dialogs if pending receipts or advances exist
         if (mounted && _pendingReceiptConfirmations.isNotEmpty) {
-          _showNextPendingReceiptDialog();
+          await _showNextPendingReceiptDialog();
+        }
+        _checkPendingAdvanceConfirmations();
+        if (mounted && _pendingAdvanceConfirmations.isNotEmpty) {
+          await Future.delayed(const Duration(milliseconds: 400));
+          _showNextPendingAdvanceDialog();
         }
       } catch (e) {
         // Network error - fall back to cache
@@ -586,6 +592,20 @@ class _WalletScreenState extends State<WalletScreen> {
     }
   }
 
+  void _checkPendingAdvanceConfirmations() {
+    _pendingAdvanceConfirmations = _advances.where((advance) {
+      final status = (advance['status'] as String? ?? '').toLowerCase();
+      final meta = (advance['metadata'] as Map?)?.cast<String, dynamic>() ?? {};
+      final receiptConfirmed = meta['receipt_confirmation']?['confirmed'] == true;
+      final isDisbursed =
+          status == 'partially_paid' || status == 'fully_paid' || status == 'paid';
+      return isDisbursed && !receiptConfirmed;
+    }).toList();
+    debugPrint(
+      '[Wallet] Found ${_pendingAdvanceConfirmations.length} pending advance confirmations',
+    );
+  }
+
   Future<void> _showNextPendingReceiptDialog() async {
     if (_pendingReceiptConfirmations.isEmpty) return;
 
@@ -882,6 +902,302 @@ class _WalletScreenState extends State<WalletScreen> {
     } finally {
       if (mounted) {
         setState(() => _declineLoading = false);
+      }
+    }
+  }
+
+  Future<void> _showNextPendingAdvanceDialog() async {
+    if (_pendingAdvanceConfirmations.isEmpty) return;
+    final advance = _pendingAdvanceConfirmations.first;
+
+    final requestedAmount = (advance['requested_amount'] as num?)?.toDouble() ?? 0.0;
+    final approvedAmount = (advance['approved_amount'] as num?)?.toDouble() ?? requestedAmount;
+    final disbursedAmount = approvedAmount;
+    final siteName = advance['site_name'] as String? ?? 'Site Visit';
+    final proofUrl = advance['payment_proof_url'] as String?;
+    final proofNotes = advance['payment_proof_notes'] as String?;
+    final isImage = proofUrl != null &&
+        RegExp(r'\.(jpg|jpeg|png|gif|webp)$', caseSensitive: false).hasMatch(proofUrl);
+
+    if (!mounted) return;
+
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        insetPadding: const EdgeInsets.all(16),
+        titlePadding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+        contentPadding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.amber.shade100,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(Icons.directions_car, color: Colors.amber.shade700, size: 24),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Transport Advance Confirmation',
+                    style: GoogleFonts.poppins(fontWeight: FontWeight.w700, fontSize: 15),
+                  ),
+                  Text(
+                    'تأكيد استلام سلفة النقل',
+                    style: GoogleFonts.poppins(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 12,
+                      color: Colors.grey.shade600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'You have a pending transport advance receipt that requires confirmation.',
+                style: GoogleFonts.poppins(fontSize: 13, color: Colors.grey.shade700),
+              ),
+              Text(
+                'لديك سلفة نقل معلقة تتطلب تأكيد الاستلام.',
+                style: GoogleFonts.poppins(fontSize: 12, color: Colors.grey.shade600),
+                textDirection: ui.TextDirection.rtl,
+              ),
+              const SizedBox(height: 14),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.amber.shade50,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: Colors.amber.shade200),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(children: [
+                      Icon(Icons.place, color: Colors.amber.shade700, size: 14),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          siteName,
+                          style: GoogleFonts.poppins(fontWeight: FontWeight.w700, fontSize: 13),
+                        ),
+                      ),
+                    ]),
+                    const SizedBox(height: 6),
+                    Text(
+                      '${NumberFormat.currency(symbol: '', decimalDigits: 2).format(disbursedAmount)} SDG',
+                      style: GoogleFonts.poppins(
+                        fontWeight: FontWeight.w800,
+                        fontSize: 20,
+                        color: Colors.amber.shade800,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              // ── Payment Proof Image ─────────────────────────────────────
+              if (proofUrl != null && proofUrl.isNotEmpty) ...[
+                const SizedBox(height: 14),
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: Colors.amber.shade50,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: Colors.amber.shade200),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(children: [
+                        Icon(Icons.receipt_long, color: Colors.amber.shade700, size: 14),
+                        const SizedBox(width: 6),
+                        Text(
+                          'Payment Receipt / إيصال الدفع',
+                          style: GoogleFonts.poppins(
+                            fontWeight: FontWeight.w600,
+                            fontSize: 12,
+                            color: Colors.amber.shade800,
+                          ),
+                        ),
+                      ]),
+                      const SizedBox(height: 8),
+                      if (isImage)
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(8),
+                          child: Image.network(
+                            proofUrl,
+                            height: 160,
+                            width: double.infinity,
+                            fit: BoxFit.contain,
+                            errorBuilder: (_, __, ___) => Container(
+                              height: 80,
+                              alignment: Alignment.center,
+                              child: Text(
+                                'Could not load image',
+                                style: GoogleFonts.poppins(fontSize: 11, color: Colors.grey),
+                              ),
+                            ),
+                          ),
+                        )
+                      else
+                        InkWell(
+                          onTap: () async {
+                            final uri = Uri.tryParse(proofUrl);
+                            if (uri != null) await launchUrl(uri);
+                          },
+                          child: Row(children: [
+                            Icon(Icons.open_in_new, color: Colors.amber.shade700, size: 14),
+                            const SizedBox(width: 6),
+                            Text(
+                              'View Receipt / عرض الإيصال',
+                              style: GoogleFonts.poppins(
+                                fontSize: 12,
+                                color: Colors.amber.shade700,
+                                decoration: TextDecoration.underline,
+                              ),
+                            ),
+                          ]),
+                        ),
+                      if (proofNotes != null && proofNotes.isNotEmpty) ...[
+                        const SizedBox(height: 6),
+                        Text(
+                          '"$proofNotes"',
+                          style: GoogleFonts.poppins(
+                            fontSize: 11,
+                            color: Colors.grey.shade600,
+                            fontStyle: FontStyle.italic,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ],
+              const SizedBox(height: 14),
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: Colors.blue.shade50,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: Colors.blue.shade200),
+                ),
+                child: Row(children: [
+                  Icon(Icons.info_outline, color: Colors.blue.shade700, size: 18),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      'Please confirm receipt of this advance or indicate that you have not yet received it.',
+                      style: GoogleFonts.poppins(fontSize: 12, color: Colors.blue.shade900),
+                    ),
+                  ),
+                ]),
+              ),
+              const SizedBox(height: 16),
+            ],
+          ),
+        ),
+        actions: [
+          ElevatedButton(
+            onPressed: () async {
+              Navigator.pop(ctx);
+              await Future.delayed(const Duration(milliseconds: 100));
+              await _declineAdvanceConfirmation(advance);
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.orange.shade600,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+            child: Text('Not Yet Received', style: GoogleFonts.poppins(fontWeight: FontWeight.w600)),
+          ),
+          ElevatedButton.icon(
+            onPressed: () async {
+              Navigator.pop(ctx);
+              await Future.delayed(const Duration(milliseconds: 100));
+              await _confirmAdvanceReceipt(advance);
+            },
+            icon: const Icon(Icons.verified, size: 16),
+            label: Text('Confirm Receipt', style: GoogleFonts.poppins(fontWeight: FontWeight.w600)),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.amber.shade700,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _declineAdvanceConfirmation(Map<String, dynamic> advance) async {
+    final advanceId = advance['id'] as String?;
+    if (advanceId == null) return;
+    try {
+      final now = DateTime.now().toIso8601String();
+      final existingMeta = Map<String, dynamic>.from(
+        (advance['metadata'] as Map?)?.cast<String, dynamic>() ?? {},
+      );
+      existingMeta['receipt_decline'] = {
+        'declined': true,
+        'declinedAt': now,
+        'declinedBy': _userId,
+        '_message': 'Advance not yet received; awaiting reconfirmation',
+      };
+      await Supabase.instance.client
+          .from('down_payment_requests')
+          .update({'metadata': existingMeta, 'updated_at': now})
+          .eq('id', advanceId);
+      try {
+        await Supabase.instance.client.from('notification_broadcast').insert({
+          'recipient_type': 'admin',
+          'sender_id': _userId,
+          'title': 'Transport Advance Not Yet Received',
+          'title_ar': 'لم يتم استلام سلفة النقل',
+          'message': 'Field user has indicated they have not yet received the transport advance for site ${advance['site_name'] ?? ''}. Please review and process again.',
+          'message_ar': 'أشار المستخدم الميداني إلى عدم استلامه سلفة النقل. يرجى المراجعة والمعالجة مجدداً.',
+          'notification_type': 'advance_not_received',
+          'related_id': advanceId,
+          'related_type': 'down_payment_request',
+          'created_at': now,
+        });
+      } catch (_) {}
+      await Future.delayed(const Duration(milliseconds: 300));
+      await _loadAdvances();
+      _checkPendingAdvanceConfirmations();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(widget.isArabic
+              ? 'تم إرسال إشعار بأنك لم تستلم السلفة بعد'
+              : 'Reviewer notified — awaiting reconfirmation'),
+          backgroundColor: Colors.orange.shade600,
+          duration: const Duration(seconds: 3),
+        ));
+        if (_pendingAdvanceConfirmations.isNotEmpty) {
+          Future.delayed(const Duration(milliseconds: 500), () {
+            if (mounted) _showNextPendingAdvanceDialog();
+          });
+        }
+      }
+    } catch (e) {
+      debugPrint('[Wallet] Error declining advance confirmation: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(widget.isArabic ? 'فشل الرفض' : 'Failed to decline advance receipt'),
+          backgroundColor: Colors.red,
+        ));
       }
     }
   }
@@ -3564,6 +3880,13 @@ class _WalletScreenState extends State<WalletScreen> {
       );
     }
 
+    final pendingAdv = _advances.where((a) {
+      final s = (a['status'] as String? ?? '').toLowerCase();
+      final meta = (a['metadata'] as Map?)?.cast<String, dynamic>() ?? {};
+      final confirmed = meta['receipt_confirmation']?['confirmed'] == true;
+      return (s == 'partially_paid' || s == 'fully_paid' || s == 'paid') && !confirmed;
+    }).length;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -3573,7 +3896,52 @@ class _WalletScreenState extends State<WalletScreen> {
               : 'My Transportation Advances',
           style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.w600),
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 8),
+        if (pendingAdv > 0)
+          GestureDetector(
+            onTap: () {
+              final first = _pendingAdvanceConfirmations.isNotEmpty
+                  ? _pendingAdvanceConfirmations.first
+                  : _advances.firstWhere(
+                      (a) {
+                        final s = (a['status'] as String? ?? '').toLowerCase();
+                        final meta = (a['metadata'] as Map?)?.cast<String, dynamic>() ?? {};
+                        final confirmed = meta['receipt_confirmation']?['confirmed'] == true;
+                        return (s == 'partially_paid' || s == 'fully_paid' || s == 'paid') && !confirmed;
+                      },
+                      orElse: () => {},
+                    );
+              if (first.isNotEmpty) _confirmAdvanceReceipt(first);
+            },
+            child: Container(
+              width: double.infinity,
+              margin: const EdgeInsets.only(bottom: 12),
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: Colors.amber.shade50,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: Colors.amber.shade300),
+              ),
+              child: Row(children: [
+                Icon(Icons.info_outline, color: Colors.amber.shade800, size: 16),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    widget.isArabic
+                        ? '$pendingAdv سلفة تنتظر تأكيد الاستلام — اضغط للتأكيد'
+                        : '$pendingAdv advance${pendingAdv != 1 ? 's' : ''} awaiting your receipt confirmation — tap to confirm',
+                    style: GoogleFonts.poppins(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.amber.shade900,
+                    ),
+                  ),
+                ),
+                Icon(Icons.chevron_right, color: Colors.amber.shade700, size: 18),
+              ]),
+            ),
+          ),
+        const SizedBox(height: 4),
         ..._advances.map((advance) => _buildAdvanceItem(advance)),
       ],
     );
@@ -3581,7 +3949,7 @@ class _WalletScreenState extends State<WalletScreen> {
 
   Widget _buildCostPaymentsTab() {
     if (_costPaymentsLoading) {
-      return const Center(child: CircularProgressIndicator());
+      return const ShimmerBody(layout: ShimmerLayout.retainer, listItems: 5);
     }
 
     if (_costPayments.isEmpty) {

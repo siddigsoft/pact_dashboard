@@ -2043,6 +2043,21 @@ const WalletPage = () => {
               </CardDescription>
             </CardHeader>
             <CardContent>
+              {pendingAdvanceConfirmations.length > 0 && (
+                <div className="flex items-start gap-3 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2.5 mb-4">
+                  <Info className="w-4 h-4 text-amber-400 mt-0.5 flex-shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-semibold text-amber-300">
+                      {pendingAdvanceConfirmations.length} transport advance{pendingAdvanceConfirmations.length !== 1 ? 's' : ''} awaiting your receipt confirmation
+                      {' / '}
+                      {pendingAdvanceConfirmations.length} سلفة نقل تنتظر تأكيد الاستلام
+                    </p>
+                    <p className="text-xs text-amber-300/70 mt-0.5">
+                      Please view the receipt image and sign to confirm — scroll down to find the highlighted items.
+                    </p>
+                  </div>
+                </div>
+              )}
               {advanceLoading ? (
                 <div className="flex items-center justify-center py-12">
                   <RefreshCw className="w-5 h-5 animate-spin text-muted-foreground" />
