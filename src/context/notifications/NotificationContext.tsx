@@ -16,6 +16,8 @@ interface NotificationContextType {
   clearAllNotifications: () => Promise<number>;
   realtimeStatus: RealtimeStatus;
   lastRefresh: Date | null;
+  broadcastQueue: Notification[];
+  dismissBroadcast: (notificationId: string) => Promise<void>;
 }
 
 const NotificationContext = createContext<NotificationContextType | undefined>(undefined);
@@ -26,6 +28,18 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
   const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
   const [clearedAt, setClearedAt] = useState<Date | null>(null);
   const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set());
+  const [broadcastQueue, setBroadcastQueue] = useState<Notification[]>([]);
+
+  // A notification should block the screen if it is a broadcast AND high/urgent priority AND unread
+  const isBlockingBroadcast = useCallback((n: Notification): boolean => {
+    return (
+      (n.eventType === 'broadcast' ||
+        n.relatedEntityType === 'broadcast' ||
+        n.relatedEntityType === 'broadcast_batch') &&
+      (n.priority === 'urgent' || n.priority === 'high') &&
+      !n.isRead
+    );
+  }, []);
   // Get current user ID from localStorage or auth state
   const [currentUserId, setCurrentUserId] = useState<string | null>(() => {
     try {
@@ -290,13 +304,17 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
             filter: `recipient_id=eq.${currentUserId}`,
           }, (payload) => {
             const n = mapDbToNotification((payload as any).new);
-            // Only add if it matches current user
             if (n.userId === currentUserId && filterByRoleAndProject(n)) {
               setAppNotifications(prev => {
-                // Avoid duplicates
                 if (prev.some(p => p.id === n.id)) return prev;
                 return [n, ...prev].slice(0, 50);
               });
+              // Push to blocking queue if this is a high/urgent broadcast
+              if (isBlockingBroadcast(n)) {
+                setBroadcastQueue(prev =>
+                  prev.some(b => b.id === n.id) ? prev : [...prev, n]
+                );
+              }
             }
           })
           .on('postgres_changes', {
@@ -306,13 +324,17 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
             filter: `user_id=eq.${currentUserId}`,
           }, (payload) => {
             const n = mapDbToNotification((payload as any).new);
-            // Only add if it matches current user (double check)
             if (n.userId === currentUserId && filterByRoleAndProject(n)) {
               setAppNotifications(prev => {
-                // Avoid duplicates
                 if (prev.some(p => p.id === n.id)) return prev;
                 return [n, ...prev].slice(0, 50);
               });
+              // Push to blocking queue if this is a high/urgent broadcast
+              if (isBlockingBroadcast(n)) {
+                setBroadcastQueue(prev =>
+                  prev.some(b => b.id === n.id) ? prev : [...prev, n]
+                );
+              }
             }
           })
           .on('postgres_changes', {
@@ -528,12 +550,50 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
   }, [currentUserId, appNotifications]);
 
   const getUnreadNotificationsCount = useCallback((): number => {
-    // If we don't have a current user ID, return 0
     if (!currentUserId) return 0;
-    return appNotifications.filter(n => 
+    return appNotifications.filter(n =>
       n.userId === currentUserId && !n.isRead
     ).length;
   }, [appNotifications, currentUserId]);
+
+  // Seed the blocking broadcast queue from initial fetch —
+  // only show broadcasts created within the last hour to avoid replaying stale ones
+  const [broadcastQueueSeeded, setBroadcastQueueSeeded] = useState(false);
+  useEffect(() => {
+    if (broadcastQueueSeeded || appNotifications.length === 0) return;
+    const oneHourAgo = Date.now() - 60 * 60 * 1000;
+    const pending = appNotifications.filter(n =>
+      isBlockingBroadcast(n) &&
+      new Date(n.createdAt).getTime() > oneHourAgo
+    );
+    if (pending.length > 0) {
+      setBroadcastQueue(pending);
+    }
+    setBroadcastQueueSeeded(true);
+  }, [appNotifications, broadcastQueueSeeded, isBlockingBroadcast]);
+
+  // Reset seeded flag when user changes
+  useEffect(() => {
+    setBroadcastQueueSeeded(false);
+    setBroadcastQueue([]);
+  }, [currentUserId]);
+
+  const dismissBroadcast = useCallback(async (notificationId: string) => {
+    // Remove from queue immediately
+    setBroadcastQueue(prev => prev.filter(n => n.id !== notificationId));
+    // Mark as read in local state and DB
+    setAppNotifications(prev =>
+      prev.map(n => n.id === notificationId ? { ...n, isRead: true } : n)
+    );
+    try {
+      await supabase.from('notifications').update({
+        status: 'read',
+        read_at: new Date().toISOString(),
+      }).eq('id', notificationId);
+    } catch (err) {
+      console.warn('[Notification] Failed to mark broadcast as read:', err);
+    }
+  }, []);
 
   return (
     <NotificationContext.Provider
@@ -545,6 +605,8 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
         clearAllNotifications,
         realtimeStatus,
         lastRefresh,
+        broadcastQueue,
+        dismissBroadcast,
       }}
     >
       {children}

@@ -132,6 +132,7 @@ import { useAppContext } from './context/AppContext';
 import { NotificationTriggerService } from './services/NotificationTriggerService';
 import { NotificationProvider } from './context/NotificationContext';
 import { NotificationStack } from './components/NotificationStack';
+import { GlobalBroadcastAlert } from './components/GlobalBroadcastAlert';
 import { useNotifications } from './context/NotificationContext';
 import ErrorBoundary from './components/ErrorBoundary';
 import { debugDatabase } from './utils/debug-db';
@@ -469,6 +470,7 @@ function App() {
                       </Suspense>
                       <AppNotifications />
                     </ActivityTrackingProvider>
+                    <GlobalBroadcastAlert />
                     <Toaster />
                     <SonnerToaster />
                     <HotToaster
