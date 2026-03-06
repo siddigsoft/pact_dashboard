@@ -189,7 +189,7 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
           ),
           Expanded(
             child: _isLoading
-                ? const ShimmerBody(listItems: 6)
+                ? const ShimmerBody(layout: ShimmerLayout.project, listItems: 6)
                 : _filtered.isEmpty
                     ? Center(
                         child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [

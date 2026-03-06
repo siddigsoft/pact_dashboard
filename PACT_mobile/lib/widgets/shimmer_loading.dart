@@ -409,6 +409,222 @@ class ShimmerRetainerCard extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Project card skeleton — coloured accent bar + name + status badge + meta row
+// ─────────────────────────────────────────────────────────────────────────────
+
+class ShimmerProjectCard extends StatelessWidget {
+  const ShimmerProjectCard({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      elevation: 1,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Top accent bar
+          _ShimmerBase(
+            child: Container(
+              height: 6,
+              decoration: const BoxDecoration(
+                color: Color(0xFFD0D0D0),
+                borderRadius: BorderRadius.only(
+                  topLeft: Radius.circular(12),
+                  topRight: Radius.circular(12),
+                ),
+              ),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Row(children: [
+                Expanded(child: ShimmerBox(height: 15, width: 200)),
+                const SizedBox(width: 10),
+                ShimmerBox(height: 24, width: 72, radius: 12),
+              ]),
+              const SizedBox(height: 8),
+              ShimmerBox(height: 11, width: 260),
+              const SizedBox(height: 12),
+              Row(children: [
+                ShimmerBox(height: 11, width: 90),
+                const SizedBox(width: 16),
+                ShimmerBox(height: 11, width: 80),
+                const SizedBox(width: 16),
+                ShimmerBox(height: 11, width: 70),
+              ]),
+            ]),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Reconciliation card skeleton — reference + status + 3-column amounts
+// ─────────────────────────────────────────────────────────────────────────────
+
+class ShimmerReconciliationCard extends StatelessWidget {
+  const ShimmerReconciliationCard({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      elevation: 1,
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: [
+            Expanded(child: ShimmerBox(height: 14, width: 170)),
+            const SizedBox(width: 10),
+            ShimmerBox(height: 24, width: 76, radius: 12),
+          ]),
+          const SizedBox(height: 12),
+          Row(children: [
+            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              ShimmerBox(height: 10, width: 55),
+              const SizedBox(height: 5),
+              ShimmerBox(height: 18, width: 70),
+            ])),
+            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              ShimmerBox(height: 10, width: 40),
+              const SizedBox(height: 5),
+              ShimmerBox(height: 18, width: 65),
+            ])),
+            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              ShimmerBox(height: 10, width: 50),
+              const SizedBox(height: 5),
+              ShimmerBox(height: 18, width: 60),
+            ])),
+          ]),
+        ]),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Archive skeletons — three tab-specific variants
+// ─────────────────────────────────────────────────────────────────────────────
+
+class ShimmerArchiveMmpCard extends StatelessWidget {
+  const ShimmerArchiveMmpCard({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+      elevation: 1,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        child: Row(children: [
+          ShimmerBox(height: 32, width: 32, radius: 6),
+          const SizedBox(width: 12),
+          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            ShimmerBox(height: 14, width: 160),
+            const SizedBox(height: 6),
+            ShimmerBox(height: 10, width: 90),
+          ])),
+          ShimmerBox(height: 20, width: 20, radius: 4),
+        ]),
+      ),
+    );
+  }
+}
+
+class ShimmerArchiveVisitCard extends StatelessWidget {
+  const ShimmerArchiveVisitCard({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+      elevation: 1,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        child: Row(children: [
+          ShimmerBox(height: 32, width: 32, radius: 16),
+          const SizedBox(width: 12),
+          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            ShimmerBox(height: 14, width: 180),
+            const SizedBox(height: 6),
+            Row(children: [
+              ShimmerBox(height: 18, width: 70, radius: 9),
+              const SizedBox(width: 8),
+              ShimmerBox(height: 10, width: 80),
+            ]),
+          ])),
+          ShimmerBox(height: 20, width: 20, radius: 4),
+        ]),
+      ),
+    );
+  }
+}
+
+class ShimmerArchiveDocCard extends StatelessWidget {
+  const ShimmerArchiveDocCard({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+      elevation: 1,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        child: Row(children: [
+          ShimmerBox(height: 36, width: 30, radius: 4),
+          const SizedBox(width: 12),
+          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            ShimmerBox(height: 14, width: 200),
+            const SizedBox(height: 6),
+            ShimmerBox(height: 18, width: 80, radius: 9),
+          ])),
+          ShimmerBox(height: 20, width: 20, radius: 4),
+        ]),
+      ),
+    );
+  }
+}
+
+// Unified archive body — switches card shape based on active tab
+class ShimmerArchiveBody extends StatelessWidget {
+  final String activeTab; // 'mmps' | 'visits' | 'documents'
+  final int itemCount;
+
+  const ShimmerArchiveBody({
+    super.key,
+    required this.activeTab,
+    this.itemCount = 6,
+  });
+
+  Widget _card() {
+    switch (activeTab) {
+      case 'visits':    return const ShimmerArchiveVisitCard();
+      case 'documents': return const ShimmerArchiveDocCard();
+      default:          return const ShimmerArchiveMmpCard();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.only(top: 10),
+      child: Column(
+        children: List.generate(itemCount, (_) => _card()),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Search result skeleton — icon circle + title + type chip
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -449,14 +665,16 @@ class ShimmerSearchResult extends StatelessWidget {
 // ─────────────────────────────────────────────────────────────────────────────
 
 enum ShimmerLayout {
-  generic,       // default — generic card list
-  staff,         // staff directory
-  mmp,           // MMP / monitoring plan
-  budget,        // budget line items
-  hub,           // hub management
-  retainer,      // retainer payments
-  searchResult,  // global search
-  statGrid,      // coordinator dashboard 2×2 grid
+  generic,        // default — generic card list
+  staff,          // staff directory
+  mmp,            // MMP / monitoring plan
+  budget,         // budget line items
+  hub,            // hub management
+  retainer,       // retainer payments
+  searchResult,   // global search
+  statGrid,       // coordinator dashboard 2×2 grid
+  project,        // projects screen
+  reconciliation, // reconciliation dashboard
 }
 
 class ShimmerBody extends StatelessWidget {
@@ -475,13 +693,15 @@ class ShimmerBody extends StatelessWidget {
 
   Widget _buildItem() {
     switch (layout) {
-      case ShimmerLayout.staff:       return const ShimmerStaffCard();
-      case ShimmerLayout.mmp:         return const ShimmerMmpCard();
-      case ShimmerLayout.budget:      return const ShimmerBudgetCard();
-      case ShimmerLayout.hub:         return const ShimmerHubCard();
-      case ShimmerLayout.retainer:    return const ShimmerRetainerCard();
-      case ShimmerLayout.searchResult: return const ShimmerSearchResult();
-      case ShimmerLayout.statGrid:    return const SizedBox.shrink();
+      case ShimmerLayout.staff:          return const ShimmerStaffCard();
+      case ShimmerLayout.mmp:            return const ShimmerMmpCard();
+      case ShimmerLayout.budget:         return const ShimmerBudgetCard();
+      case ShimmerLayout.hub:            return const ShimmerHubCard();
+      case ShimmerLayout.retainer:       return const ShimmerRetainerCard();
+      case ShimmerLayout.searchResult:   return const ShimmerSearchResult();
+      case ShimmerLayout.project:        return const ShimmerProjectCard();
+      case ShimmerLayout.reconciliation: return const ShimmerReconciliationCard();
+      case ShimmerLayout.statGrid:       return const SizedBox.shrink();
       case ShimmerLayout.generic:
         return ShimmerCard(hasAvatar: hasAvatar, hasTrailing: true, hasProgressBar: hasStats);
     }

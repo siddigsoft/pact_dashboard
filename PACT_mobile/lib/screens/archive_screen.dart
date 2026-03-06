@@ -111,7 +111,7 @@ class _ArchiveScreenState extends State<ArchiveScreen> {
           ),
           Expanded(
             child: _isLoading
-                ? const ShimmerBody(listItems: 6)
+                ? ShimmerArchiveBody(activeTab: _activeTab, itemCount: 6)
                 : filtered.isEmpty
                     ? Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
                         const Icon(Icons.archive, size: 60, color: Colors.grey),

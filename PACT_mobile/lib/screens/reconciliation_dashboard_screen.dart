@@ -122,7 +122,7 @@ class _ReconciliationDashboardScreenState extends State<ReconciliationDashboardS
         actions: [IconButton(icon: const Icon(Icons.refresh, color: Colors.white), onPressed: () => _loadData(refresh: true))],
       ),
       body: _isLoading
-          ? const ShimmerBody(hasStats: true, listItems: 5)
+          ? const ShimmerBody(layout: ShimmerLayout.reconciliation, hasStats: true, listItems: 5)
           : RefreshIndicator(
               onRefresh: () => _loadData(refresh: true),
               child: ListView(
