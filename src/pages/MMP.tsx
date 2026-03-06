@@ -7048,8 +7048,8 @@ const MMP = () => {
           }
         }}
       >
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
+        <DialogContent className="w-[95vw] max-w-lg max-h-[90vh] flex flex-col overflow-hidden">
+          <DialogHeader className="shrink-0">
             <DialogTitle>
               {returnedSiteActionDialog.action === 'sendback' && (returnedSiteActionBatchSites.length > 1
                 ? `Send Back ${returnedSiteActionBatchSites.length} Sites to Coordinator`
@@ -7066,7 +7066,8 @@ const MMP = () => {
             </DialogDescription>
           </DialogHeader>
           {returnedSiteActionDialog.site && (
-            <div className="space-y-4 py-2">
+            <div className="flex-1 min-h-0 overflow-y-auto">
+              <div className="space-y-4 py-2 pr-1">
               {returnedSiteActionDialog.action === 'sendback' && returnedSiteActionBatchSites.length > 1 && (
                 <div className="rounded-md border border-blue-200 bg-blue-50 dark:border-blue-900 dark:bg-blue-950/30 p-3">
                   <button
@@ -7184,9 +7185,10 @@ const MMP = () => {
                   data-testid="textarea-returned-action-notes"
                 />
               </div>
+              </div>
             </div>
           )}
-          <DialogFooter className="gap-2">
+          <DialogFooter className="gap-2 shrink-0 flex-col-reverse sm:flex-row">
             <Button
               variant="outline"
               onClick={() => {
@@ -7198,6 +7200,7 @@ const MMP = () => {
                 setSelectedReturnedActionType('sendback');
               }}
               data-testid="button-cancel-returned-action"
+              className="w-full sm:w-auto"
             >
               Cancel
             </Button>
@@ -7274,13 +7277,13 @@ const MMP = () => {
                 (returnedSiteActionDialog.action === 'sendback' && selectedReturnedActionType === 'sendback' && !returnedActionNotes.trim()) ||
                 (returnedSiteActionDialog.action === 'report' && !returnedActionNotes.trim())
               }
-              className={
+              className={`w-full sm:w-auto ${
                 returnedSiteActionDialog.action === 'report' 
                   ? 'bg-orange-600 hover:bg-orange-700 text-white' 
                   : returnedSiteActionDialog.action === 'redispatch'
                     ? 'bg-blue-600 hover:bg-blue-700 text-white'
                     : ''
-              }
+              }`}
               data-testid="button-confirm-returned-action"
             >
               {returnedSiteActionDialog.action === 'sendback' && selectedReturnedActionType === 'sendback' && (returnedSiteActionBatchSites.length > 1
