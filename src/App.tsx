@@ -34,6 +34,7 @@ const CoordinatorDashboard = lazy(() => import('./pages/coordinator/CoordinatorD
 const SitesForVerification = lazy(() => import('./pages/coordinator/SitesForVerification'));
 const CoordinatorSites = lazy(() => import('./pages/coordinator/CoordinatorSites'));
 const Calls = lazy(() => import('./pages/Calls'));
+const CallAnalytics = lazy(() => import('./pages/CallAnalytics'));
 const Chat = lazy(() => import('./pages/Chat'));
 const FieldTeam = lazy(() => import('./pages/FieldTeam'));
 const Finance = lazy(() => import('./pages/Finance'));
@@ -265,6 +266,7 @@ const AppRoutes = () => {
         <Route path="/mmp/cycle-close" element={<MMPCycleClose />} />
         <Route path="/data-export-center" element={<DataExportCenter />} />
         <Route path="/calls" element={<Calls />} />
+        <Route path="/call-analytics" element={<CallAnalytics />} />
         <Route path="/field-team" element={<FieldTeam />} />
         <Route path="/finance" element={<Finance />} />
         <Route path="/financial-operations" element={<FinancialOperations />} />

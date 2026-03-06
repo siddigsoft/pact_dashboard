@@ -31,7 +31,8 @@ import {
   Wifi,
   WifiOff,
   RotateCcw,
-  Clapperboard
+  Clapperboard,
+  BarChart3
 } from 'lucide-react';
 import { useUser } from '@/context/user/UserContext';
 import { useAppContext } from '@/context/AppContext';
@@ -307,6 +308,14 @@ const Calls = () => {
               </div>
             </div>
             <div className="flex items-center gap-1.5">
+              <button
+                onClick={() => navigate('/call-analytics')}
+                className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center hover:bg-white/20 transition-colors"
+                data-testid="button-call-analytics"
+                title="Call Analytics"
+              >
+                <BarChart3 className="h-4 w-4 text-white" />
+              </button>
               <button 
                 onClick={() => window.location.reload()}
                 className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center hover:bg-white/20 transition-colors"

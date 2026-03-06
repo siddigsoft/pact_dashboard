@@ -39,6 +39,12 @@ import 'data_export_screen.dart';
 import 'global_search_screen.dart';
 import 'mmp_management_screen.dart';
 import 'comprehensive_monitoring_form_screen.dart';
+import 'mmp_cycle_close_screen.dart';
+import 'questionnaire_analytics_screen.dart';
+import 'tracker_preparation_plan_screen.dart';
+import 'admin/broadcast_center_screen.dart';
+import 'admin/permissions_management_screen.dart';
+import 'admin/role_perspective_screen.dart';
 import '../widgets/network_status_indicator.dart';
 import '../widgets/agora_incoming_call_dialog.dart';
 import '../services/webrtc_service.dart';
@@ -574,6 +580,8 @@ class _MoreScreenContentState extends State<_MoreScreenContent> {
       _MoreItem(Icons.phone, 'Helpline', () => widget.onNavigate(const HelplineScreen())),
       _MoreItem(Icons.description, 'MMP Management', () => widget.onNavigate(const MmpManagementScreen())),
       _MoreItem(Icons.assignment, 'Monitoring Plan', () => widget.onNavigate(const MonitoringPlanScreen())),
+      _MoreItem(Icons.lock_clock, 'Cycle Close', () => widget.onNavigate(const MmpCycleCloseScreen())),
+      _MoreItem(Icons.track_changes, 'Tracker Plan', () => widget.onNavigate(const TrackerPreparationPlanScreen())),
     ];
 
     final financeItems = <_MoreItem>[
@@ -596,6 +604,7 @@ class _MoreScreenContentState extends State<_MoreScreenContent> {
         _MoreItem(Icons.request_quote, 'Advance Reports', () => widget.onNavigate(const AdvanceRequestsReportScreen())),
         _MoreItem(Icons.download, 'Data Export', () => widget.onNavigate(const DataExportScreen())),
         _MoreItem(Icons.archive, 'Archive', () => widget.onNavigate(const ArchiveScreen())),
+        _MoreItem(Icons.quiz, 'Questionnaire Analytics', () => widget.onNavigate(const QuestionnaireAnalyticsScreen())),
       ],
     ];
 
@@ -606,6 +615,9 @@ class _MoreScreenContentState extends State<_MoreScreenContent> {
         _MoreItem(Icons.account_tree, 'Reconciliation', () => widget.onNavigate(const ReconciliationDashboardScreen())),
         _MoreItem(Icons.manage_accounts, 'Coordinator', () => widget.onNavigate(const CoordinatorDashboardScreen())),
         _MoreItem(Icons.search, 'Global Search', () => widget.onNavigate(const GlobalSearchScreen())),
+        _MoreItem(Icons.campaign, 'Broadcast Center', () => widget.onNavigate(const BroadcastCenterScreen())),
+        _MoreItem(Icons.shield, 'Permissions', () => widget.onNavigate(const PermissionsManagementScreen())),
+        _MoreItem(Icons.visibility, 'Role Perspective', () => widget.onNavigate(const RolePerspectiveScreen())),
       ],
     ];
 
