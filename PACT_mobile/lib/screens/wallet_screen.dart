@@ -1734,7 +1734,9 @@ class _WalletScreenState extends State<WalletScreen> {
     if (_transactionFilter == 'all') return _transactions;
     return _transactions.where((t) {
       if (_transactionFilter == 'earning') {
-        return t['type'] == 'earning' || t['type'] == 'site_visit_fee';
+        return t['type'] == 'earning' ||
+            t['type'] == 'site_visit_fee' ||
+            t['type'] == 'visit_completion';
       }
       return t['type'] == _transactionFilter;
     }).toList();
@@ -1759,6 +1761,7 @@ class _WalletScreenState extends State<WalletScreen> {
     switch (type) {
       case 'earning':
       case 'site_visit_fee':
+      case 'visit_completion':
         return Icons.arrow_upward;
       case 'down_payment':
       case 'advance_deduction':
@@ -1779,6 +1782,7 @@ class _WalletScreenState extends State<WalletScreen> {
     switch (type) {
       case 'earning':
       case 'site_visit_fee':
+      case 'visit_completion':
       case 'bonus':
         return Colors.green;
       case 'withdrawal':
@@ -3007,6 +3011,7 @@ class _WalletScreenState extends State<WalletScreen> {
     final type = tx['type'] as String? ?? '';
     switch (type) {
       case 'site_visit_fee':
+      case 'visit_completion':
         return widget.isArabic ? 'رسوم زيارة' : 'Site Visit Fee';
       case 'down_payment':
         return widget.isArabic ? 'سلفة مواصلات' : 'Transport Advance';
@@ -3021,6 +3026,7 @@ class _WalletScreenState extends State<WalletScreen> {
     // Group recent transactions by reference_id (site visit), or show individually
     final siteTypes = {
       'site_visit_fee',
+      'visit_completion',
       'advance_deduction',
       'down_payment',
       'earning',
@@ -3092,7 +3098,9 @@ class _WalletScreenState extends State<WalletScreen> {
           ? DateTime.parse(tx['created_at'] as String).toLocal()
           : DateTime.now();
       if (dt.isAfter(latest)) latest = dt;
-      if (type == 'site_visit_fee' || type == 'earning') {
+      if (type == 'site_visit_fee' ||
+          type == 'visit_completion' ||
+          type == 'earning') {
         totalFee += amt;
       } else if (type == 'down_payment') {
         totalAdvance += amt;
@@ -3103,7 +3111,10 @@ class _WalletScreenState extends State<WalletScreen> {
     final net = totalFee - totalAdvance - totalDeduction;
     final siteName = _siteNameFromTx(
       txs.firstWhere(
-        (t) => t['type'] == 'site_visit_fee' || t['type'] == 'earning',
+        (t) =>
+            t['type'] == 'site_visit_fee' ||
+            t['type'] == 'visit_completion' ||
+            t['type'] == 'earning',
         orElse: () => txs.first,
       ),
     );
@@ -4939,24 +4950,68 @@ class _WalletScreenState extends State<WalletScreen> {
   Widget _buildStatementTab() {
     final entries = <Map<String, dynamic>>[];
 
-    // 1. Site visit fees (credits from wallet_transactions)
+    // 1. Site visit fees and earnings (credits from wallet_transactions)
     for (final tx in _transactions) {
       final type = (tx['type'] as String? ?? '').toLowerCase();
-      if (type == 'site_visit_fee' || type == 'fee' || type == 'credit') {
-        final amount = (tx['amount'] as num?)?.toDouble() ?? 0;
-        if (amount > 0) {
-          entries.add({
-            'entry_type': 'site_fee',
-            'label_en': 'Site Visit Fee',
-            'label_ar': 'رسوم الزيارة الميدانية',
-            'date': tx['created_at'] as String? ?? '',
-            'amount_sdg': amount,
-            'site': _siteNameFromTx(tx),
-            'confirmed': true,
-            'color': 0xFF2E7D32,
-            'icon': Icons.check_circle_outline,
-          });
+      final status = (tx['status'] as String? ?? '').toLowerCase();
+      final amount = (tx['amount'] as num?)?.toDouble() ?? 0;
+
+      // Include earning, site_visit_fee, and other earning transaction types
+      if ((type == 'earning' ||
+              type == 'site_visit_fee' ||
+              type == 'visit_completion' ||
+              type == 'fee' ||
+              type == 'credit' ||
+              type == 'fund_receipt' ||
+              type == 'fund_receipt_confirmation' ||
+              type == 'wallet_credit') &&
+          amount > 0) {
+        // Extract description and metadata for detail
+        final description = tx['description'] as String? ?? '';
+        final metadata = tx['metadata'];
+        String label_en = 'Site Visit Fee';
+        String label_ar = 'رسوم الزيارة الميدانية';
+
+        if (type == 'earning') {
+          label_en = 'Site Visit Earnings';
+          label_ar = 'أرباح زيارة الموقع';
+        } else if (type == 'fund_receipt' ||
+            type == 'fund_receipt_confirmation') {
+          label_en = 'Fund Receipt';
+          label_ar = 'استلام الصندوق';
         }
+
+        entries.add({
+          'entry_type': 'site_fee',
+          'label_en': label_en,
+          'label_ar': label_ar,
+          'description': description,
+          'date': tx['created_at'] as String? ?? '',
+          'amount_sdg': amount,
+          'site': _siteNameFromTx(tx),
+          'metadata': metadata,
+          'confirmed': status == 'posted' || status == 'confirmed',
+          'color': 0xFF2E7D32,
+          'icon': Icons.check_circle_outline,
+        });
+      }
+
+      // Include advance deductions as negative entries
+      if (type == 'advance_deduction' || type == 'down_payment' && amount > 0) {
+        final description = tx['description'] as String? ?? '';
+        entries.add({
+          'entry_type': 'advance_deduction',
+          'label_en': 'Advance Deduction / Transport Advance',
+          'label_ar': 'خصم السلفة / سلفة المواصلات',
+          'description': description,
+          'date': tx['created_at'] as String? ?? '',
+          'amount_sdg': amount,
+          'site': _siteNameFromTx(tx),
+          'confirmed': status == 'posted' || status == 'confirmed',
+          'color': 0xFFF57C00,
+          'icon': Icons.directions_car_outlined,
+          'is_deduction': true,
+        });
       }
     }
 
@@ -5302,6 +5357,20 @@ class _WalletScreenState extends State<WalletScreen> {
                       fontSize: 13,
                     ),
                   ),
+                  // Show description if available (from transaction detail)
+                  if ((entry['description'] as String? ?? '').isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: Text(
+                        entry['description'] as String? ?? '',
+                        style: GoogleFonts.poppins(
+                          fontSize: 11,
+                          color: Colors.grey.shade700,
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
                   if (site.isNotEmpty)
                     Text(
                       site,
@@ -5330,7 +5399,7 @@ class _WalletScreenState extends State<WalletScreen> {
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
                 Text(
-                  '+${amountSdg.toStringAsFixed(0)} SDG',
+                  '${(entry['is_deduction'] == true ? '−' : '+')}${amountSdg.toStringAsFixed(0)} SDG',
                   style: GoogleFonts.poppins(
                     fontWeight: FontWeight.bold,
                     fontSize: 13,
@@ -5953,6 +6022,7 @@ class _WalletScreenState extends State<WalletScreen> {
         typeLabel = widget.isArabic ? 'سلفة مواصلات' : 'Transport Advance';
         break;
       case 'site_visit_fee':
+      case 'visit_completion':
         typeLabel = widget.isArabic ? 'رسوم زيارة' : 'Site Visit Fee';
         break;
       case 'earning':
@@ -6117,6 +6187,7 @@ class _WalletScreenState extends State<WalletScreen> {
         typeLabel = 'Transport Advance / سلفة مواصلات';
         break;
       case 'site_visit_fee':
+      case 'visit_completion':
         typeLabel = 'Site Visit Fee / رسوم زيارة';
         break;
       case 'earning':
@@ -6290,6 +6361,83 @@ class _WalletScreenState extends State<WalletScreen> {
                         const SizedBox(height: 12),
                       ],
 
+                      // ── Fee Breakdown (for earning transactions) ──────
+                      if (type == 'earning' && metadata != null) ...[
+                        Builder(
+                          builder: (ctx) {
+                            final feeBreakdown = metadata is Map
+                                ? (metadata['fee_breakdown']
+                                          as Map<String, dynamic>? ??
+                                      {})
+                                : <String, dynamic>{};
+                            final enumeratorFee =
+                                (feeBreakdown['enumerator_fee'] as num?)
+                                    ?.toDouble() ??
+                                0.0;
+                            final transportFee =
+                                (feeBreakdown['transport_fee'] as num?)
+                                    ?.toDouble() ??
+                                0.0;
+                            final feeMultiplier =
+                                (feeBreakdown['fee_multiplier'] as num?)
+                                    ?.toInt() ??
+                                1;
+                            final isAdjusted =
+                                feeBreakdown['is_adjusted'] as bool? ?? false;
+
+                            if (enumeratorFee > 0 || transportFee > 0) {
+                              return _txDetailSection(
+                                'Fee Breakdown / تفاصيل الرسوم',
+                                Icons.receipt_long_outlined,
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    _txDetailRow(
+                                      'Enumerator Fee / رسوم العد',
+                                      '${_formatCurrency(enumeratorFee)} $currency${isAdjusted ? ' × $feeMultiplier' : ''}',
+                                    ),
+                                    if (transportFee > 0) ...[
+                                      const SizedBox(height: 8),
+                                      _txDetailRow(
+                                        'Transport Fee / رسوم النقل',
+                                        '${_formatCurrency(transportFee)} $currency',
+                                      ),
+                                    ],
+                                    if (isAdjusted) ...[
+                                      const SizedBox(height: 8),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 10,
+                                          vertical: 6,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: Colors.blue.shade50,
+                                          borderRadius: BorderRadius.circular(
+                                            6,
+                                          ),
+                                          border: Border.all(
+                                            color: Colors.blue.shade200,
+                                          ),
+                                        ),
+                                        child: Text(
+                                          'Adjusted for addon activities (×$feeMultiplier) / معدل للأنشطة الإضافية',
+                                          style: GoogleFonts.poppins(
+                                            fontSize: 11,
+                                            color: Colors.blue.shade700,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                              );
+                            }
+                            return const SizedBox.shrink();
+                          },
+                        ),
+                        const SizedBox(height: 12),
+                      ],
+
                       // ── Balance before / after ───────────────────────
                       if (balanceBefore != null || balanceAfter != null)
                         _txDetailSection(
@@ -6401,6 +6549,7 @@ class _WalletScreenState extends State<WalletScreen> {
                         builder: (ctx2) {
                           if (referenceId == null ||
                               (type != 'site_visit_fee' &&
+                                  type != 'visit_completion' &&
                                   type != 'down_payment' &&
                                   type != 'advance_deduction')) {
                             return const SizedBox.shrink();
@@ -6411,6 +6560,7 @@ class _WalletScreenState extends State<WalletScreen> {
                                     t['id'] != tx['id'] &&
                                     t['reference_id'] == referenceId &&
                                     (t['type'] == 'site_visit_fee' ||
+                                        t['type'] == 'visit_completion' ||
                                         t['type'] == 'down_payment' ||
                                         t['type'] == 'advance_deduction'),
                               )

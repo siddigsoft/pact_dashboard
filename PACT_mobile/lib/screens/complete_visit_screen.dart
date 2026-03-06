@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 import 'dart:convert';
@@ -20,6 +21,8 @@ import '../providers/offline_provider.dart';
 import '../providers/locale_provider.dart';
 import '../models/site_visit.dart';
 import '../services/offline/models.dart';
+import '../services/local_storage_service.dart';
+import '../services/visit_location_settings.dart';
 
 class CompleteVisitScreen extends ConsumerStatefulWidget {
   final SiteVisit visit;
@@ -44,6 +47,7 @@ class _CompleteVisitScreenState extends ConsumerState<CompleteVisitScreen> {
   bool _isSubmitting = false;
   bool _isSavingDraft = false;
   Position? _currentLocation;
+  bool _isLocationLocked = false;
   String? _locationError;
   bool _isOnline = true;
   late Stream<List<ConnectivityResult>> _connectivityStream;
@@ -56,6 +60,10 @@ class _CompleteVisitScreenState extends ConsumerState<CompleteVisitScreen> {
   final TextEditingController _marketNameController = TextEditingController();
 
   static const int _pdmQPerVisit = 7;
+  final LocalStorageService _localStorageService = LocalStorageService();
+  late double _requiredLocationAccuracyMeters;
+  String get _locationLockMetadataKey =>
+      'visit_locked_location_${widget.visit.id}';
 
   // MMP flags from site data
   bool _hasPdmTool = false;
@@ -65,7 +73,8 @@ class _CompleteVisitScreenState extends ConsumerState<CompleteVisitScreen> {
 
   bool get _isArabic => Localizations.localeOf(context).languageCode == 'ar';
 
-  String _bi(String en, String ar) => '$en\n$ar';
+  String _bi(String en, String ar) =>
+      '\u2066$en\u2069 \u200B|\u200B \u2067$ar\u2069';
 
   bool _isYesValue(dynamic value) {
     final normalized = value?.toString().trim().toLowerCase() ?? '';
@@ -232,10 +241,58 @@ class _CompleteVisitScreenState extends ConsumerState<CompleteVisitScreen> {
   @override
   void initState() {
     super.initState();
+    _requiredLocationAccuracyMeters = VisitLocationSettings
+        .defaultLocationAccuracyThresholdMeters
+        .toDouble();
+    _loadLocationAccuracyThreshold();
     _initActivityType();
-    _getCurrentLocation();
     _checkConnectivity();
-    _loadDraftData();
+    _initializeLockedLocation();
+  }
+
+  void _loadLocationAccuracyThreshold() {
+    final configured = _localStorageService.getAppSetting(
+      VisitLocationSettings.locationAccuracyThresholdMetersSettingKey,
+    );
+    final normalized = VisitLocationSettings.normalizeThreshold(configured);
+    _requiredLocationAccuracyMeters = normalized.toDouble();
+  }
+
+  Future<void> _initializeLockedLocation() async {
+    try {
+      await _loadDraftData();
+
+      if (_isLocationLocked && _currentLocation != null) {
+        return;
+      }
+
+      final db = ref.read(offlineDbProvider);
+      final persistedLock = db.getMetadataValue(_locationLockMetadataKey);
+      if (persistedLock is Map) {
+        final persistedPosition = _positionFromLocationMap(
+          Map<String, dynamic>.from(persistedLock),
+        );
+        if (persistedPosition != null) {
+          if (mounted) {
+            setState(() {
+              _applyLockedLocation(persistedPosition);
+            });
+          } else {
+            _applyLockedLocation(persistedPosition);
+          }
+          return;
+        }
+      }
+
+      _seedLocationFromActiveVisit();
+      if (_isLocationLocked && _currentLocation != null) {
+        return;
+      }
+
+      await _getCurrentLocation();
+    } catch (e) {
+      debugPrint('Error initializing locked location: $e');
+    }
   }
 
   @override
@@ -276,23 +333,77 @@ class _CompleteVisitScreenState extends ConsumerState<CompleteVisitScreen> {
           .toList();
 
       if (drafts.isNotEmpty) {
+        drafts.sort((a, b) => b.startedAt.compareTo(a.startedAt));
         final draft = drafts.first;
 
-        // Parse combined notes and activities
-        final parsed = _parseNotesAndActivities(draft.notes);
+        // Keep only the latest draft to avoid stale reloads.
+        if (drafts.length > 1) {
+          for (final staleDraft in drafts.skip(1)) {
+            await db.deleteSiteVisit(staleDraft.id);
+          }
+        }
+
+        // Parse combined draft content (notes/activities/metadata)
+        final parsed = _parseDraftContent(draft.notes);
+        final metadata = parsed['metadata'] as Map<String, dynamic>;
 
         // Restore notes
-        if (parsed['notes']!.isNotEmpty) {
-          _notesController.text = parsed['notes']!;
+        if ((parsed['notes'] as String).isNotEmpty) {
+          _notesController.text = parsed['notes'] as String;
         }
 
         // Restore activities
-        if (parsed['activities']!.isNotEmpty) {
-          _activitiesController.text = parsed['activities']!;
+        if ((parsed['activities'] as String).isNotEmpty) {
+          _activitiesController.text = parsed['activities'] as String;
+        }
+
+        // Restore activity selections and related fields
+        final availableActivities = _getAvailableActivities().toSet();
+        final savedActivities = (metadata['selected_activities'] as List?)
+            ?.map((e) => e.toString())
+            .where((e) => availableActivities.contains(e))
+            .toSet();
+        if (savedActivities != null && savedActivities.isNotEmpty) {
+          _selectedActivities
+            ..clear()
+            ..addAll(savedActivities);
+        }
+
+        _pdmQuestionnaires =
+            (metadata['pdm_questionnaires'] as num?)?.toInt() ??
+            _pdmQuestionnaires;
+        if (_pdmQuestionnaires > 0) {
+          _pdmQController.text = _pdmQuestionnaires.toString();
+        }
+
+        final marketName = metadata['market_name']?.toString().trim() ?? '';
+        if (marketName.isNotEmpty) {
+          _marketNameController.text = marketName;
+        }
+
+        final warehouseName =
+            metadata['warehouse_name']?.toString().trim() ?? '';
+        if (warehouseName.isNotEmpty) {
+          _warehouseName = warehouseName;
+        }
+
+        // Restore locked location (from metadata first, then draft endLocation fallback)
+        final locationFromMetadata = metadata['locked_location'] is Map
+            ? Map<String, dynamic>.from(metadata['locked_location'] as Map)
+            : null;
+        final restoredLocation =
+            _positionFromLocationMap(locationFromMetadata) ??
+            _positionFromLocationMap(draft.endLocation);
+        if (restoredLocation != null) {
+          _applyLockedLocation(restoredLocation);
+          if (_isLocationLocked) {
+            await _persistLockedLocation();
+          }
         }
 
         // Restore photos from base64 strings
         if (draft.photos != null && draft.photos!.isNotEmpty) {
+          _photos.clear();
           await _restorePhotosFromDraft(draft.photos!);
         }
 
@@ -385,33 +496,183 @@ class _CompleteVisitScreenState extends ConsumerState<CompleteVisitScreen> {
 
   /// Separator used to combine notes and activities in draft storage
   static const String _draftSeparator = '|||ACTIVITIES|||';
+  static const String _draftMetaSeparator = '|||META|||';
 
-  /// Combine notes and activities into a single string for storage
-  String _combineNotesAndActivities(String notes, String activities) {
-    if (activities.isEmpty) {
-      return notes;
+  /// Combine notes, activities, and metadata into a single string for draft storage
+  String _combineDraftContent(
+    String notes,
+    String activities,
+    Map<String, dynamic> metadata,
+  ) {
+    final base = activities.isEmpty
+        ? notes
+        : '$notes$_draftSeparator$activities';
+    if (metadata.isEmpty) {
+      return base;
     }
-    return '$notes$_draftSeparator$activities';
+
+    return '$base$_draftMetaSeparator${jsonEncode(metadata)}';
   }
 
-  /// Parse combined notes string into separate notes and activities
-  Map<String, String> _parseNotesAndActivities(String? combined) {
+  /// Parse combined draft string into notes, activities, and metadata.
+  Map<String, dynamic> _parseDraftContent(String? combined) {
     if (combined == null || combined.isEmpty) {
-      return {'notes': '', 'activities': ''};
+      return {'notes': '', 'activities': '', 'metadata': <String, dynamic>{}};
     }
 
-    if (combined.contains(_draftSeparator)) {
-      final parts = combined.split(_draftSeparator);
+    String content = combined;
+    Map<String, dynamic> metadata = <String, dynamic>{};
+
+    if (combined.contains(_draftMetaSeparator)) {
+      final parts = combined.split(_draftMetaSeparator);
+      content = parts.first;
+      if (parts.length > 1 && parts[1].trim().isNotEmpty) {
+        try {
+          final decoded = jsonDecode(parts[1]);
+          if (decoded is Map) {
+            metadata = Map<String, dynamic>.from(decoded);
+          }
+        } catch (_) {
+          metadata = <String, dynamic>{};
+        }
+      }
+    }
+
+    if (content.contains(_draftSeparator)) {
+      final parts = content.split(_draftSeparator);
       return {
         'notes': parts[0],
         'activities': parts.length > 1 ? parts[1] : '',
+        'metadata': metadata,
       };
     }
 
-    return {'notes': combined, 'activities': ''};
+    return {'notes': content, 'activities': '', 'metadata': metadata};
+  }
+
+  Map<String, dynamic> _buildActivityDetails() {
+    final Map<String, dynamic> activityDetails = {};
+
+    for (final activity in _selectedActivities) {
+      if (activity == 'PDM' && _pdmQuestionnaires > 0) {
+        activityDetails['PDM'] = {
+          'questionnaires': _pdmQuestionnaires,
+          'site_visits': _pdmSiteVisits,
+        };
+      } else if (activity == 'MDM' && _marketNameController.text.isNotEmpty) {
+        activityDetails['MDM'] = {
+          'market_name': _marketNameController.text.trim(),
+          'site_visits': 2,
+        };
+      } else if (activity == 'WHM' && _warehouseName.isNotEmpty) {
+        activityDetails['WHM'] = {
+          'warehouse_name': _warehouseName.trim(),
+          'site_visits': 2,
+        };
+      } else {
+        activityDetails[activity] = {'site_visits': activity == 'WHM' ? 2 : 1};
+      }
+    }
+
+    return activityDetails;
+  }
+
+  Map<String, dynamic>? _effectiveLocationMap() {
+    final position = _currentLocation;
+    if (position == null) {
+      return null;
+    }
+
+    return {
+      'lat': position.latitude,
+      'lng': position.longitude,
+      'latitude': position.latitude,
+      'longitude': position.longitude,
+      'accuracy': position.accuracy,
+    };
+  }
+
+  bool _hasAcceptableAccuracy(Position position) {
+    return position.accuracy <= _requiredLocationAccuracyMeters;
+  }
+
+  void _applyLockedLocation(Position position) {
+    if (!_hasAcceptableAccuracy(position)) {
+      _currentLocation = position;
+      _isLocationLocked = false;
+      _locationError = _bi(
+        'Low GPS accuracy (${position.accuracy.toStringAsFixed(0)}m). Please retry to capture ≤ ${_requiredLocationAccuracyMeters.toStringAsFixed(0)}m.',
+        'دقة GPS منخفضة (${position.accuracy.toStringAsFixed(0)}م). يرجى إعادة المحاولة لالتقاط ≤ ${_requiredLocationAccuracyMeters.toStringAsFixed(0)}م.',
+      );
+      return;
+    }
+
+    _currentLocation = position;
+    _isLocationLocked = true;
+    _locationError = null;
+  }
+
+  Future<void> _persistLockedLocation() async {
+    final locationMap = _effectiveLocationMap();
+    if (locationMap == null) return;
+
+    final db = ref.read(offlineDbProvider);
+    await db.setMetadataValue(_locationLockMetadataKey, locationMap);
+  }
+
+  void _seedLocationFromActiveVisit() {
+    final activeVisitState = ref.read(activeVisitProvider);
+
+    Position? candidate = activeVisitState.lockedStartGPS;
+
+    if (candidate == null && activeVisitState.locationHistory.isNotEmpty) {
+      candidate = activeVisitState.locationHistory.first;
+    }
+
+    candidate ??= activeVisitState.currentLocation;
+
+    if (candidate != null) {
+      setState(() {
+        _applyLockedLocation(candidate!);
+      });
+      if (_isLocationLocked) {
+        unawaited(_persistLockedLocation());
+      }
+    }
+  }
+
+  Position? _positionFromLocationMap(Map<String, dynamic>? location) {
+    if (location == null) {
+      return null;
+    }
+
+    final latRaw = location['lat'] ?? location['latitude'];
+    final lngRaw = location['lng'] ?? location['longitude'];
+    final accuracyRaw = location['accuracy'];
+
+    if (latRaw is! num || lngRaw is! num) {
+      return null;
+    }
+
+    return Position(
+      latitude: latRaw.toDouble(),
+      longitude: lngRaw.toDouble(),
+      timestamp: DateTime.now(),
+      accuracy: accuracyRaw is num ? accuracyRaw.toDouble() : 0,
+      altitude: 0,
+      altitudeAccuracy: 0,
+      heading: 0,
+      headingAccuracy: 0,
+      speed: 0,
+      speedAccuracy: 0,
+    );
   }
 
   Future<void> _getCurrentLocation() async {
+    if (_isLocationLocked && _currentLocation != null) {
+      return;
+    }
+
     try {
       // On web this may trigger a browser permission prompt.
       final serviceEnabled = await Geolocator.isLocationServiceEnabled();
@@ -464,10 +725,13 @@ class _CompleteVisitScreenState extends ConsumerState<CompleteVisitScreen> {
       }
 
       if (!mounted) return;
+
       setState(() {
-        _currentLocation = position;
-        _locationError = null;
+        _applyLockedLocation(position);
       });
+      if (_isLocationLocked) {
+        await _persistLockedLocation();
+      }
     } catch (e) {
       debugPrint('Error getting location: $e');
       if (!mounted) return;
@@ -585,15 +849,15 @@ class _CompleteVisitScreenState extends ConsumerState<CompleteVisitScreen> {
       return;
     }
 
-    if (_currentLocation == null) {
+    if (_currentLocation == null || !_isLocationLocked) {
       await _getCurrentLocation();
     }
-    if (_currentLocation == null) {
+    if (_currentLocation == null || !_isLocationLocked) {
       AppSnackBar.show(
         context,
         message: _bi(
-          'Final location is required. Please tap Retry to capture location.',
-          'الموقع النهائي مطلوب. يرجى الضغط على إعادة المحاولة لالتقاط الموقع.',
+          'A locked high-accuracy final location is required. Please tap Retry.',
+          'موقع نهائي ثابت وعالي الدقة مطلوب. يرجى الضغط على إعادة المحاولة.',
         ),
         type: SnackBarType.warning,
       );
@@ -623,7 +887,7 @@ class _CompleteVisitScreenState extends ConsumerState<CompleteVisitScreen> {
       }
 
       // Get current location if not already obtained
-      if (_currentLocation == null) {
+      if (_currentLocation == null || !_isLocationLocked) {
         await _getCurrentLocation();
       }
 
@@ -635,38 +899,38 @@ class _CompleteVisitScreenState extends ConsumerState<CompleteVisitScreen> {
           : null;
 
       // 1. Create the report with activities data
-      final coordinates = _currentLocation != null
+      final locationMap = _effectiveLocationMap();
+      final coordinates = locationMap != null
           ? {
-              'latitude': _currentLocation!.latitude,
-              'longitude': _currentLocation!.longitude,
-              'accuracy': _currentLocation!.accuracy,
+              'latitude': locationMap['latitude'],
+              'longitude': locationMap['longitude'],
+              'accuracy': locationMap['accuracy'],
             }
           : <String, dynamic>{};
 
-      // Build activity details JSON for storage
-      final Map<String, dynamic> activityDetails = {};
-      for (final activity in _selectedActivities) {
-        if (activity == 'PDM' && _pdmQuestionnaires > 0) {
-          activityDetails['PDM'] = {
-            'questionnaires': _pdmQuestionnaires,
-            'site_visits': _pdmSiteVisits,
-          };
-        } else if (activity == 'MDM' && _marketNameController.text.isNotEmpty) {
-          activityDetails['MDM'] = {
-            'market_name': _marketNameController.text.trim(),
-            'site_visits': 2,
-          };
-        } else if (activity == 'WHM' && _warehouseName.isNotEmpty) {
-          activityDetails['WHM'] = {
-            'warehouse_name': _warehouseName.trim(),
-            'site_visits': 2,
-          };
-        } else {
-          activityDetails[activity] = {
-            'site_visits': activity == 'WHM' ? 2 : 1,
-          };
-        }
+      double toDouble(dynamic value) {
+        if (value is num) return value.toDouble();
+        if (value is String) return double.tryParse(value.trim()) ?? 0.0;
+        return 0.0;
       }
+
+      final additionalData = Map<String, dynamic>.from(
+        widget.visit.additionalData ?? const <String, dynamic>{},
+      );
+      final feeMultiplier = _totalVisitFees > 0 ? _totalVisitFees : 1;
+      final baseEnumeratorFee = toDouble(
+        additionalData['base_enumerator_fee'] ?? widget.visit.enumeratorFee,
+      );
+      final transportFee = toDouble(widget.visit.transportFee);
+      final adjustedEnumeratorFee = baseEnumeratorFee > 0
+          ? baseEnumeratorFee * feeMultiplier
+          : 0.0;
+      final adjustedTotalCost = adjustedEnumeratorFee > 0
+          ? adjustedEnumeratorFee + transportFee
+          : toDouble(widget.visit.cost);
+
+      // Build activity details JSON for storage
+      final activityDetails = _buildActivityDetails();
 
       final reportResponse = await supabase
           .from('reports')
@@ -750,9 +1014,9 @@ class _CompleteVisitScreenState extends ConsumerState<CompleteVisitScreen> {
       await supabase.from('site_locations').upsert({
         'site_id': widget.visit.id,
         'user_id': userId,
-        'latitude': _currentLocation!.latitude,
-        'longitude': _currentLocation!.longitude,
-        'accuracy': _currentLocation!.accuracy,
+        'latitude': coordinates['latitude'],
+        'longitude': coordinates['longitude'],
+        'accuracy': coordinates['accuracy'],
         'recorded_at': DateTime.now().toIso8601String(),
         'notes': 'Location recorded at visit completion',
       }, onConflict: 'site_id');
@@ -765,6 +1029,21 @@ class _CompleteVisitScreenState extends ConsumerState<CompleteVisitScreen> {
             'status': 'completed',
             'visit_completed_at': DateTime.now().toIso8601String(),
             'visit_completed_by': userId,
+            if (adjustedEnumeratorFee > 0)
+              'enumerator_fee': adjustedEnumeratorFee,
+            if (adjustedEnumeratorFee > 0) 'cost': adjustedTotalCost,
+            'additional_data': {
+              ...additionalData,
+              'selected_activities': _selectedActivities.toList(),
+              'activity_details': activityDetails,
+              'total_visit_fees': feeMultiplier,
+              'fee_multiplier': feeMultiplier,
+              if (baseEnumeratorFee > 0)
+                'base_enumerator_fee': baseEnumeratorFee,
+              if (adjustedEnumeratorFee > 0)
+                'adjusted_enumerator_fee': adjustedEnumeratorFee,
+              if (feeMultiplier > 1) 'fee_adjusted_for_addon_activities': true,
+            },
             'updated_at': DateTime.now().toIso8601String(),
           })
           .eq('id', widget.visit.id)
@@ -831,6 +1110,16 @@ class _CompleteVisitScreenState extends ConsumerState<CompleteVisitScreen> {
           ? now.difference(startTime).inMinutes
           : null;
 
+      if (_currentLocation == null || !_isLocationLocked) {
+        await _getCurrentLocation();
+      }
+      if (_currentLocation == null || !_isLocationLocked) {
+        throw Exception('A locked high-accuracy location is required');
+      }
+
+      final locationMap = _effectiveLocationMap();
+      final activityDetails = _buildActivityDetails();
+
       // Convert photos to base64 for local storage
       final List<String> photoDataList = [];
       for (final photo in _photos) {
@@ -872,13 +1161,7 @@ class _CompleteVisitScreenState extends ConsumerState<CompleteVisitScreen> {
                 'accuracy': startLocation.accuracy,
               }
             : null,
-        endLocation: _currentLocation != null
-            ? {
-                'lat': _currentLocation!.latitude,
-                'lng': _currentLocation!.longitude,
-                'accuracy': _currentLocation!.accuracy,
-              }
-            : null,
+        endLocation: _currentLocation != null ? locationMap : null,
         photos: photoDataList,
         notes: _notesController.text.trim(),
         synced: false,
@@ -891,17 +1174,21 @@ class _CompleteVisitScreenState extends ConsumerState<CompleteVisitScreen> {
         id: uuid.v4(),
         type: 'site_visit_complete',
         payload: {
+          'visit_id': widget.visit.id,
           'site_visit_id': widget.visit.id,
           'notes': _notesController.text.trim(),
           'activities': _activitiesController.text.trim().isEmpty
               ? null
               : _activitiesController.text.trim(),
+          'selected_activities': _selectedActivities.toList(),
+          'activity_details': activityDetails,
+          'total_visit_fees': _totalVisitFees,
           'duration_minutes': durationMinutes,
-          'coordinates': _currentLocation != null
+          'coordinates': locationMap != null
               ? {
-                  'latitude': _currentLocation!.latitude,
-                  'longitude': _currentLocation!.longitude,
-                  'accuracy': _currentLocation!.accuracy,
+                  'latitude': locationMap['latitude'],
+                  'longitude': locationMap['longitude'],
+                  'accuracy': locationMap['accuracy'],
                 }
               : null,
           'submitted_by': userId,
@@ -975,6 +1262,13 @@ class _CompleteVisitScreenState extends ConsumerState<CompleteVisitScreen> {
         throw Exception('User not authenticated');
       }
 
+      if (_currentLocation == null || !_isLocationLocked) {
+        _seedLocationFromActiveVisit();
+      }
+      if (_currentLocation == null || !_isLocationLocked) {
+        await _getCurrentLocation();
+      }
+
       // Get or create draft ID - reuse existing draft if present
       String draftId;
       final existingDrafts = db
@@ -983,7 +1277,13 @@ class _CompleteVisitScreenState extends ConsumerState<CompleteVisitScreen> {
           .toList();
 
       if (existingDrafts.isNotEmpty) {
+        existingDrafts.sort((a, b) => b.startedAt.compareTo(a.startedAt));
         draftId = existingDrafts.first.id;
+
+        // Remove any stale duplicate drafts for this site.
+        for (final staleDraft in existingDrafts.skip(1)) {
+          await db.deleteSiteVisit(staleDraft.id);
+        }
       } else {
         draftId = uuid.v4();
       }
@@ -1013,11 +1313,21 @@ class _CompleteVisitScreenState extends ConsumerState<CompleteVisitScreen> {
           ? activeVisitState.locationHistory.first
           : null;
 
-      // Combine notes and activities with separator for storage
-      // Format: notes|||activities (can be parsed later on load)
-      final combinedNotes = _combineNotesAndActivities(
+      final locationMap = _effectiveLocationMap();
+
+      final draftMetadata = <String, dynamic>{
+        'selected_activities': _selectedActivities.toList(),
+        'pdm_questionnaires': _pdmQuestionnaires,
+        'market_name': _marketNameController.text.trim(),
+        'warehouse_name': _warehouseName.trim(),
+        if (locationMap != null) 'locked_location': locationMap,
+      };
+
+      // Combine notes/activities with metadata for full draft restoration.
+      final combinedNotes = _combineDraftContent(
         _notesController.text.trim(),
         _activitiesController.text.trim(),
+        draftMetadata,
       );
 
       // Create draft record
@@ -1038,19 +1348,14 @@ class _CompleteVisitScreenState extends ConsumerState<CompleteVisitScreen> {
                 'accuracy': startLocation.accuracy,
               }
             : null,
-        endLocation: _currentLocation != null
-            ? {
-                'lat': _currentLocation!.latitude,
-                'lng': _currentLocation!.longitude,
-                'accuracy': _currentLocation!.accuracy,
-              }
-            : null,
+        endLocation: _currentLocation != null ? locationMap : null,
         photos: photoDataList,
         notes: combinedNotes,
         synced: false,
       );
 
       await db.saveSiteVisitOffline(draftVisit);
+      await db.setMetadataValue(_locationLockMetadataKey, locationMap);
 
       if (mounted) {
         AppSnackBar.show(
@@ -1087,582 +1392,618 @@ class _CompleteVisitScreenState extends ConsumerState<CompleteVisitScreen> {
     final activityType = _resolvedMainActivity;
     final isGfa = activityType.toUpperCase() == 'GFA';
 
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(_bi('Complete Visit', 'إكمال الزيارة')),
-        backgroundColor: AppColors.primaryOrange,
-        foregroundColor: Colors.white,
-        actions: [
-          // Language Toggle Button
-          Tooltip(
-            message: _bi('Toggle Language', 'تبديل اللغة'),
-            child: IconButton(
-              onPressed: () {
-                // Toggle the app language between English and Arabic
-                if (mounted) {
-                  // Using context.read() to access the LocaleProvider
-                  // ignore: use_build_context_synchronously
-                  final localeProvider = context.read<LocaleProvider>();
-                  localeProvider.toggleLocale();
-                }
-              },
-              icon: Text(
-                _isArabic ? 'EN' : 'ع',
-                style: const TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white,
+    return Directionality(
+      textDirection: _isArabic ? TextDirection.rtl : TextDirection.ltr,
+      child: Scaffold(
+        appBar: AppBar(
+          title: Text(_bi('Complete Visit', 'إكمال الزيارة')),
+          backgroundColor: AppColors.primaryOrange,
+          foregroundColor: Colors.white,
+          actions: [
+            // Language Toggle Button
+            Tooltip(
+              message: _bi('Toggle Language', 'تبديل اللغة'),
+              child: IconButton(
+                onPressed: () {
+                  // Toggle the app language between English and Arabic
+                  if (mounted) {
+                    // Using context.read() to access the LocaleProvider
+                    // ignore: use_build_context_synchronously
+                    final localeProvider = context.read<LocaleProvider>();
+                    localeProvider.toggleLocale();
+                  }
+                },
+                icon: Text(
+                  _isArabic ? 'EN' : 'ع',
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
                 ),
               ),
             ),
-          ),
-        ],
-      ),
-      body: SafeArea(
-        top: false,
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        widget.visit.siteName,
-                        style: AppTextStyles.headlineSmall,
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        '${widget.visit.state} • ${widget.visit.locality}',
-                        style: AppTextStyles.bodySmall.copyWith(
-                          color: AppColors.textSecondary,
+          ],
+        ),
+        body: SafeArea(
+          top: false,
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          widget.visit.siteName,
+                          style: AppTextStyles.headlineSmall,
                         ),
-                      ),
-                      if (widget.visit.siteCode.isNotEmpty) ...[
                         const SizedBox(height: 4),
                         Text(
-                          'Code: ${widget.visit.siteCode}\nالرمز: ${widget.visit.siteCode}',
+                          '${widget.visit.state} • ${widget.visit.locality}',
                           style: AppTextStyles.bodySmall.copyWith(
                             color: AppColors.textSecondary,
                           ),
                         ),
-                      ],
-                      if (activityType.isNotEmpty) ...[
-                        const SizedBox(height: 8),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 4,
-                          ),
-                          decoration: BoxDecoration(
-                            color: isGfa
-                                ? Colors.green.shade50
-                                : Colors.grey.shade50,
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(
-                              color: isGfa
-                                  ? Colors.green.shade300
-                                  : Colors.grey.shade300,
+                        if (widget.visit.siteCode.isNotEmpty) ...[
+                          const SizedBox(height: 4),
+                          Text(
+                            _bi(
+                              'Code: ${widget.visit.siteCode}',
+                              'الرمز: ${widget.visit.siteCode}',
+                            ),
+                            style: AppTextStyles.bodySmall.copyWith(
+                              color: AppColors.textSecondary,
                             ),
                           ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(
-                                isGfa
-                                    ? Icons.verified_outlined
-                                    : Icons.location_on_outlined,
-                                size: 14,
+                        ],
+                        if (activityType.isNotEmpty) ...[
+                          const SizedBox(height: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 4,
+                            ),
+                            decoration: BoxDecoration(
+                              color: isGfa
+                                  ? Colors.green.shade50
+                                  : Colors.grey.shade50,
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
                                 color: isGfa
-                                    ? Colors.green.shade700
-                                    : Colors.grey.shade600,
+                                    ? Colors.green.shade300
+                                    : Colors.grey.shade300,
                               ),
-                              const SizedBox(width: 4),
-                              Text(
-                                'Site Type: $activityType\nنوع الموقع: $activityType',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w600,
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  isGfa
+                                      ? Icons.verified_outlined
+                                      : Icons.location_on_outlined,
+                                  size: 14,
                                   color: isGfa
                                       ? Colors.green.shade700
                                       : Colors.grey.shade600,
                                 ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-              ),
-
-              const SizedBox(height: 24),
-
-              _buildLocationStatus(),
-
-              const SizedBox(height: 24),
-
-              _buildMmpDetails(),
-
-              const SizedBox(height: 24),
-
-              // Enumerator Fee Note
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.red.shade50,
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: Colors.red.shade300, width: 1.5),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Icon(
-                          Icons.info_outlined,
-                          color: Colors.red.shade700,
-                          size: 18,
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            'Enumerator Fee Note\nملاحظة رسوم الفنيين',
-                            style: AppTextStyles.labelLarge.copyWith(
-                              color: Colors.red.shade700,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      _bi(
-                        '• If site has 2 activities (e.g., GFA + MDM):',
-                        '• في حالة وجود نشاطين (مثل: GFA + MDM):',
-                      ),
-                      style: AppTextStyles.bodySmall.copyWith(
-                        color: Colors.red.shade700,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      _bi(
-                        '⚠️ You MUST confirm with supervisor & coordinator first',
-                        '⚠️ يجب عليك تأكيد الموافقة مع المشرف والمنسق أولاً',
-                      ),
-                      style: AppTextStyles.bodySmall.copyWith(
-                        color: Colors.red.shade700,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      _bi(
-                        '✓ Clearly: Will you cover 2 activities at this site?',
-                        '✓ بوضوح: هل سيتم تغطية كلا النشاطين في هذه الزيارة؟',
-                      ),
-                      style: AppTextStyles.bodySmall.copyWith(
-                        color: Colors.red.shade700,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      _bi(
-                        '✓ Without confirmation = Only 1 site fee allowed',
-                        '✓ بدون تأكيد = زيارة موقع واحدة فقط مسموح',
-                      ),
-                      style: AppTextStyles.bodySmall.copyWith(
-                        color: Colors.red.shade700,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    Divider(color: Colors.red.shade300, height: 1),
-                    const SizedBox(height: 12),
-                    Text(
-                      _bi(
-                        '• For Post-Distribution Monitoring (PDM):',
-                        '• في نشاط رصد ما بعد التوزيع (PDM):',
-                      ),
-                      style: AppTextStyles.bodySmall.copyWith(
-                        color: Colors.red.shade700,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      _bi(
-                        '⚠️ Total number of questionnaires MUST be agreed with WFP AO and Focal Point',
-                        '⚠️ العدد الإجمالي للاستبيانات يجب أن يكون متفقاً عليه من WFP AO والنقطة البؤرية',
-                      ),
-                      style: AppTextStyles.bodySmall.copyWith(
-                        color: Colors.red.shade700,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      _bi(
-                        '✓ Do NOT determine the number yourself - Get approval first',
-                        '✓ لا تحدد العدد بنفسك - يجب الموافقة أولاً',
-                      ),
-                      style: AppTextStyles.bodySmall.copyWith(
-                        color: Colors.red.shade700,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-
-              if (_showActivitySelector()) ...[
-                const SizedBox(height: 24),
-                _buildActivityTypeSelector(),
-              ],
-
-              const SizedBox(height: 16),
-
-              Row(
-                children: [
-                  Icon(
-                    Icons.note_outlined,
-                    size: 20,
-                    color: AppColors.primaryOrange,
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      'Visit Notes *\nملاحظات الزيارة *',
-                      style: AppTextStyles.titleMedium.copyWith(
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              TextField(
-                controller: _notesController,
-                decoration: InputDecoration(
-                  hintText:
-                      'Describe what you observed and did during the visit...\nصف ما لاحظته وما قمت به أثناء الزيارة...',
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  filled: true,
-                  fillColor: Colors.grey.shade50,
-                ),
-                maxLines: 5,
-                textInputAction: TextInputAction.newline,
-              ),
-
-              const SizedBox(height: 16),
-
-              Row(
-                children: [
-                  Icon(
-                    Icons.assignment_outlined,
-                    size: 20,
-                    color: AppColors.primaryOrange,
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      'Activities Performed (optional)\nالأنشطة المنفذة (اختياري)',
-                      style: AppTextStyles.titleMedium.copyWith(
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              TextField(
-                controller: _activitiesController,
-                decoration: InputDecoration(
-                  hintText:
-                      'List the activities you performed...\nاذكر الأنشطة التي قمت بها....',
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  filled: true,
-                  fillColor: Colors.grey.shade50,
-                ),
-                maxLines: 3,
-                textInputAction: TextInputAction.newline,
-              ),
-
-              const SizedBox(height: 24),
-
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Row(
-                    children: [
-                      Icon(
-                        Icons.image_outlined,
-                        size: 20,
-                        color: AppColors.primaryOrange,
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        '${_bi('Photos', 'الصور')} (${_photos.length})',
-                        style: AppTextStyles.titleMedium.copyWith(
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ],
-                  ),
-                  Row(
-                    children: [
-                      if (!kIsWeb)
-                        IconButton(
-                          onPressed: _takePhoto,
-                          icon: const Icon(Icons.camera_alt),
-                          tooltip: _bi('Take Photo', 'التقاط صورة'),
-                          color: AppColors.primaryOrange,
-                        ),
-                      IconButton(
-                        onPressed: _pickPhotos,
-                        icon: const Icon(Icons.photo_library),
-                        tooltip: _bi('Pick from Gallery', 'اختيار من المعرض'),
-                        color: AppColors.primaryOrange,
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-
-              if (_photos.isEmpty)
-                Container(
-                  height: 120,
-                  width: double.infinity,
-                  decoration: BoxDecoration(
-                    border: Border.all(
-                      color: Colors.grey.shade300,
-                      style: BorderStyle.solid,
-                    ),
-                    borderRadius: BorderRadius.circular(12),
-                    color: Colors.grey.shade50,
-                  ),
-                  child: InkWell(
-                    onTap: _pickPhotos,
-                    borderRadius: BorderRadius.circular(12),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.add_photo_alternate,
-                          size: 48,
-                          color: Colors.grey.shade400,
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          _bi('Tap to add photos', 'اضغط لإضافة صور'),
-                          style: TextStyle(color: Colors.grey.shade600),
-                        ),
-                      ],
-                    ),
-                  ),
-                )
-              else
-                SizedBox(
-                  height: 120,
-                  child: ListView.builder(
-                    scrollDirection: Axis.horizontal,
-                    itemCount: _photos.length + 1,
-                    itemBuilder: (context, index) {
-                      if (index == _photos.length) {
-                        return Container(
-                          width: 100,
-                          margin: const EdgeInsets.only(right: 8),
-                          decoration: BoxDecoration(
-                            border: Border.all(color: Colors.grey.shade300),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: InkWell(
-                            onTap: _pickPhotos,
-                            borderRadius: BorderRadius.circular(12),
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(
-                                  Icons.add,
-                                  size: 32,
-                                  color: Colors.grey.shade400,
-                                ),
+                                const SizedBox(width: 4),
                                 Text(
-                                  _bi('Add more', 'إضافة المزيد'),
+                                  _bi(
+                                    'Site Type: $activityType',
+                                    'نوع الموقع: $activityType',
+                                  ),
                                   style: TextStyle(
-                                    color: Colors.grey.shade600,
                                     fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                    color: isGfa
+                                        ? Colors.green.shade700
+                                        : Colors.grey.shade600,
                                   ),
                                 ),
                               ],
                             ),
                           ),
-                        );
-                      }
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
 
-                      return Stack(
+                const SizedBox(height: 24),
+
+                _buildLocationStatus(),
+
+                const SizedBox(height: 24),
+
+                _buildMmpDetails(),
+
+                const SizedBox(height: 24),
+
+                // Enumerator Fee Note
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.red.shade50,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: Colors.red.shade300, width: 1.5),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
                         children: [
-                          Container(
-                            width: 100,
-                            margin: const EdgeInsets.only(right: 8),
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(12),
-                              image: DecorationImage(
-                                image: kIsWeb
-                                    ? NetworkImage(_photos[index].path)
-                                          as ImageProvider
-                                    : FileImage(File(_photos[index].path)),
-                                fit: BoxFit.cover,
-                              ),
-                            ),
+                          Icon(
+                            Icons.info_outlined,
+                            color: Colors.red.shade700,
+                            size: 18,
                           ),
-                          Positioned(
-                            top: 4,
-                            right: 12,
-                            child: GestureDetector(
-                              onTap: () => _removePhoto(index),
-                              child: Container(
-                                padding: const EdgeInsets.all(4),
-                                decoration: const BoxDecoration(
-                                  color: Colors.red,
-                                  shape: BoxShape.circle,
-                                ),
-                                child: const Icon(
-                                  Icons.close,
-                                  size: 16,
-                                  color: Colors.white,
-                                ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              _bi('Enumerator Fee Note', 'ملاحظة رسوم الفنيين'),
+                              style: AppTextStyles.labelLarge.copyWith(
+                                color: Colors.red.shade700,
+                                fontWeight: FontWeight.w700,
                               ),
                             ),
                           ),
                         ],
-                      );
-                    },
-                  ),
-                ),
-
-              const SizedBox(height: 32),
-
-              if (!_isOnline) ...[
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  margin: const EdgeInsets.only(bottom: 16),
-                  decoration: BoxDecoration(
-                    color: Colors.orange.shade50,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.orange.shade300),
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(Icons.wifi_off, color: Colors.orange.shade700),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Text(
-                          _bi(
-                            'You are offline. Save as Draft to continue later, or Complete to sync when back online.',
-                            'أنت غير متصل بالإنترنت. احفظ كمسودة للمتابعة لاحقاً، أو أكمل للمزامنة عند الاتصال.',
-                          ),
-                          style: TextStyle(
-                            color: Colors.orange.shade800,
-                            fontSize: 13,
-                          ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        _bi(
+                          '• If site has 2 activities (e.g., GFA + MDM):',
+                          '• في حالة وجود نشاطين (مثل: GFA + MDM):',
+                        ),
+                        style: AppTextStyles.bodySmall.copyWith(
+                          color: Colors.red.shade700,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        _bi(
+                          '⚠️ You MUST confirm with supervisor & coordinator first',
+                          '⚠️ يجب عليك تأكيد الموافقة مع المشرف والمنسق أولاً',
+                        ),
+                        style: AppTextStyles.bodySmall.copyWith(
+                          color: Colors.red.shade700,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        _bi(
+                          '✓ Clearly: Will you cover 2 activities at this site?',
+                          '✓ بوضوح: هل سيتم تغطية كلا النشاطين في هذه الزيارة؟',
+                        ),
+                        style: AppTextStyles.bodySmall.copyWith(
+                          color: Colors.red.shade700,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        _bi(
+                          '✓ Without confirmation = Only 1 site fee allowed',
+                          '✓ بدون تأكيد = زيارة موقع واحدة فقط مسموح',
+                        ),
+                        style: AppTextStyles.bodySmall.copyWith(
+                          color: Colors.red.shade700,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Divider(color: Colors.red.shade300, height: 1),
+                      const SizedBox(height: 12),
+                      Text(
+                        _bi(
+                          '• For Post-Distribution Monitoring (PDM):',
+                          '• في نشاط رصد ما بعد التوزيع (PDM):',
+                        ),
+                        style: AppTextStyles.bodySmall.copyWith(
+                          color: Colors.red.shade700,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        _bi(
+                          '⚠️ Total number of questionnaires MUST be agreed with WFP AO and Focal Point',
+                          '⚠️ العدد الإجمالي للاستبيانات يجب أن يكون متفقاً عليه من WFP AO والنقطة البؤرية',
+                        ),
+                        style: AppTextStyles.bodySmall.copyWith(
+                          color: Colors.red.shade700,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        _bi(
+                          '✓ Do NOT determine the number yourself - Get approval first',
+                          '✓ لا تحدد العدد بنفسك - يجب الموافقة أولاً',
+                        ),
+                        style: AppTextStyles.bodySmall.copyWith(
+                          color: Colors.red.shade700,
+                          fontWeight: FontWeight.w500,
                         ),
                       ),
                     ],
                   ),
                 ),
-              ],
 
-              if (!_isOnline) ...[
+                if (_showActivitySelector()) ...[
+                  const SizedBox(height: 24),
+                  _buildActivityTypeSelector(),
+                ],
+
+                const SizedBox(height: 16),
+
+                Row(
+                  children: [
+                    Icon(
+                      Icons.note_outlined,
+                      size: 20,
+                      color: AppColors.primaryOrange,
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        _bi('Visit Notes *', 'ملاحظات الزيارة *'),
+                        style: AppTextStyles.titleMedium.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: _notesController,
+                  decoration: InputDecoration(
+                    hintText: _bi(
+                      'Describe what you observed and did during the visit...',
+                      'صف ما لاحظته وما قمت به أثناء الزيارة...',
+                    ),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    filled: true,
+                    fillColor: Colors.grey.shade50,
+                  ),
+                  maxLines: 5,
+                  textInputAction: TextInputAction.newline,
+                ),
+
+                const SizedBox(height: 16),
+
+                Row(
+                  children: [
+                    Icon(
+                      Icons.assignment_outlined,
+                      size: 20,
+                      color: AppColors.primaryOrange,
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        _bi(
+                          'Activities Performed (optional)',
+                          'الأنشطة المنفذة (اختياري)',
+                        ),
+                        style: AppTextStyles.titleMedium.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: _activitiesController,
+                  decoration: InputDecoration(
+                    hintText: _bi(
+                      'List the activities you performed...',
+                      'اذكر الأنشطة التي قمت بها....',
+                    ),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    filled: true,
+                    fillColor: Colors.grey.shade50,
+                  ),
+                  maxLines: 3,
+                  textInputAction: TextInputAction.newline,
+                ),
+
+                const SizedBox(height: 24),
+
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.image_outlined,
+                          size: 20,
+                          color: AppColors.primaryOrange,
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          '${_bi('Photos', 'الصور')} (${_photos.length})',
+                          style: AppTextStyles.titleMedium.copyWith(
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                    Row(
+                      children: [
+                        if (!kIsWeb)
+                          IconButton(
+                            onPressed: _takePhoto,
+                            icon: const Icon(Icons.camera_alt),
+                            tooltip: _bi('Take Photo', 'التقاط صورة'),
+                            color: AppColors.primaryOrange,
+                          ),
+                        IconButton(
+                          onPressed: _pickPhotos,
+                          icon: const Icon(Icons.photo_library),
+                          tooltip: _bi('Pick from Gallery', 'اختيار من المعرض'),
+                          color: AppColors.primaryOrange,
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+
+                if (_photos.isEmpty)
+                  Container(
+                    height: 120,
+                    width: double.infinity,
+                    decoration: BoxDecoration(
+                      border: Border.all(
+                        color: Colors.grey.shade300,
+                        style: BorderStyle.solid,
+                      ),
+                      borderRadius: BorderRadius.circular(12),
+                      color: Colors.grey.shade50,
+                    ),
+                    child: InkWell(
+                      onTap: _pickPhotos,
+                      borderRadius: BorderRadius.circular(12),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.add_photo_alternate,
+                            size: 48,
+                            color: Colors.grey.shade400,
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            _bi('Tap to add photos', 'اضغط لإضافة صور'),
+                            style: TextStyle(color: Colors.grey.shade600),
+                          ),
+                        ],
+                      ),
+                    ),
+                  )
+                else
+                  SizedBox(
+                    height: 120,
+                    child: ListView.builder(
+                      scrollDirection: Axis.horizontal,
+                      itemCount: _photos.length + 1,
+                      itemBuilder: (context, index) {
+                        if (index == _photos.length) {
+                          return Container(
+                            width: 100,
+                            margin: const EdgeInsets.only(right: 8),
+                            decoration: BoxDecoration(
+                              border: Border.all(color: Colors.grey.shade300),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: InkWell(
+                              onTap: _pickPhotos,
+                              borderRadius: BorderRadius.circular(12),
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(
+                                    Icons.add,
+                                    size: 32,
+                                    color: Colors.grey.shade400,
+                                  ),
+                                  Text(
+                                    _bi('Add more', 'إضافة المزيد'),
+                                    style: TextStyle(
+                                      color: Colors.grey.shade600,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          );
+                        }
+
+                        return Stack(
+                          children: [
+                            Container(
+                              width: 100,
+                              margin: const EdgeInsets.only(right: 8),
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(12),
+                                image: DecorationImage(
+                                  image: kIsWeb
+                                      ? NetworkImage(_photos[index].path)
+                                            as ImageProvider
+                                      : FileImage(File(_photos[index].path)),
+                                  fit: BoxFit.cover,
+                                ),
+                              ),
+                            ),
+                            Positioned(
+                              top: 4,
+                              right: 12,
+                              child: GestureDetector(
+                                onTap: () => _removePhoto(index),
+                                child: Container(
+                                  padding: const EdgeInsets.all(4),
+                                  decoration: const BoxDecoration(
+                                    color: Colors.red,
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: const Icon(
+                                    Icons.close,
+                                    size: 16,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        );
+                      },
+                    ),
+                  ),
+
+                const SizedBox(height: 32),
+
+                if (!_isOnline) ...[
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    margin: const EdgeInsets.only(bottom: 16),
+                    decoration: BoxDecoration(
+                      color: Colors.orange.shade50,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.orange.shade300),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.wifi_off, color: Colors.orange.shade700),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            _bi(
+                              'You are offline. Save as Draft to continue later, or Complete to sync when back online.',
+                              'أنت غير متصل بالإنترنت. احفظ كمسودة للمتابعة لاحقاً، أو أكمل للمزامنة عند الاتصال.',
+                            ),
+                            style: TextStyle(
+                              color: Colors.orange.shade800,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+
+                if (!_isOnline) ...[
+                  SizedBox(
+                    width: double.infinity,
+                    height: 50,
+                    child: OutlinedButton.icon(
+                      onPressed: (_isSavingDraft || _isSubmitting)
+                          ? null
+                          : _saveDraft,
+                      icon: _isSavingDraft
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.save_outlined),
+                      label: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(
+                          _isSavingDraft
+                              ? _bi('Saving Draft...', 'جاري حفظ المسودة...')
+                              : _bi('Save as Draft', 'حفظ كمسودة'),
+                          maxLines: 1,
+                          softWrap: false,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppColors.primaryBlue,
+                        side: const BorderSide(
+                          color: AppColors.primaryBlue,
+                          width: 2,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                ],
+
                 SizedBox(
                   width: double.infinity,
                   height: 50,
-                  child: OutlinedButton.icon(
-                    onPressed: (_isSavingDraft || _isSubmitting)
+                  child: ElevatedButton.icon(
+                    onPressed: (_isSubmitting || _isSavingDraft)
                         ? null
-                        : _saveDraft,
-                    icon: _isSavingDraft
+                        : _submitReport,
+                    icon: _isSubmitting
                         ? const SizedBox(
                             width: 20,
                             height: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2),
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              valueColor: AlwaysStoppedAnimation<Color>(
+                                Colors.white,
+                              ),
+                            ),
                           )
-                        : const Icon(Icons.save_outlined),
-                    label: Text(
-                      _isSavingDraft
-                          ? _bi('Saving Draft...', 'جاري حفظ المسودة...')
-                          : _bi('Save as Draft', 'حفظ كمسودة'),
-                    ),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: AppColors.primaryBlue,
-                      side: const BorderSide(
-                        color: AppColors.primaryBlue,
-                        width: 2,
+                        : const Icon(Icons.check_circle),
+                    label: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(
+                        _isSubmitting
+                            ? _bi('Submitting...', 'جاري الإرسال...')
+                            : (_isOnline
+                                  ? _bi('Submit Report', 'إرسال التقرير')
+                                  : _bi(
+                                      'Complete (Sync Later)',
+                                      'إكمال (مزامنة لاحقاً)',
+                                    )),
+                        maxLines: 1,
+                        softWrap: false,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.success,
+                      foregroundColor: Colors.white,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),
                       ),
                     ),
                   ),
                 ),
-                const SizedBox(height: 12),
+
+                const SizedBox(height: 16),
               ],
-
-              SizedBox(
-                width: double.infinity,
-                height: 50,
-                child: ElevatedButton.icon(
-                  onPressed: (_isSubmitting || _isSavingDraft)
-                      ? null
-                      : _submitReport,
-                  icon: _isSubmitting
-                      ? const SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            valueColor: AlwaysStoppedAnimation<Color>(
-                              Colors.white,
-                            ),
-                          ),
-                        )
-                      : const Icon(Icons.check_circle),
-                  label: Text(
-                    _isSubmitting
-                        ? _bi('Submitting...', 'جاري الإرسال...')
-                        : (_isOnline
-                              ? _bi('Submit Report', 'إرسال التقرير')
-                              : _bi(
-                                  'Complete (Sync Later)',
-                                  'إكمال (مزامنة لاحقاً)',
-                                )),
-                  ),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.success,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                ),
-              ),
-
-              const SizedBox(height: 16),
-            ],
+            ),
           ),
         ),
       ),
@@ -1699,7 +2040,7 @@ class _CompleteVisitScreenState extends ConsumerState<CompleteVisitScreen> {
               const SizedBox(width: 10),
               Expanded(
                 child: Text(
-                  'SELECT ACTIVITIES *\nاختر نشاط واحد أو أكثر *',
+                  _bi('SELECT ACTIVITIES *', 'اختر نشاط واحد أو أكثر *'),
                   style: AppTextStyles.titleSmall.copyWith(
                     color: AppColors.primaryOrange,
                     letterSpacing: 0.5,
@@ -1812,7 +2153,10 @@ class _CompleteVisitScreenState extends ConsumerState<CompleteVisitScreen> {
                   const SizedBox(width: 10),
                   Expanded(
                     child: Text(
-                      'Expected fees: $_totalVisitFees site visit(s)\nإجمالي الرسوم المتوقعة: $_totalVisitFees زيارة موقع',
+                      _bi(
+                        'Expected fees: $_totalVisitFees site visit(s)',
+                        'إجمالي الرسوم المتوقعة: $_totalVisitFees زيارة موقع',
+                      ),
                       style: AppTextStyles.bodySmall.copyWith(
                         color: AppColors.accentGreen,
                         fontWeight: FontWeight.w600,
@@ -1847,7 +2191,10 @@ class _CompleteVisitScreenState extends ConsumerState<CompleteVisitScreen> {
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
-                          'Warehouse Monitoring — × 2 visits\nرصد المستودع — × ٢ زيارة',
+                          _bi(
+                            'Warehouse Monitoring — × 2 visits',
+                            'رصد المستودع — × ٢ زيارة',
+                          ),
                           style: AppTextStyles.labelLarge.copyWith(
                             color: Colors.purple.shade700,
                             fontWeight: FontWeight.w700,
@@ -1858,7 +2205,7 @@ class _CompleteVisitScreenState extends ConsumerState<CompleteVisitScreen> {
                   ),
                   const SizedBox(height: 12),
                   Text(
-                    'Warehouse Name *\nاسم المستودع *',
+                    _bi('Warehouse Name *', 'اسم المستودع *'),
                     style: AppTextStyles.labelLarge.copyWith(
                       color: Colors.purple.shade800,
                       fontWeight: FontWeight.w600,
@@ -1873,7 +2220,10 @@ class _CompleteVisitScreenState extends ConsumerState<CompleteVisitScreen> {
                         ? TextDirection.rtl
                         : TextDirection.ltr,
                     decoration: InputDecoration(
-                      hintText: 'Enter warehouse name...\nأدخل اسم المستودع...',
+                      hintText: _bi(
+                        'Enter warehouse name...',
+                        'أدخل اسم المستودع...',
+                      ),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(8),
                       ),
@@ -1920,7 +2270,10 @@ class _CompleteVisitScreenState extends ConsumerState<CompleteVisitScreen> {
                       ),
                       const SizedBox(width: 8),
                       Text(
-                        'Questionnaires Submitted *\nعدد الاستبيانات المقدمة *',
+                        _bi(
+                          'Questionnaires Submitted *',
+                          'عدد الاستبيانات المقدمة *',
+                        ),
                         style: AppTextStyles.labelLarge.copyWith(
                           color: AppColors.primaryOrange,
                           fontWeight: FontWeight.w700,
@@ -1930,7 +2283,10 @@ class _CompleteVisitScreenState extends ConsumerState<CompleteVisitScreen> {
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    'Every 7 questionnaires = 1 visit fee\nكل 7 استبيانات = زيارة موقع واحدة',
+                    _bi(
+                      'Every 7 questionnaires = 1 visit fee',
+                      'كل 7 استبيانات = زيارة موقع واحدة',
+                    ),
                     style: AppTextStyles.bodySmall.copyWith(
                       color: AppColors.primaryOrange.withValues(alpha: 0.8),
                     ),
@@ -1940,7 +2296,7 @@ class _CompleteVisitScreenState extends ConsumerState<CompleteVisitScreen> {
                     controller: _pdmQController,
                     keyboardType: TextInputType.number,
                     decoration: InputDecoration(
-                      hintText: 'Enter count\nأدخل العدد',
+                      hintText: _bi('Enter count', 'أدخل العدد'),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(8),
                       ),
@@ -2007,7 +2363,10 @@ class _CompleteVisitScreenState extends ConsumerState<CompleteVisitScreen> {
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
-                          'Market Diversion Monitoring — × 2 visits\nرصد انحراف السوق — × ٢ زيارة',
+                          _bi(
+                            'Market Diversion Monitoring — × 2 visits',
+                            'رصد انحراف السوق — × ٢ زيارة',
+                          ),
                           style: AppTextStyles.labelLarge.copyWith(
                             color: Colors.blue.shade700,
                             fontWeight: FontWeight.w700,
@@ -2018,7 +2377,7 @@ class _CompleteVisitScreenState extends ConsumerState<CompleteVisitScreen> {
                   ),
                   const SizedBox(height: 12),
                   Text(
-                    'Market Name Covered *\nاسم السوق المُغطى *',
+                    _bi('Market Name Covered *', 'اسم السوق المُغطى *'),
                     style: AppTextStyles.labelLarge.copyWith(
                       color: Colors.blue.shade800,
                       fontWeight: FontWeight.w600,
@@ -2031,7 +2390,10 @@ class _CompleteVisitScreenState extends ConsumerState<CompleteVisitScreen> {
                         ? TextDirection.rtl
                         : TextDirection.ltr,
                     decoration: InputDecoration(
-                      hintText: 'Enter market name...\nأدخل اسم السوق...',
+                      hintText: _bi(
+                        'Enter market name...',
+                        'أدخل اسم السوق...',
+                      ),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(8),
                       ),
@@ -2091,7 +2453,7 @@ class _CompleteVisitScreenState extends ConsumerState<CompleteVisitScreen> {
               Icon(Icons.info_outline, color: Colors.orange.shade700, size: 20),
               const SizedBox(width: 8),
               Text(
-                'SITE DETAILS\nتفاصيل الموقع',
+                _bi('SITE DETAILS', 'تفاصيل الموقع'),
                 style: AppTextStyles.labelMedium.copyWith(
                   color: Colors.orange.shade700,
                   fontWeight: FontWeight.w600,
@@ -2110,7 +2472,7 @@ class _CompleteVisitScreenState extends ConsumerState<CompleteVisitScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Site Code\nرمز الموقع',
+                      _bi('Site Code', 'رمز الموقع'),
                       style: AppTextStyles.bodySmall.copyWith(
                         color: AppColors.textSecondary,
                         fontWeight: FontWeight.w500,
@@ -2135,7 +2497,7 @@ class _CompleteVisitScreenState extends ConsumerState<CompleteVisitScreen> {
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
                     Text(
-                      'Main Activity\nالنشاط الرئيسي',
+                      _bi('Main Activity', 'النشاط الرئيسي'),
                       style: AppTextStyles.bodySmall.copyWith(
                         color: AppColors.textSecondary,
                         fontWeight: FontWeight.w500,
@@ -2164,7 +2526,7 @@ class _CompleteVisitScreenState extends ConsumerState<CompleteVisitScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Locality\nالمحلية',
+                      _bi('Locality', 'المحلية'),
                       style: AppTextStyles.bodySmall.copyWith(
                         color: AppColors.textSecondary,
                         fontWeight: FontWeight.w500,
@@ -2189,7 +2551,7 @@ class _CompleteVisitScreenState extends ConsumerState<CompleteVisitScreen> {
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
                     Text(
-                      'Visit Type\nنوع الزيارة',
+                      _bi('Visit Type', 'نوع الزيارة'),
                       style: AppTextStyles.bodySmall.copyWith(
                         color: AppColors.textSecondary,
                         fontWeight: FontWeight.w500,
@@ -2220,7 +2582,7 @@ class _CompleteVisitScreenState extends ConsumerState<CompleteVisitScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Hub Office\nمكتب المركز',
+                      _bi('Hub Office', 'مكتب المركز'),
                       style: AppTextStyles.bodySmall.copyWith(
                         color: AppColors.textSecondary,
                         fontWeight: FontWeight.w500,
@@ -2245,7 +2607,7 @@ class _CompleteVisitScreenState extends ConsumerState<CompleteVisitScreen> {
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
                     Text(
-                      'Status\nالحالة',
+                      _bi('Status', 'الحالة'),
                       style: AppTextStyles.bodySmall.copyWith(
                         color: AppColors.textSecondary,
                         fontWeight: FontWeight.w500,
@@ -2263,7 +2625,7 @@ class _CompleteVisitScreenState extends ConsumerState<CompleteVisitScreen> {
                         border: Border.all(color: Colors.green.shade300),
                       ),
                       child: Text(
-                        'Active\nنشط',
+                        _bi('Active', 'نشط'),
                         style: AppTextStyles.bodySmall.copyWith(
                           color: Colors.green.shade700,
                           fontWeight: FontWeight.w600,
@@ -2304,15 +2666,19 @@ class _CompleteVisitScreenState extends ConsumerState<CompleteVisitScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Final Location\nالموقع النهائي',
+                    _bi('Final Location', 'الموقع النهائي'),
                     style: AppTextStyles.titleSmall,
                   ),
                   const SizedBox(height: 2),
                   Text(
                     _currentLocation != null
                         ? _bi(
-                            'Lat: ${_currentLocation!.latitude.toStringAsFixed(6)}, Lon: ${_currentLocation!.longitude.toStringAsFixed(6)}',
-                            'خط العرض: ${_currentLocation!.latitude.toStringAsFixed(6)}، خط الطول: ${_currentLocation!.longitude.toStringAsFixed(6)}',
+                            _isLocationLocked
+                                ? 'Locked • Lat: ${_currentLocation!.latitude.toStringAsFixed(6)}, Lon: ${_currentLocation!.longitude.toStringAsFixed(6)}'
+                                : 'Lat: ${_currentLocation!.latitude.toStringAsFixed(6)}, Lon: ${_currentLocation!.longitude.toStringAsFixed(6)}',
+                            _isLocationLocked
+                                ? 'ثابت • خط العرض: ${_currentLocation!.latitude.toStringAsFixed(6)}، خط الطول: ${_currentLocation!.longitude.toStringAsFixed(6)}'
+                                : 'خط العرض: ${_currentLocation!.latitude.toStringAsFixed(6)}، خط الطول: ${_currentLocation!.longitude.toStringAsFixed(6)}',
                           )
                         : _locationError ??
                               _bi(
@@ -2327,7 +2693,10 @@ class _CompleteVisitScreenState extends ConsumerState<CompleteVisitScreen> {
                   ),
                   if (_currentLocation != null)
                     Text(
-                      'Accuracy: ${_currentLocation!.accuracy.toStringAsFixed(0)}m\nالدقة: ${_currentLocation!.accuracy.toStringAsFixed(0)}م',
+                      _bi(
+                        'Accuracy: ${_currentLocation!.accuracy.toStringAsFixed(0)}m',
+                        'الدقة: ${_currentLocation!.accuracy.toStringAsFixed(0)}م',
+                      ),
                       style: AppTextStyles.bodySmall.copyWith(
                         color: AppColors.textSecondary,
                       ),
@@ -2335,7 +2704,7 @@ class _CompleteVisitScreenState extends ConsumerState<CompleteVisitScreen> {
                 ],
               ),
             ),
-            if (_locationError != null)
+            if (_locationError != null && !_isLocationLocked)
               IconButton(
                 onPressed: _getCurrentLocation,
                 icon: const Icon(Icons.refresh),

@@ -1365,6 +1365,8 @@ class _BroadcastDialogState extends State<_BroadcastDialog> {
   String _priority = 'normal';
   bool _sending = false;
   Map<String, dynamic>? _result;
+  bool _loadingMetrics = false;
+  Map<String, dynamic>? _deliveryMetrics;
 
   static const _audiences = [
     {'value': 'all', 'label': 'All Users / كل المستخدمين', 'icon': Icons.group},
@@ -1437,6 +1439,71 @@ class _BroadcastDialogState extends State<_BroadcastDialog> {
       _audience = t['audience'] as String;
       _priority = t['priority'] as String;
     });
+  }
+
+  Future<void> _loadBroadcastDeliveryMetrics(
+    String broadcastId,
+    int sentCount,
+  ) async {
+    if (!mounted) return;
+
+    setState(() {
+      _loadingMetrics = true;
+      _deliveryMetrics = null;
+    });
+
+    try {
+      final List rows = await widget.supabase
+          .from('notifications')
+          .select('status, is_read')
+          .eq('related_entity_id', broadcastId)
+          .eq('event_type', 'broadcast');
+
+      final total = sentCount > 0 ? sentCount : rows.length;
+      final delivered = rows.where((r) {
+        final status = (r['status'] as String? ?? '').toLowerCase();
+        return status == 'delivered' || status == 'opened' || status == 'read';
+      }).length;
+      final opened = rows.where((r) {
+        final status = (r['status'] as String? ?? '').toLowerCase();
+        return status == 'opened' || status == 'read';
+      }).length;
+      final read = rows.where((r) => r['is_read'] == true).length;
+
+      final deliveredRate = total == 0 ? 0.0 : (delivered / total) * 100;
+      final openedRate = total == 0 ? 0.0 : (opened / total) * 100;
+      final readRate = total == 0 ? 0.0 : (read / total) * 100;
+
+      if (!mounted) return;
+      setState(() {
+        _deliveryMetrics = {
+          'total': total,
+          'delivered': delivered,
+          'opened': opened,
+          'read': read,
+          'deliveredRate': deliveredRate,
+          'openedRate': openedRate,
+          'readRate': readRate,
+        };
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _deliveryMetrics = {
+          'total': sentCount,
+          'delivered': 0,
+          'opened': 0,
+          'read': 0,
+          'deliveredRate': 0.0,
+          'openedRate': 0.0,
+          'readRate': 0.0,
+        };
+      });
+    } finally {
+      if (mounted) {
+        setState(() => _loadingMetrics = false);
+      }
+    }
   }
 
   Future<void> _send() async {
@@ -1565,9 +1632,12 @@ class _BroadcastDialogState extends State<_BroadcastDialog> {
             'sent': targetUsers.length,
             'audience': _audience,
             'priority': _priority,
+            'broadcastId': broadcastId,
           };
           _sending = false;
         });
+
+        await _loadBroadcastDeliveryMetrics(broadcastId, targetUsers.length);
       }
     } catch (e) {
       if (mounted) {
@@ -1985,12 +2055,87 @@ class _BroadcastDialogState extends State<_BroadcastDialog> {
                 _badge(priority, col),
               ],
             ),
+            const SizedBox(height: 16),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF8FAFC),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: const Color(0xFFE2E8F0)),
+              ),
+              child: _loadingMetrics
+                  ? Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Loading delivery metrics... / جارٍ تحميل المقاييس...',
+                          style: GoogleFonts.poppins(
+                            fontSize: 11,
+                            color: Colors.grey.shade700,
+                          ),
+                        ),
+                      ],
+                    )
+                  : (_deliveryMetrics == null
+                        ? Text(
+                            'Metrics unavailable / المقاييس غير متاحة',
+                            textAlign: TextAlign.center,
+                            style: GoogleFonts.poppins(
+                              fontSize: 11,
+                              color: Colors.grey.shade600,
+                            ),
+                          )
+                        : Row(
+                            children: [
+                              Expanded(
+                                child: _metricItem(
+                                  label: 'Delivered / تم التسليم',
+                                  count: _deliveryMetrics!['delivered'] as int,
+                                  rate:
+                                      _deliveryMetrics!['deliveredRate']
+                                          as double,
+                                  color: const Color(0xFF2563EB),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: _metricItem(
+                                  label: 'Opened / تم الفتح',
+                                  count: _deliveryMetrics!['opened'] as int,
+                                  rate:
+                                      _deliveryMetrics!['openedRate'] as double,
+                                  color: const Color(0xFF7C3AED),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: _metricItem(
+                                  label: 'Read / تمت القراءة',
+                                  count: _deliveryMetrics!['read'] as int,
+                                  rate: _deliveryMetrics!['readRate'] as double,
+                                  color: const Color(0xFF059669),
+                                ),
+                              ),
+                            ],
+                          )),
+            ),
             const SizedBox(height: 24),
             Row(
               children: [
                 Expanded(
                   child: OutlinedButton(
-                    onPressed: () => setState(() => _result = null),
+                    onPressed: () => setState(() {
+                      _result = null;
+                      _deliveryMetrics = null;
+                      _loadingMetrics = false;
+                    }),
                     child: Text(
                       'Send Another / أرسل آخر',
                       style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
@@ -2015,6 +2160,41 @@ class _BroadcastDialogState extends State<_BroadcastDialog> {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _metricItem({
+    required String label,
+    required int count,
+    required double rate,
+    required Color color,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            '$count (${rate.toStringAsFixed(0)}%)',
+            style: GoogleFonts.poppins(
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              color: color,
+            ),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 4),
+          Text(
+            label,
+            style: GoogleFonts.poppins(fontSize: 10, color: Colors.grey[700]),
+            textAlign: TextAlign.center,
+          ),
+        ],
       ),
     );
   }

@@ -19,6 +19,13 @@ class BackgroundNotificationHandler {
       NotificationRoutingService();
 
   bool _isInitialized = false;
+  final Map<String, DateTime> _recentMessageFingerprints = {};
+  final Map<String, DateTime> _throttleKeys = {};
+
+  static const Duration _dedupWindow = Duration(seconds: 45);
+  static const Duration _defaultThrottleWindow = Duration(seconds: 3);
+  static const Duration _broadcastThrottleWindow = Duration(seconds: 8);
+  static const Duration _callThrottleWindow = Duration(seconds: 2);
 
   /// Initialize Firebase messaging lazily (only on mobile)
   FirebaseMessaging _getFirebaseMessaging() {
@@ -152,6 +159,10 @@ class BackgroundNotificationHandler {
           .toString()
           .toLowerCase();
 
+      if (_shouldSkipMessage(message, type, data)) {
+        return;
+      }
+
       debugPrint(
         '[BackgroundHandler] Processing message type: $type, isBackground: $isBackground',
       );
@@ -261,8 +272,18 @@ class BackgroundNotificationHandler {
   /// Handle broadcast notification
   Future<void> _handleBroadcast(RemoteMessage message) async {
     try {
-      final fcmTitle = message.notification?.title ?? '';
-      final fcmBody = message.notification?.body ?? '';
+      final fcmTitle = _composeBilingualText(
+        primary: message.notification?.title,
+        secondary: message.data['title_ar']?.toString(),
+        fallbackPrimary: message.data['title']?.toString(),
+        fallbackSecondary: message.data['title_en']?.toString(),
+      );
+      final fcmBody = _composeBilingualText(
+        primary: message.notification?.body,
+        secondary: message.data['message_ar']?.toString(),
+        fallbackPrimary: message.data['body']?.toString(),
+        fallbackSecondary: message.data['message_en']?.toString(),
+      );
 
       if (fcmTitle.isNotEmpty || fcmBody.isNotEmpty) {
         await _routingService.handleNotification(
@@ -328,8 +349,18 @@ class BackgroundNotificationHandler {
   /// Handle generic notification
   Future<void> _handleGenericNotification(RemoteMessage message) async {
     try {
-      final title = message.notification?.title ?? '';
-      final body = message.notification?.body ?? '';
+      final title = _composeBilingualText(
+        primary: message.notification?.title,
+        secondary: message.data['title_ar']?.toString(),
+        fallbackPrimary: message.data['title']?.toString(),
+        fallbackSecondary: message.data['title_en']?.toString(),
+      );
+      final body = _composeBilingualText(
+        primary: message.notification?.body,
+        secondary: message.data['message_ar']?.toString(),
+        fallbackPrimary: message.data['body']?.toString(),
+        fallbackSecondary: message.data['message_en']?.toString(),
+      );
 
       if (title.isNotEmpty || body.isNotEmpty) {
         await _routingService.handleNotification(
@@ -351,7 +382,11 @@ class BackgroundNotificationHandler {
   void _handleNotificationTap(RemoteMessage message) {
     try {
       final data = message.data;
-      final payload = data['type'] ?? 'home';
+      final payload =
+          data['payload'] ??
+          data['notification_type'] ??
+          data['type'] ??
+          'home';
 
       _routingService.handleNotificationTap(
         payload: payload.toString(),
@@ -387,6 +422,102 @@ class BackgroundNotificationHandler {
         type.contains('cost_submission') ||
         type.contains('withdrawal') ||
         type.contains('payment');
+  }
+
+  bool _shouldSkipMessage(
+    RemoteMessage message,
+    String type,
+    Map<String, dynamic> data,
+  ) {
+    _cleanupDedupState();
+
+    final fingerprint = _messageFingerprint(message, type, data);
+    final now = DateTime.now();
+    final previousSeenAt = _recentMessageFingerprints[fingerprint];
+
+    if (previousSeenAt != null &&
+        now.difference(previousSeenAt) <= _dedupWindow) {
+      debugPrint(
+        '[BackgroundHandler] Duplicate message suppressed: $fingerprint',
+      );
+      return true;
+    }
+
+    _recentMessageFingerprints[fingerprint] = now;
+
+    final throttleKey = _throttleKey(type, data);
+    final throttleWindow = _throttleWindowForType(type);
+    final previousThrottleAt = _throttleKeys[throttleKey];
+    if (previousThrottleAt != null &&
+        now.difference(previousThrottleAt) <= throttleWindow) {
+      debugPrint(
+        '[BackgroundHandler] Throttled message suppressed: $throttleKey',
+      );
+      return true;
+    }
+
+    _throttleKeys[throttleKey] = now;
+    return false;
+  }
+
+  void _cleanupDedupState() {
+    final cutoffDedup = DateTime.now().subtract(_dedupWindow);
+    _recentMessageFingerprints.removeWhere((_, t) => t.isBefore(cutoffDedup));
+
+    final cutoffThrottle = DateTime.now().subtract(_broadcastThrottleWindow);
+    _throttleKeys.removeWhere((_, t) => t.isBefore(cutoffThrottle));
+  }
+
+  Duration _throttleWindowForType(String type) {
+    if (_isIncomingCall(type, const {})) return _callThrottleWindow;
+    if (type == 'broadcast') return _broadcastThrottleWindow;
+    return _defaultThrottleWindow;
+  }
+
+  String _throttleKey(String type, Map<String, dynamic> data) {
+    final sender = (data['sender_id'] ?? data['from'] ?? '').toString();
+    final callId = (data['call_id'] ?? data['callId'] ?? '').toString();
+    final broadcastId = (data['broadcast_id'] ?? '').toString();
+    return '$type|$sender|$callId|$broadcastId';
+  }
+
+  String _messageFingerprint(
+    RemoteMessage message,
+    String type,
+    Map<String, dynamic> data,
+  ) {
+    final messageId = message.messageId ?? '';
+    final sentAt = message.sentTime?.millisecondsSinceEpoch.toString() ?? '';
+    final callId = (data['call_id'] ?? data['callId'] ?? '').toString();
+    final sender =
+        (data['sender_id'] ?? data['from'] ?? data['caller_id'] ?? '')
+            .toString();
+    final title = (message.notification?.title ?? data['title'] ?? '')
+        .toString();
+    final body =
+        (message.notification?.body ?? data['body'] ?? data['message'] ?? '')
+            .toString();
+
+    return '$messageId|$type|$callId|$sender|$title|$body|$sentAt';
+  }
+
+  String _composeBilingualText({
+    String? primary,
+    String? secondary,
+    String? fallbackPrimary,
+    String? fallbackSecondary,
+  }) {
+    final first = (primary?.trim().isNotEmpty ?? false)
+        ? primary!.trim()
+        : (fallbackPrimary?.trim() ?? '');
+    final secondSource = (secondary?.trim().isNotEmpty ?? false)
+        ? secondary!.trim()
+        : (fallbackSecondary?.trim() ?? '');
+
+    if (first.isEmpty) return secondSource;
+    if (secondSource.isEmpty) return first;
+    if (first == secondSource) return first;
+    return '$first\n$secondSource';
   }
 
   /// Log activity to database

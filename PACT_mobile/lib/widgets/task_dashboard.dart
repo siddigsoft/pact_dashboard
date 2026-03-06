@@ -6,7 +6,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../models/site_visit.dart';
 import '../algorithms/nearest_site_visits.dart';
 import '../theme/app_colors.dart';
-import 'package:flutter_gen/gen_l10n/app_localizations.dart';
+import 'package:pact_mobile/l10n/app_localizations.dart';
 
 class TaskDashboard extends StatefulWidget {
   final List<SiteVisitWithDistance> availableTasks;

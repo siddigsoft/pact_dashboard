@@ -42,16 +42,10 @@ class WhatsNewDialog extends StatelessWidget {
 
   /// Zip English and Arabic lists into paired maps.
   /// If Arabic list is shorter, falls back to English text for missing entries.
-  List<Map<String, String>> _zipBilingual(
-    List<String> en,
-    List<String> ar,
-  ) {
+  List<Map<String, String>> _zipBilingual(List<String> en, List<String> ar) {
     final result = <Map<String, String>>[];
     for (int i = 0; i < en.length; i++) {
-      result.add({
-        'en': en[i],
-        'ar': i < ar.length ? ar[i] : en[i],
-      });
+      result.add({'en': en[i], 'ar': i < ar.length ? ar[i] : en[i]});
     }
     return result;
   }

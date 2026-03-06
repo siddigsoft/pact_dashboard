@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -28,16 +29,21 @@ import 'screens/approval_dashboard_screen.dart';
 import 'screens/down_payment_approval_screen.dart';
 import 'screens/chat_screen.dart';
 import 'models/chat.dart';
+import 'models/user_notification.dart';
 import 'widgets/notifications_panel.dart';
+import 'widgets/global_sos_overlay.dart';
 import 'theme/app_colors.dart';
 import 'l10n/app_localizations.dart';
 import 'providers/locale_provider.dart';
+import 'providers/app_preferences_provider.dart';
 import 'providers/sync_provider.dart';
 import 'services/connectivity_service.dart';
 import 'services/local_storage_service.dart';
 import 'services/data_migration_service.dart';
 import 'services/notification_service.dart';
+import 'services/notification_route_resolver.dart';
 import 'services/update_service.dart';
+import 'services/user_notification_service.dart';
 import 'services/permission_handler_service.dart';
 import 'services/map_tile_cache_service.dart'
     if (dart.library.html) 'services/map_tile_cache_service_web.dart';
@@ -204,6 +210,8 @@ void main() async {
 
   // Initialize services
   final localStorageService = LocalStorageService();
+  final appPreferencesProvider = AppPreferencesProvider(localStorageService);
+  await appPreferencesProvider.load();
   final connectivityService = ConnectivityService(Connectivity());
   await connectivityService.initialize();
 
@@ -222,95 +230,58 @@ void main() async {
       // Handle notification tap based on payload
       final payload = response.payload;
       if (payload != null) {
-        if (payload.startsWith('chat:')) {
-          // Navigate to specific chat
-          final chatId = payload.substring(5);
-          navigatorKey.currentState?.pushNamed('/chat', arguments: chatId);
-        } else if (payload.startsWith('call:')) {
-          // Navigate to main screen and show call UI
-          // The WebRTC service will handle showing the call dialog
-          navigatorKey.currentState?.pushNamedAndRemoveUntil(
-            '/main',
-            (route) => false,
-            arguments: {'activeCall': true},
-          );
-        } else if (payload.startsWith('notif:')) {
-          final notificationId = payload.substring(6);
-          navigatorKey.currentState?.pushNamed(
-            '/main',
-            arguments: {'notificationId': notificationId},
-          );
-        } else if (payload.startsWith('cost_submission_approved:')) {
-          final submissionId = payload.substring(24);
-          navigatorKey.currentState?.pushNamed(
-            '/main',
-            arguments: {
-              'costSubmissionId': submissionId,
-              'tab': 'cost_submissions',
-            },
-          );
-        } else if (payload.startsWith('cost_submission_rejected:')) {
-          final submissionId = payload.substring(24);
-          navigatorKey.currentState?.pushNamed(
-            '/main',
-            arguments: {
-              'costSubmissionId': submissionId,
-              'tab': 'cost_submissions',
-            },
-          );
-        } else if (payload.startsWith('cost_submission_revision:')) {
-          final submissionId = payload.substring(23);
-          navigatorKey.currentState?.pushNamed(
-            '/main',
-            arguments: {
-              'costSubmissionId': submissionId,
-              'tab': 'cost_submissions',
-            },
-          );
-        } else if (payload.startsWith('budget_alert:')) {
-          final siteVisitId = payload.substring(13);
-          navigatorKey.currentState?.pushNamed(
-            '/main',
-            arguments: {'siteVisitId': siteVisitId, 'tab': 'cost_submissions'},
-          );
-        } else if (payload == 'wallet:advances') {
-          // Navigate directly to Wallet screen — My Advances tab
-          navigatorKey.currentState?.push(
-            MaterialPageRoute(
-              builder: (_) => const WalletScreen(initialTab: 3),
-            ),
-          );
-        } else if (payload == 'wallet:cost_payments') {
-          // Navigate directly to Wallet screen — Cost Payments tab
-          navigatorKey.currentState?.push(
-            MaterialPageRoute(
-              builder: (_) => const WalletScreen(initialTab: 4),
-            ),
-          );
-        } else if (payload == 'notifications') {
-          // Broadcast or generic notification tapped — open notifications panel
-          final ctx = navigatorKey.currentContext;
-          if (ctx != null) {
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              NotificationsPanel.show(ctx, initialTab: 'broadcasts');
-            });
-          }
-        } else if (payload == 'broadcast' || payload.startsWith('broadcast:')) {
-          // Legacy broadcast payload — open notifications panel
-          final ctx = navigatorKey.currentContext;
-          if (ctx != null) {
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              NotificationsPanel.show(ctx, initialTab: 'broadcasts');
-            });
-          }
-        } else if (payload == 'offline_sync_completed') {
-          navigatorKey.currentState?.pushNamed(
-            '/main',
-            arguments: {'tab': 'cost_submissions'},
-          );
-        } else if (payload.startsWith('update:')) {
-          // Handle update notification tap
-          UpdateService().downloadAndInstallUpdate();
+        final decision = NotificationRouteResolver.fromPayload(payload);
+        NotificationRouteResolver.logDecision('main_payload', decision);
+
+        switch (decision.kind) {
+          case NotificationRouteKind.chat:
+            navigatorKey.currentState?.pushNamed(
+              '/chat',
+              arguments: decision.chatId,
+            );
+            break;
+          case NotificationRouteKind.call:
+            navigatorKey.currentState?.pushNamedAndRemoveUntil(
+              '/main',
+              (route) => false,
+              arguments: {'activeCall': true},
+            );
+            break;
+          case NotificationRouteKind.main:
+            final notificationId = decision.mainArgs?['notificationId'];
+            if (notificationId is String && notificationId.isNotEmpty) {
+              unawaited(UserNotificationService().markAsOpened(notificationId));
+            }
+            navigatorKey.currentState?.pushNamed(
+              '/main',
+              arguments: decision.mainArgs,
+            );
+            break;
+          case NotificationRouteKind.wallet:
+            navigatorKey.currentState?.push(
+              MaterialPageRoute(
+                builder: (_) =>
+                    WalletScreen(initialTab: decision.walletTab ?? 3),
+              ),
+            );
+            break;
+          case NotificationRouteKind.notificationsPanel:
+            final ctx = navigatorKey.currentContext;
+            if (ctx != null) {
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                NotificationsPanel.show(
+                  ctx,
+                  initialTab: decision.panelTab ?? 'broadcasts',
+                );
+              });
+            }
+            break;
+          case NotificationRouteKind.updateDownload:
+            UpdateService().downloadAndInstallUpdate();
+            break;
+          case NotificationRouteKind.sync:
+          case NotificationRouteKind.none:
+            break;
         }
       }
     },
@@ -416,6 +387,7 @@ void main() async {
       child: MultiProvider(
         providers: [
           ChangeNotifierProvider(create: (context) => LocaleProvider()),
+          ChangeNotifierProvider.value(value: appPreferencesProvider),
           ChangeNotifierProvider(
             create: (context) => SyncProvider(
               Supabase.instance.client,
@@ -430,16 +402,216 @@ void main() async {
   );
 }
 
-class MyApp extends StatelessWidget {
+class MyApp extends StatefulWidget {
   final RouteObserver<PageRoute>? routeObserver;
   final String initialRoute;
 
   const MyApp({super.key, this.routeObserver, required this.initialRoute});
 
   @override
+  State<MyApp> createState() => _MyAppState();
+}
+
+class _MyAppState extends State<MyApp> {
+  StreamSubscription<UserNotification>? _globalBroadcastSub;
+  final List<UserNotification> _pendingBlockingBroadcasts = [];
+  bool _isShowingBlockingBroadcast = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _globalBroadcastSub = UserNotificationService().broadcastStream.listen(
+      _onBroadcastReceived,
+    );
+  }
+
+  @override
+  void dispose() {
+    _globalBroadcastSub?.cancel();
+    super.dispose();
+  }
+
+  void _onBroadcastReceived(UserNotification notification) {
+    final priority = notification.priority.toLowerCase().trim();
+    final isBlockingPriority = priority == 'high' || priority == 'urgent';
+    if (!isBlockingPriority) return;
+
+    final alreadyQueued = _pendingBlockingBroadcasts.any(
+      (n) => n.id == notification.id,
+    );
+    if (alreadyQueued) return;
+
+    if (_isShowingBlockingBroadcast) {
+      _pendingBlockingBroadcasts.add(notification);
+      return;
+    }
+
+    unawaited(_showBlockingBroadcast(notification));
+  }
+
+  Future<void> _showBlockingBroadcast(UserNotification notification) async {
+    final rootContext = navigatorKey.currentContext;
+    if (rootContext == null) {
+      _pendingBlockingBroadcasts.add(notification);
+      return;
+    }
+
+    _isShowingBlockingBroadcast = true;
+
+    final service = UserNotificationService();
+
+    await showDialog<void>(
+      context: rootContext,
+      barrierDismissible: false,
+      builder: (dialogContext) {
+        return PopScope(
+          canPop: false,
+          child: Material(
+            color: const Color(0xB3000000),
+            child: SafeArea(
+              child: Container(
+                width: double.infinity,
+                height: double.infinity,
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFB91C1C),
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: const Row(
+                        children: [
+                          Icon(
+                            Icons.warning_amber_rounded,
+                            color: Colors.white,
+                            size: 28,
+                          ),
+                          SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              'High Priority Broadcast / بث عالي الأولوية',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w700,
+                                fontSize: 16,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    Expanded(
+                      child: Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        child: SingleChildScrollView(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                notification.title,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 16,
+                                ),
+                              ),
+                              if (notification.titleAr.isNotEmpty &&
+                                  notification.titleAr != notification.title)
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 4),
+                                  child: Text(
+                                    notification.titleAr,
+                                    textDirection: TextDirection.rtl,
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w700,
+                                      fontSize: 16,
+                                    ),
+                                  ),
+                                ),
+                              const SizedBox(height: 12),
+                              Text(notification.message),
+                              if (notification.messageAr.isNotEmpty &&
+                                  notification.messageAr !=
+                                      notification.message)
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 6),
+                                  child: Text(
+                                    notification.messageAr,
+                                    textDirection: TextDirection.rtl,
+                                  ),
+                                ),
+                              const SizedBox(height: 16),
+                              Container(
+                                width: double.infinity,
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFFEE2E2),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: const Text(
+                                  'You must acknowledge this alert before continuing. / يجب تأكيد هذا التنبيه قبل المتابعة.',
+                                  style: TextStyle(fontWeight: FontWeight.w600),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFFB91C1C),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                      ),
+                      onPressed: () async {
+                        await service.markAsOpened(notification.id);
+                        await service.markAsRead(notification.id);
+
+                        if (dialogContext.mounted) {
+                          Navigator.of(dialogContext).pop();
+                        }
+
+                        final ctx = navigatorKey.currentContext;
+                        if (ctx != null) {
+                          WidgetsBinding.instance.addPostFrameCallback((_) {
+                            NotificationsPanel.show(
+                              ctx,
+                              initialTab: 'broadcasts',
+                            );
+                          });
+                        }
+                      },
+                      child: const Text('Acknowledge / تأكيد'),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+
+    _isShowingBlockingBroadcast = false;
+    if (_pendingBlockingBroadcasts.isNotEmpty) {
+      final next = _pendingBlockingBroadcasts.removeAt(0);
+      unawaited(_showBlockingBroadcast(next));
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return Consumer<LocaleProvider>(
-      builder: (context, localeProvider, child) {
+    return Consumer2<LocaleProvider, AppPreferencesProvider>(
+      builder: (context, localeProvider, appPreferences, child) {
         return MaterialApp(
           // App title shown in task switcher
           title: 'Pact Consultancy',
@@ -449,6 +621,8 @@ class MyApp extends StatelessWidget {
 
           // Reactive locale from provider
           locale: localeProvider.locale,
+
+          themeMode: appPreferences.darkMode ? ThemeMode.dark : ThemeMode.light,
 
           // Localization support
           localizationsDelegates: [
@@ -462,10 +636,13 @@ class MyApp extends StatelessWidget {
             Locale('ar', ''), // Arabic
           ],
 
-          // Define theme using AppColors
+          // Define themes using app appearance preferences
           theme: ThemeData(
             primaryColor: AppColors.primaryOrange,
             useMaterial3: true,
+            visualDensity: appPreferences.compactDisplay
+                ? VisualDensity.compact
+                : VisualDensity.standard,
             colorScheme: ColorScheme.fromSeed(
               seedColor: AppColors.primaryOrange,
               primary: AppColors.primaryOrange,
@@ -487,142 +664,162 @@ class MyApp extends StatelessWidget {
               ),
             ),
           ),
+          darkTheme: ThemeData(
+            useMaterial3: true,
+            visualDensity: appPreferences.compactDisplay
+                ? VisualDensity.compact
+                : VisualDensity.standard,
+            colorScheme: ColorScheme.fromSeed(
+              seedColor: AppColors.primaryOrange,
+              primary: AppColors.primaryOrange,
+              secondary: AppColors.primaryBlue,
+              brightness: Brightness.dark,
+            ),
+          ),
 
           // Set up routing for proper URL display
           // Do not set home when using initialRoute
-          initialRoute: initialRoute,
+          initialRoute: widget.initialRoute,
 
-              // Define routes for navigation throughout the app
-              routes: {
-                '/': (_) => LoginScreen(),
-                '/login': (_) => LoginScreen(),
-                '/biometric-prompt': (_) => BiometricPromptScreen(),
-                '/register': (_) => ImprovedRegisterScreen(),
-                '/forgot-password': (_) => ForgotPasswordScreen(),
-                '/main': (_) => MainScreen(),
-                '/field-operations': (_) => FieldOperationsEnhancedScreen(),
-                '/comprehensive-monitoring': (_) =>
-                    ComprehensiveMonitoringFormScreen(),
-                '/approvals': (_) => const ApprovalDashboardScreen(),
-                '/down-payment-approval': (_) =>
-                    const DownPaymentApprovalScreen(),
-                // New enhancement routes
-                '/onboarding': (_) => OnboardingScreen(),
-                '/compliance': (_) => ComplianceCheckScreen(),
-              },
+          // Define routes for navigation throughout the app
+          routes: {
+            '/': (_) => LoginScreen(),
+            '/login': (_) => LoginScreen(),
+            '/biometric-prompt': (_) => BiometricPromptScreen(),
+            '/register': (_) => ImprovedRegisterScreen(),
+            '/forgot-password': (_) => ForgotPasswordScreen(),
+            '/main': (_) => MainScreen(),
+            '/field-operations': (_) => FieldOperationsEnhancedScreen(),
+            '/comprehensive-monitoring': (_) =>
+                ComprehensiveMonitoringFormScreen(),
+            '/approvals': (_) => const ApprovalDashboardScreen(),
+            '/down-payment-approval': (_) => const DownPaymentApprovalScreen(),
+            // New enhancement routes
+            '/onboarding': (_) => OnboardingScreen(),
+            '/compliance': (_) => ComplianceCheckScreen(),
+          },
 
-              // Backup with onGenerateRoute for dynamic routes and better debugging
-              onGenerateRoute: (settings) {
-                debugPrint('⚠️ Fallback route generation: ${settings.name}');
+          // Backup with onGenerateRoute for dynamic routes and better debugging
+          onGenerateRoute: (settings) {
+            debugPrint('⚠️ Fallback route generation: ${settings.name}');
 
-                // Handle /chat route with Chat argument or chatId string
-                if (settings.name == '/chat') {
-                  final args = settings.arguments;
-                  if (args is Chat) {
-                    return MaterialPageRoute(
-                      settings: settings,
-                      builder: (context) => ChatScreen(chat: args),
-                    );
-                  }
-                  // If args is a string (chatId from notification), create a minimal Chat object
-                  if (args is String) {
-                    final chatId = args;
-                    debugPrint('📱 Chat route with chatId: $chatId');
-                    // Create a minimal Chat object - the ChatScreen will load full details
-                    final chat = Chat(
-                      id: chatId,
-                      isGroup: false,
-                      name: 'Chat',
-                      type: 'private',
-                      createdAt: DateTime.now(),
-                      updatedAt: DateTime.now(),
-                    );
-                    return MaterialPageRoute(
-                      settings: settings,
-                      builder: (context) => ChatScreen(chat: chat),
-                    );
-                  }
-                  // Fallback for unknown argument types
-                  debugPrint('⚠️ Chat route called without proper argument');
-                  return MaterialPageRoute(
-                    builder: (context) => const Scaffold(
-                      body: Center(child: Text('Unable to open chat')),
-                    ),
-                  );
-                }
+            // Handle /chat route with Chat argument or chatId string
+            if (settings.name == '/chat') {
+              final args = settings.arguments;
+              if (args is Chat) {
+                return MaterialPageRoute(
+                  settings: settings,
+                  builder: (context) => ChatScreen(chat: args),
+                );
+              }
+              // If args is a string (chatId from notification), create a minimal Chat object
+              if (args is String) {
+                final chatId = args;
+                debugPrint('📱 Chat route with chatId: $chatId');
+                // Create a minimal Chat object - the ChatScreen will load full details
+                final chat = Chat(
+                  id: chatId,
+                  isGroup: false,
+                  name: 'Chat',
+                  type: 'private',
+                  createdAt: DateTime.now(),
+                  updatedAt: DateTime.now(),
+                );
+                return MaterialPageRoute(
+                  settings: settings,
+                  builder: (context) => ChatScreen(chat: chat),
+                );
+              }
+              // Fallback for unknown argument types
+              debugPrint('⚠️ Chat route called without proper argument');
+              return MaterialPageRoute(
+                builder: (context) => const Scaffold(
+                  body: Center(child: Text('Unable to open chat')),
+                ),
+              );
+            }
 
-                // Only for routes not defined in routes map
-                switch (settings.name) {
-                  // Professional call screen routes
-                  case '/incoming-call-professional':
-                  case '/active-call-professional':
-                    return RouteGenerator.generateRoute(settings);
+            // Only for routes not defined in routes map
+            switch (settings.name) {
+              // Professional call screen routes
+              case '/incoming-call-professional':
+              case '/active-call-professional':
+                return RouteGenerator.generateRoute(settings);
 
-                  case '/login':
-                  case '/biometric-prompt':
-                  case '/register':
-                  case '/forgot-password':
-                  case '/main':
-                  case '/':
-                    // These should be handled by the routes map above
-                    // Just a fallback
-                    final routeBuilders = {
-                      '/': (_) => LoginScreen(),
-                      '/login': (_) => LoginScreen(),
-                      '/biometric-prompt': (_) => BiometricPromptScreen(),
-                      '/register': (_) => ImprovedRegisterScreen(),
-                      '/forgot-password': (_) => ForgotPasswordScreen(),
-                      '/main': (_) => MainScreen(),
-                    };
+              case '/login':
+              case '/biometric-prompt':
+              case '/register':
+              case '/forgot-password':
+              case '/main':
+              case '/':
+                // These should be handled by the routes map above
+                // Just a fallback
+                final routeBuilders = {
+                  '/': (_) => LoginScreen(),
+                  '/login': (_) => LoginScreen(),
+                  '/biometric-prompt': (_) => BiometricPromptScreen(),
+                  '/register': (_) => ImprovedRegisterScreen(),
+                  '/forgot-password': (_) => ForgotPasswordScreen(),
+                  '/main': (_) => MainScreen(),
+                };
 
-                    final builder = routeBuilders[settings.name];
-                    if (builder != null) {
-                      return PageRouteBuilder(
-                        settings: settings,
-                        pageBuilder: (context, animation, secondaryAnimation) =>
-                            builder(context),
-                        transitionsBuilder: (context, animation,
-                            secondaryAnimation, child) {
+                final builder = routeBuilders[settings.name];
+                if (builder != null) {
+                  return PageRouteBuilder(
+                    settings: settings,
+                    pageBuilder: (context, animation, secondaryAnimation) =>
+                        builder(context),
+                    transitionsBuilder:
+                        (context, animation, secondaryAnimation, child) {
                           return FadeTransition(
                             opacity: animation,
                             child: child,
                           );
                         },
-                      );
-                    }
-                    return null;
-                  default:
-                    // If route not found, pass to onUnknownRoute
-                    return null;
+                  );
                 }
-              },
+                return null;
+              default:
+                // If route not found, pass to onUnknownRoute
+                return null;
+            }
+          },
 
-              // Handle unknown routes (404 page)
-              onUnknownRoute: (settings) {
-                debugPrint('Unknown route: ${settings.name}');
-                return MaterialPageRoute(
-                  builder: (context) => Scaffold(
-                    body: Center(child: Text('Page not found: ${settings.name}')),
-                  ),
-                );
-              },
-
-              // Add route observer for logging navigation
-              navigatorObservers: [?routeObserver],
-
-              // Use global navigator key for navigation
-              navigatorKey: navigatorKey,
-
-              // Wrap with global fund confirmation panel
-              builder: (context, child) {
-                return Stack(
-                  children: [
-                    child ?? const SizedBox.shrink(),
-                    const GlobalFundConfirmationPanel(),
-                  ],
-                );
-              },
+          // Handle unknown routes (404 page)
+          onUnknownRoute: (settings) {
+            debugPrint('Unknown route: ${settings.name}');
+            return MaterialPageRoute(
+              builder: (context) => Scaffold(
+                body: Center(child: Text('Page not found: ${settings.name}')),
+              ),
             );
+          },
+
+          // Add route observer for logging navigation
+          navigatorObservers: [?widget.routeObserver],
+
+          // Use global navigator key for navigation
+          navigatorKey: navigatorKey,
+
+          // Wrap with global fund confirmation panel
+          builder: (context, child) {
+            final mediaQuery = MediaQuery.of(context);
+            final scaledChild = MediaQuery(
+              data: mediaQuery.copyWith(
+                textScaler: TextScaler.linear(appPreferences.fontScale),
+              ),
+              child: child ?? const SizedBox.shrink(),
+            );
+
+            return Stack(
+              children: [
+                scaledChild,
+                const GlobalFundConfirmationPanel(),
+                const GlobalSosOverlay(),
+              ],
+            );
+          },
+        );
       },
     );
   }

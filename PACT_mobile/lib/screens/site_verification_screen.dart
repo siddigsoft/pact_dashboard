@@ -18,6 +18,9 @@ import '../widgets/modern_app_header.dart';
 import '../widgets/mmp_filter_bar.dart';
 import '../utils/mmp_filter_utils.dart';
 
+String _bi(String en, String ar) =>
+    '\u2066$en\u2069 \u200B|\u200B \u2067$ar\u2069';
+
 /// Permit decision structure for state and locality permits
 class PermitDecision {
   final PermitStatus statePermit;
@@ -169,6 +172,11 @@ class _SiteVerificationScreenState extends State<SiteVerificationScreen> {
   String _searchQuery = '';
   String? _selectedMmpId; // null = All MMPs
   List<Map<String, dynamic>> _availableMmps = []; // [{id, name, count}]
+
+  bool get _isArabic => Localizations.localeOf(context).languageCode == 'ar';
+
+  String _bi(String en, String ar) =>
+      '\u2066$en\u2069 \u200B|\u200B \u2067$ar\u2069';
 
   @override
   void initState() {
@@ -1032,9 +1040,12 @@ class _SiteVerificationScreenState extends State<SiteVerificationScreen> {
                   ],
                 ),
                 child: TextField(
-                  decoration: const InputDecoration(
+                  decoration: InputDecoration(
                     prefixIcon: Icon(Icons.search),
-                    hintText: 'Search / بحث — site name, code, state, locality',
+                    hintText: _bi(
+                      'Search — site name, code, state, locality',
+                      'بحث — اسم الموقع، الرمز، الولاية، المحلية',
+                    ),
                     border: InputBorder.none,
                     contentPadding: EdgeInsets.symmetric(
                       horizontal: 8,
@@ -1273,31 +1284,23 @@ class _SiteVerificationScreenState extends State<SiteVerificationScreen> {
                               : Colors.grey[600],
                         ),
                         const SizedBox(width: 6),
-                        Column(
-                          mainAxisSize: MainAxisSize.min,
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
+                        Flexible(
+                          child: Text(
+                            _bi(
                               'State (${sitesNeedingStatePermit.length})',
-                              style: GoogleFonts.poppins(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w700,
-                                color: _newSubTabIndex == 0
-                                    ? Colors.white
-                                    : Colors.grey[700],
-                              ),
-                            ),
-                            Text(
                               'تصريح الولاية (${sitesNeedingStatePermit.length})',
-                              style: GoogleFonts.poppins(
-                                fontSize: 11,
-                                fontWeight: FontWeight.w700,
-                                color: _newSubTabIndex == 0
-                                    ? Colors.white.withValues(alpha: 0.85)
-                                    : Colors.grey[600],
-                              ),
                             ),
-                          ],
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            softWrap: false,
+                            style: GoogleFonts.poppins(
+                              fontSize: 11.5,
+                              fontWeight: FontWeight.w700,
+                              color: _newSubTabIndex == 0
+                                  ? Colors.white
+                                  : Colors.grey[700],
+                            ),
+                          ),
                         ),
                       ],
                     ),
@@ -1326,31 +1329,23 @@ class _SiteVerificationScreenState extends State<SiteVerificationScreen> {
                               : Colors.grey[600],
                         ),
                         const SizedBox(width: 6),
-                        Column(
-                          mainAxisSize: MainAxisSize.min,
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
+                        Flexible(
+                          child: Text(
+                            _bi(
                               'Locality (${sitesNeedingLocalityPermit.length})',
-                              style: GoogleFonts.poppins(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w700,
-                                color: _newSubTabIndex == 1
-                                    ? Colors.white
-                                    : Colors.grey[700],
-                              ),
-                            ),
-                            Text(
                               'تصريح المحلية (${sitesNeedingLocalityPermit.length})',
-                              style: GoogleFonts.poppins(
-                                fontSize: 11,
-                                fontWeight: FontWeight.w700,
-                                color: _newSubTabIndex == 1
-                                    ? Colors.white.withValues(alpha: 0.85)
-                                    : Colors.grey[600],
-                              ),
                             ),
-                          ],
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            softWrap: false,
+                            style: GoogleFonts.poppins(
+                              fontSize: 11.5,
+                              fontWeight: FontWeight.w700,
+                              color: _newSubTabIndex == 1
+                                  ? Colors.white
+                                  : Colors.grey[700],
+                            ),
+                          ),
                         ),
                       ],
                     ),
@@ -1446,24 +1441,21 @@ class _SiteVerificationScreenState extends State<SiteVerificationScreen> {
                       Expanded(
                         child: ElevatedButton.icon(
                           icon: const Icon(Icons.upload_file),
-                          label: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(
+                          label: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Text(
+                              _bi(
                                 'Manage state permit (${sitesNeedingStatePermit.length})',
-                                style: GoogleFonts.poppins(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                              Text(
                                 'إدارة تصريح الولاية (${sitesNeedingStatePermit.length})',
-                                style: GoogleFonts.poppins(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w700,
-                                ),
                               ),
-                            ],
+                              maxLines: 1,
+                              softWrap: false,
+                              overflow: TextOverflow.ellipsis,
+                              style: GoogleFonts.poppins(
+                                fontSize: 11.5,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
                           ),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: Colors.white,
@@ -1597,24 +1589,21 @@ class _SiteVerificationScreenState extends State<SiteVerificationScreen> {
                       Expanded(
                         child: ElevatedButton.icon(
                           icon: const Icon(Icons.upload_file),
-                          label: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(
+                          label: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Text(
+                              _bi(
                                 'Upload locality permit (${sitesNeedingLocalityPermit.length})',
-                                style: GoogleFonts.poppins(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                              Text(
                                 'رفع تصريح المحلية (${sitesNeedingLocalityPermit.length})',
-                                style: GoogleFonts.poppins(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w700,
-                                ),
                               ),
-                            ],
+                              maxLines: 1,
+                              softWrap: false,
+                              overflow: TextOverflow.ellipsis,
+                              style: GoogleFonts.poppins(
+                                fontSize: 11.5,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
                           ),
                           onPressed: () {
                             final parts = locality.split(' - ');
@@ -2000,6 +1989,32 @@ class _SiteVerificationScreenState extends State<SiteVerificationScreen> {
     final status = site['status']?.toString() ?? '';
     final additionalData =
         site['additional_data'] as Map<String, dynamic>? ?? {};
+    final toolsToBeUsed =
+        (site['tool_to_be_used'] ??
+                site['tools_to_be_used'] ??
+                site['survey_tool'] ??
+                site['tool'] ??
+                additionalData['tool_to_be_used'] ??
+                additionalData['tools_to_be_used'] ??
+                additionalData['survey_tool'] ??
+                additionalData['tool'] ??
+                '')
+            .toString()
+            .trim();
+    final mainActivity =
+        (site['main_activity'] ??
+                site['activity_type'] ??
+                site['activity'] ??
+                additionalData['main_activity'] ??
+                additionalData['activity_type'] ??
+                additionalData['activity'] ??
+                '')
+            .toString()
+            .trim();
+    final plannedActivity =
+        (site['activity_at_site'] ?? additionalData['activity_at_site'] ?? '')
+            .toString()
+            .trim();
     final mmpFile = site['mmp_files'] as Map<String, dynamic>? ?? {};
     final projectName = mmpFile['name']?.toString() ?? '';
 
@@ -2212,8 +2227,32 @@ class _SiteVerificationScreenState extends State<SiteVerificationScreen> {
                   const SizedBox(height: 8),
                 ],
 
-                if ((site['main_activity'] ?? '').toString().isNotEmpty ||
-                    (site['activity_at_site'] ?? '').toString().isNotEmpty) ...[
+                if (toolsToBeUsed.isNotEmpty) ...[
+                  Row(
+                    children: [
+                      const Icon(
+                        Icons.analytics_outlined,
+                        size: 14,
+                        color: Color(0xFF9CA3AF),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Tools to be Used: $toolsToBeUsed',
+                          style: GoogleFonts.poppins(
+                            fontSize: 12,
+                            color: const Color(0xFF6B7280),
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                ],
+
+                if (mainActivity.isNotEmpty || plannedActivity.isNotEmpty) ...[
                   Row(
                     children: [
                       const Icon(
@@ -2227,14 +2266,12 @@ class _SiteVerificationScreenState extends State<SiteVerificationScreen> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             // Main Activity
-                            if ((site['main_activity'] ?? '')
-                                .toString()
-                                .isNotEmpty)
+                            if (mainActivity.isNotEmpty)
                               Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text(
-                                    'Activity / النشاط',
+                                    _bi('Main Activity', 'النشاط الرئيسي'),
                                     style: GoogleFonts.poppins(
                                       fontSize: 10,
                                       color: const Color(0xFF9CA3AF),
@@ -2243,7 +2280,7 @@ class _SiteVerificationScreenState extends State<SiteVerificationScreen> {
                                   ),
                                   const SizedBox(height: 2),
                                   Text(
-                                    site['main_activity']?.toString() ?? 'N/A',
+                                    mainActivity,
                                     style: GoogleFonts.poppins(
                                       fontSize: 12,
                                       color: const Color(0xFF374151),
@@ -2253,15 +2290,13 @@ class _SiteVerificationScreenState extends State<SiteVerificationScreen> {
                                 ],
                               ),
                             // Activity at Site
-                            if ((site['activity_at_site'] ?? '')
-                                .toString()
-                                .isNotEmpty) ...[
+                            if (plannedActivity.isNotEmpty) ...[
                               const SizedBox(height: 8),
                               Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text(
-                                    'Planned Activity / النشاط المخطط',
+                                    _bi('Planned Activity', 'النشاط المخطط'),
                                     style: GoogleFonts.poppins(
                                       fontSize: 10,
                                       color: const Color(0xFF9CA3AF),
@@ -2270,8 +2305,7 @@ class _SiteVerificationScreenState extends State<SiteVerificationScreen> {
                                   ),
                                   const SizedBox(height: 2),
                                   Text(
-                                    site['activity_at_site']?.toString() ??
-                                        'N/A',
+                                    plannedActivity,
                                     style: GoogleFonts.poppins(
                                       fontSize: 12,
                                       color: const Color(0xFF374151),
@@ -2282,31 +2316,6 @@ class _SiteVerificationScreenState extends State<SiteVerificationScreen> {
                               ),
                             ],
                           ],
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                ],
-
-                if (additionalData['survey_tool'] != null) ...[
-                  Row(
-                    children: [
-                      const Icon(
-                        Icons.analytics_outlined,
-                        size: 14,
-                        color: Color(0xFF9CA3AF),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          'Tool: ${additionalData['survey_tool'].toString()}',
-                          style: GoogleFonts.poppins(
-                            fontSize: 12,
-                            color: const Color(0xFF6B7280),
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
                     ],
@@ -4790,7 +4799,18 @@ class _SiteDetailsSheet extends StatelessWidget {
         (site['verification_notes']?.toString() ??
         additionalData['verification_notes']?.toString() ??
         '');
-    final surveyTool = additionalData['survey_tool']?.toString() ?? '';
+    final toolsToBeUsed =
+        (site['tool_to_be_used'] ??
+                site['tools_to_be_used'] ??
+                site['survey_tool'] ??
+                site['tool'] ??
+                additionalData['tool_to_be_used'] ??
+                additionalData['tools_to_be_used'] ??
+                additionalData['survey_tool'] ??
+                additionalData['tool'] ??
+                '')
+            .toString()
+            .trim();
     final marketDiversion = additionalData['market_diversion_monitoring'];
     final warehouseMonitoring = additionalData['warehouse_monitoring'];
 
@@ -4909,8 +4929,6 @@ class _SiteDetailsSheet extends StatelessWidget {
                       'Visit Date',
                       '${visitDate.day}/${visitDate.month}/${visitDate.year}',
                     ),
-                  if (surveyTool.isNotEmpty)
-                    _buildInfoRow('Tool to be Used', surveyTool),
                   if (verificationNotes.isNotEmpty)
                     _buildInfoRow('Verification Notes', verificationNotes),
                   if (verifiedAt != null)
@@ -4950,6 +4968,8 @@ class _SiteDetailsSheet extends StatelessWidget {
                     ),
                   const SizedBox(height: 16),
                   _buildInfoRow('Visit Type', visitType),
+                  if (toolsToBeUsed.isNotEmpty)
+                    _buildInfoRow('Tools to be Used', toolsToBeUsed),
                   _buildInfoRow('Main Activity', mainActivity),
                   if (comments.isNotEmpty) _buildInfoRow('Comments', comments),
                   const SizedBox(height: 16),
@@ -6688,8 +6708,8 @@ class _PermitVerificationDialogState extends State<_PermitVerificationDialog> {
                       ),
                       label: Text(
                         _canWorkWithoutLocalityPermit == 'no'
-                            ? 'Send Back to FOM / أرسل بالعودة'
-                            : 'Continue / متابعة',
+                            ? _bi('Send Back to FOM', 'أرسل بالعودة')
+                            : _bi('Continue', 'متابعة'),
                         style: GoogleFonts.poppins(
                           color: Colors.white,
                           fontSize: 12,
@@ -9106,7 +9126,7 @@ class _VerificationDialogState extends State<_VerificationDialog> {
                         ),
                         const SizedBox(height: 8),
                         _buildDatePicker(
-                          label: 'Select Start Date / اختر تاريخ البداية',
+                          label: _bi('Select Start Date', 'اختر تاريخ البداية'),
                           value: _distributionStart,
                           onTap: () async {
                             final date = await showDatePicker(
@@ -9132,7 +9152,7 @@ class _VerificationDialogState extends State<_VerificationDialog> {
                         ),
                         const SizedBox(height: 8),
                         _buildDatePicker(
-                          label: 'Select End Date / اختر تاريخ النهاية',
+                          label: _bi('Select End Date', 'اختر تاريخ النهاية'),
                           value: _distributionEnd,
                           onTap: () async {
                             final date = await showDatePicker(
@@ -9159,8 +9179,10 @@ class _VerificationDialogState extends State<_VerificationDialog> {
                         ),
                         const SizedBox(height: 8),
                         _buildDatePicker(
-                          label:
-                              'Select Date (must be within distribution period) / اختر التاريخ',
+                          label: _bi(
+                            'Select Date (must be within distribution period)',
+                            'اختر التاريخ',
+                          ),
                           value: _visitDate,
                           onTap: () async {
                             final firstDate =
@@ -9193,7 +9215,10 @@ class _VerificationDialogState extends State<_VerificationDialog> {
 
                         // Initial Visit Date
                         _buildDatePicker(
-                          label: 'Initial Visit Date / تاريخ الزيارة الأولية',
+                          label: _bi(
+                            'Initial Visit Date',
+                            'تاريخ الزيارة الأولية',
+                          ),
                           value: _visitDate,
                           onTap: () async {
                             final date = await showDatePicker(
@@ -9241,25 +9266,15 @@ class _VerificationDialogState extends State<_VerificationDialog> {
                                 activeColor: const Color(0xFF10B981),
                               ),
                               Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      'Schedule follow-up visit',
-                                      style: GoogleFonts.poppins(
-                                        fontSize: 13,
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    ),
-                                    Text(
-                                      'جدولة زيارة متابعة',
-                                      textAlign: TextAlign.right,
-                                      style: GoogleFonts.poppins(
-                                        fontSize: 11,
-                                        color: Colors.grey[600],
-                                      ),
-                                    ),
-                                  ],
+                                child: Text(
+                                  _bi(
+                                    'Schedule follow-up visit',
+                                    'جدولة زيارة متابعة',
+                                  ),
+                                  style: GoogleFonts.poppins(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w600,
+                                  ),
                                 ),
                               ),
                             ],
@@ -9269,7 +9284,7 @@ class _VerificationDialogState extends State<_VerificationDialog> {
                         if (_requiresFollowUp) ...[
                           const SizedBox(height: 12),
                           _buildDatePicker(
-                            label: 'Follow-up Date / تاريخ المتابعة',
+                            label: _bi('Follow-up Date', 'تاريخ المتابعة'),
                             value: _followUpDate,
                             onTap: () async {
                               final date = await showDatePicker(
@@ -9304,8 +9319,10 @@ class _VerificationDialogState extends State<_VerificationDialog> {
                         const SizedBox(height: 8),
 
                         _buildDatePicker(
-                          label:
-                              'Visit Date (Today/Tomorrow) / التاريخ (اليوم/غداً)',
+                          label: _bi(
+                            'Visit Date (Today/Tomorrow)',
+                            'التاريخ (اليوم/غداً)',
+                          ),
                           value: _visitDate,
                           onTap: () async {
                             final date = await showDatePicker(
@@ -9331,7 +9348,7 @@ class _VerificationDialogState extends State<_VerificationDialog> {
                         const SizedBox(height: 8),
 
                         _buildDatePicker(
-                          label: 'Select Date / اختر التاريخ',
+                          label: _bi('Select Date', 'اختر التاريخ'),
                           value: _visitDate,
                           onTap: () async {
                             final date = await showDatePicker(
@@ -9362,7 +9379,10 @@ class _VerificationDialogState extends State<_VerificationDialog> {
                         controller: _notesController,
                         maxLines: 3,
                         decoration: InputDecoration(
-                          hintText: 'Add any notes / أضف أي ملاحظات...',
+                          hintText: _bi(
+                            'Add any notes...',
+                            'أضف أي ملاحظات...',
+                          ),
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(10),
                             borderSide: BorderSide(
@@ -10198,9 +10218,7 @@ class _BulkLocalityPermitFollowUpDialogState
                             ),
                           ),
                           Text(
-                            isArabic
-                                ? 'تصريح المحلية | Locality Permit'
-                                : 'تصريح المحلية | Locality Permit',
+                            _bi('Locality Permit', 'تصريح المحلية'),
                             style: GoogleFonts.poppins(
                               fontSize: 11,
                               color: Colors.white70,

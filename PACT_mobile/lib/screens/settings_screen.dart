@@ -1,13 +1,23 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter/foundation.dart'
+    show kIsWeb, defaultTargetPlatform, TargetPlatform;
+import 'package:permission_handler/permission_handler.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:provider/provider.dart';
 import 'dart:io';
 import '../widgets/reusable_app_bar.dart';
 import '../widgets/custom_drawer_menu.dart';
 import '../theme/app_colors.dart';
 import '../services/biometric_auth_service.dart';
+import '../services/local_storage_service.dart';
+import '../services/sos_emergency_service.dart';
+import '../services/visit_location_settings.dart';
 import '../services/screen_analytics_mixin.dart';
+import '../providers/app_preferences_provider.dart';
+import 'safety_hub_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -18,6 +28,9 @@ class SettingsScreen extends StatefulWidget {
 
 class _SettingsScreenState extends State<SettingsScreen>
     with ScreenAnalyticsMixin {
+  static const String _broadcastPopupEnabledSettingKey =
+      'broadcast_popup_enabled';
+
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   final ImagePicker _imagePicker = ImagePicker();
 
@@ -32,9 +45,44 @@ class _SettingsScreenState extends State<SettingsScreen>
   // Settings state
   bool _locationSharing = false;
   bool _notificationsEnabled = true;
+  bool _broadcastPopupEnabled = true;
   bool _darkMode = false;
+  double _fontScale = 1.0;
+  bool _compactDisplay = false;
   bool _biometricEnabled = false;
   bool _biometricAvailable = false;
+  bool _loadingPermissions = false;
+  Map<String, PermissionStatus> _permissionStatuses = {};
+  int _sosCountdownSeconds = SosEmergencyService.defaultSosCountdownSeconds;
+  bool _sosHapticWarningEnabled =
+      SosEmergencyService.defaultSosHapticWarningEnabled;
+  bool _sosLongPressRequired = SosEmergencyService.defaultSosRequireLongPress;
+  bool _sosVolumeUpHoldEnabled =
+      SosEmergencyService.defaultSosVolumeUpHoldEnabled;
+  bool _sosTestModeEnabled = SosEmergencyService.defaultSosTestModeEnabled;
+  int _visitLocationAccuracyThresholdMeters =
+      VisitLocationSettings.defaultLocationAccuracyThresholdMeters;
+
+  final LocalStorageService _localStorageService = LocalStorageService();
+  final SosEmergencyService _sosEmergencyService = SosEmergencyService();
+
+  static const List<String> _requiredPermissionKeys = [
+    'Location',
+    'Camera',
+    'Microphone',
+    'Notifications',
+  ];
+  static const List<String> _optionalPermissionKeys = ['Phone', 'Storage'];
+
+  bool get _canEditSosCountdown {
+    final role = (_userRole ?? '').toLowerCase().trim();
+    return role == 'admin' || role == 'supervisor';
+  }
+
+  bool get _isAndroidPlatform {
+    if (kIsWeb) return false;
+    return defaultTargetPlatform == TargetPlatform.android;
+  }
 
   // Password change
   final TextEditingController _oldPasswordController = TextEditingController();
@@ -47,8 +95,314 @@ class _SettingsScreenState extends State<SettingsScreen>
     super.initState();
     _loadUserData();
     _checkBiometricAvailability();
+    _loadPermissionStatuses();
     // Track screen view
     logScreenView('SettingsScreen');
+  }
+
+  Future<void> _loadPermissionStatuses() async {
+    if (kIsWeb) {
+      setState(() {
+        _permissionStatuses = {};
+      });
+      return;
+    }
+
+    setState(() => _loadingPermissions = true);
+
+    try {
+      final statuses = <String, PermissionStatus>{
+        'Location': await Permission.locationWhenInUse.status,
+        'Camera': await Permission.camera.status,
+        'Microphone': await Permission.microphone.status,
+        'Notifications': await Permission.notification.status,
+        'Phone': await Permission.phone.status,
+        'Storage': await Permission.storage.status,
+      };
+
+      if (!mounted) return;
+      setState(() {
+        _permissionStatuses = statuses;
+      });
+    } catch (e) {
+      debugPrint('Error loading permission statuses: $e');
+    } finally {
+      if (mounted) {
+        setState(() => _loadingPermissions = false);
+      }
+    }
+  }
+
+  Future<void> _requestPermission(String key) async {
+    if (kIsWeb) return;
+
+    Permission permission;
+    switch (key) {
+      case 'Location':
+        permission = Permission.locationWhenInUse;
+        break;
+      case 'Camera':
+        permission = Permission.camera;
+        break;
+      case 'Microphone':
+        permission = Permission.microphone;
+        break;
+      case 'Notifications':
+        permission = Permission.notification;
+        break;
+      case 'Phone':
+        permission = Permission.phone;
+        break;
+      case 'Storage':
+      default:
+        permission = Permission.storage;
+        break;
+    }
+
+    try {
+      await permission.request();
+      await _loadPermissionStatuses();
+    } catch (e) {
+      debugPrint('Error requesting $key permission: $e');
+    }
+  }
+
+  String _permissionStatusLabel(PermissionStatus status) {
+    if (status.isGranted) return 'Granted';
+    if (status.isLimited) return 'Limited';
+    if (status.isPermanentlyDenied) return 'Permanently Denied';
+    if (status.isRestricted) return 'Restricted';
+    return 'Denied';
+  }
+
+  Color _permissionStatusColor(PermissionStatus status) {
+    if (status.isGranted || status.isLimited) return Colors.green;
+    if (status.isRestricted) return Colors.orange;
+    return Colors.red;
+  }
+
+  bool _isPermissionGrantedLike(PermissionStatus? status) {
+    if (status == null) return false;
+    return status.isGranted || status.isLimited;
+  }
+
+  int _grantedPermissionCount(List<String> keys) {
+    return keys
+        .where((key) => _isPermissionGrantedLike(_permissionStatuses[key]))
+        .length;
+  }
+
+  Future<void> _requestRequiredPermissions() async {
+    if (kIsWeb) return;
+
+    for (final key in _requiredPermissionKeys) {
+      await _requestPermission(key);
+    }
+
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text(
+          'Required permission checks completed / تم فحص الأذونات المطلوبة',
+        ),
+        backgroundColor: Colors.green,
+      ),
+    );
+  }
+
+  Color _permissionHealthColor({required int granted, required int total}) {
+    if (total <= 0) return Colors.grey;
+    if (granted >= total) return Colors.green;
+    if (granted <= 0) return Colors.red;
+    return Colors.orange;
+  }
+
+  String _permissionHealthLabel({required int granted, required int total}) {
+    if (total <= 0) return 'Unknown / غير معروف';
+    if (granted >= total) return 'Excellent / ممتاز';
+    if (granted <= 0) return 'Needs Attention / يحتاج متابعة';
+    return 'Partial / جزئي';
+  }
+
+  Widget _buildPermissionSummaryCard({
+    required List<String> requiredKeys,
+    required List<String> optionalKeys,
+  }) {
+    if (kIsWeb) {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: Colors.blue.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.blue.withValues(alpha: 0.2)),
+        ),
+        child: Text(
+          'Permission status is managed by browser settings on web / حالة الأذونات تتم إدارتها من إعدادات المتصفح على الويب.',
+          style: GoogleFonts.poppins(fontSize: 12, color: AppColors.textLight),
+        ),
+      );
+    }
+
+    final requiredGranted = _grantedPermissionCount(requiredKeys);
+    final optionalGranted = _grantedPermissionCount(optionalKeys);
+    final total = requiredKeys.length + optionalKeys.length;
+    final grantedTotal = requiredGranted + optionalGranted;
+    final overallColor = _permissionHealthColor(
+      granted: grantedTotal,
+      total: total,
+    );
+    final overallLabel = _permissionHealthLabel(
+      granted: grantedTotal,
+      total: total,
+    );
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.indigo.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.indigo.withValues(alpha: 0.2)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 10,
+                height: 10,
+                decoration: BoxDecoration(
+                  color: overallColor,
+                  shape: BoxShape.circle,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Permission Health / صحة الأذونات',
+                  style: GoogleFonts.poppins(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.indigo,
+                  ),
+                ),
+              ),
+              Text(
+                overallLabel,
+                style: GoogleFonts.poppins(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  color: overallColor,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Required: $requiredGranted/${requiredKeys.length} granted / المطلوب: $requiredGranted/${requiredKeys.length}',
+            style: GoogleFonts.poppins(fontSize: 12, color: AppColors.textDark),
+          ),
+          Text(
+            'Optional: $optionalGranted/${optionalKeys.length} granted / الاختياري: $optionalGranted/${optionalKeys.length}',
+            style: GoogleFonts.poppins(
+              fontSize: 12,
+              color: AppColors.textLight,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPermissionGroupLabel({
+    required String title,
+    required int granted,
+    required int total,
+  }) {
+    final dotColor = _permissionHealthColor(granted: granted, total: total);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(4, 8, 4, 6),
+      child: Row(
+        children: [
+          Container(
+            width: 9,
+            height: 9,
+            decoration: BoxDecoration(color: dotColor, shape: BoxShape.circle),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              title,
+              style: GoogleFonts.poppins(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color: AppColors.textLight,
+              ),
+            ),
+          ),
+          Text(
+            '$granted/$total',
+            style: GoogleFonts.poppins(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: dotColor,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPermissionTile(String key, IconData icon) {
+    if (kIsWeb) {
+      return ListTile(
+        leading: Icon(icon, color: AppColors.primaryBlue),
+        title: Text(
+          key,
+          style: GoogleFonts.poppins(fontWeight: FontWeight.w500),
+        ),
+        subtitle: Text(
+          'Managed by browser settings / تتم الإدارة من المتصفح',
+          style: GoogleFonts.poppins(fontSize: 12, color: AppColors.textLight),
+        ),
+      );
+    }
+
+    final status = _permissionStatuses[key];
+    final statusLabel = status == null
+        ? 'Unknown'
+        : _permissionStatusLabel(status);
+    final statusColor = status == null
+        ? Colors.grey
+        : _permissionStatusColor(status);
+
+    final isGranted = _isPermissionGrantedLike(status);
+    final isPermanentDeny = status?.isPermanentlyDenied == true;
+
+    return ListTile(
+      leading: Icon(icon, color: AppColors.primaryBlue),
+      title: Text(key, style: GoogleFonts.poppins(fontWeight: FontWeight.w500)),
+      subtitle: Text(
+        statusLabel,
+        style: GoogleFonts.poppins(fontSize: 12, color: statusColor),
+      ),
+      trailing: isGranted
+          ? const Icon(Icons.check_circle, color: Colors.green)
+          : TextButton(
+              onPressed: () async {
+                if (isPermanentDeny) {
+                  await openAppSettings();
+                } else {
+                  await _requestPermission(key);
+                }
+              },
+              child: Text(
+                isPermanentDeny ? 'Settings / الإعدادات' : 'Allow / سماح',
+              ),
+            ),
+    );
   }
 
   @override
@@ -97,13 +451,46 @@ class _SettingsScreenState extends State<SettingsScreen>
       if (settingsResponse != null) {
         final settings = settingsResponse['settings'] as Map<String, dynamic>?;
         if (settings != null) {
+          final appearance = settings['appearance'] as Map<String, dynamic>?;
           setState(() {
             _notificationsEnabled =
                 settings['notifications']?['enabled'] as bool? ?? true;
-            _darkMode = settings['appearance']?['darkMode'] as bool? ?? false;
+            _darkMode = appearance?['darkMode'] as bool? ?? _darkMode;
+            _fontScale = (appearance?['fontScale'] is num)
+                ? (appearance!['fontScale'] as num).toDouble()
+                : _fontScale;
+            _compactDisplay =
+                appearance?['compactDisplay'] as bool? ?? _compactDisplay;
           });
         }
       }
+
+      final appPreferences = context.read<AppPreferencesProvider>();
+
+      setState(() {
+        _darkMode = appPreferences.darkMode;
+        _fontScale = appPreferences.fontScale;
+        _compactDisplay = appPreferences.compactDisplay;
+        _sosCountdownSeconds = _sosEmergencyService.getSosCountdownSeconds();
+        _sosHapticWarningEnabled = _sosEmergencyService
+            .isSosHapticWarningEnabled();
+        _sosLongPressRequired = _sosEmergencyService.isSosLongPressRequired();
+        _sosVolumeUpHoldEnabled = _sosEmergencyService
+            .isSosVolumeUpHoldEnabled();
+        _sosTestModeEnabled = _sosEmergencyService.isSosTestModeEnabled();
+        _visitLocationAccuracyThresholdMeters =
+            VisitLocationSettings.normalizeThreshold(
+              _localStorageService.getAppSetting(
+                VisitLocationSettings.locationAccuracyThresholdMetersSettingKey,
+              ),
+            );
+        final configuredBroadcastPopup = _localStorageService.getAppSetting(
+          _broadcastPopupEnabledSettingKey,
+        );
+        _broadcastPopupEnabled = configuredBroadcastPopup is bool
+            ? configuredBroadcastPopup
+            : true;
+      });
 
       setState(() => _isLoading = false);
     } catch (e) {
@@ -125,6 +512,163 @@ class _SettingsScreenState extends State<SettingsScreen>
     } catch (e) {
       debugPrint('Error checking biometric availability: $e');
     }
+  }
+
+  Future<void> _resetSosSettingsToDefaults() async {
+    if (!_canEditSosCountdown) return;
+
+    final shouldReset = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Row(
+          children: [
+            Icon(
+              Icons.warning_amber_rounded,
+              color: Theme.of(dialogContext).colorScheme.error,
+            ),
+            const SizedBox(width: 8),
+            const Expanded(child: Text('Reset SOS Settings')),
+          ],
+        ),
+        content: const Text(
+          'This is a sensitive action. This will restore SOS countdown and haptic warning to default values. Continue?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () async {
+              await HapticFeedback.selectionClick();
+              if (dialogContext.mounted) {
+                Navigator.of(dialogContext).pop(false);
+              }
+            },
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () async {
+              await HapticFeedback.lightImpact();
+              if (dialogContext.mounted) {
+                Navigator.of(dialogContext).pop(true);
+              }
+            },
+            child: const Text('Reset'),
+          ),
+        ],
+      ),
+    );
+
+    if (shouldReset != true) return;
+
+    await _applySosDefaultsReset();
+  }
+
+  Future<void> _applySosDefaultsReset() async {
+    if (!_canEditSosCountdown) return;
+
+    setState(() {
+      _sosCountdownSeconds = SosEmergencyService.defaultSosCountdownSeconds;
+      _sosHapticWarningEnabled =
+          SosEmergencyService.defaultSosHapticWarningEnabled;
+    });
+
+    try {
+      await _localStorageService.saveAppSetting(
+        SosEmergencyService.sosCountdownSecondsSettingKey,
+        _sosCountdownSeconds,
+      );
+      await _localStorageService.saveAppSetting(
+        SosEmergencyService.sosHapticWarningEnabledSettingKey,
+        _sosHapticWarningEnabled,
+      );
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('SOS settings reset to defaults'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to reset SOS settings: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _resetDisplaySettingsToDefaults() async {
+    final shouldReset = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Row(
+          children: [
+            Icon(
+              Icons.warning_amber_rounded,
+              color: Theme.of(dialogContext).colorScheme.error,
+            ),
+            const SizedBox(width: 8),
+            const Expanded(child: Text('Reset Display Settings')),
+          ],
+        ),
+        content: const Text(
+          'This will restore Dark Mode, Font Size, and Compact Display to default values. Continue?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () async {
+              await HapticFeedback.selectionClick();
+              if (dialogContext.mounted) {
+                Navigator.of(dialogContext).pop(false);
+              }
+            },
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.orange,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () async {
+              await HapticFeedback.lightImpact();
+              if (dialogContext.mounted) {
+                Navigator.of(dialogContext).pop(true);
+              }
+            },
+            child: const Text('Reset'),
+          ),
+        ],
+      ),
+    );
+
+    if (shouldReset != true) return;
+
+    final appPreferences = context.read<AppPreferencesProvider>();
+
+    setState(() {
+      _darkMode = false;
+      _fontScale = 1.0;
+      _compactDisplay = false;
+    });
+
+    await appPreferences.setDarkMode(false);
+    await appPreferences.setFontScale(1.0);
+    await appPreferences.setCompactDisplay(false);
+
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Display settings reset to defaults'),
+        backgroundColor: Colors.green,
+      ),
+    );
   }
 
   Future<void> _toggleBiometric(bool value) async {
@@ -280,7 +824,11 @@ class _SettingsScreenState extends State<SettingsScreen>
       final settingsData = {
         'settings': {
           'notifications': {'enabled': _notificationsEnabled},
-          'appearance': {'darkMode': _darkMode},
+          'appearance': {
+            'darkMode': _darkMode,
+            'fontScale': _fontScale,
+            'compactDisplay': _compactDisplay,
+          },
         },
       };
 
@@ -288,6 +836,47 @@ class _SettingsScreenState extends State<SettingsScreen>
         'user_id': _userId!,
         ...settingsData,
       });
+
+      if (_canEditSosCountdown) {
+        await _localStorageService.saveAppSetting(
+          SosEmergencyService.sosCountdownSecondsSettingKey,
+          _sosCountdownSeconds,
+        );
+        await _localStorageService.saveAppSetting(
+          SosEmergencyService.sosHapticWarningEnabledSettingKey,
+          _sosHapticWarningEnabled,
+        );
+      }
+
+      await _localStorageService.saveAppSetting(
+        _broadcastPopupEnabledSettingKey,
+        _broadcastPopupEnabled,
+      );
+
+      await _localStorageService.saveAppSetting(
+        SosEmergencyService.sosRequireLongPressSettingKey,
+        _sosLongPressRequired,
+      );
+
+      await _localStorageService.saveAppSetting(
+        SosEmergencyService.sosVolumeUpHoldEnabledSettingKey,
+        _sosVolumeUpHoldEnabled,
+      );
+
+      await _localStorageService.saveAppSetting(
+        SosEmergencyService.sosTestModeEnabledSettingKey,
+        _sosTestModeEnabled,
+      );
+
+      await _localStorageService.saveAppSetting(
+        VisitLocationSettings.locationAccuracyThresholdMetersSettingKey,
+        _visitLocationAccuracyThresholdMeters,
+      );
+
+      final appPreferences = context.read<AppPreferencesProvider>();
+      await appPreferences.setDarkMode(_darkMode);
+      await appPreferences.setFontScale(_fontScale);
+      await appPreferences.setCompactDisplay(_compactDisplay);
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -554,7 +1143,7 @@ class _SettingsScreenState extends State<SettingsScreen>
     required String title,
     required String subtitle,
     required bool value,
-    required Function(bool) onChanged,
+    required Function(bool)? onChanged,
     IconData? icon,
   }) {
     return SwitchListTile(
@@ -585,7 +1174,10 @@ class _SettingsScreenState extends State<SettingsScreen>
       body: SafeArea(
         child: Column(
           children: [
-            ReusableAppBar(title: 'Settings', scaffoldKey: _scaffoldKey),
+            ReusableAppBar(
+              title: 'Settings / الإعدادات',
+              scaffoldKey: _scaffoldKey,
+            ),
             Expanded(
               child: _isLoading
                   ? const Center(child: CircularProgressIndicator())
@@ -699,6 +1291,44 @@ class _SettingsScreenState extends State<SettingsScreen>
                                     setState(() => _locationSharing = value),
                                 icon: Icons.location_on,
                               ),
+                              ListTile(
+                                leading: const Icon(
+                                  Icons.gps_fixed,
+                                  color: AppColors.primaryBlue,
+                                ),
+                                title: Text(
+                                  'Visit GPS Accuracy Lock (meters)',
+                                  style: GoogleFonts.poppins(
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                                subtitle: Text(
+                                  'Complete Visit locks GPS only when accuracy is at or below this threshold',
+                                  style: GoogleFonts.poppins(
+                                    fontSize: 12,
+                                    color: AppColors.textLight,
+                                  ),
+                                ),
+                                trailing: DropdownButton<int>(
+                                  value: _visitLocationAccuracyThresholdMeters,
+                                  borderRadius: BorderRadius.circular(12),
+                                  items: const [10, 20, 30, 50, 75, 100].map((
+                                    value,
+                                  ) {
+                                    return DropdownMenuItem<int>(
+                                      value: value,
+                                      child: Text('$value m'),
+                                    );
+                                  }).toList(),
+                                  onChanged: (value) {
+                                    if (value == null) return;
+                                    setState(() {
+                                      _visitLocationAccuracyThresholdMeters =
+                                          value;
+                                    });
+                                  },
+                                ),
+                              ),
                             ],
                           ),
 
@@ -719,6 +1349,16 @@ class _SettingsScreenState extends State<SettingsScreen>
                                 ),
                                 icon: Icons.notifications,
                               ),
+                              _buildSwitchTile(
+                                title: 'Broadcast Pop-up / نافذة البث',
+                                subtitle:
+                                    'Show instant broadcast pop-up on dashboard / عرض نافذة بث فورية في لوحة التحكم',
+                                value: _broadcastPopupEnabled,
+                                onChanged: (value) => setState(
+                                  () => _broadcastPopupEnabled = value,
+                                ),
+                                icon: Icons.campaign,
+                              ),
                             ],
                           ),
 
@@ -730,13 +1370,93 @@ class _SettingsScreenState extends State<SettingsScreen>
                             icon: Icons.palette_outlined,
                             color: Colors.purple,
                             children: [
+                              ListTile(
+                                leading: const Icon(
+                                  Icons.restart_alt,
+                                  color: Colors.orange,
+                                ),
+                                title: Text(
+                                  'Reset Display Settings',
+                                  style: GoogleFonts.poppins(
+                                    fontWeight: FontWeight.w500,
+                                    color: Colors.orange,
+                                  ),
+                                ),
+                                subtitle: Text(
+                                  'Restore dark mode, font size, and compact display defaults',
+                                  style: GoogleFonts.poppins(
+                                    fontSize: 12,
+                                    color: AppColors.textLight,
+                                  ),
+                                ),
+                                trailing: TextButton(
+                                  onPressed: _resetDisplaySettingsToDefaults,
+                                  child: const Text('Reset'),
+                                ),
+                                onTap: _resetDisplaySettingsToDefaults,
+                              ),
                               _buildSwitchTile(
                                 title: 'Dark Mode',
                                 subtitle: 'Switch to dark theme',
                                 value: _darkMode,
-                                onChanged: (value) =>
-                                    setState(() => _darkMode = value),
+                                onChanged: (value) async {
+                                  setState(() => _darkMode = value);
+                                  await context
+                                      .read<AppPreferencesProvider>()
+                                      .setDarkMode(value);
+                                },
                                 icon: Icons.dark_mode,
+                              ),
+                              ListTile(
+                                leading: const Icon(
+                                  Icons.format_size,
+                                  color: AppColors.primaryBlue,
+                                ),
+                                title: Text(
+                                  'Font Size',
+                                  style: GoogleFonts.poppins(
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                                subtitle: Text(
+                                  'Adjust app text size for readability',
+                                  style: GoogleFonts.poppins(
+                                    fontSize: 12,
+                                    color: AppColors.textLight,
+                                  ),
+                                ),
+                                trailing: DropdownButton<double>(
+                                  value: _fontScale,
+                                  borderRadius: BorderRadius.circular(12),
+                                  items: const [0.9, 1.0, 1.1, 1.2, 1.3].map((
+                                    value,
+                                  ) {
+                                    return DropdownMenuItem<double>(
+                                      value: value,
+                                      child: Text('${(value * 100).round()}%'),
+                                    );
+                                  }).toList(),
+                                  onChanged: (value) async {
+                                    if (value == null) return;
+                                    setState(() => _fontScale = value);
+                                    await context
+                                        .read<AppPreferencesProvider>()
+                                        .setFontScale(value);
+                                  },
+                                ),
+                              ),
+                              _buildSwitchTile(
+                                title: 'Compact Display',
+                                subtitle:
+                                    'Reduce spacing to fit more content on screen',
+                                value: _compactDisplay,
+                                onChanged: (value) async {
+                                  setState(() => _compactDisplay = value);
+                                  await context
+                                      .read<AppPreferencesProvider>()
+                                      .setCompactDisplay(value);
+                                },
+                                icon: Icons.view_compact_alt_outlined,
                               ),
                             ],
                           ),
@@ -749,6 +1469,167 @@ class _SettingsScreenState extends State<SettingsScreen>
                             icon: Icons.lock_outline,
                             color: AppColors.accentGreen,
                             children: [
+                              ListTile(
+                                leading: const Icon(
+                                  Icons.sos,
+                                  color: Colors.red,
+                                ),
+                                title: Text(
+                                  'Emergency SOS',
+                                  style: GoogleFonts.poppins(
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                subtitle: Text(
+                                  'Open Safety Hub for emergency actions',
+                                  style: GoogleFonts.poppins(
+                                    fontSize: 12,
+                                    color: AppColors.textLight,
+                                  ),
+                                ),
+                                trailing: const Icon(Icons.chevron_right),
+                                onTap: () {
+                                  Navigator.of(context).push(
+                                    MaterialPageRoute(
+                                      builder: (_) => const SafetyHubScreen(),
+                                    ),
+                                  );
+                                },
+                              ),
+                              _buildSwitchTile(
+                                title: 'Require Long Press for SOS',
+                                subtitle:
+                                    'Hold the SOS button to prevent accidental emergency triggers',
+                                value: _sosLongPressRequired,
+                                onChanged: (value) => setState(
+                                  () => _sosLongPressRequired = value,
+                                ),
+                                icon: Icons.touch_app,
+                              ),
+                              _buildSwitchTile(
+                                title: 'Volume Up Hold (3s) for SOS',
+                                subtitle: _isAndroidPlatform
+                                    ? 'Trigger SOS by holding volume up for 3 seconds (foreground app)'
+                                    : 'Available on Android only (foreground app)',
+                                value: _isAndroidPlatform
+                                    ? _sosVolumeUpHoldEnabled
+                                    : false,
+                                onChanged: _isAndroidPlatform
+                                    ? (value) => setState(
+                                        () => _sosVolumeUpHoldEnabled = value,
+                                      )
+                                    : null,
+                                icon: Icons.volume_up,
+                              ),
+                              _buildSwitchTile(
+                                title: 'SOS Test Mode (No Real Call)',
+                                subtitle:
+                                    'Run SOS trigger flow without placing phone calls',
+                                value: _sosTestModeEnabled,
+                                onChanged: (value) =>
+                                    setState(() => _sosTestModeEnabled = value),
+                                icon: Icons.science_outlined,
+                              ),
+                              if (!_canEditSosCountdown)
+                                ListTile(
+                                  leading: const Icon(
+                                    Icons.info_outline,
+                                    color: AppColors.primaryBlue,
+                                  ),
+                                  title: Text(
+                                    'SOS Settings (Read Only)',
+                                    style: GoogleFonts.poppins(
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                  subtitle: Text(
+                                    'Countdown: ${_sosCountdownSeconds}s · 1s Haptic: ${_sosHapticWarningEnabled ? 'On' : 'Off'}\nManaged by Admin/Supervisor',
+                                    style: GoogleFonts.poppins(
+                                      fontSize: 12,
+                                      color: AppColors.textLight,
+                                    ),
+                                  ),
+                                ),
+                              const Divider(height: 24),
+
+                              if (_canEditSosCountdown) ...[
+                                ListTile(
+                                  leading: const Icon(
+                                    Icons.sos,
+                                    color: AppColors.primaryBlue,
+                                  ),
+                                  title: Text(
+                                    'SOS Countdown Seconds',
+                                    style: GoogleFonts.poppins(
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                  subtitle: Text(
+                                    'Choose delay before emergency call starts',
+                                    style: GoogleFonts.poppins(
+                                      fontSize: 12,
+                                      color: AppColors.textLight,
+                                    ),
+                                  ),
+                                  trailing: DropdownButton<int>(
+                                    value: _sosCountdownSeconds,
+                                    borderRadius: BorderRadius.circular(12),
+                                    items:
+                                        List.generate(
+                                          10,
+                                          (index) => index + 1,
+                                        ).map((value) {
+                                          return DropdownMenuItem<int>(
+                                            value: value,
+                                            child: Text('$value s'),
+                                          );
+                                        }).toList(),
+                                    onChanged: (value) {
+                                      if (value == null) return;
+                                      setState(() {
+                                        _sosCountdownSeconds = value;
+                                      });
+                                    },
+                                  ),
+                                ),
+                                _buildSwitchTile(
+                                  title: 'SOS 1-Second Haptic Warning',
+                                  subtitle:
+                                      'Pulse vibration when countdown reaches 1 second',
+                                  value: _sosHapticWarningEnabled,
+                                  onChanged: (value) => setState(
+                                    () => _sosHapticWarningEnabled = value,
+                                  ),
+                                  icon: Icons.vibration,
+                                ),
+                                ListTile(
+                                  leading: const Icon(
+                                    Icons.restart_alt,
+                                    color: Colors.orange,
+                                  ),
+                                  title: Text(
+                                    'Reset SOS Settings to Defaults',
+                                    style: GoogleFonts.poppins(
+                                      fontWeight: FontWeight.w500,
+                                      color: Colors.orange,
+                                    ),
+                                  ),
+                                  subtitle: Text(
+                                    'Restore countdown and haptic warning defaults',
+                                    style: GoogleFonts.poppins(
+                                      fontSize: 12,
+                                      color: AppColors.textLight,
+                                    ),
+                                  ),
+                                  trailing: TextButton(
+                                    onPressed: _resetSosSettingsToDefaults,
+                                    child: const Text('Reset'),
+                                  ),
+                                  onTap: _resetSosSettingsToDefaults,
+                                ),
+                                const Divider(height: 24),
+                              ],
+
                               // Biometric Authentication
                               if (_biometricAvailable)
                                 Column(
@@ -777,6 +1658,150 @@ class _SettingsScreenState extends State<SettingsScreen>
                                 ),
                                 trailing: const Icon(Icons.chevron_right),
                                 onTap: () => _showPasswordChangeDialog(),
+                              ),
+                            ],
+                          ),
+
+                          const SizedBox(height: 24),
+
+                          // Permissions & Access
+                          _buildSection(
+                            title: 'Permissions & Access',
+                            icon: Icons.verified_user_outlined,
+                            color: Colors.indigo,
+                            children: [
+                              _buildPermissionSummaryCard(
+                                requiredKeys: _requiredPermissionKeys,
+                                optionalKeys: _optionalPermissionKeys,
+                              ),
+                              const SizedBox(height: 8),
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: OutlinedButton.icon(
+                                      onPressed: _requestRequiredPermissions,
+                                      icon: const Icon(Icons.security),
+                                      label: const Text(
+                                        'Allow All Required / سماح للكل',
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  OutlinedButton.icon(
+                                    onPressed: _loadPermissionStatuses,
+                                    icon: const Icon(Icons.refresh),
+                                    label: const Text('Refresh / تحديث'),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 8),
+                              if (_loadingPermissions)
+                                const Padding(
+                                  padding: EdgeInsets.symmetric(vertical: 8),
+                                  child: LinearProgressIndicator(),
+                                ),
+                              _buildPermissionGroupLabel(
+                                title:
+                                    'Required Permissions / الأذونات المطلوبة',
+                                granted: _grantedPermissionCount(
+                                  _requiredPermissionKeys,
+                                ),
+                                total: _requiredPermissionKeys.length,
+                              ),
+                              _buildPermissionTile(
+                                'Location',
+                                Icons.location_on,
+                              ),
+                              _buildPermissionTile('Camera', Icons.camera_alt),
+                              _buildPermissionTile('Microphone', Icons.mic),
+                              _buildPermissionTile(
+                                'Notifications',
+                                Icons.notifications_active,
+                              ),
+                              const Divider(height: 16),
+                              _buildPermissionGroupLabel(
+                                title:
+                                    'Optional Permissions / الأذونات الاختيارية',
+                                granted: _grantedPermissionCount(
+                                  _optionalPermissionKeys,
+                                ),
+                                total: _optionalPermissionKeys.length,
+                              ),
+                              _buildPermissionTile('Phone', Icons.phone),
+                              _buildPermissionTile('Storage', Icons.sd_storage),
+                              const Divider(height: 24),
+                              ListTile(
+                                leading: const Icon(
+                                  Icons.refresh,
+                                  color: AppColors.primaryBlue,
+                                ),
+                                title: const Text(
+                                  'Refresh Permission Status / تحديث حالة الأذونات',
+                                ),
+                                subtitle: const Text(
+                                  'Re-check all permission statuses / إعادة فحص جميع الأذونات',
+                                ),
+                                trailing: const Icon(Icons.chevron_right),
+                                onTap: _loadPermissionStatuses,
+                              ),
+                              ListTile(
+                                leading: const Icon(
+                                  Icons.settings,
+                                  color: AppColors.primaryBlue,
+                                ),
+                                title: const Text(
+                                  'Open Device App Settings / فتح إعدادات التطبيق',
+                                ),
+                                subtitle: const Text(
+                                  'Manage permissions from system settings / إدارة الأذونات من إعدادات النظام',
+                                ),
+                                trailing: const Icon(Icons.chevron_right),
+                                onTap: () async {
+                                  await openAppSettings();
+                                },
+                              ),
+                            ],
+                          ),
+
+                          const SizedBox(height: 24),
+
+                          // Other
+                          _buildSection(
+                            title: 'Other / أخرى',
+                            icon: Icons.tune,
+                            color: Colors.teal,
+                            children: [
+                              ListTile(
+                                leading: const Icon(
+                                  Icons.manage_accounts,
+                                  color: AppColors.primaryBlue,
+                                ),
+                                title: const Text(
+                                  'Account Overview / نظرة عامة على الحساب',
+                                ),
+                                subtitle: Text(
+                                  'Role / الدور: ${_userRole ?? 'N/A'}',
+                                  style: GoogleFonts.poppins(
+                                    fontSize: 12,
+                                    color: AppColors.textLight,
+                                  ),
+                                ),
+                              ),
+                              ListTile(
+                                leading: const Icon(
+                                  Icons.info_outline,
+                                  color: AppColors.primaryBlue,
+                                ),
+                                title: const Text(
+                                  'Session Info / معلومات الجلسة',
+                                ),
+                                subtitle: Text(
+                                  'User ID / معرف المستخدم: ${_userId?.substring(0, 8) ?? 'N/A'}...',
+                                  style: GoogleFonts.poppins(
+                                    fontSize: 12,
+                                    color: AppColors.textLight,
+                                  ),
+                                ),
                               ),
                             ],
                           ),
@@ -810,7 +1835,7 @@ class _SettingsScreenState extends State<SettingsScreen>
                                       ),
                                     )
                                   : Text(
-                                      'Save Changes',
+                                      'Save Changes / حفظ التغييرات',
                                       style: GoogleFonts.poppins(
                                         fontSize: 16,
                                         fontWeight: FontWeight.w600,

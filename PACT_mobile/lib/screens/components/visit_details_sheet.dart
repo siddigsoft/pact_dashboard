@@ -362,6 +362,16 @@ class _VisitDetailsSheetState extends State<VisitDetailsSheet> {
 
   @override
   Widget build(BuildContext context) {
+    final additionalData = _visit.additionalData ?? <String, dynamic>{};
+    final toolsToBeUsed =
+        (additionalData['tool_to_be_used'] ??
+                additionalData['tools_to_be_used'] ??
+                additionalData['survey_tool'] ??
+                additionalData['tool'] ??
+                '')
+            .toString()
+            .trim();
+
     return Container(
       decoration: const BoxDecoration(
         color: Colors.white,
@@ -467,6 +477,18 @@ class _VisitDetailsSheetState extends State<VisitDetailsSheet> {
                     const Divider(),
                   ],
 
+                  if (toolsToBeUsed.isNotEmpty) ...[
+                    _buildInfoSection(
+                      icon: Icons.build,
+                      iconColor: Colors.cyan.shade400,
+                      title: _isArabic
+                          ? 'الأدوات المستخدمة'
+                          : 'Tools to be Used',
+                      content: toolsToBeUsed,
+                    ),
+                    const Divider(),
+                  ],
+
                   if (_visit.mainActivity.isNotEmpty) ...[
                     _buildInfoSection(
                       icon: Icons.work,
@@ -506,16 +528,6 @@ class _VisitDetailsSheetState extends State<VisitDetailsSheet> {
                       title: _isArabic ? 'المراقبة بواسطة' : 'Monitoring By',
                       content: _visit.additionalData!['monitoring_by']
                           .toString(),
-                    ),
-                    const Divider(),
-                  ],
-
-                  if (_visit.additionalData?['survey_tool'] != null) ...[
-                    _buildInfoSection(
-                      icon: Icons.analytics,
-                      iconColor: Colors.cyan.shade400,
-                      title: _isArabic ? 'أداة المسح' : 'Survey Tool',
-                      content: _visit.additionalData!['survey_tool'].toString(),
                     ),
                     const Divider(),
                   ],

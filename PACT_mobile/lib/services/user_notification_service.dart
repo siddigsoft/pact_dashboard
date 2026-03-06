@@ -75,10 +75,45 @@ class UserNotificationService {
   int get unreadBroadcastCount =>
       _notifications.where((n) => !n.isRead && n.isBroadcast).length;
 
+  Future<void> markAsDelivered(String id) async {
+    final index = _notifications.indexWhere((item) => item.id == id);
+    if (index == -1) return;
+    if (_notifications[index].isRead) return;
+
+    try {
+      await _supabase
+          .from('notifications')
+          .update({'status': 'delivered'})
+          .eq('id', id)
+          .neq('status', 'read');
+    } catch (e) {
+      debugPrint('UserNotificationService markAsDelivered error: $e');
+    }
+  }
+
+  Future<void> markAsOpened(String id) async {
+    final index = _notifications.indexWhere((item) => item.id == id);
+    if (index == -1) return;
+    if (_notifications[index].isRead) return;
+
+    try {
+      await _supabase
+          .from('notifications')
+          .update({'status': 'opened'})
+          .eq('id', id)
+          .neq('status', 'read');
+    } catch (e) {
+      debugPrint('UserNotificationService markAsOpened error: $e');
+    }
+  }
+
   Future<void> markAsRead(String id) async {
     final index = _notifications.indexWhere((item) => item.id == id);
     if (index == -1) return;
     if (_notifications[index].isRead) return;
+
+    await markAsOpened(id);
+
     try {
       await _supabase
           .from('notifications')
@@ -248,6 +283,8 @@ class UserNotificationService {
     _upsertNotification(notification);
 
     if (!alreadyExists) {
+      unawaited(markAsDelivered(notification.id));
+
       // Show OS-level push notification
       unawaited(
         NotificationService.showUserNotification(

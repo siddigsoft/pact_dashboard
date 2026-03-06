@@ -1061,13 +1061,17 @@ class _NotificationsPanelContentState
     if (n.isBroadcast) {
       return _BroadcastCard(
         notification: n,
-        onConfirm: () => widget.notificationService.markAsRead(n.id),
+        onConfirm: () async {
+          await widget.notificationService.markAsOpened(n.id);
+          await widget.notificationService.markAsRead(n.id);
+        },
       );
     }
     return _UpdateCard(
       notification: n,
       onTap: () async {
         if (!n.isRead) {
+          await widget.notificationService.markAsOpened(n.id);
           await widget.notificationService.markAsRead(n.id);
         }
         if (context.mounted) Navigator.pop(context);

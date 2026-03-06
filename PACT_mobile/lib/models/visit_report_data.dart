@@ -8,6 +8,7 @@ class VisitReportData {
   final int durationMinutes;
   final Position? coordinates;
   final String? activityType;
+  final List<String> selectedActivityTypes;
 
   /// Number of PDM questionnaires submitted (only relevant when activityType == 'PDM')
   final int pdmQuestionnaires;
@@ -28,6 +29,7 @@ class VisitReportData {
     required this.durationMinutes,
     this.coordinates,
     this.activityType,
+    this.selectedActivityTypes = const [],
     this.pdmQuestionnaires = 0,
     this.hasMarketDiversion = false,
     this.marketName,
@@ -36,8 +38,16 @@ class VisitReportData {
 
   /// How many site-visit fees this report represents
   int get visitFeeMultiplier {
-    if (activityType == 'DM' && hasMarketDiversion) return 2;
-    if (activityType == 'PDM' && pdmQuestionnaires > 0) {
+    final activities = selectedActivityTypes.isNotEmpty
+        ? selectedActivityTypes.map((item) => item.toUpperCase()).toSet()
+        : {
+            if (activityType != null && activityType!.trim().isNotEmpty)
+              activityType!.trim().toUpperCase(),
+          };
+
+    if (activities.contains('MDM')) return 2;
+
+    if (activities.contains('PDM') && pdmQuestionnaires > 0) {
       final visits = (pdmQuestionnaires / 7).floor();
       return visits > 0 ? visits : 1;
     }

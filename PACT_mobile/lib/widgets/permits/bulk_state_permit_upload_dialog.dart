@@ -6,7 +6,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:intl/intl.dart';
 import '../../theme/app_colors.dart';
 import '../../services/permit_upload_service.dart';
-import 'package:flutter_gen/gen_l10n/app_localizations.dart';
+import 'package:pact_mobile/l10n/app_localizations.dart';
 import 'package:pact_mobile/l10n/app_localizations_extension.dart';
 import 'permit_types.dart';
 

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
@@ -9,6 +10,8 @@ import '../../services/offline/offline_db.dart';
 import '../../services/offline/models.dart';
 import '../../screens/wallet_screen.dart';
 import '../../providers/offline_provider.dart';
+import '../../services/notification_route_resolver.dart';
+import '../../services/user_notification_service.dart';
 import '../notifications_panel.dart';
 import '../offline/sync_status_widget.dart'
     show SyncStatusBar, SyncProgressToast, OfflineBanner;
@@ -257,63 +260,56 @@ class _MobileAppShellState extends ConsumerState<MobileAppShell>
     final data = message.data;
     final type = _resolveType(message);
     final navigator = Navigator.of(context, rootNavigator: true);
+    final decision = NotificationRouteResolver.fromFcmMessage(
+      type: type,
+      data: data,
+    );
+    final notificationId =
+        (data['notification_id'] ?? data['notificationId'] ?? data['id'] ?? '')
+            .toString();
+    if (notificationId.isNotEmpty) {
+      unawaited(UserNotificationService().markAsOpened(notificationId));
+    }
 
     debugPrint('[FCM] Routing for type="$type" data=$data');
+    NotificationRouteResolver.logDecision('mobile_shell_fcm', decision);
 
-    switch (type) {
-      // ── Sync ────────────────────────────────────────────────────────────────
-      case 'sync':
+    switch (decision.kind) {
+      case NotificationRouteKind.sync:
         _handleSyncRequest();
         return;
 
-      // ── Fund receipt / advance disbursed ────────────────────────────────────
-      case 'fund_receipt_confirmation':
-      case 'advance_disbursed':
+      case NotificationRouteKind.wallet:
         navigator.push(
-          MaterialPageRoute(builder: (_) => const WalletScreen(initialTab: 3)),
+          MaterialPageRoute(
+            builder: (_) => WalletScreen(initialTab: decision.walletTab ?? 3),
+          ),
         );
         return;
 
-      // ── Operational cost submissions ─────────────────────────────────────────
-      case 'cost_submission_approved':
-      case 'cost_submission_rejected':
-      case 'cost_submission_revision':
-        navigator.push(
-          MaterialPageRoute(builder: (_) => const WalletScreen(initialTab: 4)),
-        );
-        return;
-
-      // ── Wallet / advances ───────────────────────────────────────────────────
-      case 'wallet':
-      case 'withdrawal_approved':
-      case 'withdrawal_rejected':
-        navigator.push(
-          MaterialPageRoute(builder: (_) => const WalletScreen(initialTab: 3)),
-        );
-        return;
-
-      // ── Broadcast / admin announcement ─────────────────────────────────────
-      case 'broadcast':
-        // Open the notifications panel (bottom sheet) on the current screen
+      case NotificationRouteKind.notificationsPanel:
         if (mounted) {
-          NotificationsPanel.show(context, initialTab: 'broadcasts');
+          NotificationsPanel.show(context, initialTab: decision.panelTab);
         }
         return;
 
-      // ── Budget alert / MMP / site visit ────────────────────────────────────
-      case 'budget_alert':
-      case 'mmp_approved':
-      case 'mmp_rejected':
-      case 'mmp_status':
-      case 'site_visit':
-      case 'site_assigned':
-      case 'coverage_gap':
-        navigator.pushNamed('/main', arguments: {'tab': 'site_visits'});
+      case NotificationRouteKind.main:
+        navigator.pushNamed('/main', arguments: decision.mainArgs);
         return;
 
-      // ── Generic notification centre ─────────────────────────────────────────
+      case NotificationRouteKind.chat:
+        navigator.pushNamed('/chat', arguments: decision.chatId);
+        return;
+      case NotificationRouteKind.call:
+        navigator.pushNamedAndRemoveUntil(
+          '/main',
+          (route) => false,
+          arguments: {'activeCall': true},
+        );
+        return;
+      case NotificationRouteKind.updateDownload:
+      case NotificationRouteKind.none:
       default:
-        // Fall back to opening the notifications panel so nothing is silently lost
         if (mounted) {
           NotificationsPanel.show(context, initialTab: 'all');
         }
@@ -331,7 +327,7 @@ class _MobileAppShellState extends ConsumerState<MobileAppShell>
     final title =
         message.notification?.title ??
         data['title']?.toString() ??
-        'Notification';
+        'Notification / إشعار';
     final body = message.notification?.body ?? data['body']?.toString() ?? '';
     final priority = data['priority']?.toString() ?? 'normal';
 
@@ -343,39 +339,49 @@ class _MobileAppShellState extends ConsumerState<MobileAppShell>
     if (priority == 'urgent') {
       bannerColor = Colors.red.shade700;
       bannerIcon = Icons.warning_rounded;
-      actionLabel = 'View / عرض';
+      actionLabel = NotificationRouteResolver.localizedActionLabelForType(type);
     } else {
       switch (type) {
         case 'broadcast':
           bannerColor = Colors.indigo.shade700;
           bannerIcon = Icons.campaign;
-          actionLabel = 'View / عرض';
+          actionLabel = NotificationRouteResolver.localizedActionLabelForType(
+            type,
+          );
           break;
         case 'fund_receipt_confirmation':
         case 'advance_disbursed':
           bannerColor = Colors.green.shade700;
           bannerIcon = Icons.account_balance_wallet;
-          actionLabel = 'Confirm / تأكيد';
+          actionLabel = NotificationRouteResolver.localizedActionLabelForType(
+            type,
+          );
           break;
         case 'cost_submission_approved':
         case 'cost_submission_rejected':
         case 'cost_submission_revision':
           bannerColor = Colors.blue.shade700;
           bannerIcon = Icons.receipt_long;
-          actionLabel = 'View / عرض';
+          actionLabel = NotificationRouteResolver.localizedActionLabelForType(
+            type,
+          );
           break;
         case 'withdrawal_approved':
         case 'withdrawal_rejected':
           bannerColor = Colors.teal.shade700;
           bannerIcon = Icons.payments;
-          actionLabel = 'View / عرض';
+          actionLabel = NotificationRouteResolver.localizedActionLabelForType(
+            type,
+          );
           break;
         default:
           bannerColor = priority == 'high'
               ? Colors.orange.shade700
               : Colors.blueGrey.shade700;
           bannerIcon = Icons.notifications;
-          actionLabel = 'View / عرض';
+          actionLabel = NotificationRouteResolver.localizedActionLabelForType(
+            type,
+          );
       }
     }
 
@@ -459,7 +465,7 @@ class _MobileAppShellState extends ConsumerState<MobileAppShell>
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           duration: Duration(seconds: 2),
-          content: Text('Syncing updates...'),
+          content: Text('Syncing updates... / جارٍ مزامنة التحديثات...'),
         ),
       );
     }

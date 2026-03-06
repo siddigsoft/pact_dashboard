@@ -7,13 +7,107 @@ import 'package:google_fonts/google_fonts.dart';
 import '../theme/app_colors.dart';
 import '../widgets/modern_app_header.dart';
 import '../widgets/sos_button.dart';
+import '../services/help_enhancements_service.dart';
 import 'comprehensive_monitoring_form_screen.dart';
 import 'incident_report_screen.dart';
 import 'helpline_screen.dart';
-import 'package:flutter_gen/gen_l10n/app_localizations.dart';
+import 'package:pact_mobile/l10n/app_localizations.dart';
 
-class SafetyHubScreen extends StatelessWidget {
+class SafetyHubScreen extends StatefulWidget {
   const SafetyHubScreen({super.key});
+
+  @override
+  State<SafetyHubScreen> createState() => _SafetyHubScreenState();
+}
+
+class _SafetyHubScreenState extends State<SafetyHubScreen> {
+  final HelpEnhancementsService _helpEnhancementsService =
+      HelpEnhancementsService();
+  List<Map<String, dynamic>> _emergencyContacts = [];
+  bool _loadingEmergencyContacts = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadEmergencyContacts();
+  }
+
+  Future<void> _loadEmergencyContacts() async {
+    setState(() => _loadingEmergencyContacts = true);
+    try {
+      final contacts = await _helpEnhancementsService.getEmergencyContacts();
+      if (!mounted) return;
+      setState(() {
+        _emergencyContacts = contacts;
+        _loadingEmergencyContacts = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _loadingEmergencyContacts = false);
+    }
+  }
+
+  List<EmergencyContactOption> _fallbackLocalizedContacts(
+    BuildContext context,
+  ) {
+    final l10n = AppLocalizations.of(context)!;
+
+    return [l10n.localPolice, l10n.pactEmergency, l10n.medicalEmergency]
+        .map((entry) {
+          final parts = entry.split(':');
+          final name = parts.isNotEmpty ? parts.first.trim() : 'Emergency';
+          final number = parts.length > 1
+              ? parts.sublist(1).join(':').trim()
+              : '';
+          return EmergencyContactOption(name: name, number: number);
+        })
+        .where((c) => c.number.isNotEmpty)
+        .toList();
+  }
+
+  List<EmergencyContactOption> _buildEmergencyContactOptions(
+    BuildContext context,
+  ) {
+    final locale = Localizations.localeOf(context).languageCode;
+
+    final dbContacts = _emergencyContacts
+        .map((c) {
+          final id = c['id']?.toString();
+          final nameEn = (c['name']?.toString() ?? '').trim();
+          final nameAr = (c['name_ar']?.toString() ?? '').trim();
+          final roleEn = (c['role']?.toString() ?? '').trim();
+          final roleAr = (c['role_ar']?.toString() ?? '').trim();
+          final phone = (c['phone']?.toString() ?? '').trim();
+          final whatsapp = (c['whatsapp']?.toString() ?? '').trim();
+
+          final number = phone.isNotEmpty ? phone : whatsapp;
+          if (number.isEmpty) {
+            return null;
+          }
+
+          final displayName = locale == 'ar' && nameAr.isNotEmpty
+              ? nameAr
+              : nameEn;
+          final subtitle = locale == 'ar' && roleAr.isNotEmpty
+              ? roleAr
+              : roleEn;
+
+          return EmergencyContactOption(
+            id: id,
+            name: displayName.isNotEmpty ? displayName : 'Emergency',
+            number: number,
+            subtitle: subtitle,
+          );
+        })
+        .whereType<EmergencyContactOption>()
+        .toList();
+
+    if (dbContacts.isNotEmpty) {
+      return dbContacts;
+    }
+
+    return _fallbackLocalizedContacts(context);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -32,7 +126,8 @@ class SafetyHubScreen extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       _buildSectionTitle(
-                          AppLocalizations.of(context)!.quickAccess),
+                        AppLocalizations.of(context)!.quickAccess,
+                      ),
                       const SizedBox(height: 16),
                       _buildQuickAccessItems(),
                       const SizedBox(height: 24),
@@ -93,24 +188,27 @@ class SafetyHubScreen extends StatelessWidget {
             context: context,
             icon: Icons.checklist_rounded,
             title: AppLocalizations.of(context)!.safetyChecklist,
-            iconBackgroundColor:
-                const Color(0xFFFF9800).withOpacity(0.15), // Orange background
+            iconBackgroundColor: const Color(
+              0xFFFF9800,
+            ).withOpacity(0.15), // Orange background
             iconColor: const Color(0xFFFF9800), // Orange icon
           ),
           _buildSafetyItem(
             context: context,
             icon: Icons.warning_amber_rounded,
             title: AppLocalizations.of(context)!.incidentReport,
-            iconBackgroundColor:
-                const Color(0xFF1976D2).withOpacity(0.15), // Blue background
+            iconBackgroundColor: const Color(
+              0xFF1976D2,
+            ).withOpacity(0.15), // Blue background
             iconColor: const Color(0xFF1976D2), // Blue icon
           ),
           _buildSafetyItem(
             context: context,
             icon: Icons.support_agent,
             title: AppLocalizations.of(context)!.regionalHelplines,
-            iconBackgroundColor:
-                const Color(0xFF4CAF50).withOpacity(0.15), // Green background
+            iconBackgroundColor: const Color(
+              0xFF4CAF50,
+            ).withOpacity(0.15), // Green background
             iconColor: const Color(0xFF4CAF50), // Green icon
           ),
         ],
@@ -138,8 +236,9 @@ class SafetyHubScreen extends StatelessWidget {
           ),
         ],
         border: Border.all(
-          color:
-              const Color(0xFFFF9800).withOpacity(0.1), // Light orange border
+          color: const Color(
+            0xFFFF9800,
+          ).withOpacity(0.1), // Light orange border
           width: 1,
         ),
       ),
@@ -196,8 +295,11 @@ class SafetyHubScreen extends StatelessWidget {
                     ),
                   ),
                 ),
-                const Icon(Icons.chevron_right,
-                    color: Color(0xFFFF9800), size: 28), // Orange chevron
+                const Icon(
+                  Icons.chevron_right,
+                  color: Color(0xFFFF9800),
+                  size: 28,
+                ), // Orange chevron
               ],
             ),
           ),
@@ -208,96 +310,115 @@ class SafetyHubScreen extends StatelessWidget {
 
   Widget _buildSafetyTips() {
     return Builder(
-        builder: (context) => Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [
-                    Color(0xFF1976D2), // Deep blue
-                    Color(0xFF42A5F5), // Light blue
-                  ],
-                ),
-                borderRadius: BorderRadius.circular(16),
-                boxShadow: [
-                  BoxShadow(
-                    color: const Color(0xFF1976D2).withOpacity(0.3),
-                    blurRadius: 10,
-                    offset: const Offset(0, 5),
-                    spreadRadius: -2,
-                  ),
-                ],
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      const Icon(
-                        Icons.tips_and_updates_outlined,
-                        color: Colors.white,
-                        size: 28,
-                      ),
-                      const SizedBox(width: 12),
-                      Text(
-                        AppLocalizations.of(context)!.safetyTipOfTheDay,
-                        style: const TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w600,
-                          color: Colors.white,
-                        ),
-                      ),
+      builder: (context) =>
+          Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      Color(0xFF1976D2), // Deep blue
+                      Color(0xFF42A5F5), // Light blue
                     ],
                   ),
-                  const SizedBox(height: 12),
-                  Text(
-                    AppLocalizations.of(context)!.ladderInspectionTip,
-                    style: const TextStyle(fontSize: 15, color: Colors.white),
-                  ),
-                  const SizedBox(height: 16),
-                  Align(
-                    alignment: Alignment.centerRight,
-                    child: TextButton(
-                      onPressed: () {
-                        HapticFeedback.lightImpact();
-                        // View more safety tips
-                      },
-                      style: TextButton.styleFrom(
-                        backgroundColor: Colors.white.withOpacity(0.3),
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 8,
-                        ),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                      child: Text(
-                        AppLocalizations.of(context)!.viewMoreTips,
-                        style: const TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFF1976D2).withOpacity(0.3),
+                      blurRadius: 10,
+                      offset: const Offset(0, 5),
+                      spreadRadius: -2,
+                    ),
+                  ],
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(
+                          Icons.tips_and_updates_outlined,
                           color: Colors.white,
+                          size: 28,
+                        ),
+                        const SizedBox(width: 12),
+                        Text(
+                          AppLocalizations.of(context)!.safetyTipOfTheDay,
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      AppLocalizations.of(context)!.ladderInspectionTip,
+                      style: const TextStyle(fontSize: 15, color: Colors.white),
+                    ),
+                    const SizedBox(height: 16),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: TextButton(
+                        onPressed: () {
+                          HapticFeedback.lightImpact();
+                          // View more safety tips
+                        },
+                        style: TextButton.styleFrom(
+                          backgroundColor: Colors.white.withOpacity(0.3),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 8,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        child: Text(
+                          AppLocalizations.of(context)!.viewMoreTips,
+                          style: const TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.white,
+                          ),
                         ),
                       ),
                     ),
-                  ),
-                ],
-              ),
-            )
-                .animate()
-                .fadeIn(duration: 400.ms, delay: 300.ms)
-                .slideY(begin: 0.2, end: 0, duration: 400.ms));
+                  ],
+                ),
+              )
+              .animate()
+              .fadeIn(duration: 400.ms, delay: 300.ms)
+              .slideY(begin: 0.2, end: 0, duration: 400.ms),
+    );
   }
 
   Widget _buildEmergencyContact() {
+    final options = _buildEmergencyContactOptions(context);
+
     return Builder(
-      builder: (context) => SOSButton(
-        emergencyContacts: [
-          AppLocalizations.of(context)!.localPolice,
-          AppLocalizations.of(context)!.pactEmergency,
-          AppLocalizations.of(context)!.medicalEmergency,
+      builder: (context) => Stack(
+        children: [
+          SOSButton(
+            contacts: options,
+            onContactAction: (contact, action) async {
+              final id = contact.id;
+              if (id == null || id.isEmpty) return;
+              await _helpEnhancementsService.logEmergencyContact(id, action);
+            },
+          ),
+          if (_loadingEmergencyContacts)
+            const Positioned(
+              right: 8,
+              top: 8,
+              child: SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+            ),
         ],
       ),
     );

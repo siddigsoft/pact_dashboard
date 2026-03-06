@@ -477,8 +477,6 @@ class _MainScreenState extends State<MainScreen> {
       // Commented out screens - keeping for future use
       // case 1:
       //   return const ReportsScreen(key: ValueKey('reports'));
-      // case 2:
-      //   return const SafetyHubScreen(key: ValueKey('safety'));
       // case 3:
       //   return const ChatListScreen(key: ValueKey('chat'));
       // case 5:

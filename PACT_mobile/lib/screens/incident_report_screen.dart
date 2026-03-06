@@ -8,7 +8,7 @@ import '../services/local_storage_service.dart';
 import '../services/auth_service.dart';
 import '../providers/sync_provider.dart';
 import '../theme/app_colors.dart';
-import 'package:flutter_gen/gen_l10n/app_localizations.dart';
+import 'package:pact_mobile/l10n/app_localizations.dart';
 
 class IncidentReportScreen extends StatefulWidget {
   const IncidentReportScreen({super.key});

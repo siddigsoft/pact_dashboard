@@ -77,6 +77,11 @@ class _EnhancedOfflineToggleState extends State<EnhancedOfflineToggle>
       if (mounted) {
         setState(() {
           _isOnline = isOnline;
+          // If online on initial load and auto-hide is enabled, dismiss
+          // immediately so it doesn't create empty space in the layout.
+          if (isOnline && widget.autoHideWhenOnline) {
+            _isDismissed = true;
+          }
         });
       }
     } catch (e) {

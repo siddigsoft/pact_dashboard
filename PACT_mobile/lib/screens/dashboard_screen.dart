@@ -14,6 +14,7 @@ import '../widgets/main_layout.dart';
 import '../widgets/mmp_filter_bar.dart';
 import '../services/wallet_service.dart';
 import '../services/user_notification_service.dart';
+import '../services/local_storage_service.dart';
 import '../services/offline/offline_db.dart';
 import '../models/site_visit.dart';
 import '../utils/mmp_filter_utils.dart';
@@ -27,8 +28,12 @@ class DashboardScreen extends StatefulWidget {
 }
 
 class _DashboardScreenState extends State<DashboardScreen> {
+  static const String _broadcastPopupEnabledSettingKey =
+      'broadcast_popup_enabled';
+
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   final WalletService _walletService = WalletService();
+  final LocalStorageService _localStorageService = LocalStorageService();
 
   bool _isLoading = true;
   bool _isOffline = false;
@@ -74,13 +79,29 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   RealtimeChannel? _realtimeChannel;
   StreamSubscription? _broadcastSub;
+  bool _broadcastPopupEnabled = true;
 
   @override
   void initState() {
     super.initState();
+    final configuredBroadcastPopup = _localStorageService.getAppSetting(
+      _broadcastPopupEnabledSettingKey,
+    );
+    if (configuredBroadcastPopup is bool) {
+      _broadcastPopupEnabled = configuredBroadcastPopup;
+    }
+
     _initializeDashboard();
     _broadcastSub = UserNotificationService().broadcastStream.listen((n) {
-      if (mounted) BroadcastPopup.show(context, n);
+      if (!mounted) return;
+
+      final priority = n.priority.toLowerCase().trim();
+      if (priority == 'high' || priority == 'urgent') {
+        return;
+      }
+
+      if (!_broadcastPopupEnabled) return;
+      BroadcastPopup.show(context, n);
     });
   }
 

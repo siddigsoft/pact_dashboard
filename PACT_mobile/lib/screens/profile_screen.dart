@@ -136,93 +136,73 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
     try {
       final supabase = Supabase.instance.client;
 
-      // Use direct name fields if available (some databases store names directly)
-      if (profile.hubName != null && profile.hubName!.isNotEmpty) {
-        _hubName = profile.hubName;
-      }
-      if (profile.stateName != null && profile.stateName!.isNotEmpty) {
-        _stateName = profile.stateName;
-      }
-      if (profile.localityName != null && profile.localityName!.isNotEmpty) {
-        _localityName = profile.localityName;
-      }
-
-      // If still no names and we have IDs that look like UUIDs, try lookup
-      final uuidRegex = RegExp(
-        r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$',
-      );
-
-      // Load hub name if not already set
+      // Load hub name from `hubs` table (column: name, key: id)
       if (_hubName == null &&
           profile.hubId != null &&
           profile.hubId!.isNotEmpty) {
-        if (uuidRegex.hasMatch(profile.hubId!)) {
-          try {
-            final hubResponse = await supabase
-                .from('hubs')
-                .select('name')
-                .eq('id', profile.hubId!)
-                .maybeSingle();
-            if (hubResponse != null) {
-              _hubName = hubResponse['name'] as String?;
-            }
-          } catch (e) {
-            debugPrint('Error loading hub name: $e');
-            // If lookup fails, use the ID as fallback (it might be the name)
-            _hubName = profile.hubId;
-          }
-        } else {
-          // Not a UUID, use it directly as the name
+        try {
+          final hubResp = await supabase
+              .from('hubs')
+              .select('name')
+              .eq('id', profile.hubId!)
+              .maybeSingle();
+          _hubName = hubResp?['name'] as String? ?? profile.hubId;
+        } catch (e) {
+          debugPrint('Error loading hub name: $e');
           _hubName = profile.hubId;
         }
+        debugPrint('Hub name resolved: $_hubName');
       }
 
-      // Load state name if not already set
+      // Load state name from `hub_states` table (column: state_name, key: state_id)
       if (_stateName == null &&
           profile.stateId != null &&
           profile.stateId!.isNotEmpty) {
-        if (uuidRegex.hasMatch(profile.stateId!)) {
-          try {
-            final stateResponse = await supabase
-                .from('states')
-                .select('name')
-                .eq('id', profile.stateId!)
-                .maybeSingle();
-            if (stateResponse != null) {
-              _stateName = stateResponse['name'] as String?;
-            }
-          } catch (e) {
-            debugPrint('Error loading state name: $e');
-            _stateName = profile.stateId;
+        try {
+          final stateResp = await supabase
+              .from('hub_states')
+              .select('state_name')
+              .eq('state_id', profile.stateId!)
+              .maybeSingle();
+          if (stateResp != null) {
+            _stateName = stateResp['state_name'] as String?;
           }
-        } else {
-          // Not a UUID, use it directly as the name
+          // Fallback: try sites_registry
+          if (_stateName == null) {
+            final registryResp = await supabase
+                .from('sites_registry')
+                .select('state_name')
+                .eq('state_id', profile.stateId!)
+                .limit(1)
+                .maybeSingle();
+            _stateName = registryResp?['state_name'] as String?;
+          }
+          _stateName ??= profile.stateId;
+        } catch (e) {
+          debugPrint('Error loading state name: $e');
           _stateName = profile.stateId;
         }
+        debugPrint('State name resolved: $_stateName');
       }
 
-      // Load locality name if not already set
+      // Load locality name from `sites_registry` table (column: locality_name, key: locality_id)
       if (_localityName == null &&
           profile.localityId != null &&
           profile.localityId!.isNotEmpty) {
-        if (uuidRegex.hasMatch(profile.localityId!)) {
-          try {
-            final localityResponse = await supabase
-                .from('localities')
-                .select('name')
-                .eq('id', profile.localityId!)
-                .maybeSingle();
-            if (localityResponse != null) {
-              _localityName = localityResponse['name'] as String?;
-            }
-          } catch (e) {
-            debugPrint('Error loading locality name: $e');
-            _localityName = profile.localityId;
-          }
-        } else {
-          // Not a UUID, use it directly as the name
+        try {
+          final localityResp = await supabase
+              .from('sites_registry')
+              .select('locality_name')
+              .eq('locality_id', profile.localityId!)
+              .limit(1)
+              .maybeSingle();
+          _localityName =
+              localityResp?['locality_name'] as String? ?? profile.localityId;
+        } catch (e) {
+          debugPrint('Error loading locality name: $e');
           _localityName = profile.localityId;
         }
+        debugPrint('Locality name resolved: $_localityName');
       }
 
       // Load classification history
@@ -230,7 +210,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
         final classificationsResponse = await supabase
             .from('user_classifications')
             .select(
-              'id, classification_level, role_scope, is_active, effective_from, effective_until',
+              'id, classification_level, role_scope, is_active, effective_from, effective_until, notes',
             )
             .eq('user_id', profile.id)
             .order('effective_from', ascending: false);
@@ -241,6 +221,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
           final isActive = c['is_active'] as bool? ?? false;
           final effectiveFrom = c['effective_from'] as String? ?? '';
           final effectiveUntil = c['effective_until'] as String?;
+          final notes = c['notes'] as String?;
           final id = c['id'] as String? ?? '';
           return {
             'id': id,
@@ -249,6 +230,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
             'is_active': isActive.toString(),
             'effective_from': effectiveFrom,
             'effective_until': effectiveUntil ?? '',
+            'reason': notes?.trim() ?? '',
           };
         }).toList();
 
@@ -934,11 +916,10 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
                 children: List.generate(_classificationHistory.length, (i) {
                   final c = _classificationHistory[i];
                   final isCurrent = c['is_current'] == true;
-                  final level = (c['classification_level'] as String? ?? '')
-                      .trim();
-                  final scope = (c['role_scope'] as String? ?? '').trim();
-                  final reason = (c['reason'] as String?)?.trim();
-                  final assignedAt = c['assigned_at'] as String?;
+                  final level = (c['classification_level'] ?? '').trim();
+                  final scope = (c['role_scope'] ?? '').trim();
+                  final reason = (c['reason'])?.trim();
+                  final assignedAt = c['assigned_at'];
                   final isLast = i == _classificationHistory.length - 1;
 
                   return IntrinsicHeight(
@@ -1752,225 +1733,327 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
   }
 
   void _showClassificationHistory(BuildContext context) {
-    showModalBottomSheet(
+    showDialog(
       context: context,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (_) {
-        return DraggableScrollableSheet(
-          expand: false,
-          initialChildSize: 0.5,
-          maxChildSize: 0.85,
-          minChildSize: 0.3,
-          builder: (_, scrollController) => Column(
-            children: [
-              Container(
-                margin: const EdgeInsets.only(top: 12, bottom: 8),
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: Colors.grey[300],
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 8,
-                ),
-                child: Row(
-                  children: [
-                    Icon(
-                      Icons.history,
-                      color: AppColors.primaryOrange,
-                      size: 20,
+      barrierDismissible: true,
+      builder: (ctx) {
+        return Dialog(
+          insetPadding: const EdgeInsets.symmetric(
+            horizontal: 24,
+            vertical: 40,
+          ),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          elevation: 8,
+          child: Container(
+            constraints: const BoxConstraints(maxHeight: 540),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // ── Gradient header ──────────────────────────────────────
+                Container(
+                  padding: const EdgeInsets.fromLTRB(20, 20, 8, 16),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [AppColors.primaryOrange, Colors.orange.shade300],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
                     ),
-                    const SizedBox(width: 8),
-                    Text(
-                      'Classification History',
-                      style: GoogleFonts.poppins(
-                        fontWeight: FontWeight.w600,
-                        fontSize: 16,
-                        color: AppColors.primaryOrange,
+                    borderRadius: const BorderRadius.only(
+                      topLeft: Radius.circular(20),
+                      topRight: Radius.circular(20),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.2),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: const Icon(
+                          Icons.history,
+                          color: Colors.white,
+                          size: 20,
+                        ),
                       ),
-                    ),
-                    const Spacer(),
-                    IconButton(
-                      icon: const Icon(Icons.close),
-                      onPressed: () => Navigator.pop(context),
-                    ),
-                  ],
-                ),
-              ),
-              const Divider(height: 1),
-              Expanded(
-                child: _classificationHistory.isEmpty
-                    ? Center(
+                      const SizedBox(width: 12),
+                      Expanded(
                         child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Icon(
-                              Icons.history_toggle_off,
-                              size: 48,
-                              color: Colors.grey[300],
-                            ),
-                            const SizedBox(height: 12),
                             Text(
-                              'No classification records found',
+                              'Classification History',
                               style: GoogleFonts.poppins(
-                                fontSize: 14,
-                                color: Colors.grey[500],
+                                fontWeight: FontWeight.w700,
+                                fontSize: 15,
+                                color: Colors.white,
+                              ),
+                            ),
+                            Text(
+                              '${_classificationHistory.length} record${_classificationHistory.length == 1 ? '' : 's'}',
+                              style: GoogleFonts.poppins(
+                                fontSize: 11,
+                                color: Colors.white.withOpacity(0.85),
                               ),
                             ),
                           ],
                         ),
-                      )
-                    : ListView.separated(
-                        controller: scrollController,
-                        padding: const EdgeInsets.all(16),
-                        itemCount: _classificationHistory.length,
-                        separatorBuilder: (_, __) => const SizedBox(height: 12),
-                        itemBuilder: (_, index) {
-                          final item = _classificationHistory[index];
-                          final level = item['level'] ?? '';
-                          final scope = (item['scope'] ?? '').replaceAll(
-                            '_',
-                            ' ',
-                          );
-                          final from = item['effective_from'] ?? '';
-                          final until = item['effective_until'] ?? '';
-                          final isCurrent =
-                              _currentClassification != null &&
-                              item['id'] != null &&
-                              item['id'] == _currentClassification!['id'];
-                          return Container(
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              color: isCurrent
-                                  ? AppColors.primaryOrange.withOpacity(0.05)
-                                  : Colors.grey[50],
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(
-                                color: isCurrent
-                                    ? AppColors.primaryOrange.withOpacity(0.4)
-                                    : Colors.grey[200]!,
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close, color: Colors.white),
+                        onPressed: () => Navigator.pop(ctx),
+                      ),
+                    ],
+                  ),
+                ),
+
+                // ── Body ─────────────────────────────────────────────────
+                Flexible(
+                  child: _classificationHistory.isEmpty
+                      ? Padding(
+                          padding: const EdgeInsets.all(40),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.history_toggle_off,
+                                size: 56,
+                                color: Colors.grey[300],
                               ),
-                            ),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  children: [
-                                    Icon(
-                                      Icons.grade,
-                                      color: AppColors.primaryOrange,
-                                      size: 16,
-                                    ),
-                                    const SizedBox(width: 6),
-                                    Text(
-                                      level.toUpperCase(),
-                                      style: GoogleFonts.poppins(
-                                        fontWeight: FontWeight.w600,
-                                        fontSize: 13,
-                                      ),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 8,
-                                        vertical: 2,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color: Colors.orange[50],
-                                        borderRadius: BorderRadius.circular(8),
-                                        border: Border.all(
-                                          color: Colors.orange[200]!,
+                              const SizedBox(height: 12),
+                              Text(
+                                'No classification records found',
+                                style: GoogleFonts.poppins(
+                                  fontSize: 14,
+                                  color: Colors.grey[500],
+                                ),
+                              ),
+                            ],
+                          ),
+                        )
+                      : ListView.separated(
+                          shrinkWrap: true,
+                          padding: const EdgeInsets.fromLTRB(16, 16, 16, 20),
+                          itemCount: _classificationHistory.length,
+                          separatorBuilder: (_, __) =>
+                              const SizedBox(height: 10),
+                          itemBuilder: (_, index) {
+                            final item = _classificationHistory[index];
+                            final level = item['level'] ?? '';
+                            final scope = (item['scope'] ?? '').replaceAll(
+                              '_',
+                              ' ',
+                            );
+                            final reason = (item['reason'] ?? '').trim();
+                            final from = item['effective_from'] ?? '';
+                            final until = item['effective_until'] ?? '';
+                            final isCurrent =
+                                _currentClassification != null &&
+                                item['id'] != null &&
+                                item['id'] == _currentClassification!['id'];
+
+                            return Container(
+                              padding: const EdgeInsets.all(14),
+                              decoration: BoxDecoration(
+                                color: isCurrent
+                                    ? AppColors.primaryOrange.withOpacity(0.06)
+                                    : Colors.grey[50],
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: isCurrent
+                                      ? AppColors.primaryOrange.withOpacity(
+                                          0.45,
+                                        )
+                                      : Colors.grey[200]!,
+                                  width: isCurrent ? 1.5 : 1,
+                                ),
+                                boxShadow: isCurrent
+                                    ? [
+                                        BoxShadow(
+                                          color: AppColors.primaryOrange
+                                              .withOpacity(0.08),
+                                          blurRadius: 8,
+                                          offset: const Offset(0, 2),
                                         ),
-                                      ),
-                                      child: Text(
-                                        scope.toUpperCase(),
-                                        style: GoogleFonts.poppins(
-                                          fontSize: 11,
-                                          color: AppColors.primaryOrange,
-                                        ),
-                                      ),
-                                    ),
-                                    if (isCurrent) ...[
-                                      const SizedBox(width: 6),
+                                      ]
+                                    : null,
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      // Level badge
                                       Container(
                                         padding: const EdgeInsets.symmetric(
-                                          horizontal: 7,
-                                          vertical: 2,
+                                          horizontal: 10,
+                                          vertical: 4,
                                         ),
                                         decoration: BoxDecoration(
-                                          color: Colors.green[50],
+                                          color: isCurrent
+                                              ? AppColors.primaryOrange
+                                              : Colors.grey.shade400,
                                           borderRadius: BorderRadius.circular(
                                             8,
                                           ),
-                                          border: Border.all(
-                                            color: Colors.green[300]!,
-                                          ),
                                         ),
                                         child: Text(
-                                          'CURRENT',
+                                          level.toUpperCase(),
                                           style: GoogleFonts.poppins(
-                                            fontSize: 10,
-                                            color: Colors.green[700],
-                                            fontWeight: FontWeight.w600,
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w700,
+                                            color: Colors.white,
                                           ),
+                                        ),
+                                      ),
+                                      if (scope.isNotEmpty) ...[
+                                        const SizedBox(width: 8),
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 8,
+                                            vertical: 3,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: Colors.orange[50],
+                                            borderRadius: BorderRadius.circular(
+                                              8,
+                                            ),
+                                            border: Border.all(
+                                              color: Colors.orange[200]!,
+                                            ),
+                                          ),
+                                          child: Text(
+                                            scope.toUpperCase(),
+                                            style: GoogleFonts.poppins(
+                                              fontSize: 11,
+                                              color: AppColors.primaryOrange,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                      if (isCurrent) ...[
+                                        const SizedBox(width: 6),
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 7,
+                                            vertical: 2,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: Colors.green[50],
+                                            borderRadius: BorderRadius.circular(
+                                              8,
+                                            ),
+                                            border: Border.all(
+                                              color: Colors.green[300]!,
+                                            ),
+                                          ),
+                                          child: Text(
+                                            'CURRENT',
+                                            style: GoogleFonts.poppins(
+                                              fontSize: 10,
+                                              color: Colors.green[700],
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ],
+                                  ),
+                                  const SizedBox(height: 8),
+                                  // Date range row
+                                  Row(
+                                    children: [
+                                      Icon(
+                                        Icons.date_range,
+                                        size: 13,
+                                        color: Colors.grey[500],
+                                      ),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        from.isNotEmpty
+                                            ? _formatDate(DateTime.parse(from))
+                                            : '—',
+                                        style: GoogleFonts.poppins(
+                                          fontSize: 12,
+                                          color: Colors.grey[600],
+                                        ),
+                                      ),
+                                      Padding(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 6,
+                                        ),
+                                        child: Icon(
+                                          Icons.arrow_forward,
+                                          size: 12,
+                                          color: Colors.grey[400],
+                                        ),
+                                      ),
+                                      Text(
+                                        until.isNotEmpty
+                                            ? _formatDate(DateTime.parse(until))
+                                            : 'Present',
+                                        style: GoogleFonts.poppins(
+                                          fontSize: 12,
+                                          color: until.isEmpty
+                                              ? Colors.green[600]
+                                              : Colors.grey[600],
+                                          fontWeight: until.isEmpty
+                                              ? FontWeight.w600
+                                              : FontWeight.normal,
                                         ),
                                       ),
                                     ],
-                                  ],
-                                ),
-                                const SizedBox(height: 6),
-                                Row(
-                                  children: [
-                                    Icon(
-                                      Icons.date_range,
-                                      size: 14,
-                                      color: Colors.grey[500],
-                                    ),
-                                    const SizedBox(width: 4),
-                                    Text(
-                                      from.isNotEmpty
-                                          ? _formatDate(DateTime.parse(from))
-                                          : '—',
-                                      style: GoogleFonts.poppins(
-                                        fontSize: 12,
-                                        color: Colors.grey[600],
-                                      ),
-                                    ),
-                                    Padding(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 6,
-                                      ),
-                                      child: Icon(
-                                        Icons.arrow_forward,
-                                        size: 12,
-                                        color: Colors.grey[400],
-                                      ),
-                                    ),
-                                    Text(
-                                      until.isNotEmpty
-                                          ? _formatDate(DateTime.parse(until))
-                                          : 'Present',
-                                      style: GoogleFonts.poppins(
-                                        fontSize: 12,
-                                        color: Colors.grey[600],
-                                      ),
+                                  ),
+                                  if (reason.isNotEmpty) ...[
+                                    const SizedBox(height: 8),
+                                    Row(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Icon(
+                                          Icons.info_outline,
+                                          size: 13,
+                                          color: Colors.grey[500],
+                                        ),
+                                        const SizedBox(width: 4),
+                                        Expanded(
+                                          child: RichText(
+                                            text: TextSpan(
+                                              style: GoogleFonts.poppins(
+                                                fontSize: 12,
+                                                color: Colors.grey[700],
+                                              ),
+                                              children: [
+                                                TextSpan(
+                                                  text: 'Reason: ',
+                                                  style: GoogleFonts.poppins(
+                                                    fontWeight: FontWeight.w600,
+                                                    color: Colors.grey[800],
+                                                  ),
+                                                ),
+                                                TextSpan(text: reason),
+                                              ],
+                                            ),
+                                          ),
+                                        ),
+                                      ],
                                     ),
                                   ],
-                                ),
-                              ],
-                            ),
-                          );
-                        },
-                      ),
-              ),
-            ],
+                                ],
+                              ),
+                            );
+                          },
+                        ),
+                ),
+              ],
+            ),
           ),
         );
       },

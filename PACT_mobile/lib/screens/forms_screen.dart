@@ -13,7 +13,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../services/auth_service.dart';
 import '../theme/app_colors.dart';
 import '../widgets/modern_app_header.dart';
-import 'package:flutter_gen/gen_l10n/app_localizations.dart';
+import 'package:pact_mobile/l10n/app_localizations.dart';
 // import '../widgets/mmp_preview_bottom_sheet.dart'; // MMP code frozen
 
 class FormsScreen extends StatefulWidget {

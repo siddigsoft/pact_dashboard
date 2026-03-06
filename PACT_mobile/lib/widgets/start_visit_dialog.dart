@@ -1,13 +1,410 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+
+import '../theme/app_colors.dart';
 
 class StartVisitDialog extends StatelessWidget {
   final Map<String, dynamic> site;
   const StartVisitDialog({super.key, required this.site});
 
+  static Map<String, dynamic>? _safeAdditionalData(dynamic data) {
+    if (data == null) return null;
+    if (data is String) {
+      try {
+        final decoded = jsonDecode(data);
+        return decoded is Map ? Map<String, dynamic>.from(decoded) : null;
+      } catch (_) {
+        return null;
+      }
+    }
+    if (data is Map) {
+      return Map<String, dynamic>.from(data);
+    }
+    return null;
+  }
+
+  static String _stringify(dynamic value) {
+    if (value == null) return '';
+    final text = value.toString().trim();
+    if (text.isEmpty) return '';
+    final lowered = text.toLowerCase();
+    if (lowered == 'null' || lowered == 'n/a' || lowered == 'na') return '';
+    return text;
+  }
+
+  static String _resolveFromSite(
+    Map<String, dynamic> site,
+    Map<String, dynamic> additionalData,
+    List<String> keys,
+  ) {
+    for (final key in keys) {
+      final v = _stringify(site[key]);
+      if (v.isNotEmpty) return v;
+      final a = _stringify(additionalData[key]);
+      if (a.isNotEmpty) return a;
+    }
+    return '';
+  }
+
+  static String _formatMmpKeyLabel(String key) {
+    final cleaned = key
+        .replaceAll(RegExp(r'[^A-Za-z0-9_ ]'), ' ')
+        .replaceAll('_', ' ')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+    if (cleaned.isEmpty) return key;
+    return cleaned
+        .split(' ')
+        .map((word) {
+          if (word.isEmpty) return word;
+          return '${word[0].toUpperCase()}${word.substring(1)}';
+        })
+        .join(' ');
+  }
+
+  static String _normalizeLookupKey(String input) {
+    return input.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '');
+  }
+
+  static String _normalizeLabelKey(String input) {
+    return input.toLowerCase().replaceAll(RegExp(r'[\s_:\-]+'), '').trim();
+  }
+
+  static Map<String, dynamic>? _toMapValue(dynamic value) {
+    if (value == null) return null;
+    if (value is Map<String, dynamic>) return value;
+    if (value is Map) return Map<String, dynamic>.from(value);
+    if (value is String) {
+      try {
+        final decoded = jsonDecode(value);
+        if (decoded is Map) return Map<String, dynamic>.from(decoded);
+      } catch (_) {}
+    }
+    return null;
+  }
+
+  static String _stringifyMmpValue(dynamic value, bool isArabic) {
+    if (value == null) return '';
+    if (value is bool) {
+      return isArabic ? (value ? 'نعم' : 'لا') : (value ? 'Yes' : 'No');
+    }
+    if (value is List || value is Map) {
+      try {
+        return jsonEncode(value);
+      } catch (_) {
+        final fallback = value.toString().trim();
+        return fallback.toLowerCase() == 'null' ? '' : fallback;
+      }
+    }
+    final text = value.toString().trim();
+    if (text.isEmpty) return '';
+    final lowered = text.toLowerCase();
+    if (lowered == 'null' || lowered == 'n/a' || lowered == 'na') return '';
+    return text;
+  }
+
+  static String _formatNumberWithCommas(String numericText) {
+    final parts = numericText.split('.');
+    final integerPart = parts.first;
+    final decimalPart = parts.length > 1 ? parts[1] : '';
+    final buffer = StringBuffer();
+    for (int i = 0; i < integerPart.length; i++) {
+      final reverseIndex = integerPart.length - i;
+      buffer.write(integerPart[i]);
+      if (reverseIndex > 1 && reverseIndex % 3 == 1) buffer.write(',');
+    }
+    if (decimalPart.isNotEmpty) return '${buffer.toString()}.$decimalPart';
+    return buffer.toString();
+  }
+
+  static String _enhanceMmpDetailValue(String label, String value) {
+    if (value.isEmpty) return value;
+    final normalizedLabel = _normalizeLabelKey(label);
+    final shouldFormatAmount =
+        normalizedLabel.contains('payout') ||
+        normalizedLabel.contains('cost') ||
+        normalizedLabel.contains('budget') ||
+        normalizedLabel.contains('fee') ||
+        normalizedLabel.contains('transport') ||
+        normalizedLabel.contains('مطالبة') ||
+        normalizedLabel.contains('ارسال');
+    if (!shouldFormatAmount) return value;
+    final cleaned = value.replaceAll(',', '').trim();
+    final parsed = num.tryParse(cleaned);
+    if (parsed == null) return value;
+    final normalizedNumber =
+        parsed % 1 == 0 ? parsed.toInt().toString() : parsed.toStringAsFixed(2);
+    return '${_formatNumberWithCommas(normalizedNumber)} SDG';
+  }
+
+  static String _bi(bool isArabic, String en, String ar) =>
+      isArabic ? ar : en;
+
+  static List<Widget> _buildUploadedMmpDetailSections(
+    bool isArabic,
+    List<MapEntry<String, String>> uploadedDetails,
+  ) {
+    final core = <MapEntry<String, String>>[];
+    final claim = <MapEntry<String, String>>[];
+    final dispatch = <MapEntry<String, String>>[];
+
+    for (final entry in uploadedDetails) {
+      final label = entry.key.toLowerCase();
+      if (label.contains('dispatch') || label.contains('إرسال')) {
+        dispatch.add(entry);
+      } else if (label.contains('claim') || label.contains('مطالبة')) {
+        claim.add(entry);
+      } else {
+        core.add(entry);
+      }
+    }
+
+    Widget buildSection({
+      required String title,
+      required List<MapEntry<String, String>> entries,
+    }) {
+      return Container(
+        padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.55),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: Colors.grey.withValues(alpha: 0.2)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 2),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      title,
+                      style: GoogleFonts.poppins(
+                        fontSize: 12,
+                        height: 1.3,
+                        color: Colors.grey[800],
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 7,
+                      vertical: 3,
+                    ),
+                    decoration: BoxDecoration(
+                      color: AppColors.primaryOrange.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                    child: Text(
+                      entries.length.toString(),
+                      style: GoogleFonts.poppins(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.primaryOrange,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 8),
+            ...entries.map(
+              (entry) => Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      flex: 4,
+                      child: Text(
+                        entry.key,
+                        style: GoogleFonts.poppins(
+                          fontSize: 12,
+                          height: 1.4,
+                          color: Colors.grey[700],
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      flex: 6,
+                      child: Text(
+                        entry.value,
+                        textAlign: isArabic ? TextAlign.start : TextAlign.end,
+                        textDirection: isArabic
+                            ? TextDirection.rtl
+                            : TextDirection.ltr,
+                        style: GoogleFonts.poppins(
+                          fontSize: 12,
+                          height: 1.4,
+                          color: AppColors.textDark,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    final sections = <Widget>[];
+    if (core.isNotEmpty) {
+      sections.add(
+        buildSection(
+          title: isArabic ? 'البيانات الأساسية' : 'Core Details',
+          entries: core,
+        ),
+      );
+    }
+    if (claim.isNotEmpty) {
+      if (sections.isNotEmpty) sections.add(const SizedBox(height: 8));
+      sections.add(
+        buildSection(
+          title: isArabic ? 'تفاصيل المطالبة' : 'Claim Details',
+          entries: claim,
+        ),
+      );
+    }
+    if (dispatch.isNotEmpty) {
+      if (sections.isNotEmpty) sections.add(const SizedBox(height: 8));
+      sections.add(
+        buildSection(
+          title: isArabic ? 'تفاصيل الإرسال' : 'Dispatch Details',
+          entries: dispatch,
+        ),
+      );
+    }
+    return sections;
+  }
+
+  static List<MapEntry<String, String>> _collectUploadedDetails(
+    Map<String, dynamic> siteData,
+    Map<String, dynamic> additionalData,
+    bool isArabic,
+  ) {
+    final details = <MapEntry<String, String>>[];
+    final seen = <String>{};
+
+    void addLabeledEntry(String label, String value) {
+      final normalized = _normalizeLabelKey(label);
+      if (normalized.isEmpty || seen.contains(normalized) || value.isEmpty) return;
+      seen.add(normalized);
+      details.add(MapEntry(label, _enhanceMmpDetailValue(label, value)));
+    }
+
+    void addEntry(String key, dynamic rawValue) {
+      final normalizedKey = _normalizeLookupKey(key);
+
+      if (normalizedKey == 'claimfeecalculation') {
+        final mapValue = _toMapValue(rawValue);
+        if (mapValue != null) {
+          addLabeledEntry(
+            _bi(isArabic, 'Claim Calculation Source', 'حساب المطالبة - المصدر'),
+            _stringifyMmpValue(mapValue['fee_source'], isArabic),
+          );
+          addLabeledEntry(
+            _bi(isArabic, 'Claim Calculation Scope', 'حساب المطالبة - النطاق'),
+            _stringifyMmpValue(mapValue['role_scope'], isArabic),
+          );
+          addLabeledEntry(
+            _bi(isArabic, 'Claim Total Payout', 'حساب المطالبة - إجمالي الدفع'),
+            _stringifyMmpValue(mapValue['total_payout'], isArabic),
+          );
+          addLabeledEntry(
+            _bi(isArabic, 'Claim Transport Cost', 'حساب المطالبة - تكلفة النقل'),
+            _stringifyMmpValue(mapValue['calculated_transport_cost'], isArabic),
+          );
+          addLabeledEntry(
+            _bi(isArabic, 'Claim Enumerator Fee', 'حساب المطالبة - أجر الباحث'),
+            _stringifyMmpValue(mapValue['enumerator_fee'], isArabic),
+          );
+          return;
+        }
+      }
+
+      if (normalizedKey == 'dispatchcosts') {
+        final mapValue = _toMapValue(rawValue);
+        if (mapValue != null) {
+          addLabeledEntry(
+            _bi(isArabic, 'Dispatch Cost Status', 'تكاليف الإرسال - الحالة'),
+            _stringifyMmpValue(mapValue['cost_status'], isArabic),
+          );
+          addLabeledEntry(
+            _bi(isArabic, 'Dispatch Cost Calculated By', 'تكاليف الإرسال - حسب'),
+            _stringifyMmpValue(mapValue['calculated_by'], isArabic),
+          );
+          addLabeledEntry(
+            _bi(isArabic, 'Dispatch Transport Cost', 'تكاليف الإرسال - نقل'),
+            _stringifyMmpValue(mapValue['transportation_cost'], isArabic),
+          );
+          addLabeledEntry(
+            _bi(isArabic, 'Dispatch Transport Budget', 'تكاليف الإرسال - ميزانية النقل'),
+            _stringifyMmpValue(mapValue['transport_budget_total'], isArabic),
+          );
+          return;
+        }
+      }
+
+      if (rawValue is Map || rawValue is List) return;
+
+      final value = _stringifyMmpValue(rawValue, isArabic);
+      if (value.isEmpty) return;
+      if (normalizedKey.isEmpty || seen.contains(normalizedKey)) return;
+      seen.add(normalizedKey);
+      details.add(MapEntry(
+        _formatMmpKeyLabel(key),
+        _enhanceMmpDetailValue(_formatMmpKeyLabel(key), value),
+      ));
+    }
+
+    const preferredKeys = [
+      'mmp_name',
+      'mmp_file_name',
+      'cp_name',
+      'monitoring_by',
+      'tool_to_be_used',
+      'tools_to_be_used',
+      'survey_tool',
+      'main_activity',
+      'activity_at_site',
+      'activity_type',
+      'activity',
+      'use_market_diversion',
+      'use_warehouse_monitoring',
+      'market_name',
+      'warehouse_name',
+      'whm_warehouse_name',
+      'mmp_status',
+    ];
+    for (final key in preferredKeys) {
+      addEntry(key, siteData[key]);
+      addEntry(key, additionalData[key]);
+    }
+
+    const excludedPrefixes = ['draft_', 'visit_', 'start_', 'final_', 'permit_', 'state_permit_', 'locality_permit_', 'registry_', '_'];
+    const excludedExact = {'assigned_to', 'assigned_at', 'accepted_at', 'accepted_by', 'claimed_at', 'claimed_by', 'updated_at', 'created_at'};
+    final sortedKeys = additionalData.keys.toList()..sort();
+    for (final key in sortedKeys) {
+      if (excludedExact.contains(key)) continue;
+      if (excludedPrefixes.any((p) => key.startsWith(p))) continue;
+      addEntry(key, additionalData[key]);
+    }
+    return details;
+  }
+
   @override
   Widget build(BuildContext context) {
     final isArabic = Localizations.localeOf(context).languageCode == 'ar';
+    final additionalData = _safeAdditionalData(site['additional_data']) ?? {};
     final siteName =
         site['site_name'] ??
         site['siteName'] ??
@@ -20,12 +417,41 @@ class StartVisitDialog extends StatelessWidget {
     final state = site['state'] ?? '';
     final locality = site['locality'] ?? '';
     final status = site['status'] ?? (isArabic ? 'معلق' : 'Pending');
-    final activityType = site['activity_type'] ?? site['main_activity'] ?? '';
-    final isDM = [
-      'GFA',
-      'CBT',
-      'EBSFP',
-    ].contains(activityType.toString().toUpperCase());
+
+    final toolsToBeUsed = _resolveFromSite(
+      site,
+      additionalData,
+      const [
+        'tool_to_be_used',
+        'tool_to_be_use',
+        'tools_to_be_used',
+        'tools_to_be_use',
+        'survey_tool',
+        'tool_used',
+        'tool',
+      ],
+    );
+    final mainActivity = _resolveFromSite(
+      site,
+      additionalData,
+      const [
+        'main_activity',
+        'activity_at_site',
+        'activity_type',
+        'activity',
+      ],
+    ).toUpperCase();
+    final mmpStatus = _resolveFromSite(
+      site,
+      additionalData,
+      const ['mmp_status', 'status'],
+    );
+    final toolsDisplay = toolsToBeUsed.isNotEmpty
+        ? toolsToBeUsed
+        : (mainActivity.isNotEmpty ? mainActivity : '');
+    final mainActivityDisplay = mainActivity.isNotEmpty ? mainActivity : '';
+    final mmpStatusDisplay = mmpStatus.isNotEmpty ? mmpStatus : status;
+    final uploadedDetails = _collectUploadedDetails(site, additionalData, isArabic);
 
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
@@ -120,14 +546,12 @@ class StartVisitDialog extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Site Details Card
+                    // Site Information card (exact same as Complete Site dialog)
                     Container(
-                      width: double.infinity,
                       padding: const EdgeInsets.all(20),
                       decoration: BoxDecoration(
-                        color: const Color(0xFFF8F9FA),
+                        color: AppColors.backgroundGray,
                         borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: Colors.grey.withOpacity(0.1)),
                       ),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -135,69 +559,218 @@ class StartVisitDialog extends StatelessWidget {
                           Text(
                             isArabic ? 'معلومات الموقع' : 'SITE INFORMATION',
                             style: GoogleFonts.poppins(
-                              fontSize: 11,
+                              fontSize: 10,
                               fontWeight: FontWeight.bold,
-                              color: const Color(0xFF666666),
-                              letterSpacing: 1,
+                              color: AppColors.textLight,
+                              letterSpacing: 1.2,
                             ),
                           ),
-                          const SizedBox(height: 16),
-                          _buildDetailRow(
-                            icon: Icons.location_on,
-                            iconColor: const Color(0xFF1976D2),
-                            label: isArabic ? 'الموقع' : 'Location',
-                            value: locality.isNotEmpty
-                                ? '$locality, $state'
-                                : state.isNotEmpty
-                                ? state
-                                : (isArabic ? 'غير متوفر' : 'N/A'),
-                          ),
-                          const SizedBox(height: 14),
-                          _buildDetailRow(
-                            icon: Icons.business,
-                            iconColor: const Color(0xFF1976D2),
-                            label: isArabic ? 'اسم الموقع' : 'Site Name',
-                            value: siteName,
-                          ),
-                          if (activityType.toString().isNotEmpty) ...[
-                            const SizedBox(height: 14),
-                            _buildDetailRow(
-                              icon: isDM
-                                  ? Icons.trending_down
-                                  : Icons.trending_up,
-                              iconColor: isDM
-                                  ? const Color(0xFF1976D2)
-                                  : const Color(0xFFFF9800),
-                              label: isArabic ? 'نوع المشروع' : 'Project Type',
-                              value: isDM
-                                  ? (isArabic
-                                        ? 'رصد التوزيع'
-                                        : 'Distribution Monitoring')
-                                  : (isArabic
-                                        ? 'رصد ما بعد التوزيع'
-                                        : 'Post-Dist. Monitoring'),
-                            ),
-                          ],
-                          const SizedBox(height: 14),
+                          const SizedBox(height: 12),
                           Row(
                             children: [
                               Expanded(
-                                child: _buildChip(
-                                  isArabic ? 'رمز الموقع' : 'Site Code',
-                                  siteCode,
-                                  const Color(0xFF1976D2),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      isArabic ? 'رمز الموقع' : 'Site Code',
+                                      style: GoogleFonts.poppins(
+                                        fontSize: 10,
+                                        color: AppColors.textLight,
+                                      ),
+                                    ),
+                                    Text(
+                                      siteCode,
+                                      textAlign: isArabic ? TextAlign.start : TextAlign.end,
+                                      textDirection: isArabic
+                                          ? TextDirection.rtl
+                                          : TextDirection.ltr,
+                                      style: GoogleFonts.poppins(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ),
-                              const SizedBox(width: 12),
                               Expanded(
-                                child: _buildChip(
-                                  isArabic ? 'الحالة' : 'Status',
-                                  status,
-                                  const Color(0xFFFF9800),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      isArabic ? 'المحلية' : 'Locality',
+                                      style: GoogleFonts.poppins(
+                                        fontSize: 10,
+                                        color: AppColors.textLight,
+                                      ),
+                                    ),
+                                    Text(
+                                      locality.isNotEmpty
+                                          ? locality
+                                          : (state.isNotEmpty ? state : 'N/A'),
+                                      textAlign: isArabic ? TextAlign.start : TextAlign.end,
+                                      textDirection: isArabic
+                                          ? TextDirection.rtl
+                                          : TextDirection.ltr,
+                                      style: GoogleFonts.poppins(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ),
                             ],
                           ),
+                        ],
+                      ),
+                    ),
+
+                    const SizedBox(height: 20),
+
+                    // MMP Details card (exact same as Complete Site dialog)
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: AppColors.primaryOrange.withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: AppColors.primaryOrange.withValues(alpha: 0.3),
+                          width: 1.5,
+                        ),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Icon(
+                                Icons.info_rounded,
+                                color: AppColors.primaryOrange,
+                                size: 20,
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Text(
+                                  isArabic ? 'تفاصيل الخطة' : 'MMP DETAILS',
+                                  style: GoogleFonts.poppins(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.bold,
+                                    color: AppColors.primaryOrange,
+                                    letterSpacing: 1,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                isArabic ? 'الأدوات المستخدمة' : 'Tools to be Used',
+                                style: GoogleFonts.poppins(
+                                  fontSize: 12,
+                                  color: Colors.grey[600],
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                toolsDisplay.isEmpty ? 'N/A' : toolsDisplay,
+                                textAlign: isArabic ? TextAlign.start : TextAlign.end,
+                                textDirection: isArabic
+                                    ? TextDirection.rtl
+                                    : TextDirection.ltr,
+                                style: GoogleFonts.poppins(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w700,
+                                  color: AppColors.primaryOrange,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      isArabic ? 'النشاط الرئيسي' : 'Main Activity',
+                                      style: GoogleFonts.poppins(
+                                        fontSize: 12,
+                                        color: Colors.grey[600],
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      mainActivityDisplay.isEmpty ? 'N/A' : mainActivityDisplay,
+                                      textAlign: isArabic ? TextAlign.start : TextAlign.end,
+                                      textDirection: isArabic
+                                          ? TextDirection.rtl
+                                          : TextDirection.ltr,
+                                      style: GoogleFonts.poppins(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w700,
+                                        color: AppColors.primaryOrange,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      isArabic ? 'الحالة' : 'Status',
+                                      style: GoogleFonts.poppins(
+                                        fontSize: 12,
+                                        color: Colors.grey[600],
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 8,
+                                        vertical: 4,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: AppColors.accentGreen.withValues(alpha: 0.15),
+                                        borderRadius: BorderRadius.circular(6),
+                                      ),
+                                      child: Text(
+                                        mmpStatusDisplay,
+                                        style: GoogleFonts.poppins(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w600,
+                                          color: AppColors.accentGreen,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                          if (uploadedDetails.isNotEmpty) ...[
+                            const SizedBox(height: 14),
+                            Text(
+                              isArabic ? 'بيانات MMP المرفوعة' : 'Uploaded MMP Data',
+                              style: GoogleFonts.poppins(
+                                fontSize: 12,
+                                color: Colors.grey[700],
+                                fontWeight: FontWeight.w600,
+                                letterSpacing: 0.3,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            ..._buildUploadedMmpDetailSections(isArabic, uploadedDetails),
+                          ],
                         ],
                       ),
                     ),
@@ -333,89 +906,6 @@ class StartVisitDialog extends StatelessWidget {
           ],
         ),
       ),
-    );
-  }
-
-  Widget _buildDetailRow({
-    required IconData icon,
-    required Color iconColor,
-    required String label,
-    required String value,
-  }) {
-    return Row(
-      children: [
-        Container(
-          width: 36,
-          height: 36,
-          decoration: BoxDecoration(
-            color: iconColor.withOpacity(0.1),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Icon(icon, color: iconColor, size: 18),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                label,
-                style: GoogleFonts.poppins(
-                  fontSize: 10,
-                  color: const Color(0xFF999999),
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                value,
-                style: GoogleFonts.poppins(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  color: const Color(0xFF333333),
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildChip(String label, String value, Color color) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label,
-          style: GoogleFonts.poppins(
-            fontSize: 10,
-            color: const Color(0xFF999999),
-            fontWeight: FontWeight.w500,
-          ),
-        ),
-        const SizedBox(height: 4),
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          decoration: BoxDecoration(
-            color: color.withOpacity(0.1),
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: color.withOpacity(0.3)),
-          ),
-          child: Text(
-            value,
-            style: GoogleFonts.poppins(
-              fontSize: 11,
-              fontWeight: FontWeight.bold,
-              color: color,
-            ),
-            textAlign: TextAlign.center,
-          ),
-        ),
-      ],
     );
   }
 

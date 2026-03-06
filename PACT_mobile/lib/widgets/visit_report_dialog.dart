@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:google_fonts/google_fonts.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../theme/app_colors.dart';
 import '../models/visit_report_data.dart';
 import '../services/location_service.dart';
@@ -31,11 +32,18 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
   bool _locationEnabled = false;
   String? _locationError;
   bool _isSubmitting = false;
+  bool _loggedMissingToolKeys = false;
+  bool _showCoreMmpDetails = false;
+  bool _showClaimMmpDetails = false;
+  bool _showDispatchMmpDetails = false;
+  bool _mmpSectionExpansionInitialized = false;
+  Map<String, dynamic>? _latestMmpEntry;
 
   DateTime? _visitStartTime;
   StreamSubscription<Position>? _positionStream;
 
   String? _selectedActivityType;
+  final Set<String> _selectedActivityTypes = <String>{};
   int _pdmQuestionnaires = 0;
   final TextEditingController _pdmQController = TextEditingController();
   final TextEditingController _marketNameController = TextEditingController();
@@ -65,12 +73,16 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
 
   bool get _isArabic => Localizations.localeOf(context).languageCode == 'ar';
 
+  String _bi(String en, String ar) =>
+      '\u2066$en\u2069 \u200B|\u200B \u2067$ar\u2069';
+
   bool _isYesValue(dynamic value) {
     final normalized = value?.toString().trim().toLowerCase() ?? '';
     return normalized == 'yes' ||
         normalized == 'y' ||
         normalized == 'true' ||
-        normalized == '1';
+        normalized == '1' ||
+        normalized == 'نعم';
   }
 
   Map<String, dynamic> get _additionalData {
@@ -81,11 +93,13 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
     final additionalData = _additionalData;
     final candidates = [
       widget.site['main_activity']?.toString(),
+      widget.site['activity_at_site']?.toString(),
       widget.site['activity_type']?.toString(),
       widget.site['activity']?.toString(),
       additionalData['main_activity']?.toString(),
       additionalData['activity_at_site']?.toString(),
       additionalData['activity_type']?.toString(),
+      additionalData['activity']?.toString(),
     ];
 
     for (final candidate in candidates) {
@@ -108,6 +122,7 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
 
   bool get _isDmMainActivity =>
       _normalizedMainActivity.startsWith('GFA') ||
+      _normalizedMainActivity.contains('CBT') ||
       _normalizedMainActivity.contains('BSFP') ||
       _normalizedMainActivity == 'DM';
 
@@ -144,13 +159,20 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
     }
 
     if (_hasMarketDiversion &&
-        _isDmMainActivity &&
+        (_isDmMainActivity ||
+            _baseActivityCode == 'GFA' ||
+            _baseActivityCode == 'CBT' ||
+            _baseActivityCode.isEmpty) &&
         !activities.contains('MDM')) {
       activities.add('MDM');
     }
 
     if (_hasWarehouseMonitoring &&
-        (_isDmMainActivity || _isAimMainActivity) &&
+        (_isDmMainActivity ||
+            _isAimMainActivity ||
+            _baseActivityCode == 'GFA' ||
+            _baseActivityCode == 'CBT' ||
+            _baseActivityCode.isEmpty) &&
         !activities.contains('WHM')) {
       activities.add('WHM');
     }
@@ -161,7 +183,11 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
   bool _showActivitySelector() => _getAvailableActivities().isNotEmpty;
 
   /// True if MDM is selected (market diversion = 2 visits)
-  bool get _hasMDM => _selectedActivityType == 'MDM';
+  bool get _hasMDM => _selectedActivityTypes.contains('MDM');
+
+  bool _isActivitySelected(String activityCode) {
+    return _selectedActivityTypes.contains(activityCode);
+  }
 
   int get _pdmSiteVisits => (_pdmQuestionnaires / _pdmQPerVisit).floor();
   int get _pdmRemainder => _pdmQuestionnaires % _pdmQPerVisit;
@@ -172,6 +198,7 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
     _loadDraftData();
     _startVisitTimer();
     _startLocationMonitoring();
+    _refreshMmpEntryFromServer();
   }
 
   @override
@@ -200,19 +227,599 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
     return null;
   }
 
+  Map<String, dynamic> _mergedSiteDataForMmp() {
+    if (_latestMmpEntry == null) {
+      return Map<String, dynamic>.from(widget.site);
+    }
+
+    final merged = <String, dynamic>{...widget.site, ..._latestMmpEntry!};
+
+    final baseAdditional =
+        _safeAdditionalData(widget.site['additional_data']) ??
+        <String, dynamic>{};
+    final latestAdditional =
+        _safeAdditionalData(_latestMmpEntry!['additional_data']) ??
+        <String, dynamic>{};
+    merged['additional_data'] = {...baseAdditional, ...latestAdditional};
+
+    return merged;
+  }
+
+  Future<void> _refreshMmpEntryFromServer() async {
+    final siteId = widget.site['id']?.toString();
+    if (siteId == null || siteId.isEmpty) return;
+
+    try {
+      final response = await Supabase.instance.client
+          .from('mmp_site_entries')
+          .select('*')
+          .eq('id', siteId)
+          .maybeSingle();
+
+      if (!mounted || response == null) return;
+
+      final map = Map<String, dynamic>.from(response as Map);
+      setState(() {
+        _latestMmpEntry = map;
+      });
+    } catch (error) {
+      debugPrint(
+        '[VisitReportDialog] Failed to refresh mmp_site_entries row: $error',
+      );
+    }
+  }
+
+  String _normalizeLookupKey(String input) {
+    return input.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '');
+  }
+
+  String _stringifyMmpValue(dynamic value) {
+    if (value == null) return '';
+
+    if (value is bool) {
+      return _isArabic ? (value ? 'نعم' : 'لا') : (value ? 'Yes' : 'No');
+    }
+
+    if (value is List || value is Map) {
+      try {
+        return jsonEncode(value);
+      } catch (_) {
+        final fallback = value.toString().trim();
+        return fallback.toLowerCase() == 'null' ? '' : fallback;
+      }
+    }
+
+    final text = value.toString().trim();
+    if (text.isEmpty) return '';
+
+    final lowered = text.toLowerCase();
+    if (lowered == 'null' || lowered == 'n/a' || lowered == 'na') {
+      return '';
+    }
+
+    return text;
+  }
+
+  String _resolveMmpValue({
+    required Map<String, dynamic> siteData,
+    required Map<String, dynamic> additionalData,
+    required List<String> exactKeys,
+    required List<String> normalizedKeys,
+  }) {
+    for (final key in exactKeys) {
+      final fromSite = _stringifyMmpValue(siteData[key]);
+      if (fromSite.isNotEmpty) return fromSite;
+
+      final fromAdditional = _stringifyMmpValue(additionalData[key]);
+      if (fromAdditional.isNotEmpty) return fromAdditional;
+    }
+
+    for (final normalizedTarget in normalizedKeys) {
+      for (final entry in siteData.entries) {
+        if (_normalizeLookupKey(entry.key) == normalizedTarget) {
+          final value = _stringifyMmpValue(entry.value);
+          if (value.isNotEmpty) return value;
+        }
+      }
+      for (final entry in additionalData.entries) {
+        if (_normalizeLookupKey(entry.key) == normalizedTarget) {
+          final value = _stringifyMmpValue(entry.value);
+          if (value.isNotEmpty) return value;
+        }
+      }
+    }
+
+    return '';
+  }
+
+  dynamic _resolveMmpRawValue({
+    required Map<String, dynamic> siteData,
+    required Map<String, dynamic> additionalData,
+    required List<String> exactKeys,
+    required List<String> normalizedKeys,
+  }) {
+    for (final key in exactKeys) {
+      if (siteData.containsKey(key) && siteData[key] != null) {
+        return siteData[key];
+      }
+      if (additionalData.containsKey(key) && additionalData[key] != null) {
+        return additionalData[key];
+      }
+    }
+
+    for (final normalizedTarget in normalizedKeys) {
+      for (final entry in siteData.entries) {
+        if (_normalizeLookupKey(entry.key) == normalizedTarget &&
+            entry.value != null) {
+          return entry.value;
+        }
+      }
+      for (final entry in additionalData.entries) {
+        if (_normalizeLookupKey(entry.key) == normalizedTarget &&
+            entry.value != null) {
+          return entry.value;
+        }
+      }
+    }
+
+    return null;
+  }
+
+  Map<String, dynamic>? _toMapValue(dynamic value) {
+    if (value == null) return null;
+    if (value is Map<String, dynamic>) return value;
+    if (value is Map) return Map<String, dynamic>.from(value);
+    if (value is String) {
+      try {
+        final decoded = jsonDecode(value);
+        if (decoded is Map) {
+          return Map<String, dynamic>.from(decoded);
+        }
+      } catch (_) {}
+    }
+    return null;
+  }
+
+  String _formatMmpKeyLabel(String key) {
+    final cleaned = key
+        .replaceAll(RegExp(r'[^A-Za-z0-9_ ]'), ' ')
+        .replaceAll('_', ' ')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+
+    if (cleaned.isEmpty) return key;
+
+    return cleaned
+        .split(' ')
+        .map((word) {
+          if (word.isEmpty) return word;
+          return '${word[0].toUpperCase()}${word.substring(1)}';
+        })
+        .join(' ');
+  }
+
+  String _normalizeLabelKey(String input) {
+    return input.toLowerCase().replaceAll(RegExp(r'[\s_:\-]+'), '').trim();
+  }
+
+  String _formatNumberWithCommas(String numericText) {
+    final parts = numericText.split('.');
+    final integerPart = parts.first;
+    final decimalPart = parts.length > 1 ? parts[1] : '';
+
+    final buffer = StringBuffer();
+    for (int i = 0; i < integerPart.length; i++) {
+      final reverseIndex = integerPart.length - i;
+      buffer.write(integerPart[i]);
+      if (reverseIndex > 1 && reverseIndex % 3 == 1) {
+        buffer.write(',');
+      }
+    }
+
+    if (decimalPart.isNotEmpty) {
+      return '${buffer.toString()}.$decimalPart';
+    }
+
+    return buffer.toString();
+  }
+
+  String _enhanceMmpDetailValue(String label, String value) {
+    if (value.isEmpty) return value;
+
+    final normalizedLabel = _normalizeLabelKey(label);
+    final shouldFormatAmount =
+        normalizedLabel.contains('payout') ||
+        normalizedLabel.contains('cost') ||
+        normalizedLabel.contains('budget') ||
+        normalizedLabel.contains('fee') ||
+        normalizedLabel.contains('transport') ||
+        normalizedLabel.contains('مطالبة') ||
+        normalizedLabel.contains('ارسال');
+
+    if (!shouldFormatAmount) return value;
+
+    final cleaned = value.replaceAll(',', '').trim();
+    final parsed = num.tryParse(cleaned);
+    if (parsed == null) return value;
+
+    final normalizedNumber = parsed % 1 == 0
+        ? parsed.toInt().toString()
+        : parsed.toStringAsFixed(2);
+    final withCommas = _formatNumberWithCommas(normalizedNumber);
+
+    return '$withCommas SDG';
+  }
+
+  List<Widget> _buildUploadedMmpDetailSections(
+    List<MapEntry<String, String>> uploadedDetails,
+  ) {
+    final core = <MapEntry<String, String>>[];
+    final claim = <MapEntry<String, String>>[];
+    final dispatch = <MapEntry<String, String>>[];
+
+    for (final entry in uploadedDetails) {
+      final label = entry.key.toLowerCase();
+      if (label.contains('dispatch') || label.contains('إرسال')) {
+        dispatch.add(entry);
+      } else if (label.contains('claim') || label.contains('مطالبة')) {
+        claim.add(entry);
+      } else {
+        core.add(entry);
+      }
+    }
+
+    Widget buildSection({
+      required String title,
+      required List<MapEntry<String, String>> entries,
+      required bool isExpanded,
+      required VoidCallback onToggle,
+    }) {
+      return Container(
+        padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.55),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: Colors.grey.withValues(alpha: 0.2)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            InkWell(
+              borderRadius: BorderRadius.circular(8),
+              onTap: onToggle,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 2),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        title,
+                        style: GoogleFonts.poppins(
+                          fontSize: 12,
+                          height: 1.3,
+                          color: Colors.grey[800],
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 7,
+                        vertical: 3,
+                      ),
+                      decoration: BoxDecoration(
+                        color: AppColors.primaryOrange.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                      child: Text(
+                        entries.length.toString(),
+                        style: GoogleFonts.poppins(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.primaryOrange,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Icon(
+                      isExpanded
+                          ? Icons.keyboard_arrow_up_rounded
+                          : Icons.keyboard_arrow_down_rounded,
+                      size: 18,
+                      color: Colors.grey[700],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            if (isExpanded) ...[
+              const SizedBox(height: 8),
+              ...entries.map(
+                (entry) => Padding(
+                  padding: const EdgeInsets.only(bottom: 6),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        flex: 4,
+                        child: Text(
+                          entry.key,
+                          style: GoogleFonts.poppins(
+                            fontSize: 12,
+                            height: 1.4,
+                            color: Colors.grey[700],
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        flex: 6,
+                        child: Text(
+                          entry.value,
+                          textAlign: _isArabic
+                              ? TextAlign.start
+                              : TextAlign.end,
+                          textDirection: _isArabic
+                              ? TextDirection.rtl
+                              : TextDirection.ltr,
+                          style: GoogleFonts.poppins(
+                            fontSize: 12,
+                            height: 1.4,
+                            color: AppColors.textDark,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+      );
+    }
+
+    final sections = <Widget>[];
+
+    if (!_mmpSectionExpansionInitialized) {
+      _showCoreMmpDetails = core.isNotEmpty;
+      _showClaimMmpDetails = false;
+      _showDispatchMmpDetails = false;
+      _mmpSectionExpansionInitialized = true;
+    }
+
+    if (core.isNotEmpty) {
+      sections.add(
+        buildSection(
+          title: _bi('Core Details', 'البيانات الأساسية'),
+          entries: core,
+          isExpanded: _showCoreMmpDetails,
+          onToggle: () => setState(() {
+            _showCoreMmpDetails = !_showCoreMmpDetails;
+          }),
+        ),
+      );
+    }
+    if (claim.isNotEmpty) {
+      if (sections.isNotEmpty) sections.add(const SizedBox(height: 8));
+      sections.add(
+        buildSection(
+          title: _bi('Claim Details', 'تفاصيل المطالبة'),
+          entries: claim,
+          isExpanded: _showClaimMmpDetails,
+          onToggle: () => setState(() {
+            _showClaimMmpDetails = !_showClaimMmpDetails;
+          }),
+        ),
+      );
+    }
+    if (dispatch.isNotEmpty) {
+      if (sections.isNotEmpty) sections.add(const SizedBox(height: 8));
+      sections.add(
+        buildSection(
+          title: _bi('Dispatch Details', 'تفاصيل الإرسال'),
+          entries: dispatch,
+          isExpanded: _showDispatchMmpDetails,
+          onToggle: () => setState(() {
+            _showDispatchMmpDetails = !_showDispatchMmpDetails;
+          }),
+        ),
+      );
+    }
+
+    return sections;
+  }
+
+  List<MapEntry<String, String>> _collectMmpUploadedDetails(
+    Map<String, dynamic> siteData,
+    Map<String, dynamic> additionalData,
+  ) {
+    final details = <MapEntry<String, String>>[];
+    final seen = <String>{};
+
+    void addLabeledEntry(String label, String value) {
+      final normalized = _normalizeLabelKey(label);
+      if (normalized.isEmpty || seen.contains(normalized) || value.isEmpty) {
+        return;
+      }
+      seen.add(normalized);
+      details.add(MapEntry(label, _enhanceMmpDetailValue(label, value)));
+    }
+
+    void addEntry(String key, dynamic rawValue) {
+      final normalizedKey = _normalizeLookupKey(key);
+
+      if (normalizedKey == 'claimfeecalculation') {
+        final mapValue = _toMapValue(rawValue);
+        if (mapValue != null) {
+          addLabeledEntry(
+            _bi('Claim Calculation Source', 'حساب المطالبة - المصدر'),
+            _stringifyMmpValue(mapValue['fee_source']),
+          );
+          addLabeledEntry(
+            _bi('Claim Calculation Scope', 'حساب المطالبة - النطاق'),
+            _stringifyMmpValue(mapValue['role_scope']),
+          );
+          addLabeledEntry(
+            _bi('Claim Total Payout', 'حساب المطالبة - إجمالي الدفع'),
+            _stringifyMmpValue(mapValue['total_payout']),
+          );
+          addLabeledEntry(
+            _bi('Claim Transport Cost', 'حساب المطالبة - تكلفة النقل'),
+            _stringifyMmpValue(mapValue['calculated_transport_cost']),
+          );
+          addLabeledEntry(
+            _bi('Claim Enumerator Fee', 'حساب المطالبة - أجر الباحث'),
+            _stringifyMmpValue(mapValue['enumerator_fee']),
+          );
+          return;
+        }
+      }
+
+      if (normalizedKey == 'dispatchcosts') {
+        final mapValue = _toMapValue(rawValue);
+        if (mapValue != null) {
+          addLabeledEntry(
+            _bi('Dispatch Cost Status', 'تكاليف الإرسال - الحالة'),
+            _stringifyMmpValue(mapValue['cost_status']),
+          );
+          addLabeledEntry(
+            _bi('Dispatch Cost Calculated By', 'تكاليف الإرسال - حسب'),
+            _stringifyMmpValue(mapValue['calculated_by']),
+          );
+          addLabeledEntry(
+            _bi('Dispatch Transport Cost', 'تكاليف الإرسال - نقل'),
+            _stringifyMmpValue(mapValue['transportation_cost']),
+          );
+          addLabeledEntry(
+            _bi('Dispatch Transport Budget', 'تكاليف الإرسال - ميزانية النقل'),
+            _stringifyMmpValue(mapValue['transport_budget_total']),
+          );
+          return;
+        }
+      }
+
+      final value = _stringifyMmpValue(rawValue);
+      if (value.isEmpty) return;
+
+      final normalized = normalizedKey;
+      if (normalized.isEmpty || seen.contains(normalized)) return;
+
+      seen.add(normalized);
+      final label = _formatMmpKeyLabel(key);
+      details.add(MapEntry(label, _enhanceMmpDetailValue(label, value)));
+    }
+
+    final preferredTopLevelKeys = <String>[
+      'mmp_name',
+      'mmp_file_name',
+      'cp_name',
+      'monitoring_by',
+      'tool_to_be_used',
+      'tools_to_be_used',
+      'survey_tool',
+      'main_activity',
+      'activity_at_site',
+      'activity_type',
+      'activity',
+      'use_market_diversion',
+      'use_warehouse_monitoring',
+      'market_diversion_monitoring',
+      'warehouse_monitoring',
+      'market_name',
+      'warehouse_name',
+      'whm_warehouse_name',
+      'mmp_status',
+    ];
+
+    for (final key in preferredTopLevelKeys) {
+      addEntry(key, siteData[key]);
+      addEntry(key, additionalData[key]);
+    }
+
+    final excludedAdditionalPrefixes = <String>[
+      'draft_',
+      'visit_',
+      'start_',
+      'final_',
+      'permit_',
+      'state_permit_',
+      'locality_permit_',
+      'registry_',
+      '_',
+    ];
+
+    final excludedAdditionalExact = <String>{
+      'assigned_to',
+      'assigned_at',
+      'accepted_at',
+      'accepted_by',
+      'claimed_at',
+      'claimed_by',
+      'updated_at',
+      'created_at',
+    };
+
+    final sortedAdditionalKeys = additionalData.keys.toList()..sort();
+    for (final key in sortedAdditionalKeys) {
+      final normalized = _normalizeLookupKey(key);
+      if (normalized.isEmpty) continue;
+
+      final isExcludedPrefix = excludedAdditionalPrefixes.any(
+        (prefix) => key.startsWith(prefix),
+      );
+      if (isExcludedPrefix || excludedAdditionalExact.contains(key)) {
+        continue;
+      }
+
+      addEntry(key, additionalData[key]);
+    }
+
+    return details;
+  }
+
   void _loadDraftData() {
     final additionalData = _safeAdditionalData(widget.site['additional_data']);
+    final mergedAdditional = additionalData ?? <String, dynamic>{};
 
-    _hasMarketDiversion =
-        _isYesValue(widget.site['use_market_diversion']) ||
-        _isYesValue(widget.site['use_market_diversion_monitoring']) ||
-        _isYesValue(widget.site['market_diversion']) ||
-        _isYesValue(widget.site['market_diversion_monitoring']);
-    _hasWarehouseMonitoring =
-        _isYesValue(widget.site['use_warehouse_monitoring']) ||
-        _isYesValue(widget.site['use_warehouse']) ||
-        _isYesValue(widget.site['warehouse_monitoring']) ||
-        _isYesValue(widget.site['warehouse_monitoring_flag']);
+    final marketDiversionRaw = _resolveMmpRawValue(
+      siteData: widget.site,
+      additionalData: mergedAdditional,
+      exactKeys: const [
+        'use_market_diversion',
+        'use_market_diversion_monitoring',
+        'market_diversion',
+        'market_diversion_monitoring',
+      ],
+      normalizedKeys: const [
+        'usemarketdiversion',
+        'usemarketdiversionmonitoring',
+        'marketdiversion',
+        'marketdiversionmonitoring',
+      ],
+    );
+
+    final warehouseMonitoringRaw = _resolveMmpRawValue(
+      siteData: widget.site,
+      additionalData: mergedAdditional,
+      exactKeys: const [
+        'use_warehouse_monitoring',
+        'use_warehouse',
+        'warehouse_monitoring',
+        'warehouse_monitoring_flag',
+      ],
+      normalizedKeys: const [
+        'usewarehousemonitoring',
+        'usewarehouse',
+        'warehousemonitoring',
+        'warehousemonitoringflag',
+      ],
+    );
+
+    _hasMarketDiversion = _isYesValue(marketDiversionRaw);
+    _hasWarehouseMonitoring = _isYesValue(warehouseMonitoringRaw);
 
     if (additionalData != null && additionalData.isNotEmpty) {
       _hasMarketDiversion =
@@ -232,6 +839,15 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
       _notesController.text = additionalData['draft_notes'] ?? '';
       _durationMinutes = additionalData['draft_visit_duration'] ?? 0;
       _selectedActivityType = additionalData['draft_activity_type'];
+      final rawSelectedActivities = additionalData['draft_activity_types'];
+      if (rawSelectedActivities is List) {
+        for (final value in rawSelectedActivities) {
+          final normalized = value.toString().trim().toUpperCase();
+          if (normalized.isNotEmpty) {
+            _selectedActivityTypes.add(normalized);
+          }
+        }
+      }
       _warehouseName =
           (additionalData['draft_warehouse_name']?.toString() ??
                   additionalData['warehouse_name']?.toString() ??
@@ -239,6 +855,20 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
                   additionalData['warehouse']?.toString() ??
                   '')
               .trim();
+      _marketNameController.text =
+          (additionalData['draft_market_name']?.toString() ??
+                  additionalData['mdm_market_name']?.toString() ??
+                  additionalData['market_name']?.toString() ??
+                  '')
+              .trim();
+      final additionalDraftPaths = additionalData['draft_photo_paths'];
+      if (additionalDraftPaths is List) {
+        for (final p in additionalDraftPaths) {
+          if (p is String && p.trim().isNotEmpty) {
+            _photoPaths.add(p.trim());
+          }
+        }
+      }
       final draftQ =
           (additionalData['draft_pdm_questionnaires'] as num?)?.toInt() ?? 0;
       if (draftQ > 0) {
@@ -292,9 +922,22 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
           if (draft['draft_activity_type'] != null) {
             _selectedActivityType = draft['draft_activity_type'] as String?;
           }
+          final rawSelectedActivities = draft['draft_activity_types'];
+          if (rawSelectedActivities is List) {
+            for (final value in rawSelectedActivities) {
+              final normalized = value.toString().trim().toUpperCase();
+              if (normalized.isNotEmpty) {
+                _selectedActivityTypes.add(normalized);
+              }
+            }
+          }
           if (draft['draft_warehouse_name'] != null) {
             _warehouseName =
                 (draft['draft_warehouse_name'] as String?)?.trim() ?? '';
+          }
+          if (draft['draft_market_name'] != null) {
+            _marketNameController.text =
+                (draft['draft_market_name'] as String?)?.trim() ?? '';
           }
           final draftQ2 =
               (draft['draft_pdm_questionnaires'] as num?)?.toInt() ?? 0;
@@ -325,8 +968,17 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
           final paths = draft['draft_photo_paths'] as List?;
           if (paths != null && paths.isNotEmpty) {
             for (final p in paths) {
-              if (p is String && File(p).existsSync()) {
-                _photoPaths.add(p);
+              if (p is! String) continue;
+              final normalizedPath = p.trim();
+              if (normalizedPath.isEmpty) continue;
+
+              if (kIsWeb) {
+                _photoPaths.add(normalizedPath);
+                continue;
+              }
+
+              if (File(normalizedPath).existsSync()) {
+                _photoPaths.add(normalizedPath);
               }
             }
           }
@@ -338,9 +990,26 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
 
     final availableActivities = _getAvailableActivities();
     if (availableActivities.isNotEmpty) {
+      _selectedActivityTypes.removeWhere(
+        (activity) => !availableActivities.contains(activity),
+      );
+
+      if (_selectedActivityType != null &&
+          _selectedActivityType!.trim().isNotEmpty) {
+        final normalizedPrimary = _selectedActivityType!.trim().toUpperCase();
+        if (availableActivities.contains(normalizedPrimary)) {
+          _selectedActivityTypes.add(normalizedPrimary);
+          _selectedActivityType = normalizedPrimary;
+        }
+      }
+
+      if (_selectedActivityTypes.isEmpty) {
+        _selectedActivityTypes.add(availableActivities.first);
+      }
+
       if (_selectedActivityType == null ||
-          !availableActivities.contains(_selectedActivityType)) {
-        _selectedActivityType = availableActivities.first;
+          !_selectedActivityTypes.contains(_selectedActivityType)) {
+        _selectedActivityType = _selectedActivityTypes.first;
       }
     }
 
@@ -450,14 +1119,12 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
           children: [
             ListTile(
               leading: const Icon(Icons.camera_alt),
-              title: Text(_isArabic ? 'التقاط صورة' : 'Take Photo'),
+              title: Text(_bi('Take Photo', 'التقاط صورة')),
               onTap: () => Navigator.pop(context, ImageSource.camera),
             ),
             ListTile(
               leading: const Icon(Icons.photo_library),
-              title: Text(
-                _isArabic ? 'اختيار من المعرض' : 'Choose from Gallery',
-              ),
+              title: Text(_bi('Choose from Gallery', 'اختيار من المعرض')),
               onTap: () => Navigator.pop(context, ImageSource.gallery),
             ),
           ],
@@ -517,9 +1184,10 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            _isArabic
-                ? 'الوصول إلى الموقع مطلوب لإكمال زيارة الموقع.'
-                : 'Location access is required to complete the site visit.',
+            _bi(
+              'Final location is required. Please tap Retry to capture location.',
+              'الموقع النهائي مطلوب. يرجى الضغط على إعادة المحاولة لالتقاط الموقع.',
+            ),
           ),
           backgroundColor: Colors.red,
         ),
@@ -541,14 +1209,14 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
       return;
     }
 
-    if (_showActivitySelector() &&
-        (_selectedActivityType == null || _selectedActivityType!.isEmpty)) {
+    if (_showActivitySelector() && _selectedActivityTypes.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            _isArabic
-                ? 'يرجى اختيار نشاط واحد على الأقل.'
-                : 'Please select at least one activity.',
+            _bi(
+              'Please select at least one activity',
+              'يرجى اختيار نشاط واحد على الأقل',
+            ),
           ),
           backgroundColor: Colors.red,
         ),
@@ -556,7 +1224,7 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
       return;
     }
 
-    if (_selectedActivityType == 'MDM' &&
+    if (_isActivitySelected('MDM') &&
         _marketNameController.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -571,7 +1239,7 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
       return;
     }
 
-    if (_selectedActivityType == 'WHM' && _warehouseName.trim().isEmpty) {
+    if (_isActivitySelected('WHM') && _warehouseName.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
@@ -609,6 +1277,7 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
         durationMinutes: _durationMinutes,
         coordinates: _coordinates,
         activityType: _selectedActivityType,
+        selectedActivityTypes: _selectedActivityTypes.toList(),
         pdmQuestionnaires: _pdmQuestionnaires,
         hasMarketDiversion: _hasMDM,
         marketName: _marketNameController.text.trim().isEmpty
@@ -628,7 +1297,7 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
         setState(() => _isSubmitting = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('${_isArabic ? 'خطأ' : 'Error'}: ${e.toString()}'),
+            content: Text('${_bi('Error', 'خطأ')}: ${e.toString()}'),
             backgroundColor: Colors.red,
           ),
         );
@@ -647,7 +1316,9 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
         'draft_visit_duration': _durationMinutes,
         'draft_photo_paths': List<String>.from(_photoPaths),
         'draft_activity_type': _selectedActivityType,
+        'draft_activity_types': _selectedActivityTypes.toList(),
         'draft_warehouse_name': _warehouseName.trim(),
+        'draft_market_name': _marketNameController.text.trim(),
         if (_pdmQuestionnaires > 0)
           'draft_pdm_questionnaires': _pdmQuestionnaires,
       };
@@ -686,7 +1357,7 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              '${_isArabic ? 'تعذر حفظ المسودة' : 'Could not save draft'}: ${e.toString()}',
+              '${_bi('Could not save draft', 'تعذر حفظ المسودة')}: ${e.toString()}',
             ),
             backgroundColor: Colors.red,
           ),
@@ -700,7 +1371,7 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
     final siteName =
         widget.site['site_name'] ??
         widget.site['siteName'] ??
-        (_isArabic ? 'موقع غير معروف' : 'Unknown Site');
+        _bi('Unknown Site', 'موقع غير معروف');
     final siteCode =
         widget.site['site_code'] ??
         widget.site['siteCode'] ??
@@ -709,229 +1380,253 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
     final locality = widget.site['locality'] ?? '';
     final state = widget.site['state'] ?? '';
 
-    return Dialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-      backgroundColor: Colors.transparent,
-      insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
-      child: Container(
-        constraints: BoxConstraints(
-          maxHeight: MediaQuery.of(context).size.height * 0.92,
-          maxWidth: 500,
-        ),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(24),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.15),
-              blurRadius: 30,
-              offset: const Offset(0, 10),
-            ),
-          ],
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Professional Header with Gradient
-            Container(
-              padding: const EdgeInsets.all(24),
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: [Color(0xFF1976D2), Color(0xFF1565C0)],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-                borderRadius: const BorderRadius.only(
-                  topLeft: Radius.circular(24),
-                  topRight: Radius.circular(24),
-                ),
+    return Directionality(
+      textDirection: _isArabic ? TextDirection.rtl : TextDirection.ltr,
+      child: Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+        child: Container(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.of(context).size.height * 0.92,
+            maxWidth: 500,
+          ),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(24),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.15),
+                blurRadius: 30,
+                offset: const Offset(0, 10),
               ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Container(
-                        width: 48,
-                        height: 48,
-                        decoration: const BoxDecoration(
-                          color: Colors.white,
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Icon(
-                          Icons.check_circle,
-                          color: Color(0xFF1976D2),
-                          size: 28,
-                        ),
-                      ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              _isArabic
-                                  ? 'إكمال زيارة الموقع'
-                                  : 'Complete Site Visit',
-                              style: GoogleFonts.poppins(
-                                fontSize: 22,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.white,
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              siteName,
-                              style: GoogleFonts.poppins(
-                                fontSize: 12,
-                                color: Colors.white70,
-                                fontWeight: FontWeight.w500,
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
+            ],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Professional Header with Gradient
+              Container(
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF1976D2), Color(0xFF1565C0)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
                   ),
-                ],
-              ),
-            ),
-
-            Expanded(
-              child: Form(
-                key: _formKey,
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.all(24),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _buildLocationStatusCard(),
-
-                      const SizedBox(height: 20),
-
-                      _buildMmpDetailsCard(),
-
-                      const SizedBox(height: 20),
-
-                      _buildSiteInfoCard(siteCode, locality, state),
-
-                      const SizedBox(height: 20),
-
-                      _buildActivityTypeSelector(),
-
-                      const SizedBox(height: 20),
-
-                      _buildActivitiesField(),
-
-                      const SizedBox(height: 20),
-
-                      _buildNotesField(),
-
-                      const SizedBox(height: 20),
-
-                      _buildPhotosSection(),
-                    ],
+                  borderRadius: const BorderRadius.only(
+                    topLeft: Radius.circular(24),
+                    topRight: Radius.circular(24),
                   ),
                 ),
-              ),
-            ),
-
-            Container(
-              padding: const EdgeInsets.all(24),
-              decoration: BoxDecoration(
-                border: Border(
-                  top: BorderSide(color: Colors.grey.withOpacity(0.1)),
-                ),
-              ),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton(
-                      onPressed: _isSubmitting
-                          ? null
-                          : () => Navigator.of(context).pop(),
-                      style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          width: 48,
+                          height: 48,
+                          decoration: const BoxDecoration(
+                            color: Colors.white,
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(
+                            Icons.check_circle,
+                            color: Color(0xFF1976D2),
+                            size: 28,
+                          ),
                         ),
-                        side: BorderSide(
-                          color: Colors.grey.withOpacity(0.3),
-                          width: 1.5,
-                        ),
-                      ),
-                      child: Text(
-                        _isArabic ? 'إلغاء' : 'Cancel',
-                        style: GoogleFonts.poppins(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                          color: const Color(0xFF333333),
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: _isSubmitting ? null : _saveDraft,
-                      icon: const Icon(Icons.save_outlined, size: 18),
-                      label: Text(_isArabic ? 'مسودة' : 'Draft'),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: const Color(0xFFFF9800),
-                        side: const BorderSide(
-                          color: Color(0xFFFF9800),
-                          width: 1.5,
-                        ),
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    flex: 2,
-                    child: ElevatedButton.icon(
-                      onPressed: _isSubmitting ? null : _submit,
-                      icon: _isSubmitting
-                          ? const SizedBox.shrink()
-                          : const Icon(Icons.check_circle, size: 20),
-                      label: _isSubmitting
-                          ? const SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                valueColor: AlwaysStoppedAnimation<Color>(
-                                  Colors.white,
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                _isArabic
+                                    ? 'إكمال زيارة الموقع'
+                                    : 'Complete Site Visit',
+                                style: GoogleFonts.poppins(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.white,
                                 ),
                               ),
-                            )
-                          : Text(
-                              _isArabic ? 'إكمال الزيارة' : 'Complete Visit',
-                              style: GoogleFonts.poppins(
-                                fontSize: 14,
-                                fontWeight: FontWeight.bold,
+                              const SizedBox(height: 4),
+                              Text(
+                                siteName,
+                                style: GoogleFonts.poppins(
+                                  fontSize: 11,
+                                  color: Colors.white70,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
                               ),
-                            ),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF1976D2),
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
+                            ],
+                          ),
                         ),
-                        elevation: 2,
-                      ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+
+              Expanded(
+                child: Form(
+                  key: _formKey,
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _buildLocationStatusCard(),
+
+                        const SizedBox(height: 20),
+
+                        _buildMmpDetailsCard(),
+
+                        const SizedBox(height: 20),
+
+                        _buildSiteInfoCard(siteCode, locality, state),
+
+                        const SizedBox(height: 20),
+
+                        _buildActivityTypeSelector(),
+
+                        const SizedBox(height: 20),
+
+                        _buildActivitiesField(),
+
+                        const SizedBox(height: 20),
+
+                        _buildNotesField(),
+
+                        const SizedBox(height: 20),
+
+                        _buildPhotosSection(),
+                      ],
                     ),
                   ),
-                ],
+                ),
               ),
-            ),
-          ],
+
+              Container(
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  border: Border(
+                    top: BorderSide(color: Colors.grey.withOpacity(0.1)),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: _isSubmitting
+                            ? null
+                            : () => Navigator.of(context).pop(),
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          side: BorderSide(
+                            color: Colors.grey.withOpacity(0.3),
+                            width: 1.5,
+                          ),
+                        ),
+                        child: Text(
+                          _bi('Cancel', 'إلغاء'),
+                          maxLines: 1,
+                          softWrap: false,
+                          overflow: TextOverflow.ellipsis,
+                          style: GoogleFonts.poppins(
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w600,
+                            color: const Color(0xFF333333),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: _isSubmitting ? null : _saveDraft,
+                        icon: const Icon(Icons.save_outlined, size: 18),
+                        label: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Text(
+                            _bi('Draft', 'مسودة'),
+                            maxLines: 1,
+                            softWrap: false,
+                            overflow: TextOverflow.ellipsis,
+                            style: GoogleFonts.poppins(
+                              fontSize: 11.5,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: const Color(0xFFFF9800),
+                          side: const BorderSide(
+                            color: Color(0xFFFF9800),
+                            width: 1.5,
+                          ),
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      flex: 2,
+                      child: ElevatedButton.icon(
+                        onPressed: _isSubmitting ? null : _submit,
+                        icon: _isSubmitting
+                            ? const SizedBox.shrink()
+                            : const Icon(Icons.check_circle, size: 20),
+                        label: _isSubmitting
+                            ? const SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  valueColor: AlwaysStoppedAnimation<Color>(
+                                    Colors.white,
+                                  ),
+                                ),
+                              )
+                            : FittedBox(
+                                fit: BoxFit.scaleDown,
+                                child: Text(
+                                  _bi('Complete Visit', 'إكمال الزيارة'),
+                                  maxLines: 1,
+                                  softWrap: false,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: GoogleFonts.poppins(
+                                    fontSize: 11.5,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF1976D2),
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          elevation: 2,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -939,6 +1634,9 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
 
   Widget _buildActivityTypeSelector() {
     final availableActivities = _getAvailableActivities();
+    final hasPDMSelected = _isActivitySelected('PDM');
+    final hasMDMSelected = _isActivitySelected('MDM');
+    final hasWHMSelected = _isActivitySelected('WHM');
     if (availableActivities.isEmpty) {
       return const SizedBox.shrink();
     }
@@ -962,6 +1660,17 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
               letterSpacing: 1,
             ),
           ),
+          const SizedBox(height: 6),
+          Text(
+            _isArabic
+                ? 'يمكنك اختيار نشاط واحد أو أكثر'
+                : 'You can select one or multiple activities',
+            style: GoogleFonts.poppins(
+              fontSize: 10,
+              color: Colors.grey.shade600,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
           const SizedBox(height: 16),
           GridView.count(
             crossAxisCount: 2,
@@ -970,7 +1679,7 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
             mainAxisSpacing: 12,
             crossAxisSpacing: 12,
             children: availableActivities.map((key) {
-              final isSelected = _selectedActivityType == key;
+              final isSelected = _isActivitySelected(key);
               final isMDM = key == 'MDM';
               final isPDM = key == 'PDM';
               final isGFA = key == 'GFA';
@@ -987,17 +1696,29 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
 
               return GestureDetector(
                 onTap: () => setState(() {
-                  final previous = _selectedActivityType;
-                  _selectedActivityType = key;
-                  if (previous == 'PDM' && key != 'PDM') {
-                    _pdmQuestionnaires = 0;
-                    _pdmQController.clear();
-                  }
-                  if (previous == 'MDM' && key != 'MDM') {
-                    _marketNameController.clear();
-                  }
-                  if (previous == 'WHM' && key != 'WHM') {
-                    _warehouseName = '';
+                  final wasSelected = _selectedActivityTypes.contains(key);
+
+                  if (wasSelected) {
+                    _selectedActivityTypes.remove(key);
+                    if (key == 'PDM') {
+                      _pdmQuestionnaires = 0;
+                      _pdmQController.clear();
+                    }
+                    if (key == 'MDM') {
+                      _marketNameController.clear();
+                    }
+                    if (key == 'WHM') {
+                      _warehouseName = '';
+                    }
+
+                    if (_selectedActivityType == key) {
+                      _selectedActivityType = _selectedActivityTypes.isNotEmpty
+                          ? _selectedActivityTypes.first
+                          : null;
+                    }
+                  } else {
+                    _selectedActivityTypes.add(key);
+                    _selectedActivityType = key;
                   }
                 }),
                 child: AnimatedContainer(
@@ -1083,18 +1804,17 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
           ),
 
           // ── Fee Information Section for PDM/MDM ─────────────────────────────
-          if (_selectedActivityType == 'PDM' ||
-              _selectedActivityType == 'MDM') ...[
+          if (hasPDMSelected || hasMDMSelected) ...[
             const SizedBox(height: 16),
             Container(
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
-                color: _selectedActivityType == 'PDM'
+                color: hasPDMSelected && !hasMDMSelected
                     ? Colors.orange.shade50
                     : Colors.blue.shade50,
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(
-                  color: _selectedActivityType == 'PDM'
+                  color: hasPDMSelected && !hasMDMSelected
                       ? Colors.orange.shade200
                       : Colors.blue.shade200,
                 ),
@@ -1104,7 +1824,7 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
                   Icon(
                     Icons.info_rounded,
                     size: 18,
-                    color: _selectedActivityType == 'PDM'
+                    color: hasPDMSelected && !hasMDMSelected
                         ? Colors.orange.shade700
                         : Colors.blue.shade700,
                   ),
@@ -1114,26 +1834,25 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          _isArabic
-                              ? 'ملحوظة بشأن أتعاب المحقق'
-                              : 'Enumerator Fee Note',
+                          _bi('Enumerator Fee Note', 'ملاحظة رسوم الفنيين'),
                           style: GoogleFonts.poppins(
                             fontSize: 11,
                             fontWeight: FontWeight.w700,
-                            color: _selectedActivityType == 'PDM'
+                            color: hasPDMSelected && !hasMDMSelected
                                 ? Colors.orange.shade900
                                 : Colors.blue.shade900,
                           ),
                         ),
                         const SizedBox(height: 4),
-                        if (_selectedActivityType == 'PDM')
+                        if (hasPDMSelected && !hasMDMSelected)
                           Text(
-                            _isArabic
-                                ? 'سيتم احتساب أتعابك بناءً على عدد الاستبيانات المقدمة. كل 7 استبيانات = رسم زيارة واحد'
-                                : 'Your enumerator fee will be calculated based on questionnaires submitted. Every 7 questionnaires = 1 visit fee',
+                            _bi(
+                              'Your enumerator fee will be calculated based on questionnaires submitted. Every 7 questionnaires = 1 visit fee',
+                              'سيتم احتساب أتعابك بناءً على عدد الاستبيانات المقدمة. كل 7 استبيانات = رسم زيارة واحد',
+                            ),
                             style: GoogleFonts.poppins(
                               fontSize: 10,
-                              color: _selectedActivityType == 'PDM'
+                              color: hasPDMSelected && !hasMDMSelected
                                   ? Colors.orange.shade700
                                   : Colors.blue.shade700,
                               height: 1.3,
@@ -1144,13 +1863,14 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                _isArabic
-                                    ? '⚠️ إذا كان بالموقع نشاطين (مثل GFA + MDM):'
-                                    : '⚠️ If site has 2 activities (e.g., GFA + MDM):',
+                                _bi(
+                                  '⚠️ If site has 2 activities (e.g., GFA + MDM):',
+                                  '⚠️ في حالة وجود نشاطين (مثل: GFA + MDM):',
+                                ),
                                 style: GoogleFonts.poppins(
                                   fontSize: 10,
                                   fontWeight: FontWeight.w600,
-                                  color: _selectedActivityType == 'PDM'
+                                  color: hasPDMSelected && !hasMDMSelected
                                       ? Colors.orange.shade900
                                       : Colors.blue.shade900,
                                   height: 1.4,
@@ -1158,9 +1878,10 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
                               ),
                               const SizedBox(height: 6),
                               Text(
-                                _isArabic
-                                    ? '1️⃣ يجب عليك استشارة المشرف والمنسق أولاً\n2️⃣ توضيح: سيتم تغطية نشاط واحد أو اثنين في نفس الموقع؟\n3️⃣ بدون تأكيد = لن تحصل على رسوم موقع واحد فقط'
-                                    : '1️⃣ You MUST confirm with supervisor & coordinator first\n2️⃣ Clarify: Will you cover 1 or 2 activities at this site?\n3️⃣ Without confirmation = Only 1 site fee allowed',
+                                _bi(
+                                  '1️⃣ You MUST confirm with supervisor & coordinator first\n2️⃣ Clearly: Will you cover 2 activities at this site?\n3️⃣ Without confirmation = Only 1 site fee allowed',
+                                  '1️⃣ يجب عليك تأكيد الموافقة مع المشرف والمنسق أولاً\n2️⃣ بوضوح: هل سيتم تغطية كلا النشاطين في هذه الزيارة؟\n3️⃣ بدون تأكيد = زيارة موقع واحدة فقط مسموح',
+                                ),
                                 style: GoogleFonts.poppins(
                                   fontSize: 9.5,
                                   color: Colors.red.shade700,
@@ -1179,7 +1900,7 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
           ],
 
           // ── PDM: questionnaire count input ────────────────────────────────
-          if (_selectedActivityType == 'PDM') ...[
+          if (hasPDMSelected) ...[
             const SizedBox(height: 16),
             Container(
               padding: const EdgeInsets.all(14),
@@ -1200,9 +1921,10 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
                       ),
                       const SizedBox(width: 6),
                       Text(
-                        _isArabic
-                            ? 'عدد الاستبيانات المقدمة *'
-                            : 'Questionnaires Submitted *',
+                        _bi(
+                          'Questionnaires Submitted *',
+                          'عدد الاستبيانات المقدمة *',
+                        ),
                         style: GoogleFonts.poppins(
                           fontWeight: FontWeight.w700,
                           fontSize: 12,
@@ -1213,9 +1935,10 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
                   ),
                   const SizedBox(height: 3),
                   Text(
-                    _isArabic
-                        ? 'كل 7 استبيانات = زيارة موقع واحدة'
-                        : 'Every 7 questionnaires = 1 site visit fee',
+                    _bi(
+                      'Every 7 questionnaires = 1 site visit fee',
+                      'كل 7 استبيانات = زيارة موقع واحدة',
+                    ),
                     style: GoogleFonts.poppins(
                       fontSize: 10,
                       color: Colors.orange.shade600,
@@ -1226,9 +1949,7 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
                     controller: _pdmQController,
                     keyboardType: TextInputType.number,
                     decoration: InputDecoration(
-                      hintText: _isArabic
-                          ? 'أدخل عدد الاستبيانات'
-                          : 'Enter count',
+                      hintText: _bi('Enter count', 'أدخل العدد'),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(8),
                       ),
@@ -1286,7 +2007,7 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
           ],
 
           // ── MDM: market name + 2-visit badge ─────────────────────────────
-          if (_selectedActivityType == 'MDM') ...[
+          if (hasMDMSelected) ...[
             const SizedBox(height: 16),
             Container(
               padding: const EdgeInsets.all(14),
@@ -1308,9 +2029,10 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
-                          _isArabic
-                              ? 'رصد انحراف السوق — × ٢ زيارة'
-                              : 'Market Diversion Monitoring — × 2 visits',
+                          _bi(
+                            'Market Diversion Monitoring — × 2 visits',
+                            'رصد انحراف السوق — × ٢ زيارة',
+                          ),
                           style: GoogleFonts.poppins(
                             fontWeight: FontWeight.w700,
                             fontSize: 12,
@@ -1340,7 +2062,7 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
                   ),
                   const SizedBox(height: 12),
                   Text(
-                    _isArabic ? 'اسم السوق المُغطى *' : 'Market Name Covered *',
+                    _bi('Market Name Covered *', 'اسم السوق المُغطى *'),
                     style: GoogleFonts.poppins(
                       fontWeight: FontWeight.w600,
                       fontSize: 11,
@@ -1351,9 +2073,10 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
                   TextField(
                     controller: _marketNameController,
                     decoration: InputDecoration(
-                      hintText: _isArabic
-                          ? 'أدخل اسم السوق...'
-                          : 'Enter market name...',
+                      hintText: _bi(
+                        'Enter market name...',
+                        'أدخل اسم السوق...',
+                      ),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(8),
                       ),
@@ -1378,7 +2101,7 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
           ],
 
           // ── WHM: warehouse name + 2-visit badge ─────────────────────────
-          if (_selectedActivityType == 'WHM') ...[
+          if (hasWHMSelected) ...[
             const SizedBox(height: 16),
             Container(
               padding: const EdgeInsets.all(14),
@@ -1400,9 +2123,10 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
-                          _isArabic
-                              ? 'رصد المستودع — × ٢ زيارة'
-                              : 'Warehouse Monitoring — × 2 visits',
+                          _bi(
+                            'Warehouse Monitoring — × 2 visits',
+                            'رصد المستودع — × ٢ زيارة',
+                          ),
                           style: GoogleFonts.poppins(
                             fontWeight: FontWeight.w700,
                             fontSize: 12,
@@ -1432,7 +2156,7 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
                   ),
                   const SizedBox(height: 12),
                   Text(
-                    _isArabic ? 'اسم المستودع *' : 'Warehouse Name *',
+                    _bi('Warehouse Name *', 'اسم المستودع *'),
                     style: GoogleFonts.poppins(
                       fontWeight: FontWeight.w600,
                       fontSize: 11,
@@ -1446,9 +2170,10 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
                         : TextDirection.ltr,
                     initialValue: _warehouseName,
                     decoration: InputDecoration(
-                      hintText: _isArabic
-                          ? 'أدخل اسم المستودع...'
-                          : 'Enter warehouse name...',
+                      hintText: _bi(
+                        'Enter warehouse name...',
+                        'أدخل اسم المستودع...',
+                      ),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(8),
                       ),
@@ -1533,9 +2258,10 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
                       if (_coordinates != null) ...[
                         const SizedBox(height: 4),
                         Text(
-                          _isArabic
-                              ? 'الدقة: ${_coordinates!.accuracy.toStringAsFixed(1)}م'
-                              : 'Accuracy: ${_coordinates!.accuracy.toStringAsFixed(1)}m',
+                          _bi(
+                            'Accuracy: ${_coordinates!.accuracy.toStringAsFixed(1)}m',
+                            'الدقة: ${_coordinates!.accuracy.toStringAsFixed(1)}م',
+                          ),
                           style: GoogleFonts.poppins(
                             fontSize: 12,
                             color: _coordinates!.accuracy <= 10
@@ -1553,9 +2279,10 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
                         )
                       else if (_isGettingLocation)
                         Text(
-                          _isArabic
-                              ? 'جاري الحصول على الموقع...'
-                              : 'Getting location...',
+                          _bi(
+                            'Getting location...',
+                            'جاري الحصول على الموقع...',
+                          ),
                           style: GoogleFonts.poppins(
                             fontSize: 12,
                             color: AppColors.textLight,
@@ -1574,7 +2301,7 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
               child: OutlinedButton.icon(
                 onPressed: _refreshLocation,
                 icon: const Icon(Icons.refresh, size: 18),
-                label: Text(_isArabic ? 'إعادة المحاولة' : 'Retry'),
+                label: Text(_bi('Retry', 'إعادة المحاولة')),
                 style: OutlinedButton.styleFrom(
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
@@ -1592,7 +2319,7 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
                   const Icon(Icons.timer, size: 18, color: Colors.black54),
                   const SizedBox(width: 8),
                   Text(
-                    _isArabic ? 'مدة الزيارة' : 'Visit Duration',
+                    _bi('Visit Duration', 'مدة الزيارة'),
                     style: GoogleFonts.poppins(
                       fontSize: 12,
                       color: AppColors.textLight,
@@ -1616,15 +2343,137 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
   }
 
   Widget _buildMmpDetailsCard() {
-    final mainActivity =
-        (widget.site['main_activity'] ??
-                widget.site['activity_at_site'] ??
-                widget.site['activity_type'] ??
-                widget.site['activity'] ??
-                '')
-            .toString()
-            .toUpperCase();
-    final mmpStatus = widget.site['mmp_status'] ?? 'Active';
+    final siteData = _mergedSiteDataForMmp();
+    final additionalData =
+        _safeAdditionalData(siteData['additional_data']) ?? <String, dynamic>{};
+    final toolsToBeUsed = _resolveMmpValue(
+      siteData: siteData,
+      additionalData: additionalData,
+      exactKeys: const [
+        'tool_to_be_used',
+        'tool_to_be_use',
+        'tools_to_be_used',
+        'tools_to_be_use',
+        'survey_tool',
+        'tool_used',
+        'tool',
+      ],
+      normalizedKeys: const [
+        'tooltobeused',
+        'tooltobeuse',
+        'toolstobeused',
+        'toolstobeuse',
+        'surveytool',
+        'toolused',
+        'tool',
+      ],
+    );
+    final mainActivity = _resolveMmpValue(
+      siteData: siteData,
+      additionalData: additionalData,
+      exactKeys: const [
+        'main_activity',
+        'activity_at_site',
+        'activity_type',
+        'activity',
+      ],
+      normalizedKeys: const [
+        'mainactivity',
+        'activityatsite',
+        'activitytype',
+        'activity',
+      ],
+    ).toUpperCase();
+    final mmpStatus = _resolveMmpValue(
+      siteData: siteData,
+      additionalData: additionalData,
+      exactKeys: const ['mmp_status', 'status'],
+      normalizedKeys: const ['mmpstatus', 'status'],
+    );
+    final uploadedDetails = _collectMmpUploadedDetails(
+      siteData,
+      additionalData,
+    );
+
+    final marketDiversionRaw = _resolveMmpRawValue(
+      siteData: siteData,
+      additionalData: additionalData,
+      exactKeys: const [
+        'use_market_diversion',
+        'use_market_diversion_monitoring',
+        'market_diversion',
+        'market_diversion_monitoring',
+      ],
+      normalizedKeys: const [
+        'usemarketdiversion',
+        'usemarketdiversionmonitoring',
+        'marketdiversion',
+        'marketdiversionmonitoring',
+      ],
+    );
+
+    final warehouseMonitoringRaw = _resolveMmpRawValue(
+      siteData: siteData,
+      additionalData: additionalData,
+      exactKeys: const [
+        'use_warehouse_monitoring',
+        'use_warehouse',
+        'warehouse_monitoring',
+        'warehouse_monitoring_flag',
+      ],
+      normalizedKeys: const [
+        'usewarehousemonitoring',
+        'usewarehouse',
+        'warehousemonitoring',
+        'warehousemonitoringflag',
+      ],
+    );
+
+    final derivedTools = <String>{};
+    final normalizedMainActivity = mainActivity.trim().toUpperCase();
+
+    // Uploaded MMP file uses DM/AIM under "Tool to be used".
+    // Prefer deriving those families first when explicit tool value is missing.
+    if (_isDmMainActivity ||
+        normalizedMainActivity == 'GFA' ||
+        normalizedMainActivity == 'CBT' ||
+        normalizedMainActivity == 'DM') {
+      derivedTools.add('DM');
+    } else if (_isAimMainActivity ||
+        normalizedMainActivity == 'AIM' ||
+        normalizedMainActivity == 'TSFP' ||
+        normalizedMainActivity == 'PSN' ||
+        normalizedMainActivity == 'FFA' ||
+        normalizedMainActivity == 'SF' ||
+        normalizedMainActivity == 'THR' ||
+        normalizedMainActivity == 'PHL') {
+      derivedTools.add('AIM');
+    } else if (normalizedMainActivity == 'PDM') {
+      derivedTools.add('PDM');
+    }
+
+    // Last resort: infer technical add-on tools from flags only.
+    if (derivedTools.isEmpty) {
+      if (_isYesValue(marketDiversionRaw)) {
+        derivedTools.add('MDM');
+      }
+      if (_isYesValue(warehouseMonitoringRaw)) {
+        derivedTools.add('WHM');
+      }
+    }
+
+    final toolsToBeUsedDisplay = toolsToBeUsed.isNotEmpty
+        ? toolsToBeUsed
+        : derivedTools.join(' + ');
+
+    if (toolsToBeUsedDisplay.isEmpty && !_loggedMissingToolKeys) {
+      _loggedMissingToolKeys = true;
+      debugPrint(
+        '[VisitReportDialog] Tools value missing for site ${siteData['id']}. '
+        'site keys: ${siteData.keys.toList()} | additional_data keys: ${additionalData.keys.toList()} | '
+        'derived market_diversion=${_isYesValue(marketDiversionRaw)} warehouse_monitoring=${_isYesValue(warehouseMonitoringRaw)} main_activity=$mainActivity',
+      );
+    }
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -1651,11 +2500,38 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
                 child: Text(
                   _isArabic ? 'تفاصيل الخطة' : 'MMP DETAILS',
                   style: GoogleFonts.poppins(
-                    fontSize: 11,
+                    fontSize: 14,
                     fontWeight: FontWeight.bold,
                     color: AppColors.primaryOrange,
                     letterSpacing: 1,
                   ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                _isArabic ? 'الأدوات المستخدمة' : 'Tools to be Used',
+                style: GoogleFonts.poppins(
+                  fontSize: 12,
+                  color: Colors.grey[600],
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                toolsToBeUsedDisplay.isEmpty ? 'N/A' : toolsToBeUsedDisplay,
+                textAlign: _isArabic ? TextAlign.start : TextAlign.end,
+                textDirection: _isArabic
+                    ? TextDirection.rtl
+                    : TextDirection.ltr,
+                style: GoogleFonts.poppins(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.primaryOrange,
                 ),
               ),
             ],
@@ -1670,7 +2546,7 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
                     Text(
                       _isArabic ? 'النشاط الرئيسي' : 'Main Activity',
                       style: GoogleFonts.poppins(
-                        fontSize: 10,
+                        fontSize: 12,
                         color: Colors.grey[600],
                         fontWeight: FontWeight.w500,
                       ),
@@ -1678,8 +2554,12 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
                     const SizedBox(height: 4),
                     Text(
                       mainActivity.isEmpty ? 'N/A' : mainActivity,
+                      textAlign: _isArabic ? TextAlign.start : TextAlign.end,
+                      textDirection: _isArabic
+                          ? TextDirection.rtl
+                          : TextDirection.ltr,
                       style: GoogleFonts.poppins(
-                        fontSize: 13,
+                        fontSize: 14,
                         fontWeight: FontWeight.w700,
                         color: AppColors.primaryOrange,
                       ),
@@ -1694,7 +2574,7 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
                     Text(
                       _isArabic ? 'الحالة' : 'Status',
                       style: GoogleFonts.poppins(
-                        fontSize: 10,
+                        fontSize: 12,
                         color: Colors.grey[600],
                         fontWeight: FontWeight.w500,
                       ),
@@ -1712,7 +2592,7 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
                       child: Text(
                         mmpStatus,
                         style: GoogleFonts.poppins(
-                          fontSize: 11,
+                          fontSize: 12,
                           fontWeight: FontWeight.w600,
                           color: AppColors.accentGreen,
                         ),
@@ -1723,6 +2603,20 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
               ),
             ],
           ),
+          if (uploadedDetails.isNotEmpty) ...[
+            const SizedBox(height: 14),
+            Text(
+              _isArabic ? 'بيانات MMP المرفوعة' : 'Uploaded MMP Data',
+              style: GoogleFonts.poppins(
+                fontSize: 12,
+                color: Colors.grey[700],
+                fontWeight: FontWeight.w600,
+                letterSpacing: 0.3,
+              ),
+            ),
+            const SizedBox(height: 8),
+            ..._buildUploadedMmpDetailSections(uploadedDetails),
+          ],
         ],
       ),
     );
@@ -1763,6 +2657,10 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
                     ),
                     Text(
                       siteCode,
+                      textAlign: _isArabic ? TextAlign.start : TextAlign.end,
+                      textDirection: _isArabic
+                          ? TextDirection.rtl
+                          : TextDirection.ltr,
                       style: GoogleFonts.poppins(
                         fontSize: 14,
                         fontWeight: FontWeight.bold,
@@ -1786,6 +2684,10 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
                       locality.isNotEmpty
                           ? locality
                           : (state.isNotEmpty ? state : 'N/A'),
+                      textAlign: _isArabic ? TextAlign.start : TextAlign.end,
+                      textDirection: _isArabic
+                          ? TextDirection.rtl
+                          : TextDirection.ltr,
                       style: GoogleFonts.poppins(
                         fontSize: 14,
                         fontWeight: FontWeight.bold,
@@ -1914,9 +2816,10 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
               ),
               const SizedBox(height: 4),
               Text(
-                _isArabic
-                    ? 'مطلوب صورة واحدة على الأقل'
-                    : 'At least one photo required',
+                _bi(
+                  'At least one photo required',
+                  'مطلوب صورة واحدة على الأقل',
+                ),
                 style: GoogleFonts.poppins(
                   fontSize: 11,
                   color: AppColors.textLight,
@@ -1928,7 +2831,7 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
                 child: ElevatedButton.icon(
                   onPressed: _addPhoto,
                   icon: const Icon(Icons.camera_alt, size: 18),
-                  label: Text(_isArabic ? 'إضافة صورة' : 'Add Photo'),
+                  label: Text(_bi('Add Photo', 'إضافة صورة')),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.black,
                     foregroundColor: Colors.white,
@@ -1954,32 +2857,9 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
               itemCount: _photoPaths.length,
               itemBuilder: (context, index) {
                 final photoPath = _photoPaths[index];
-
-                if (photoPath.startsWith('http://') ||
-                    photoPath.startsWith('https://')) {
-                  return const SizedBox.shrink();
-                }
-
-                if (kIsWeb) {
-                  return Container(
-                    decoration: BoxDecoration(
-                      color: AppColors.backgroundGray,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: const Center(
-                      child: Icon(Icons.image_not_supported, size: 24),
-                    ),
-                  );
-                }
-
-                final file = File(photoPath);
-
-                return Stack(
-                  children: [
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(12),
-                      child: Image.file(
-                        file,
+                final imageWidget = kIsWeb
+                    ? Image.network(
+                        photoPath,
                         width: double.infinity,
                         height: double.infinity,
                         fit: BoxFit.cover,
@@ -1989,7 +2869,25 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
                             child: const Icon(Icons.broken_image, size: 32),
                           );
                         },
-                      ),
+                      )
+                    : Image.file(
+                        File(photoPath),
+                        width: double.infinity,
+                        height: double.infinity,
+                        fit: BoxFit.cover,
+                        errorBuilder: (context, error, stackTrace) {
+                          return Container(
+                            color: AppColors.backgroundGray,
+                            child: const Icon(Icons.broken_image, size: 32),
+                          );
+                        },
+                      );
+
+                return Stack(
+                  children: [
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(12),
+                      child: imageWidget,
                     ),
                     Positioned(
                       top: 4,

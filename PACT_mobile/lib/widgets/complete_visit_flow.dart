@@ -45,6 +45,14 @@ Map<String, dynamic>? _safeStartLocation(Map<String, dynamic> additionalData) {
   return null;
 }
 
+double _safeToDouble(dynamic value) {
+  if (value is num) return value.toDouble();
+  if (value is String) {
+    return double.tryParse(value.trim()) ?? 0.0;
+  }
+  return 0.0;
+}
+
 /// Entry point for the complete-site flow (dialog + offline/online completion).
 class CompleteVisitFlow {
   CompleteVisitFlow._();
@@ -102,8 +110,14 @@ class CompleteVisitFlow {
             }
           : <String, dynamic>{};
 
-      final selectedActivities = <String>[];
-      if (reportData.activityType != null &&
+      final selectedActivities = reportData.selectedActivityTypes
+          .map((activity) => activity.trim().toUpperCase())
+          .where((activity) => activity.isNotEmpty)
+          .toSet()
+          .toList();
+
+      if (selectedActivities.isEmpty &&
+          reportData.activityType != null &&
           reportData.activityType!.trim().isNotEmpty) {
         selectedActivities.add(reportData.activityType!.trim().toUpperCase());
       }
@@ -146,6 +160,19 @@ class CompleteVisitFlow {
         }
       }
 
+      final additionalData = _safeParseAdditionalData(site['additional_data']);
+      final feeMultiplier = totalVisitFees > 0 ? totalVisitFees : 1;
+      final baseEnumeratorFee = _safeToDouble(
+        additionalData['base_enumerator_fee'] ?? site['enumerator_fee'],
+      );
+      final transportFee = _safeToDouble(site['transport_fee']);
+      final adjustedEnumeratorFee = baseEnumeratorFee > 0
+          ? baseEnumeratorFee * feeMultiplier
+          : 0.0;
+      final adjustedTotalCost = adjustedEnumeratorFee > 0
+          ? adjustedEnumeratorFee + transportFee
+          : _safeToDouble(site['cost']);
+
       // ---------- OFFLINE MODE ----------
       if (isOffline) {
         debugPrint('[CompleteVisitFlow] Offline mode - saving locally');
@@ -166,9 +193,6 @@ class CompleteVisitFlow {
           }
         }
 
-        final additionalData = _safeParseAdditionalData(
-          site['additional_data'],
-        );
         final savedStartLocation = _safeStartLocation(additionalData);
 
         final offlineDb = OfflineDb();
@@ -198,6 +222,7 @@ class CompleteVisitFlow {
         updatedSite['_offline_activities'] = reportData.activities;
         updatedSite['_offline_selected_activities'] = selectedActivities;
         updatedSite['_offline_activity_details'] = activityDetails;
+        updatedSite['_offline_total_visit_fees'] = feeMultiplier;
         updatedSite['_offline_photos'] = photoBase64Urls;
         updatedSite['_offline_end_location'] = endLocation;
 
@@ -270,6 +295,7 @@ class CompleteVisitFlow {
           updatedSite['_offline_activities'] = reportData.activities;
           updatedSite['_offline_selected_activities'] = selectedActivities;
           updatedSite['_offline_activity_details'] = activityDetails;
+          updatedSite['_offline_total_visit_fees'] = feeMultiplier;
           updatedSite['_offline_photos'] = photoBase64Urls;
           updatedSite['_offline_end_location'] = endLocation;
           if (mounted) {
@@ -452,10 +478,18 @@ class CompleteVisitFlow {
         'visit_completed_by': currentUserId,
         'updated_at': now,
         'additional_data': {
-          ..._safeParseAdditionalData(site['additional_data']),
+          ...additionalData,
           'visit_report_submitted': true,
           'visit_report_id': savedReport['id'],
           'visit_report_submitted_at': now,
+          'selected_activities': selectedActivities,
+          'activity_details': activityDetails,
+          'total_visit_fees': feeMultiplier,
+          'fee_multiplier': feeMultiplier,
+          if (baseEnumeratorFee > 0) 'base_enumerator_fee': baseEnumeratorFee,
+          if (adjustedEnumeratorFee > 0)
+            'adjusted_enumerator_fee': adjustedEnumeratorFee,
+          if (feeMultiplier > 1) 'fee_adjusted_for_addon_activities': true,
           if (position != null)
             'final_location': {
               'latitude': position.latitude,
@@ -464,6 +498,11 @@ class CompleteVisitFlow {
             },
         },
       };
+
+      if (adjustedEnumeratorFee > 0) {
+        updateData['enumerator_fee'] = adjustedEnumeratorFee;
+        updateData['cost'] = adjustedTotalCost;
+      }
 
       final currentSite = await supabase
           .from('mmp_site_entries')
@@ -496,6 +535,131 @@ class CompleteVisitFlow {
               .eq('id', site['id']);
         } else {
           rethrow;
+        }
+      }
+
+      // Create wallet transaction for online completion
+      try {
+        final existing = await supabase
+            .from('wallet_transactions')
+            .select()
+            .eq('reference_id', site['id'])
+            .maybeSingle();
+
+        if (existing == null) {
+          final walletResponse = await supabase
+              .from('wallets')
+              .select('id')
+              .eq('user_id', currentUserId)
+              .maybeSingle();
+
+          if (walletResponse != null) {
+            final walletId = walletResponse['id'];
+            final amount = adjustedEnumeratorFee + transportFee;
+
+            if (amount > 0) {
+              // Build detailed metadata for the transaction
+              final metadata = {
+                'site_id': site['id'],
+                'site_name': site['site_name'] ?? site['siteName'] ?? 'Unknown',
+                'site_code': site['site_code'] ?? site['siteCode'] ?? '',
+                'fee_breakdown': {
+                  'enumerator_fee': adjustedEnumeratorFee,
+                  'transport_fee': transportFee,
+                  'fee_multiplier': feeMultiplier,
+                  'is_adjusted': feeMultiplier > 1,
+                },
+                'activity_details': activityDetails,
+                'selected_activities': selectedActivities,
+              };
+
+              await supabase.from('wallet_transactions').insert({
+                'wallet_id': walletId,
+                'user_id': currentUserId,
+                'reference_id': site['id'],
+                'type': 'earning',
+                'amount': amount,
+                'description':
+                    'Site visit completion: ${site['site_code'] ?? site['siteCode'] ?? 'Site'} | Enumerator: $adjustedEnumeratorFee, Transport: $transportFee',
+                'status': 'posted',
+                'created_at': now,
+                'metadata': metadata,
+              });
+              debugPrint(
+                '[CompleteVisitFlow] Wallet transaction created for user=$currentUserId, amount=$amount, breakdown: enum=$adjustedEnumeratorFee, transport=$transportFee',
+              );
+            }
+          }
+        }
+      } catch (walletError) {
+        final errorStr = walletError.toString().toLowerCase();
+        if (errorStr.contains('auth') ||
+            errorStr.contains('unauthorized') ||
+            errorStr.contains('jwt') ||
+            errorStr.contains('token')) {
+          try {
+            await supabase.auth.refreshSession();
+            final existing = await supabase
+                .from('wallet_transactions')
+                .select()
+                .eq('reference_id', site['id'])
+                .maybeSingle();
+
+            if (existing == null) {
+              final walletResponse = await supabase
+                  .from('wallets')
+                  .select('id')
+                  .eq('user_id', currentUserId)
+                  .maybeSingle();
+
+              if (walletResponse != null) {
+                final walletId = walletResponse['id'];
+                final amount = adjustedEnumeratorFee + transportFee;
+
+                if (amount > 0) {
+                  // Build detailed metadata for the transaction
+                  final metadata = {
+                    'site_id': site['id'],
+                    'site_name':
+                        site['site_name'] ?? site['siteName'] ?? 'Unknown',
+                    'site_code': site['site_code'] ?? site['siteCode'] ?? '',
+                    'fee_breakdown': {
+                      'enumerator_fee': adjustedEnumeratorFee,
+                      'transport_fee': transportFee,
+                      'fee_multiplier': feeMultiplier,
+                      'is_adjusted': feeMultiplier > 1,
+                    },
+                    'activity_details': activityDetails,
+                    'selected_activities': selectedActivities,
+                  };
+
+                  await supabase.from('wallet_transactions').insert({
+                    'wallet_id': walletId,
+                    'user_id': currentUserId,
+                    'reference_id': site['id'],
+                    'type': 'earning',
+                    'amount': amount,
+                    'description':
+                        'Site visit completion: ${site['site_code'] ?? site['siteCode'] ?? 'Site'} | Enumerator: $adjustedEnumeratorFee, Transport: $transportFee',
+                    'status': 'posted',
+                    'created_at': now,
+                    'metadata': metadata,
+                  });
+                  debugPrint(
+                    '[CompleteVisitFlow] Wallet transaction created (retry) for user=$currentUserId',
+                  );
+                }
+              }
+            }
+          } catch (_) {
+            debugPrint(
+              '[CompleteVisitFlow] Wallet transaction creation failed (non-critical after retry)',
+            );
+          }
+        } else {
+          debugPrint(
+            '[CompleteVisitFlow] Wallet transaction creation failed (non-critical): $walletError',
+          );
         }
       }
 

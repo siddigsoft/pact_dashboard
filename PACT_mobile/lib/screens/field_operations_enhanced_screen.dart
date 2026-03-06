@@ -3204,15 +3204,14 @@ class _MMPScreenState extends State<MMPScreen> {
       // View Report Button for completed visits (Admin/FOM/ICT only)
       if ((status.toString().toLowerCase() == 'completed' ||
           status.toString().toLowerCase() == 'complete')) {
-        final canViewReport =
-            _isAdminOrSuperUser || _userRole == 'fom' || _userRole == 'ict';
+        final canViewReport = _hasSyncedReport(site);
         if (canViewReport) {
           buttons.add(
             Expanded(
               child: ElevatedButton.icon(
                 onPressed: () => _viewVisitReport(site),
                 icon: const Icon(Icons.visibility, size: 18),
-                label: Text(l10n?.viewReport ?? 'View Report'),
+                label: Text(l10n?.viewReport ?? 'Details'),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.blue,
                   foregroundColor: Colors.white,

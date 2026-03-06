@@ -698,6 +698,18 @@ class OfflineDb {
     return _metadata.get('syncInProgress') ?? false;
   }
 
+  Future<void> setMetadataValue(String key, dynamic value) async {
+    await _metadata.put(key, value);
+  }
+
+  dynamic getMetadataValue(String key) {
+    return _metadata.get(key);
+  }
+
+  Future<void> removeMetadataValue(String key) async {
+    await _metadata.delete(key);
+  }
+
   // ============================================================================
   // STATISTICS & DIAGNOSTICS
   // ============================================================================
