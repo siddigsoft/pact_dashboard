@@ -602,7 +602,7 @@ class _CompleteVisitScreenState extends ConsumerState<CompleteVisitScreen> {
       _isLocationLocked = false;
       _locationError = _bi(
         'Low GPS accuracy (${position.accuracy.toStringAsFixed(0)}m). Please retry to capture ≤ ${_requiredLocationAccuracyMeters.toStringAsFixed(0)}m.',
-        'دقة GPS منخفضة (${position.accuracy.toStringAsFixed(0)}م). يرجى إعادة المحاولة لالتقاط ≤ ${_requiredLocationAccuracyMeters.toStringAsFixed(0)}م.',
+        'دقة GPS منخفضة (${position.accuracy.toStringAsFixed(0)}م). يـرجى إعادة المحاولة لالتقاط ≤ ${_requiredLocationAccuracyMeters.toStringAsFixed(0)}م.',
       );
       return;
     }
