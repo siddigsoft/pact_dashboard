@@ -755,14 +755,21 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
           installment_plan: updatedInstallmentPlan,
           metadata: updatedMetadata,
           updated_at: processedAt,
-        })
+          ...(data.receiptUrl ? {
+            payment_proof_url: data.receiptUrl,
+            payment_proof_uploaded_at: processedAt,
+            ...(data.notes?.trim() ? { payment_proof_notes: data.notes.trim() } : {}),
+          } : {}),
+        } as any)
         .eq('id', data.requestId);
 
       if (requestUpdateError) throw requestUpdateError;
 
       toastRef.current({
         title: 'Advance Recorded',
-        description: `Transport advance of ${data.amount} SDG recorded — receipt auto-confirmed`,
+        description: data.receiptUrl
+          ? `Transport advance of ${data.amount} SDG recorded with payment receipt`
+          : `Transport advance of ${data.amount} SDG recorded`,
       });
 
       // Send FCM push notification to enumerator's mobile device

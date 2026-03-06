@@ -214,6 +214,8 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
   const [rejectionReason, setRejectionReason] = useState('');
   const [paymentAmount, setPaymentAmount] = useState(0);
   const [processing, setProcessing] = useState(false);
+  const [payProofFile, setPayProofFile] = useState<File | null>(null);
+  const [payProofPreviewUrl, setPayProofPreviewUrl] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState('pending');
   const [showFilters, setShowFilters] = useState(true);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -424,13 +426,27 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
     }
 
     setProcessing(true);
+    let receiptUrl: string | null = null;
     try {
+      if (payProofFile) {
+        const timestamp = Date.now();
+        const random = Math.random().toString(36).substring(2, 8);
+        const extension = payProofFile.name.split('.').pop()?.toLowerCase() || 'file';
+        const filePath = `payment-proofs/process_${timestamp}_${random}.${extension}`;
+        const { error: uploadErr } = await supabase.storage
+          .from('mmp-files')
+          .upload(filePath, payProofFile, { cacheControl: '3600', upsert: false });
+        if (uploadErr) throw new Error(uploadErr.message);
+        receiptUrl = supabase.storage.from('mmp-files').getPublicUrl(filePath).data.publicUrl;
+      }
+
       const success = await processPayment({
         requestId: selectedRequest.id,
         amount: paymentAmount,
         processedBy: currentUser.id,
         processedByName: currentUser.fullName || currentUser.email,
         notes,
+        receiptUrl,
       });
 
       if (success) {
@@ -608,6 +624,18 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
     setCustomPercentage(100);
     setCustomAmount(0);
     setRevertTarget('pending_supervisor');
+    if (payProofPreviewUrl) URL.revokeObjectURL(payProofPreviewUrl);
+    setPayProofFile(null);
+    setPayProofPreviewUrl(null);
+  };
+
+  const handlePayProofFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (payProofPreviewUrl) URL.revokeObjectURL(payProofPreviewUrl);
+    const preview = file.type.startsWith('image/') ? URL.createObjectURL(file) : null;
+    setPayProofFile(file);
+    setPayProofPreviewUrl(preview);
   };
 
   const openActionDialog = (request: DownPaymentRequest, actionType: 'approve' | 'reject' | 'pay' | 'view_audit' | 'revert') => {
@@ -2921,6 +2949,42 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
                   data-testid="textarea-payment-notes"
                 />
               </div>
+
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">
+                  Payment Receipt / إيصال الدفع{' '}
+                  <span className="text-muted-foreground font-normal text-xs">(optional / اختياري)</span>
+                </Label>
+                <div className="border-2 border-dashed border-muted-foreground/30 rounded-lg p-3 text-center hover:border-primary/50 transition-colors relative cursor-pointer">
+                  <input
+                    type="file"
+                    accept="image/*,application/pdf"
+                    className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                    onChange={handlePayProofFileChange}
+                    disabled={processing}
+                    data-testid="input-pay-proof-file"
+                  />
+                  {payProofFile ? (
+                    <div className="space-y-1.5">
+                      {payProofPreviewUrl ? (
+                        <img src={payProofPreviewUrl} alt="Receipt preview" className="max-h-28 mx-auto rounded object-contain" />
+                      ) : (
+                        <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
+                          <FileText className="h-7 w-7 text-red-500" />
+                          <span className="truncate max-w-[180px]">{payProofFile.name}</span>
+                        </div>
+                      )}
+                      <p className="text-xs text-muted-foreground">Click to change / انقر للتغيير</p>
+                    </div>
+                  ) : (
+                    <div className="text-muted-foreground py-1">
+                      <ImageIcon className="h-7 w-7 mx-auto mb-1 opacity-40" />
+                      <p className="text-xs">Upload receipt image or PDF</p>
+                      <p className="text-xs opacity-60">Visible to recipient in their wallet / مرئي للمستلم في محفظته</p>
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
           )}
 
@@ -2929,7 +2993,7 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
               Cancel
             </Button>
             <Button variant="default" onClick={handleProcessPayment} disabled={processing} data-testid="button-confirm-payment">
-              {processing ? 'Processing...' : 'Process Payment'}
+              {processing ? (payProofFile ? 'Uploading...' : 'Processing...') : 'Process Payment'}
             </Button>
           </DialogFooter>
         </DialogContent>
