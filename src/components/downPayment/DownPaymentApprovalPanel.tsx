@@ -2913,86 +2913,94 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
       </Dialog>
 
       <Dialog open={action === 'pay'} onOpenChange={() => closeDialog()}>
-        <DialogContent data-testid="dialog-payment">
-          <DialogHeader>
+        <DialogContent data-testid="dialog-payment" className="flex flex-col max-h-[90vh]">
+          <DialogHeader className="flex-shrink-0">
             <DialogTitle>Process Payment</DialogTitle>
           </DialogHeader>
 
-          {selectedRequest && (
-            <div className="space-y-4">
-              <div className="bg-muted/50 p-3 rounded-md space-y-2">
-                <p><strong>Site:</strong> {selectedRequest.siteName}</p>
-                <p><strong>Requested:</strong> {selectedRequest.requestedAmount.toLocaleString()} SDG</p>
-                <p><strong>Remaining:</strong> {selectedRequest.remainingAmount.toLocaleString()} SDG</p>
-              </div>
+          <div className="flex-1 overflow-y-auto pr-1">
+            {selectedRequest && (
+              <div className="space-y-4 py-1">
+                <div className="bg-muted/50 p-3 rounded-md space-y-2">
+                  <p><strong>Site:</strong> {selectedRequest.siteName}</p>
+                  <p><strong>Requested:</strong> {selectedRequest.requestedAmount.toLocaleString()} SDG</p>
+                  <p><strong>Remaining:</strong> {selectedRequest.remainingAmount.toLocaleString()} SDG</p>
+                </div>
 
-              <div>
-                <Label htmlFor="payment-amount">Payment Amount (SDG)</Label>
-                <Input
-                  id="payment-amount"
-                  type="number"
-                  value={paymentAmount}
-                  onChange={e => setPaymentAmount(parseFloat(e.target.value) || 0)}
-                  max={selectedRequest.remainingAmount}
-                  data-testid="input-payment-amount"
-                />
-              </div>
-
-              <div>
-                <Label htmlFor="payment-notes">Notes (Optional)</Label>
-                <Textarea
-                  id="payment-notes"
-                  value={notes}
-                  onChange={e => setNotes(e.target.value)}
-                  placeholder="Add payment notes..."
-                  rows={2}
-                  data-testid="textarea-payment-notes"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label className="text-sm font-medium">
-                  Payment Receipt / إيصال الدفع{' '}
-                  <span className="text-muted-foreground font-normal text-xs">(optional / اختياري)</span>
-                </Label>
-                <div className="border-2 border-dashed border-muted-foreground/30 rounded-lg p-3 text-center hover:border-primary/50 transition-colors relative cursor-pointer">
-                  <input
-                    type="file"
-                    accept="image/*,application/pdf"
-                    className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
-                    onChange={handlePayProofFileChange}
-                    disabled={processing}
-                    data-testid="input-pay-proof-file"
+                <div>
+                  <Label htmlFor="payment-amount">Payment Amount (SDG)</Label>
+                  <Input
+                    id="payment-amount"
+                    type="number"
+                    value={paymentAmount}
+                    onChange={e => setPaymentAmount(parseFloat(e.target.value) || 0)}
+                    max={selectedRequest.remainingAmount}
+                    data-testid="input-payment-amount"
                   />
-                  {payProofFile ? (
-                    <div className="space-y-1.5">
-                      {payProofPreviewUrl ? (
-                        <img src={payProofPreviewUrl} alt="Receipt preview" className="max-h-28 mx-auto rounded object-contain" />
-                      ) : (
-                        <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
-                          <FileText className="h-7 w-7 text-red-500" />
-                          <span className="truncate max-w-[180px]">{payProofFile.name}</span>
-                        </div>
-                      )}
-                      <p className="text-xs text-muted-foreground">Click to change / انقر للتغيير</p>
-                    </div>
-                  ) : (
-                    <div className="text-muted-foreground py-1">
-                      <ImageIcon className="h-7 w-7 mx-auto mb-1 opacity-40" />
-                      <p className="text-xs">Upload receipt image or PDF</p>
-                      <p className="text-xs opacity-60">Visible to recipient in their wallet / مرئي للمستلم في محفظته</p>
-                    </div>
-                  )}
+                </div>
+
+                <div>
+                  <Label htmlFor="payment-notes">Notes (Optional)</Label>
+                  <Textarea
+                    id="payment-notes"
+                    value={notes}
+                    onChange={e => setNotes(e.target.value)}
+                    placeholder="Add payment notes..."
+                    rows={2}
+                    data-testid="textarea-payment-notes"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium">
+                    Payment Receipt / إيصال الدفع <span className="text-red-500">*</span>
+                  </Label>
+                  <div className={`border-2 border-dashed rounded-lg p-3 text-center transition-colors relative cursor-pointer ${
+                    payProofFile ? 'border-green-500/50 hover:border-green-400' : 'border-red-400/60 hover:border-red-400'
+                  }`}>
+                    <input
+                      type="file"
+                      accept="image/*,application/pdf"
+                      className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                      onChange={handlePayProofFileChange}
+                      disabled={processing}
+                      data-testid="input-pay-proof-file"
+                    />
+                    {payProofFile ? (
+                      <div className="space-y-1.5">
+                        {payProofPreviewUrl ? (
+                          <img src={payProofPreviewUrl} alt="Receipt preview" className="max-h-28 mx-auto rounded object-contain" />
+                        ) : (
+                          <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
+                            <FileText className="h-7 w-7 text-red-500" />
+                            <span className="truncate max-w-[180px]">{payProofFile.name}</span>
+                          </div>
+                        )}
+                        <p className="text-xs text-muted-foreground">Click to change / انقر للتغيير</p>
+                      </div>
+                    ) : (
+                      <div className="text-muted-foreground py-1">
+                        <ImageIcon className="h-7 w-7 mx-auto mb-1 opacity-40" />
+                        <p className="text-xs font-medium text-red-400">Receipt required / الإيصال مطلوب</p>
+                        <p className="text-xs opacity-60 mt-0.5">Upload image or PDF — visible to recipient</p>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
-            </div>
-          )}
+            )}
+          </div>
 
-          <DialogFooter>
+          <DialogFooter className="flex-shrink-0 pt-3 border-t">
             <Button variant="outline" onClick={closeDialog} data-testid="button-cancel-payment">
               Cancel
             </Button>
-            <Button variant="default" onClick={handleProcessPayment} disabled={processing} data-testid="button-confirm-payment">
+            <Button
+              variant="default"
+              onClick={handleProcessPayment}
+              disabled={processing || !payProofFile}
+              data-testid="button-confirm-payment"
+            >
               {processing ? (payProofFile ? 'Uploading...' : 'Processing...') : 'Process Payment'}
             </Button>
           </DialogFooter>
