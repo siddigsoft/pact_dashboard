@@ -8,6 +8,37 @@ import 'dashboard_screen.dart';
 import 'field_operations_enhanced_screen.dart';
 
 import 'wallet_screen.dart';
+import 'chat_list_screen.dart';
+import 'reports_screen.dart';
+import 'safety_hub_screen.dart';
+import 'incident_report_screen.dart';
+import 'equipment_screen.dart';
+import 'documents_screen.dart';
+import 'cost_submission_screen.dart';
+import 'down_payment_approval_screen.dart';
+import 'advance_requests_report_screen.dart';
+import 'approval_dashboard_screen.dart';
+import 'site_verification_screen.dart';
+import 'settings_screen.dart';
+import 'digital_signatures_screen.dart';
+import 'profile_screen.dart';
+import 'help_support_screen.dart';
+import 'helpline_screen.dart';
+import 'projects_screen.dart';
+import 'budget_screen.dart';
+import 'exchange_rates_screen.dart';
+import 'staff_directory_screen.dart';
+import 'transaction_scanner_screen.dart';
+import 'reconciliation_dashboard_screen.dart';
+import 'hub_management_screen.dart';
+import 'coordinator_dashboard_screen.dart';
+import 'monitoring_plan_screen.dart';
+import 'archive_screen.dart';
+import 'retainer_management_screen.dart';
+import 'data_export_screen.dart';
+import 'global_search_screen.dart';
+import 'mmp_management_screen.dart';
+import 'comprehensive_monitoring_form_screen.dart';
 import '../widgets/network_status_indicator.dart';
 import '../widgets/agora_incoming_call_dialog.dart';
 import '../services/webrtc_service.dart';
@@ -389,13 +420,13 @@ class _MainScreenState extends State<MainScreen> {
   }
 
   void _onItemTapped(int index) {
-    // Now only 3 items: Dashboard (0), Sites Management (1), Wallet (2)
-    final maxIndex = 2;
-    if (index >= 0 && index <= maxIndex) {
-      setState(() {
-        _currentIndex = index;
-      });
-    }
+    setState(() {
+      _currentIndex = index;
+    });
+  }
+
+  void _navigateToScreen(Widget screen) {
+    Navigator.of(context).push(MaterialPageRoute(builder: (_) => screen));
   }
 
   Future<bool> _onWillPop() async {
@@ -454,11 +485,22 @@ class _MainScreenState extends State<MainScreen> {
             ],
           ),
         ),
-        // bottomNavigationBar: CustomBottomNavigationBar(
-        //   currentIndex: _currentIndex,
-        //   onTap: _onItemTapped,
-        //   isCoordinator: _isCoordinator,
-        // ),
+        bottomNavigationBar: BottomNavigationBar(
+          currentIndex: _currentIndex > 4 ? 4 : _currentIndex,
+          onTap: _onItemTapped,
+          type: BottomNavigationBarType.fixed,
+          selectedItemColor: const Color(0xFF1D3461),
+          unselectedItemColor: Colors.grey,
+          selectedLabelStyle: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
+          unselectedLabelStyle: const TextStyle(fontSize: 10),
+          items: const [
+            BottomNavigationBarItem(icon: Icon(Icons.dashboard_outlined), activeIcon: Icon(Icons.dashboard), label: 'Home'),
+            BottomNavigationBarItem(icon: Icon(Icons.map_outlined), activeIcon: Icon(Icons.map), label: 'Field Ops'),
+            BottomNavigationBarItem(icon: Icon(Icons.chat_bubble_outline), activeIcon: Icon(Icons.chat_bubble), label: 'Chat'),
+            BottomNavigationBarItem(icon: Icon(Icons.account_balance_wallet_outlined), activeIcon: Icon(Icons.account_balance_wallet), label: 'Wallet'),
+            BottomNavigationBarItem(icon: Icon(Icons.grid_view_outlined), activeIcon: Icon(Icons.grid_view), label: 'More'),
+          ],
+        ),
       ),
     );
   }
@@ -466,27 +508,105 @@ class _MainScreenState extends State<MainScreen> {
   Widget _buildCurrentScreen() {
     switch (_currentIndex) {
       case 0:
-        // Dashboard
         return const DashboardScreen(key: ValueKey('home'));
       case 1:
-        // Sites Management
         return FieldOperationsEnhancedScreen(key: const ValueKey('sites'));
       case 2:
-        // Wallet
+        return const ChatListScreen(key: ValueKey('chat'));
+      case 3:
         return const WalletScreen(key: ValueKey('wallet'));
-      // Commented out screens - keeping for future use
-      // case 1:
-      //   return const ReportsScreen(key: ValueKey('reports'));
-      // case 3:
-      //   return const ChatListScreen(key: ValueKey('chat'));
-      // case 5:
-      //   // Only accessible for coordinators
-      //   if (_isCoordinator) {
-      //     return const SiteVerificationScreen(key: ValueKey('verification'));
-      //   }
-      //   return const FieldOperationsEnhancedScreen(key: ValueKey('home'));
+      case 4:
+        return _buildMoreScreen();
       default:
         return const DashboardScreen(key: ValueKey('home'));
     }
   }
+
+  Widget _buildMoreScreen() {
+    final items = [
+      _MoreItem(Icons.bar_chart, 'Reports', () => _navigateToScreen(const ReportsScreen())),
+      _MoreItem(Icons.folder_special, 'Projects', () => _navigateToScreen(const ProjectsScreen())),
+      _MoreItem(Icons.account_balance, 'Budget', () => _navigateToScreen(const BudgetScreen())),
+      _MoreItem(Icons.currency_exchange, 'Exchange Rates', () => _navigateToScreen(const ExchangeRatesScreen())),
+      _MoreItem(Icons.safety_check, 'Safety Hub', () => _navigateToScreen(const SafetyHubScreen())),
+      _MoreItem(Icons.warning_amber, 'Incidents', () => _navigateToScreen(const IncidentReportScreen())),
+      _MoreItem(Icons.construction, 'Equipment', () => _navigateToScreen(const EquipmentScreen())),
+      _MoreItem(Icons.description, 'MMP Management', () => _navigateToScreen(const MmpManagementScreen())),
+      _MoreItem(Icons.fact_check, 'Monitoring Form', () => _navigateToScreen(const ComprehensiveMonitoringFormScreen())),
+      _MoreItem(Icons.payment, 'Down Payment', () => _navigateToScreen(const DownPaymentApprovalScreen())),
+      _MoreItem(Icons.request_quote, 'Advance Reports', () => _navigateToScreen(const AdvanceRequestsReportScreen())),
+      _MoreItem(Icons.approval, 'Approvals', () => _navigateToScreen(const ApprovalDashboardScreen())),
+      _MoreItem(Icons.attach_money, 'Cost Submission', () => _navigateToScreen(const CostSubmissionScreen())),
+      _MoreItem(Icons.receipt_long, 'Retainers', () => _navigateToScreen(const RetainerManagementScreen())),
+      _MoreItem(Icons.account_tree, 'Reconciliation', () => _navigateToScreen(const ReconciliationDashboardScreen())),
+      _MoreItem(Icons.hub, 'Hub Management', () => _navigateToScreen(const HubManagementScreen())),
+      _MoreItem(Icons.manage_accounts, 'Coordinator', () => _navigateToScreen(const CoordinatorDashboardScreen())),
+      _MoreItem(Icons.assignment, 'Monitoring Plan', () => _navigateToScreen(const MonitoringPlanScreen())),
+      _MoreItem(Icons.archive, 'Archive', () => _navigateToScreen(const ArchiveScreen())),
+      _MoreItem(Icons.people, 'Staff Directory', () => _navigateToScreen(const StaffDirectoryScreen())),
+      _MoreItem(Icons.document_scanner, 'Scanner', () => _navigateToScreen(const TransactionScannerScreen())),
+      _MoreItem(Icons.download, 'Data Export', () => _navigateToScreen(const DataExportScreen())),
+      _MoreItem(Icons.search, 'Global Search', () => _navigateToScreen(const GlobalSearchScreen())),
+      _MoreItem(Icons.folder_copy, 'Documents', () => _navigateToScreen(const DocumentsScreen())),
+      _MoreItem(Icons.draw, 'Signatures', () => _navigateToScreen(const DigitalSignaturesScreen())),
+      _MoreItem(Icons.verified_user, 'Verification', () => _navigateToScreen(const SiteVerificationScreen())),
+      _MoreItem(Icons.phone, 'Helpline', () => _navigateToScreen(const HelplineScreen())),
+      _MoreItem(Icons.help_outline, 'Help & Support', () => _navigateToScreen(const HelpSupportScreen())),
+      _MoreItem(Icons.person, 'Profile', () => _navigateToScreen(const ProfileScreen())),
+      _MoreItem(Icons.settings, 'Settings', () => _navigateToScreen(const SettingsScreen())),
+    ];
+
+    return Scaffold(
+      appBar: AppBar(
+        backgroundColor: const Color(0xFF0F2041),
+        title: const Text('All Features', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.search, color: Colors.white),
+            onPressed: () => _navigateToScreen(const GlobalSearchScreen()),
+          ),
+        ],
+      ),
+      body: GridView.builder(
+        padding: const EdgeInsets.all(12),
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 3,
+          crossAxisSpacing: 10,
+          mainAxisSpacing: 10,
+          childAspectRatio: 1.0,
+        ),
+        itemCount: items.length,
+        itemBuilder: (context, index) {
+          final item = items[index];
+          return InkWell(
+            onTap: item.onTap,
+            borderRadius: BorderRadius.circular(12),
+            child: Container(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.grey.shade200),
+                boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 4, offset: const Offset(0, 2))],
+              ),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(item.icon, size: 28, color: const Color(0xFF1D3461)),
+                  const SizedBox(height: 6),
+                  Text(item.label, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w500), textAlign: TextAlign.center, maxLines: 2, overflow: TextOverflow.ellipsis),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _MoreItem {
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+  _MoreItem(this.icon, this.label, this.onTap);
 }

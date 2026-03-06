@@ -46,7 +46,11 @@
     PhoneCall,
     RefreshCw,
     Megaphone,
-    ScanLine
+    ScanLine,
+    Siren,
+    AlertTriangle,
+    Package,
+    HeartPulse
   } from "lucide-react";
   import { RealtimeStatusDot } from '@/components/realtime';
   import { useSiteVisitReminders } from "@/hooks/use-site-visit-reminders";
@@ -304,6 +308,18 @@
     if (!isHidden('/field-operation-manager') && (isSuperAdmin || ((isAdmin || isFOM || perms.fieldOpManager) && !isCoordinator))) {
       fieldOpsItems.push({ id: 'field-op-manager', title: "Field Operation Manager", url: "/field-operation-manager", icon: MapPin, priority: 3, isPinned: isPinned('/field-operation-manager') });
     }
+    if (!isHidden('/safety-hub')) {
+      fieldOpsItems.push({ id: 'safety-hub', title: "Safety Hub", url: "/safety-hub", icon: Siren, priority: 4, isPinned: isPinned('/safety-hub') });
+    }
+    if (!isHidden('/incident-reports')) {
+      fieldOpsItems.push({ id: 'incident-reports', title: "Incident Reports", url: "/incident-reports", icon: AlertTriangle, priority: 5, isPinned: isPinned('/incident-reports') });
+    }
+    if (!isHidden('/equipment') && (isSuperAdmin || isAdmin || isFOM)) {
+      fieldOpsItems.push({ id: 'equipment', title: "Equipment Tracking", url: "/equipment", icon: Package, priority: 6, isPinned: isPinned('/equipment') });
+    }
+    if (!isHidden('/monitoring-form') && (isSuperAdmin || isAdmin || isDataCollector || isCoordinator || isFOM)) {
+      fieldOpsItems.push({ id: 'monitoring-form', title: "Monitoring Form", url: "/monitoring-form", icon: ClipboardCheck, priority: 7, isPinned: isPinned('/monitoring-form') });
+    }
     if (fieldOpsItems.length) groups.push({ id: 'field-ops', label: "Field Operations", order: 3, items: fieldOpsItems });
 
     const cycleItems: MenuGroup['items'] = [];
@@ -358,6 +374,9 @@
     }
     if (!isHidden('/mobile-support-tickets') && (isSuperAdmin || isAdmin)) {
       helpItems.push({ id: 'mobile-support-tickets', title: "Mobile Support Tickets", url: "/mobile-support-tickets", icon: Smartphone, priority: 2, isPinned: isPinned('/mobile-support-tickets') });
+    }
+    if (!isHidden('/helpline')) {
+      helpItems.push({ id: 'helpline', title: "Helpline & Emergency Contacts", url: "/helpline", icon: HeartPulse, priority: 3, isPinned: isPinned('/helpline') });
     }
     if (helpItems.length) groups.push({ id: 'help', label: "Help & Support", order: 9, items: helpItems });
 

@@ -117,6 +117,11 @@ const NotificationHistory = lazy(() => import('./pages/NotificationHistory'));
 const NotificationAnalytics = lazy(() => import('./pages/NotificationAnalytics'));
 const MMPCycleClose = lazy(() => import('./pages/MMPCycleClose'));
 const DataExportCenter = lazy(() => import('./pages/DataExportCenter'));
+const SafetyHub = lazy(() => import('./pages/SafetyHub'));
+const IncidentReports = lazy(() => import('./pages/IncidentReports'));
+const EquipmentPage = lazy(() => import('./pages/Equipment'));
+const MonitoringForm = lazy(() => import('./pages/MonitoringForm'));
+const Helpline = lazy(() => import('./pages/Helpline'));
 
 // Components (keep these eagerly loaded as they're used immediately)
 import MainLayout from './components/MainLayout';
@@ -345,6 +350,11 @@ const AppRoutes = () => {
         <Route path="/mobile-call-scheduling" element={<MobileCallScheduling />} />
         <Route path="/mobile-document-sync" element={<MobileDocumentSync />} />
         <Route path="/reconciliation-dashboard" element={<ReconciliationDashboard />} />
+        <Route path="/safety-hub" element={<SafetyHub />} />
+        <Route path="/incident-reports" element={<IncidentReports />} />
+        <Route path="/equipment" element={<EquipmentPage />} />
+        <Route path="/monitoring-form" element={<MonitoringForm />} />
+        <Route path="/helpline" element={<Helpline />} />
       </Route>
 
       {/* Redirects */}
