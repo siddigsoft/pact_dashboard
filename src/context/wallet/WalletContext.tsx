@@ -524,14 +524,18 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       if (transactionError) throw transactionError;
 
       // Update request to final 'approved' status with admin details
+      // Auto-confirm fund receipt at the same time — no separate acknowledge step needed
+      const processedAt = new Date().toISOString();
       const { error: requestError } = await supabase
         .from('withdrawal_requests')
         .update({
           status: 'approved',
           admin_processed_by: currentUser.id,
-          admin_processed_at: new Date().toISOString(),
+          admin_processed_at: processedAt,
           admin_notes: notes,
-          updated_at: new Date().toISOString(),
+          updated_at: processedAt,
+          fund_receipt_confirmed: true,
+          fund_receipt_confirmed_at: processedAt,
         })
         .eq('id', requestId);
 
@@ -539,7 +543,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
       toast({
         title: 'Withdrawal Processed',
-        description: 'The payment has been completed and funds released',
+        description: 'The payment has been completed and receipt confirmed',
       });
 
       // Send email notification to the requester

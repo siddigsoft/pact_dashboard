@@ -731,6 +731,20 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
         );
       }
 
+      // Auto-confirm receipt when admin processes payment — no separate acknowledge needed
+      const processedAt = new Date().toISOString();
+      const autoReceiptConfirmation = {
+        confirmed: true,
+        confirmedAt: processedAt,
+        method: 'auto_process',
+        auto_confirmed: true,
+        confirmed_by: data.processedBy,
+      };
+      const updatedMetadata = {
+        ...((request.metadata as any) || {}),
+        receipt_confirmation: autoReceiptConfirmation,
+      };
+
       const { error: requestUpdateError } = await supabase
         .from('down_payment_requests')
         .update({
@@ -739,7 +753,8 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
           status: newStatus,
           wallet_transaction_ids: transactionIds,
           installment_plan: updatedInstallmentPlan,
-          updated_at: new Date().toISOString(),
+          metadata: updatedMetadata,
+          updated_at: processedAt,
         })
         .eq('id', data.requestId);
 
@@ -747,7 +762,7 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
 
       toastRef.current({
         title: 'Advance Recorded',
-        description: `Transport advance of ${data.amount} SDG recorded — will be deducted from site visit fee upon completion`,
+        description: `Transport advance of ${data.amount} SDG recorded — receipt auto-confirmed`,
       });
 
       // Send FCM push notification to enumerator's mobile device
