@@ -71,7 +71,7 @@ class _CoordinatorDashboardScreenState extends State<CoordinatorDashboardScreen>
         actions: [IconButton(icon: const Icon(Icons.refresh, color: Colors.white), onPressed: _loadData)],
       ),
       body: _isLoading
-          ? const ShimmerBody(hasStats: true, listItems: 4)
+          ? const ShimmerBody(layout: ShimmerLayout.statGrid)
           : RefreshIndicator(
               onRefresh: _loadData,
               child: ListView(

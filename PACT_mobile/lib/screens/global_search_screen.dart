@@ -104,7 +104,7 @@ class _GlobalSearchScreenState extends State<GlobalSearchScreen> {
               Text('MMPs, site visits, staff, documents, incidents', style: TextStyle(color: Colors.grey.shade400, fontSize: 13)),
             ]))
           : _isSearching
-              ? const ShimmerBody(listItems: 5)
+              ? const ShimmerBody(layout: ShimmerLayout.searchResult, listItems: 5)
               : _results.isEmpty
                   ? Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
                       const Icon(Icons.search_off, size: 48, color: Colors.grey),

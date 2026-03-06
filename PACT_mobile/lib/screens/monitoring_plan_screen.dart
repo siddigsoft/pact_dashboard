@@ -170,7 +170,7 @@ class _MonitoringPlanScreenState extends State<MonitoringPlanScreen> {
           ),
           Expanded(
             child: _isLoading
-                ? const ShimmerBody(listItems: 5)
+                ? const ShimmerBody(layout: ShimmerLayout.mmp, listItems: 5)
                 : filtered.isEmpty
                     ? Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
                         const Icon(Icons.assignment, size: 60, color: Colors.grey),

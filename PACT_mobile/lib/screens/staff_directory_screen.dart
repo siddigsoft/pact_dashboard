@@ -148,7 +148,7 @@ class _StaffDirectoryScreenState extends State<StaffDirectoryScreen> {
           ),
           Expanded(
             child: _isLoading
-                ? const ShimmerBody(hasAvatar: true, listItems: 7)
+                ? const ShimmerBody(layout: ShimmerLayout.staff, listItems: 7)
                 : filtered.isEmpty
                     ? const Center(child: Text('No staff found.', style: TextStyle(color: Colors.grey)))
                     : RefreshIndicator(

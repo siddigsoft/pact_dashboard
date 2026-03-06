@@ -88,7 +88,7 @@ class _HubManagementScreenState extends State<HubManagementScreen> {
           ),
           Expanded(
             child: _isLoading
-                ? const ShimmerBody(listItems: 6)
+                ? const ShimmerBody(layout: ShimmerLayout.hub, listItems: 6)
                 : _filtered.isEmpty
                     ? Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
                         const Icon(Icons.hub, size: 60, color: Colors.grey),

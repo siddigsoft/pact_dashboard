@@ -138,7 +138,7 @@ class _RetainerManagementScreenState extends State<RetainerManagementScreen> {
           ),
           Expanded(
             child: _isLoading
-                ? const ShimmerBody(hasAvatar: true, listItems: 5)
+                ? const ShimmerBody(layout: ShimmerLayout.retainer, listItems: 5)
                 : filtered.isEmpty
                     ? Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
                         const Icon(Icons.receipt_long, size: 60, color: Colors.grey),

@@ -85,7 +85,7 @@ class _BudgetScreenState extends State<BudgetScreen> {
         actions: [IconButton(icon: const Icon(Icons.refresh, color: Colors.white), onPressed: _loadData)],
       ),
       body: _isLoading
-          ? const ShimmerBody(hasStats: true, listItems: 5)
+          ? const ShimmerBody(layout: ShimmerLayout.budget, hasStats: true, listItems: 5)
           : Column(
               children: [
                 if (_isOffline) const OfflineBanner(),
