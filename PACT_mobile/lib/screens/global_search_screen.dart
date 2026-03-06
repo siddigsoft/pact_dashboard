@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../theme/app_colors.dart';
+import '../widgets/shimmer_loading.dart';
 
 class GlobalSearchScreen extends StatefulWidget {
   const GlobalSearchScreen({super.key});
@@ -22,9 +23,14 @@ class _GlobalSearchScreenState extends State<GlobalSearchScreen> {
   }
 
   Future<void> _search(String query) async {
-    if (query.trim().length < 2) { setState(() { _results = []; }); return; }
+    if (query.trim().length < 2) {
+      if (!mounted) return;
+      setState(() { _results = []; _isSearching = false; });
+      return;
+    }
     if (query == _lastQuery) return;
     _lastQuery = query;
+    if (!mounted) return;
     setState(() => _isSearching = true);
 
     final results = <_SearchResult>[];
@@ -48,7 +54,8 @@ class _GlobalSearchScreenState extends State<GlobalSearchScreen> {
       ]);
     } catch (_) {}
 
-    if (mounted) setState(() { _results = results; _isSearching = false; });
+    if (!mounted) return;
+    setState(() { _results = results; _isSearching = false; });
   }
 
   Color _typeColor(String type) {
@@ -77,49 +84,54 @@ class _GlobalSearchScreenState extends State<GlobalSearchScreen> {
             hintStyle: const TextStyle(color: Colors.white60),
             border: InputBorder.none,
             prefixIcon: const Icon(Icons.search, color: Colors.white70),
-            suffixIcon: _controller.text.isNotEmpty ? IconButton(icon: const Icon(Icons.clear, color: Colors.white70), onPressed: () { _controller.clear(); setState(() { _results = []; _lastQuery = ''; }); }) : null,
+            suffixIcon: _controller.text.isNotEmpty
+                ? IconButton(icon: const Icon(Icons.clear, color: Colors.white70), onPressed: () {
+                    _controller.clear();
+                    setState(() { _results = []; _lastQuery = ''; });
+                  })
+                : null,
           ),
           onChanged: (v) { setState(() {}); _search(v); },
         ),
         iconTheme: const IconThemeData(color: Colors.white),
       ),
       body: _controller.text.isEmpty
-        ? Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-            const Icon(Icons.search, size: 64, color: Colors.grey),
-            const SizedBox(height: 12),
-            const Text('Search across all data', style: TextStyle(color: Colors.grey, fontSize: 16)),
-            const SizedBox(height: 4),
-            Text('MMPs, site visits, staff, documents, incidents', style: TextStyle(color: Colors.grey.shade400, fontSize: 13)),
-          ]))
-        : _isSearching
-          ? const Center(child: CircularProgressIndicator())
-          : _results.isEmpty
-            ? Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-                const Icon(Icons.search_off, size: 48, color: Colors.grey),
-                const SizedBox(height: 8),
-                Text('No results for "${_controller.text}"', style: const TextStyle(color: Colors.grey)),
-              ]))
-            : ListView.builder(
-                padding: const EdgeInsets.all(12),
-                itemCount: _results.length,
-                itemBuilder: (_, i) {
-                  final r = _results[i];
-                  return Card(
-                    margin: const EdgeInsets.only(bottom: 8),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                    child: ListTile(
-                      leading: CircleAvatar(backgroundColor: _typeColor(r.type).withOpacity(0.12), child: Icon(r.icon, color: _typeColor(r.type), size: 20)),
-                      title: Text(r.title, style: const TextStyle(fontWeight: FontWeight.w600)),
-                      subtitle: Row(children: [
-                        Container(padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1), decoration: BoxDecoration(color: _typeColor(r.type).withOpacity(0.12), borderRadius: BorderRadius.circular(8)), child: Text(r.type, style: TextStyle(color: _typeColor(r.type), fontSize: 10, fontWeight: FontWeight.w600))),
-                        const SizedBox(width: 6),
-                        Text(r.subtitle, style: const TextStyle(fontSize: 12)),
-                      ]),
-                      trailing: const Icon(Icons.chevron_right),
+          ? Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+              const Icon(Icons.search, size: 64, color: Colors.grey),
+              const SizedBox(height: 12),
+              const Text('Search across all data', style: TextStyle(color: Colors.grey, fontSize: 16)),
+              const SizedBox(height: 4),
+              Text('MMPs, site visits, staff, documents, incidents', style: TextStyle(color: Colors.grey.shade400, fontSize: 13)),
+            ]))
+          : _isSearching
+              ? const ShimmerBody(listItems: 5)
+              : _results.isEmpty
+                  ? Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+                      const Icon(Icons.search_off, size: 48, color: Colors.grey),
+                      const SizedBox(height: 8),
+                      Text('No results for "${_controller.text}"', style: const TextStyle(color: Colors.grey)),
+                    ]))
+                  : ListView.builder(
+                      padding: const EdgeInsets.all(12),
+                      itemCount: _results.length,
+                      itemBuilder: (_, i) {
+                        final r = _results[i];
+                        return Card(
+                          margin: const EdgeInsets.only(bottom: 8),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          child: ListTile(
+                            leading: CircleAvatar(backgroundColor: _typeColor(r.type).withOpacity(0.12), child: Icon(r.icon, color: _typeColor(r.type), size: 20)),
+                            title: Text(r.title, style: const TextStyle(fontWeight: FontWeight.w600)),
+                            subtitle: Row(children: [
+                              Container(padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1), decoration: BoxDecoration(color: _typeColor(r.type).withOpacity(0.12), borderRadius: BorderRadius.circular(8)), child: Text(r.type, style: TextStyle(color: _typeColor(r.type), fontSize: 10, fontWeight: FontWeight.w600))),
+                              const SizedBox(width: 6),
+                              Text(r.subtitle, style: const TextStyle(fontSize: 12)),
+                            ]),
+                            trailing: const Icon(Icons.chevron_right),
+                          ),
+                        );
+                      },
                     ),
-                  );
-                },
-              ),
     );
   }
 }

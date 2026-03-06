@@ -64,6 +64,7 @@ class _MainScreenState extends State<MainScreen> {
   StreamSubscription? _connectivitySubscription;
   bool _isCoordinator = false;
   bool _isLoadingRole = true;
+  String _userRole = '';
   bool _servicesInitialized = false;
   Timer? _activityHeartbeatTimer;
 
@@ -226,6 +227,7 @@ class _MainScreenState extends State<MainScreen> {
       if (response != null && mounted) {
         final role = (response['role'] as String?)?.toLowerCase() ?? '';
         setState(() {
+          _userRole = role;
           _isCoordinator =
               role == 'coordinator' ||
               role == 'field_coordinator' ||
@@ -253,6 +255,7 @@ class _MainScreenState extends State<MainScreen> {
       if (cachedRole != null && mounted) {
         final role = cachedRole.toLowerCase();
         setState(() {
+          _userRole = role;
           _isCoordinator =
               role == 'coordinator' ||
               role == 'field_coordinator' ||
@@ -522,86 +525,206 @@ class _MainScreenState extends State<MainScreen> {
     }
   }
 
+  bool _canSeeAdminFeatures() => _userRole == 'super_admin' || _userRole == 'admin' || _userRole == 'fom';
+  bool _canSeeReports() => _canSeeAdminFeatures() || _userRole == 'coordinator' || _userRole == 'field_coordinator' || _userRole == 'state_coordinator' || _userRole == 'supervisor';
+  bool _canSeeFinance() => _canSeeAdminFeatures() || _userRole == 'coordinator' || _userRole == 'field_coordinator' || _userRole == 'state_coordinator' || _userRole == 'supervisor';
+
   Widget _buildMoreScreen() {
-    final items = [
-      _MoreItem(Icons.bar_chart, 'Reports', () => _navigateToScreen(const ReportsScreen())),
-      _MoreItem(Icons.folder_special, 'Projects', () => _navigateToScreen(const ProjectsScreen())),
-      _MoreItem(Icons.account_balance, 'Budget', () => _navigateToScreen(const BudgetScreen())),
-      _MoreItem(Icons.currency_exchange, 'Exchange Rates', () => _navigateToScreen(const ExchangeRatesScreen())),
-      _MoreItem(Icons.safety_check, 'Safety Hub', () => _navigateToScreen(const SafetyHubScreen())),
-      _MoreItem(Icons.warning_amber, 'Incidents', () => _navigateToScreen(const IncidentReportScreen())),
-      _MoreItem(Icons.construction, 'Equipment', () => _navigateToScreen(const EquipmentScreen())),
-      _MoreItem(Icons.description, 'MMP Management', () => _navigateToScreen(const MmpManagementScreen())),
-      _MoreItem(Icons.fact_check, 'Monitoring Form', () => _navigateToScreen(const ComprehensiveMonitoringFormScreen())),
-      _MoreItem(Icons.payment, 'Down Payment', () => _navigateToScreen(const DownPaymentApprovalScreen())),
-      _MoreItem(Icons.request_quote, 'Advance Reports', () => _navigateToScreen(const AdvanceRequestsReportScreen())),
-      _MoreItem(Icons.approval, 'Approvals', () => _navigateToScreen(const ApprovalDashboardScreen())),
-      _MoreItem(Icons.attach_money, 'Cost Submission', () => _navigateToScreen(const CostSubmissionScreen())),
-      _MoreItem(Icons.receipt_long, 'Retainers', () => _navigateToScreen(const RetainerManagementScreen())),
-      _MoreItem(Icons.account_tree, 'Reconciliation', () => _navigateToScreen(const ReconciliationDashboardScreen())),
-      _MoreItem(Icons.hub, 'Hub Management', () => _navigateToScreen(const HubManagementScreen())),
-      _MoreItem(Icons.manage_accounts, 'Coordinator', () => _navigateToScreen(const CoordinatorDashboardScreen())),
-      _MoreItem(Icons.assignment, 'Monitoring Plan', () => _navigateToScreen(const MonitoringPlanScreen())),
-      _MoreItem(Icons.archive, 'Archive', () => _navigateToScreen(const ArchiveScreen())),
-      _MoreItem(Icons.people, 'Staff Directory', () => _navigateToScreen(const StaffDirectoryScreen())),
-      _MoreItem(Icons.document_scanner, 'Scanner', () => _navigateToScreen(const TransactionScannerScreen())),
-      _MoreItem(Icons.download, 'Data Export', () => _navigateToScreen(const DataExportScreen())),
-      _MoreItem(Icons.search, 'Global Search', () => _navigateToScreen(const GlobalSearchScreen())),
-      _MoreItem(Icons.folder_copy, 'Documents', () => _navigateToScreen(const DocumentsScreen())),
-      _MoreItem(Icons.draw, 'Signatures', () => _navigateToScreen(const DigitalSignaturesScreen())),
-      _MoreItem(Icons.verified_user, 'Verification', () => _navigateToScreen(const SiteVerificationScreen())),
-      _MoreItem(Icons.phone, 'Helpline', () => _navigateToScreen(const HelplineScreen())),
-      _MoreItem(Icons.help_outline, 'Help & Support', () => _navigateToScreen(const HelpSupportScreen())),
-      _MoreItem(Icons.person, 'Profile', () => _navigateToScreen(const ProfileScreen())),
-      _MoreItem(Icons.settings, 'Settings', () => _navigateToScreen(const SettingsScreen())),
+    return _MoreScreenContent(
+      userRole: _userRole,
+      canSeeAdminFeatures: _canSeeAdminFeatures(),
+      canSeeReports: _canSeeReports(),
+      canSeeFinance: _canSeeFinance(),
+      onNavigate: _navigateToScreen,
+    );
+  }
+}
+
+class _MoreScreenContent extends StatefulWidget {
+  final String userRole;
+  final bool canSeeAdminFeatures;
+  final bool canSeeReports;
+  final bool canSeeFinance;
+  final void Function(Widget) onNavigate;
+
+  const _MoreScreenContent({
+    required this.userRole,
+    required this.canSeeAdminFeatures,
+    required this.canSeeReports,
+    required this.canSeeFinance,
+    required this.onNavigate,
+  });
+
+  @override
+  State<_MoreScreenContent> createState() => _MoreScreenContentState();
+}
+
+class _MoreScreenContentState extends State<_MoreScreenContent> {
+  String _search = '';
+
+  @override
+  Widget build(BuildContext context) {
+    final fieldOps = <_MoreItem>[
+      _MoreItem(Icons.fact_check, 'Monitoring Form', () => widget.onNavigate(const ComprehensiveMonitoringFormScreen())),
+      _MoreItem(Icons.safety_check, 'Safety Hub', () => widget.onNavigate(const SafetyHubScreen())),
+      _MoreItem(Icons.warning_amber, 'Incidents', () => widget.onNavigate(const IncidentReportScreen())),
+      _MoreItem(Icons.construction, 'Equipment', () => widget.onNavigate(const EquipmentScreen())),
+      _MoreItem(Icons.verified_user, 'Verification', () => widget.onNavigate(const SiteVerificationScreen())),
+      _MoreItem(Icons.folder_copy, 'Documents', () => widget.onNavigate(const DocumentsScreen())),
+      _MoreItem(Icons.phone, 'Helpline', () => widget.onNavigate(const HelplineScreen())),
+      _MoreItem(Icons.description, 'MMP Management', () => widget.onNavigate(const MmpManagementScreen())),
+      _MoreItem(Icons.assignment, 'Monitoring Plan', () => widget.onNavigate(const MonitoringPlanScreen())),
     ];
+
+    final financeItems = <_MoreItem>[
+      _MoreItem(Icons.attach_money, 'Cost Submission', () => widget.onNavigate(const CostSubmissionScreen())),
+      if (widget.canSeeFinance) ...[
+        _MoreItem(Icons.payment, 'Down Payment', () => widget.onNavigate(const DownPaymentApprovalScreen())),
+        _MoreItem(Icons.approval, 'Approvals', () => widget.onNavigate(const ApprovalDashboardScreen())),
+        _MoreItem(Icons.receipt_long, 'Retainers', () => widget.onNavigate(const RetainerManagementScreen())),
+        _MoreItem(Icons.currency_exchange, 'Exchange Rates', () => widget.onNavigate(const ExchangeRatesScreen())),
+        _MoreItem(Icons.account_balance, 'Budget', () => widget.onNavigate(const BudgetScreen())),
+        _MoreItem(Icons.folder_special, 'Projects', () => widget.onNavigate(const ProjectsScreen())),
+        _MoreItem(Icons.draw, 'Signatures', () => widget.onNavigate(const DigitalSignaturesScreen())),
+        _MoreItem(Icons.document_scanner, 'Scanner', () => widget.onNavigate(const TransactionScannerScreen())),
+      ],
+    ];
+
+    final reportsItems = <_MoreItem>[
+      if (widget.canSeeReports) ...[
+        _MoreItem(Icons.bar_chart, 'Reports', () => widget.onNavigate(const ReportsScreen())),
+        _MoreItem(Icons.request_quote, 'Advance Reports', () => widget.onNavigate(const AdvanceRequestsReportScreen())),
+        _MoreItem(Icons.download, 'Data Export', () => widget.onNavigate(const DataExportScreen())),
+        _MoreItem(Icons.archive, 'Archive', () => widget.onNavigate(const ArchiveScreen())),
+      ],
+    ];
+
+    final adminItems = <_MoreItem>[
+      if (widget.canSeeAdminFeatures) ...[
+        _MoreItem(Icons.hub, 'Hub Management', () => widget.onNavigate(const HubManagementScreen())),
+        _MoreItem(Icons.people, 'Staff Directory', () => widget.onNavigate(const StaffDirectoryScreen())),
+        _MoreItem(Icons.account_tree, 'Reconciliation', () => widget.onNavigate(const ReconciliationDashboardScreen())),
+        _MoreItem(Icons.manage_accounts, 'Coordinator', () => widget.onNavigate(const CoordinatorDashboardScreen())),
+        _MoreItem(Icons.search, 'Global Search', () => widget.onNavigate(const GlobalSearchScreen())),
+      ],
+    ];
+
+    final accountItems = <_MoreItem>[
+      _MoreItem(Icons.person, 'Profile', () => widget.onNavigate(const ProfileScreen())),
+      _MoreItem(Icons.settings, 'Settings', () => widget.onNavigate(const SettingsScreen())),
+      _MoreItem(Icons.help_outline, 'Help & Support', () => widget.onNavigate(const HelpSupportScreen())),
+    ];
+
+    final categories = <_MoreCategory>[
+      _MoreCategory('Field Operations', Icons.map, fieldOps),
+      _MoreCategory('Finance', Icons.account_balance_wallet, financeItems),
+      if (reportsItems.isNotEmpty) _MoreCategory('Reports & Data', Icons.bar_chart, reportsItems),
+      if (adminItems.isNotEmpty) _MoreCategory('Administration', Icons.admin_panel_settings, adminItems),
+      _MoreCategory('Account', Icons.person_outline, accountItems),
+    ];
+
+    final query = _search.toLowerCase().trim();
+    final filteredCategories = query.isEmpty
+        ? categories
+        : categories.map((c) {
+            final filtered = c.items.where((i) => i.label.toLowerCase().contains(query)).toList();
+            return _MoreCategory(c.title, c.icon, filtered);
+          }).where((c) => c.items.isNotEmpty).toList();
 
     return Scaffold(
       appBar: AppBar(
         backgroundColor: const Color(0xFF0F2041),
         title: const Text('All Features', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.search, color: Colors.white),
-            onPressed: () => _navigateToScreen(const GlobalSearchScreen()),
+      ),
+      body: Column(
+        children: [
+          Container(
+            color: Colors.white,
+            padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+            child: TextField(
+              decoration: InputDecoration(
+                hintText: 'Search features…',
+                prefixIcon: const Icon(Icons.search),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                contentPadding: const EdgeInsets.symmetric(vertical: 8),
+                filled: true,
+                fillColor: Colors.grey.shade50,
+              ),
+              onChanged: (v) => setState(() => _search = v),
+            ),
+          ),
+          Expanded(
+            child: filteredCategories.isEmpty
+                ? Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+                    const Icon(Icons.search_off, size: 48, color: Colors.grey),
+                    const SizedBox(height: 8),
+                    Text('No features match "$_search"', style: const TextStyle(color: Colors.grey)),
+                  ]))
+                : ListView.builder(
+                    padding: const EdgeInsets.only(bottom: 24),
+                    itemCount: filteredCategories.length,
+                    itemBuilder: (ctx, ci) {
+                      final cat = filteredCategories[ci];
+                      return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                          child: Row(children: [
+                            Icon(cat.icon, size: 16, color: const Color(0xFF1D3461)),
+                            const SizedBox(width: 6),
+                            Text(cat.title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFF1D3461), letterSpacing: 0.5)),
+                          ]),
+                        ),
+                        GridView.builder(
+                          padding: const EdgeInsets.symmetric(horizontal: 12),
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                            crossAxisCount: 4,
+                            crossAxisSpacing: 8,
+                            mainAxisSpacing: 8,
+                            childAspectRatio: 0.9,
+                          ),
+                          itemCount: cat.items.length,
+                          itemBuilder: (ctx, i) {
+                            final item = cat.items[i];
+                            return InkWell(
+                              onTap: item.onTap,
+                              borderRadius: BorderRadius.circular(10),
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  borderRadius: BorderRadius.circular(10),
+                                  border: Border.all(color: Colors.grey.shade200),
+                                  boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 3, offset: const Offset(0, 1))],
+                                ),
+                                child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+                                  Icon(item.icon, size: 24, color: const Color(0xFF1D3461)),
+                                  const SizedBox(height: 5),
+                                  Padding(
+                                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                                    child: Text(item.label, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w500), textAlign: TextAlign.center, maxLines: 2, overflow: TextOverflow.ellipsis),
+                                  ),
+                                ]),
+                              ),
+                            );
+                          },
+                        ),
+                        Divider(color: Colors.grey.shade100, height: 1, indent: 12, endIndent: 12),
+                      ]);
+                    },
+                  ),
           ),
         ],
       ),
-      body: GridView.builder(
-        padding: const EdgeInsets.all(12),
-        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: 3,
-          crossAxisSpacing: 10,
-          mainAxisSpacing: 10,
-          childAspectRatio: 1.0,
-        ),
-        itemCount: items.length,
-        itemBuilder: (context, index) {
-          final item = items[index];
-          return InkWell(
-            onTap: item.onTap,
-            borderRadius: BorderRadius.circular(12),
-            child: Container(
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.grey.shade200),
-                boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 4, offset: const Offset(0, 2))],
-              ),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(item.icon, size: 28, color: const Color(0xFF1D3461)),
-                  const SizedBox(height: 6),
-                  Text(item.label, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w500), textAlign: TextAlign.center, maxLines: 2, overflow: TextOverflow.ellipsis),
-                ],
-              ),
-            ),
-          );
-        },
-      ),
     );
   }
+}
+
+class _MoreCategory {
+  final String title;
+  final IconData icon;
+  final List<_MoreItem> items;
+  _MoreCategory(this.title, this.icon, this.items);
 }
 
 class _MoreItem {

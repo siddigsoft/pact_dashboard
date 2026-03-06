@@ -59,11 +59,13 @@ class _DataExportScreenState extends State<DataExportScreen> {
         final data = await _supabase.from(table).select('id').limit(1000);
         totalRecords += (data as List).length;
       }
+      if (!mounted) return;
       setState(() {
         _isExporting = false;
         _exportMessage = '✅ Export prepared: $totalRecords records from ${selected.length} dataset(s).\n\nNote: Full export with file download is available on the web platform. This preview confirms data availability.';
       });
     } catch (e) {
+      if (!mounted) return;
       setState(() { _isExporting = false; _exportMessage = 'Export error: $e'; });
     }
   }

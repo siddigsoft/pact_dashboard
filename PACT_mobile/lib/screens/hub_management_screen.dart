@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:hive_flutter/hive_flutter.dart';
 import '../theme/app_colors.dart';
+import '../widgets/shimmer_loading.dart';
 
 class HubManagementScreen extends StatefulWidget {
   const HubManagementScreen({super.key});
@@ -12,6 +14,7 @@ class _HubManagementScreenState extends State<HubManagementScreen> {
   final _supabase = Supabase.instance.client;
   List<Map<String, dynamic>> _hubs = [];
   bool _isLoading = true;
+  bool _isOffline = false;
   String _searchQuery = '';
 
   @override
@@ -23,21 +26,39 @@ class _HubManagementScreenState extends State<HubManagementScreen> {
   Future<void> _loadHubs() async {
     setState(() => _isLoading = true);
     try {
-      final data = await _supabase.from('hubs').select('*, hub_states(count)').order('name');
-      if (mounted) setState(() { _hubs = List<Map<String, dynamic>>.from(data); _isLoading = false; });
-    } catch (e) {
+      List<Map<String, dynamic>> data;
       try {
-        final data = await _supabase.from('hubs').select('*').order('name');
-        if (mounted) setState(() { _hubs = List<Map<String, dynamic>>.from(data); _isLoading = false; });
+        final raw = await _supabase.from('hubs').select('*, hub_states(count)').order('name');
+        data = List<Map<String, dynamic>>.from(raw);
       } catch (_) {
-        if (mounted) setState(() => _isLoading = false);
+        final raw = await _supabase.from('hubs').select('*').order('name');
+        data = List<Map<String, dynamic>>.from(raw);
       }
+      final box = await Hive.openBox('offline_cache');
+      await box.put('hubs', data);
+      if (!mounted) return;
+      setState(() { _hubs = data; _isLoading = false; _isOffline = false; });
+    } catch (e) {
+      if (!mounted) return;
+      try {
+        final box = await Hive.openBox('offline_cache');
+        final cached = box.get('hubs');
+        if (cached != null) {
+          setState(() {
+            _hubs = List<Map<String, dynamic>>.from(
+                (cached as List).map((e) => Map<String, dynamic>.from(e)));
+            _isLoading = false;
+            _isOffline = true;
+          });
+          return;
+        }
+      } catch (_) {}
+      setState(() => _isLoading = false);
     }
   }
 
   List<Map<String, dynamic>> get _filtered => _hubs.where((h) =>
-    _searchQuery.isEmpty || (h['name'] ?? '').toLowerCase().contains(_searchQuery.toLowerCase())
-  ).toList();
+      _searchQuery.isEmpty || (h['name'] ?? '').toLowerCase().contains(_searchQuery.toLowerCase())).toList();
 
   @override
   Widget build(BuildContext context) {
@@ -51,48 +72,61 @@ class _HubManagementScreenState extends State<HubManagementScreen> {
       ),
       body: Column(
         children: [
+          if (_isOffline) const OfflineBanner(),
           Container(
             padding: const EdgeInsets.all(12),
             color: Colors.white,
             child: TextField(
-              decoration: InputDecoration(hintText: 'Search hubs...', prefixIcon: const Icon(Icons.search), border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)), contentPadding: const EdgeInsets.symmetric(vertical: 8)),
+              decoration: InputDecoration(
+                hintText: 'Search hubs...',
+                prefixIcon: const Icon(Icons.search),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                contentPadding: const EdgeInsets.symmetric(vertical: 8),
+              ),
               onChanged: (v) => setState(() => _searchQuery = v),
             ),
           ),
           Expanded(
             child: _isLoading
-              ? const Center(child: CircularProgressIndicator())
-              : _filtered.isEmpty
-                ? Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [const Icon(Icons.hub, size: 60, color: Colors.grey), const SizedBox(height: 12), const Text('No hubs found.', style: TextStyle(color: Colors.grey))]))
-                : ListView.builder(
-                    padding: const EdgeInsets.all(12),
-                    itemCount: _filtered.length,
-                    itemBuilder: (_, i) {
-                      final h = _filtered[i];
-                      return Card(
-                        margin: const EdgeInsets.only(bottom: 10),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                        child: ExpansionTile(
-                          leading: CircleAvatar(backgroundColor: AppColors.primaryDark.withOpacity(0.1), child: const Icon(Icons.hub, color: AppColors.primaryDark)),
-                          title: Text(h['name'] ?? 'Unnamed Hub', style: const TextStyle(fontWeight: FontWeight.bold)),
-                          subtitle: Text(h['region'] ?? h['state'] ?? '', style: TextStyle(color: Colors.grey.shade600)),
-                          children: [
-                            Padding(
-                              padding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
-                              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                                if (h['manager_name'] != null) _row('Manager', h['manager_name']),
-                                if (h['phone'] != null) _row('Phone', h['phone']),
-                                if (h['email'] != null) _row('Email', h['email']),
-                                if (h['address'] != null) _row('Address', h['address']),
-                                if (h['states_count'] != null) _row('States', h['states_count'].toString()),
-                                if (h['localities_count'] != null) _row('Localities', h['localities_count'].toString()),
-                              ]),
-                            ),
-                          ],
+                ? const ShimmerBody(listItems: 6)
+                : _filtered.isEmpty
+                    ? Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+                        const Icon(Icons.hub, size: 60, color: Colors.grey),
+                        const SizedBox(height: 12),
+                        const Text('No hubs found.', style: TextStyle(color: Colors.grey)),
+                      ]))
+                    : RefreshIndicator(
+                        onRefresh: _loadHubs,
+                        child: ListView.builder(
+                          padding: const EdgeInsets.all(12),
+                          itemCount: _filtered.length,
+                          itemBuilder: (_, i) {
+                            final h = _filtered[i];
+                            return Card(
+                              margin: const EdgeInsets.only(bottom: 10),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                              child: ExpansionTile(
+                                leading: CircleAvatar(backgroundColor: AppColors.primaryDark.withOpacity(0.1), child: const Icon(Icons.hub, color: AppColors.primaryDark)),
+                                title: Text(h['name'] ?? 'Unnamed Hub', style: const TextStyle(fontWeight: FontWeight.bold)),
+                                subtitle: Text(h['region'] ?? h['state'] ?? '', style: TextStyle(color: Colors.grey.shade600)),
+                                children: [
+                                  Padding(
+                                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
+                                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                                      if (h['manager_name'] != null) _row('Manager', h['manager_name']),
+                                      if (h['phone'] != null) _row('Phone', h['phone']),
+                                      if (h['email'] != null) _row('Email', h['email']),
+                                      if (h['address'] != null) _row('Address', h['address']),
+                                      if (h['states_count'] != null) _row('States', h['states_count'].toString()),
+                                      if (h['localities_count'] != null) _row('Localities', h['localities_count'].toString()),
+                                    ]),
+                                  ),
+                                ],
+                              ),
+                            );
+                          },
                         ),
-                      );
-                    },
-                  ),
+                      ),
           ),
         ],
       ),
