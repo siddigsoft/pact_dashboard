@@ -784,13 +784,18 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
           await supabase.functions.invoke('send-fcm-push', {
             body: {
               tokens,
-              title: '💰 Transport Advance Disbursed | تم صرف سلفة المواصلات',
-              body: `${data.amount} SDG — ${request.siteName}. Tap to confirm receipt.\nاضغط لتأكيد استلام السلفة.`,
+              title: '💰 تم صرف السلفة — يرجى التأكيد | Advance Disbursed — Action Required',
+              body: `${data.amount.toLocaleString()} SDG — ${request.siteName}\nهل استلمت المبلغ؟ اضغط لتأكيد الاستلام أو الإبلاغ عن عدم الاستلام.\nDid you receive the funds? Tap to ACKNOWLEDGE or report NOT YET RECEIVED.`,
               data: {
-                type: 'fund_receipt_confirmation',
+                type: 'advance_payment_action',
                 requestId: data.requestId,
                 siteName: request.siteName,
                 amount: String(data.amount),
+                has_receipt: data.receiptUrl ? 'true' : 'false',
+                receipt_url: data.receiptUrl || '',
+                action_acknowledge: 'confirm_received',
+                action_not_received: 'report_not_received',
+                navigate_to: 'wallet_advances',
               },
             },
           });

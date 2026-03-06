@@ -2955,8 +2955,10 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
                   <Label className="text-sm font-medium">
                     Payment Receipt / إيصال الدفع <span className="text-red-500">*</span>
                   </Label>
+
+                  {/* Upload zone */}
                   <div className={`border-2 border-dashed rounded-lg p-3 text-center transition-colors relative cursor-pointer ${
-                    payProofFile ? 'border-green-500/50 hover:border-green-400' : 'border-red-400/60 hover:border-red-400'
+                    payProofFile ? 'border-green-500/50 hover:border-green-400 bg-green-500/5' : 'border-red-400/60 hover:border-red-400'
                   }`}>
                     <input
                       type="file"
@@ -2967,16 +2969,10 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
                       data-testid="input-pay-proof-file"
                     />
                     {payProofFile ? (
-                      <div className="space-y-1.5">
-                        {payProofPreviewUrl ? (
-                          <img src={payProofPreviewUrl} alt="Receipt preview" className="max-h-28 mx-auto rounded object-contain" />
-                        ) : (
-                          <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
-                            <FileText className="h-7 w-7 text-red-500" />
-                            <span className="truncate max-w-[180px]">{payProofFile.name}</span>
-                          </div>
-                        )}
-                        <p className="text-xs text-muted-foreground">Click to change / انقر للتغيير</p>
+                      <div className="flex items-center justify-center gap-2 text-sm">
+                        <CheckCircle2 className="h-4 w-4 text-green-500 flex-shrink-0" />
+                        <span className="truncate max-w-[200px] text-green-600 dark:text-green-400 font-medium">{payProofFile.name}</span>
+                        <span className="text-xs text-muted-foreground flex-shrink-0">— click to change</span>
                       </div>
                     ) : (
                       <div className="text-muted-foreground py-1">
@@ -2986,6 +2982,41 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
                       </div>
                     )}
                   </div>
+
+                  {/* Preview panel shown after file is selected */}
+                  {payProofFile && (
+                    <div className="rounded-lg border border-border bg-muted/30 overflow-hidden">
+                      {payProofPreviewUrl ? (
+                        <a href={payProofPreviewUrl} target="_blank" rel="noopener noreferrer" className="block group relative">
+                          <img
+                            src={payProofPreviewUrl}
+                            alt="Receipt preview"
+                            className="w-full max-h-52 object-contain bg-black/5 group-hover:opacity-90 transition-opacity"
+                          />
+                          <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/30">
+                            <span className="text-white text-xs font-medium bg-black/60 px-2 py-1 rounded">View full size</span>
+                          </div>
+                        </a>
+                      ) : (
+                        <div className="flex items-center gap-3 px-3 py-2.5">
+                          <FileText className="h-8 w-8 text-red-500 flex-shrink-0" />
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium truncate">{payProofFile.name}</p>
+                            <p className="text-xs text-muted-foreground">{(payProofFile.size / 1024).toFixed(1)} KB</p>
+                          </div>
+                          <a
+                            href={URL.createObjectURL(payProofFile)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={e => e.stopPropagation()}
+                            className="ml-auto text-xs text-primary underline flex-shrink-0"
+                          >
+                            Preview
+                          </a>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
             )}
