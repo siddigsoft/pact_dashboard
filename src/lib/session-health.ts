@@ -124,8 +124,16 @@ export async function ensureValidSession(): Promise<{
     );
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Session check failed.';
-    if (msg.includes('Session check timed out')) {
-      console.error('[SessionHealth] ⏱️ Session check timed out after', SESSION_TIMEOUT_MS, 'ms - refreshSession() likely hung (Supabase client frozen)');
+    const isTimeoutOrFrozen =
+      msg.includes('Session check timed out') ||
+      msg.includes('Session read timed out') ||
+      msg.includes('refreshSession timed out');
+    if (isTimeoutOrFrozen) {
+      if (msg.includes('Session check timed out')) {
+        console.error('[SessionHealth] ⏱️ Session check timed out after', SESSION_TIMEOUT_MS, 'ms - refreshSession() likely hung (Supabase client frozen)');
+      } else {
+        console.warn('[SessionHealth] ⚠️ Inner timeout (getSession/refreshSession) - attempting recovery without full page refresh');
+      }
       const recovered = await recoverFromFrozenClient();
       if (recovered.success) {
         return {
@@ -245,9 +253,21 @@ async function ensureValidSessionCore(): Promise<{
     };
   } catch (error: any) {
     console.error('[SessionHealth] ❌ Error ensuring valid session:', error);
+    const msg = error?.message || 'Authentication error. Please log in again.';
+    // When getSession() or refreshSession() times out (frozen client), try recovery before giving up
+    if (msg.includes('Session read timed out') || msg.includes('refreshSession timed out')) {
+      console.warn('[SessionHealth] ⚠️ Timeout in core - attempting recovery via native fetch');
+      const recovered = await recoverFromFrozenClient();
+      if (recovered.success) {
+        return {
+          success: true,
+          user: recovered.user,
+        };
+      }
+    }
     return {
       success: false,
-      error: error.message || 'Authentication error. Please log in again.',
+      error: msg,
     };
   }
 }
