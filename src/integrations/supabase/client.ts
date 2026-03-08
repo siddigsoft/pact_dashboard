@@ -13,6 +13,61 @@ if (!isSupabaseConfigured) {
   console.error('[Supabase] Configuration missing');
 }
 
+/**
+ * Custom lock function for Supabase auth.
+ * Uses navigator.locks with an AbortSignal timeout so that zombie locks
+ * (held by frozen/backgrounded tab operations) cannot block new auth calls.
+ * Falls back to simple execution if Web Locks API is unavailable.
+ */
+function createAuthLock() {
+  const LOCK_ACQUIRE_TIMEOUT_MS = 8000;
+
+  return async function lock<R>(name: string, _acquireTimeout: number, fn: () => Promise<R>): Promise<R> {
+    if (typeof navigator === 'undefined' || !navigator.locks?.request) {
+      return await fn();
+    }
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), LOCK_ACQUIRE_TIMEOUT_MS);
+
+    try {
+      return await navigator.locks.request(name, { signal: controller.signal }, fn);
+    } catch (err: any) {
+      if (err?.name === 'AbortError') {
+        // Lock was held too long (zombie lock). Run without lock as fallback.
+        console.warn('[Supabase] Auth lock timed out, running without lock:', name);
+        return await fn();
+      }
+      throw err;
+    } finally {
+      clearTimeout(timeoutId);
+    }
+  };
+}
+
+/**
+ * Global fetch wrapper with AbortController timeout.
+ * Prevents REST API calls from hanging indefinitely on stuck TCP connections.
+ */
+const FETCH_TIMEOUT_MS = 20_000;
+function fetchWithTimeout(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+  const signal = init?.signal
+    ? anySignal([init.signal, controller.signal])
+    : controller.signal;
+  return fetch(input, { ...init, signal }).finally(() => clearTimeout(timeoutId));
+}
+
+function anySignal(signals: AbortSignal[]): AbortSignal {
+  const controller = new AbortController();
+  for (const signal of signals) {
+    if (signal.aborted) { controller.abort(signal.reason); break; }
+    signal.addEventListener('abort', () => controller.abort(signal.reason), { once: true });
+  }
+  return controller.signal;
+}
+
 function createSupabaseClient(): SupabaseClient {
   if (!isSupabaseConfigured || !url || !anonKey) {
     return new Proxy({} as SupabaseClient, {
@@ -26,7 +81,11 @@ function createSupabaseClient(): SupabaseClient {
       persistSession: true,
       autoRefreshToken: true,
       detectSessionInUrl: true,
-      storage: localStorage, // 🔥 critical fix (web + mobile)
+      storage: localStorage,
+      lock: createAuthLock(),
+    },
+    global: {
+      fetch: fetchWithTimeout,
     },
   });
 }

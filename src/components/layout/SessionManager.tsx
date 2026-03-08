@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { testConnection, isClientFrozen, recoverFromFrozenClient } from '@/lib/session-health';
-import { supabase } from '@/integrations/supabase/client';
+import { supabase, replaceSupabaseClient } from '@/integrations/supabase/client';
 
 interface SessionManagerProps {
   children: React.ReactNode;
@@ -161,6 +161,19 @@ const SessionManager: React.FC<SessionManagerProps> = ({ children }) => {
       }
     });
 
+    // Handle page restoration from bfcache (back-forward cache).
+    // When a frozen page is restored, Web Locks held by the old client may be stuck.
+    // Replacing the client releases those locks and prevents auth operations from hanging.
+    const handlePageShow = (event: PageTransitionEvent) => {
+      if (event.persisted) {
+        if (isDev) {
+          console.log('[SessionManager] Page restored from bfcache - replacing Supabase client');
+        }
+        replaceSupabaseClient(true);
+      }
+    };
+    window.addEventListener('pageshow', handlePageShow);
+
     // Check connection when page becomes visible (user returns to tab)
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
@@ -185,6 +198,7 @@ const SessionManager: React.FC<SessionManagerProps> = ({ children }) => {
         clearInterval(checkIntervalRef.current);
       }
       subscription.unsubscribe();
+      window.removeEventListener('pageshow', handlePageShow);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       window.removeEventListener('online', handleOnline);
     };

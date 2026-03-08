@@ -3,6 +3,9 @@ import { withTimeout } from '@/utils/promise-with-timeout';
 
 const isDev = import.meta.env.DEV;
 
+// Deduplicate concurrent ensureValidSession() calls - all callers share one ongoing check
+let _ongoingSessionCheck: Promise<{ success: boolean; user?: { id: string; email?: string }; error?: string }> | null = null;
+
 /**
  * Tests Supabase connection using native fetch (bypasses frozen Supabase client)
  * This prevents hanging when the Supabase client is in a frozen/zombie state
@@ -112,10 +115,22 @@ export async function ensureValidSession(): Promise<{
   user?: { id: string; email?: string };
   error?: string;
 }> {
+  // If a session check is already in progress, reuse it instead of starting a new one.
+  // This prevents 3+ concurrent callers (keepalive, return-from-idle, approve button)
+  // from all racing to call refreshSession() at the same time.
+  if (_ongoingSessionCheck) {
+    if (isDev) {
+      console.log('[SessionHealth] ensureValidSession() deduplicated - joining existing check');
+    }
+    return _ongoingSessionCheck;
+  }
+
   const SESSION_TIMEOUT_MS = 25000;
   if (isDev) {
     console.log('[SessionHealth] ensureValidSession() called (likely from mutation or SessionGuard)');
   }
+
+  _ongoingSessionCheck = (async () => {
   try {
     return await withTimeout(
       ensureValidSessionCore(),
@@ -146,6 +161,13 @@ export async function ensureValidSession(): Promise<{
       success: false,
       error: msg,
     };
+  }
+  })();
+
+  try {
+    return await _ongoingSessionCheck;
+  } finally {
+    _ongoingSessionCheck = null;
   }
 }
 
