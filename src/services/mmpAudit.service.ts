@@ -1,7 +1,7 @@
 import { supabase } from '@/integrations/supabase/client';
 import { logAuditEvent } from '@/utils/audit-logger';
 
-export type MMPAuditAction = 
+export type MMPAuditAction =
   | 'upload'
   | 'forward_to_fom'
   | 'forward_to_coordinator'
@@ -19,7 +19,17 @@ export type MMPAuditAction =
   | 'status_change'
   | 'site_dispatch'
   | 'site_claim'
+  | 'site_accept'
   | 'site_complete'
+  | 'site_visit_start'
+  | 'site_return'
+  | 'site_recalled'
+  | 'site_returned_to_fom'
+  | 'site_approved_costed'
+  | 'cp_verification'
+  | 'state_permit_decision'
+  | 'permit_decision_set'
+  | 'cost_acknowledge'
   | 'permit_upload'
   | 'permit_verify'
   | 'cost_update'
@@ -59,27 +69,37 @@ export interface SiteAuditContext {
 const ACTION_DESCRIPTIONS: Record<MMPAuditAction, string> = {
   upload: 'MMP file uploaded',
   forward_to_fom: 'MMP forwarded to FOM',
-  forward_to_coordinator: 'MMP forwarded to coordinators',
+  forward_to_coordinator: 'Sites forwarded to coordinator',
   recall_admin_to_fom: 'MMP recalled from FOM to Admin',
   recall_fom_to_coordinator: 'MMP recalled from Coordinators to FOM',
   recall_coordinator_to_collector: 'MMP recalled from Data Collectors to Coordinator',
   recall_approved: 'Approved MMP recalled for revision',
   force_recall: 'MMP force recalled (admin override)',
   approve: 'MMP approved',
-  reject: 'MMP rejected',
+  reject: 'Site/MMP rejected',
   verify: 'MMP verified',
   delete: 'MMP deleted',
   archive: 'MMP archived',
   restore: 'MMP restored from archive',
-  status_change: 'MMP status changed',
-  site_dispatch: 'Sites dispatched to data collectors',
+  status_change: 'Status changed',
+  site_dispatch: 'Site dispatched to data collector',
   site_claim: 'Site claimed by data collector',
+  site_accept: 'Site accepted by data collector',
   site_complete: 'Site visit completed',
+  site_visit_start: 'Site visit started',
+  site_return: 'Site returned to previous stage',
+  site_recalled: 'Site recalled',
+  site_returned_to_fom: 'Site returned to FOM',
+  site_approved_costed: 'Site approved and costed',
+  cp_verification: 'CP verification completed',
+  state_permit_decision: 'State permit decision recorded',
+  permit_decision_set: 'Locality permit requirement set',
+  cost_acknowledge: 'Cost acknowledged by data collector',
   permit_upload: 'Permit document uploaded',
   permit_verify: 'Permit verified',
   cost_update: 'Cost information updated',
   bulk_operation: 'Bulk operation performed',
-  reclaim_from_coordinator: 'MMP reclaimed from coordinators back to FOM'
+  reclaim_from_coordinator: 'Sites reclaimed from coordinator back to FOM'
 };
 
 export async function logMMPAudit(context: MMPAuditContext): Promise<string | null> {
@@ -353,7 +373,7 @@ export async function getAuditTrailForMMP(mmpId: string, limit: number = 50): Pr
   return data || [];
 }
 
-export async function getAuditTrailForSite(siteId: string, limit: number = 50): Promise<any[]> {
+export async function getAuditTrailForSite(siteId: string, limit: number = 100): Promise<any[]> {
   const { data, error } = await supabase
     .from('audit_logs')
     .select('*')
@@ -368,4 +388,39 @@ export async function getAuditTrailForSite(siteId: string, limit: number = 50): 
   }
 
   return data || [];
+}
+
+/**
+ * Convenience wrapper: log a single site-level action with full context.
+ * Use this from any code path that changes a site entry's state.
+ */
+export async function logSiteEntryAction(opts: {
+  siteId: string;
+  siteName: string;
+  mmpId?: string;
+  action: MMPAuditAction;
+  previousStatus?: string;
+  newStatus?: string;
+  performedBy: string;
+  performedByName?: string;
+  performedByEmail?: string;
+  reason?: string;
+  metadata?: Record<string, unknown>;
+}): Promise<string | null> {
+  return logSiteAudit({
+    siteId: opts.siteId,
+    siteName: opts.siteName,
+    mmpId: opts.mmpId,
+    action: opts.action,
+    performedBy: opts.performedBy,
+    performedByEmail: opts.performedByEmail,
+    performedByName: opts.performedByName,
+    previousStatus: opts.previousStatus,
+    newStatus: opts.newStatus,
+    reason: opts.reason,
+    metadata: {
+      ...opts.metadata,
+      source: 'app',
+    },
+  });
 }

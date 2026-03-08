@@ -13,7 +13,9 @@ import { PostponementDialog } from './PostponementDialog';
 import type { PostponementHistoryEntry } from '@/types/mmp/site';
 import { useAppContext } from '@/context/AppContext';
 import { useUser } from '@/context/user/UserContext';
+import { useAuthorization } from '@/hooks/use-authorization';
 import { supabase } from '@/integrations/supabase/client';
+import { SiteAuditTrail } from '@/components/mmp/SiteAuditTrail';
 import { calculateEnumeratorFeeForUser } from '@/hooks/use-claim-fee-calculation';
 import { parseBoolean } from '@/utils/siteNormalization';
 
@@ -58,6 +60,8 @@ const SiteDetailDialog: React.FC<SiteDetailDialogProps> = ({
   const [postponementOpen, setPostponementOpen] = useState(false);
   const { users } = useAppContext();
   const { currentUser } = useUser();
+  const { hasAnyRole } = useAuthorization();
+  const canSeeAuditTrail = hasAnyRole(['supervisor', 'Supervisor', 'admin', 'Admin', 'super_admin', 'Super Admin', 'SuperAdmin']);
   const [acceptedByName, setAcceptedByName] = useState<string | null>(null);
   const [dispatchedByName, setDispatchedByName] = useState<string | null>(null);
   const [verifiedByName, setVerifiedByName] = useState<string | null>(null);
@@ -1114,6 +1118,19 @@ const SiteDetailDialog: React.FC<SiteDetailDialogProps> = ({
                 )}
               </div>
             </div>
+
+            {/* Section 4: Site Audit Trail (supervisors, admins, superadmins only) */}
+            {canSeeAuditTrail && site?.id && !isEditing && (
+              <div className="bg-gray-50 dark:bg-gray-800 p-5 rounded-lg border space-y-4">
+                <div className="flex items-center gap-2 pb-3 border-b">
+                  <div className="bg-gray-700 text-white rounded w-6 h-6 flex items-center justify-center font-semibold text-sm">
+                    4
+                  </div>
+                  <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100">Site Audit Trail</h3>
+                </div>
+                <SiteAuditTrail siteId={site.id} className="mt-2" />
+              </div>
+            )}
 
             {/* Action Buttons */}
             {isAvailableSite && !isEditing && currentUserId && (

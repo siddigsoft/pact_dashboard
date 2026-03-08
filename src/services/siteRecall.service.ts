@@ -262,24 +262,7 @@ export async function recallSites(request: SiteRecallRequest): Promise<SiteRecal
         continue;
       }
 
-      await supabase.from('audit_logs').insert({
-        module: 'mmp',
-        action: 'site_recalled',
-        entity_type: 'mmp_site_entry',
-        entity_id: siteId,
-        performed_by: recalledBy,
-        old_value: { status: currentSite.status },
-        new_value: { status: targetStatus, reason },
-        metadata: {
-          site_name: currentSite.site_name,
-          mmp_file_id: currentSite.mmp_file_id,
-          recalled_by_email: recalledByEmail,
-          recalled_by_name: recalledByName,
-          recalled_at: recallTimestamp
-        }
-      });
-
-      // Enhanced audit logging via centralized service
+      // Log via the centralized audit service (correct schema)
       try {
         await logSiteAudit({
           siteId,
@@ -298,7 +281,7 @@ export async function recallSites(request: SiteRecallRequest): Promise<SiteRecal
           }
         });
       } catch (auditError) {
-        console.warn('[Site Recall] Enhanced audit log failed:', auditError);
+        console.warn('[Site Recall] Audit log failed:', auditError);
       }
 
       result.successCount++;

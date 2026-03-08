@@ -1,5 +1,5 @@
 import { supabase } from '@/integrations/supabase/client';
-import { logForwardingAudit, logStatusChangeAudit } from '@/services/mmpAudit.service';
+import { logForwardingAudit, logStatusChangeAudit, logSiteEntryAction } from '@/services/mmpAudit.service';
 
 // Fetch FOM users (role = 'fom')
 export async function fetchFomUsers() {
@@ -297,6 +297,34 @@ export async function forwardSitesToCoordinator(opts: {
     await Promise.all(updates);
   }
 
+  // Log per-site audit entries for the forward operation
+  try {
+    const { data: sessionData } = await supabase.auth.getSession();
+    const actor = sessionData?.session?.user;
+    await Promise.all(
+      siteEntryIds.map(id =>
+        logSiteEntryAction({
+          siteId: id,
+          mmpId: mmpId,
+          action: 'forward_to_coordinator',
+          newStatus: 'Pending',
+          performedBy: currentUserId || actor?.id || 'unknown',
+          performedByName: actor?.user_metadata?.full_name || actor?.email,
+          performedByEmail: actor?.email,
+          metadata: {
+            coordinatorId,
+            supervisorId,
+            forwardedAt,
+            attachStatePermit,
+            stateId,
+          },
+        }).catch(err => console.warn('[MMP Actions] Site forward audit failed:', err))
+      )
+    );
+  } catch (auditErr) {
+    console.warn('[MMP Actions] Forward-to-coordinator audit block failed:', auditErr);
+  }
+
   // Update parent MMP status to reflect coordinator forwarding
   if (mmpId) {
     // Get the current workflow data to preserve existing fields
@@ -477,7 +505,7 @@ export async function reclaimFromCoordinator(opts: {
     await Promise.all(resetPromises);
   }
 
-  // Log audit
+  // Log MMP-level audit
   const newStatus = (!coordinatorId || !hasRemainingCoordinators) ? 'forwarded_to_fom' : 'forwarded_to_coordinator';
   try {
     await logStatusChangeAudit(
@@ -495,6 +523,33 @@ export async function reclaimFromCoordinator(opts: {
     );
   } catch (auditError) {
     console.warn('[MMP Actions] Reclaim audit log failed:', auditError);
+  }
+
+  // Log per-site audit entries for the reclaim
+  if (forwardedEntryIds.length > 0) {
+    try {
+      await Promise.all(
+        forwardedEntryIds.map(entryId => {
+          const entry = (siteEntries || []).find((e: any) => e.id === entryId);
+          return logSiteEntryAction({
+            siteId: entryId,
+            siteName: entry?.additional_data?.site_name ?? entry?.id ?? entryId,
+            mmpId,
+            action: 'reclaim_from_coordinator',
+            previousStatus: entry?.status,
+            newStatus: 'verified',
+            performedBy: currentUserId,
+            reason: `${reasonCategory}: ${reason}`,
+            metadata: {
+              previousCoordinatorId: coordinatorId ?? entry?.forwarded_to_user_id,
+              reclaimedAt: now,
+            },
+          }).catch(err => console.warn(`[MMP Actions] Site reclaim audit failed for ${entryId}:`, err));
+        })
+      );
+    } catch (siteAuditError) {
+      console.warn('[MMP Actions] Per-site reclaim audit block failed:', siteAuditError);
+    }
   }
 
   return {
