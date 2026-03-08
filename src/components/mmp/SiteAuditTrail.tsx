@@ -174,6 +174,26 @@ function EventDetail({ log }: { log: AuditLogEntry }) {
     );
   }
 
+  // Forwarded to coordinator (re-forward after recall, or first forward)
+  if (c.forwarded_to_user_id && log.action === 'forward_to_coordinator') {
+    const ft = c.forwarded_to_user_id as Record<string, unknown>;
+    return (
+      <p className="text-xs text-muted-foreground mt-0.5">
+        Forwarded to coordinator
+        {ft.to ? ` · Assignee ID: ${str(ft.to)}` : ''}
+      </p>
+    );
+  }
+
+  // Reclaimed from coordinator
+  if (log.action === 'reclaim_from_coordinator') {
+    return (
+      <p className="text-xs text-muted-foreground mt-0.5">
+        Site reclaimed from coordinator; can be re-dispatched or re-forwarded.
+      </p>
+    );
+  }
+
   // Recall history entry
   if (c.recall_history_entry) {
     const rh = c.recall_history_entry as Record<string, unknown>;

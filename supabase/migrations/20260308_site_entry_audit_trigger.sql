@@ -368,6 +368,10 @@ BEGIN
           THEN format('locality permit requirement set: %s', v_new_ad->'permit_decision'->'localityPermit'->>'requirement')
         WHEN v_changes ? 'assigned_to'
           THEN format('assigned to data collector (additional_data)')
+        WHEN v_changes ? 'forwarded_to_user_id' AND NEW.forwarded_to_user_id IS NOT NULL
+          THEN 'forwarded to coordinator'
+        WHEN v_changes ? 'forwarded_to_user_id' AND NEW.forwarded_to_user_id IS NULL
+          THEN 'reclaimed from coordinator'
         WHEN v_changes ? 'recall_history_entry'
           THEN format('recalled: %s', v_new_ad->'recall_history'->-1->>'reason')
         ELSE v_action
