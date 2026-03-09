@@ -7,7 +7,7 @@ import {
   ExternalLink, History, Clock, Wallet, Filter, X, PenLine,
   Briefcase, Home, ChevronLeft, ChevronRight, Loader2, Database, User, Upload
 } from 'lucide-react';
-import { formatDistanceToNow, format, parseISO, isValid } from 'date-fns';
+import { format, parseISO, isValid } from 'date-fns';
 
 // Cache configuration
 const CACHE_KEY = 'pact_documents_cache';
@@ -172,6 +172,8 @@ const DocumentsPage = () => {
   const isAdmin = hasAnyRole(['admin', 'superAdmin', 'super_admin', 'ict']);
   
   const [documents, setDocuments] = useState<Document[]>([]);
+  // Map of siteVisitId -> visit_completed_at to prefer for relative timestamps
+  const [siteVisitCompletionMap, setSiteVisitCompletionMap] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -1724,7 +1726,16 @@ const DocumentsPage = () => {
 
     const groups = Array.from(map.values()).map(g => {
       const photos = g.photos.sort((a, b) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime());
-      const lastVisited = photos.length > 0 ? photos[0].uploadedAt : undefined;
+      // Prefer site completion time (if we have it for the site's siteVisitId), otherwise fall back to photo upload
+      let lastVisited: string | undefined = undefined;
+      if (photos.length > 0) {
+        const svId = photos[0].siteVisitId || photos[0].siteVisitId;
+        if (svId && siteVisitCompletionMap[svId]) {
+          lastVisited = siteVisitCompletionMap[svId];
+        } else {
+          lastVisited = photos[0].uploadedAt;
+        }
+      }
       return { siteName: g.siteName, photos, lastVisited };
     });
 
@@ -1736,7 +1747,37 @@ const DocumentsPage = () => {
     });
 
     return groups;
-  }, [allFilteredDocuments, mmpFilter]);
+  }, [allFilteredDocuments, mmpFilter, siteVisitCompletionMap]);
+
+  // Fetch visit completion times for any siteVisitIds present in the documents
+  useEffect(() => {
+    const ids = Array.from(new Set(documents.map(d => d.siteVisitId).filter(Boolean) as string[]));
+    if (ids.length === 0) {
+      setSiteVisitCompletionMap({});
+      return;
+    }
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data } = await supabase
+          .from('mmp_site_entries')
+          .select('id, visit_completed_at')
+          .in('id', ids);
+
+        if (cancelled) return;
+        const map: Record<string, string> = {};
+        (data || []).forEach((row: any) => {
+          if (row.id && row.visit_completed_at) map[row.id] = row.visit_completed_at;
+        });
+        setSiteVisitCompletionMap(map);
+      } catch (err) {
+        console.warn('Failed to fetch site visit completion times:', err);
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [documents]);
 
   const handleViewDocument = (doc: Document) => {
     // For permits, open view dialog instead of file URL
@@ -2938,7 +2979,7 @@ const DocumentsPage = () => {
                             // Try to get from mmp_site_entries first
                             const { data: siteEntry } = await supabase
                               .from('mmp_site_entries')
-                              .select('site_code, status, visit_started_at, visit_completed_at, visit_completed_by, claimed_by, accepted_by, verified_by, verified_at')
+                              .select('site_code, status, visit_completed_at, visit_completed_by, claimed_by, accepted_by, verified_by, verified_at')
                               .eq('id', group.siteVisitId)
                               .maybeSingle();
                             
@@ -2977,18 +3018,6 @@ const DocumentsPage = () => {
                                 if (user) claimedByName = user.full_name || user.username || claimedById;
                               }
                               
-                              // Compute visit duration from siteEntry timestamps if available
-                              let computedDuration: number | undefined = undefined;
-                              try {
-                                if (siteEntry.visit_started_at && siteEntry.visit_completed_at) {
-                                  const start = new Date(siteEntry.visit_started_at).getTime();
-                                  const end = new Date(siteEntry.visit_completed_at).getTime();
-                                  if (!isNaN(start) && !isNaN(end) && end >= start) {
-                                    computedDuration = Math.max(0, Math.round((end - start) / 60000));
-                                  }
-                                }
-                              } catch {}
-
                               setSiteEntryDetails({
                                 siteCode: siteEntry.site_code,
                                 status: siteEntry.status,
@@ -2996,8 +3025,7 @@ const DocumentsPage = () => {
                                 completedBy: completedByName,
                                 claimedBy: claimedByName,
                                 verifiedAt: siteEntry.verified_at,
-                                verifiedBy: verifiedByName,
-                                visitDuration: computedDuration
+                                verifiedBy: verifiedByName
                               });
                         }
                         
@@ -3031,11 +3059,7 @@ const DocumentsPage = () => {
                   </div>
                   <div className="flex items-center gap-2 flex-shrink-0">
                     <Badge variant="secondary" className="text-xs">{group.photos.length} photos</Badge>
-                    {group.lastVisited && (
-                      <span className="text-xs text-muted-foreground hidden sm:inline">
-                        {formatDistanceToNow(new Date(group.lastVisited), { addSuffix: true })}
-                      </span>
-                    )}
+                    {/* relative time removed per request */}
                     <ChevronRight className="h-4 w-4 text-muted-foreground" />
                   </div>
                 </button>
@@ -3075,7 +3099,7 @@ const DocumentsPage = () => {
                         <div className="flex items-center justify-between mb-2">
                         <div className="min-w-0">
                           <p className="text-sm font-medium truncate">{group.siteName}</p>
-                          <p className="text-xs text-muted-foreground">{group.photos.length} photos • {group.lastVisited ? formatDistanceToNow(new Date(group.lastVisited), { addSuffix: true }) : 'No recent visit'}</p>
+                          <p className="text-xs text-muted-foreground">{group.photos.length} photos</p>
                         </div>
                       </div>
 
@@ -3224,7 +3248,7 @@ const DocumentsPage = () => {
                               )}
                               <span className="flex items-center gap-1" title={format(new Date(doc.uploadedAt), 'PPpp')}>
                                 <Clock className="h-3 w-3" />
-                                {formatDistanceToNow(new Date(doc.uploadedAt), { addSuffix: true })}
+                                {format(new Date(doc.uploadedAt), 'PPp')}
                               </span>
                             </div>
                             {/* Quick links to related pages */}
@@ -3644,10 +3668,7 @@ const DocumentsPage = () => {
                 <div className="mt-3 flex items-center justify-between text-sm">
                   <div className="min-w-0">
                     <p className="font-medium truncate">{viewingSitePhotos.photos[viewingSitePhotoIndex]?.fileName}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {viewingSitePhotos.photos[viewingSitePhotoIndex]?.uploadedAt && 
-                        formatDistanceToNow(new Date(viewingSitePhotos.photos[viewingSitePhotoIndex].uploadedAt), { addSuffix: true })}
-                    </p>
+                    {/* relative upload time removed per request */}
                   </div>
                   <div className="flex items-center gap-2">
                     <span className="text-muted-foreground">
@@ -3691,6 +3712,12 @@ const DocumentsPage = () => {
               {/* Right side - Site Details */}
               <div className="lg:w-[280px] flex-shrink-0 bg-muted/30 rounded-lg p-4 space-y-4">
                 <h4 className="font-semibold text-sm border-b pb-2">Site Details</h4>
+                {viewingSitePhotos?.siteName && (
+                  <div className="pt-2">
+                    <p className="text-sm text-muted-foreground">Site</p>
+                    <p className="text-base font-semibold truncate">{viewingSitePhotos.siteName}</p>
+                  </div>
+                )}
                 
                 {loadingSiteDetails ? (
                   <div className="flex items-center justify-center py-8">
@@ -3736,6 +3763,9 @@ const DocumentsPage = () => {
                           <User className="h-3 w-3" />
                           {siteEntryDetails.verifiedBy}
                         </p>
+                        {siteEntryDetails?.verifiedAt && (
+                          <p className="text-xs text-muted-foreground">{format(new Date(siteEntryDetails.verifiedAt), 'PPp')}</p>
+                        )}
                       </div>
                     )}
 
@@ -3764,12 +3794,10 @@ const DocumentsPage = () => {
                     )}
                     
                     {/* Visit Duration */}
-                    {typeof siteEntryDetails?.visitDuration === 'number' && (
+                    {siteEntryDetails?.visitDuration && (
                       <div>
                         <p className="text-xs text-muted-foreground">Visit Duration</p>
-                        <p className="font-medium">
-                          {siteEntryDetails.visitDuration} minute{siteEntryDetails.visitDuration === 1 ? '' : 's'}
-                        </p>
+                        <p className="font-medium">{siteEntryDetails.visitDuration} minutes</p>
                       </div>
                     )}
                     
