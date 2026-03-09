@@ -446,36 +446,45 @@ const DocumentsPage = () => {
         (mmpFiles || []).forEach((mmp: any) => {
           if (!mmp) return;
           
-          // Skip if already in persistent document_index (avoid duplicates)
+          // Skip MMP push if already in persistent document_index (avoid duplicates)
+          // but always process permits below
+          let skipMmpPush = false;
           if (isAlreadyIndexed('mmp_files', mmp.id)) {
             console.log('Skipping MMP already in persistent index:', mmp.id);
-            return;
+            skipMmpPush = true;
           }
           
+          if (!skipMmpPush) {
+            const projectName = mmp.project_name || mmp.projects?.name || 'Unknown Project';
+            const uploadDate = mmp.uploaded_at || mmp.created_at;
+            const monthBucket = safeFormatDate(uploadDate, 'yyyy-MM');
+            if (monthBucket) monthsSet.add(monthBucket);
+            
+            // Add the MMP file itself
+            docs.push({
+              id: `mmp-${mmp.id}`,
+              indexNo: indexCounter++,
+              fileName: mmp.original_filename || mmp.name || 'Untitled MMP',
+              fileUrl: mmp.file_url || '',
+              category: 'mmp_file',
+              uploadedAt: uploadDate || new Date().toISOString(),
+              uploadedBy: mmp.uploaded_by,
+              projectId: mmp.project_id,
+              projectName,
+              mmpId: mmp.id,
+              monthBucket,
+              status: mmp.status === 'approved' ? 'approved' : mmp.status === 'rejected' ? 'rejected' : 'pending',
+              verified: mmp.status === 'approved',
+              sourceType: 'mmp'
+            });
+          }
+
+          // Always extract permits (even if MMP was skipped as duplicate)
+          // Permits should already be in persistent index, but this is a fallback
           const projectName = mmp.project_name || mmp.projects?.name || 'Unknown Project';
           const uploadDate = mmp.uploaded_at || mmp.created_at;
           const monthBucket = safeFormatDate(uploadDate, 'yyyy-MM');
-          if (monthBucket) monthsSet.add(monthBucket);
-          
-          // Add the MMP file itself
-          docs.push({
-            id: `mmp-${mmp.id}`,
-            indexNo: indexCounter++,
-            fileName: mmp.original_filename || mmp.name || 'Untitled MMP',
-            fileUrl: mmp.file_url || '',
-            category: 'mmp_file',
-            uploadedAt: uploadDate || new Date().toISOString(),
-            uploadedBy: mmp.uploaded_by,
-            projectId: mmp.project_id,
-            projectName,
-            mmpId: mmp.id,
-            monthBucket,
-            status: mmp.status === 'approved' ? 'approved' : mmp.status === 'rejected' ? 'rejected' : 'pending',
-            verified: mmp.status === 'approved',
-            sourceType: 'mmp'
-          });
-
-          // Extract permit documents (skip if already in persistent index)
+          if (!skipMmpPush && monthBucket) monthsSet.add(monthBucket);
           const permits = mmp.permits || {};
           
           // Federal permits
