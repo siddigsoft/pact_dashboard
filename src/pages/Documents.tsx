@@ -5,7 +5,7 @@ import {
   FolderOpen, RefreshCw, FileSpreadsheet, Receipt, Shield, Hash,
   ArrowUpDown, ChevronDown, ChevronUp, File, Image, Folder,
   ExternalLink, History, Clock, Wallet, Filter, X, PenLine,
-  Briefcase, Home, ChevronLeft, ChevronRight, Loader2, Database
+  Briefcase, Home, ChevronLeft, ChevronRight, Loader2, Database, User
 } from 'lucide-react';
 import { formatDistanceToNow, format, parseISO, isValid } from 'date-fns';
 
@@ -538,11 +538,14 @@ const DocumentsPage = () => {
                 fileUrl: doc.fileUrl || '',
                 category: 'federal_permit',
                 uploadedAt: doc.uploadedAt || uploadDate || new Date().toISOString(),
+                uploadedBy: doc.uploadedBy || doc.verifiedBy || mmp.uploaded_by,
                 projectId: mmp.project_id,
                 projectName,
                 mmpName: mmp.original_filename || mmp.name,
                 mmpId: mmp.id,
                 monthBucket: docMonth,
+                issueDate: doc.issueDate,
+                expiryDate: doc.expiryDate,
                 verified: doc.validated || false,
                 status: doc.validated ? 'verified' : 'pending',
                 sourceType: 'permit'
@@ -580,6 +583,7 @@ const DocumentsPage = () => {
                     fileUrl: doc.fileUrl || '',
                     category: 'state_permit',
                     uploadedAt: doc.uploadedAt || uploadDate || new Date().toISOString(),
+                    uploadedBy: doc.uploadedBy || sp.uploadedBy || mmp.uploaded_by,
                     state: sp.stateName,
                     projectId: mmp.project_id,
                     projectName,
@@ -615,6 +619,7 @@ const DocumentsPage = () => {
                     fileUrl: sp.fileUrl || '',
                     category: 'state_permit',
                     uploadedAt: sp.uploadedAt || uploadDate || new Date().toISOString(),
+                    uploadedBy: sp.uploadedBy || mmp.uploaded_by,
                     state: sp.state,
                     projectId: mmp.project_id,
                     projectName,
@@ -659,6 +664,7 @@ const DocumentsPage = () => {
                   fileUrl: doc.fileUrl || '',
                   category: 'local_permit',
                   uploadedAt: doc.uploadedAt || uploadDate || new Date().toISOString(),
+                  uploadedBy: doc.uploadedBy || lp.uploadedBy || mmp.uploaded_by,
                   state: lp.state,
                   locality: lp.localityName,
                   projectId: mmp.project_id,
@@ -700,6 +706,7 @@ const DocumentsPage = () => {
                 fileUrl: lp.fileUrl || '',
                 category: 'local_permit',
                 uploadedAt: lp.uploadedAt || uploadDate || new Date().toISOString(),
+                uploadedBy: lp.uploadedBy || mmp.uploaded_by,
                 state: lp.state,
                 locality: lp.locality,
                 projectId: mmp.project_id,
@@ -777,6 +784,7 @@ const DocumentsPage = () => {
             fileUrl: p.file_url || p.fileUrl || '',
             category: 'state_permit',
             uploadedAt: p.uploaded_at || p.created_at || new Date().toISOString(),
+            uploadedBy: p.uploaded_by || p.uploadedBy,
             state: p.state,
             locality: p.locality,
             projectId: p.project_id,
@@ -819,6 +827,7 @@ const DocumentsPage = () => {
             fileUrl: p.file_url || p.fileUrl || '',
             category: 'local_permit',
             uploadedAt: p.uploaded_at || p.created_at || new Date().toISOString(),
+            uploadedBy: p.uploaded_by || p.uploadedBy,
             state: p.state,
             locality: p.locality || p.locality_name || p.localityName,
             projectId: p.project_id,
@@ -859,6 +868,7 @@ const DocumentsPage = () => {
             fileUrl: p.file_url || p.fileUrl || '',
             category: 'federal_permit',
             uploadedAt: p.uploaded_at || p.created_at || new Date().toISOString(),
+            uploadedBy: p.uploaded_by || p.uploadedBy,
             projectId: p.project_id,
             projectName: p.project_name,
             mmpName: p.mmp_name,
@@ -2014,6 +2024,13 @@ const DocumentsPage = () => {
                               {doc.projectName && (
                                 <span className="truncate max-w-[120px]">{doc.projectName}</span>
                               )}
+                              {/* Show MMP name for permits */}
+                              {doc.mmpName && ['federal_permit', 'state_permit', 'local_permit'].includes(doc.category) && (
+                                <span className="flex items-center gap-1 text-primary font-medium">
+                                  <FileText className="h-3 w-3" />
+                                  {doc.mmpName}
+                                </span>
+                              )}
                               {doc.siteName && (
                                 <span className="flex items-center gap-1">
                                   <Home className="h-3 w-3" />
@@ -2030,6 +2047,13 @@ const DocumentsPage = () => {
                                 <span className="flex items-center gap-1">
                                   <Building2 className="h-3 w-3" />
                                   {doc.locality}
+                                </span>
+                              )}
+                              {/* Show uploader name */}
+                              {doc.uploadedBy && (
+                                <span className="flex items-center gap-1">
+                                  <User className="h-3 w-3" />
+                                  {doc.uploadedBy}
                                 </span>
                               )}
                               <span className="flex items-center gap-1" title={format(new Date(doc.uploadedAt), 'PPpp')}>
