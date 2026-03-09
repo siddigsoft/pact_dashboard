@@ -33,6 +33,10 @@ async function insertDocument(row) {
 
 async function indexMMPFiles() {
   console.log('Indexing mmp_files...');
+  
+  // UUID validation helper
+  const isValidUUID = (str) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
+  
   const { data: mmpFiles, error } = await supabase
     .from('mmp_files')
     .select('id, name, original_filename, file_url, created_at, permits, project_id, status, uploaded_by')
@@ -45,35 +49,40 @@ async function indexMMPFiles() {
     const sourceId = mmp.id;
     const fileUrl = mmp.file_url || null;
     const exists = await existsInIndexBySource('mmp_files', sourceId) || (fileUrl && await existsInIndexByUrl(fileUrl));
-    if (exists) continue;
-
-    const fileName = mmp.original_filename || mmp.name || 'MMP File';
-    // Validate uploaded_by is a valid UUID, otherwise set to null
-    const isValidUUID = (str) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
-    const uploadedBy = mmp.uploaded_by && isValidUUID(mmp.uploaded_by) ? mmp.uploaded_by : null;
     
-    const row = {
-      file_name: fileName,
-      file_url: fileUrl,
-      category: 'mmp_file',
-      uploaded_at: mmp.created_at || new Date().toISOString(),
-      uploaded_by: uploadedBy,
-      project_id: mmp.project_id || null,
-      mmp_id: mmp.id,
-      mmp_name: fileName,
-      month_bucket: mmp.created_at ? mmp.created_at.slice(0,7) : (new Date()).toISOString().slice(0,7),
-      status: mmp.status === 'approved' ? 'approved' : 'pending',
-      verified: mmp.status === 'approved',
-      source_type: 'mmp',
-      source_table: 'mmp_files',
-      source_id: sourceId,
-      metadata: {}
-    };
-    const ok = await insertDocument(row);
-    if (ok) console.log('Indexed MMP', sourceId);
+    // Index the MMP file if not already indexed
+    if (!exists) {
+      const fileName = mmp.original_filename || mmp.name || 'MMP File';
+      // Validate uploaded_by is a valid UUID, otherwise set to null
+      const isValidUUID = (str) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
+      const uploadedBy = mmp.uploaded_by && isValidUUID(mmp.uploaded_by) ? mmp.uploaded_by : null;
+      
+      const row = {
+        file_name: fileName,
+        file_url: fileUrl,
+        category: 'mmp_file',
+        uploaded_at: mmp.created_at || new Date().toISOString(),
+        uploaded_by: uploadedBy,
+        project_id: mmp.project_id || null,
+        mmp_id: mmp.id,
+        mmp_name: fileName,
+        month_bucket: mmp.created_at ? mmp.created_at.slice(0,7) : (new Date()).toISOString().slice(0,7),
+        status: mmp.status === 'approved' ? 'approved' : 'pending',
+        verified: mmp.status === 'approved',
+        source_type: 'mmp',
+        source_table: 'mmp_files',
+        source_id: sourceId,
+        metadata: {}
+      };
+      const ok = await insertDocument(row);
+      if (ok) console.log('Indexed MMP', sourceId);
+    }
 
-    // Extract and index permits from mmp_files.permits JSONB column
+    // Always extract and index permits from mmp_files.permits JSONB column
+    // (even if the MMP itself was already indexed)
+    const fileName = mmp.original_filename || mmp.name || 'MMP File';
     const permits = mmp.permits || {};
+    console.log(`  Processing permits for ${mmp.name}: federal=${Array.isArray(permits.federalPermits) ? permits.federalPermits.length : 0}, state=${Array.isArray(permits.statePermits) ? permits.statePermits.length : 0}, local=${Array.isArray(permits.localityPermits) ? permits.localityPermits.length : 0}`);
     
     // Index Federal Permits
     if (permits.federalPermits && Array.isArray(permits.federalPermits)) {
@@ -83,12 +92,13 @@ async function indexMMPFiles() {
         const permitUrl = permit.fileUrl || permit.file_url || null;
         const permitExists = await existsInIndexBySource('mmp_files', permitSourceId) || (permitUrl && await existsInIndexByUrl(permitUrl));
         if (!permitExists && permitUrl) {
+          const permitUploadedBy = permit.uploadedBy || permit.uploaded_by;
           const permitRow = {
             file_name: permit.fileName || permit.file_name || `federal-permit-${i+1}`,
             file_url: permitUrl,
             category: 'federal_permit',
             uploaded_at: permit.uploadedAt || permit.uploaded_at || mmp.created_at || new Date().toISOString(),
-            uploaded_by: permit.uploadedBy || permit.uploaded_by || null,
+            uploaded_by: permitUploadedBy && isValidUUID(permitUploadedBy) ? permitUploadedBy : null,
             project_id: mmp.project_id || null,
             mmp_id: mmp.id,
             mmp_name: fileName,
@@ -117,12 +127,13 @@ async function indexMMPFiles() {
         const permitUrl = permit.fileUrl || permit.file_url || null;
         const permitExists = await existsInIndexBySource('mmp_files', permitSourceId) || (permitUrl && await existsInIndexByUrl(permitUrl));
         if (!permitExists && permitUrl) {
+          const permitUploadedBy = permit.uploadedBy || permit.uploaded_by;
           const permitRow = {
             file_name: permit.fileName || permit.file_name || `state-permit-${i+1}`,
             file_url: permitUrl,
             category: 'state_permit',
             uploaded_at: permit.uploadedAt || permit.uploaded_at || mmp.created_at || new Date().toISOString(),
-            uploaded_by: permit.uploadedBy || permit.uploaded_by || null,
+            uploaded_by: permitUploadedBy && isValidUUID(permitUploadedBy) ? permitUploadedBy : null,
             project_id: mmp.project_id || null,
             mmp_id: mmp.id,
             mmp_name: fileName,
@@ -151,12 +162,13 @@ async function indexMMPFiles() {
         const permitUrl = permit.fileUrl || permit.file_url || null;
         const permitExists = await existsInIndexBySource('mmp_files', permitSourceId) || (permitUrl && await existsInIndexByUrl(permitUrl));
         if (!permitExists && permitUrl) {
+          const permitUploadedBy = permit.uploadedBy || permit.uploaded_by;
           const permitRow = {
             file_name: permit.fileName || permit.file_name || `locality-permit-${i+1}`,
             file_url: permitUrl,
             category: 'local_permit',
             uploaded_at: permit.uploadedAt || permit.uploaded_at || mmp.created_at || new Date().toISOString(),
-            uploaded_by: permit.uploadedBy || permit.uploaded_by || null,
+            uploaded_by: permitUploadedBy && isValidUUID(permitUploadedBy) ? permitUploadedBy : null,
             project_id: mmp.project_id || null,
             mmp_id: mmp.id,
             mmp_name: fileName,
