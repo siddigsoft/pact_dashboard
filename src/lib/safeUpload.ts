@@ -111,10 +111,11 @@ export async function safeUploadFile(
 
     // 🔐 CRITICAL: Test connection first to detect frozen Supabase client
     // This prevents the upload from hanging forever
+    // Keep timeout short (2s) to not delay upload too much
     if (isDev) {
       console.log('[SafeUpload] Testing connection before upload...');
     }
-    const connectionOk = await testConnection(5000);
+    const connectionOk = await testConnection(2000);
     if (!connectionOk) {
       return {
         success: false,

@@ -5,7 +5,7 @@ import {
   FolderOpen, RefreshCw, FileSpreadsheet, Receipt, Shield, Hash,
   ArrowUpDown, ChevronDown, ChevronUp, File, Image, Folder,
   ExternalLink, History, Clock, Wallet, Filter, X, PenLine,
-  Briefcase, Home, ChevronLeft, ChevronRight, Loader2, Database, User
+  Briefcase, Home, ChevronLeft, ChevronRight, Loader2, Database, User, Upload
 } from 'lucide-react';
 import { formatDistanceToNow, format, parseISO, isValid } from 'date-fns';
 
@@ -67,8 +67,14 @@ import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import { DatePicker } from '@/components/ui/date-picker';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { useAuthorization } from '@/hooks/use-authorization';
+import { safeUploadFile } from '@/lib/safeUpload';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Progress } from '@/components/ui/progress';
 import { DocumentIndexService } from '@/services/document-index.service';
@@ -162,6 +168,9 @@ const DEFAULT_PAGE_SIZE = 50;
 const DocumentsPage = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { hasAnyRole, currentUser } = useAuthorization();
+  const isAdmin = hasAnyRole(['admin', 'superAdmin', 'super_admin', 'ict']);
+  
   const [documents, setDocuments] = useState<Document[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -211,6 +220,21 @@ const DocumentsPage = () => {
   const [syncing, setSyncing] = useState(false);
   const [syncProgress, setSyncProgress] = useState(0);
   const [syncMessage, setSyncMessage] = useState('');
+
+  // Permit editing state
+  const [editingPermit, setEditingPermit] = useState<Document | null>(null);
+  const [viewingPermit, setViewingPermit] = useState<Document | null>(null);
+  const [editPermitLoading, setEditPermitLoading] = useState(false);
+  const [editPermitFile, setEditPermitFile] = useState<File | null>(null);
+  const [editPermitPreviewUrl, setEditPermitPreviewUrl] = useState<string>('');
+  const editPermitFileInputRef = useRef<HTMLInputElement>(null);
+  const [editPermitForm, setEditPermitForm] = useState({
+    uploadedBy: '',
+    issueDate: undefined as Date | undefined,
+    expiryDate: undefined as Date | undefined,
+    comments: '',
+    verified: false
+  });
 
   // Sync/rebuild document index
   const handleSyncDocuments = async () => {
@@ -523,10 +547,9 @@ const DocumentsPage = () => {
               const sourceId = doc.id || `${mmp.id}-fed-${idx}`;
               if (isAlreadyIndexed('mmp_files', sourceId)) return;
               
-              // Skip if we've already added this permit file
-              const permitKey = doc.fileUrl || `${mmp.id}-${doc.fileName || idx}`;
-              if (seenPermitFiles.has(permitKey)) return;
-              seenPermitFiles.add(permitKey);
+              // Skip if this file URL was already added from document_index
+              if (doc.fileUrl && seenPermitFiles.has(doc.fileUrl)) return;
+              if (doc.fileUrl) seenPermitFiles.add(doc.fileUrl);
               
               const docMonth = safeFormatDate(doc.uploadedAt, 'yyyy-MM', monthBucket);
               if (docMonth) monthsSet.add(docMonth);
@@ -538,7 +561,7 @@ const DocumentsPage = () => {
                 fileUrl: doc.fileUrl || '',
                 category: 'federal_permit',
                 uploadedAt: doc.uploadedAt || uploadDate || new Date().toISOString(),
-                uploadedBy: doc.uploadedBy || doc.verifiedBy || mmp.uploaded_by,
+                uploadedBy: doc.uploadedBy || doc.verifiedBy || null,
                 projectId: mmp.project_id,
                 projectName,
                 mmpName: mmp.original_filename || mmp.name,
@@ -583,7 +606,7 @@ const DocumentsPage = () => {
                     fileUrl: doc.fileUrl || '',
                     category: 'state_permit',
                     uploadedAt: doc.uploadedAt || uploadDate || new Date().toISOString(),
-                    uploadedBy: doc.uploadedBy || sp.uploadedBy || mmp.uploaded_by,
+                    uploadedBy: doc.uploadedBy || sp.uploadedBy || null,
                     state: sp.stateName,
                     projectId: mmp.project_id,
                     projectName,
@@ -601,10 +624,9 @@ const DocumentsPage = () => {
                 // New flat format (direct from StatePermitUpload)
                 if (sp.state) statesSet.add(sp.state);
                 
-                // Skip if we've already added this permit file
-                const permitKey = sp.fileUrl || `${mmp.id}-state-${sp.state}-${spIdx}`;
-                if (seenPermitFiles.has(permitKey)) return;
-                seenPermitFiles.add(permitKey);
+                // Skip if this file URL was already added from document_index
+                if (sp.fileUrl && seenPermitFiles.has(sp.fileUrl)) return;
+                if (sp.fileUrl) seenPermitFiles.add(sp.fileUrl);
                 
                 // Make ID unique: use sp.id if available, otherwise use mmp.id + state + array index
                 const sourceId = sp.id || `${mmp.id}-state-${sp.state}-${spIdx}`;
@@ -619,7 +641,7 @@ const DocumentsPage = () => {
                     fileUrl: sp.fileUrl || '',
                     category: 'state_permit',
                     uploadedAt: sp.uploadedAt || uploadDate || new Date().toISOString(),
-                    uploadedBy: sp.uploadedBy || mmp.uploaded_by,
+                    uploadedBy: sp.uploadedBy || null,
                     state: sp.state,
                     projectId: mmp.project_id,
                     projectName,
@@ -649,10 +671,9 @@ const DocumentsPage = () => {
                 const sourceId = doc.id || `${mmp.id}-local-${lp.localityName}-${idx}`;
                 if (isAlreadyIndexed('mmp_files', sourceId)) return;
                 
-                // Skip if we've already added this permit file
-                const permitKey = doc.fileUrl || `${mmp.id}-local-${lp.localityName}-${idx}`;
-                if (seenPermitFiles.has(permitKey)) return;
-                seenPermitFiles.add(permitKey);
+                // Skip if this file URL was already added from document_index
+                if (doc.fileUrl && seenPermitFiles.has(doc.fileUrl)) return;
+                if (doc.fileUrl) seenPermitFiles.add(doc.fileUrl);
                 
                 const docMonth = safeFormatDate(doc.uploadedAt, 'yyyy-MM', monthBucket);
                 if (docMonth) monthsSet.add(docMonth);
@@ -664,7 +685,7 @@ const DocumentsPage = () => {
                   fileUrl: doc.fileUrl || '',
                   category: 'local_permit',
                   uploadedAt: doc.uploadedAt || uploadDate || new Date().toISOString(),
-                  uploadedBy: doc.uploadedBy || lp.uploadedBy || mmp.uploaded_by,
+                  uploadedBy: doc.uploadedBy || lp.uploadedBy || null,
                   state: lp.state,
                   locality: lp.localityName,
                   projectId: mmp.project_id,
@@ -690,10 +711,11 @@ const DocumentsPage = () => {
               const sourceId = lp.id || `${mmp.id}-locality-${idx}`;
               if (isAlreadyIndexed('mmp_files', sourceId)) return;
               
-              // Skip if we've already added this permit file
-              const permitKey = lp.fileUrl || `${mmp.id}-locality-${idx}`;
-              if (seenPermitFiles.has(permitKey)) return;
-              seenPermitFiles.add(permitKey);
+              // For localityPermits, use a unique key per locality since multiple localities can share same file
+              // This allows 3 different localities to each have a permit entry even if using same file
+              const localityKey = `${mmp.id}-locality-${lp.locality || lp.localityName || ''}-${lp.state || ''}`;
+              if (seenPermitFiles.has(localityKey)) return;
+              seenPermitFiles.add(localityKey);
               
               if (lp.state) statesSet.add(lp.state);
               const docMonth = safeFormatDate(lp.uploadedAt, 'yyyy-MM', monthBucket);
@@ -706,7 +728,7 @@ const DocumentsPage = () => {
                 fileUrl: lp.fileUrl || '',
                 category: 'local_permit',
                 uploadedAt: lp.uploadedAt || uploadDate || new Date().toISOString(),
-                uploadedBy: lp.uploadedBy || mmp.uploaded_by,
+                uploadedBy: lp.uploadedBy || null,
                 state: lp.state,
                 locality: lp.locality,
                 projectId: mmp.project_id,
@@ -1198,7 +1220,7 @@ const DocumentsPage = () => {
     });
 
     return filtered;
-  }, [documents, searchTerm, categoryFilter, statusFilter, sourceFilter, projectFilter, monthFilter, stateFilter, activeTab, sortField, sortDirection]);
+  }, [documents, searchTerm, categoryFilter, statusFilter, sourceFilter, projectFilter, monthFilter, stateFilter, localityFilter, activeTab, sortField, sortDirection, mmpFilter, permitTypeFilter]);
   
   // Pagination calculations
   const totalPages = Math.ceil(allFilteredDocuments.length / pageSize);
@@ -1372,6 +1394,12 @@ const DocumentsPage = () => {
   }, [allFilteredDocuments, mmpFilter]);
 
   const handleViewDocument = (doc: Document) => {
+    // For permits, open view dialog instead of file URL
+    if (['federal_permit', 'state_permit', 'local_permit'].includes(doc.category)) {
+      setViewingPermit(doc);
+      return;
+    }
+    
     if (doc.fileUrl) {
       window.open(doc.fileUrl, '_blank');
     } else {
@@ -1380,6 +1408,319 @@ const DocumentsPage = () => {
         description: 'The document URL is not available.',
         variant: 'destructive'
       });
+    }
+  };
+
+  // Open permit edit dialog
+  const handleOpenEditPermit = (doc: Document) => {
+    setEditingPermit(doc);
+    setEditPermitFile(null);
+    setEditPermitPreviewUrl('');
+    setEditPermitForm({
+      uploadedBy: doc.uploadedBy || '',
+      issueDate: doc.issueDate ? new Date(doc.issueDate) : undefined,
+      expiryDate: doc.expiryDate ? new Date(doc.expiryDate) : undefined,
+      comments: '',
+      verified: doc.verified || doc.status === 'verified'
+    });
+  };
+
+  // Handle file selection for permit edit
+  const handleEditPermitFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const allowedTypes = ['application/pdf', 'image/jpeg', 'image/png', 'image/jpg'];
+    if (!allowedTypes.includes(file.type)) {
+      toast({ title: 'Invalid file type', description: 'Please select a PDF or image file (JPG, PNG).', variant: 'destructive' });
+      return;
+    }
+
+    if (file.size > 10 * 1024 * 1024) {
+      toast({ title: 'File too large', description: 'Please select a file smaller than 10MB.', variant: 'destructive' });
+      return;
+    }
+
+    // Revoke previous preview URL
+    if (editPermitPreviewUrl) URL.revokeObjectURL(editPermitPreviewUrl);
+    
+    setEditPermitFile(file);
+    setEditPermitPreviewUrl(URL.createObjectURL(file));
+  };
+
+  // Update permit in database
+  const handleUpdatePermit = async () => {
+    if (!editingPermit || !editingPermit.mmpId) {
+      toast({ title: 'Error', description: 'Cannot update permit - missing MMP reference', variant: 'destructive' });
+      return;
+    }
+
+    setEditPermitLoading(true);
+    
+    // Reduced timeout for faster feedback
+    const timeoutId = setTimeout(() => {
+      console.error('Permit update timed out after 30 seconds');
+      toast({ title: 'Timeout', description: 'Update is taking too long. Please check your connection and try again.', variant: 'destructive' });
+      setEditPermitLoading(false);
+    }, 30000);
+    
+    try {
+      // Start MMP fetch immediately (parallel with file upload if any)
+      const mmpFetchPromise = supabase
+        .from('mmp_files')
+        .select('permits')
+        .eq('id', editingPermit.mmpId)
+        .single();
+
+      let newFileUrl: string | null = null;
+
+      // Upload new file if provided
+      if (editPermitFile) {
+        const bucketMap: Record<string, string> = {
+          federal_permit: 'federal-permits',
+          state_permit: 'state-permits',
+          local_permit: 'local-permits'
+        };
+        const bucket = bucketMap[editingPermit.category] || 'state-permits';
+        
+        // Extract the original file path from the existing URL to replace at same location
+        let filePath: string;
+        let oldFilePath: string | null = null;
+        const existingUrl = editingPermit.fileUrl || '';
+        
+        // Parse the path from URL: https://xxx.supabase.co/storage/v1/object/public/{bucket}/{path}
+        const bucketPattern = new RegExp(`/storage/v1/object/public/${bucket}/(.+)$`);
+        const match = existingUrl.match(bucketPattern);
+        
+        if (match && match[1]) {
+          // Use the original path (without the filename) + new filename
+          const originalPath = match[1];
+          oldFilePath = originalPath;
+          const pathParts = originalPath.split('/');
+          pathParts.pop(); // Remove the old filename
+          const dirPath = pathParts.join('/');
+          
+          // Generate new filename with timestamp to avoid caching issues
+          const newFileName = `${Date.now()}_${Math.random().toString(36).substring(2, 8)}_${editPermitFile.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
+          filePath = dirPath ? `${dirPath}/${newFileName}` : newFileName;
+        } else {
+          // Fallback: generate new path if we can't parse the original URL
+          const sanitize = (s: string) => (s || '').toString().trim().toLowerCase().replace(/[^a-z0-9]+/gi, '-').replace(/^-+|-+$/g, '');
+          const stateSegment = sanitize(editingPermit.state || 'unknown');
+          const localitySegment = sanitize(editingPermit.locality || '');
+          
+          filePath = `${editingPermit.mmpId}`;
+          if (editingPermit.category === 'federal_permit') {
+            filePath += `/federal-${Date.now()}`;
+          } else if (editingPermit.category === 'state_permit') {
+            filePath += `/state/${stateSegment}-${Date.now()}`;
+          } else {
+            filePath += `/local/${localitySegment || stateSegment}-${Date.now()}`;
+          }
+        }
+
+        // Upload new file (faster timeout)
+        const uploadResult = await safeUploadFile(editPermitFile, {
+          bucket,
+          path: filePath,
+          allowedTypes: ['application/pdf', 'image/jpeg', 'image/png', 'image/jpg'],
+          maxSizeBytes: 10 * 1024 * 1024,
+          uploadTimeoutMs: 15000 // Reduced to 15 seconds
+        });
+
+        if (!uploadResult.success || !uploadResult.url) {
+          throw new Error(uploadResult.error || 'Failed to upload new file');
+        }
+        newFileUrl = uploadResult.url;
+        
+        // Delete old file in background (don't await)
+        if (oldFilePath) {
+          supabase.storage.from(bucket).remove([oldFilePath]).catch(() => {});
+        }
+      }
+
+      // Wait for MMP data fetch
+      const { data: mmpData, error: fetchError } = await mmpFetchPromise;
+
+      if (fetchError) throw fetchError;
+
+      const permits = mmpData?.permits || {};
+      let updated = false;
+
+      // Determine which permit array to update based on category
+      if (editingPermit.category === 'federal_permit' && Array.isArray(permits.federalPermits)) {
+        permits.federalPermits = permits.federalPermits.map((p: any) => {
+          if (p.fileUrl === editingPermit.fileUrl || p.fileName === editingPermit.fileName) {
+            updated = true;
+            return {
+              ...p,
+              fileName: editPermitFile?.name || p.fileName,
+              fileUrl: newFileUrl || p.fileUrl,
+              uploadedBy: editPermitForm.uploadedBy || p.uploadedBy,
+              issueDate: editPermitForm.issueDate?.toISOString().split('T')[0] || p.issueDate,
+              expiryDate: editPermitForm.expiryDate?.toISOString().split('T')[0] || p.expiryDate,
+              verified: editPermitForm.verified,
+              validated: editPermitForm.verified,
+              lastUpdatedBy: currentUser?.name || currentUser?.email || 'Admin',
+              lastUpdatedAt: new Date().toISOString()
+            };
+          }
+          return p;
+        });
+      } else if (editingPermit.category === 'state_permit' && Array.isArray(permits.statePermits)) {
+        permits.statePermits = permits.statePermits.map((p: any) => {
+          // Handle both nested and flat formats
+          if (p.fileUrl === editingPermit.fileUrl || p.fileName === editingPermit.fileName) {
+            updated = true;
+            return {
+              ...p,
+              fileName: editPermitFile?.name || p.fileName,
+              fileUrl: newFileUrl || p.fileUrl,
+              uploadedBy: editPermitForm.uploadedBy || p.uploadedBy,
+              issueDate: editPermitForm.issueDate?.toISOString().split('T')[0] || p.issueDate,
+              expiryDate: editPermitForm.expiryDate?.toISOString().split('T')[0] || p.expiryDate,
+              verified: editPermitForm.verified,
+              lastUpdatedBy: currentUser?.name || currentUser?.email || 'Admin',
+              lastUpdatedAt: new Date().toISOString()
+            };
+          }
+          // Check nested documents array
+          if (Array.isArray(p.documents)) {
+            p.documents = p.documents.map((doc: any) => {
+              if (doc.fileUrl === editingPermit.fileUrl || doc.fileName === editingPermit.fileName) {
+                updated = true;
+                return {
+                  ...doc,
+                  fileName: editPermitFile?.name || doc.fileName,
+                  fileUrl: newFileUrl || doc.fileUrl,
+                  uploadedBy: editPermitForm.uploadedBy || doc.uploadedBy,
+                  issueDate: editPermitForm.issueDate?.toISOString().split('T')[0] || doc.issueDate,
+                  expiryDate: editPermitForm.expiryDate?.toISOString().split('T')[0] || doc.expiryDate,
+                  validated: editPermitForm.verified,
+                  lastUpdatedBy: currentUser?.name || currentUser?.email || 'Admin',
+                  lastUpdatedAt: new Date().toISOString()
+                };
+              }
+              return doc;
+            });
+          }
+          return p;
+        });
+      } else if ((editingPermit.category === 'local_permit') && Array.isArray(permits.localityPermits)) {
+        permits.localityPermits = permits.localityPermits.map((p: any) => {
+          // Match by fileUrl, fileName, OR by locality (more reliable for local permits)
+          // Handle both 'locality' and 'localityName' field names
+          const permitLocality = p.locality || p.localityName;
+          const urlMatch = p.fileUrl === editingPermit.fileUrl || 
+                          (p.fileUrl && editingPermit.fileUrl && p.fileUrl.includes(editingPermit.fileUrl.split('/').pop() || ''));
+          const nameMatch = p.fileName === editingPermit.fileName;
+          const localityMatch = permitLocality === editingPermit.locality && p.state === editingPermit.state;
+          
+          if (urlMatch || nameMatch || localityMatch) {
+            updated = true;
+            return {
+              ...p,
+              fileName: editPermitFile?.name || p.fileName,
+              fileUrl: newFileUrl || p.fileUrl,
+              uploadedBy: editPermitForm.uploadedBy || p.uploadedBy,
+              issueDate: editPermitForm.issueDate?.toISOString().split('T')[0] || p.issueDate,
+              expiryDate: editPermitForm.expiryDate?.toISOString().split('T')[0] || p.expiryDate,
+              verified: editPermitForm.verified,
+              lastUpdatedBy: currentUser?.name || currentUser?.email || 'Admin',
+              lastUpdatedAt: new Date().toISOString()
+            };
+          }
+          // Check nested documents array
+          if (Array.isArray(p.documents)) {
+            p.documents = p.documents.map((doc: any) => {
+              if (doc.fileUrl === editingPermit.fileUrl || doc.fileName === editingPermit.fileName) {
+                updated = true;
+                return {
+                  ...doc,
+                  fileName: editPermitFile?.name || doc.fileName,
+                  fileUrl: newFileUrl || doc.fileUrl,
+                  uploadedBy: editPermitForm.uploadedBy || doc.uploadedBy,
+                  issueDate: editPermitForm.issueDate?.toISOString().split('T')[0] || doc.issueDate,
+                  expiryDate: editPermitForm.expiryDate?.toISOString().split('T')[0] || doc.expiryDate,
+                  validated: editPermitForm.verified,
+                  lastUpdatedBy: currentUser?.name || currentUser?.email || 'Admin',
+                  lastUpdatedAt: new Date().toISOString()
+                };
+              }
+              return doc;
+            });
+          }
+          return p;
+        });
+      }
+      // Also check localPermits array (alternative name)
+      if (!updated && editingPermit.category === 'local_permit' && Array.isArray(permits.localPermits)) {
+        permits.localPermits = permits.localPermits.map((p: any) => {
+          if (p.fileUrl === editingPermit.fileUrl || p.fileName === editingPermit.fileName) {
+            updated = true;
+            return {
+              ...p,
+              fileName: editPermitFile?.name || p.fileName,
+              fileUrl: newFileUrl || p.fileUrl,
+              uploadedBy: editPermitForm.uploadedBy || p.uploadedBy,
+              issueDate: editPermitForm.issueDate?.toISOString().split('T')[0] || p.issueDate,
+              expiryDate: editPermitForm.expiryDate?.toISOString().split('T')[0] || p.expiryDate,
+              verified: editPermitForm.verified,
+              lastUpdatedBy: currentUser?.name || currentUser?.email || 'Admin',
+              lastUpdatedAt: new Date().toISOString()
+            };
+          }
+          return p;
+        });
+      }
+
+      if (!updated) {
+        clearTimeout(timeoutId);
+        toast({ title: 'Warning', description: 'Could not find permit to update', variant: 'destructive' });
+        setEditPermitLoading(false);
+        return;
+      }
+
+      // Update the MMP with new permits data
+      const { error: updateError } = await supabase
+        .from('mmp_files')
+        .update({ permits })
+        .eq('id', editingPermit.mmpId);
+
+      if (updateError) throw updateError;
+
+      // Update local state
+      setDocuments(prev => prev.map(d => {
+        if (d.id === editingPermit.id) {
+          return {
+            ...d,
+            fileName: editPermitFile?.name || d.fileName,
+            fileUrl: newFileUrl || d.fileUrl,
+            uploadedBy: editPermitForm.uploadedBy || d.uploadedBy,
+            issueDate: editPermitForm.issueDate?.toISOString().split('T')[0],
+            expiryDate: editPermitForm.expiryDate?.toISOString().split('T')[0],
+            verified: editPermitForm.verified,
+            status: editPermitForm.verified ? 'verified' : 'pending'
+          };
+        }
+        return d;
+      }));
+
+      // Clean up preview URL
+      if (editPermitPreviewUrl) URL.revokeObjectURL(editPermitPreviewUrl);
+      setEditPermitFile(null);
+      setEditPermitPreviewUrl('');
+
+      clearCache(); // Clear cache to force refresh
+      clearTimeout(timeoutId);
+      toast({ title: 'Success', description: 'Permit updated successfully' });
+      setEditingPermit(null);
+    } catch (err: any) {
+      clearTimeout(timeoutId);
+      console.error('Error updating permit:', err);
+      toast({ title: 'Error', description: err.message || 'Failed to update permit', variant: 'destructive' });
+    } finally {
+      setEditPermitLoading(false);
     }
   };
 
@@ -1607,7 +1948,15 @@ const DocumentsPage = () => {
       </div>
 
       {/* Tabs for quick filtering */}
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+      <Tabs value={activeTab} onValueChange={(val) => {
+        setActiveTab(val);
+        setCategoryFilter('all'); // Reset category filter when switching tabs
+        setPermitTypeFilter('all'); // Reset permit type filter
+        // Reset MMP filter when switching to tabs that don't use it
+        if (val === 'mmp' || val === 'receipts') {
+          setMmpFilter('all');
+        }
+      }} className="w-full">
         <TabsList className="grid w-full grid-cols-5">
           <TabsTrigger value="all" data-testid="tab-all">All ({stats.total})</TabsTrigger>
           <TabsTrigger value="mmp" data-testid="tab-mmp">MMP Files ({stats.mmpFiles})</TabsTrigger>
@@ -1756,21 +2105,23 @@ const DocumentsPage = () => {
                   />
                 </div>
                 <div className="flex flex-wrap gap-2 items-center">
-                  {/* MMP Selector: choose an MMP first, then choose permit type */}
-                  <Select value={mmpFilter} onValueChange={(v) => { setMmpFilter(v); setPermitTypeFilter('all'); }}>
-                    <SelectTrigger className="w-[220px]" data-testid="select-mmp-filter">
-                      <SelectValue placeholder="All MMPs" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All MMPs</SelectItem>
-                      {availableMmps.map(m => (
-                        <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  {/* MMP Selector: show on permits and site_photos tabs, or on 'all' tab */}
+                  {(activeTab === 'all' || activeTab === 'permits' || activeTab === 'site_photos') && (
+                    <Select value={mmpFilter} onValueChange={(v) => { setMmpFilter(v); setPermitTypeFilter('all'); }}>
+                      <SelectTrigger className="w-[180px]" data-testid="select-mmp-filter">
+                        <SelectValue placeholder="All MMPs" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All MMPs</SelectItem>
+                        {availableMmps.map(m => (
+                          <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
 
-                  {/* Permit type selector: show for Permits tab or when MMP is selected */}
-                  {(activeTab === 'permits' || mmpFilter !== 'all') && (
+                  {/* Permit type selector: show only for Permits tab */}
+                  {activeTab === 'permits' && (
                     (() => {
                       // Count permits by type for the currently selected MMP (or all MMPs if no MMP selected)
                       const docsToCount = mmpFilter !== 'all' 
@@ -1781,59 +2132,60 @@ const DocumentsPage = () => {
                       const st = docsToCount.filter(d => d.category === 'state_permit').length;
                       const loc = docsToCount.filter(d => d.category === 'local_permit').length;
                       return (
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm text-muted-foreground">Type:</span>
-                          <Select value={permitTypeFilter} onValueChange={setPermitTypeFilter}>
-                            <SelectTrigger className="w-[170px]" data-testid="select-permit-type-filter">
-                              <SelectValue placeholder="All Types" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="all">All ({fed + st + loc})</SelectItem>
-                              {fed > 0 && <SelectItem value="federal">Federal ({fed})</SelectItem>}
-                              {st > 0 && <SelectItem value="state">State ({st})</SelectItem>}
-                              {loc > 0 && <SelectItem value="local">Local ({loc})</SelectItem>}
-                            </SelectContent>
-                          </Select>
-                          {permitTypeFilter !== 'all' && (
-                            <Badge variant="secondary" className="ml-1">
-                              {permitTypeFilter}
-                            </Badge>
-                          )}
-                        </div>
+                        <Select value={permitTypeFilter} onValueChange={setPermitTypeFilter}>
+                          <SelectTrigger className="w-[130px]" data-testid="select-permit-type-filter">
+                            <SelectValue placeholder="All Types" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all">All ({fed + st + loc})</SelectItem>
+                            {fed > 0 && <SelectItem value="federal">Federal ({fed})</SelectItem>}
+                            {st > 0 && <SelectItem value="state">State ({st})</SelectItem>}
+                            {loc > 0 && <SelectItem value="local">Local ({loc})</SelectItem>}
+                          </SelectContent>
+                        </Select>
                       );
                     })()
                   )}
 
-                  {/* Category selector hidden when a permit-type is chosen */}
-                  {permitTypeFilter === 'all' && (
+                  {/* Category selector: only show on 'all' and 'receipts' tabs */}
+                  {(activeTab === 'all' || activeTab === 'receipts') && (
                     <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-                      <SelectTrigger className="w-[150px]" data-testid="select-category-filter">
+                      <SelectTrigger className="w-[140px]" data-testid="select-category-filter">
                         <SelectValue placeholder="Category" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="all">All Categories</SelectItem>
-                        <SelectItem value="mmp_file">MMP File</SelectItem>
-                        <SelectItem value="federal_permit">Federal Permit</SelectItem>
-                        <SelectItem value="state_permit">State Permit</SelectItem>
-                        <SelectItem value="local_permit">Local Permit</SelectItem>
-                        <SelectItem value="cost_receipt">Cost Receipt</SelectItem>
-                        <SelectItem value="transaction_receipt">Transaction Receipt</SelectItem>
-                        <SelectItem value="site_visit_photo">Site Visit Photo</SelectItem>
-                        <SelectItem value="report">Report</SelectItem>
-                        <SelectItem value="other">Other</SelectItem>
+                        {activeTab === 'all' && (
+                          <>
+                            <SelectItem value="all">All</SelectItem>
+                            <SelectItem value="mmp_file">MMP</SelectItem>
+                            <SelectItem value="federal_permit">Federal</SelectItem>
+                            <SelectItem value="state_permit">State</SelectItem>
+                            <SelectItem value="local_permit">Local</SelectItem>
+                            <SelectItem value="cost_receipt">Cost Receipt</SelectItem>
+                            <SelectItem value="transaction_receipt">Transaction</SelectItem>
+                            <SelectItem value="site_visit_photo">Site Photo</SelectItem>
+                            <SelectItem value="report">Report</SelectItem>
+                            <SelectItem value="other">Other</SelectItem>
+                          </>
+                        )}
+                        {activeTab === 'receipts' && (
+                          <>
+                            <SelectItem value="all">All</SelectItem>
+                            <SelectItem value="cost_receipt">Cost</SelectItem>
+                            <SelectItem value="transaction_receipt">Transaction</SelectItem>
+                          </>
+                        )}
                       </SelectContent>
                     </Select>
                   )}
                   <Select value={statusFilter} onValueChange={setStatusFilter}>
-                    <SelectTrigger className="w-[130px]" data-testid="select-status-filter">
+                    <SelectTrigger className="w-[110px]" data-testid="select-status-filter">
                       <SelectValue placeholder="Status" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="all">All Status</SelectItem>
+                      <SelectItem value="all">All</SelectItem>
                       <SelectItem value="verified">Verified</SelectItem>
-                      <SelectItem value="approved">Approved</SelectItem>
                       <SelectItem value="pending">Pending</SelectItem>
-                      <SelectItem value="rejected">Rejected</SelectItem>
                     </SelectContent>
                   </Select>
 
@@ -1841,10 +2193,9 @@ const DocumentsPage = () => {
                   <Popover>
                     <PopoverTrigger asChild>
                       <Button variant="outline" size="sm" data-testid="button-advanced-filters">
-                        <Filter className="h-4 w-4 mr-2" />
-                        Filters
+                        <Filter className="h-4 w-4" />
                         {advancedFiltersCount > 0 && (
-                          <Badge variant="secondary" className="ml-2">
+                          <Badge variant="secondary" className="ml-1 h-5 w-5 p-0 flex items-center justify-center text-xs">
                             {advancedFiltersCount}
                           </Badge>
                         )}
@@ -2094,6 +2445,18 @@ const DocumentsPage = () => {
                           <Badge variant={getStatusBadgeVariant(doc.status)}>
                             {doc.status || 'pending'}
                           </Badge>
+                          {/* Edit button for permits (admin only) */}
+                          {isAdmin && ['federal_permit', 'state_permit', 'local_permit'].includes(doc.category) && doc.mmpId && (
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              onClick={(e) => { e.stopPropagation(); handleOpenEditPermit(doc); }}
+                              title="Edit Permit"
+                              data-testid={`button-edit-${doc.id}`}
+                            >
+                              <PenLine className="h-4 w-4" />
+                            </Button>
+                          )}
                           <Button 
                             variant="ghost" 
                             size="icon" 
@@ -2248,6 +2611,356 @@ const DocumentsPage = () => {
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* Permit View Dialog */}
+      <Dialog open={!!viewingPermit} onOpenChange={(open) => !open && setViewingPermit(null)}>
+        <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Shield className="h-5 w-5" />
+              {categoryLabels[viewingPermit?.category || ''] || 'Permit'} Details
+            </DialogTitle>
+          </DialogHeader>
+          
+          {viewingPermit && (
+            <div className="space-y-4 py-4">
+              {/* File Preview */}
+              <div className="space-y-2">
+                <Label>Permit File</Label>
+                <div className="border rounded-lg p-3 bg-muted/50">
+                  {viewingPermit.fileUrl ? (
+                    <div className="space-y-3">
+                      {viewingPermit.fileUrl.match(/\.(jpg|jpeg|png|gif|webp)$/i) ? (
+                        <img 
+                          src={viewingPermit.fileUrl} 
+                          alt="Permit" 
+                          className="max-h-64 rounded-md object-contain mx-auto border"
+                        />
+                      ) : (
+                        <div className="flex items-center gap-2 text-sm p-4 bg-muted rounded-md">
+                          <File className="h-8 w-8 text-muted-foreground" />
+                          <div>
+                            <p className="font-medium">{viewingPermit.fileName}</p>
+                            <p className="text-xs text-muted-foreground">PDF Document</p>
+                          </div>
+                        </div>
+                      )}
+                      <Button 
+                        variant="outline" 
+                        className="w-full"
+                        onClick={() => window.open(viewingPermit.fileUrl, '_blank')}
+                      >
+                        <Eye className="h-4 w-4 mr-2" />
+                        Open Full File
+                      </Button>
+                    </div>
+                  ) : (
+                    <p className="text-sm text-muted-foreground text-center py-4">No file available</p>
+                  )}
+                </div>
+              </div>
+
+              {/* Permit Details Grid */}
+              <div className="grid grid-cols-2 gap-4">
+                {/* Category */}
+                <div className="space-y-1">
+                  <Label className="text-xs text-muted-foreground">Category</Label>
+                  <p className="font-medium">{categoryLabels[viewingPermit.category] || viewingPermit.category}</p>
+                </div>
+
+                {/* Status */}
+                <div className="space-y-1">
+                  <Label className="text-xs text-muted-foreground">Status</Label>
+                  <Badge variant={viewingPermit.verified || viewingPermit.status === 'verified' ? 'default' : 'secondary'}>
+                    {viewingPermit.verified || viewingPermit.status === 'verified' ? 'Verified' : 'Pending'}
+                  </Badge>
+                </div>
+
+                {/* MMP File */}
+                {viewingPermit.mmpName && (
+                  <div className="space-y-1 col-span-2">
+                    <Label className="text-xs text-muted-foreground">MMP File</Label>
+                    <p className="font-medium text-primary">{viewingPermit.mmpName}</p>
+                  </div>
+                )}
+
+                {/* State */}
+                {viewingPermit.state && (
+                  <div className="space-y-1">
+                    <Label className="text-xs text-muted-foreground">State</Label>
+                    <p className="font-medium flex items-center gap-1">
+                      <MapPin className="h-3 w-3" />
+                      {viewingPermit.state}
+                    </p>
+                  </div>
+                )}
+
+                {/* Locality */}
+                {viewingPermit.locality && (
+                  <div className="space-y-1">
+                    <Label className="text-xs text-muted-foreground">Locality</Label>
+                    <p className="font-medium flex items-center gap-1">
+                      <Building2 className="h-3 w-3" />
+                      {viewingPermit.locality}
+                    </p>
+                  </div>
+                )}
+
+                {/* Issue Date */}
+                {viewingPermit.issueDate && (
+                  <div className="space-y-1">
+                    <Label className="text-xs text-muted-foreground">Issue Date</Label>
+                    <p className="font-medium">{format(new Date(viewingPermit.issueDate), 'PPP')}</p>
+                  </div>
+                )}
+
+                {/* Expiry Date */}
+                {viewingPermit.expiryDate && (
+                  <div className="space-y-1">
+                    <Label className="text-xs text-muted-foreground">Expiry Date</Label>
+                    <p className="font-medium">{format(new Date(viewingPermit.expiryDate), 'PPP')}</p>
+                  </div>
+                )}
+
+                {/* Uploaded By */}
+                {viewingPermit.uploadedBy && (
+                  <div className="space-y-1">
+                    <Label className="text-xs text-muted-foreground">Uploaded By</Label>
+                    <p className="font-medium flex items-center gap-1">
+                      <User className="h-3 w-3" />
+                      {viewingPermit.uploadedBy}
+                    </p>
+                  </div>
+                )}
+
+                {/* Upload Date */}
+                <div className="space-y-1">
+                  <Label className="text-xs text-muted-foreground">Upload Date</Label>
+                  <p className="font-medium flex items-center gap-1">
+                    <Clock className="h-3 w-3" />
+                    {format(new Date(viewingPermit.uploadedAt), 'PPP')}
+                  </p>
+                </div>
+
+                {/* Project */}
+                {viewingPermit.projectName && (
+                  <div className="space-y-1 col-span-2">
+                    <Label className="text-xs text-muted-foreground">Project</Label>
+                    <p className="font-medium">{viewingPermit.projectName}</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          <DialogFooter className="sm:justify-between">
+            <Button variant="outline" onClick={() => setViewingPermit(null)}>
+              Close
+            </Button>
+            {isAdmin && viewingPermit?.mmpId && (
+              <Button onClick={() => {
+                handleOpenEditPermit(viewingPermit);
+                setViewingPermit(null);
+              }}>
+                <PenLine className="h-4 w-4 mr-2" />
+                Edit Permit
+              </Button>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Permit Edit Dialog */}
+      <Dialog open={!!editingPermit} onOpenChange={(open) => !open && setEditingPermit(null)}>
+        <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Shield className="h-5 w-5" />
+              Edit Permit
+            </DialogTitle>
+          </DialogHeader>
+          
+          {editingPermit && (
+            <div className="space-y-4 py-4">
+              {/* Current File Preview */}
+              <div className="space-y-2">
+                <Label>Current File</Label>
+                <div className="border rounded-lg p-3 bg-muted/50">
+                  {editPermitPreviewUrl ? (
+                    <div className="space-y-2">
+                      <p className="text-sm font-medium text-primary">New file selected:</p>
+                      {editPermitFile?.type?.startsWith('image/') ? (
+                        <img 
+                          src={editPermitPreviewUrl} 
+                          alt="New permit preview" 
+                          className="max-h-40 rounded-md object-contain mx-auto"
+                        />
+                      ) : (
+                        <div className="flex items-center gap-2 text-sm">
+                          <File className="h-5 w-5" />
+                          {editPermitFile?.name}
+                        </div>
+                      )}
+                    </div>
+                  ) : editingPermit.fileUrl ? (
+                    <div className="space-y-2">
+                      {editingPermit.fileUrl.match(/\.(jpg|jpeg|png|gif|webp)$/i) ? (
+                        <img 
+                          src={editingPermit.fileUrl} 
+                          alt="Current permit" 
+                          className="max-h-40 rounded-md object-contain mx-auto"
+                        />
+                      ) : (
+                        <div className="flex items-center gap-2 text-sm">
+                          <File className="h-5 w-5" />
+                          {editingPermit.fileName}
+                        </div>
+                      )}
+                      <a 
+                        href={editingPermit.fileUrl} 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="text-xs text-primary hover:underline flex items-center gap-1"
+                      >
+                        <Eye className="h-3 w-3" /> View current file
+                      </a>
+                    </div>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">No file available</p>
+                  )}
+                </div>
+              </div>
+
+              {/* Replace File */}
+              <div className="space-y-2">
+                <Label>Replace File</Label>
+                <input
+                  ref={editPermitFileInputRef}
+                  type="file"
+                  accept=".pdf,.jpg,.jpeg,.png"
+                  onChange={handleEditPermitFileSelect}
+                  className="hidden"
+                />
+                <div className="flex gap-2">
+                  <Button 
+                    type="button" 
+                    variant="outline" 
+                    onClick={() => editPermitFileInputRef.current?.click()}
+                    className="flex-1"
+                  >
+                    <Upload className="h-4 w-4 mr-2" />
+                    {editPermitFile ? 'Change File' : 'Select New File'}
+                  </Button>
+                  {editPermitFile && (
+                    <Button 
+                      type="button" 
+                      variant="ghost" 
+                      size="icon"
+                      onClick={() => {
+                        if (editPermitPreviewUrl) URL.revokeObjectURL(editPermitPreviewUrl);
+                        setEditPermitFile(null);
+                        setEditPermitPreviewUrl('');
+                      }}
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  )}
+                </div>
+                <p className="text-xs text-muted-foreground">PDF or image files (JPG, PNG). Max 10MB.</p>
+              </div>
+
+              {/* Category (read-only) */}
+              <div className="space-y-2">
+                <Label>Category</Label>
+                <Input value={categoryLabels[editingPermit.category] || editingPermit.category} disabled className="bg-muted" />
+              </div>
+
+              {/* Uploaded By */}
+              <div className="space-y-2">
+                <Label htmlFor="uploadedBy">Uploaded By</Label>
+                <Input
+                  id="uploadedBy"
+                  value={editPermitForm.uploadedBy}
+                  onChange={(e) => setEditPermitForm(prev => ({ ...prev, uploadedBy: e.target.value }))}
+                  placeholder="Enter uploader name"
+                />
+              </div>
+
+              {/* Issue Date */}
+              <div className="space-y-2">
+                <Label>Issue Date</Label>
+                <DatePicker
+                  date={editPermitForm.issueDate}
+                  onSelect={(date) => setEditPermitForm(prev => ({ ...prev, issueDate: date }))}
+                />
+              </div>
+
+              {/* Expiry Date */}
+              <div className="space-y-2">
+                <Label>Expiry Date</Label>
+                <DatePicker
+                  date={editPermitForm.expiryDate}
+                  onSelect={(date) => setEditPermitForm(prev => ({ ...prev, expiryDate: date }))}
+                />
+              </div>
+
+              {/* Verified Status */}
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="verified"
+                  checked={editPermitForm.verified}
+                  onChange={(e) => setEditPermitForm(prev => ({ ...prev, verified: e.target.checked }))}
+                  className="h-4 w-4 rounded border-gray-300"
+                />
+                <Label htmlFor="verified" className="cursor-pointer">Mark as Verified</Label>
+              </div>
+
+              {/* MMP Reference (read-only) */}
+              {editingPermit.mmpName && (
+                <div className="space-y-2">
+                  <Label>MMP File</Label>
+                  <Input value={editingPermit.mmpName} disabled className="bg-muted" />
+                </div>
+              )}
+
+              {/* State/Locality (read-only) */}
+              {(editingPermit.state || editingPermit.locality) && (
+                <div className="grid grid-cols-2 gap-4">
+                  {editingPermit.state && (
+                    <div className="space-y-2">
+                      <Label>State</Label>
+                      <Input value={editingPermit.state} disabled className="bg-muted" />
+                    </div>
+                  )}
+                  {editingPermit.locality && (
+                    <div className="space-y-2">
+                      <Label>Locality</Label>
+                      <Input value={editingPermit.locality} disabled className="bg-muted" />
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditingPermit(null)} disabled={editPermitLoading}>
+              Cancel
+            </Button>
+            <Button onClick={handleUpdatePermit} disabled={editPermitLoading}>
+              {editPermitLoading ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                'Save Changes'
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

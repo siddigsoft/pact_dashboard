@@ -1,4 +1,5 @@
 import React, { useState, useRef } from 'react';
+import { useAuthorization } from '@/hooks/use-authorization';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -35,6 +36,7 @@ export const LocalityPermitUpload: React.FC<LocalityPermitUploadProps> = ({
   const [comments, setComments] = useState<string>('');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
+  const { currentUser } = useAuthorization();
 
   const sanitizeSegment = (s: string) =>
     (s || '').toString().trim().toLowerCase().replace(/[^a-z0-9]+/gi, '-').replace(/^-+|-+$/g, '');
@@ -111,7 +113,7 @@ export const LocalityPermitUpload: React.FC<LocalityPermitUploadProps> = ({
             fileName: selectedFile.name,
             fileUrl: publicUrl,
             uploadedAt: new Date().toISOString(),
-            uploadedBy: null,
+            uploadedBy: currentUser?.name || currentUser?.fullName || currentUser?.email || null,
             verified: false,
             issueDate: issueDate.toISOString().split('T')[0],
             expiryDate: expiryDate.toISOString().split('T')[0],
@@ -120,28 +122,46 @@ export const LocalityPermitUpload: React.FC<LocalityPermitUploadProps> = ({
         ]
       };
 
-      const { error: updateError } = await supabase.from('mmp_files').update({ permits: updatedPermitsData }).eq('id', mmpFileId);
-      if (updateError) throw updateError;
+      // Update mmp_files in background (don't wait for this before showing success)
+      const updateMmpPromise = supabase.from('mmp_files').update({ permits: updatedPermitsData }).eq('id', mmpFileId);
 
-      // Update all sites in this locality to 'permits_attached'
-      const { data: sitesData, error: sitesFetchError } = await supabase
-        .from('mmp_site_entries')
-        .select('id, additional_data, status')
-        .eq('mmp_file_id', mmpFileId)
-        .eq('state', state)
-        .eq('locality', locality)
-        .in('status', ['Pending', 'Dispatched', 'assigned', 'inProgress', 'in_progress']);
-
-      if (!sitesFetchError && sitesData?.length) {
-        for (const site of sitesData) {
-          const updatedAdditionalData = { ...(site.additional_data || {}), locality_permit_attached: true };
-          const { error: siteUpdateError } = await supabase
+      // Update all sites in this locality to 'permits_attached' in background (use batch update instead of loop)
+      const updateSitesPromise = (async () => {
+        try {
+          // Fetch site IDs that need updating
+          const { data: siteIds, error: sitesFetchError } = await supabase
             .from('mmp_site_entries')
-            .update({ status: 'permits_attached', additional_data: updatedAdditionalData })
-            .eq('id', site.id);
-          if (siteUpdateError) console.warn(`Failed to update site ${site.id}:`, siteUpdateError);
+            .select('id, additional_data, status')
+            .eq('mmp_file_id', mmpFileId)
+            .eq('state', state)
+            .eq('locality', locality)
+            .in('status', ['Pending', 'Dispatched', 'assigned', 'inProgress', 'in_progress']);
+
+          if (sitesFetchError || !siteIds?.length) return; // No sites to update
+
+          // Use Promise.all to parallelize the updates instead of sequential loop
+          await Promise.all(
+            siteIds.map(async (site) => {
+              try {
+                const updatedAdditionalData = { ...(site.additional_data || {}), locality_permit_attached: true };
+                const { error } = await supabase
+                  .from('mmp_site_entries')
+                  .update({ status: 'permits_attached', additional_data: updatedAdditionalData })
+                  .eq('id', site.id);
+                if (error) console.warn(`Failed to update site ${site.id}:`, error);
+              } catch (err) {
+                console.warn(`Failed to update site ${site.id}:`, err);
+              }
+            })
+          );
+        } catch (err) {
+          console.warn('Error updating sites:', err);
         }
-      }
+      })();
+
+      // Wait for both operations to complete
+      const [mmpUpdateResult] = await Promise.all([updateMmpPromise, updateSitesPromise]);
+      if (mmpUpdateResult.error) throw mmpUpdateResult.error;
 
       toast({
         title: "Local permit uploaded successfully",
