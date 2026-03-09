@@ -409,7 +409,11 @@ export default function DownPaymentApproval() {
   const filteredRequests = useMemo(() => {
     return requests.filter(req => {
       if (statusFilter !== 'all' && req.status !== statusFilter) return false;
-      if (mmpFilter !== 'all' && (req.mmpName || '') !== mmpFilter) return false;
+      if (mmpFilter !== 'all') {
+        const idMatch = ((req as any).mmpId && (req as any).mmpId === mmpFilter) || ((req as any).mmpSiteEntryId && (req as any).mmpSiteEntryId === mmpFilter) || ((req as any).mmp_file_id && (req as any).mmp_file_id === mmpFilter);
+        const nameMatch = (req.mmpName || '') === mmpFilter;
+        if (!idMatch && !nameMatch) return false;
+      }
       if (debouncedSearch) {
         const q = debouncedSearch.toLowerCase();
         if (

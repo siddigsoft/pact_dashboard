@@ -176,9 +176,9 @@ export const SequentialPermitUpload: React.FC<SequentialPermitUploadProps> = ({
     try {
 
       const stateSegment = sanitizeSegment(state);
-      const filePath = `permits/${mmpFileId}/state/${stateSegment}`;
+      const filePath = `${mmpFileId}/state/${stateSegment}`;
       const uploadResult = await safeUploadFile(selectedFile, {
-        bucket: 'mmp-files',
+        bucket: 'state-permits',
         path: filePath,
         allowedTypes: ['application/pdf', 'image/jpeg', 'image/png', 'image/jpg'],
         maxSizeBytes: 10 * 1024 * 1024
@@ -274,9 +274,9 @@ export const SequentialPermitUpload: React.FC<SequentialPermitUploadProps> = ({
 
       const stateSegment = sanitizeSegment(state);
       const localitySegment = sanitizeSegment(currentLocality.localityName);
-      const filePath = `permits/${mmpFileId}/local/${localitySegment}`;
+      const filePath = `${mmpFileId}/local/${localitySegment}`;
       const uploadResult = await safeUploadFile(selectedFile, {
-        bucket: 'mmp-files',
+        bucket: 'local-permits',
         path: filePath,
         allowedTypes: ['application/pdf', 'image/jpeg', 'image/png', 'image/jpg'],
         maxSizeBytes: 10 * 1024 * 1024

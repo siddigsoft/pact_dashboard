@@ -82,9 +82,9 @@ export const LocalityPermitUpload: React.FC<LocalityPermitUploadProps> = ({
       const localitySegment = sanitizeSegment(locality);
 
       // Use safeUploadFile for secure upload
-      const filePath = `permits/${mmpFileId}/local/${localitySegment}`;
+      const filePath = `${mmpFileId}/local/${localitySegment}`;
       const uploadResult = await safeUploadFile(selectedFile, {
-        bucket: 'mmp-files',
+        bucket: 'local-permits',
         path: filePath,
         allowedTypes: ['application/pdf', 'image/jpeg', 'image/png', 'image/jpg'],
         maxSizeBytes: 10 * 1024 * 1024

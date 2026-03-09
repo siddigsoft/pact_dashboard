@@ -77,9 +77,9 @@ export const StatePermitUpload: React.FC<StatePermitUploadProps> = ({
     try {
 
       const stateSegment = sanitizeSegment(state);
-      const filePath = `permits/${mmpFileId}/state/${stateSegment}`;
+      const filePath = `${mmpFileId}/state/${stateSegment}`;
       const uploadResult = await safeUploadFile(selectedFile, {
-        bucket: 'mmp-files',
+        bucket: 'state-permits',
         path: filePath,
         allowedTypes: ['application/pdf', 'image/jpeg', 'image/png', 'image/jpg'],
         maxSizeBytes: 10 * 1024 * 1024

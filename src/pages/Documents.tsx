@@ -18,6 +18,7 @@ interface CachedData {
   timestamp: number;
   availableMonths: string[];
   availableStates: string[];
+  availableLocalities: string[];
 }
 
 const getFromCache = (): CachedData | null => {
@@ -35,9 +36,9 @@ const getFromCache = (): CachedData | null => {
   }
 };
 
-const saveToCache = (documents: Document[], availableMonths: string[], availableStates: string[]) => {
+const saveToCache = (documents: Document[], availableMonths: string[], availableStates: string[], availableLocalities: string[]) => {
   try {
-    const data: CachedData = { documents, timestamp: Date.now(), availableMonths, availableStates };
+    const data: CachedData = { documents, timestamp: Date.now(), availableMonths, availableStates, availableLocalities };
     sessionStorage.setItem(CACHE_KEY, JSON.stringify(data));
   } catch (e) {
     console.warn('Failed to cache documents:', e);
@@ -89,6 +90,8 @@ interface Document {
   hubId?: string;
   hubName?: string;
   mmpName?: string;
+  mmpId?: string;
+  siteName?: string;
   siteVisitId?: string;
   issueDate?: string;
   expiryDate?: string;
@@ -181,14 +184,25 @@ const DocumentsPage = () => {
   const [monthFilter, setMonthFilter] = useState<string>('all');
   const [hubFilter, setHubFilter] = useState<string>('all');
   const [stateFilter, setStateFilter] = useState<string>('all');
+  const [localityFilter, setLocalityFilter] = useState<string>('all');
   const [hasSignatureFilter, setHasSignatureFilter] = useState<string>('all');
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
+  // New MMP + permit-type filters
+  const [mmpFilter, setMmpFilter] = useState<string>('all');
+  const [permitTypeFilter, setPermitTypeFilter] = useState<string>('all');
   
   // Filter options data
   const [projects, setProjects] = useState<Project[]>([]);
   const [hubs, setHubs] = useState<Hub[]>([]);
   const [availableMonths, setAvailableMonths] = useState<string[]>([]);
   const [availableStates, setAvailableStates] = useState<string[]>([]);
+  const [availableLocalities, setAvailableLocalities] = useState<string[]>([]);
+  const [availableMmps, setAvailableMmps] = useState<{ id: string; name: string }[]>([]);
+  const [availableSiteNames, setAvailableSiteNames] = useState<string[]>([]);
+
+  // Site photos specific filters
+  const [sitePhotosMmpFilter, setSitePhotosMmpFilter] = useState<string>('all');
+  const [sitePhotosSiteFilter, setSitePhotosSiteFilter] = useState<string>('all');
   
   // Cache status
   const [fromCache, setFromCache] = useState(false);
@@ -264,6 +278,7 @@ const DocumentsPage = () => {
         setDocuments(cached.documents);
         setAvailableMonths(cached.availableMonths);
         setAvailableStates(cached.availableStates);
+        setAvailableLocalities(cached.availableLocalities || []);
         setFromCache(true);
         setLoading(false);
         return;
@@ -275,6 +290,7 @@ const DocumentsPage = () => {
       let indexCounter = 1;
       const monthsSet = new Set<string>();
       const statesSet = new Set<string>();
+      const localitiesSet = new Set<string>();
       const seenIds = new Set<string>();
 
       // Fetch all documents without date filter to ensure nothing is missed
@@ -383,6 +399,8 @@ const DocumentsPage = () => {
             state: doc.state,
             locality: doc.locality,
             mmpName: doc.mmp_name,
+            mmpId: doc.mmp_id || doc.mmpId,
+            siteName: doc.metadata?.site_name || doc.metadata?.siteName,
             siteVisitId: doc.site_visit_id,
             issueDate: doc.issue_date,
             expiryDate: doc.expiry_date,
@@ -412,6 +430,13 @@ const DocumentsPage = () => {
         console.log('No MMP files returned from database query');
       }
 
+      // Build quick mmp name -> id map from fetched mmpFiles for fallback name matching
+      const mmpNameToId: Record<string, string> = {};
+      (mmpFiles || []).forEach((m: any) => {
+        const nm = (m.original_filename || m.name || '').toString();
+        if (nm) mmpNameToId[nm] = m.id;
+      });
+
       // 1. Process MMP Files (the CSV uploads themselves)
       try {
         if (mmpError) {
@@ -436,6 +461,7 @@ const DocumentsPage = () => {
             uploadedBy: mmp.uploaded_by,
             projectId: mmp.project_id,
             projectName,
+            mmpId: mmp.id,
             monthBucket,
             status: mmp.status === 'approved' ? 'approved' : mmp.status === 'rejected' ? 'rejected' : 'pending',
             verified: mmp.status === 'approved',
@@ -466,6 +492,7 @@ const DocumentsPage = () => {
                 projectId: mmp.project_id,
                 projectName,
                 mmpName: mmp.original_filename || mmp.name,
+                mmpId: mmp.id,
                 monthBucket: docMonth,
                 verified: doc.validated || false,
                 status: doc.validated ? 'verified' : 'pending',
@@ -500,6 +527,7 @@ const DocumentsPage = () => {
                   projectId: mmp.project_id,
                   projectName,
                   mmpName: mmp.original_filename || mmp.name,
+                  mmpId: mmp.id,
                   monthBucket: docMonth,
                   issueDate: doc.issueDate,
                   expiryDate: doc.expiryDate,
@@ -538,6 +566,7 @@ const DocumentsPage = () => {
                   projectId: mmp.project_id,
                   projectName,
                   mmpName: mmp.original_filename || mmp.name,
+                  mmpId: mmp.id,
                   monthBucket: docMonth,
                   issueDate: doc.issueDate,
                   expiryDate: doc.expiryDate,
@@ -573,6 +602,7 @@ const DocumentsPage = () => {
                 projectId: mmp.project_id,
                 projectName,
                 mmpName: mmp.original_filename || mmp.name,
+                mmpId: mmp.id,
                 monthBucket: docMonth,
                 issueDate: lp.issueDate,
                 expiryDate: lp.expiryDate,
@@ -585,6 +615,131 @@ const DocumentsPage = () => {
         });
       } catch (mmpErr) {
         console.warn('Error processing MMP files:', mmpErr);
+      }
+
+      // 4. Fetch and process standalone permit tables (if present) to improve index completeness
+      try {
+        const [statePermsRes, localPermsRes, federalPermsRes] = await Promise.all([
+          (async () => {
+            try {
+              return await supabase.from('state_permits').select('*').order('created_at', { ascending: false }).limit(500);
+            } catch {
+              return { data: null, error: { message: 'state_permits table may not exist' } };
+            }
+          })(),
+          (async () => {
+            try {
+              return await supabase.from('local_permits').select('*').order('created_at', { ascending: false }).limit(500);
+            } catch {
+              return { data: null, error: { message: 'local_permits table may not exist' } };
+            }
+          })(),
+          (async () => {
+            try {
+              return await supabase.from('federal_permits').select('*').order('created_at', { ascending: false }).limit(500);
+            } catch {
+              return { data: null, error: { message: 'federal_permits table may not exist' } };
+            }
+          })()
+        ]);
+
+        const statePerms = statePermsRes.data || [];
+        const localPerms = localPermsRes.data || [];
+        const federalPerms = federalPermsRes.data || [];
+
+        // normalize state permits
+        (statePerms || []).forEach((p: any) => {
+          if (!p) return;
+          const sourceId = p.id?.toString();
+          if (sourceId && isAlreadyIndexed('state_permits', sourceId)) return;
+          const mmid = p.mmp_id || mmpNameToId[p.mmp_name] || p.mmpId;
+          if (p.state) statesSet.add(p.state);
+          if (p.locality) localitiesSet.add(p.locality);
+          const month = safeFormatDate(p.uploaded_at || p.created_at, 'yyyy-MM');
+          if (month) monthsSet.add(month);
+          docs.push({
+            id: `stateperm-${p.id}`,
+            indexNo: indexCounter++,
+            fileName: p.file_name || p.name || `State Permit ${p.id}`,
+            fileUrl: p.file_url || p.fileUrl || '',
+            category: 'state_permit',
+            uploadedAt: p.uploaded_at || p.created_at || new Date().toISOString(),
+            state: p.state,
+            locality: p.locality,
+            projectId: p.project_id,
+            projectName: p.project_name,
+            mmpName: p.mmp_name,
+            mmpId: mmid,
+            monthBucket: month,
+            issueDate: p.issue_date,
+            expiryDate: p.expiry_date,
+            verified: p.verified || false,
+            status: p.status || (p.verified ? 'verified' : 'pending'),
+            sourceType: 'permit'
+          });
+        });
+
+        // normalize local permits
+        (localPerms || []).forEach((p: any) => {
+          if (!p) return;
+          const sourceId = p.id?.toString();
+          if (sourceId && isAlreadyIndexed('local_permits', sourceId)) return;
+          const mmid = p.mmp_id || mmpNameToId[p.mmp_name] || p.mmpId;
+          if (p.state) statesSet.add(p.state);
+          if (p.locality) localitiesSet.add(p.locality || p.locality_name || p.localityName);
+          const month = safeFormatDate(p.uploaded_at || p.created_at, 'yyyy-MM');
+          if (month) monthsSet.add(month);
+          docs.push({
+            id: `localperm-${p.id}`,
+            indexNo: indexCounter++,
+            fileName: p.file_name || p.name || `Local Permit ${p.id}`,
+            fileUrl: p.file_url || p.fileUrl || '',
+            category: 'local_permit',
+            uploadedAt: p.uploaded_at || p.created_at || new Date().toISOString(),
+            state: p.state,
+            locality: p.locality || p.locality_name || p.localityName,
+            projectId: p.project_id,
+            projectName: p.project_name,
+            mmpName: p.mmp_name,
+            mmpId: mmid,
+            monthBucket: month,
+            issueDate: p.issue_date,
+            expiryDate: p.expiry_date,
+            verified: p.verified || false,
+            status: p.status || (p.verified ? 'verified' : 'pending'),
+            sourceType: 'permit'
+          });
+        });
+
+        // normalize federal permits
+        (federalPerms || []).forEach((p: any) => {
+          if (!p) return;
+          const sourceId = p.id?.toString();
+          if (sourceId && isAlreadyIndexed('federal_permits', sourceId)) return;
+          const mmid = p.mmp_id || mmpNameToId[p.mmp_name] || p.mmpId;
+          const month = safeFormatDate(p.uploaded_at || p.created_at, 'yyyy-MM');
+          if (month) monthsSet.add(month);
+          docs.push({
+            id: `fedperm-${p.id}`,
+            indexNo: indexCounter++,
+            fileName: p.file_name || p.name || `Federal Permit ${p.id}`,
+            fileUrl: p.file_url || p.fileUrl || '',
+            category: 'federal_permit',
+            uploadedAt: p.uploaded_at || p.created_at || new Date().toISOString(),
+            projectId: p.project_id,
+            projectName: p.project_name,
+            mmpName: p.mmp_name,
+            mmpId: mmid,
+            monthBucket: month,
+            issueDate: p.issue_date,
+            expiryDate: p.expiry_date,
+            verified: p.verified || false,
+            status: p.status || (p.verified ? 'verified' : 'pending'),
+            sourceType: 'permit'
+          });
+        });
+      } catch (permErr) {
+        console.warn('Error fetching standalone permits:', permErr);
       }
 
       // 2. Process Cost Submission Receipts from site_visit_cost_submissions (supporting_documents)
@@ -627,19 +782,60 @@ const DocumentsPage = () => {
 
       // 3. Process Report Photos (report_photos join reports for site_visit_id)
       if (!photoError && reportPhotos) {
+        const siteVisitIds = Array.from(
+          new Set(
+            (reportPhotos || [])
+              .map((photo: any) => photo?.reports?.site_visit_id ?? photo?.site_visit_id)
+              .filter(Boolean)
+          )
+        ) as string[];
+
+        let siteVisitMap = new Map<string, any>();
+        let mmpNameMap = new Map<string, string>();
+
+        if (siteVisitIds.length > 0) {
+          const { data: siteVisits } = await supabase
+            .from('site_visits')
+            .select('id, site_name, site_code, mmp_id, state, locality, visit_date')
+            .in('id', siteVisitIds);
+
+          siteVisitMap = new Map((siteVisits || []).map((sv: any) => [sv.id, sv]));
+
+          const mmpIds = Array.from(new Set((siteVisits || []).map((sv: any) => sv?.mmp_id).filter(Boolean))) as string[];
+          if (mmpIds.length > 0) {
+            const { data: mmpRows } = await supabase
+              .from('mmp_files')
+              .select('id, name, original_filename')
+              .in('id', mmpIds);
+
+            mmpNameMap = new Map(
+              (mmpRows || []).map((m: any) => [m.id, m.original_filename || m.name || 'Unknown MMP'])
+            );
+          }
+        }
+
         (reportPhotos || []).forEach((photo: any) => {
           if (!photo || !photo.photo_url) return;
           const siteVisitId = photo.reports?.site_visit_id ?? photo.site_visit_id;
+          const siteVisit = siteVisitId ? siteVisitMap.get(siteVisitId) : null;
+          const mmpName = siteVisit?.mmp_id ? mmpNameMap.get(siteVisit.mmp_id) : undefined;
+          const mmpId = siteVisit?.mmp_id;
+          const siteName = siteVisit?.site_name || 'Unknown Site';
           const photoMonth = safeFormatDate(photo.created_at, 'yyyy-MM');
           if (photoMonth) monthsSet.add(photoMonth);
           docs.push({
             id: `photo-${photo.id}`,
             indexNo: indexCounter++,
-            fileName: photo.reports?.notes || photo.caption || 'Site Visit Photo',
+            fileName: photo.reports?.notes || photo.caption || `${siteName} - Site Visit Photo`,
             fileUrl: photo.photo_url,
             category: 'site_visit_photo',
             uploadedAt: photo.created_at || new Date().toISOString(),
+            mmpName,
+            mmpId,
+            siteName,
             siteVisitId,
+            state: siteVisit?.state,
+            locality: siteVisit?.locality,
             monthBucket: photoMonth,
             status: 'verified',
             verified: true,
@@ -665,12 +861,14 @@ const DocumentsPage = () => {
       // Set available months and states for filters
       const months = Array.from(monthsSet).sort((a, b) => b.localeCompare(a));
       const states = Array.from(statesSet).sort();
+      const localities = Array.from(localitiesSet).sort();
       setAvailableMonths(months);
       setAvailableStates(states);
+      setAvailableLocalities(localities);
       setDocuments(docs);
       
       // Save to cache
-      saveToCache(docs, months, states);
+      saveToCache(docs, months, states, localities);
     } catch (error) {
       console.error('Error fetching documents:', error);
       toast({
@@ -711,6 +909,31 @@ const DocumentsPage = () => {
       });
   }, []);
 
+  // Build available MMP names from loaded documents
+  useEffect(() => {
+    const map = new Map<string, string>();
+    documents.forEach(d => {
+      if (d.mmpId && d.mmpName) map.set(d.mmpId, d.mmpName);
+      if (d.category === 'mmp_file' && d.mmpId) map.set(d.mmpId, d.fileName || d.mmpName || `MMP ${d.mmpId}`);
+    });
+    const arr = Array.from(map.entries()).map(([id, name]) => ({ id, name }));
+    arr.sort((a, b) => a.name.localeCompare(b.name));
+    setAvailableMmps(arr);
+  }, [documents]);
+
+  // Build available site names for site photos (filtered by sitePhotosMmpFilter)
+  useEffect(() => {
+    const names = new Set<string>();
+    documents.forEach(d => {
+      if (d.category !== 'site_visit_photo') return;
+      const mmpId = d.mmpId || 'unknown';
+      if (sitePhotosMmpFilter !== 'all' && sitePhotosMmpFilter !== mmpId) return;
+      const site = d.siteName || d.locality || d.state || 'Unknown Site';
+      if (site) names.add(site);
+    });
+    setAvailableSiteNames(Array.from(names).sort((a, b) => a.localeCompare(b)));
+  }, [documents, sitePhotosMmpFilter]);
+
   // Reset all filters
   const resetFilters = () => {
     setSearchTerm('');
@@ -721,24 +944,57 @@ const DocumentsPage = () => {
     setMonthFilter('all');
     setHubFilter('all');
     setStateFilter('all');
+    setLocalityFilter('all');
     setHasSignatureFilter('all');
+    setMmpFilter('all');
+    setPermitTypeFilter('all');
+    setSitePhotosMmpFilter('all');
+    setSitePhotosSiteFilter('all');
     setCurrentPage(1);
     setVisibleCount(pageSize);
   };
+
+  // When a permit type is selected, lock the category filter to the corresponding permit category
+  useEffect(() => {
+    if (permitTypeFilter === 'all') return;
+
+    const map: Record<string, string> = {
+      federal: 'federal_permit',
+      state: 'state_permit',
+      local: 'local_permit'
+    };
+
+    const mapped = map[permitTypeFilter];
+    if (mapped) setCategoryFilter(mapped);
+  }, [permitTypeFilter]);
 
   // Count active advanced filters
   const activeAdvancedFiltersCount = [
     projectFilter !== 'all',
     monthFilter !== 'all',
-    stateFilter !== 'all'
+    stateFilter !== 'all',
+    localityFilter !== 'all'
   ].filter(Boolean).length;
+  // Include MMP/permit-type in advanced filter badges
+  const advancedFiltersCount = (
+    (mmpFilter !== 'all' ? 1 : 0) + (permitTypeFilter !== 'all' ? 1 : 0) + activeAdvancedFiltersCount
+  );
 
   // All filtered documents (before pagination)
   const allFilteredDocuments = useMemo(() => {
     let filtered = documents.filter(doc => {
+      const matchesMmp = mmpFilter === 'all' || (doc.mmpId && doc.mmpId === mmpFilter);
+      const matchesPermitType = permitTypeFilter === 'all' || (
+        permitTypeFilter === 'federal' && doc.category === 'federal_permit'
+      ) || (
+        permitTypeFilter === 'state' && doc.category === 'state_permit'
+      ) || (
+        permitTypeFilter === 'local' && doc.category === 'local_permit'
+      );
       const matchesSearch = searchTerm === '' || 
         doc.fileName.toLowerCase().includes(searchTerm.toLowerCase()) ||
         doc.projectName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        doc.siteName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         doc.state?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         doc.locality?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         doc.mmpName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -752,15 +1008,17 @@ const DocumentsPage = () => {
       const matchesProject = projectFilter === 'all' || doc.projectId === projectFilter;
       const matchesMonth = monthFilter === 'all' || doc.monthBucket === monthFilter;
       const matchesState = stateFilter === 'all' || doc.state === stateFilter;
+      const matchesLocality = localityFilter === 'all' || doc.locality === localityFilter;
       
       // Tab filtering
       const matchesTab = activeTab === 'all' || 
         (activeTab === 'mmp' && doc.category === 'mmp_file') ||
         (activeTab === 'permits' && doc.category.includes('permit')) ||
-        (activeTab === 'receipts' && (doc.category === 'cost_receipt' || doc.category === 'transaction_receipt'));
+        (activeTab === 'receipts' && (doc.category === 'cost_receipt' || doc.category === 'transaction_receipt')) ||
+        (activeTab === 'site_photos' && doc.category === 'site_visit_photo');
       
       return matchesSearch && matchesCategory && matchesStatus && matchesSource && 
-        matchesProject && matchesMonth && matchesState && matchesTab;
+        matchesProject && matchesMonth && matchesState && matchesLocality && matchesTab && matchesMmp && matchesPermitType;
     });
 
     // Sort
@@ -810,7 +1068,7 @@ const DocumentsPage = () => {
   useEffect(() => {
     setCurrentPage(1);
     setVisibleCount(pageSize);
-  }, [searchTerm, categoryFilter, statusFilter, sourceFilter, projectFilter, monthFilter, stateFilter, activeTab, pageSize]);
+  }, [searchTerm, categoryFilter, statusFilter, sourceFilter, projectFilter, monthFilter, stateFilter, localityFilter, activeTab, pageSize]);
   
   // Clamp currentPage when data length changes to prevent empty results
   useEffect(() => {
@@ -877,9 +1135,85 @@ const DocumentsPage = () => {
     mmpFiles: documents.filter(d => d.category === 'mmp_file').length,
     permits: documents.filter(d => d.category.includes('permit')).length,
     receipts: documents.filter(d => d.category === 'cost_receipt').length,
+    sitePhotos: documents.filter(d => d.category === 'site_visit_photo').length,
     verified: documents.filter(d => d.verified || d.status === 'approved').length,
     pending: documents.filter(d => d.status === 'pending').length
   }), [documents]);
+
+  const selectedMmpName = useMemo(() => {
+    if (mmpFilter === 'all') return 'All MMPs';
+    return availableMmps.find(m => m.id === mmpFilter)?.name || mmpFilter;
+  }, [availableMmps, mmpFilter]);
+
+  const isSitePhotosFilterActive = activeTab === 'site_photos' || categoryFilter === 'site_visit_photo';
+
+  const sitePhotoGroups = useMemo(() => {
+    if (!isSitePhotosFilterActive) return [];
+
+    const grouped = new Map<string, {
+      mmpName: string;
+      month: string;
+      siteName: string;
+      photos: Document[];
+    }>();
+
+    allFilteredDocuments
+      .filter(doc => doc.category === 'site_visit_photo')
+      .filter(doc => {
+        // apply site-photos specific filters (use mmpId for matching)
+        const mmpId = doc.mmpId || 'unknown';
+        const siteName = doc.siteName || doc.locality || doc.state || 'Unknown Site';
+        if (sitePhotosMmpFilter !== 'all' && sitePhotosMmpFilter !== mmpId) return false;
+        if (sitePhotosSiteFilter !== 'all' && sitePhotosSiteFilter !== siteName) return false;
+        return true;
+      })
+      .forEach((doc) => {
+        const month = doc.monthBucket || safeFormatDate(doc.uploadedAt, 'yyyy-MM', 'Unknown Month') || 'Unknown Month';
+        const mmpName = doc.mmpName || 'Unknown MMP';
+        const siteName = doc.siteName || doc.locality || doc.state || 'Unknown Site';
+        const key = `${mmpName}__${month}__${siteName}`;
+
+        if (!grouped.has(key)) {
+          grouped.set(key, { mmpName, month, siteName, photos: [] });
+        }
+
+        grouped.get(key)!.photos.push(doc);
+      });
+
+    return Array.from(grouped.values()).sort((a, b) => b.month.localeCompare(a.month));
+  }, [isSitePhotosFilterActive, allFilteredDocuments]);
+
+  // When an MMP is selected, group completed sites (sites with photos) for that MMP
+  const siteGroupsForSelectedMmp = useMemo(() => {
+    if (mmpFilter === 'all') return [];
+
+    const map = new Map<string, { siteName: string; photos: Document[]; lastVisited?: string }>();
+
+    allFilteredDocuments
+      .filter(d => d.category === 'site_visit_photo')
+      .forEach((doc) => {
+        const mmpId = doc.mmpId || 'unknown';
+        if (mmpId !== mmpFilter) return;
+        const siteName = doc.siteName || doc.locality || doc.state || 'Unknown Site';
+        if (!map.has(siteName)) map.set(siteName, { siteName, photos: [], lastVisited: undefined });
+        map.get(siteName)!.photos.push(doc);
+      });
+
+    const groups = Array.from(map.values()).map(g => {
+      const photos = g.photos.sort((a, b) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime());
+      const lastVisited = photos.length > 0 ? photos[0].uploadedAt : undefined;
+      return { siteName: g.siteName, photos, lastVisited };
+    });
+
+    // Sort sites by lastVisited descending (most recently visited first)
+    groups.sort((a, b) => {
+      const ta = a.lastVisited ? new Date(a.lastVisited).getTime() : 0;
+      const tb = b.lastVisited ? new Date(b.lastVisited).getTime() : 0;
+      return tb - ta;
+    });
+
+    return groups;
+  }, [allFilteredDocuments, mmpFilter]);
 
   const handleViewDocument = (doc: Document) => {
     if (doc.fileUrl) {
@@ -1022,7 +1356,7 @@ const DocumentsPage = () => {
       )}
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-7 gap-3">
         <Card className="border-border">
           <CardContent className="p-3">
             <div className="flex items-center gap-2">
@@ -1078,6 +1412,19 @@ const DocumentsPage = () => {
         <Card className="border-border">
           <CardContent className="p-3">
             <div className="flex items-center gap-2">
+              <div className="w-8 h-8 rounded-full bg-cyan-500/10 flex items-center justify-center flex-shrink-0">
+                <Image className="h-4 w-4 text-cyan-600 dark:text-cyan-400" />
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Site Photos</p>
+                <p className="text-xl font-bold">{stats.sitePhotos}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card className="border-border">
+          <CardContent className="p-3">
+            <div className="flex items-center gap-2">
               <div className="w-8 h-8 rounded-full bg-green-500/10 flex items-center justify-center flex-shrink-0">
                 <FileText className="h-4 w-4 text-green-600 dark:text-green-400" />
               </div>
@@ -1105,14 +1452,140 @@ const DocumentsPage = () => {
 
       {/* Tabs for quick filtering */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-4">
+        <TabsList className="grid w-full grid-cols-5">
           <TabsTrigger value="all" data-testid="tab-all">All ({stats.total})</TabsTrigger>
           <TabsTrigger value="mmp" data-testid="tab-mmp">MMP Files ({stats.mmpFiles})</TabsTrigger>
           <TabsTrigger value="permits" data-testid="tab-permits">Permits ({stats.permits})</TabsTrigger>
           <TabsTrigger value="receipts" data-testid="tab-receipts">Receipts ({stats.receipts})</TabsTrigger>
+          <TabsTrigger value="site_photos" data-testid="tab-site-photos">Site Photos ({stats.sitePhotos})</TabsTrigger>
         </TabsList>
 
         <TabsContent value={activeTab} className="mt-4">
+          {isSitePhotosFilterActive && sitePhotoGroups.length > 0 && (
+            <Card className="border-border mb-4">
+              <CardHeader className="pb-3">
+                <h3 className="text-sm font-semibold">Site Photos Index</h3>
+                <p className="text-xs text-muted-foreground">Grouped by MMP name, month, and site name</p>
+                <div className="mt-3 flex items-center gap-2">
+                  <Select value={sitePhotosMmpFilter} onValueChange={(v) => { setSitePhotosMmpFilter(v); setSitePhotosSiteFilter('all'); }}>
+                    <SelectTrigger className="w-[220px]" data-testid="select-sitephotos-mmp-filter">
+                      <SelectValue placeholder="Filter by MMP" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All MMPs</SelectItem>
+                      {availableMmps.map(m => (
+                        <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+
+                  <Select value={sitePhotosSiteFilter} onValueChange={setSitePhotosSiteFilter}>
+                    <SelectTrigger className="w-[200px]" data-testid="select-sitephotos-site-filter">
+                      <SelectValue placeholder="Filter by Site" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Sites</SelectItem>
+                      {availableSiteNames.map(name => (
+                        <SelectItem key={name} value={name}>{name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-3">
+                  {sitePhotoGroups.map((group, idx) => (
+                    <div key={`${group.mmpName}-${group.month}-${group.siteName}-${idx}`} className="rounded-md border border-border p-3">
+                      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-3">
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium truncate">{group.siteName}</p>
+                          <p className="text-xs text-muted-foreground truncate">{group.mmpName}</p>
+                        </div>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <Badge variant="outline">
+                            {safeFormatDate(`${group.month}-01`, 'MMMM yyyy', group.month)}
+                          </Badge>
+                          <Badge variant="secondary">{group.photos.length} photos</Badge>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2">
+                        {group.photos.map((photo) => (
+                          <button
+                            key={photo.id}
+                            type="button"
+                            onClick={() => handleViewDocument(photo)}
+                            className="group rounded-md border border-border overflow-hidden text-left"
+                            data-testid={`site-photo-thumb-${photo.id}`}
+                          >
+                            <img
+                              src={photo.fileUrl}
+                              alt={photo.fileName}
+                              className="w-full h-24 object-cover group-hover:opacity-90 transition-opacity"
+                              loading="lazy"
+                            />
+                            <div className="p-2">
+                              <p className="text-[11px] text-muted-foreground truncate">{photo.fileName}</p>
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* When an MMP is selected, show completed sites for that MMP with attached photos */}
+          {mmpFilter !== 'all' && siteGroupsForSelectedMmp.length > 0 && (
+            <Card className="border-border mb-4">
+              <CardHeader className="pb-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-sm font-semibold">Sites for {selectedMmpName}</h3>
+                    <p className="text-xs text-muted-foreground">Completed sites with attached photos</p>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-3">
+                  {siteGroupsForSelectedMmp.map((group) => (
+                    <div key={group.siteName} className="rounded-md border border-border p-3">
+                        <div className="flex items-center justify-between mb-2">
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium truncate">{group.siteName}</p>
+                          <p className="text-xs text-muted-foreground">{group.photos.length} photos • {group.lastVisited ? formatDistanceToNow(new Date(group.lastVisited), { addSuffix: true }) : 'No recent visit'}</p>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2">
+                        {group.photos.map(photo => (
+                          <button
+                            key={photo.id}
+                            type="button"
+                            onClick={() => handleViewDocument(photo)}
+                            className="group rounded-md border border-border overflow-hidden text-left"
+                          >
+                            <img
+                              src={photo.fileUrl}
+                              alt={photo.fileName}
+                              className="w-full h-24 object-cover group-hover:opacity-90 transition-opacity"
+                              loading="lazy"
+                            />
+                            <div className="p-2">
+                              <p className="text-[11px] text-muted-foreground truncate">{photo.fileName}</p>
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
           <Card className="border-border">
             <CardHeader className="pb-3">
               <div className="flex flex-col lg:flex-row lg:items-center gap-3">
@@ -1127,23 +1600,61 @@ const DocumentsPage = () => {
                   />
                 </div>
                 <div className="flex flex-wrap gap-2 items-center">
-                  <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-                    <SelectTrigger className="w-[150px]" data-testid="select-category-filter">
-                      <SelectValue placeholder="Category" />
+                  {/* MMP Selector: choose an MMP first, then choose permit type */}
+                  <Select value={mmpFilter} onValueChange={(v) => { setMmpFilter(v); setPermitTypeFilter('all'); }}>
+                    <SelectTrigger className="w-[220px]" data-testid="select-mmp-filter">
+                      <SelectValue placeholder="All MMPs" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="all">All Categories</SelectItem>
-                      <SelectItem value="mmp_file">MMP File</SelectItem>
-                      <SelectItem value="federal_permit">Federal Permit</SelectItem>
-                      <SelectItem value="state_permit">State Permit</SelectItem>
-                      <SelectItem value="local_permit">Local Permit</SelectItem>
-                      <SelectItem value="cost_receipt">Cost Receipt</SelectItem>
-                      <SelectItem value="transaction_receipt">Transaction Receipt</SelectItem>
-                      <SelectItem value="site_visit_photo">Site Visit Photo</SelectItem>
-                      <SelectItem value="report">Report</SelectItem>
-                      <SelectItem value="other">Other</SelectItem>
+                      <SelectItem value="all">All MMPs</SelectItem>
+                      {availableMmps.map(m => (
+                        <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
+
+                  {/* Permit type selector shown when an MMP is chosen */}
+                  {mmpFilter !== 'all' && (
+                    (() => {
+                      const fed = documents.filter(d => d.mmpId === mmpFilter && d.category === 'federal_permit').length;
+                      const st = documents.filter(d => d.mmpId === mmpFilter && d.category === 'state_permit').length;
+                      const loc = documents.filter(d => d.mmpId === mmpFilter && d.category === 'local_permit').length;
+                      return (
+                        <Select value={permitTypeFilter} onValueChange={setPermitTypeFilter}>
+                          <SelectTrigger className="w-[170px]" data-testid="select-permit-type-filter">
+                            <SelectValue placeholder="All Permit Types" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all">All Permit Types ({fed + st + loc})</SelectItem>
+                            <SelectItem value="federal">Federal ({fed})</SelectItem>
+                            <SelectItem value="state">State ({st})</SelectItem>
+                            <SelectItem value="local">Local ({loc})</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      );
+                    })()
+                  )}
+
+                  {/* Category selector hidden when a permit-type is chosen */}
+                  {permitTypeFilter === 'all' && (
+                    <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+                      <SelectTrigger className="w-[150px]" data-testid="select-category-filter">
+                        <SelectValue placeholder="Category" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Categories</SelectItem>
+                        <SelectItem value="mmp_file">MMP File</SelectItem>
+                        <SelectItem value="federal_permit">Federal Permit</SelectItem>
+                        <SelectItem value="state_permit">State Permit</SelectItem>
+                        <SelectItem value="local_permit">Local Permit</SelectItem>
+                        <SelectItem value="cost_receipt">Cost Receipt</SelectItem>
+                        <SelectItem value="transaction_receipt">Transaction Receipt</SelectItem>
+                        <SelectItem value="site_visit_photo">Site Visit Photo</SelectItem>
+                        <SelectItem value="report">Report</SelectItem>
+                        <SelectItem value="other">Other</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  )}
                   <Select value={statusFilter} onValueChange={setStatusFilter}>
                     <SelectTrigger className="w-[130px]" data-testid="select-status-filter">
                       <SelectValue placeholder="Status" />
@@ -1163,9 +1674,9 @@ const DocumentsPage = () => {
                       <Button variant="outline" size="sm" data-testid="button-advanced-filters">
                         <Filter className="h-4 w-4 mr-2" />
                         Filters
-                        {activeAdvancedFiltersCount > 0 && (
+                        {advancedFiltersCount > 0 && (
                           <Badge variant="secondary" className="ml-2">
-                            {activeAdvancedFiltersCount}
+                            {advancedFiltersCount}
                           </Badge>
                         )}
                       </Button>
@@ -1237,6 +1748,26 @@ const DocumentsPage = () => {
                                 <SelectItem value="all">All States</SelectItem>
                                 {availableStates.map(s => (
                                   <SelectItem key={s} value={s}>{s}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        )}
+                        {/* Locality Filter */}
+                        {availableLocalities.length > 0 && (
+                          <div className="space-y-2">
+                            <label className="text-sm font-medium flex items-center gap-1">
+                              <Building2 className="h-3 w-3" />
+                              Locality
+                            </label>
+                            <Select value={localityFilter} onValueChange={setLocalityFilter}>
+                              <SelectTrigger data-testid="select-locality-filter">
+                                <SelectValue placeholder="All Localities" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="all">All Localities</SelectItem>
+                                {availableLocalities.map(l => (
+                                  <SelectItem key={l} value={l}>{l}</SelectItem>
                                 ))}
                               </SelectContent>
                             </Select>
@@ -1323,6 +1854,12 @@ const DocumentsPage = () => {
                               </Badge>
                               {doc.projectName && (
                                 <span className="truncate max-w-[120px]">{doc.projectName}</span>
+                              )}
+                              {doc.siteName && (
+                                <span className="flex items-center gap-1">
+                                  <Home className="h-3 w-3" />
+                                  {doc.siteName}
+                                </span>
                               )}
                               {doc.state && (
                                 <span className="flex items-center gap-1">

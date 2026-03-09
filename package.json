@@ -18,6 +18,7 @@
     "cap:build:apk": "npm run build:mobile && npx cap sync && npx cap open android",
     "cap:build:remote": "npx cap sync && npx cap open android",
     "cap:dev": "CAPACITOR_LIVE_RELOAD=true npm run dev"
+    ,"backfill-storage": "node scripts/backfill_storage_to_db.js"
   },
   "dependencies": {
     "@capacitor-firebase/crashlytics": "^7.4.0",

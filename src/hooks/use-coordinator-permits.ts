@@ -18,7 +18,7 @@ export const useCoordinatorLocalityPermits = () => {
     setError(null);
 
     try {
-      const bucket = 'mmp-files';
+      const bucket = 'coordinator-permits';
       const base = `coordinator-permits/${currentUser.id}`;
 
       const list = async (path: string) => {
@@ -103,7 +103,7 @@ export const useCoordinatorLocalityPermits = () => {
       // Upload file using safeUploadFile
       const filePath = `coordinator-permits/${currentUser.id}/${stateId}/${localityId}`;
       const uploadResult = await safeUploadFile(file, {
-        bucket: 'mmp-files',
+        bucket: 'coordinator-permits',
         path: filePath,
         allowedTypes: undefined, // allow all types
         maxSizeBytes: 10 * 1024 * 1024
@@ -161,7 +161,7 @@ export const useCoordinatorLocalityPermits = () => {
       if (!filePath) throw new Error('Invalid storage path');
 
       await supabase.storage
-        .from('mmp-files')
+        .from('coordinator-permits')
         .remove([filePath]);
 
       // Update local state

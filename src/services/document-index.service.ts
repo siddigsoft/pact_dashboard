@@ -338,25 +338,69 @@ export const DocumentIndexService = {
           .order('created_at', { ascending: false });
 
         if (!photoError && reportPhotos) {
+          const siteVisitIds = Array.from(
+            new Set(
+              reportPhotos
+                .map((photo: any) => (photo as any)?.reports?.site_visit_id ?? (photo as any)?.site_visit_id)
+                .filter(Boolean)
+            )
+          ) as string[];
+
+          let siteVisitMap = new Map<string, any>();
+          let mmpNameMap = new Map<string, string>();
+
+          if (siteVisitIds.length > 0) {
+            const { data: siteVisits } = await supabase
+              .from('site_visits')
+              .select('id, site_name, site_code, mmp_id, state, locality, visit_date')
+              .in('id', siteVisitIds);
+
+            siteVisitMap = new Map((siteVisits || []).map((sv: any) => [sv.id, sv]));
+
+            const mmpIds = Array.from(new Set((siteVisits || []).map((sv: any) => sv?.mmp_id).filter(Boolean))) as string[];
+            if (mmpIds.length > 0) {
+              const { data: mmps } = await supabase
+                .from('mmp_files')
+                .select('id, name, original_filename')
+                .in('id', mmpIds);
+
+              mmpNameMap = new Map(
+                (mmps || []).map((m: any) => [m.id, m.original_filename || m.name || 'Unknown MMP'])
+              );
+            }
+          }
+
           for (const photo of reportPhotos) {
             if (photo.photo_url) {
               const siteVisitId = (photo as any).reports?.site_visit_id ?? (photo as any).site_visit_id;
+              const siteVisit = siteVisitId ? siteVisitMap.get(siteVisitId) : null;
+              const mmpId = siteVisit?.mmp_id;
+              const mmpName = mmpId ? mmpNameMap.get(mmpId) : undefined;
+              const siteName = siteVisit?.site_name || 'Unknown Site';
               const caption = (photo as any).reports?.notes ?? (photo as any).caption;
               const monthBucket = photo.created_at ? format(parseISO(photo.created_at), 'yyyy-MM') : undefined;
               docs.push({
                 id: `photo-${photo.id}`,
                 indexNo: indexCounter++,
-                fileName: caption || 'Site Visit Photo',
+                fileName: caption || `${siteName} - Site Visit Photo`,
                 fileUrl: photo.photo_url,
                 category: 'site_visit_photo',
                 uploadedAt: photo.created_at,
+                state: siteVisit?.state,
+                locality: siteVisit?.locality,
+                mmpId,
+                mmpName,
                 siteVisitId,
+                siteVisitCode: siteVisit?.site_code,
                 monthBucket,
                 status: 'verified',
                 verified: true,
                 sourceType: 'site_visit',
                 sourceTable: 'report_photos',
-                sourceId: photo.id
+                sourceId: photo.id,
+                metadata: {
+                  site_name: siteName
+                }
               });
             }
           }
@@ -1042,6 +1086,38 @@ export const DocumentIndexService = {
         .select('id, photo_url, created_at, report_id, reports(site_visit_id, notes)')
         .order('created_at', { ascending: false });
 
+      const siteVisitIds = Array.from(
+        new Set(
+          (reportPhotos || [])
+            .map((photo: any) => (photo as any)?.reports?.site_visit_id ?? (photo as any)?.site_visit_id)
+            .filter(Boolean)
+        )
+      ) as string[];
+
+      let siteVisitMap = new Map<string, any>();
+      let mmpNameMap = new Map<string, string>();
+
+      if (siteVisitIds.length > 0) {
+        const { data: siteVisits } = await supabase
+          .from('site_visits')
+          .select('id, site_name, site_code, mmp_id, state, locality, visit_date')
+          .in('id', siteVisitIds);
+
+        siteVisitMap = new Map((siteVisits || []).map((sv: any) => [sv.id, sv]));
+
+        const mmpIds = Array.from(new Set((siteVisits || []).map((sv: any) => sv?.mmp_id).filter(Boolean))) as string[];
+        if (mmpIds.length > 0) {
+          const { data: mmps } = await supabase
+            .from('mmp_files')
+            .select('id, name, original_filename')
+            .in('id', mmpIds);
+
+          mmpNameMap = new Map(
+            (mmps || []).map((m: any) => [m.id, m.original_filename || m.name || 'Unknown MMP'])
+          );
+        }
+      }
+
       const totalPhotos = reportPhotos?.length || 0;
       let photoCount = 0;
 
@@ -1052,27 +1128,87 @@ export const DocumentIndexService = {
         if (photo.photo_url && !seenUrls.has(photo.photo_url)) {
           seenUrls.add(photo.photo_url);
           const siteVisitId = (photo as any).reports?.site_visit_id ?? (photo as any).site_visit_id;
+          const siteVisit = siteVisitId ? siteVisitMap.get(siteVisitId) : null;
+          const mmpId = siteVisit?.mmp_id;
+          const mmpName = mmpId ? mmpNameMap.get(mmpId) : undefined;
+          const siteName = siteVisit?.site_name || 'Unknown Site';
           const caption = (photo as any).reports?.notes ?? (photo as any).caption;
           const exists = await this.documentExists('report_photos', photo.id, photo.photo_url);
           if (!exists) {
             const monthBucket = photo.created_at ? format(parseISO(photo.created_at), 'yyyy-MM') : undefined;
             const result = await this.recordDocument({
-              fileName: caption || 'Site Visit Photo',
+              fileName: caption || `${siteName} - Site Visit Photo`,
               fileUrl: photo.photo_url,
               category: 'site_visit_photo',
               uploadedAt: photo.created_at,
+              state: siteVisit?.state,
+              locality: siteVisit?.locality,
+              mmpId,
+              mmpName,
               siteVisitId,
+              siteVisitCode: siteVisit?.site_code,
               monthBucket,
               status: 'verified',
               verified: true,
               sourceType: 'site_visit',
               sourceTable: 'report_photos',
-              sourceId: photo.id
+              sourceId: photo.id,
+              metadata: {
+                site_name: siteName
+              }
             });
             if (result.success) indexed++;
             else errors++;
           }
         }
+      }
+
+      // Additionally index rows from `site_visit_photos` table (backfilled storage photos)
+      try {
+        onProgress?.(95, 100, 'Fetching site_visit_photos table...');
+        const { data: svPhotos, error: svPhotosErr } = await supabase
+          .from('site_visit_photos')
+          .select('id, file_url, uploaded_at, site_visit_id, caption, mmp_id, mmp_name, state, locality, site_name')
+          .order('uploaded_at', { ascending: false });
+
+        if (!svPhotosErr && svPhotos) {
+          let svCount = 0;
+          const totalSv = svPhotos.length || 0;
+          for (const photo of svPhotos) {
+            svCount++;
+            onProgress?.(95 + Math.floor((svCount / Math.max(totalSv, 1)) * 4), 100, `Processing site_visit_photos ${svCount}/${totalSv}...`);
+            const url = (photo as any).file_url;
+            if (!url || seenUrls.has(url)) continue;
+            seenUrls.add(url);
+            const exists = await this.documentExists('site_visit_photos', photo.id, url);
+            if (!exists) {
+              const siteName = (photo as any).site_name || (photo as any).caption || 'Unknown Site';
+              const monthBucket = (photo as any).uploaded_at ? format(parseISO(photo.uploaded_at), 'yyyy-MM') : undefined;
+              const result = await this.recordDocument({
+                fileName: (photo as any).caption || `${siteName} - Site Visit Photo`,
+                fileUrl: url,
+                category: 'site_visit_photo',
+                uploadedAt: photo.uploaded_at,
+                state: photo.state,
+                locality: photo.locality,
+                mmpId: photo.mmp_id,
+                mmpName: photo.mmp_name,
+                siteVisitId: photo.site_visit_id,
+                monthBucket,
+                status: 'verified',
+                verified: true,
+                sourceType: 'site_visit',
+                sourceTable: 'site_visit_photos',
+                sourceId: photo.id,
+                metadata: { site_name: siteName }
+              });
+              if (result.success) indexed++;
+              else errors++;
+            }
+          }
+        }
+      } catch (svErr) {
+        console.warn('[DocumentIndexService] site_visit_photos table may not exist or failed to fetch:', svErr);
       }
 
       onProgress?.(100, 100, 'Complete!');
