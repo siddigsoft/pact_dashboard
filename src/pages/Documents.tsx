@@ -278,6 +278,8 @@ const DocumentsPage = () => {
     siteCode?: string;
     visitDuration?: number;
     coordinates?: { latitude?: number; longitude?: number };
+    verifiedBy?: string;
+    verifiedAt?: string;
   } | null>(null);
   const [loadingSiteDetails, setLoadingSiteDetails] = useState(false);
 
@@ -2936,7 +2938,7 @@ const DocumentsPage = () => {
                             // Try to get from mmp_site_entries first
                             const { data: siteEntry } = await supabase
                               .from('mmp_site_entries')
-                              .select('site_code, status, visit_completed_at, visit_completed_by, claimed_by, accepted_by')
+                              .select('site_code, status, visit_completed_at, visit_completed_by, claimed_by, accepted_by, verified_by, verified_at')
                               .eq('id', group.siteVisitId)
                               .maybeSingle();
                             
@@ -2950,6 +2952,17 @@ const DocumentsPage = () => {
                                   .eq('id', siteEntry.visit_completed_by)
                                   .maybeSingle();
                                 if (user) completedByName = user.full_name || user.username || siteEntry.visit_completed_by;
+                              }
+
+                              // Get user name for verified_by
+                              let verifiedByName = siteEntry.verified_by;
+                              if (siteEntry.verified_by) {
+                                const { data: vuser } = await supabase
+                                  .from('profiles')
+                                  .select('username, full_name')
+                                  .eq('id', siteEntry.verified_by)
+                                  .maybeSingle();
+                                if (vuser) verifiedByName = vuser.full_name || vuser.username || siteEntry.verified_by;
                               }
                               
                               // Get user name for claimed_by/accepted_by
@@ -2966,11 +2979,13 @@ const DocumentsPage = () => {
                               
                               setSiteEntryDetails({
                                 siteCode: siteEntry.site_code,
-                            status: siteEntry.status,
-                            completedAt: siteEntry.visit_completed_at,
-                            completedBy: completedByName,
-                            claimedBy: claimedByName
-                          });
+                                status: siteEntry.status,
+                                completedAt: siteEntry.visit_completed_at,
+                                completedBy: completedByName,
+                                claimedBy: claimedByName,
+                                verifiedAt: siteEntry.verified_at,
+                                verifiedBy: verifiedByName
+                              });
                         }
                         
                         // Also try to get report details
@@ -3700,6 +3715,18 @@ const DocumentsPage = () => {
                     )}
                     
                     {/* Completed By */}
+                    {/* Verified By */}
+                    {siteEntryDetails?.verifiedBy && (
+                      <div>
+                        <p className="text-xs text-muted-foreground">Verified By</p>
+                        <p className="font-medium flex items-center gap-1">
+                          <User className="h-3 w-3" />
+                          {siteEntryDetails.verifiedBy}
+                        </p>
+                      </div>
+                    )}
+
+                    {/* Completed By */}
                     {siteEntryDetails?.completedBy && (
                       <div>
                         <p className="text-xs text-muted-foreground">Completed By</p>
@@ -3710,16 +3737,7 @@ const DocumentsPage = () => {
                       </div>
                     )}
                     
-                    {/* Claimed/Accepted By (Data Collector) */}
-                    {siteEntryDetails?.claimedBy && (
-                      <div>
-                        <p className="text-xs text-muted-foreground">Data Collector</p>
-                        <p className="font-medium flex items-center gap-1">
-                          <User className="h-3 w-3" />
-                          {siteEntryDetails.claimedBy}
-                        </p>
-                      </div>
-                    )}
+                    {/* Claimed/Accepted By (Data Collector) - removed per request */}
                     
                     {/* Completed At */}
                     {siteEntryDetails?.completedAt && (
