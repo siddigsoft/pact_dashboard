@@ -2938,7 +2938,7 @@ const DocumentsPage = () => {
                             // Try to get from mmp_site_entries first
                             const { data: siteEntry } = await supabase
                               .from('mmp_site_entries')
-                              .select('site_code, status, visit_completed_at, visit_completed_by, claimed_by, accepted_by, verified_by, verified_at')
+                              .select('site_code, status, visit_started_at, visit_completed_at, visit_completed_by, claimed_by, accepted_by, verified_by, verified_at')
                               .eq('id', group.siteVisitId)
                               .maybeSingle();
                             
@@ -2977,6 +2977,18 @@ const DocumentsPage = () => {
                                 if (user) claimedByName = user.full_name || user.username || claimedById;
                               }
                               
+                              // Compute visit duration from siteEntry timestamps if available
+                              let computedDuration: number | undefined = undefined;
+                              try {
+                                if (siteEntry.visit_started_at && siteEntry.visit_completed_at) {
+                                  const start = new Date(siteEntry.visit_started_at).getTime();
+                                  const end = new Date(siteEntry.visit_completed_at).getTime();
+                                  if (!isNaN(start) && !isNaN(end) && end >= start) {
+                                    computedDuration = Math.max(0, Math.round((end - start) / 60000));
+                                  }
+                                }
+                              } catch {}
+
                               setSiteEntryDetails({
                                 siteCode: siteEntry.site_code,
                                 status: siteEntry.status,
@@ -2984,7 +2996,8 @@ const DocumentsPage = () => {
                                 completedBy: completedByName,
                                 claimedBy: claimedByName,
                                 verifiedAt: siteEntry.verified_at,
-                                verifiedBy: verifiedByName
+                                verifiedBy: verifiedByName,
+                                visitDuration: computedDuration
                               });
                         }
                         
@@ -3751,10 +3764,12 @@ const DocumentsPage = () => {
                     )}
                     
                     {/* Visit Duration */}
-                    {siteEntryDetails?.visitDuration && (
+                    {typeof siteEntryDetails?.visitDuration === 'number' && (
                       <div>
                         <p className="text-xs text-muted-foreground">Visit Duration</p>
-                        <p className="font-medium">{siteEntryDetails.visitDuration} minutes</p>
+                        <p className="font-medium">
+                          {siteEntryDetails.visitDuration} minute{siteEntryDetails.visitDuration === 1 ? '' : 's'}
+                        </p>
                       </div>
                     )}
                     
