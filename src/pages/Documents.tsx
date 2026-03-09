@@ -362,29 +362,9 @@ const DocumentsPage = () => {
       // Track indexed source IDs to prevent duplicates from legacy sources
       const indexedSourceIds = new Set<string>();
       
-      // Track permits by MMP ID to avoid duplicates from standalone tables
-      const federalPermitsByMmp = new Set<string>();
-      const statePermitsByMmp = new Set<string>();
-      const localPermitsByMmp = new Set<string>();
-      
       // Track individual permit files to prevent any duplicates (same file in multiple sources)
       const seenPermitFiles = new Set<string>();
       
-      (mmpFiles || []).forEach((mmp: any) => {
-        if (mmp?.permits?.documents && Array.isArray(mmp.permits.documents) && mmp.permits.documents.length > 0) {
-          federalPermitsByMmp.add(mmp.id);
-        }
-        if (mmp?.permits?.statePermits && Array.isArray(mmp.permits.statePermits) && mmp.permits.statePermits.length > 0) {
-          statePermitsByMmp.add(mmp.id);
-        }
-        if (mmp?.permits?.localPermits && Array.isArray(mmp.permits.localPermits) && mmp.permits.localPermits.length > 0) {
-          localPermitsByMmp.add(mmp.id);
-        }
-        if (mmp?.permits?.localityPermits && Array.isArray(mmp.permits.localityPermits) && mmp.permits.localityPermits.length > 0) {
-          localPermitsByMmp.add(mmp.id);
-        }
-      });
-
       try {
         if (indexedError) {
           console.warn('Document index fetch error:', indexedError);
@@ -501,215 +481,6 @@ const DocumentsPage = () => {
               sourceType: 'mmp'
             });
           }
-
-          // Always extract permits (even if MMP was skipped as duplicate)
-          // Permits should already be in persistent index, but this is a fallback
-          const projectName = mmp.project_name || mmp.projects?.name || 'Unknown Project';
-          const uploadDate = mmp.uploaded_at || mmp.created_at;
-          const monthBucket = safeFormatDate(uploadDate, 'yyyy-MM');
-          if (!skipMmpPush && monthBucket) monthsSet.add(monthBucket);
-          const permits = mmp.permits || {};
-          
-          // Federal permits
-          if (Array.isArray(permits.documents)) {
-            permits.documents.forEach((doc: any, idx: number) => {
-              if (!doc) return;
-              // Skip if already indexed
-              const sourceId = doc.id || `${mmp.id}-fed-${idx}`;
-              if (isAlreadyIndexed('mmp_files', sourceId)) return;
-              
-              // Skip if we've already added this permit file - use stable key based on content
-              const permitKey = doc.fileUrl || `${mmp.id}-fed-${doc.fileName}-${doc.uploadedAt || idx}`;
-              if (seenPermitFiles.has(permitKey)) return;
-              seenPermitFiles.add(permitKey);
-              
-              const docMonth = safeFormatDate(doc.uploadedAt, 'yyyy-MM', monthBucket);
-              if (docMonth) monthsSet.add(docMonth);
-              
-              docs.push({
-                id: `${mmp.id}-fed-${idx}`,
-                indexNo: indexCounter++,
-                fileName: doc.fileName || 'Federal Permit',
-                fileUrl: doc.fileUrl || '',
-                category: 'federal_permit',
-                uploadedAt: doc.uploadedAt || uploadDate || new Date().toISOString(),
-                projectId: mmp.project_id,
-                projectName,
-                mmpName: mmp.original_filename || mmp.name,
-                mmpId: mmp.id,
-                monthBucket: docMonth,
-                verified: doc.validated || false,
-                status: doc.validated ? 'verified' : 'pending',
-                sourceType: 'permit'
-              });
-            });
-          }
-
-          // State permits (handle both nested and flat structures)
-          if (Array.isArray(permits.statePermits)) {
-            permits.statePermits.forEach((sp: any, spIdx: number) => {
-              if (!sp) return;
-              
-              // Handle both legacy nested format (sp.documents) and new flat format (sp.fileUrl directly)
-              if (sp.documents && Array.isArray(sp.documents)) {
-                // Legacy nested format
-                if (sp.stateName) statesSet.add(sp.stateName);
-                
-                sp.documents.forEach((doc: any, idx: number) => {
-                  if (!doc) return;
-                  const sourceId = doc.id || `${mmp.id}-state-${sp.stateName}-${idx}`;
-                  if (isAlreadyIndexed('mmp_files', sourceId)) return;
-                  
-                  // Skip if we've already added this permit file - use stable key based on content
-                  const permitKey = doc.fileUrl || `${mmp.id}-state-${sp.stateName}-${doc.fileName}-${doc.uploadedAt || idx}`;
-                  if (seenPermitFiles.has(permitKey)) return;
-                  seenPermitFiles.add(permitKey);
-                  
-                  const docMonth = safeFormatDate(doc.uploadedAt, 'yyyy-MM', monthBucket);
-                  if (docMonth) monthsSet.add(docMonth);
-                  
-                  docs.push({
-                    id: `${mmp.id}-state-${sp.stateName}-${idx}`,
-                    indexNo: indexCounter++,
-                    fileName: doc.fileName || `State Permit - ${sp.stateName}`,
-                    fileUrl: doc.fileUrl || '',
-                    category: 'state_permit',
-                    uploadedAt: doc.uploadedAt || uploadDate || new Date().toISOString(),
-                    state: sp.stateName,
-                    projectId: mmp.project_id,
-                    projectName,
-                    mmpName: mmp.original_filename || mmp.name,
-                    mmpId: mmp.id,
-                    monthBucket: docMonth,
-                    issueDate: doc.issueDate,
-                    expiryDate: doc.expiryDate,
-                    verified: doc.validated || sp.verified || false,
-                    status: doc.status || (sp.verified ? 'verified' : 'pending'),
-                    sourceType: 'permit'
-                  });
-                });
-              } else if (sp.fileUrl) {
-                // New flat format (direct from StatePermitUpload)
-                if (sp.state) statesSet.add(sp.state);
-                
-                // Skip if we've already added this permit file - use stable key based on content
-                const permitKey = sp.fileUrl || `${mmp.id}-state-${sp.state}-${sp.fileName}-${sp.uploadedAt || spIdx}`;
-                if (seenPermitFiles.has(permitKey)) return;
-                seenPermitFiles.add(permitKey);
-                
-                // Make ID unique: use sp.id if available, otherwise use mmp.id + state + array index
-                const sourceId = sp.id || `${mmp.id}-state-${sp.state}-${spIdx}`;
-                if (!isAlreadyIndexed('mmp_files', sourceId)) {
-                  const docMonth = safeFormatDate(sp.uploadedAt, 'yyyy-MM', monthBucket);
-                  if (docMonth) monthsSet.add(docMonth);
-                  
-                  docs.push({
-                    id: `${mmp.id}-state-${sp.state}-${spIdx}`,
-                    indexNo: indexCounter++,
-                    fileName: sp.fileName || `State Permit - ${sp.state}`,
-                    fileUrl: sp.fileUrl || '',
-                    category: 'state_permit',
-                    uploadedAt: sp.uploadedAt || uploadDate || new Date().toISOString(),
-                    state: sp.state,
-                    projectId: mmp.project_id,
-                    projectName,
-                    mmpName: mmp.original_filename || mmp.name,
-                    mmpId: mmp.id,
-                    monthBucket: docMonth,
-                    issueDate: sp.issueDate,
-                    expiryDate: sp.expiryDate,
-                    verified: sp.verified || false,
-                    status: sp.status || (sp.verified ? 'verified' : 'pending'),
-                    sourceType: 'permit'
-                  });
-                }
-              }
-            });
-          }
-
-          // Local permits
-          if (Array.isArray(permits.localPermits)) {
-            permits.localPermits.forEach((lp: any) => {
-              if (!lp) return;
-              if (lp.state) statesSet.add(lp.state);
-              
-              (Array.isArray(lp.documents) ? lp.documents : []).forEach((doc: any, idx: number) => {
-                if (!doc) return;
-                // Skip if already indexed
-                const sourceId = doc.id || `${mmp.id}-local-${lp.localityName}-${idx}`;
-                if (isAlreadyIndexed('mmp_files', sourceId)) return;
-                
-                // Skip if we've already added this permit file - use stable key based on content
-                const permitKey = doc.fileUrl || `${mmp.id}-local-${lp.localityName}-${doc.fileName}-${doc.uploadedAt || idx}`;
-                if (seenPermitFiles.has(permitKey)) return;
-                seenPermitFiles.add(permitKey);
-                
-                const docMonth = safeFormatDate(doc.uploadedAt, 'yyyy-MM', monthBucket);
-                if (docMonth) monthsSet.add(docMonth);
-                
-                docs.push({
-                  id: `${mmp.id}-local-${lp.localityName}-${idx}`,
-                  indexNo: indexCounter++,
-                  fileName: doc.fileName || `Local Permit - ${lp.localityName}`,
-                  fileUrl: doc.fileUrl || '',
-                  category: 'local_permit',
-                  uploadedAt: doc.uploadedAt || uploadDate || new Date().toISOString(),
-                  state: lp.state,
-                  locality: lp.localityName,
-                  projectId: mmp.project_id,
-                  projectName,
-                  mmpName: mmp.original_filename || mmp.name,
-                  mmpId: mmp.id,
-                  monthBucket: docMonth,
-                  issueDate: doc.issueDate,
-                  expiryDate: doc.expiryDate,
-                  verified: doc.validated || lp.verified || false,
-                  status: doc.status || (lp.verified ? 'verified' : 'pending'),
-                  sourceType: 'permit'
-                });
-              });
-            });
-          }
-
-          // Locality permits array format
-          if (Array.isArray(permits.localityPermits)) {
-            permits.localityPermits.forEach((lp: any, idx: number) => {
-              if (!lp) return;
-              // Skip if already indexed
-              const sourceId = lp.id || `${mmp.id}-locality-${idx}`;
-              if (isAlreadyIndexed('mmp_files', sourceId)) return;
-              
-              // Skip if we've already added this permit file - use stable key based on content
-              const permitKey = lp.fileUrl || `${mmp.id}-locality-${lp.fileName}-${lp.uploadedAt || idx}`;
-              if (seenPermitFiles.has(permitKey)) return;
-              seenPermitFiles.add(permitKey);
-              
-              if (lp.state) statesSet.add(lp.state);
-              const docMonth = safeFormatDate(lp.uploadedAt, 'yyyy-MM', monthBucket);
-              if (docMonth) monthsSet.add(docMonth);
-              
-              docs.push({
-                id: `${mmp.id}-locality-${idx}`,
-                indexNo: indexCounter++,
-                fileName: lp.fileName || `Locality Permit`,
-                fileUrl: lp.fileUrl || '',
-                category: 'local_permit',
-                uploadedAt: lp.uploadedAt || uploadDate || new Date().toISOString(),
-                state: lp.state,
-                locality: lp.locality,
-                projectId: mmp.project_id,
-                projectName,
-                mmpName: mmp.original_filename || mmp.name,
-                mmpId: mmp.id,
-                monthBucket: docMonth,
-                issueDate: lp.issueDate,
-                expiryDate: lp.expiryDate,
-                verified: lp.verified || false,
-                status: lp.verified ? 'verified' : 'pending',
-                sourceType: 'permit'
-              });
-            });
-          }
         });
       } catch (mmpErr) {
         console.warn('Error processing MMP files:', mmpErr);
@@ -745,13 +516,9 @@ const DocumentsPage = () => {
         const localPerms = localPermsRes.data || [];
         const federalPerms = federalPermsRes.data || [];
 
-        // normalize state permits (skip if already extracted from mmp_files)
+        // normalize state permits
         (statePerms || []).forEach((p: any) => {
           if (!p) return;
-          
-          // Skip if this state permit already came from the MMP file
-          const mmid = p.mmp_id || mmpNameToId[p.mmp_name] || p.mmpId;
-          if (mmid && statePermitsByMmp.has(mmid)) return;
           
           const sourceId = p.id?.toString();
           if (sourceId && isAlreadyIndexed('state_permits', sourceId)) return;
@@ -777,7 +544,7 @@ const DocumentsPage = () => {
             projectId: p.project_id,
             projectName: p.project_name,
             mmpName: p.mmp_name,
-            mmpId: mmid,
+            mmpId: p.mmp_id || mmpNameToId[p.mmp_name] || p.mmpId,
             monthBucket: month,
             issueDate: p.issue_date,
             expiryDate: p.expiry_date,
@@ -787,13 +554,9 @@ const DocumentsPage = () => {
           });
         });
 
-        // normalize local permits (skip if already extracted from mmp_files)
+        // normalize local permits
         (localPerms || []).forEach((p: any) => {
           if (!p) return;
-          
-          // Skip if this local permit already came from the MMP file
-          const mmid = p.mmp_id || mmpNameToId[p.mmp_name] || p.mmpId;
-          if (mmid && localPermitsByMmp.has(mmid)) return;
           
           const sourceId = p.id?.toString();
           if (sourceId && isAlreadyIndexed('local_permits', sourceId)) return;
@@ -819,7 +582,7 @@ const DocumentsPage = () => {
             projectId: p.project_id,
             projectName: p.project_name,
             mmpName: p.mmp_name,
-            mmpId: mmid,
+            mmpId: p.mmp_id || mmpNameToId[p.mmp_name] || p.mmpId,
             monthBucket: month,
             issueDate: p.issue_date,
             expiryDate: p.expiry_date,
@@ -829,13 +592,9 @@ const DocumentsPage = () => {
           });
         });
 
-        // normalize federal permits (skip if already extracted from mmp_files)
+        // normalize federal permits
         (federalPerms || []).forEach((p: any) => {
           if (!p) return;
-          
-          // Skip if this federal permit already came from the MMP file
-          const mmid = p.mmp_id || mmpNameToId[p.mmp_name] || p.mmpId;
-          if (mmid && federalPermitsByMmp.has(mmid)) return;
           
           const sourceId = p.id?.toString();
           if (sourceId && isAlreadyIndexed('federal_permits', sourceId)) return;
@@ -857,7 +616,7 @@ const DocumentsPage = () => {
             projectId: p.project_id,
             projectName: p.project_name,
             mmpName: p.mmp_name,
-            mmpId: mmid,
+            mmpId: p.mmp_id || mmpNameToId[p.mmp_name] || p.mmpId,
             monthBucket: month,
             issueDate: p.issue_date,
             expiryDate: p.expiry_date,
