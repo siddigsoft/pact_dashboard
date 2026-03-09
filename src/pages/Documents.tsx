@@ -518,8 +518,8 @@ const DocumentsPage = () => {
               const sourceId = doc.id || `${mmp.id}-fed-${idx}`;
               if (isAlreadyIndexed('mmp_files', sourceId)) return;
               
-              // Skip if we've already added this permit file
-              const permitKey = doc.fileUrl || `${mmp.id}-${doc.fileName || idx}`;
+              // Skip if we've already added this permit file - use stable key based on content
+              const permitKey = doc.fileUrl || `${mmp.id}-fed-${doc.fileName}-${doc.uploadedAt || idx}`;
               if (seenPermitFiles.has(permitKey)) return;
               seenPermitFiles.add(permitKey);
               
@@ -560,8 +560,8 @@ const DocumentsPage = () => {
                   const sourceId = doc.id || `${mmp.id}-state-${sp.stateName}-${idx}`;
                   if (isAlreadyIndexed('mmp_files', sourceId)) return;
                   
-                  // Skip if we've already added this permit file
-                  const permitKey = doc.fileUrl || `${mmp.id}-state-${sp.stateName}-${idx}`;
+                  // Skip if we've already added this permit file - use stable key based on content
+                  const permitKey = doc.fileUrl || `${mmp.id}-state-${sp.stateName}-${doc.fileName}-${doc.uploadedAt || idx}`;
                   if (seenPermitFiles.has(permitKey)) return;
                   seenPermitFiles.add(permitKey);
                   
@@ -592,8 +592,8 @@ const DocumentsPage = () => {
                 // New flat format (direct from StatePermitUpload)
                 if (sp.state) statesSet.add(sp.state);
                 
-                // Skip if we've already added this permit file
-                const permitKey = sp.fileUrl || `${mmp.id}-state-${sp.state}-${spIdx}`;
+                // Skip if we've already added this permit file - use stable key based on content
+                const permitKey = sp.fileUrl || `${mmp.id}-state-${sp.state}-${sp.fileName}-${sp.uploadedAt || spIdx}`;
                 if (seenPermitFiles.has(permitKey)) return;
                 seenPermitFiles.add(permitKey);
                 
@@ -639,8 +639,8 @@ const DocumentsPage = () => {
                 const sourceId = doc.id || `${mmp.id}-local-${lp.localityName}-${idx}`;
                 if (isAlreadyIndexed('mmp_files', sourceId)) return;
                 
-                // Skip if we've already added this permit file
-                const permitKey = doc.fileUrl || `${mmp.id}-local-${lp.localityName}-${idx}`;
+                // Skip if we've already added this permit file - use stable key based on content
+                const permitKey = doc.fileUrl || `${mmp.id}-local-${lp.localityName}-${doc.fileName}-${doc.uploadedAt || idx}`;
                 if (seenPermitFiles.has(permitKey)) return;
                 seenPermitFiles.add(permitKey);
                 
@@ -679,8 +679,8 @@ const DocumentsPage = () => {
               const sourceId = lp.id || `${mmp.id}-locality-${idx}`;
               if (isAlreadyIndexed('mmp_files', sourceId)) return;
               
-              // Skip if we've already added this permit file
-              const permitKey = lp.fileUrl || `${mmp.id}-locality-${idx}`;
+              // Skip if we've already added this permit file - use stable key based on content
+              const permitKey = lp.fileUrl || `${mmp.id}-locality-${lp.fileName}-${lp.uploadedAt || idx}`;
               if (seenPermitFiles.has(permitKey)) return;
               seenPermitFiles.add(permitKey);
               
@@ -756,8 +756,8 @@ const DocumentsPage = () => {
           const sourceId = p.id?.toString();
           if (sourceId && isAlreadyIndexed('state_permits', sourceId)) return;
           
-          // Skip if we've already added this permit file
-          const permitKey = p.file_url || p.fileUrl || `state-${p.id}`;
+          // Skip if we've already added this permit file - use stable key based on content
+          const permitKey = p.file_url || p.fileUrl || `state-${p.file_name}-${p.uploaded_at || p.created_at || p.id}`;
           if (seenPermitFiles.has(permitKey)) return;
           seenPermitFiles.add(permitKey);
           
@@ -798,8 +798,8 @@ const DocumentsPage = () => {
           const sourceId = p.id?.toString();
           if (sourceId && isAlreadyIndexed('local_permits', sourceId)) return;
           
-          // Skip if we've already added this permit file
-          const permitKey = p.file_url || p.fileUrl || `local-${p.id}`;
+          // Skip if we've already added this permit file - use stable key based on content
+          const permitKey = p.file_url || p.fileUrl || `local-${p.file_name}-${p.uploaded_at || p.created_at || p.id}`;
           if (seenPermitFiles.has(permitKey)) return;
           seenPermitFiles.add(permitKey);
           
@@ -840,8 +840,8 @@ const DocumentsPage = () => {
           const sourceId = p.id?.toString();
           if (sourceId && isAlreadyIndexed('federal_permits', sourceId)) return;
           
-          // Skip if we've already added this permit file
-          const permitKey = p.file_url || p.fileUrl || `federal-${p.id}`;
+          // Skip if we've already added this permit file - use stable key based on content
+          const permitKey = p.file_url || p.fileUrl || `federal-${p.file_name}-${p.uploaded_at || p.created_at || p.id}`;
           if (seenPermitFiles.has(permitKey)) return;
           seenPermitFiles.add(permitKey);
           
