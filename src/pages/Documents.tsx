@@ -445,6 +445,13 @@ const DocumentsPage = () => {
 
         (mmpFiles || []).forEach((mmp: any) => {
           if (!mmp) return;
+          
+          // Skip if already in persistent document_index (avoid duplicates)
+          if (isAlreadyIndexed('mmp_files', mmp.id)) {
+            console.log('Skipping MMP already in persistent index:', mmp.id);
+            return;
+          }
+          
           const projectName = mmp.project_name || mmp.projects?.name || 'Unknown Project';
           const uploadDate = mmp.uploaded_at || mmp.created_at;
           const monthBucket = safeFormatDate(uploadDate, 'yyyy-MM');
