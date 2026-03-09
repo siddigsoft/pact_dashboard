@@ -1555,22 +1555,23 @@ const MMP = () => {
 
         // Link photos to site visit via report_photos table
         if (photoUrls.length > 0) {
-          console.log('📎 Linking photos to site visit...');
-          const reportPhotos = photoUrls.map((photoUrl, index) => ({
-            site_visit_id: site.id,
+          console.log('📎 Linking photos to report...');
+          // Match mobile column names: report_id, photo_url, storage_path, is_synced
+          const reportPhotos = photoUrls.map((photoUrl) => ({
+            report_id: report.id,
             photo_url: photoUrl,
-            caption: `Site Visit Photo ${index + 1}`,
-            photo_type: 'site_visit',
-            created_at: now
+            storage_path: photoUrl,
+            is_synced: true,
           }));
 
           const { error: photosError } = await supabase
             .from('report_photos')
             .insert(reportPhotos);
           if (photosError) {
+            console.error('❌ Error linking photos:', photosError);
             // Don't throw - report is already created, just log the error
           } else {
-            console.log('✅ Photos linked to site visit:', photoUrls.length);
+            console.log('✅ Photos linked to report:', photoUrls.length);
           }
         }
         // Generate PDF report

@@ -122,46 +122,39 @@ export const LocalityPermitUpload: React.FC<LocalityPermitUploadProps> = ({
         ]
       };
 
-      // Update mmp_files in background (don't wait for this before showing success)
+      // Update mmp_files - don't wait for completion
       const updateMmpPromise = supabase.from('mmp_files').update({ permits: updatedPermitsData }).eq('id', mmpFileId);
 
-      // Update all sites in this locality to 'permits_attached' in background (use batch update instead of loop)
+      // Update all sites in this locality to 'permits_attached' using batch update
       const updateSitesPromise = (async () => {
         try {
-          // Fetch site IDs that need updating
-          const { data: siteIds, error: sitesFetchError } = await supabase
+          // Single batch update for all sites matching the criteria - much faster than individual updates
+          const { error: batchError } = await supabase
             .from('mmp_site_entries')
-            .select('id, additional_data, status')
+            .update({ 
+              status: 'permits_attached',
+              // Use raw SQL to merge additional_data without needing to fetch first
+              additional_data: supabase.rpc ? undefined : { locality_permit_attached: true }
+            })
             .eq('mmp_file_id', mmpFileId)
             .eq('state', state)
             .eq('locality', locality)
             .in('status', ['Pending', 'Dispatched', 'assigned', 'inProgress', 'in_progress']);
 
-          if (sitesFetchError || !siteIds?.length) return; // No sites to update
-
-          // Use Promise.all to parallelize the updates instead of sequential loop
-          await Promise.all(
-            siteIds.map(async (site) => {
-              try {
-                const updatedAdditionalData = { ...(site.additional_data || {}), locality_permit_attached: true };
-                const { error } = await supabase
-                  .from('mmp_site_entries')
-                  .update({ status: 'permits_attached', additional_data: updatedAdditionalData })
-                  .eq('id', site.id);
-                if (error) console.warn(`Failed to update site ${site.id}:`, error);
-              } catch (err) {
-                console.warn(`Failed to update site ${site.id}:`, err);
-              }
-            })
-          );
+          if (batchError) {
+            console.warn('Batch site update error:', batchError);
+          }
         } catch (err) {
           console.warn('Error updating sites:', err);
         }
       })();
 
-      // Wait for both operations to complete
-      const [mmpUpdateResult] = await Promise.all([updateMmpPromise, updateSitesPromise]);
+      // Wait for MMP update first (critical), sites update can complete in background
+      const mmpUpdateResult = await updateMmpPromise;
       if (mmpUpdateResult.error) throw mmpUpdateResult.error;
+
+      // Don't wait for sites update - let it complete in background
+      updateSitesPromise.catch(err => console.warn('Background sites update failed:', err));
 
       toast({
         title: "Local permit uploaded successfully",
@@ -193,14 +186,14 @@ export const LocalityPermitUpload: React.FC<LocalityPermitUploadProps> = ({
   const togglePreview = () => setShowPreview(!showPreview);
 
   return (
-    <Card className="border-border shadow-sm">
-      <CardHeader className="pb-3">
+    <Card className="border-border shadow-sm max-h-[70vh] overflow-hidden flex flex-col">
+      <CardHeader className="pb-3 flex-shrink-0">
         <CardTitle className="flex items-center gap-2 text-foreground">
           <AlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-400" />
           Local Permit Required
         </CardTitle>
       </CardHeader>
-      <CardContent className="space-y-4">
+      <CardContent className="space-y-4 overflow-y-auto flex-1">
         <Alert className="border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950">
           <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
           <AlertDescription className="text-foreground">

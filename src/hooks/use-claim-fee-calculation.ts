@@ -2,6 +2,31 @@ import { useState, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import type { ClassificationLevel, ClassificationRoleScope } from '@/types/classification';
 
+/**
+ * Maps app/UI role names to the database enum classification_role_scope.
+ * Valid enum values: field_officer, team_leader, supervisor, coordinator.
+ * Use this when sending p_role_scope to claim_site_visit RPC.
+ * Matches mobile logic in PACT_mobile/lib/services/claim_fee_service.dart
+ */
+export function normalizeRoleScopeForEnum(roleScope: string | null | undefined): string | null {
+  if (!roleScope) return null;
+  const lower = roleScope.toLowerCase();
+  switch (lower) {
+    case 'enumerator':
+    case 'datacollector':
+    case 'data_collector':
+    case 'dc':
+      return 'field_officer';
+    case 'field_officer':
+    case 'team_leader':
+    case 'supervisor':
+    case 'coordinator':
+      return lower;
+    default:
+      return roleScope;
+  }
+}
+
 export interface ClaimFeeBreakdown {
   transportBudget: number;
   enumeratorFee: number;

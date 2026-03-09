@@ -6,7 +6,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useUser } from '@/context/user/UserContext';
 import { CheckCircle, Loader2, Wallet, Car, User, AlertCircle, MapPin, Calendar, Building2, Banknote, WifiOff, ShieldX, MapPinOff } from 'lucide-react';
-import { useClaimFeeCalculation, type ClaimFeeBreakdown } from '@/hooks/use-claim-fee-calculation';
+import { useClaimFeeCalculation, type ClaimFeeBreakdown, normalizeRoleScopeForEnum } from '@/hooks/use-claim-fee-calculation';
 import { CLASSIFICATION_LABELS, CLASSIFICATION_COLORS } from '@/types/classification';
 import { useOffline } from '@/hooks/use-offline';
 import { useClassification } from '@/context/classification/ClassificationContext';
@@ -77,7 +77,7 @@ export function AcceptSiteButton({
   
   const hasClassification = !!userClassification;
   
-  // PERMISSION CHECK 2: Site must be in user's assigned locality
+  // PERMISSION CHECK 2: Site must be in user's assigned state (locality not required)
   const localityCheck = useMemo(() => {
     if (!currentUser || !isFieldWorker || isSuperAdmin) {
       // Non-field workers (admin, FOM, etc) and SuperAdmins can claim any site
@@ -85,7 +85,6 @@ export function AcceptSiteButton({
     }
     
     const userStateId = currentUser.stateId;
-    const userLocalityId = currentUser.localityId;
     
     // User must have geographic assignment
     if (!userStateId) {
@@ -96,12 +95,9 @@ export function AcceptSiteButton({
     }
     
     const userStateName = getStateName(userStateId)?.toLowerCase().trim() || '';
-    const userLocalityName = userLocalityId ? getLocalityName(userStateId, userLocalityId)?.toLowerCase().trim() : '';
-    
     const siteState = (site.state || '').toLowerCase().trim();
-    const siteLocality = (site.locality || '').toLowerCase().trim();
     
-    // Check state match
+    // Check state match only - no locality requirement
     const stateMatches = siteState === userStateName || 
                          siteState.includes(userStateName) || 
                          userStateName.includes(siteState);
@@ -113,22 +109,8 @@ export function AcceptSiteButton({
       };
     }
     
-    // If user has locality assigned, check locality match
-    if (userLocalityId && userLocalityName) {
-      const localityMatches = siteLocality === userLocalityName || 
-                              siteLocality.includes(userLocalityName) || 
-                              userLocalityName.includes(siteLocality);
-      
-      if (!localityMatches) {
-        return { 
-          canClaim: false, 
-          reason: `This site is in ${site.locality || 'unknown locality'}, but you are assigned to ${getLocalityName(userStateId, userLocalityId) || 'unknown'}.` 
-        };
-      }
-    }
-    
     return { canClaim: true, reason: null };
-  }, [currentUser, isFieldWorker, isSuperAdmin, site.state, site.locality]);
+  }, [currentUser, isFieldWorker, isSuperAdmin, site.state]);
 
   // Combined permission check for field workers
   const canClaimSite = useMemo(() => {
@@ -206,13 +188,16 @@ export function AcceptSiteButton({
       }
 
       if (isDispatchedSite) {
+        // Normalize role_scope to match DB enum (matching mobile logic)
+        const normalizedRoleScope = normalizeRoleScopeForEnum(feeBreakdown.roleScope);
+        
         const { data, error } = await supabase.rpc('claim_site_visit', {
           p_site_id: site.id,
           p_user_id: userId,
-          p_enumerator_fee: null,
-          p_total_cost: null,
+          p_enumerator_fee: feeBreakdown.enumeratorFee,
+          p_total_cost: feeBreakdown.totalPayout,
           p_classification_level: feeBreakdown.classificationLevel || null,
-          p_role_scope: feeBreakdown.roleScope || null,
+          p_role_scope: normalizedRoleScope,
           p_fee_source: feeBreakdown.feeSource
         });
 

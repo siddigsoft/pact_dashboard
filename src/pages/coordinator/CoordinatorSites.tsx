@@ -4511,11 +4511,22 @@ const CoordinatorSites: React.FC = () => {
                                         className="text-xs h-8"
                                         onClick={(e) => {
                                           e.stopPropagation();
+                                          // Find all sites in this locality
+                                          const allSitesInLocality = coordinatorSites.filter(s => s.state === site.state && s.locality === site.locality);
+                                          const uniqueMmpIds = Array.from(new Set(allSitesInLocality.map(s => s.mmp_file_id)));
+                                          if (uniqueMmpIds.length > 1) {
+                                            toast({
+                                              title: 'MMP Mismatch',
+                                              description: 'Sites in this locality are attached to different MMPs. Please resolve this before uploading a permit.',
+                                              variant: 'destructive'
+                                            });
+                                            return;
+                                          }
                                           setSelectedLocalityForWorkflow({
                                             state: site.state || '',
                                             stateName: site.state || '',
                                             locality: site.locality || '',
-                                            sites: [site]
+                                            sites: allSitesInLocality
                                           });
                                           setLocalityPermitUploadDialogOpen(true);
                                         }}

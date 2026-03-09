@@ -207,11 +207,34 @@ const DocumentsPage = () => {
   const [availableStates, setAvailableStates] = useState<string[]>([]);
   const [availableLocalities, setAvailableLocalities] = useState<string[]>([]);
   const [availableMmps, setAvailableMmps] = useState<{ id: string; name: string }[]>([]);
-  const [availableSiteNames, setAvailableSiteNames] = useState<string[]>([]);
-
+  
   // Site photos specific filters
-  const [sitePhotosMmpFilter, setSitePhotosMmpFilter] = useState<string>('all');
-  const [sitePhotosSiteFilter, setSitePhotosSiteFilter] = useState<string>('all');
+  const [sitePhotoMmpFilter, setSitePhotoMmpFilter] = useState<string>('all');
+  const [sitePhotoStateFilter, setSitePhotoStateFilter] = useState<string>('all');
+  const [sitePhotoLocalityFilter, setSitePhotoLocalityFilter] = useState<string>('all');
+  const [sitePhotoSiteFilter, setSitePhotoSiteFilter] = useState<string>('all');
+  
+  // Permits specific filters
+  const [permitMmpFilter, setPermitMmpFilter] = useState<string>('all');
+  const [permitStateFilter, setPermitStateFilter] = useState<string>('all');
+  const [permitLocalityFilter, setPermitLocalityFilter] = useState<string>('all');
+  const [permitSearchTerm, setPermitSearchTerm] = useState<string>('');
+  
+  // All tab specific filters
+  const [allSearchTerm, setAllSearchTerm] = useState<string>('');
+  const [allMmpFilter, setAllMmpFilter] = useState<string>('all');
+  const [allStateFilter, setAllStateFilter] = useState<string>('all');
+  const [allLocalityFilter, setAllLocalityFilter] = useState<string>('all');
+  
+  // MMP Files tab specific filters
+  const [mmpSearchTerm, setMmpSearchTerm] = useState<string>('');
+  const [mmpTabStateFilter, setMmpTabStateFilter] = useState<string>('all');
+  
+  // Receipts tab specific filters
+  const [receiptsSearchTerm, setReceiptsSearchTerm] = useState<string>('');
+  const [receiptsMmpFilter, setReceiptsMmpFilter] = useState<string>('all');
+  const [receiptsStateFilter, setReceiptsStateFilter] = useState<string>('all');
+  const [receiptsLocalityFilter, setReceiptsLocalityFilter] = useState<string>('all');
   
   // Cache status
   const [fromCache, setFromCache] = useState(false);
@@ -235,6 +258,28 @@ const DocumentsPage = () => {
     comments: '',
     verified: false
   });
+
+  // Site photos viewing state
+  const [viewingSitePhotos, setViewingSitePhotos] = useState<{
+    siteName: string;
+    mmpName: string;
+    mmpId: string;
+    state?: string;
+    locality?: string;
+    photos: Document[];
+    siteVisitId?: string;
+  } | null>(null);
+  const [viewingSitePhotoIndex, setViewingSitePhotoIndex] = useState(0);
+  const [siteEntryDetails, setSiteEntryDetails] = useState<{
+    completedBy?: string;
+    completedAt?: string;
+    claimedBy?: string;
+    status?: string;
+    siteCode?: string;
+    visitDuration?: number;
+    coordinates?: { latitude?: number; longitude?: number };
+  } | null>(null);
+  const [loadingSiteDetails, setLoadingSiteDetails] = useState(false);
 
   // Sync/rebuild document index
   const handleSyncDocuments = async () => {
@@ -959,14 +1004,15 @@ const DocumentsPage = () => {
         let mmpNameMap = new Map<string, string>();
 
         if (siteVisitIds.length > 0) {
-          const { data: siteVisits } = await supabase
-            .from('site_visits')
-            .select('id, site_name, site_code, mmp_id, state, locality, visit_date')
+          // Query mmp_site_entries (not site_visits) - this is where MMP workflow data lives
+          const { data: siteEntries } = await supabase
+            .from('mmp_site_entries')
+            .select('id, site_name, site_code, mmp_file_id, state, locality, visit_date')
             .in('id', siteVisitIds);
 
-          siteVisitMap = new Map((siteVisits || []).map((sv: any) => [sv.id, sv]));
+          siteVisitMap = new Map((siteEntries || []).map((se: any) => [se.id, { ...se, mmp_id: se.mmp_file_id }]));
 
-          const mmpIds = Array.from(new Set((siteVisits || []).map((sv: any) => sv?.mmp_id).filter(Boolean))) as string[];
+          const mmpIds = Array.from(new Set((siteEntries || []).map((se: any) => se?.mmp_file_id).filter(Boolean))) as string[];
           if (mmpIds.length > 0) {
             const { data: mmpRows } = await supabase
               .from('mmp_files')
@@ -1086,18 +1132,7 @@ const DocumentsPage = () => {
     setAvailableMmps(arr);
   }, [documents]);
 
-  // Build available site names for site photos (filtered by sitePhotosMmpFilter)
-  useEffect(() => {
-    const names = new Set<string>();
-    documents.forEach(d => {
-      if (d.category !== 'site_visit_photo') return;
-      const mmpId = d.mmpId || 'unknown';
-      if (sitePhotosMmpFilter !== 'all' && sitePhotosMmpFilter !== mmpId) return;
-      const site = d.siteName || d.locality || d.state || 'Unknown Site';
-      if (site) names.add(site);
-    });
-    setAvailableSiteNames(Array.from(names).sort((a, b) => a.localeCompare(b)));
-  }, [documents, sitePhotosMmpFilter]);
+
 
   // Reset all filters
   const resetFilters = () => {
@@ -1113,8 +1148,6 @@ const DocumentsPage = () => {
     setHasSignatureFilter('all');
     setMmpFilter('all');
     setPermitTypeFilter('all');
-    setSitePhotosMmpFilter('all');
-    setSitePhotosSiteFilter('all');
     setCurrentPage(1);
     setVisibleCount(pageSize);
   };
@@ -1189,11 +1222,16 @@ const DocumentsPage = () => {
       const matchesLocality = localityFilter === 'all' || doc.locality === localityFilter;
       
       // Tab filtering
+      // Note: site_photos tab doesn't show individual documents in the list - they're displayed in grouped cards above
       const matchesTab = activeTab === 'all' || 
         (activeTab === 'mmp' && doc.category === 'mmp_file') ||
         (activeTab === 'permits' && doc.category.includes('permit')) ||
-        (activeTab === 'receipts' && (doc.category === 'cost_receipt' || doc.category === 'transaction_receipt')) ||
-        (activeTab === 'site_photos' && doc.category === 'site_visit_photo');
+        (activeTab === 'receipts' && (doc.category === 'cost_receipt' || doc.category === 'transaction_receipt'));
+      
+      // Exclude site_visit_photo from document list on site_photos tab (they're shown in grouped cards)
+      if (activeTab === 'site_photos' && doc.category === 'site_visit_photo') {
+        return false;
+      }
       
       return matchesSearch && matchesCategory && matchesStatus && matchesSource && 
         matchesProject && matchesMonth && matchesState && matchesLocality && matchesTab && matchesMmp && matchesPermitType;
@@ -1221,26 +1259,6 @@ const DocumentsPage = () => {
 
     return filtered;
   }, [documents, searchTerm, categoryFilter, statusFilter, sourceFilter, projectFilter, monthFilter, stateFilter, localityFilter, activeTab, sortField, sortDirection, mmpFilter, permitTypeFilter]);
-  
-  // Pagination calculations
-  const totalPages = Math.ceil(allFilteredDocuments.length / pageSize);
-  const startIndex = (currentPage - 1) * pageSize;
-  const endIndex = startIndex + pageSize;
-  
-  // Paginated or lazy-loaded documents
-  const filteredDocuments = useMemo(() => {
-    if (useLazyLoad) {
-      return allFilteredDocuments.slice(0, visibleCount);
-    }
-    return allFilteredDocuments.slice(startIndex, endIndex);
-  }, [allFilteredDocuments, useLazyLoad, visibleCount, startIndex, endIndex]);
-  
-  // Pagination handlers
-  const goToPage = (page: number) => {
-    setCurrentPage(Math.max(1, Math.min(page, totalPages)));
-  };
-  
-  const hasMoreToLoad = useLazyLoad && visibleCount < allFilteredDocuments.length;
   
   // Reset page and visibleCount when filters change
   useEffect(() => {
@@ -1276,6 +1294,257 @@ const DocumentsPage = () => {
     setSentinelNode(node);
   }, []);
   
+  // Note: IntersectionObserver useEffect is defined after hasMoreToLoad
+
+  const stats = useMemo(() => ({
+    total: documents.length,
+    mmpFiles: documents.filter(d => d.category === 'mmp_file').length,
+    permits: documents.filter(d => d.category.includes('permit')).length,
+    receipts: documents.filter(d => d.category === 'cost_receipt').length,
+    sitePhotos: documents.filter(d => d.category === 'site_visit_photo').length,
+    verified: documents.filter(d => d.verified || d.status === 'approved').length,
+    pending: documents.filter(d => d.status === 'pending').length
+  }), [documents]);
+
+  const selectedMmpName = useMemo(() => {
+    if (mmpFilter === 'all') return 'All MMPs';
+    return availableMmps.find(m => m.id === mmpFilter)?.name || mmpFilter;
+  }, [availableMmps, mmpFilter]);
+
+  const isSitePhotosFilterActive = activeTab === 'site_photos' || categoryFilter === 'site_visit_photo';
+
+  // Build available filter options for permits
+  const permitFilterOptions = useMemo(() => {
+    const permitDocs = documents.filter(d => d.category.includes('permit'));
+    
+    // All MMPs from permits
+    const mmps = new Map<string, string>();
+    permitDocs.forEach(d => {
+      if (d.mmpId && d.mmpName) mmps.set(d.mmpId, d.mmpName);
+    });
+    
+    // States filtered by selected MMP
+    const states = new Set<string>();
+    permitDocs
+      .filter(d => permitMmpFilter === 'all' || d.mmpId === permitMmpFilter)
+      .forEach(d => { if (d.state) states.add(d.state); });
+    
+    // Localities filtered by selected MMP and State
+    const localities = new Set<string>();
+    permitDocs
+      .filter(d => permitMmpFilter === 'all' || d.mmpId === permitMmpFilter)
+      .filter(d => permitStateFilter === 'all' || d.state === permitStateFilter)
+      .forEach(d => { if (d.locality) localities.add(d.locality); });
+    
+    return {
+      mmps: Array.from(mmps.entries()).map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name)),
+      states: Array.from(states).sort(),
+      localities: Array.from(localities).sort()
+    };
+  }, [documents, permitMmpFilter, permitStateFilter]);
+
+  // Filtered permits list
+  const filteredPermits = useMemo(() => {
+    return documents
+      .filter(d => d.category.includes('permit'))
+      .filter(d => {
+        // Apply search filter
+        const matchesSearch = permitSearchTerm === '' || 
+          d.fileName.toLowerCase().includes(permitSearchTerm.toLowerCase()) ||
+          d.mmpName?.toLowerCase().includes(permitSearchTerm.toLowerCase()) ||
+          d.state?.toLowerCase().includes(permitSearchTerm.toLowerCase()) ||
+          d.locality?.toLowerCase().includes(permitSearchTerm.toLowerCase());
+        if (!matchesSearch) return false;
+        return true;
+      })
+      .filter(d => {
+        // Apply permit specific filters
+        if (permitMmpFilter !== 'all' && d.mmpId !== permitMmpFilter) return false;
+        if (permitStateFilter !== 'all' && d.state !== permitStateFilter) return false;
+        if (permitLocalityFilter !== 'all' && d.locality !== permitLocalityFilter) return false;
+        if (permitTypeFilter !== 'all') {
+          if (permitTypeFilter === 'federal' && d.category !== 'federal_permit') return false;
+          if (permitTypeFilter === 'state' && d.category !== 'state_permit') return false;
+          if (permitTypeFilter === 'local' && d.category !== 'local_permit') return false;
+        }
+        return true;
+      })
+      .sort((a, b) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime());
+  }, [documents, permitSearchTerm, permitMmpFilter, permitStateFilter, permitLocalityFilter, permitTypeFilter]);
+
+  // Build available filter options for All tab
+  const allFilterOptions = useMemo(() => {
+    // All MMPs from all documents
+    const mmps = new Map<string, string>();
+    documents.forEach(d => {
+      if (d.mmpId && d.mmpName) mmps.set(d.mmpId, d.mmpName);
+    });
+    
+    // States filtered by selected MMP
+    const states = new Set<string>();
+    documents
+      .filter(d => allMmpFilter === 'all' || d.mmpId === allMmpFilter)
+      .forEach(d => { if (d.state) states.add(d.state); });
+    
+    // Localities filtered by selected MMP and State
+    const localities = new Set<string>();
+    documents
+      .filter(d => allMmpFilter === 'all' || d.mmpId === allMmpFilter)
+      .filter(d => allStateFilter === 'all' || d.state === allStateFilter)
+      .forEach(d => { if (d.locality) localities.add(d.locality); });
+    
+    return {
+      mmps: Array.from(mmps.entries()).map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name)),
+      states: Array.from(states).sort(),
+      localities: Array.from(localities).sort()
+    };
+  }, [documents, allMmpFilter, allStateFilter]);
+
+  // Filtered documents for All tab
+  const filteredAll = useMemo(() => {
+    return documents
+      .filter(d => {
+        // Apply search filter
+        const matchesSearch = allSearchTerm === '' || 
+          d.fileName.toLowerCase().includes(allSearchTerm.toLowerCase()) ||
+          d.mmpName?.toLowerCase().includes(allSearchTerm.toLowerCase()) ||
+          d.state?.toLowerCase().includes(allSearchTerm.toLowerCase()) ||
+          d.locality?.toLowerCase().includes(allSearchTerm.toLowerCase()) ||
+          d.siteName?.toLowerCase().includes(allSearchTerm.toLowerCase());
+        if (!matchesSearch) return false;
+        return true;
+      })
+      .filter(d => {
+        // Apply filters
+        if (allMmpFilter !== 'all' && d.mmpId !== allMmpFilter) return false;
+        if (allStateFilter !== 'all' && d.state !== allStateFilter) return false;
+        if (allLocalityFilter !== 'all' && d.locality !== allLocalityFilter) return false;
+        return true;
+      })
+      .sort((a, b) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime());
+  }, [documents, allSearchTerm, allMmpFilter, allStateFilter, allLocalityFilter]);
+
+  // Build available filter options for MMP Files tab
+  const mmpFilesFilterOptions = useMemo(() => {
+    const mmpDocs = documents.filter(d => d.category === 'mmp_file');
+    
+    // States from MMP files (based on sites within each MMP)
+    const states = new Set<string>();
+    mmpDocs.forEach(d => { if (d.state) states.add(d.state); });
+    
+    return {
+      states: Array.from(states).sort()
+    };
+  }, [documents]);
+
+  // Filtered MMP files list
+  const filteredMmpFiles = useMemo(() => {
+    return documents
+      .filter(d => d.category === 'mmp_file')
+      .filter(d => {
+        // Apply search filter
+        const matchesSearch = mmpSearchTerm === '' || 
+          d.fileName.toLowerCase().includes(mmpSearchTerm.toLowerCase()) ||
+          d.mmpName?.toLowerCase().includes(mmpSearchTerm.toLowerCase()) ||
+          d.projectName?.toLowerCase().includes(mmpSearchTerm.toLowerCase());
+        if (!matchesSearch) return false;
+        return true;
+      })
+      .filter(d => {
+        // Apply filters
+        if (mmpTabStateFilter !== 'all' && d.state !== mmpTabStateFilter) return false;
+        return true;
+      })
+      .sort((a, b) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime());
+  }, [documents, mmpSearchTerm, mmpTabStateFilter]);
+
+  // Build available filter options for Receipts tab
+  const receiptsFilterOptions = useMemo(() => {
+    const receiptDocs = documents.filter(d => d.category === 'cost_receipt' || d.category === 'transaction_receipt');
+    
+    // All MMPs from receipts
+    const mmps = new Map<string, string>();
+    receiptDocs.forEach(d => {
+      if (d.mmpId && d.mmpName) mmps.set(d.mmpId, d.mmpName);
+    });
+    
+    // States filtered by selected MMP
+    const states = new Set<string>();
+    receiptDocs
+      .filter(d => receiptsMmpFilter === 'all' || d.mmpId === receiptsMmpFilter)
+      .forEach(d => { if (d.state) states.add(d.state); });
+    
+    // Localities filtered by selected MMP and State
+    const localities = new Set<string>();
+    receiptDocs
+      .filter(d => receiptsMmpFilter === 'all' || d.mmpId === receiptsMmpFilter)
+      .filter(d => receiptsStateFilter === 'all' || d.state === receiptsStateFilter)
+      .forEach(d => { if (d.locality) localities.add(d.locality); });
+    
+    return {
+      mmps: Array.from(mmps.entries()).map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name)),
+      states: Array.from(states).sort(),
+      localities: Array.from(localities).sort()
+    };
+  }, [documents, receiptsMmpFilter, receiptsStateFilter]);
+
+  // Filtered receipts list
+  const filteredReceipts = useMemo(() => {
+    return documents
+      .filter(d => d.category === 'cost_receipt' || d.category === 'transaction_receipt')
+      .filter(d => {
+        // Apply search filter
+        const matchesSearch = receiptsSearchTerm === '' || 
+          d.fileName.toLowerCase().includes(receiptsSearchTerm.toLowerCase()) ||
+          d.mmpName?.toLowerCase().includes(receiptsSearchTerm.toLowerCase()) ||
+          d.state?.toLowerCase().includes(receiptsSearchTerm.toLowerCase()) ||
+          d.locality?.toLowerCase().includes(receiptsSearchTerm.toLowerCase()) ||
+          d.siteName?.toLowerCase().includes(receiptsSearchTerm.toLowerCase());
+        if (!matchesSearch) return false;
+        return true;
+      })
+      .filter(d => {
+        // Apply filters
+        if (receiptsMmpFilter !== 'all' && d.mmpId !== receiptsMmpFilter) return false;
+        if (receiptsStateFilter !== 'all' && d.state !== receiptsStateFilter) return false;
+        if (receiptsLocalityFilter !== 'all' && d.locality !== receiptsLocalityFilter) return false;
+        return true;
+      })
+      .sort((a, b) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime());
+  }, [documents, receiptsSearchTerm, receiptsMmpFilter, receiptsStateFilter, receiptsLocalityFilter]);
+
+  // Get documents based on active tab's filtered list
+  const tabFilteredDocuments = useMemo(() => {
+    switch (activeTab) {
+      case 'all':
+        return filteredAll;
+      case 'mmp':
+        return filteredMmpFiles;
+      case 'receipts':
+        return filteredReceipts;
+      case 'permits':
+        return filteredPermits;
+      // site_photos uses sitePhotoGroups, not a flat document list
+      default:
+        return allFilteredDocuments;
+    }
+  }, [activeTab, filteredAll, filteredMmpFiles, filteredReceipts, filteredPermits, allFilteredDocuments]);
+  
+  // Pagination calculations
+  const totalPages = Math.ceil(tabFilteredDocuments.length / pageSize);
+  const startIndex = (currentPage - 1) * pageSize;
+  const endIndex = startIndex + pageSize;
+  
+  // Paginated or lazy-loaded documents
+  const filteredDocuments = useMemo(() => {
+    if (useLazyLoad) {
+      return tabFilteredDocuments.slice(0, visibleCount);
+    }
+    return tabFilteredDocuments.slice(startIndex, endIndex);
+  }, [tabFilteredDocuments, useLazyLoad, visibleCount, startIndex, endIndex]);
+  
+  const hasMoreToLoad = useLazyLoad && visibleCount < tabFilteredDocuments.length;
+
   // IntersectionObserver setup with proper cleanup
   useEffect(() => {
     // Disconnect existing observer
@@ -1308,58 +1577,132 @@ const DocumentsPage = () => {
     };
   }, [useLazyLoad, hasMoreToLoad, loadMore, sentinelNode]);
 
-  const stats = useMemo(() => ({
-    total: documents.length,
-    mmpFiles: documents.filter(d => d.category === 'mmp_file').length,
-    permits: documents.filter(d => d.category.includes('permit')).length,
-    receipts: documents.filter(d => d.category === 'cost_receipt').length,
-    sitePhotos: documents.filter(d => d.category === 'site_visit_photo').length,
-    verified: documents.filter(d => d.verified || d.status === 'approved').length,
-    pending: documents.filter(d => d.status === 'pending').length
-  }), [documents]);
+  // Pagination handlers
+  const goToPage = (page: number) => {
+    setCurrentPage(Math.max(1, Math.min(page, totalPages)));
+  };
 
-  const selectedMmpName = useMemo(() => {
-    if (mmpFilter === 'all') return 'All MMPs';
-    return availableMmps.find(m => m.id === mmpFilter)?.name || mmpFilter;
-  }, [availableMmps, mmpFilter]);
+  // Build available filter options for site photos
+  const sitePhotoFilterOptions = useMemo(() => {
+    const sitePhotoDocs = documents.filter(d => d.category === 'site_visit_photo');
+    
+    // All MMPs from site photos
+    const mmps = new Map<string, string>();
+    sitePhotoDocs.forEach(d => {
+      if (d.mmpId && d.mmpName) mmps.set(d.mmpId, d.mmpName);
+    });
+    
+    // States filtered by selected MMP
+    const states = new Set<string>();
+    sitePhotoDocs
+      .filter(d => sitePhotoMmpFilter === 'all' || d.mmpId === sitePhotoMmpFilter)
+      .forEach(d => { if (d.state) states.add(d.state); });
+    
+    // Localities filtered by selected MMP and State
+    const localities = new Set<string>();
+    sitePhotoDocs
+      .filter(d => sitePhotoMmpFilter === 'all' || d.mmpId === sitePhotoMmpFilter)
+      .filter(d => sitePhotoStateFilter === 'all' || d.state === sitePhotoStateFilter)
+      .forEach(d => { if (d.locality) localities.add(d.locality); });
+    
+    // Sites filtered by selected MMP, State, and Locality
+    const sites = new Set<string>();
+    sitePhotoDocs
+      .filter(d => sitePhotoMmpFilter === 'all' || d.mmpId === sitePhotoMmpFilter)
+      .filter(d => sitePhotoStateFilter === 'all' || d.state === sitePhotoStateFilter)
+      .filter(d => sitePhotoLocalityFilter === 'all' || d.locality === sitePhotoLocalityFilter)
+      .forEach(d => { if (d.siteName) sites.add(d.siteName); });
+    
+    return {
+      mmps: Array.from(mmps.entries()).map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name)),
+      states: Array.from(states).sort(),
+      localities: Array.from(localities).sort(),
+      sites: Array.from(sites).sort()
+    };
+  }, [documents, sitePhotoMmpFilter, sitePhotoStateFilter, sitePhotoLocalityFilter]);
 
-  const isSitePhotosFilterActive = activeTab === 'site_photos' || categoryFilter === 'site_visit_photo';
-
+  // Group site photos by site name (simpler grouping for cleaner UI)
+  // Note: Uses raw `documents` array instead of `allFilteredDocuments` because
+  // site_visit_photo docs are excluded from allFilteredDocuments on site_photos tab
   const sitePhotoGroups = useMemo(() => {
     if (!isSitePhotosFilterActive) return [];
 
     const grouped = new Map<string, {
-      mmpName: string;
-      month: string;
       siteName: string;
+      mmpName: string;
+      mmpId: string;
+      state?: string;
+      locality?: string;
       photos: Document[];
+      lastVisited?: string;
+      siteVisitId?: string;
     }>();
 
-    allFilteredDocuments
+    documents
       .filter(doc => doc.category === 'site_visit_photo')
       .filter(doc => {
-        // apply site-photos specific filters (use mmpId for matching)
-        const mmpId = doc.mmpId || 'unknown';
-        const siteName = doc.siteName || doc.locality || doc.state || 'Unknown Site';
-        if (sitePhotosMmpFilter !== 'all' && sitePhotosMmpFilter !== mmpId) return false;
-        if (sitePhotosSiteFilter !== 'all' && sitePhotosSiteFilter !== siteName) return false;
+        // Apply search filter
+        const matchesSearch = searchTerm === '' || 
+          doc.fileName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          doc.projectName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          doc.siteName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          doc.state?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          doc.locality?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          doc.mmpName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          doc.indexNo.toString().includes(searchTerm);
+        if (!matchesSearch) return false;
+        return true;
+      })
+      .filter(doc => {
+        // Apply site photo specific filters
+        if (sitePhotoMmpFilter !== 'all' && doc.mmpId !== sitePhotoMmpFilter) return false;
+        if (sitePhotoStateFilter !== 'all' && doc.state !== sitePhotoStateFilter) return false;
+        if (sitePhotoLocalityFilter !== 'all' && doc.locality !== sitePhotoLocalityFilter) return false;
+        if (sitePhotoSiteFilter !== 'all' && doc.siteName !== sitePhotoSiteFilter) return false;
         return true;
       })
       .forEach((doc) => {
-        const month = doc.monthBucket || safeFormatDate(doc.uploadedAt, 'yyyy-MM', 'Unknown Month') || 'Unknown Month';
         const mmpName = doc.mmpName || 'Unknown MMP';
+        const mmpId = doc.mmpId || 'unknown';
         const siteName = doc.siteName || doc.locality || doc.state || 'Unknown Site';
-        const key = `${mmpName}__${month}__${siteName}`;
+        const key = `${mmpId}__${siteName}`;
 
         if (!grouped.has(key)) {
-          grouped.set(key, { mmpName, month, siteName, photos: [] });
+          grouped.set(key, { 
+            siteName, 
+            mmpName, 
+            mmpId,
+            state: doc.state,
+            locality: doc.locality,
+            photos: [],
+            lastVisited: undefined,
+            siteVisitId: doc.siteVisitId
+          });
+        }
+        // Update siteVisitId if available
+        if (doc.siteVisitId && !grouped.get(key)!.siteVisitId) {
+          grouped.get(key)!.siteVisitId = doc.siteVisitId;
         }
 
         grouped.get(key)!.photos.push(doc);
       });
 
-    return Array.from(grouped.values()).sort((a, b) => b.month.localeCompare(a.month));
-  }, [isSitePhotosFilterActive, allFilteredDocuments]);
+    // Sort photos within each group and set lastVisited
+    const groups = Array.from(grouped.values()).map(g => {
+      g.photos.sort((a, b) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime());
+      g.lastVisited = g.photos.length > 0 ? g.photos[0].uploadedAt : undefined;
+      return g;
+    });
+
+    // Sort groups by lastVisited descending
+    groups.sort((a, b) => {
+      const ta = a.lastVisited ? new Date(a.lastVisited).getTime() : 0;
+      const tb = b.lastVisited ? new Date(b.lastVisited).getTime() : 0;
+      return tb - ta;
+    });
+
+    return groups;
+  }, [isSitePhotosFilterActive, documents, searchTerm, sitePhotoMmpFilter, sitePhotoStateFilter, sitePhotoLocalityFilter, sitePhotoSiteFilter]);
 
   // When an MMP is selected, group completed sites (sites with photos) for that MMP
   const siteGroupsForSelectedMmp = useMemo(() => {
@@ -1966,84 +2309,728 @@ const DocumentsPage = () => {
         </TabsList>
 
         <TabsContent value={activeTab} className="mt-4">
-          {isSitePhotosFilterActive && sitePhotoGroups.length > 0 && (
-            <Card className="border-border mb-4">
-              <CardHeader className="pb-3">
-                <h3 className="text-sm font-semibold">Site Photos Index</h3>
-                <p className="text-xs text-muted-foreground">Grouped by MMP name, month, and site name</p>
-                <div className="mt-3 flex items-center gap-2">
-                  <Select value={sitePhotosMmpFilter} onValueChange={(v) => { setSitePhotosMmpFilter(v); setSitePhotosSiteFilter('all'); }}>
-                    <SelectTrigger className="w-[220px]" data-testid="select-sitephotos-mmp-filter">
-                      <SelectValue placeholder="Filter by MMP" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All MMPs</SelectItem>
-                      {availableMmps.map(m => (
-                        <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-
-                  <Select value={sitePhotosSiteFilter} onValueChange={setSitePhotosSiteFilter}>
-                    <SelectTrigger className="w-[200px]" data-testid="select-sitephotos-site-filter">
-                      <SelectValue placeholder="Filter by Site" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Sites</SelectItem>
-                      {availableSiteNames.map(name => (
-                        <SelectItem key={name} value={name}>{name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-3">
-                  {sitePhotoGroups.map((group, idx) => (
-                    <div key={`${group.mmpName}-${group.month}-${group.siteName}-${idx}`} className="rounded-md border border-border p-3">
-                      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-3">
-                        <div className="min-w-0">
-                          <p className="text-sm font-medium truncate">{group.siteName}</p>
-                          <p className="text-xs text-muted-foreground truncate">{group.mmpName}</p>
-                        </div>
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <Badge variant="outline">
-                            {safeFormatDate(`${group.month}-01`, 'MMMM yyyy', group.month)}
-                          </Badge>
-                          <Badge variant="secondary">{group.photos.length} photos</Badge>
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2">
-                        {group.photos.map((photo) => (
-                          <button
-                            key={photo.id}
-                            type="button"
-                            onClick={() => handleViewDocument(photo)}
-                            className="group rounded-md border border-border overflow-hidden text-left"
-                            data-testid={`site-photo-thumb-${photo.id}`}
-                          >
-                            <img
-                              src={photo.fileUrl}
-                              alt={photo.fileName}
-                              className="w-full h-24 object-cover group-hover:opacity-90 transition-opacity"
-                              loading="lazy"
-                            />
-                            <div className="p-2">
-                              <p className="text-[11px] text-muted-foreground truncate">{photo.fileName}</p>
-                            </div>
-                          </button>
-                        ))}
-                      </div>
+          {/* All Tab - filters */}
+          {activeTab === 'all' && (
+            <div className="space-y-4 mb-4">
+              <Card className="border-border">
+                <CardContent className="py-3">
+                  {/* Search bar */}
+                  <div className="mb-3">
+                    <div className="relative">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                      <Input
+                        placeholder="Search all documents by name, MMP, state, locality..."
+                        value={allSearchTerm}
+                        onChange={(e) => setAllSearchTerm(e.target.value)}
+                        className="pl-9"
+                        data-testid="all-search"
+                      />
                     </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
+                  </div>
+                  
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                    <div className="space-y-1">
+                      <label className="text-xs font-medium text-muted-foreground">MMP</label>
+                      <Select 
+                        value={allMmpFilter} 
+                        onValueChange={(v) => { 
+                          setAllMmpFilter(v); 
+                          setAllStateFilter('all');
+                          setAllLocalityFilter('all');
+                        }}
+                      >
+                        <SelectTrigger className="h-9" data-testid="all-mmp-filter">
+                          <SelectValue placeholder="All MMPs" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">All MMPs</SelectItem>
+                          {allFilterOptions.mmps.map(m => (
+                            <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-xs font-medium text-muted-foreground">State</label>
+                      <Select 
+                        value={allStateFilter} 
+                        onValueChange={(v) => { 
+                          setAllStateFilter(v);
+                          setAllLocalityFilter('all');
+                        }}
+                      >
+                        <SelectTrigger className="h-9" data-testid="all-state-filter">
+                          <SelectValue placeholder="All States" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">All States</SelectItem>
+                          {allFilterOptions.states.map(s => (
+                            <SelectItem key={s} value={s}>{s}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-xs font-medium text-muted-foreground">Locality</label>
+                      <Select value={allLocalityFilter} onValueChange={setAllLocalityFilter}>
+                        <SelectTrigger className="h-9" data-testid="all-locality-filter">
+                          <SelectValue placeholder="All Localities" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">All Localities</SelectItem>
+                          {allFilterOptions.localities.map(l => (
+                            <SelectItem key={l} value={l}>{l}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  
+                  {/* Active filters indicator */}
+                  {(allSearchTerm || allMmpFilter !== 'all' || allStateFilter !== 'all' || allLocalityFilter !== 'all') && (
+                    <div className="mt-3 flex items-center justify-between text-sm">
+                      <span className="text-muted-foreground">
+                        Showing {filteredAll.length} document{filteredAll.length !== 1 ? 's' : ''}
+                      </span>
+                      <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        onClick={() => {
+                          setAllSearchTerm('');
+                          setAllMmpFilter('all');
+                          setAllStateFilter('all');
+                          setAllLocalityFilter('all');
+                        }}
+                        className="h-7 text-xs"
+                      >
+                        Clear filters
+                      </Button>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
           )}
 
-          {/* When an MMP is selected, show completed sites for that MMP with attached photos */}
-          {mmpFilter !== 'all' && siteGroupsForSelectedMmp.length > 0 && (
+          {/* MMP Files Tab - filters */}
+          {activeTab === 'mmp' && (
+            <div className="space-y-4 mb-4">
+              <Card className="border-border">
+                <CardContent className="py-3">
+                  {/* Search bar */}
+                  <div className="mb-3">
+                    <div className="relative">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                      <Input
+                        placeholder="Search MMP files by name, project..."
+                        value={mmpSearchTerm}
+                        onChange={(e) => setMmpSearchTerm(e.target.value)}
+                        className="pl-9"
+                        data-testid="mmp-search"
+                      />
+                    </div>
+                  </div>
+                  
+                  {mmpFilesFilterOptions.states.length > 0 && (
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                      <div className="space-y-1">
+                        <label className="text-xs font-medium text-muted-foreground">State</label>
+                        <Select value={mmpTabStateFilter} onValueChange={setMmpTabStateFilter}>
+                          <SelectTrigger className="h-9" data-testid="mmp-state-filter">
+                            <SelectValue placeholder="All States" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all">All States</SelectItem>
+                            {mmpFilesFilterOptions.states.map(s => (
+                              <SelectItem key={s} value={s}>{s}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                  )}
+                  
+                  {/* Active filters indicator */}
+                  {(mmpSearchTerm || mmpTabStateFilter !== 'all') && (
+                    <div className="mt-3 flex items-center justify-between text-sm">
+                      <span className="text-muted-foreground">
+                        Showing {filteredMmpFiles.length} MMP file{filteredMmpFiles.length !== 1 ? 's' : ''}
+                      </span>
+                      <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        onClick={() => {
+                          setMmpSearchTerm('');
+                          setMmpTabStateFilter('all');
+                        }}
+                        className="h-7 text-xs"
+                      >
+                        Clear filters
+                      </Button>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
+          )}
+
+          {/* Receipts Tab - filters */}
+          {activeTab === 'receipts' && (
+            <div className="space-y-4 mb-4">
+              <Card className="border-border">
+                <CardContent className="py-3">
+                  {/* Search bar */}
+                  <div className="mb-3">
+                    <div className="relative">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                      <Input
+                        placeholder="Search receipts by name, MMP, state, locality..."
+                        value={receiptsSearchTerm}
+                        onChange={(e) => setReceiptsSearchTerm(e.target.value)}
+                        className="pl-9"
+                        data-testid="receipts-search"
+                      />
+                    </div>
+                  </div>
+                  
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                    <div className="space-y-1">
+                      <label className="text-xs font-medium text-muted-foreground">MMP</label>
+                      <Select 
+                        value={receiptsMmpFilter} 
+                        onValueChange={(v) => { 
+                          setReceiptsMmpFilter(v); 
+                          setReceiptsStateFilter('all');
+                          setReceiptsLocalityFilter('all');
+                        }}
+                      >
+                        <SelectTrigger className="h-9" data-testid="receipts-mmp-filter">
+                          <SelectValue placeholder="All MMPs" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">All MMPs</SelectItem>
+                          {receiptsFilterOptions.mmps.map(m => (
+                            <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-xs font-medium text-muted-foreground">State</label>
+                      <Select 
+                        value={receiptsStateFilter} 
+                        onValueChange={(v) => { 
+                          setReceiptsStateFilter(v);
+                          setReceiptsLocalityFilter('all');
+                        }}
+                      >
+                        <SelectTrigger className="h-9" data-testid="receipts-state-filter">
+                          <SelectValue placeholder="All States" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">All States</SelectItem>
+                          {receiptsFilterOptions.states.map(s => (
+                            <SelectItem key={s} value={s}>{s}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-xs font-medium text-muted-foreground">Locality</label>
+                      <Select value={receiptsLocalityFilter} onValueChange={setReceiptsLocalityFilter}>
+                        <SelectTrigger className="h-9" data-testid="receipts-locality-filter">
+                          <SelectValue placeholder="All Localities" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">All Localities</SelectItem>
+                          {receiptsFilterOptions.localities.map(l => (
+                            <SelectItem key={l} value={l}>{l}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  
+                  {/* Active filters indicator */}
+                  {(receiptsSearchTerm || receiptsMmpFilter !== 'all' || receiptsStateFilter !== 'all' || receiptsLocalityFilter !== 'all') && (
+                    <div className="mt-3 flex items-center justify-between text-sm">
+                      <span className="text-muted-foreground">
+                        Showing {filteredReceipts.length} receipt{filteredReceipts.length !== 1 ? 's' : ''}
+                      </span>
+                      <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        onClick={() => {
+                          setReceiptsSearchTerm('');
+                          setReceiptsMmpFilter('all');
+                          setReceiptsStateFilter('all');
+                          setReceiptsLocalityFilter('all');
+                        }}
+                        className="h-7 text-xs"
+                      >
+                        Clear filters
+                      </Button>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
+          )}
+
+          {/* Permits Tab - filters and permit cards */}
+          {activeTab === 'permits' && (
+            <div className="space-y-4 mb-4">
+              {/* Permits Filters */}
+              <Card className="border-border">
+                <CardContent className="py-3">
+                  {/* Search bar */}
+                  <div className="mb-3">
+                    <div className="relative">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                      <Input
+                        placeholder="Search permits by name, MMP, state, locality..."
+                        value={permitSearchTerm}
+                        onChange={(e) => setPermitSearchTerm(e.target.value)}
+                        className="pl-9"
+                        data-testid="permits-search"
+                      />
+                    </div>
+                  </div>
+                  
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    <div className="space-y-1">
+                      <label className="text-xs font-medium text-muted-foreground">MMP</label>
+                      <Select 
+                        value={permitMmpFilter} 
+                        onValueChange={(v) => { 
+                          setPermitMmpFilter(v); 
+                          setPermitStateFilter('all');
+                          setPermitLocalityFilter('all');
+                        }}
+                      >
+                        <SelectTrigger className="h-9" data-testid="permit-mmp-filter">
+                          <SelectValue placeholder="All MMPs" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">All MMPs</SelectItem>
+                          {permitFilterOptions.mmps.map(m => (
+                            <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-xs font-medium text-muted-foreground">State</label>
+                      <Select 
+                        value={permitStateFilter} 
+                        onValueChange={(v) => { 
+                          setPermitStateFilter(v);
+                          setPermitLocalityFilter('all');
+                        }}
+                      >
+                        <SelectTrigger className="h-9" data-testid="permit-state-filter">
+                          <SelectValue placeholder="All States" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">All States</SelectItem>
+                          {permitFilterOptions.states.map(s => (
+                            <SelectItem key={s} value={s}>{s}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-xs font-medium text-muted-foreground">Locality</label>
+                      <Select 
+                        value={permitLocalityFilter} 
+                        onValueChange={setPermitLocalityFilter}
+                      >
+                        <SelectTrigger className="h-9" data-testid="permit-locality-filter">
+                          <SelectValue placeholder="All Localities" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">All Localities</SelectItem>
+                          {permitFilterOptions.localities.map(l => (
+                            <SelectItem key={l} value={l}>{l}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-xs font-medium text-muted-foreground">Permit Type</label>
+                      <Select 
+                        value={permitTypeFilter} 
+                        onValueChange={setPermitTypeFilter}
+                      >
+                        <SelectTrigger className="h-9" data-testid="permit-type-filter">
+                          <SelectValue placeholder="All Types" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">All Types</SelectItem>
+                          <SelectItem value="federal">Federal</SelectItem>
+                          <SelectItem value="state">State</SelectItem>
+                          <SelectItem value="local">Local</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  
+                  {/* Active filters indicator */}
+                  {(permitSearchTerm !== '' || permitMmpFilter !== 'all' || permitStateFilter !== 'all' || permitLocalityFilter !== 'all' || permitTypeFilter !== 'all') && (
+                    <div className="flex items-center justify-between mt-3 pt-3 border-t border-border">
+                      <p className="text-xs text-muted-foreground">
+                        Showing {filteredPermits.length} permit{filteredPermits.length !== 1 ? 's' : ''}
+                      </p>
+                      <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        className="h-7 text-xs"
+                        onClick={() => {
+                          setPermitSearchTerm('');
+                          setPermitMmpFilter('all');
+                          setPermitStateFilter('all');
+                          setPermitLocalityFilter('all');
+                          setPermitTypeFilter('all');
+                        }}
+                      >
+                        Clear filters
+                      </Button>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Permit Cards */}
+              {filteredPermits.length > 0 ? (
+                <div className="space-y-2">
+                  {filteredPermits.map((permit) => {
+                    const IconComponent = categoryIcons[permit.category] || Shield;
+                    const colorClass = categoryColors[permit.category] || categoryColors.other;
+                    return (
+                      <div
+                        key={permit.id}
+                        className="flex items-center justify-between p-3 rounded-lg border border-border hover:bg-muted/50 transition-colors cursor-pointer"
+                        onClick={() => handleViewDocument(permit)}
+                        data-testid={`permit-card-${permit.id}`}
+                      >
+                        <div className="flex items-center gap-3 min-w-0 flex-1">
+                          <div className={`w-10 h-10 rounded-md flex items-center justify-center flex-shrink-0 ${colorClass.split(' ')[0]}`}>
+                            <IconComponent className={`h-5 w-5 ${colorClass.split(' ').slice(1).join(' ')}`} />
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-medium truncate">{permit.fileName}</p>
+                            <div className="flex items-center gap-2 text-xs text-muted-foreground flex-wrap">
+                              <Badge variant="outline" className="text-xs py-0 h-5">
+                                {categoryLabels[permit.category] || permit.category}
+                              </Badge>
+                              {permit.mmpName && (
+                                <span className="truncate max-w-[150px]">{permit.mmpName}</span>
+                              )}
+                              {permit.state && (
+                                <span className="truncate">{permit.state}</span>
+                              )}
+                              {permit.locality && (
+                                <span className="truncate">{permit.locality}</span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 flex-shrink-0">
+                          <Badge variant={getStatusBadgeVariant(permit.status)}>
+                            {permit.status || 'pending'}
+                          </Badge>
+                          {isAdmin && permit.mmpId && (
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              onClick={(e) => { e.stopPropagation(); handleOpenEditPermit(permit); }}
+                              title="Edit Permit"
+                            >
+                              <PenLine className="h-4 w-4" />
+                            </Button>
+                          )}
+                          <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <Card className="border-border">
+                  <CardContent className="py-8 text-center">
+                    <Shield className="h-10 w-10 mx-auto text-muted-foreground/50 mb-3" />
+                    <p className="text-sm text-muted-foreground">No permits found</p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {permitSearchTerm !== '' || permitMmpFilter !== 'all' || permitStateFilter !== 'all' || permitLocalityFilter !== 'all' || permitTypeFilter !== 'all'
+                        ? 'Try adjusting your search or filters' 
+                        : 'Permits will appear here when uploaded'}
+                    </p>
+                  </CardContent>
+                </Card>
+              )}
+            </div>
+          )}
+
+          {/* Site Photos Tab - filters and site cards */}
+          {activeTab === 'site_photos' && (
+            <div className="space-y-4 mb-4">
+              {/* Site Photos Filters */}
+              <Card className="border-border">
+                <CardContent className="py-3">
+                  {/* Search bar */}
+                  <div className="mb-3">
+                    <div className="relative">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                      <Input
+                        placeholder="Search by site name, MMP, state, locality..."
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        className="pl-9"
+                        data-testid="site-photos-search"
+                      />
+                    </div>
+                  </div>
+                  
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    <div className="space-y-1">
+                      <label className="text-xs font-medium text-muted-foreground">MMP</label>
+                      <Select 
+                        value={sitePhotoMmpFilter} 
+                        onValueChange={(v) => { 
+                          setSitePhotoMmpFilter(v); 
+                          setSitePhotoStateFilter('all');
+                          setSitePhotoLocalityFilter('all');
+                          setSitePhotoSiteFilter('all');
+                        }}
+                      >
+                        <SelectTrigger className="h-9" data-testid="site-photo-mmp-filter">
+                          <SelectValue placeholder="All MMPs" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">All MMPs</SelectItem>
+                          {sitePhotoFilterOptions.mmps.map(m => (
+                            <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-xs font-medium text-muted-foreground">State</label>
+                      <Select 
+                        value={sitePhotoStateFilter} 
+                        onValueChange={(v) => { 
+                          setSitePhotoStateFilter(v);
+                          setSitePhotoLocalityFilter('all');
+                          setSitePhotoSiteFilter('all');
+                        }}
+                      >
+                        <SelectTrigger className="h-9" data-testid="site-photo-state-filter">
+                          <SelectValue placeholder="All States" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">All States</SelectItem>
+                          {sitePhotoFilterOptions.states.map(s => (
+                            <SelectItem key={s} value={s}>{s}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-xs font-medium text-muted-foreground">Locality</label>
+                      <Select 
+                        value={sitePhotoLocalityFilter} 
+                        onValueChange={(v) => { 
+                          setSitePhotoLocalityFilter(v);
+                          setSitePhotoSiteFilter('all');
+                        }}
+                      >
+                        <SelectTrigger className="h-9" data-testid="site-photo-locality-filter">
+                          <SelectValue placeholder="All Localities" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">All Localities</SelectItem>
+                          {sitePhotoFilterOptions.localities.map(l => (
+                            <SelectItem key={l} value={l}>{l}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-xs font-medium text-muted-foreground">Site</label>
+                      <Select 
+                        value={sitePhotoSiteFilter} 
+                        onValueChange={setSitePhotoSiteFilter}
+                      >
+                        <SelectTrigger className="h-9" data-testid="site-photo-site-filter">
+                          <SelectValue placeholder="All Sites" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">All Sites</SelectItem>
+                          {sitePhotoFilterOptions.sites.map(s => (
+                            <SelectItem key={s} value={s}>{s}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  
+                  {/* Active filters indicator */}
+                  {(searchTerm !== '' || sitePhotoMmpFilter !== 'all' || sitePhotoStateFilter !== 'all' || sitePhotoLocalityFilter !== 'all' || sitePhotoSiteFilter !== 'all') && (
+                    <div className="flex items-center justify-between mt-3 pt-3 border-t border-border">
+                      <p className="text-xs text-muted-foreground">
+                        Showing {sitePhotoGroups.length} site{sitePhotoGroups.length !== 1 ? 's' : ''} • {sitePhotoGroups.reduce((sum, g) => sum + g.photos.length, 0)} photos
+                      </p>
+                      <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        className="h-7 text-xs"
+                        onClick={() => {
+                          setSearchTerm('');
+                          setSitePhotoMmpFilter('all');
+                          setSitePhotoStateFilter('all');
+                          setSitePhotoLocalityFilter('all');
+                          setSitePhotoSiteFilter('all');
+                        }}
+                      >
+                        Clear filters
+                      </Button>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Site Cards */}
+              {sitePhotoGroups.length > 0 ? (
+                <div className="space-y-2">
+                  {sitePhotoGroups.map((group) => (
+                    <button
+                      key={`${group.mmpId}-${group.siteName}`}
+                      type="button"
+                      onClick={async () => {
+                        setViewingSitePhotos({
+                          siteName: group.siteName,
+                          mmpName: group.mmpName,
+                          mmpId: group.mmpId,
+                          state: group.state,
+                          locality: group.locality,
+                          photos: group.photos,
+                          siteVisitId: group.siteVisitId
+                        });
+                        setViewingSitePhotoIndex(0);
+                        setSiteEntryDetails(null);
+                        
+                        // Fetch site entry details if we have a siteVisitId
+                        if (group.siteVisitId) {
+                          setLoadingSiteDetails(true);
+                          try {
+                            // Try to get from mmp_site_entries first
+                            const { data: siteEntry } = await supabase
+                              .from('mmp_site_entries')
+                              .select('site_code, status, visit_completed_at, visit_completed_by, claimed_by, accepted_by')
+                              .eq('id', group.siteVisitId)
+                              .maybeSingle();
+                            
+                            if (siteEntry) {
+                              // Get user name for completed_by
+                              let completedByName = siteEntry.visit_completed_by;
+                              if (siteEntry.visit_completed_by) {
+                                const { data: user } = await supabase
+                                  .from('profiles')
+                                  .select('username, full_name')
+                                  .eq('id', siteEntry.visit_completed_by)
+                                  .maybeSingle();
+                                if (user) completedByName = user.full_name || user.username || siteEntry.visit_completed_by;
+                              }
+                              
+                              // Get user name for claimed_by/accepted_by
+                              let claimedByName = siteEntry.claimed_by || siteEntry.accepted_by;
+                              const claimedById = siteEntry.claimed_by || siteEntry.accepted_by;
+                              if (claimedById) {
+                                const { data: user } = await supabase
+                                  .from('profiles')
+                                  .select('username, full_name')
+                                  .eq('id', claimedById)
+                                  .maybeSingle();
+                                if (user) claimedByName = user.full_name || user.username || claimedById;
+                              }
+                              
+                              setSiteEntryDetails({
+                                siteCode: siteEntry.site_code,
+                            status: siteEntry.status,
+                            completedAt: siteEntry.visit_completed_at,
+                            completedBy: completedByName,
+                            claimedBy: claimedByName
+                          });
+                        }
+                        
+                        // Also try to get report details
+                        const { data: report } = await supabase
+                          .from('reports')
+                          .select('duration_minutes, coordinates')
+                          .eq('site_visit_id', group.siteVisitId)
+                          .maybeSingle();
+                        
+                        if (report) {
+                          setSiteEntryDetails(prev => ({
+                            ...prev,
+                            visitDuration: report.duration_minutes,
+                            coordinates: report.coordinates as { latitude?: number; longitude?: number } | undefined
+                          }));
+                        }
+                      } catch (err) {
+                        console.error('Error fetching site details:', err);
+                      } finally {
+                        setLoadingSiteDetails(false);
+                      }
+                    }
+                  }}
+                  className="w-full flex items-center justify-between p-3 rounded-lg border border-border hover:bg-muted/50 transition-colors text-left"
+                  data-testid={`site-photos-card-${group.mmpId}-${group.siteName}`}
+                >
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium truncate">{group.siteName}</p>
+                    <p className="text-xs text-muted-foreground truncate">{group.mmpName}</p>
+                  </div>
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    <Badge variant="secondary" className="text-xs">{group.photos.length} photos</Badge>
+                    {group.lastVisited && (
+                      <span className="text-xs text-muted-foreground hidden sm:inline">
+                        {formatDistanceToNow(new Date(group.lastVisited), { addSuffix: true })}
+                      </span>
+                    )}
+                    <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                  </div>
+                </button>
+                  ))}
+                </div>
+              ) : (
+                <Card className="border-border">
+                  <CardContent className="py-8 text-center">
+                    <Image className="h-10 w-10 mx-auto text-muted-foreground/50 mb-3" />
+                    <p className="text-sm text-muted-foreground">No site photos found</p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {searchTerm !== '' || sitePhotoMmpFilter !== 'all' || sitePhotoStateFilter !== 'all' || sitePhotoLocalityFilter !== 'all' || sitePhotoSiteFilter !== 'all' 
+                        ? 'Try adjusting your search or filters' 
+                        : 'Site photos will appear here when sites are completed'}
+                    </p>
+                  </CardContent>
+                </Card>
+              )}
+            </div>
+          )}
+
+          {/* When an MMP is selected, show completed sites for that MMP with attached photos (hide on site_photos tab which has its own filter) */}
+          {activeTab !== 'site_photos' && mmpFilter !== 'all' && siteGroupsForSelectedMmp.length > 0 && (
             <Card className="border-border mb-4">
               <CardHeader className="pb-3">
                 <div className="flex items-center justify-between">
@@ -2091,216 +3078,12 @@ const DocumentsPage = () => {
             </Card>
           )}
 
+          {/* Document list for All, MMP, and Receipts tabs - filters are above */}
+          {activeTab !== 'site_photos' && activeTab !== 'permits' && (
           <Card className="border-border">
             <CardHeader className="pb-3">
-              <div className="flex flex-col lg:flex-row lg:items-center gap-3">
-                <div className="relative flex-1">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    placeholder="Search by name, project, index number..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="pl-9"
-                    data-testid="input-search-documents"
-                  />
-                </div>
-                <div className="flex flex-wrap gap-2 items-center">
-                  {/* MMP Selector: show on permits and site_photos tabs, or on 'all' tab */}
-                  {(activeTab === 'all' || activeTab === 'permits' || activeTab === 'site_photos') && (
-                    <Select value={mmpFilter} onValueChange={(v) => { setMmpFilter(v); setPermitTypeFilter('all'); }}>
-                      <SelectTrigger className="w-[180px]" data-testid="select-mmp-filter">
-                        <SelectValue placeholder="All MMPs" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">All MMPs</SelectItem>
-                        {availableMmps.map(m => (
-                          <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  )}
-
-                  {/* Permit type selector: show only for Permits tab */}
-                  {activeTab === 'permits' && (
-                    (() => {
-                      // Count permits by type for the currently selected MMP (or all MMPs if no MMP selected)
-                      const docsToCount = mmpFilter !== 'all' 
-                        ? documents.filter(d => d.mmpId === mmpFilter && d.category.includes('permit'))
-                        : documents.filter(d => d.category.includes('permit'));
-                      
-                      const fed = docsToCount.filter(d => d.category === 'federal_permit').length;
-                      const st = docsToCount.filter(d => d.category === 'state_permit').length;
-                      const loc = docsToCount.filter(d => d.category === 'local_permit').length;
-                      return (
-                        <Select value={permitTypeFilter} onValueChange={setPermitTypeFilter}>
-                          <SelectTrigger className="w-[130px]" data-testid="select-permit-type-filter">
-                            <SelectValue placeholder="All Types" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="all">All ({fed + st + loc})</SelectItem>
-                            {fed > 0 && <SelectItem value="federal">Federal ({fed})</SelectItem>}
-                            {st > 0 && <SelectItem value="state">State ({st})</SelectItem>}
-                            {loc > 0 && <SelectItem value="local">Local ({loc})</SelectItem>}
-                          </SelectContent>
-                        </Select>
-                      );
-                    })()
-                  )}
-
-                  {/* Category selector: only show on 'all' and 'receipts' tabs */}
-                  {(activeTab === 'all' || activeTab === 'receipts') && (
-                    <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-                      <SelectTrigger className="w-[140px]" data-testid="select-category-filter">
-                        <SelectValue placeholder="Category" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {activeTab === 'all' && (
-                          <>
-                            <SelectItem value="all">All</SelectItem>
-                            <SelectItem value="mmp_file">MMP</SelectItem>
-                            <SelectItem value="federal_permit">Federal</SelectItem>
-                            <SelectItem value="state_permit">State</SelectItem>
-                            <SelectItem value="local_permit">Local</SelectItem>
-                            <SelectItem value="cost_receipt">Cost Receipt</SelectItem>
-                            <SelectItem value="transaction_receipt">Transaction</SelectItem>
-                            <SelectItem value="site_visit_photo">Site Photo</SelectItem>
-                            <SelectItem value="report">Report</SelectItem>
-                            <SelectItem value="other">Other</SelectItem>
-                          </>
-                        )}
-                        {activeTab === 'receipts' && (
-                          <>
-                            <SelectItem value="all">All</SelectItem>
-                            <SelectItem value="cost_receipt">Cost</SelectItem>
-                            <SelectItem value="transaction_receipt">Transaction</SelectItem>
-                          </>
-                        )}
-                      </SelectContent>
-                    </Select>
-                  )}
-                  <Select value={statusFilter} onValueChange={setStatusFilter}>
-                    <SelectTrigger className="w-[110px]" data-testid="select-status-filter">
-                      <SelectValue placeholder="Status" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All</SelectItem>
-                      <SelectItem value="verified">Verified</SelectItem>
-                      <SelectItem value="pending">Pending</SelectItem>
-                    </SelectContent>
-                  </Select>
-
-                  {/* Advanced Filters Popover */}
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <Button variant="outline" size="sm" data-testid="button-advanced-filters">
-                        <Filter className="h-4 w-4" />
-                        {advancedFiltersCount > 0 && (
-                          <Badge variant="secondary" className="ml-1 h-5 w-5 p-0 flex items-center justify-center text-xs">
-                            {advancedFiltersCount}
-                          </Badge>
-                        )}
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-80" align="end">
-                      <div className="space-y-4">
-                        <div className="flex items-center justify-between">
-                          <h4 className="font-medium">Advanced Filters</h4>
-                          {activeAdvancedFiltersCount > 0 && (
-                            <Button variant="ghost" size="sm" onClick={resetFilters} data-testid="button-reset-filters">
-                              <X className="h-3 w-3 mr-1" />
-                              Reset
-                            </Button>
-                          )}
-                        </div>
-                        
-                        {/* Project Filter */}
-                        <div className="space-y-2">
-                          <label className="text-sm font-medium flex items-center gap-1">
-                            <Briefcase className="h-3 w-3" />
-                            Project
-                          </label>
-                          <Select value={projectFilter} onValueChange={setProjectFilter}>
-                            <SelectTrigger data-testid="select-project-filter">
-                              <SelectValue placeholder="All Projects" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="all">All Projects</SelectItem>
-                              {projects.map(p => (
-                                <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        
-                        {/* Month Filter */}
-                        <div className="space-y-2">
-                          <label className="text-sm font-medium flex items-center gap-1">
-                            <Calendar className="h-3 w-3" />
-                            Month
-                          </label>
-                          <Select value={monthFilter} onValueChange={setMonthFilter}>
-                            <SelectTrigger data-testid="select-month-filter">
-                              <SelectValue placeholder="All Months" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="all">All Months</SelectItem>
-                              {availableMonths.map(m => (
-                                <SelectItem key={m} value={m}>
-                                  {safeFormatDate(`${m}-01`, 'MMMM yyyy', m)}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        
-                        {/* State Filter */}
-                        {availableStates.length > 0 && (
-                          <div className="space-y-2">
-                            <label className="text-sm font-medium flex items-center gap-1">
-                              <MapPin className="h-3 w-3" />
-                              State
-                            </label>
-                            <Select value={stateFilter} onValueChange={setStateFilter}>
-                              <SelectTrigger data-testid="select-state-filter">
-                                <SelectValue placeholder="All States" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="all">All States</SelectItem>
-                                {availableStates.map(s => (
-                                  <SelectItem key={s} value={s}>{s}</SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          </div>
-                        )}
-                        {/* Locality Filter */}
-                        {availableLocalities.length > 0 && (
-                          <div className="space-y-2">
-                            <label className="text-sm font-medium flex items-center gap-1">
-                              <Building2 className="h-3 w-3" />
-                              Locality
-                            </label>
-                            <Select value={localityFilter} onValueChange={setLocalityFilter}>
-                              <SelectTrigger data-testid="select-locality-filter">
-                                <SelectValue placeholder="All Localities" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="all">All Localities</SelectItem>
-                                {availableLocalities.map(l => (
-                                  <SelectItem key={l} value={l}>{l}</SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          </div>
-                        )}
-                      </div>
-                    </PopoverContent>
-                  </Popover>
-                </div>
-              </div>
-
               {/* Sort buttons */}
-              <div className="flex items-center gap-1 mt-3 flex-wrap">
+              <div className="flex items-center gap-1 flex-wrap">
                 <span className="text-xs text-muted-foreground mr-2">Sort by:</span>
                 <SortButton field="indexNo" label="Index" />
                 <SortButton field="fileName" label="Name" />
@@ -2314,11 +3097,15 @@ const DocumentsPage = () => {
                   <FileText className="h-12 w-12 mx-auto text-muted-foreground mb-3" />
                   <p className="text-muted-foreground font-medium">No documents found</p>
                   <p className="text-sm text-muted-foreground mt-1 mb-4">
-                    {searchTerm || categoryFilter !== 'all' || statusFilter !== 'all' 
+                    {(activeTab === 'all' && (allSearchTerm || allMmpFilter !== 'all' || allStateFilter !== 'all' || allLocalityFilter !== 'all')) ||
+                     (activeTab === 'mmp' && (mmpSearchTerm || mmpTabStateFilter !== 'all')) ||
+                     (activeTab === 'receipts' && (receiptsSearchTerm || receiptsMmpFilter !== 'all' || receiptsStateFilter !== 'all' || receiptsLocalityFilter !== 'all'))
                       ? 'Try adjusting your filters' 
                       : 'Documents will appear here when uploaded. If you have uploaded documents, try syncing the index.'}
                   </p>
-                  {!searchTerm && categoryFilter === 'all' && statusFilter === 'all' && (
+                  {!(activeTab === 'all' && (allSearchTerm || allMmpFilter !== 'all')) &&
+                   !(activeTab === 'mmp' && mmpSearchTerm) &&
+                   !(activeTab === 'receipts' && receiptsSearchTerm) && (
                     <Button 
                       variant="outline" 
                       onClick={handleSyncDocuments}
@@ -2609,6 +3396,7 @@ const DocumentsPage = () => {
               )}
             </CardContent>
           </Card>
+          )}
         </TabsContent>
       </Tabs>
 
@@ -2766,6 +3554,216 @@ const DocumentsPage = () => {
                 Edit Permit
               </Button>
             )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Site Photos View Dialog */}
+      <Dialog open={!!viewingSitePhotos} onOpenChange={(open) => { if (!open) { setViewingSitePhotos(null); setSiteEntryDetails(null); } }}>
+        <DialogContent className="sm:max-w-[900px] max-h-[90vh] overflow-hidden flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Image className="h-5 w-5" />
+              {viewingSitePhotos?.siteName || 'Site Photos'}
+            </DialogTitle>
+            <p className="text-sm text-muted-foreground">
+              {viewingSitePhotos?.mmpName} • {viewingSitePhotos?.photos.length} photos
+            </p>
+          </DialogHeader>
+          
+          {viewingSitePhotos && viewingSitePhotos.photos.length > 0 && (
+            <div className="flex-1 flex flex-col lg:flex-row gap-4 min-h-0 overflow-y-auto">
+              {/* Left side - Photos */}
+              <div className="flex-1 flex flex-col min-h-0">
+                {/* Main Photo Display */}
+                <div className="relative flex-1 min-h-[250px] max-h-[50vh] flex items-center justify-center bg-muted/30 rounded-lg overflow-hidden">
+                  <img
+                    src={viewingSitePhotos.photos[viewingSitePhotoIndex]?.fileUrl}
+                    alt={viewingSitePhotos.photos[viewingSitePhotoIndex]?.fileName || 'Site photo'}
+                    className="max-w-full max-h-full object-contain"
+                  />
+                  
+                  {/* Navigation Arrows */}
+                  {viewingSitePhotos.photos.length > 1 && (
+                    <>
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        className="absolute left-2 top-1/2 -translate-y-1/2 bg-background/80 hover:bg-background"
+                        onClick={() => setViewingSitePhotoIndex(prev => 
+                          prev === 0 ? viewingSitePhotos.photos.length - 1 : prev - 1
+                        )}
+                        disabled={viewingSitePhotos.photos.length <= 1}
+                      >
+                        <ChevronLeft className="h-5 w-5" />
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        className="absolute right-2 top-1/2 -translate-y-1/2 bg-background/80 hover:bg-background"
+                        onClick={() => setViewingSitePhotoIndex(prev => 
+                          prev === viewingSitePhotos.photos.length - 1 ? 0 : prev + 1
+                        )}
+                        disabled={viewingSitePhotos.photos.length <= 1}
+                      >
+                        <ChevronRight className="h-5 w-5" />
+                      </Button>
+                    </>
+                  )}
+                </div>
+                
+                {/* Photo Info */}
+                <div className="mt-3 flex items-center justify-between text-sm">
+                  <div className="min-w-0">
+                    <p className="font-medium truncate">{viewingSitePhotos.photos[viewingSitePhotoIndex]?.fileName}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {viewingSitePhotos.photos[viewingSitePhotoIndex]?.uploadedAt && 
+                        formatDistanceToNow(new Date(viewingSitePhotos.photos[viewingSitePhotoIndex].uploadedAt), { addSuffix: true })}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-muted-foreground">
+                      {viewingSitePhotoIndex + 1} / {viewingSitePhotos.photos.length}
+                    </span>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => window.open(viewingSitePhotos.photos[viewingSitePhotoIndex]?.fileUrl, '_blank')}
+                    >
+                      <ExternalLink className="h-4 w-4 mr-1" />
+                      Open
+                    </Button>
+                  </div>
+                </div>
+                
+                {/* Thumbnail Strip */}
+                {viewingSitePhotos.photos.length > 1 && (
+                  <div className="mt-3 flex gap-2 overflow-x-auto pb-2">
+                    {viewingSitePhotos.photos.map((photo, idx) => (
+                      <button
+                        key={photo.id}
+                        type="button"
+                        onClick={() => setViewingSitePhotoIndex(idx)}
+                        className={`flex-shrink-0 w-14 h-14 rounded-md overflow-hidden border-2 transition-colors ${
+                          idx === viewingSitePhotoIndex ? 'border-primary' : 'border-transparent hover:border-muted-foreground/50'
+                        }`}
+                      >
+                        <img
+                          src={photo.fileUrl}
+                          alt={photo.fileName}
+                          className="w-full h-full object-cover"
+                          loading="lazy"
+                        />
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+              
+              {/* Right side - Site Details */}
+              <div className="lg:w-[280px] flex-shrink-0 bg-muted/30 rounded-lg p-4 space-y-4">
+                <h4 className="font-semibold text-sm border-b pb-2">Site Details</h4>
+                
+                {loadingSiteDetails ? (
+                  <div className="flex items-center justify-center py-8">
+                    <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                  </div>
+                ) : (
+                  <div className="space-y-3 text-sm">
+                    {/* Site Code */}
+                    {siteEntryDetails?.siteCode && (
+                      <div>
+                        <p className="text-xs text-muted-foreground">Site Code</p>
+                        <p className="font-medium">{siteEntryDetails.siteCode}</p>
+                      </div>
+                    )}
+                    
+                    {/* Location */}
+                    {(viewingSitePhotos.state || viewingSitePhotos.locality) && (
+                      <div>
+                        <p className="text-xs text-muted-foreground">Location</p>
+                        <p className="font-medium flex items-center gap-1">
+                          <MapPin className="h-3 w-3" />
+                          {viewingSitePhotos.state}{viewingSitePhotos.locality ? ` - ${viewingSitePhotos.locality}` : ''}
+                        </p>
+                      </div>
+                    )}
+                    
+                    {/* Status */}
+                    {siteEntryDetails?.status && (
+                      <div>
+                        <p className="text-xs text-muted-foreground">Status</p>
+                        <Badge variant={siteEntryDetails.status === 'Completed' ? 'default' : 'secondary'}>
+                          {siteEntryDetails.status}
+                        </Badge>
+                      </div>
+                    )}
+                    
+                    {/* Completed By */}
+                    {siteEntryDetails?.completedBy && (
+                      <div>
+                        <p className="text-xs text-muted-foreground">Completed By</p>
+                        <p className="font-medium flex items-center gap-1">
+                          <User className="h-3 w-3" />
+                          {siteEntryDetails.completedBy}
+                        </p>
+                      </div>
+                    )}
+                    
+                    {/* Claimed/Accepted By (Data Collector) */}
+                    {siteEntryDetails?.claimedBy && (
+                      <div>
+                        <p className="text-xs text-muted-foreground">Data Collector</p>
+                        <p className="font-medium flex items-center gap-1">
+                          <User className="h-3 w-3" />
+                          {siteEntryDetails.claimedBy}
+                        </p>
+                      </div>
+                    )}
+                    
+                    {/* Completed At */}
+                    {siteEntryDetails?.completedAt && (
+                      <div>
+                        <p className="text-xs text-muted-foreground">Completed At</p>
+                        <p className="font-medium flex items-center gap-1">
+                          <Clock className="h-3 w-3" />
+                          {format(new Date(siteEntryDetails.completedAt), 'PPp')}
+                        </p>
+                      </div>
+                    )}
+                    
+                    {/* Visit Duration */}
+                    {siteEntryDetails?.visitDuration && (
+                      <div>
+                        <p className="text-xs text-muted-foreground">Visit Duration</p>
+                        <p className="font-medium">{siteEntryDetails.visitDuration} minutes</p>
+                      </div>
+                    )}
+                    
+                    {/* Coordinates */}
+                    {siteEntryDetails?.coordinates?.latitude && siteEntryDetails?.coordinates?.longitude && (
+                      <div>
+                        <p className="text-xs text-muted-foreground">GPS Coordinates</p>
+                        <p className="font-medium text-xs">
+                          {siteEntryDetails.coordinates.latitude.toFixed(6)}, {siteEntryDetails.coordinates.longitude.toFixed(6)}
+                        </p>
+                      </div>
+                    )}
+                    
+                    {/* If no details loaded */}
+                    {!siteEntryDetails && !loadingSiteDetails && (
+                      <p className="text-muted-foreground text-center py-4">No additional details available</p>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setViewingSitePhotos(null); setSiteEntryDetails(null); }}>
+              Close
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
