@@ -3275,6 +3275,18 @@ const DocumentsPage = () => {
                                 {format(new Date(doc.uploadedAt), 'PPp')}
                               </span>
                             </div>
+                            {/* Compact metadata row */}
+                            <div className="text-xs text-muted-foreground mt-1 flex items-center gap-3 flex-wrap">
+                              <span className="truncate">{categoryLabels[doc.category] || doc.category}</span>
+                              {doc.mmpName && <span className="truncate">{doc.mmpName}</span>}
+                              {doc.siteName && <span className="truncate">{doc.siteName}</span>}
+                              {doc.monthBucket && <span>{doc.monthBucket}</span>}
+                              {doc.status && (
+                                <Badge variant={doc.status === 'verified' || doc.status === 'approved' ? 'default' : 'secondary'} className="text-xs">
+                                  {doc.status}
+                                </Badge>
+                              )}
+                            </div>
                             {/* Quick links to related pages */}
                             <div className="flex items-center gap-2 mt-1">
                               {doc.siteVisitId && (
