@@ -121,6 +121,60 @@ export const useMMPOperations = (mmpFiles: MMPFile[], setMMPFiles: React.Dispatc
       const { data: sessionData } = await supabase.auth.getSession();
       const currentUser = sessionData?.session?.user;
 
+      // Delete associated documents from document_index (permits, files)
+      try {
+        const { error: docError, data: docData } = await supabase
+          .from('document_index')
+          .delete()
+          .eq('mmp_id', id)
+          .select(); // Add select to get count of deleted rows
+        if (docError) {
+          console.error('[MMP Delete] CRITICAL - Failed to delete document_index entries:', {
+            error: docError.message,
+            details: docError.details,
+            mmp_id: id
+          });
+        } else {
+          const deletedCount = docData?.length || 0;
+          console.log('[MMP Delete] Cleaned up', deletedCount, 'document_index entries for MMP', id);
+        }
+      } catch (docDelError) {
+        console.error('[MMP Delete] Exception deleting document_index:', docDelError);
+      }
+
+      // Delete associated site photos
+      try {
+        const { data: sitePhotos, error: photoFetchError } = await supabase
+          .from('site_visit_photos')
+          .select('id')
+          .eq('mmp_id', id);
+        
+        if (photoFetchError) {
+          console.error('[MMP Delete] Failed to fetch site photos:', photoFetchError);
+        } else if (sitePhotos?.length) {
+          const photoIds = sitePhotos.map(p => p.id);
+          const { error: photoDelError, data: photoDelData } = await supabase
+            .from('site_visit_photos')
+            .delete()
+            .in('id', photoIds)
+            .select(); // Add select to verify deletion count
+          
+          if (photoDelError) {
+            console.error('[MMP Delete] CRITICAL - Failed to delete site photos:', {
+              error: photoDelError.message,
+              details: photoDelError.details,
+              photoCount: photoIds.length,
+              mmp_id: id
+            });
+          } else {
+            const deletedPhotoCount = photoDelData?.length || photoIds.length;
+            console.log('[MMP Delete] Deleted', deletedPhotoCount, 'site photos for MMP', id);
+          }
+        }
+      } catch (photoError) {
+        console.error('[MMP Delete] Exception deleting site photos:', photoError);
+      }
+
       // First, reverse wallet transactions for all site entries in this MMP
       const { data: siteEntries, error: sitesError } = await supabase
         .from('mmp_site_entries')

@@ -111,7 +111,7 @@ export const LocalityPermitUpload: React.FC<LocalityPermitUploadProps> = ({
             fileName: selectedFile.name,
             fileUrl: publicUrl,
             uploadedAt: new Date().toISOString(),
-            uploadedBy: 'coordinator',
+            uploadedBy: null,
             verified: false,
             issueDate: issueDate.toISOString().split('T')[0],
             expiryDate: expiryDate.toISOString().split('T')[0],

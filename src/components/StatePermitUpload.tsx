@@ -105,7 +105,7 @@ export const StatePermitUpload: React.FC<StatePermitUploadProps> = ({
             fileName: selectedFile.name,
             fileUrl: publicUrl,
             uploadedAt: new Date().toISOString(),
-            uploadedBy: userType,
+            uploadedBy: null,
             verified: userType === 'coordinator' ? false : true,
             issueDate: issueDate.toISOString().split('T')[0],
             expiryDate: expiryDate.toISOString().split('T')[0],
