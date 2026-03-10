@@ -578,7 +578,7 @@ const MMPUpload = () => {
         validationWarnings?: import("@/utils/csvValidator").CSVValidationError[];
       } = await uploadMMP(fileToUpload, {
         name: data.name,
-        month: data.month,
+        month: `${currentYear}-${String(data.month).padStart(2, '0')}`,
         projectId: data.project,
         ...(data.hub ? { hub: data.hub } : {})
       }, (progress) => {

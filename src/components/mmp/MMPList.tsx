@@ -239,7 +239,7 @@ export const MMPList = ({ mmpFiles, showActions = true }: MMPListProps) => {
                         <span className="font-mono text-blue-700">{mmp.mmpId}</span>
                         {mmp.projectName && <span> • Project: {mmp.projectName}</span>}
                         {mmp.hub && <span> • Hub: {mmp.hub}</span>}
-                        {mmp.month && <span> • {new Date(2024, parseInt(mmp.month) - 1).toLocaleDateString('en-US', { month: 'long' })}</span>}
+                        {mmp.month && <span> • {mmp.month.includes('-') ? format(new Date(mmp.month + '-01'), 'MMMM yyyy') : new Date(2024, parseInt(mmp.month, 10) - 1).toLocaleDateString('en-US', { month: 'long' })}</span>}
                       </p>
                       <div className="mt-2 flex items-center gap-4 text-xs text-muted-foreground">
                         <span>

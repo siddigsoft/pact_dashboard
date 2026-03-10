@@ -155,7 +155,7 @@ const MMPProgressDialog: React.FC<MMPProgressDialogProps> = ({ open, onOpenChang
                   </div>
                   <div>
                     <span className="text-sm font-medium text-muted-foreground">Month</span>
-                    <p>{mmpFile.month ? new Date(2024, parseInt(mmpFile.month) - 1).toLocaleDateString('en-US', { month: 'long' }) : 'N/A'}</p>
+                    <p>{mmpFile.month ? (mmpFile.month.includes('-') ? format(new Date(mmpFile.month + '-01'), 'MMMM yyyy') : new Date(2024, parseInt(mmpFile.month, 10) - 1).toLocaleDateString('en-US', { month: 'long' })) : 'N/A'}</p>
                   </div>
                   <div>
                     <span className="text-sm font-medium text-muted-foreground">Uploaded</span>

@@ -66,7 +66,7 @@ const MMPVerificationHeader: React.FC<MMPVerificationHeaderProps> = ({
           </div>
           <div className="space-y-1">
             <p className="text-sm">Uploaded: {format(new Date(mmpFile.uploadedAt), 'MMM dd, yyyy')}</p>
-            <p className="text-sm">Month: {mmpFile.month || 'N/A'}</p>
+            <p className="text-sm">Month: {mmpFile.month ? (mmpFile.month.includes('-') ? format(new Date(mmpFile.month + '-01'), 'MMMM yyyy') : new Date(2024, parseInt(mmpFile.month, 10) - 1).toLocaleDateString('en-US', { month: 'long' })) : 'N/A'}</p>
             <p className="text-sm">Year: {mmpFile.year || 'N/A'}</p>
             {mmpFile.expiryDate && (
               <p className="text-sm">Expires: {format(new Date(mmpFile.expiryDate), 'MMM dd, yyyy')}</p>
