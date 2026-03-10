@@ -196,6 +196,7 @@ export interface ProcessPayment {
   processedBy: string;
   processedByName?: string;
   notes?: string;
+  receiptUrl?: string | null;
 }
 
 export interface DownPaymentFilter {

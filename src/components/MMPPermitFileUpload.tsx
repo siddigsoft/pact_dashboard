@@ -27,7 +27,7 @@ const permitTypes = [
   // Extend later for state/local permits
 ];
 
-export const MMPPermitFileUpload: React.FC<MMPPermitFileUploadProps> = ({ onUploadSuccess, bucket = 'mmp-files', pathPrefix }) => {
+export const MMPPermitFileUpload: React.FC<MMPPermitFileUploadProps> = ({ onUploadSuccess, bucket = 'federal-permits', pathPrefix }) => {
   const [uploading, setUploading] = useState(false);
   const [issueDate, setIssueDate] = useState<Date>();
   const [expiryDate, setExpiryDate] = useState<Date>();
@@ -117,7 +117,7 @@ export const MMPPermitFileUpload: React.FC<MMPPermitFileUploadProps> = ({ onUplo
       const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
       if (sessionError || !sessionData.session) throw new Error("Session expired. Please log in again.");
 
-      const filePath = `${pathPrefix || 'permits'}/federal`;
+      const filePath = `${pathPrefix || 'federal'}`;
       const uploadResult = await safeUploadFile(selectedFile, {
         bucket,
         path: filePath,

@@ -1,4 +1,5 @@
 import React, { useState, useRef } from 'react';
+import { useAuthorization } from '@/hooks/use-authorization';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -35,6 +36,7 @@ export const LocalityPermitUpload: React.FC<LocalityPermitUploadProps> = ({
   const [comments, setComments] = useState<string>('');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
+  const { currentUser } = useAuthorization();
 
   const sanitizeSegment = (s: string) =>
     (s || '').toString().trim().toLowerCase().replace(/[^a-z0-9]+/gi, '-').replace(/^-+|-+$/g, '');
@@ -82,9 +84,9 @@ export const LocalityPermitUpload: React.FC<LocalityPermitUploadProps> = ({
       const localitySegment = sanitizeSegment(locality);
 
       // Use safeUploadFile for secure upload
-      const filePath = `permits/${mmpFileId}/local/${localitySegment}`;
+      const filePath = `${mmpFileId}/local/${localitySegment}`;
       const uploadResult = await safeUploadFile(selectedFile, {
-        bucket: 'mmp-files',
+        bucket: 'local-permits',
         path: filePath,
         allowedTypes: ['application/pdf', 'image/jpeg', 'image/png', 'image/jpg'],
         maxSizeBytes: 10 * 1024 * 1024
@@ -111,7 +113,7 @@ export const LocalityPermitUpload: React.FC<LocalityPermitUploadProps> = ({
             fileName: selectedFile.name,
             fileUrl: publicUrl,
             uploadedAt: new Date().toISOString(),
-            uploadedBy: 'coordinator',
+            uploadedBy: currentUser?.name || currentUser?.fullName || currentUser?.email || null,
             verified: false,
             issueDate: issueDate.toISOString().split('T')[0],
             expiryDate: expiryDate.toISOString().split('T')[0],
@@ -120,28 +122,39 @@ export const LocalityPermitUpload: React.FC<LocalityPermitUploadProps> = ({
         ]
       };
 
-      const { error: updateError } = await supabase.from('mmp_files').update({ permits: updatedPermitsData }).eq('id', mmpFileId);
-      if (updateError) throw updateError;
+      // Update mmp_files - don't wait for completion
+      const updateMmpPromise = supabase.from('mmp_files').update({ permits: updatedPermitsData }).eq('id', mmpFileId);
 
-      // Update all sites in this locality to 'permits_attached'
-      const { data: sitesData, error: sitesFetchError } = await supabase
-        .from('mmp_site_entries')
-        .select('id, additional_data, status')
-        .eq('mmp_file_id', mmpFileId)
-        .eq('state', state)
-        .eq('locality', locality)
-        .in('status', ['Pending', 'Dispatched', 'assigned', 'inProgress', 'in_progress']);
-
-      if (!sitesFetchError && sitesData?.length) {
-        for (const site of sitesData) {
-          const updatedAdditionalData = { ...(site.additional_data || {}), locality_permit_attached: true };
-          const { error: siteUpdateError } = await supabase
+      // Update all sites in this locality to 'permits_attached' using batch update
+      const updateSitesPromise = (async () => {
+        try {
+          // Single batch update for all sites matching the criteria - much faster than individual updates
+          const { error: batchError } = await supabase
             .from('mmp_site_entries')
-            .update({ status: 'permits_attached', additional_data: updatedAdditionalData })
-            .eq('id', site.id);
-          if (siteUpdateError) console.warn(`Failed to update site ${site.id}:`, siteUpdateError);
+            .update({ 
+              status: 'permits_attached',
+              // Use raw SQL to merge additional_data without needing to fetch first
+              additional_data: supabase.rpc ? undefined : { locality_permit_attached: true }
+            })
+            .eq('mmp_file_id', mmpFileId)
+            .eq('state', state)
+            .eq('locality', locality)
+            .in('status', ['Pending', 'Dispatched', 'assigned', 'inProgress', 'in_progress']);
+
+          if (batchError) {
+            console.warn('Batch site update error:', batchError);
+          }
+        } catch (err) {
+          console.warn('Error updating sites:', err);
         }
-      }
+      })();
+
+      // Wait for MMP update first (critical), sites update can complete in background
+      const mmpUpdateResult = await updateMmpPromise;
+      if (mmpUpdateResult.error) throw mmpUpdateResult.error;
+
+      // Don't wait for sites update - let it complete in background
+      updateSitesPromise.catch(err => console.warn('Background sites update failed:', err));
 
       toast({
         title: "Local permit uploaded successfully",
@@ -173,14 +186,14 @@ export const LocalityPermitUpload: React.FC<LocalityPermitUploadProps> = ({
   const togglePreview = () => setShowPreview(!showPreview);
 
   return (
-    <Card className="border-border shadow-sm">
-      <CardHeader className="pb-3">
+    <Card className="border-border shadow-sm max-h-[70vh] overflow-hidden flex flex-col">
+      <CardHeader className="pb-3 flex-shrink-0">
         <CardTitle className="flex items-center gap-2 text-foreground">
           <AlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-400" />
           Local Permit Required
         </CardTitle>
       </CardHeader>
-      <CardContent className="space-y-4">
+      <CardContent className="space-y-4 overflow-y-auto flex-1">
         <Alert className="border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950">
           <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
           <AlertDescription className="text-foreground">

@@ -214,6 +214,8 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
   const [rejectionReason, setRejectionReason] = useState('');
   const [paymentAmount, setPaymentAmount] = useState(0);
   const [processing, setProcessing] = useState(false);
+  const [payProofFile, setPayProofFile] = useState<File | null>(null);
+  const [payProofPreviewUrl, setPayProofPreviewUrl] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState('pending');
   const [showFilters, setShowFilters] = useState(true);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -424,13 +426,27 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
     }
 
     setProcessing(true);
+    let receiptUrl: string | null = null;
     try {
+      if (payProofFile) {
+        const timestamp = Date.now();
+        const random = Math.random().toString(36).substring(2, 8);
+        const extension = payProofFile.name.split('.').pop()?.toLowerCase() || 'file';
+        const filePath = `payment-proofs/process_${timestamp}_${random}.${extension}`;
+        const { error: uploadErr } = await supabase.storage
+          .from('mmp-files')
+          .upload(filePath, payProofFile, { cacheControl: '3600', upsert: false });
+        if (uploadErr) throw new Error(uploadErr.message);
+        receiptUrl = supabase.storage.from('mmp-files').getPublicUrl(filePath).data.publicUrl;
+      }
+
       const success = await processPayment({
         requestId: selectedRequest.id,
         amount: paymentAmount,
         processedBy: currentUser.id,
         processedByName: currentUser.fullName || currentUser.email,
         notes,
+        receiptUrl,
       });
 
       if (success) {
@@ -608,6 +624,18 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
     setCustomPercentage(100);
     setCustomAmount(0);
     setRevertTarget('pending_supervisor');
+    if (payProofPreviewUrl) URL.revokeObjectURL(payProofPreviewUrl);
+    setPayProofFile(null);
+    setPayProofPreviewUrl(null);
+  };
+
+  const handlePayProofFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (payProofPreviewUrl) URL.revokeObjectURL(payProofPreviewUrl);
+    const preview = file.type.startsWith('image/') ? URL.createObjectURL(file) : null;
+    setPayProofFile(file);
+    setPayProofPreviewUrl(preview);
   };
 
   const openActionDialog = (request: DownPaymentRequest, actionType: 'approve' | 'reject' | 'pay' | 'view_audit' | 'revert') => {
@@ -2885,51 +2913,126 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
       </Dialog>
 
       <Dialog open={action === 'pay'} onOpenChange={() => closeDialog()}>
-        <DialogContent data-testid="dialog-payment">
-          <DialogHeader>
+        <DialogContent data-testid="dialog-payment" className="flex flex-col max-h-[90vh]">
+          <DialogHeader className="flex-shrink-0">
             <DialogTitle>Process Payment</DialogTitle>
           </DialogHeader>
 
-          {selectedRequest && (
-            <div className="space-y-4">
-              <div className="bg-muted/50 p-3 rounded-md space-y-2">
-                <p><strong>Site:</strong> {selectedRequest.siteName}</p>
-                <p><strong>Requested:</strong> {selectedRequest.requestedAmount.toLocaleString()} SDG</p>
-                <p><strong>Remaining:</strong> {selectedRequest.remainingAmount.toLocaleString()} SDG</p>
-              </div>
+          <div className="flex-1 overflow-y-auto pr-1">
+            {selectedRequest && (
+              <div className="space-y-4 py-1">
+                <div className="bg-muted/50 p-3 rounded-md space-y-2">
+                  <p><strong>Site:</strong> {selectedRequest.siteName}</p>
+                  <p><strong>Requested:</strong> {selectedRequest.requestedAmount.toLocaleString()} SDG</p>
+                  <p><strong>Remaining:</strong> {selectedRequest.remainingAmount.toLocaleString()} SDG</p>
+                </div>
 
-              <div>
-                <Label htmlFor="payment-amount">Payment Amount (SDG)</Label>
-                <Input
-                  id="payment-amount"
-                  type="number"
-                  value={paymentAmount}
-                  onChange={e => setPaymentAmount(parseFloat(e.target.value) || 0)}
-                  max={selectedRequest.remainingAmount}
-                  data-testid="input-payment-amount"
-                />
-              </div>
+                <div>
+                  <Label htmlFor="payment-amount">Payment Amount (SDG)</Label>
+                  <Input
+                    id="payment-amount"
+                    type="number"
+                    value={paymentAmount}
+                    onChange={e => setPaymentAmount(parseFloat(e.target.value) || 0)}
+                    max={selectedRequest.remainingAmount}
+                    data-testid="input-payment-amount"
+                  />
+                </div>
 
-              <div>
-                <Label htmlFor="payment-notes">Notes (Optional)</Label>
-                <Textarea
-                  id="payment-notes"
-                  value={notes}
-                  onChange={e => setNotes(e.target.value)}
-                  placeholder="Add payment notes..."
-                  rows={2}
-                  data-testid="textarea-payment-notes"
-                />
-              </div>
-            </div>
-          )}
+                <div>
+                  <Label htmlFor="payment-notes">Notes (Optional)</Label>
+                  <Textarea
+                    id="payment-notes"
+                    value={notes}
+                    onChange={e => setNotes(e.target.value)}
+                    placeholder="Add payment notes..."
+                    rows={2}
+                    data-testid="textarea-payment-notes"
+                  />
+                </div>
 
-          <DialogFooter>
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium">
+                    Payment Receipt / إيصال الدفع <span className="text-red-500">*</span>
+                  </Label>
+
+                  {/* Upload zone */}
+                  <div className={`border-2 border-dashed rounded-lg p-3 text-center transition-colors relative cursor-pointer ${
+                    payProofFile ? 'border-green-500/50 hover:border-green-400 bg-green-500/5' : 'border-red-400/60 hover:border-red-400'
+                  }`}>
+                    <input
+                      type="file"
+                      accept="image/*,application/pdf"
+                      className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                      onChange={handlePayProofFileChange}
+                      disabled={processing}
+                      data-testid="input-pay-proof-file"
+                    />
+                    {payProofFile ? (
+                      <div className="flex items-center justify-center gap-2 text-sm">
+                        <CheckCircle2 className="h-4 w-4 text-green-500 flex-shrink-0" />
+                        <span className="truncate max-w-[200px] text-green-600 dark:text-green-400 font-medium">{payProofFile.name}</span>
+                        <span className="text-xs text-muted-foreground flex-shrink-0">— click to change</span>
+                      </div>
+                    ) : (
+                      <div className="text-muted-foreground py-1">
+                        <ImageIcon className="h-7 w-7 mx-auto mb-1 opacity-40" />
+                        <p className="text-xs font-medium text-red-400">Receipt required / الإيصال مطلوب</p>
+                        <p className="text-xs opacity-60 mt-0.5">Upload image or PDF — visible to recipient</p>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Preview panel shown after file is selected */}
+                  {payProofFile && (
+                    <div className="rounded-lg border border-border bg-muted/30 overflow-hidden">
+                      {payProofPreviewUrl ? (
+                        <a href={payProofPreviewUrl} target="_blank" rel="noopener noreferrer" className="block group relative">
+                          <img
+                            src={payProofPreviewUrl}
+                            alt="Receipt preview"
+                            className="w-full max-h-52 object-contain bg-black/5 group-hover:opacity-90 transition-opacity"
+                          />
+                          <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/30">
+                            <span className="text-white text-xs font-medium bg-black/60 px-2 py-1 rounded">View full size</span>
+                          </div>
+                        </a>
+                      ) : (
+                        <div className="flex items-center gap-3 px-3 py-2.5">
+                          <FileText className="h-8 w-8 text-red-500 flex-shrink-0" />
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium truncate">{payProofFile.name}</p>
+                            <p className="text-xs text-muted-foreground">{(payProofFile.size / 1024).toFixed(1)} KB</p>
+                          </div>
+                          <a
+                            href={URL.createObjectURL(payProofFile)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={e => e.stopPropagation()}
+                            className="ml-auto text-xs text-primary underline flex-shrink-0"
+                          >
+                            Preview
+                          </a>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+
+          <DialogFooter className="flex-shrink-0 pt-3 border-t">
             <Button variant="outline" onClick={closeDialog} data-testid="button-cancel-payment">
               Cancel
             </Button>
-            <Button variant="default" onClick={handleProcessPayment} disabled={processing} data-testid="button-confirm-payment">
-              {processing ? 'Processing...' : 'Process Payment'}
+            <Button
+              variant="default"
+              onClick={handleProcessPayment}
+              disabled={processing || !payProofFile}
+              data-testid="button-confirm-payment"
+            >
+              {processing ? (payProofFile ? 'Uploading...' : 'Processing...') : 'Process Payment'}
             </Button>
           </DialogFooter>
         </DialogContent>

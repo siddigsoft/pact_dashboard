@@ -144,7 +144,8 @@ class NotificationRouteResolver {
     }
 
     if (normalizedType == 'fund_receipt_confirmation' ||
-        normalizedType == 'advance_disbursed') {
+        normalizedType == 'advance_disbursed' ||
+        normalizedType == 'advance_payment_action') {
       return const NotificationRouteDecision(
         kind: NotificationRouteKind.wallet,
         walletTab: 3,
@@ -204,7 +205,8 @@ class NotificationRouteResolver {
     switch (type.toLowerCase().trim()) {
       case 'fund_receipt_confirmation':
       case 'advance_disbursed':
-        return 'Confirm / تأكيد';
+      case 'advance_payment_action':
+        return 'Acknowledge / تأكيد الاستلام';
       default:
         return 'View / عرض';
     }

@@ -524,14 +524,15 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       if (transactionError) throw transactionError;
 
       // Update request to final 'approved' status with admin details
+      const processedAt = new Date().toISOString();
       const { error: requestError } = await supabase
         .from('withdrawal_requests')
         .update({
           status: 'approved',
           admin_processed_by: currentUser.id,
-          admin_processed_at: new Date().toISOString(),
+          admin_processed_at: processedAt,
           admin_notes: notes,
-          updated_at: new Date().toISOString(),
+          updated_at: processedAt,
         })
         .eq('id', requestId);
 
@@ -539,7 +540,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
       toast({
         title: 'Withdrawal Processed',
-        description: 'The payment has been completed and funds released',
+        description: 'Payment processed. The recipient will be asked to confirm receipt.',
       });
 
       // Send email notification to the requester

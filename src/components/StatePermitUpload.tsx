@@ -1,4 +1,5 @@
 import React, { useState, useRef } from 'react';
+import { useAuthorization } from '@/hooks/use-authorization';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -34,6 +35,7 @@ export const StatePermitUpload: React.FC<StatePermitUploadProps> = ({
   const [comments, setComments] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
+  const { currentUser } = useAuthorization();
 
   const sanitizeSegment = (s: string) =>
     (s || '').toString().trim().toLowerCase().replace(/[^a-z0-9]+/gi, '-').replace(/^-+|-+$/g, '');
@@ -77,9 +79,9 @@ export const StatePermitUpload: React.FC<StatePermitUploadProps> = ({
     try {
 
       const stateSegment = sanitizeSegment(state);
-      const filePath = `permits/${mmpFileId}/state/${stateSegment}`;
+      const filePath = `${mmpFileId}/state/${stateSegment}`;
       const uploadResult = await safeUploadFile(selectedFile, {
-        bucket: 'mmp-files',
+        bucket: 'state-permits',
         path: filePath,
         allowedTypes: ['application/pdf', 'image/jpeg', 'image/png', 'image/jpg'],
         maxSizeBytes: 10 * 1024 * 1024
@@ -105,7 +107,7 @@ export const StatePermitUpload: React.FC<StatePermitUploadProps> = ({
             fileName: selectedFile.name,
             fileUrl: publicUrl,
             uploadedAt: new Date().toISOString(),
-            uploadedBy: userType,
+            uploadedBy: currentUser?.name || currentUser?.fullName || currentUser?.email || null,
             verified: userType === 'coordinator' ? false : true,
             issueDate: issueDate.toISOString().split('T')[0],
             expiryDate: expiryDate.toISOString().split('T')[0],
@@ -114,19 +116,41 @@ export const StatePermitUpload: React.FC<StatePermitUploadProps> = ({
         ],
       };
 
-      const { error: updateError } = await supabase.from('mmp_files').update({ permits: updatedPermits }).eq('id', mmpFileId);
-      if (updateError) throw updateError;
+      // Run MMP update and site updates in parallel (don't wait for one before the other)
+      const updateMmpPromise = supabase.from('mmp_files').update({ permits: updatedPermits }).eq('id', mmpFileId);
 
-      // Update site entries in parallel
-      const { data: sitesData } = await supabase.from('mmp_site_entries').select('id, additional_data').eq('mmp_file_id', mmpFileId).eq('state', state);
-      if (sitesData?.length) {
-        await Promise.all(
-          sitesData.map((site) => {
-            const updatedAdditionalData = { ...(site.additional_data || {}), state_permit_attached: true };
-            return supabase.from('mmp_site_entries').update({ additional_data: updatedAdditionalData }).eq('id', site.id);
-          })
-        );
-      }
+      const updateSitesPromise = (async () => {
+        try {
+          const { data: sitesData } = await supabase
+            .from('mmp_site_entries')
+            .select('id, additional_data')
+            .eq('mmp_file_id', mmpFileId)
+            .eq('state', state);
+
+          if (sitesData?.length) {
+            await Promise.all(
+              sitesData.map(async (site) => {
+                try {
+                  const updatedAdditionalData = { ...(site.additional_data || {}), state_permit_attached: true };
+                  const { error } = await supabase
+                    .from('mmp_site_entries')
+                    .update({ additional_data: updatedAdditionalData })
+                    .eq('id', site.id);
+                  if (error) console.warn(`Failed to update site ${site.id}:`, error);
+                } catch (err) {
+                  console.warn(`Failed to update site ${site.id}:`, err);
+                }
+              })
+            );
+          }
+        } catch (err) {
+          console.warn('Error updating sites:', err);
+        }
+      })();
+
+      // Wait for both operations to complete
+      const [mmpUpdateResult] = await Promise.all([updateMmpPromise, updateSitesPromise]);
+      if (mmpUpdateResult.error) throw mmpUpdateResult.error;
 
       toast({
         title: 'State permit uploaded successfully',

@@ -730,7 +730,11 @@ function AdvanceRequestsReportContent() {
       }
       if (statusFilter !== 'all' && req.status !== statusFilter) return false;
       if (hubFilter !== 'all' && req.hubId !== hubFilter) return false;
-      if (mmpFilter !== 'all' && (req.mmpName || 'Unknown MMP') !== mmpFilter) return false;
+      if (mmpFilter !== 'all') {
+        const idMatch = ((req as any).mmpId && (req as any).mmpId === mmpFilter) || ((req as any).mmpSiteEntryId && (req as any).mmpSiteEntryId === mmpFilter) || ((req as any).mmp_file_id && (req as any).mmp_file_id === mmpFilter);
+        const nameMatch = (req.mmpName || 'Unknown MMP') === mmpFilter;
+        if (!idMatch && !nameMatch) return false;
+      }
       if (dateFilter !== 'all') {
         const reqDate = parseISO(req.requestedAt);
         const range = dateRanges[dateFilter as keyof typeof dateRanges];

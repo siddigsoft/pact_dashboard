@@ -6,7 +6,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useUser } from '@/context/user/UserContext';
 import { Hand, Loader2, CheckCircle, Wallet, Car, User, AlertCircle, Banknote, ShieldX, MapPinOff } from 'lucide-react';
-import { useClaimFeeCalculation, type ClaimFeeBreakdown } from '@/hooks/use-claim-fee-calculation';
+import { useClaimFeeCalculation, type ClaimFeeBreakdown, normalizeRoleScopeForEnum } from '@/hooks/use-claim-fee-calculation';
 import { CLASSIFICATION_LABELS, CLASSIFICATION_COLORS } from '@/types/classification';
 import { useClassification } from '@/context/classification/ClassificationContext';
 import { getStateName, getLocalityName } from '@/data/sudanStates';
@@ -166,6 +166,9 @@ export function ClaimSiteButton({
     setShowConfirmation(false);
 
     try {
+      // Normalize role_scope to match DB enum (matching mobile logic)
+      const normalizedRoleScope = normalizeRoleScopeForEnum(feeBreakdown.roleScope);
+      
       // Pass the calculated fee directly to the RPC for atomic update
       const { data, error } = await supabase.rpc('claim_site_visit', {
         p_site_id: siteId,
@@ -173,7 +176,7 @@ export function ClaimSiteButton({
         p_enumerator_fee: feeBreakdown.enumeratorFee,
         p_total_cost: feeBreakdown.totalPayout,
         p_classification_level: feeBreakdown.classificationLevel || null,
-        p_role_scope: feeBreakdown.roleScope || null,
+        p_role_scope: normalizedRoleScope,
         p_fee_source: feeBreakdown.feeSource
       });
 

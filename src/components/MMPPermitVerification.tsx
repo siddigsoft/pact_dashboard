@@ -557,8 +557,7 @@ const MMPPermitVerification: React.FC<MMPPermitVerificationProps> = ({
         <CardContent>
           <MMPPermitFileUpload 
             onUploadSuccess={handleUploadSuccess}
-            bucket="mmp-files"
-            pathPrefix={`permits/${mmpFile?.id || mmpFile?.mmpId || 'unknown'}`}
+            bucket="federal-permits"
           />
         </CardContent>
       </Card>

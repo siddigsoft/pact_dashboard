@@ -731,6 +731,8 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
         );
       }
 
+      const processedAt = new Date().toISOString();
+
       const { error: requestUpdateError } = await supabase
         .from('down_payment_requests')
         .update({
@@ -739,15 +741,22 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
           status: newStatus,
           wallet_transaction_ids: transactionIds,
           installment_plan: updatedInstallmentPlan,
-          updated_at: new Date().toISOString(),
-        })
+          updated_at: processedAt,
+          ...(data.receiptUrl ? {
+            payment_proof_url: data.receiptUrl,
+            payment_proof_uploaded_at: processedAt,
+            ...(data.notes?.trim() ? { payment_proof_notes: data.notes.trim() } : {}),
+          } : {}),
+        } as any)
         .eq('id', data.requestId);
 
       if (requestUpdateError) throw requestUpdateError;
 
       toastRef.current({
         title: 'Advance Recorded',
-        description: `Transport advance of ${data.amount} SDG recorded — will be deducted from site visit fee upon completion`,
+        description: data.receiptUrl
+          ? `Transport advance of ${data.amount} SDG recorded with payment receipt`
+          : `Transport advance of ${data.amount} SDG recorded`,
       });
 
       // Send FCM push notification to enumerator's mobile device
@@ -762,13 +771,18 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
           await supabase.functions.invoke('send-fcm-push', {
             body: {
               tokens,
-              title: '💰 Transport Advance Disbursed | تم صرف سلفة المواصلات',
-              body: `${data.amount} SDG — ${request.siteName}. Tap to confirm receipt.\nاضغط لتأكيد استلام السلفة.`,
+              title: '💰 تم صرف السلفة — يرجى التأكيد | Advance Disbursed — Action Required',
+              body: `${data.amount.toLocaleString()} SDG — ${request.siteName}\nهل استلمت المبلغ؟ اضغط لتأكيد الاستلام أو الإبلاغ عن عدم الاستلام.\nDid you receive the funds? Tap to ACKNOWLEDGE or report NOT YET RECEIVED.`,
               data: {
-                type: 'fund_receipt_confirmation',
+                type: 'advance_payment_action',
                 requestId: data.requestId,
                 siteName: request.siteName,
                 amount: String(data.amount),
+                has_receipt: data.receiptUrl ? 'true' : 'false',
+                receipt_url: data.receiptUrl || '',
+                action_acknowledge: 'confirm_received',
+                action_not_received: 'report_not_received',
+                navigate_to: 'wallet_advances',
               },
             },
           });

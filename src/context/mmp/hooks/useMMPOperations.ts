@@ -115,94 +115,207 @@ export const useMMPOperations = (mmpFiles: MMPFile[], setMMPFiles: React.Dispatc
         (async () => {
           // Get MMP details before deletion for audit logging
           const mmpToDelete = mmpFiles.find(m => m.id === id);
-      const mmpName = mmpToDelete?.name || 'Unknown MMP';
+          const mmpName = mmpToDelete?.name || mmpToDelete?.mmpId || 'Unknown MMP';
+          const mmpStorage = mmpToDelete?.filePath;
 
-      // Get current user for audit
-      const { data: sessionData } = await supabase.auth.getSession();
-      const currentUser = sessionData?.session?.user;
+          // Get current user for audit
+          const { data: sessionData } = await supabase.auth.getSession();
+          const currentUser = sessionData?.session?.user;
 
-      // First, reverse wallet transactions for all site entries in this MMP
-      const { data: siteEntries, error: sitesError } = await supabase
-        .from('mmp_site_entries')
-        .select('id, accepted_by, cost, enumerator_fee, transport_fee')
-        .eq('mmp_file_id', id)
-        .not('accepted_by', 'is', null);
+          console.log('[MMP Delete] Starting cascade delete for MMP:', { id, name: mmpName });
 
-      if (sitesError) {
-        console.error('Error fetching site entries for MMP deletion:', sitesError);
-      }
+          // 1. Get list of storage paths to delete from document_index before deleting records
+          let storagePaths: string[] = [];
+          try {
+            const { data: docs } = await supabase
+              .from('document_index')
+              .select('storage_path, file_url')
+              .eq('mmp_id', id);
+            
+            if (docs?.length) {
+              storagePaths = docs
+                .map(d => d.storage_path || (d.file_url ? new URL(d.file_url).pathname.split('/').pop() : null))
+                .filter((p): p is string => !!p);
+              console.log('[MMP Delete] Found', storagePaths.length, 'storage paths to clean');
+            }
+          } catch (err) {
+            console.warn('[MMP Delete] Could not fetch storage paths:', err);
+          }
 
-      // Reverse wallet transactions for each site entry
-      if (siteEntries && siteEntries.length > 0) {
-        for (const site of siteEntries) {
-          const totalAmount = (site.cost || 0) + (site.enumerator_fee || 0) + (site.transport_fee || 0);
-          if (totalAmount > 0 && site.accepted_by) {
-            // Create a reversal transaction
-            const { data: wallet } = await supabase
-              .from('wallets')
-              .select('id')
-              .eq('user_id', site.accepted_by)
-              .single();
+          // 2. Delete associated documents from document_index (permits, receipts, photos, files)
+          try {
+            const { error: docError, data: docData } = await supabase
+              .from('document_index')
+              .delete()
+              .eq('mmp_id', id)
+              .select();
+            if (docError) {
+              console.error('[MMP Delete] CRITICAL - Failed to delete document_index entries:', {
+                error: docError.message,
+                details: docError.details,
+                mmp_id: id
+              });
+              // Try alternative approach using mmp_name if mmp_id fails
+              if (mmpToDelete?.mmpId) {
+                console.log('[MMP Delete] Attempting fallback delete using mmp_name...');
+                const { error: fallbackErr } = await supabase
+                  .from('document_index')
+                  .delete()
+                  .eq('mmp_name', mmpToDelete.mmpId);
+                if (fallbackErr) {
+                  console.error('[MMP Delete] Fallback delete also failed:', fallbackErr.message);
+                } else {
+                  console.log('[MMP Delete] Fallback delete succeeded');
+                }
+              }
+            } else {
+              const deletedCount = docData?.length || 0;
+              console.log('[MMP Delete] Cleaned up', deletedCount, 'document_index entries for MMP', id);
+            }
+          } catch (docDelError) {
+            console.error('[MMP Delete] Exception deleting document_index:', docDelError);
+          }
 
-            if (wallet) {
-              await supabase
-                .from('wallet_transactions')
-                .insert({
-                  user_id: site.accepted_by,
-                  wallet_id: wallet.id,
-                  amount: -totalAmount, // Negative amount to reverse
-                  amount_cents: -totalAmount * 100,
-                  currency: 'SDG',
-                  type: 'adjustment_debit', // Reversal type
-                  status: 'posted',
-                  memo: `MMP deletion reversal - Site: ${site.id}`,
-                  related_site_visit_id: site.id,
-                  posted_at: new Date().toISOString(),
-                });
+          // 3. Delete storage files for permits and documents
+          if (storagePaths.length > 0) {
+            try {
+              // Try permits bucket first
+              const { error: permitStorageErr } = await supabase.storage
+                .from('permits')
+                .remove(storagePaths);
+              if (permitStorageErr) {
+                console.warn('[MMP Delete] Some permit files may not have been deleted:', permitStorageErr.message);
+              }
+              // Also try site-photos bucket
+              const { error: photoStorageErr } = await supabase.storage
+                .from('site-photos')
+                .remove(storagePaths);
+              if (photoStorageErr) {
+                console.warn('[MMP Delete] Some photo files may not have been deleted:', photoStorageErr.message);
+              }
+              console.log('[MMP Delete] Attempted storage cleanup for', storagePaths.length, 'files');
+            } catch (storageErr) {
+              console.warn('[MMP Delete] Storage cleanup error:', storageErr);
             }
           }
-        }
-      }
 
-      // Delete from DB
-      const { error } = await supabase
-        .from('mmp_files')
-        .delete()
-        .eq('id', id);
-
-      if (error) {
-        console.error('Supabase delete error:', error);
-        toast.error('Database delete failed. Check permissions/RLS and try again.');
-        return false;
-      }
-
-      // Log deletion audit with timestamp
-      try {
-        await logDeletionAudit(
-          'mmp',
-          id,
-          mmpName,
-          currentUser?.id || 'unknown',
-          currentUser?.user_metadata?.full_name || currentUser?.email,
-          currentUser?.email,
-          'MMP file deleted',
-          undefined,
-          {
-            siteEntriesReversed: siteEntries?.length || 0,
-            mmpStatus: mmpToDelete?.status,
-            deletedAt: new Date().toISOString()
+          // 4. Delete associated site photos from site_visit_photos table
+          try {
+            const { data: sitePhotos, error: photoFetchError } = await supabase
+              .from('site_visit_photos')
+              .select('id, storage_path')
+              .eq('mmp_id', id);
+            
+            if (photoFetchError) {
+              console.error('[MMP Delete] Failed to fetch site photos:', photoFetchError);
+            } else if (sitePhotos?.length) {
+              const photoIds = sitePhotos.map(p => p.id);
+              const photoPaths = sitePhotos.map(p => p.storage_path).filter(Boolean);
+              
+              // Delete from storage
+              if (photoPaths.length > 0) {
+                await supabase.storage.from('site-photos').remove(photoPaths as string[]);
+              }
+              
+              // Delete from database
+              const { error: photoDelError, data: photoDelData } = await supabase
+                .from('site_visit_photos')
+                .delete()
+                .in('id', photoIds)
+                .select();
+              
+              if (photoDelError) {
+                console.error('[MMP Delete] CRITICAL - Failed to delete site photos:', {
+                  error: photoDelError.message,
+                  details: photoDelError.details,
+                  photoCount: photoIds.length,
+                  mmp_id: id
+                });
+              } else {
+                const deletedPhotoCount = photoDelData?.length || photoIds.length;
+                console.log('[MMP Delete] Deleted', deletedPhotoCount, 'site photos for MMP', id);
+              }
+            }
+          } catch (photoError) {
+            console.error('[MMP Delete] Exception deleting site photos:', photoError);
           }
-        );
-      } catch (auditError) {
-        console.warn('[MMP Delete] Audit log failed:', auditError);
-      }
 
-      // Only update local state after successful DB delete
-      setMMPFiles((prev: MMPFile[]) => (prev || []).filter((mmp) => mmp.id !== id));
-      toast.success('MMP file deleted');
-      return true;
+          // 5. Explicitly delete mmp_site_entries (in case CASCADE is not set)
+          try {
+            const { error: siteEntriesDelError, data: deletedEntries } = await supabase
+              .from('mmp_site_entries')
+              .delete()
+              .eq('mmp_file_id', id)
+              .select();
+            
+            if (siteEntriesDelError) {
+              console.error('[MMP Delete] Failed to delete mmp_site_entries:', {
+                error: siteEntriesDelError.message,
+                details: siteEntriesDelError.details,
+                mmp_id: id
+              });
+            } else {
+              console.log('[MMP Delete] Deleted', deletedEntries?.length || 0, 'site entries for MMP', id);
+            }
+          } catch (siteEntriesErr) {
+            console.error('[MMP Delete] Exception deleting site entries:', siteEntriesErr);
+          }
+
+          // 6. Delete MMP file from storage
+          if (mmpStorage) {
+            try {
+              const { error: mmpStorageErr } = await supabase.storage
+                .from('mmp-files')
+                .remove([mmpStorage]);
+              if (mmpStorageErr) {
+                console.warn('[MMP Delete] Failed to delete MMP file from storage:', mmpStorageErr.message);
+              } else {
+                console.log('[MMP Delete] Deleted MMP file from storage:', mmpStorage);
+              }
+            } catch (storageErr) {
+              console.warn('[MMP Delete] Storage cleanup error for MMP file:', storageErr);
+            }
+          }
+
+          // 7. Delete main MMP record from DB
+          const { error } = await supabase
+            .from('mmp_files')
+            .delete()
+            .eq('id', id);
+
+          if (error) {
+            console.error('[MMP Delete] Database delete error:', error);
+            toast.error('Database delete failed. Check permissions/RLS and try again.');
+            return false;
+          }
+
+          // Log deletion audit with timestamp
+          try {
+            await logDeletionAudit(
+              'mmp',
+              id,
+              mmpName,
+              currentUser?.id || 'unknown',
+              currentUser?.user_metadata?.full_name || currentUser?.email,
+              currentUser?.email,
+              'MMP file deleted',
+              undefined,
+              {
+                mmpStatus: mmpToDelete?.status,
+                deletedAt: new Date().toISOString()
+              }
+            );
+          } catch (auditError) {
+            console.warn('[MMP Delete] Audit log failed:', auditError);
+          }
+
+          // Only update local state after successful DB delete
+          console.log('[MMP Delete] Successfully deleted MMP:', id, mmpName);
+          setMMPFiles((prev: MMPFile[]) => (prev || []).filter((mmp) => mmp.id !== id));
+          toast.success('MMP file deleted');
+          return true;
         })(),
-        15000,
+        30000, // Increased timeout for comprehensive cleanup
         'Delete MMP file timed out'
       );
     } catch (error) {
