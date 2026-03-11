@@ -217,6 +217,7 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
   const [payProofFile, setPayProofFile] = useState<File | null>(null);
   const [payProofPreviewUrl, setPayProofPreviewUrl] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState('pending');
+  const [completedSubTab, setCompletedSubTab] = useState<'paid_waiting' | 'confirmed'>('paid_waiting');
   const [showFilters, setShowFilters] = useState(true);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
@@ -325,10 +326,16 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
   }, [filteredRequests, userRole]);
 
   const completedRequests = useMemo(() => {
-    return filteredRequests.filter(req => 
-      req.status === 'fully_paid' || req.status === 'rejected' || req.status === 'cancelled'
-    );
+    return filteredRequests.filter(req => req.status === 'fully_paid');
   }, [filteredRequests]);
+
+  const paidWaitingRequests = useMemo(() => {
+    return completedRequests.filter(req => !(req.metadata as any)?.receipt_confirmation?.confirmed);
+  }, [completedRequests]);
+
+  const paidConfirmedRequests = useMemo(() => {
+    return completedRequests.filter(req => !!(req.metadata as any)?.receipt_confirmation?.confirmed);
+  }, [completedRequests]);
 
   const calculateApprovedAmount = () => {
     if (!selectedRequest) return 0;
@@ -678,7 +685,10 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
       case 'processing':
         return { data: processingRequests, tabLabel: 'Processing' };
       case 'completed':
-        return { data: completedRequests, tabLabel: 'Completed' };
+        return {
+          data: completedSubTab === 'confirmed' ? paidConfirmedRequests : paidWaitingRequests,
+          tabLabel: completedSubTab === 'confirmed' ? 'Confirmed' : 'Paid - Waiting Confirmation',
+        };
       case 'all':
       default:
         return { data: filteredRequests, tabLabel: 'All' };
@@ -2641,11 +2651,43 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
         </TabsContent>
 
         <TabsContent value="completed">
-          {completedRequests.length === 0 ? (
-            <Card><CardContent className="py-8 text-center text-muted-foreground">No completed requests</CardContent></Card>
-          ) : (
-            <VirtualizedRequestList requests={completedRequests} renderCard={(r) => <RequestCard request={r} />} />
-          )}
+          <div className="space-y-4">
+            <div className="flex gap-2 flex-wrap">
+              <Button
+                variant={completedSubTab === 'paid_waiting' ? 'default' : 'outline'}
+                onClick={() => setCompletedSubTab('paid_waiting')}
+                className="gap-2"
+                data-testid="tab-paid-waiting"
+              >
+                <Clock className="h-4 w-4" />
+                Paid — Waiting Confirmation
+                <Badge variant="secondary" className="ml-1">{paidWaitingRequests.length}</Badge>
+              </Button>
+              <Button
+                variant={completedSubTab === 'confirmed' ? 'default' : 'outline'}
+                onClick={() => setCompletedSubTab('confirmed')}
+                className="gap-2"
+                data-testid="tab-confirmed"
+              >
+                <CheckCircle2 className="h-4 w-4" />
+                Confirmed
+                <Badge variant="secondary" className="ml-1">{paidConfirmedRequests.length}</Badge>
+              </Button>
+            </div>
+            {completedSubTab === 'paid_waiting' ? (
+              paidWaitingRequests.length === 0 ? (
+                <Card><CardContent className="py-8 text-center text-muted-foreground">No requests awaiting confirmation / لا توجد طلبات بانتظار التأكيد</CardContent></Card>
+              ) : (
+                <VirtualizedRequestList requests={paidWaitingRequests} renderCard={(r) => <RequestCard request={r} />} />
+              )
+            ) : (
+              paidConfirmedRequests.length === 0 ? (
+                <Card><CardContent className="py-8 text-center text-muted-foreground">No confirmed requests / لا توجد طلبات مؤكدة</CardContent></Card>
+              ) : (
+                <VirtualizedRequestList requests={paidConfirmedRequests} renderCard={(r) => <RequestCard request={r} />} />
+              )
+            )}
+          </div>
         </TabsContent>
 
         <TabsContent value="all">
