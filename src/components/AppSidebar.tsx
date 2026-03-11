@@ -386,7 +386,7 @@
     if (!isHidden('/wallet') && (isFinancialAdmin || isAuditor || isFOM || isSupervisor || isDataCollector || isCoordinator)) {
       myMoneyItems.push({ id: 'my-wallet', title: "My Wallet", url: "/wallet", icon: CreditCard, priority: 1, isPinned: isPinned('/wallet') });
     }
-    if (!isHidden('/cost-submission') && (isSuperAdmin || isAdmin || isSupervisor || isFOM)) {
+    if (!isHidden('/cost-submission') && (isSuperAdmin || isAdmin || isSupervisor || isFOM || isCoordinator)) {
       myMoneyItems.push({ id: 'cost-submission', title: "Cost Submission", url: "/cost-submission", icon: Receipt, priority: 2, isPinned: isPinned('/cost-submission') });
     }
     if (myMoneyItems.length) groups.push({ id: 'finance-my-money', label: "My Money", order: 5.1, items: myMoneyItems, parentGroup: 'finance' } as any);
