@@ -116,8 +116,11 @@ const MobileCostSubmission = () => {
                        roles?.includes('supervisor' as AppRole) ||
                        currentUser?.role === 'hubSupervisor' || 
                        currentUser?.role === 'supervisor';
-  const isFOM = roles?.includes('Field Operation Manager (FOM)' as AppRole) || 
-                currentUser?.role === 'Field Operation Manager (FOM)';
+  const isFOM = roles?.includes('Field Operation Manager (FOM)' as AppRole) ||
+                roles?.includes('fom' as AppRole) ||
+                currentUser?.role === 'Field Operation Manager (FOM)' ||
+                currentUser?.role === 'fom' ||
+                (currentUser?.role || '').toLowerCase() === 'fom';
   const isCoordinator = roles?.includes('Coordinator' as AppRole) || 
                         currentUser?.role === 'Coordinator' ||
                         currentUser?.role === 'coordinator';
