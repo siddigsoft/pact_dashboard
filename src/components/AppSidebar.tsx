@@ -607,7 +607,7 @@
     }, [menuPrefs.favoritePages, updateMenuPreferences]);
 
     const perms = {
-      dashboard: true,
+      dashboard: checkPermission('dashboard', 'read'),
       projects: checkPermission('projects', 'read') || isAdmin || hasAnyRole(['ict']),
       mmp: checkPermission('mmp', 'read') || isAdmin || hasAnyRole(['ict']),
       monitoringPlan: checkPermission('mmp', 'read') || isAdmin || hasAnyRole(['ict']),

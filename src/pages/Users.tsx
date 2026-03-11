@@ -114,7 +114,7 @@ const Users = () => {
     primaryRole === 'ict' ||
     primaryRole === 'superadmin';
 
-  if (!isAdminOrICT && !canManageRoles) {
+  if (!isAdminOrICT && !canManageRoles()) {
     return <Navigate to="/dashboard" replace />;
   }
 
