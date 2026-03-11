@@ -63,6 +63,8 @@ interface DownPaymentContextType {
   addAuditEntry: (requestId: string, entry: Omit<ApprovalAuditEntry, 'id' | 'timestamp'>) => Promise<boolean>;
   revertToPending: (data: RevertToPendingData) => Promise<boolean>;
   confirmReceipt: (data: { requestId: string; userId: string; userName: string; signatureId: string; signatureHash: string; signatureMethod: string; signedAt: string }) => Promise<boolean>;
+  reportNotReceived: (requestId: string, userId: string, userName: string) => Promise<boolean>;
+  resendPaymentNotification: (requestId: string) => Promise<boolean>;
   editRequest: (data: EditDownPaymentData) => Promise<boolean>;
 }
 
@@ -1348,6 +1350,107 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
     }
   };
 
+  const reportNotReceived = async (requestId: string, userId: string, userName: string): Promise<boolean> => {
+    try {
+      const request = requests.find(r => r.id === requestId);
+      if (!request) throw new Error('Request not found');
+      const existingMetadata = (request.metadata as any) || {};
+      const { error } = await supabase
+        .from('down_payment_requests')
+        .update({
+          metadata: {
+            ...existingMetadata,
+            receipt_confirmation: {
+              confirmed: false,
+              denied: true,
+              deniedAt: new Date().toISOString(),
+              deniedBy: userId,
+              deniedByName: userName,
+            },
+          },
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', requestId);
+      if (error) throw error;
+      await addAuditEntry(requestId, {
+        action: 'receipt_not_received',
+        performedBy: userId,
+        performedByName: userName,
+        notes: 'Requester reported funds not yet received',
+      });
+      toast({
+        title: 'Reported: Not Yet Received / تم الإبلاغ: لم يُستلم بعد',
+        description: 'Recorded that the requester has not received the funds. / تم تسجيل عدم استلام الأموال.',
+      });
+      await refreshRequests();
+      return true;
+    } catch (error: any) {
+      toast({ title: 'Error', description: error.message || 'Failed to report', variant: 'destructive' });
+      return false;
+    }
+  };
+
+  const resendPaymentNotification = async (requestId: string): Promise<boolean> => {
+    try {
+      const request = requests.find(r => r.id === requestId);
+      if (!request) throw new Error('Request not found');
+      const existingMetadata = (request.metadata as any) || {};
+      const { error } = await supabase
+        .from('down_payment_requests')
+        .update({
+          metadata: { ...existingMetadata, receipt_confirmation: null },
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', requestId);
+      if (error) throw error;
+      try {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('fcm_tokens')
+          .eq('id', request.requestedBy)
+          .maybeSingle();
+        const tokens: string[] = profile?.fcm_tokens || [];
+        if (tokens.length > 0) {
+          await supabase.functions.invoke('send-fcm-push', {
+            body: {
+              tokens,
+              title: '💰 إعادة إرسال — تأكيد استلام السلفة | Resent — Please Confirm Receipt',
+              body: `${(request.approvedAmount || request.requestedAmount).toLocaleString()} SDG — ${request.siteName}\nهل استلمت المبلغ؟ اضغط لتأكيد الاستلام.\nDid you receive the funds? Tap to confirm receipt.`,
+              data: {
+                type: 'advance_payment_action',
+                requestId: request.id,
+                siteName: request.siteName,
+                amount: String(request.approvedAmount || request.requestedAmount),
+                has_receipt: existingMetadata?.paymentProofUrl ? 'true' : 'false',
+                receipt_url: existingMetadata?.paymentProofUrl || '',
+                action_acknowledge: 'confirm_received',
+                action_not_received: 'report_not_received',
+                navigate_to: 'wallet_advances',
+              },
+            },
+          });
+        }
+      } catch (fcmErr) {
+        console.warn('[DownPayment] FCM resend failed (non-fatal):', fcmErr);
+      }
+      await addAuditEntry(requestId, {
+        action: 'notification_resent',
+        performedBy: 'system',
+        performedByName: 'Admin',
+        notes: 'Payment confirmation notification resent to requester',
+      });
+      toast({
+        title: 'Notification Resent / تم إعادة الإرسال',
+        description: 'A new confirmation request has been sent to the requester. / تم إرسال طلب تأكيد جديد لمقدم الطلب.',
+      });
+      await refreshRequests();
+      return true;
+    } catch (error: any) {
+      toast({ title: 'Error', description: error.message || 'Failed to resend notification', variant: 'destructive' });
+      return false;
+    }
+  };
+
   const editRequest = async (data: EditDownPaymentData): Promise<boolean> => {
     const session = await ensureValidSession();
     if (!session.success) {
@@ -1478,6 +1581,8 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
     addAuditEntry,
     revertToPending,
     confirmReceipt,
+    reportNotReceived,
+    resendPaymentNotification,
     editRequest,
   };
 

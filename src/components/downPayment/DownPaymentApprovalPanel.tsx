@@ -65,6 +65,8 @@ import {
   Eye,
   Banknote,
   Pencil,
+  Send,
+  Fingerprint,
 } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -203,7 +205,7 @@ function BulkSummaryTable({ requests, users }: {
 export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelProps) {
   const { currentUser, users } = useUser();
   const { isSuperAdmin } = useSuperAdmin();
-  const { requests, loading, refreshRequests, supervisorApprove, supervisorReject, adminApprove, adminReject, processPayment, bulkApprove, revertToPending, confirmReceipt, deleteRequest, editRequest } = useDownPayment();
+  const { requests, loading, refreshRequests, supervisorApprove, supervisorReject, adminApprove, adminReject, processPayment, bulkApprove, revertToPending, confirmReceipt, reportNotReceived, resendPaymentNotification, deleteRequest, editRequest } = useDownPayment();
   const { toast } = useToast();
 
   const [selectedRequest, setSelectedRequest] = useState<DownPaymentRequest | null>(null);
@@ -1511,9 +1513,13 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
     );
   };
 
-  const RequestCard = ({ request, showCheckbox = false }: { request: DownPaymentRequest; showCheckbox?: boolean }) => {
+  const RequestCard = ({ request, showCheckbox = false, showConfirmationDetails = false }: { request: DownPaymentRequest; showCheckbox?: boolean; showConfirmationDetails?: boolean }) => {
     const [showAuditDetails, setShowAuditDetails] = useState(false);
+    const [resending, setResending] = useState(false);
     const shortId = request.id.substring(0, 8).toUpperCase();
+    const receiptConfirmation = (request.metadata as any)?.receipt_confirmation;
+    const isNotReceived = receiptConfirmation?.denied === true && !receiptConfirmation?.confirmed;
+    const isConfirmed = receiptConfirmation?.confirmed === true;
 
     const isDuplicate = duplicateSiteNames.has(request.siteName);
     const requesterName = resolveUserName(request.requestedBy, request.requestedByName);
@@ -1697,6 +1703,21 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
           <div className="mt-2">
             <WorkflowTimeline request={request} />
           </div>
+
+          {isNotReceived && (
+            <div className="flex items-center gap-2 rounded-md bg-red-50 dark:bg-red-950/30 border border-red-300 dark:border-red-700 px-3 py-2 text-xs font-medium text-red-700 dark:text-red-400" data-testid={`alert-not-received-${request.id}`}>
+              <AlertTriangle className="h-3.5 w-3.5 flex-shrink-0" />
+              <div className="flex-1">
+                <span className="font-semibold">Not Yet Received / لم يُستلم بعد</span>
+                {receiptConfirmation?.deniedAt && (
+                  <span className="ml-2 font-normal opacity-80">— {format(new Date(receiptConfirmation.deniedAt), 'MMM d, yyyy h:mm a')}</span>
+                )}
+                {receiptConfirmation?.deniedByName && (
+                  <span className="ml-1 font-normal opacity-80">by {receiptConfirmation.deniedByName}</span>
+                )}
+              </div>
+            </div>
+          )}
 
           {(request.supervisorApprovedBy || request.adminProcessedBy) && (
             <div className="space-y-1 text-xs border-l-2 border-muted-foreground/20 pl-3">
@@ -1981,11 +2002,29 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
               </Button>
             )}
 
-            {(request.metadata as any)?.receipt_confirmation?.confirmed && (
+            {isConfirmed && (
               <Badge variant="default" className="gap-1" data-testid={`badge-receipt-confirmed-${request.id}`}>
                 <CheckCircle2 className="h-3 w-3" />
                 Receipt Confirmed / تم التأكيد
               </Badge>
+            )}
+
+            {(userRole === 'admin' || isSuperAdmin) && request.status === 'fully_paid' && isNotReceived && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="border-amber-400 text-amber-700 hover:bg-amber-50 dark:border-amber-500 dark:text-amber-400"
+                disabled={resending}
+                onClick={async () => {
+                  setResending(true);
+                  await resendPaymentNotification(request.id);
+                  setResending(false);
+                }}
+                data-testid={`button-resend-notification-${request.id}`}
+              >
+                <Send className="h-4 w-4 mr-1" />
+                {resending ? 'Resending…' : 'Resend Notification / إعادة الإرسال'}
+              </Button>
             )}
 
             {isApprovedOrPaid(request.status) && (
@@ -2051,6 +2090,92 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
             )}
           </div>
         </div>
+
+        {showConfirmationDetails && isConfirmed && (
+          <div className="mt-3 rounded-lg border border-emerald-200 dark:border-emerald-800 bg-emerald-50/50 dark:bg-emerald-950/20 p-3 space-y-3" data-testid={`panel-confirmation-details-${request.id}`}>
+            <div className="flex items-center gap-2 text-xs font-semibold text-emerald-700 dark:text-emerald-400">
+              <CheckCircle2 className="h-4 w-4" />
+              Receipt Acknowledged / تفاصيل التأكيد
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <User className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+                  <div>
+                    <span className="text-muted-foreground block">Confirmed By / أكّد الاستلام</span>
+                    <span className="font-medium">{receiptConfirmation.confirmedByName || 'Unknown'}</span>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Clock className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+                  <div>
+                    <span className="text-muted-foreground block">Confirmed At / وقت التأكيد</span>
+                    <span className="font-medium">
+                      {receiptConfirmation.confirmedAt
+                        ? format(new Date(receiptConfirmation.confirmedAt), 'MMM d, yyyy h:mm:ss a')
+                        : '—'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <Fingerprint className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+                  <div>
+                    <span className="text-muted-foreground block">Signature Method / طريقة التوقيع</span>
+                    <span className="font-medium capitalize">{receiptConfirmation.signatureMethod || '—'}</span>
+                  </div>
+                </div>
+                {receiptConfirmation.signatureId && (
+                  <div className="flex items-center gap-2">
+                    <Shield className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+                    <div>
+                      <span className="text-muted-foreground block">Signature ID / رقم التوقيع</span>
+                      <span className="font-mono text-[10px] break-all">{receiptConfirmation.signatureId}</span>
+                    </div>
+                  </div>
+                )}
+                {receiptConfirmation.signatureHash && (
+                  <div className="flex items-start gap-2">
+                    <Hash className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0 mt-0.5" />
+                    <div>
+                      <span className="text-muted-foreground block">Hash / بصمة التوقيع</span>
+                      <span className="font-mono text-[10px] break-all">{receiptConfirmation.signatureHash}</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+            {request.auditLog && request.auditLog.length > 0 && (
+              <div className="border-t border-emerald-200 dark:border-emerald-800 pt-2 space-y-1.5">
+                <div className="flex items-center gap-1.5 text-[11px] font-semibold text-muted-foreground mb-1">
+                  <History className="h-3.5 w-3.5" />
+                  Audit Log ({request.auditLog.length} events)
+                </div>
+                <div className="max-h-48 overflow-y-auto space-y-1">
+                  {request.auditLog.map((entry, idx) => (
+                    <div key={entry.id || idx} className="flex items-start gap-2 text-[11px] p-1.5 rounded bg-background/70" data-testid={`confirmation-audit-${request.id}-${idx}`}>
+                      <div className={`w-1.5 h-1.5 rounded-full mt-1.5 flex-shrink-0 ${
+                        entry.action.includes('rejected') || entry.action.includes('not_received') ? 'bg-red-500' :
+                        entry.action.includes('confirmed') || entry.action.includes('approved') ? 'bg-emerald-500' :
+                        entry.action.includes('payment') || entry.action.includes('resent') ? 'bg-blue-500' :
+                        'bg-muted-foreground/40'
+                      }`} />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex flex-wrap gap-1 items-center">
+                          <span className="font-medium">{entry.action.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}</span>
+                          <span className="text-muted-foreground">by {entry.performedByName || 'System'}</span>
+                        </div>
+                        <div className="text-muted-foreground">{format(new Date(entry.timestamp), 'MMM d, yyyy h:mm:ss a')}</div>
+                        {entry.notes && <div className="italic text-muted-foreground">{entry.notes}</div>}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       </CardContent>
     </Card>
     );
@@ -2684,7 +2809,7 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
               paidConfirmedRequests.length === 0 ? (
                 <Card><CardContent className="py-8 text-center text-muted-foreground">No confirmed requests / لا توجد طلبات مؤكدة</CardContent></Card>
               ) : (
-                <VirtualizedRequestList requests={paidConfirmedRequests} renderCard={(r) => <RequestCard request={r} />} />
+                <VirtualizedRequestList requests={paidConfirmedRequests} renderCard={(r) => <RequestCard request={r} showConfirmationDetails />} />
               )
             )}
           </div>
