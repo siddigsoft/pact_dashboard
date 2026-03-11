@@ -36,7 +36,6 @@ const expenseCategories: OperationalExpenseCategory[] = [
   'incentives',
   'communications',
   'training',
-  'general_transport',
   'equipment',
   'printing',
   'meetings',

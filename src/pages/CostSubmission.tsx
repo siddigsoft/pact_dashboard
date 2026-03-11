@@ -1744,7 +1744,6 @@ const CostSubmission = () => {
                   <li>Incentives & Allowances (team bonuses, field allowances)</li>
                   <li>Internet & Communications (SIM cards, airtime, data)</li>
                   <li>Training (workshops, materials, venue hire)</li>
-                  <li>General Transportation (office travel, hub visits - NOT site visit transport)</li>
                   <li>Equipment & Supplies (field equipment, stationery)</li>
                   <li>Printing & Materials (forms, reports)</li>
                   <li>Meetings (venue, refreshments)</li>
