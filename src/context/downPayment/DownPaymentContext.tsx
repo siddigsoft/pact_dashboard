@@ -23,6 +23,7 @@ import {
   ApprovalType,
 } from '@/types/down-payment';
 import { NotificationTriggerService } from '@/services/NotificationTriggerService';
+import { EmailNotificationService } from '@/services/email-notification.service';
 
 interface RevertToPendingData {
   requestId: string;
@@ -362,6 +363,15 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
             emailActionLabel: 'View Request'
           }).catch(console.error);
         }
+        EmailNotificationService.sendAdvanceApprovalToFOM(
+          data.approvedByName || 'Supervisor',
+          'supervisor',
+          request.requestedByName || 'Field Staff',
+          request.siteName || 'Unknown Site',
+          approvedAmount,
+          'SDG',
+          'supervisor'
+        ).catch(console.error);
         toast({
           title: 'Request Approved',
           description: `Approved ${approvedAmount.toLocaleString()} SDG - forwarded to admin`,
@@ -547,6 +557,15 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
             emailActionLabel: 'View Wallet'
           }).catch(console.error);
         }
+        EmailNotificationService.sendAdvanceApprovalToFOM(
+          data.approvedByName || 'Admin',
+          'admin',
+          request.requestedByName || 'Field Staff',
+          request.siteName || 'Unknown Site',
+          approvedAmount,
+          'SDG',
+          'admin'
+        ).catch(console.error);
         toastRef.current({
           title: 'Request Approved',
           description: `Approved ${approvedAmount.toLocaleString()} SDG - ready for payment`,

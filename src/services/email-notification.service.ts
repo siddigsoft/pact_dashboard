@@ -1780,6 +1780,143 @@ PACT Command Center | مركز قيادة باكت`;
   },
 
   // ============================================
+  // TEMPLATE 16B2: Cost Submission Notification to FOM
+  // ============================================
+  async sendCostSubmissionToFOM(
+    submitterName: string,
+    submitterEmail: string,
+    requestTitle: string,
+    category: string,
+    totalAmount: number,
+    itemCount: number,
+    fundingType: string,
+    projectName: string,
+    currency: string = 'SDG'
+  ): Promise<EmailNotificationResult> {
+    try {
+      const { data: fomUsers } = await supabase
+        .from('profiles')
+        .select('email, full_name')
+        .eq('role', 'fom')
+        .eq('status', 'approved');
+
+      if (!fomUsers || fomUsers.length === 0) {
+        console.log('[EMAIL] No FOM users found to notify about cost submission');
+        return { success: true, messageId: 'no-fom' };
+      }
+
+      const fundingLabel = fundingType === 'advance' ? 'Advance Request' : 'Reimbursement';
+      const fundingLabelAr = fundingType === 'advance' ? 'طلب سلفة' : 'طلب تعويض';
+
+      const recipients = fomUsers
+        .filter(u => u.email)
+        .map(u => ({ email: u.email!, name: u.full_name || 'FOM' }));
+
+      if (recipients.length === 0) {
+        return { success: true, messageId: 'no-fom-emails' };
+      }
+
+      const options: NotificationEmailOptions = {
+        title: `New Operational Cost Submission - ${fundingLabel}`,
+        titleAr: `طلب تكلفة تشغيلية جديد - ${fundingLabelAr}`,
+        message: `${submitterName} (${submitterEmail}) has submitted a new ${fundingLabel.toLowerCase()} request titled "${requestTitle}" that requires your awareness.`,
+        messageAr: `قام ${submitterName} (${submitterEmail}) بتقديم ${fundingLabelAr} جديد بعنوان "${requestTitle}" لإطلاعك عليه.`,
+        type: 'warning',
+        actionUrl: '/costs',
+        actionLabel: 'View Submission',
+        details: [
+          { label: 'Submitted By / مقدم من', value: submitterName },
+          { label: 'Request Title / عنوان الطلب', value: requestTitle },
+          { label: 'Type / النوع', value: `${fundingLabel} / ${fundingLabelAr}` },
+          { label: 'Category / الفئة', value: category },
+          { label: 'Total Amount / المبلغ الإجمالي', value: `${currency} ${totalAmount.toLocaleString()}` },
+          ...(itemCount > 1 ? [{ label: 'Items / العناصر', value: `${itemCount} items` }] : []),
+          { label: 'Project / المشروع', value: projectName },
+          { label: 'Status / الحالة', value: 'Pending Approval / في انتظار الموافقة' },
+        ],
+      };
+
+      const result = await this.sendBulk(recipients, options);
+      console.log(`[EMAIL] Cost submission FOM notification: sent to ${result.successful}/${result.total} FOM users`);
+
+      return {
+        success: result.successful > 0,
+        messageId: result.successful > 0 ? `cost-submission-fom-${Date.now()}` : undefined,
+        error: result.failed > 0 ? `${result.failed} emails failed` : undefined,
+      };
+    } catch (err: any) {
+      console.error('[EMAIL] Error in sendCostSubmissionToFOM:', err);
+      return { success: false, error: err.message };
+    }
+  },
+
+  // ============================================
+  // TEMPLATE 16B3: Advance (Down Payment) Approval Notification to FOM
+  // ============================================
+  async sendAdvanceApprovalToFOM(
+    approverName: string,
+    approverRole: string,
+    requesterName: string,
+    siteName: string,
+    approvedAmount: number,
+    currency: string = 'SDG',
+    approvalStage: 'supervisor' | 'admin' = 'supervisor'
+  ): Promise<EmailNotificationResult> {
+    try {
+      const { data: fomUsers } = await supabase
+        .from('profiles')
+        .select('email, full_name')
+        .eq('role', 'fom')
+        .eq('status', 'approved');
+
+      if (!fomUsers || fomUsers.length === 0) {
+        console.log('[EMAIL] No FOM users found to notify about advance approval');
+        return { success: true, messageId: 'no-fom' };
+      }
+
+      const recipients = fomUsers
+        .filter(u => u.email)
+        .map(u => ({ email: u.email!, name: u.full_name || 'FOM' }));
+
+      if (recipients.length === 0) {
+        return { success: true, messageId: 'no-fom-emails' };
+      }
+
+      const stageLabel = approvalStage === 'supervisor' ? 'Supervisor' : 'Admin';
+      const stageLabelAr = approvalStage === 'supervisor' ? 'المشرف' : 'المسؤول';
+
+      const options: NotificationEmailOptions = {
+        title: `Advance Request Approved by ${stageLabel}`,
+        titleAr: `تمت الموافقة على طلب السلفة من قبل ${stageLabelAr}`,
+        message: `A field team advance (down-payment) request for "${siteName}" has been approved by ${approverName} (${stageLabel}).`,
+        messageAr: `تمت الموافقة على طلب سلفة الفريق الميداني لـ "${siteName}" من قبل ${approverName} (${stageLabelAr}).`,
+        type: 'success',
+        actionUrl: '/down-payment-approval',
+        actionLabel: 'View Request',
+        details: [
+          { label: 'Requester / مقدم الطلب', value: requesterName },
+          { label: 'Site / الموقع', value: siteName },
+          { label: 'Approved Amount / المبلغ المعتمد', value: `${currency} ${approvedAmount.toLocaleString()}` },
+          { label: 'Approved By / اعتمد من قبل', value: `${approverName} (${stageLabel})` },
+          { label: 'Approval Stage / مرحلة الاعتماد', value: `${stageLabel} Approval / اعتماد ${stageLabelAr}` },
+        ],
+      };
+
+      const result = await this.sendBulk(recipients, options);
+      console.log(`[EMAIL] Advance approval FOM notification (${approvalStage}): sent to ${result.successful}/${result.total} FOM users`);
+
+      return {
+        success: result.successful > 0,
+        messageId: result.successful > 0 ? `advance-approval-fom-${Date.now()}` : undefined,
+        error: result.failed > 0 ? `${result.failed} emails failed` : undefined,
+      };
+    } catch (err: any) {
+      console.error('[EMAIL] Error in sendAdvanceApprovalToFOM:', err);
+      return { success: false, error: err.message };
+    }
+  },
+
+  // ============================================
   // TEMPLATE 16C: Payment Request to Finance Team (with recipient selection)
   // ============================================
   async sendPaymentRequestToFinanceWithRecipients(

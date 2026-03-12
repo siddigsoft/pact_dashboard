@@ -545,6 +545,26 @@ export default function UnifiedCostRequestForm({
         }).catch(err => {
           console.error('[COST] Error sending email notification:', err);
         });
+
+        EmailNotificationService.sendCostSubmissionToFOM(
+          currentUser.fullName || currentUser.email || 'Unknown User',
+          currentUser.email || '',
+          requestTitle.trim() || 'Untitled Request',
+          categoryLabels,
+          totalAmt,
+          lineItems.length,
+          fundingType,
+          projectLabel,
+          totalCurrency
+        ).then(result => {
+          if (result.success) {
+            console.log('[COST] Email notification sent to FOM for cost submission');
+          } else {
+            console.warn('[COST] Failed to send email notification to FOM:', result.error);
+          }
+        }).catch(err => {
+          console.error('[COST] Error sending FOM email notification:', err);
+        });
       }
 
       const freshItem = createEmptyItem();
