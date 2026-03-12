@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Email Template Preview — PACT Command Center</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; padding: 24px 16px; background: #1a1a2e; font-family: 'Segoe UI', Arial, sans-serif; }
+    .page-title { text-align: center; color: #fff; font-size: 22px; font-weight: 800; margin-bottom: 6px; }
+    .page-sub { text-align: center; color: #8FADD4; font-size: 13px; margin-bottom: 40px; }
+    .section-label {
+      display: flex; align-items: center; gap: 10px;
+      color: #8FADD4; font-size: 12px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase;
+      margin: 40px 0 16px 0; max-width: 660px; margin-left: auto; margin-right: auto;
+    }
+    .section-label::after { content: ''; flex: 1; height: 1px; background: #2d3a5e; }
+    .recipients-bar {
+      max-width: 660px; margin: 0 auto 20px auto;
+      background: #0d1b3e; border: 1px solid #1e3a6e; border-radius: 8px;
+      padding: 10px 16px; font-size: 12px; color: #8FADD4;
+    }
+    .recipients-bar strong { color: #fff; }
+    .recipients-bar .badge {
+      display: inline-block; padding: 2px 8px; border-radius: 99px;
+      font-size: 11px; font-weight: 700; margin: 2px 3px;
+    }
+    .badge-fom { background: #1e3a6e; color: #60a5fa; }
+    .badge-admin { background: #1a3a2e; color: #34d399; }
+    .badge-super { background: #3a1e1e; color: #f87171; }
+    /* --- email card --- */
+    .email-wrap { max-width: 660px; margin: 0 auto 40px auto; }
+    .email-outer { background: #F3F4F6; padding: 28px 12px; border-radius: 12px; }
+    .email-card { max-width: 600px; margin: 0 auto; background: #FFFFFF; border-radius: 10px; overflow: hidden; box-shadow: 0 2px 12px rgba(0,0,0,0.18); }
+    .email-header { background: #0F2041; padding: 22px 36px 18px 36px; }
+    .email-header .brand { margin: 0; font-size: 22px; font-weight: 800; color: #FFFFFF; letter-spacing: 0.5px; }
+    .email-header .sub { margin: 4px 0 0 0; font-size: 12px; color: #8FADD4; letter-spacing: 0.3px; }
+    .accent-line { height: 4px; background: linear-gradient(90deg,#2962FF,#00C6FF); }
+    .email-body { padding: 36px 36px 28px 36px; }
+    .greeting { margin: 0 0 6px 0; font-size: 16px; color: #111827; }
+    .subject { margin: 18px 0 10px 0; font-size: 20px; font-weight: 700; color: #0F2041; line-height: 1.3; }
+    .message-text { margin: 0 0 18px 0; font-size: 14.5px; color: #374151; line-height: 1.7; }
+    .details-table { width: 100%; border-collapse: collapse; margin: 18px 0; font-size: 13.5px; }
+    .details-table td { padding: 9px 12px; border: 1px solid #E5E7EB; color: #1F2937; }
+    .details-table .label-cell { font-weight: 600; color: #374151; width: 42%; }
+    .details-table tr:nth-child(odd) td { background: #F8FAFC; }
+    .details-table tr:nth-child(even) td { background: #FFFFFF; }
+    .action-btn-wrap { text-align: center; margin: 28px 0; }
+    .action-btn {
+      display: inline-block; padding: 13px 32px; background: #0F2041;
+      color: #ffffff; text-decoration: none; border-radius: 6px;
+      font-weight: 700; font-size: 15px; letter-spacing: 0.3px;
+    }
+    .divider { border: none; border-top: 1px solid #E5E7EB; margin: 28px 0 20px 0; }
+    .arabic-section { text-align: right; direction: rtl; }
+    .arabic-greeting { margin: 0 0 6px 0; font-size: 15px; color: #111827; }
+    .arabic-subject { margin: 14px 0 8px 0; font-size: 17px; font-weight: 700; color: #0F2041; }
+    .arabic-message { margin: 0; font-size: 14px; color: #374151; line-height: 1.8; }
+    .sign-off { margin-top: 20px; }
+    .sign-off p { margin: 0 0 2px 0; font-size: 14px; color: #374151; }
+    .sign-off .name { font-size: 15px; font-weight: 700; color: #0F2041; }
+    .sign-off .team { font-size: 13px; color: #6B7280; }
+    .sign-off .behalf { font-size: 12px; color: #9CA3AF; font-style: italic; margin-top: 4px !important; }
+    .email-footer { background: #F8FAFC; border-top: 1px solid #E5E7EB; padding: 14px 36px; text-align: center; }
+    .email-footer p { margin: 0; font-size: 11px; color: #9CA3AF; line-height: 1.6; }
+
+    /* type banners */
+    .type-warning .subject { color: #0F2041; }
+    .type-success .subject { color: #0F2041; }
+  </style>
+</head>
+<body>
+
+<p class="page-title">Email Template Preview</p>
+<p class="page-sub">These are the exact emails sent by PACT Command Center — bilingual (English / Arabic)</p>
+
+<!-- ═══════════════════════════════════════════════
+     EMAIL 1 — Cost Submission (new)
+     ═══════════════════════════════════════════════ -->
+<div class="section-label">Email 1 — New Operational Cost Submission</div>
+
+<div class="email-wrap">
+  <div class="recipients-bar">
+    <strong>Recipients:</strong>
+    <span class="badge badge-fom">FOM</span>
+    <span class="badge badge-admin">Admin</span>
+    <span class="badge badge-super">Super Admin*</span>
+    <br><br>
+    <em>* Super Admins receive a separate identical email via the existing super-admin notification. FOM &amp; Admin share this one.</em>
+  </div>
+  <div class="email-outer">
+    <div class="email-card">
+      <div class="email-header">
+        <p class="brand">PACT Command Center</p>
+        <p class="sub">مركز قيادة باكت &nbsp;|&nbsp; ICT Team Platform</p>
+      </div>
+      <div class="accent-line"></div>
+      <div class="email-body type-warning">
+        <p class="greeting">Dear Ahmed Hassan (Field Operations Manager),</p>
+        <h2 class="subject">New Operational Cost Submission — Advance Request</h2>
+        <p class="message-text">Mohamed Ali (m.ali@pact.org) has submitted a new advance request titled "Field Visit — South Kordofan Q2" that requires your awareness.</p>
+        <table class="details-table">
+          <tr><td class="label-cell">Submitted By / مقدم من</td><td>Mohamed Ali</td></tr>
+          <tr><td class="label-cell">Request Title / عنوان الطلب</td><td>Field Visit — South Kordofan Q2</td></tr>
+          <tr><td class="label-cell">Type / النوع</td><td>Advance Request / طلب سلفة</td></tr>
+          <tr><td class="label-cell">Category / الفئة</td><td>Transportation, Accommodation</td></tr>
+          <tr><td class="label-cell">Total Amount / المبلغ الإجمالي</td><td>SDG 45,000</td></tr>
+          <tr><td class="label-cell">Items / العناصر</td><td>3 items</td></tr>
+          <tr><td class="label-cell">Project / المشروع</td><td>WASH — South Kordofan</td></tr>
+          <tr><td class="label-cell">Status / الحالة</td><td>Pending Approval / في انتظار الموافقة</td></tr>
+        </table>
+        <div class="action-btn-wrap">
+          <a class="action-btn" href="#">View Submission &nbsp;|&nbsp; عرض التفاصيل</a>
+        </div>
+        <hr class="divider">
+        <div class="arabic-section">
+          <p class="arabic-greeting">عزيزي أحمد حسن (مدير العمليات الميدانية)،</p>
+          <h3 class="arabic-subject">طلب تكلفة تشغيلية جديد — طلب سلفة</h3>
+          <p class="arabic-message">قام محمد علي (m.ali@pact.org) بتقديم طلب سلفة جديد بعنوان "Field Visit — South Kordofan Q2" لإطلاعك عليه.</p>
+        </div>
+        <hr class="divider">
+        <div class="sign-off">
+          <p>Kind regards,</p>
+          <p class="name">PACT Command Center</p>
+          <p class="team">ICT Team &nbsp;|&nbsp; فريق تكنولوجيا المعلومات</p>
+          <p class="behalf">On behalf of the PACT Operations Team &nbsp;|&nbsp; نيابةً عن فريق عمليات باكت</p>
+        </div>
+      </div>
+      <div class="email-footer">
+        <p>This is an automated notification from the PACT Command Center Platform.<br>
+        هذه رسالة آلية من منصة مركز قيادة باكت &nbsp;|&nbsp; <strong>PACT Platform v2</strong></p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════
+     EMAIL 2 — Advance Approved by Supervisor
+     ═══════════════════════════════════════════════ -->
+<div class="section-label">Email 2 — Advance Approved by Supervisor</div>
+
+<div class="email-wrap">
+  <div class="recipients-bar">
+    <strong>Recipients:</strong>
+    <span class="badge badge-fom">FOM</span>
+    <span class="badge badge-admin">Admin</span>
+    <span class="badge badge-super">Super Admin</span>
+  </div>
+  <div class="email-outer">
+    <div class="email-card">
+      <div class="email-header">
+        <p class="brand">PACT Command Center</p>
+        <p class="sub">مركز قيادة باكت &nbsp;|&nbsp; ICT Team Platform</p>
+      </div>
+      <div class="accent-line"></div>
+      <div class="email-body type-success">
+        <p class="greeting">Dear Fatima Omar (Administrator),</p>
+        <h2 class="subject">Advance Request Approved by Supervisor</h2>
+        <p class="message-text">A field team advance (down-payment) request for "Abu Shouk IDP Camp — Monitoring Visit" has been approved by Khalid Ibrahim (Supervisor).</p>
+        <table class="details-table">
+          <tr><td class="label-cell">Requester / مقدم الطلب</td><td>Mohamed Ali</td></tr>
+          <tr><td class="label-cell">Site / الموقع</td><td>Abu Shouk IDP Camp — Monitoring Visit</td></tr>
+          <tr><td class="label-cell">Approved Amount / المبلغ المعتمد</td><td>SDG 32,500</td></tr>
+          <tr><td class="label-cell">Approved By / اعتمد من قبل</td><td>Khalid Ibrahim (Supervisor)</td></tr>
+          <tr><td class="label-cell">Approval Stage / مرحلة الاعتماد</td><td>Supervisor Approval / اعتماد المشرف</td></tr>
+        </table>
+        <div class="action-btn-wrap">
+          <a class="action-btn" href="#">View Request &nbsp;|&nbsp; عرض التفاصيل</a>
+        </div>
+        <hr class="divider">
+        <div class="arabic-section">
+          <p class="arabic-greeting">عزيزي فاطمة عمر (المسؤول)،</p>
+          <h3 class="arabic-subject">تمت الموافقة على طلب السلفة من قبل المشرف</h3>
+          <p class="arabic-message">تمت الموافقة على طلب سلفة الفريق الميداني لـ "Abu Shouk IDP Camp — Monitoring Visit" من قبل خالد إبراهيم (المشرف).</p>
+        </div>
+        <hr class="divider">
+        <div class="sign-off">
+          <p>Kind regards,</p>
+          <p class="name">PACT Command Center</p>
+          <p class="team">ICT Team &nbsp;|&nbsp; فريق تكنولوجيا المعلومات</p>
+          <p class="behalf">On behalf of the PACT Operations Team &nbsp;|&nbsp; نيابةً عن فريق عمليات باكت</p>
+        </div>
+      </div>
+      <div class="email-footer">
+        <p>This is an automated notification from the PACT Command Center Platform.<br>
+        هذه رسالة آلية من منصة مركز قيادة باكت &nbsp;|&nbsp; <strong>PACT Platform v2</strong></p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════
+     EMAIL 3 — Advance Fully Approved by Admin
+     ═══════════════════════════════════════════════ -->
+<div class="section-label">Email 3 — Advance Fully Approved by Admin</div>
+
+<div class="email-wrap">
+  <div class="recipients-bar">
+    <strong>Recipients:</strong>
+    <span class="badge badge-fom">FOM</span>
+    <span class="badge badge-admin">Admin</span>
+    <span class="badge badge-super">Super Admin</span>
+  </div>
+  <div class="email-outer">
+    <div class="email-card">
+      <div class="email-header">
+        <p class="brand">PACT Command Center</p>
+        <p class="sub">مركز قيادة باكت &nbsp;|&nbsp; ICT Team Platform</p>
+      </div>
+      <div class="accent-line"></div>
+      <div class="email-body type-success">
+        <p class="greeting">Dear Ahmed Hassan (Field Operations Manager),</p>
+        <h2 class="subject">Advance Request Approved by Admin</h2>
+        <p class="message-text">A field team advance (down-payment) request for "Abu Shouk IDP Camp — Monitoring Visit" has been approved by Fatima Omar (Admin).</p>
+        <table class="details-table">
+          <tr><td class="label-cell">Requester / مقدم الطلب</td><td>Mohamed Ali</td></tr>
+          <tr><td class="label-cell">Site / الموقع</td><td>Abu Shouk IDP Camp — Monitoring Visit</td></tr>
+          <tr><td class="label-cell">Approved Amount / المبلغ المعتمد</td><td>SDG 32,500</td></tr>
+          <tr><td class="label-cell">Approved By / اعتمد من قبل</td><td>Fatima Omar (Admin)</td></tr>
+          <tr><td class="label-cell">Approval Stage / مرحلة الاعتماد</td><td>Admin Approval / اعتماد المسؤول</td></tr>
+        </table>
+        <div class="action-btn-wrap">
+          <a class="action-btn" href="#">View Request &nbsp;|&nbsp; عرض التفاصيل</a>
+        </div>
+        <hr class="divider">
+        <div class="arabic-section">
+          <p class="arabic-greeting">عزيزي أحمد حسن (مدير العمليات الميدانية)،</p>
+          <h3 class="arabic-subject">تمت الموافقة على طلب السلفة من قبل المسؤول</h3>
+          <p class="arabic-message">تمت الموافقة على طلب سلفة الفريق الميداني لـ "Abu Shouk IDP Camp — Monitoring Visit" من قبل فاطمة عمر (المسؤول).</p>
+        </div>
+        <hr class="divider">
+        <div class="sign-off">
+          <p>Kind regards,</p>
+          <p class="name">PACT Command Center</p>
+          <p class="team">ICT Team &nbsp;|&nbsp; فريق تكنولوجيا المعلومات</p>
+          <p class="behalf">On behalf of the PACT Operations Team &nbsp;|&nbsp; نيابةً عن فريق عمليات باكت</p>
+        </div>
+      </div>
+      <div class="email-footer">
+        <p>This is an automated notification from the PACT Command Center Platform.<br>
+        هذه رسالة آلية من منصة مركز قيادة باكت &nbsp;|&nbsp; <strong>PACT Platform v2</strong></p>
+      </div>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>
