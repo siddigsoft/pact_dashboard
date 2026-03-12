@@ -265,12 +265,16 @@ function buildEnhancedPaymentEmailHTML(d: {
   currency: string;
   usdRate?: number;
 }): string {
-  const fmt = (n: number) => `${d.currency} ${n.toLocaleString()}`;
-  const totalUsd = d.usdRate && d.usdRate > 0 ? d.totalAmount / d.usdRate : null;
-  const fundingLabel = d.fundingType === 'advance' ? 'Advance Request' : d.fundingType === 'operational_cost' ? 'Operational Cost Submission' : 'Reimbursement';
-  const fundingLabelAr = d.fundingType === 'advance' ? 'طلب سلفة' : d.fundingType === 'operational_cost' ? 'تقديم تكاليف تشغيلية' : 'طلب تعويض';
-  const showPriorityRibbon = d.fundingType === 'advance';
-  const ribbonBg = '#B45309';
+  const fmt = (n: number) => `${d.currency} ${n > 0 ? n.toLocaleString() : n.toLocaleString()}`;
+  const totalUsd = d.usdRate && d.usdRate > 0 && d.totalAmount > 0 ? d.totalAmount / d.usdRate : null;
+  const fundingLabel = d.fundingType === 'advance' ? 'Transport Advance Request' : d.fundingType === 'operational_cost' ? 'Operational Cost Submission' : 'Reimbursement Request';
+  const fundingLabelAr = d.fundingType === 'advance' ? 'طلب سلفة نقل' : d.fundingType === 'operational_cost' ? 'تقديم تكاليف تشغيلية' : 'طلب تعويض';
+  const isAdvance = d.fundingType === 'advance';
+  const isOpCost = d.fundingType === 'operational_cost';
+  const accentColor = isAdvance ? '#B45309' : '#065F46';
+  const accentLight = isAdvance ? '#FFFBEB' : '#ECFDF5';
+  const accentBorder = isAdvance ? '#FDE68A' : '#6EE7B7';
+  const badgeBg = isAdvance ? '#F59E0B' : '#10B981';
   const fullActionUrl = d.actionUrl.startsWith('http') ? d.actionUrl : APP_URL + d.actionUrl;
 
   return `<!DOCTYPE html>
@@ -280,211 +284,219 @@ function buildEnhancedPaymentEmailHTML(d: {
   <meta name="viewport" content="width=device-width,initial-scale=1.0">
   <title>Payment Request — ${d.requestId}</title>
 </head>
-<body style="margin:0;padding:0;background:#EAECF0;font-family:Georgia,'Times New Roman',Times,serif;">
-<table width="100%" cellpadding="0" cellspacing="0" style="background:#EAECF0;padding:32px 16px;">
+<body style="margin:0;padding:0;background:#DDE3ED;font-family:Arial,Helvetica,sans-serif;">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#DDE3ED;padding:28px 14px;">
 <tr><td align="center">
-<table width="100%" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:#FFFFFF;border-radius:10px;overflow:hidden;box-shadow:0 6px 32px rgba(0,0,0,0.13);">
+<table width="100%" cellpadding="0" cellspacing="0" style="max-width:620px;width:100%;background:#FFFFFF;border-radius:12px;overflow:hidden;box-shadow:0 8px 40px rgba(15,32,65,0.18);">
 
-  <!-- LETTERHEAD HEADER -->
+  <!-- ═══════════════════ HEADER ═══════════════════ -->
   <tr>
     <td style="background:#0F2041;padding:0;">
       <table width="100%" cellpadding="0" cellspacing="0">
         <tr>
-          <td style="padding:26px 36px 22px;">
+          <td style="padding:24px 32px 20px;">
             <table cellpadding="0" cellspacing="0">
               <tr>
-                <td style="vertical-align:middle;padding-right:14px;">
-                  <table cellpadding="0" cellspacing="0" style="background:#E87722;border-radius:10px;width:44px;height:44px;">
-                    <tr><td align="center" valign="middle" style="padding:0;">
-                      <span style="font-size:18px;font-weight:900;color:#FFFFFF;font-family:Arial,Helvetica,sans-serif;letter-spacing:-0.5px;line-height:1;display:block;padding:12px 0;">P</span>
+                <td style="vertical-align:middle;padding-right:12px;">
+                  <table cellpadding="0" cellspacing="0" style="background:#E87722;border-radius:9px;width:42px;height:42px;">
+                    <tr><td align="center" valign="middle">
+                      <span style="font-size:20px;font-weight:900;color:#FFFFFF;font-family:Arial,Helvetica,sans-serif;line-height:42px;display:block;">P</span>
                     </td></tr>
                   </table>
                 </td>
                 <td style="vertical-align:middle;">
-                  <p style="margin:0;font-size:26px;font-weight:900;color:#FFFFFF;letter-spacing:0.5px;line-height:1;font-family:Arial,Helvetica,sans-serif;">PACT</p>
-                  <p style="margin:3px 0 0 0;font-size:10.5px;color:#7FA5CC;letter-spacing:2px;text-transform:uppercase;font-family:Arial,Helvetica,sans-serif;">Command Center &nbsp;·&nbsp; Field Operations Platform</p>
+                  <p style="margin:0;font-size:24px;font-weight:900;color:#FFFFFF;letter-spacing:0.5px;line-height:1;font-family:Arial,Helvetica,sans-serif;">PACT</p>
+                  <p style="margin:2px 0 0 0;font-size:10px;color:#7FA5CC;letter-spacing:2.2px;text-transform:uppercase;font-family:Arial,Helvetica,sans-serif;">Command Center &nbsp;·&nbsp; Finance</p>
                 </td>
               </tr>
             </table>
           </td>
-          <td style="padding:22px 36px 22px;text-align:right;vertical-align:top;">
-            <table cellpadding="0" cellspacing="0" style="margin-left:auto;">
-              <tr><td style="padding:2px 0;font-size:10px;color:#8FADD4;white-space:nowrap;">
-                <span style="color:#BFD3F0;font-weight:600;">Ref No:&nbsp;</span>${d.requestId}
-              </td></tr>
-              <tr><td style="padding:2px 0;font-size:10px;color:#8FADD4;white-space:nowrap;">
-                <span style="color:#BFD3F0;font-weight:600;">Date:&nbsp;</span>${d.date}
-              </td></tr>
-              <tr><td style="padding:2px 0;font-size:10px;white-space:nowrap;">
-                <span style="color:#BFD3F0;font-weight:600;">Priority:&nbsp;</span>
-                <span style="color:${showPriorityRibbon ? '#FCD34D' : '#93C5FD'};font-weight:700;">&#9679; ${showPriorityRibbon ? 'HIGH' : 'NORMAL'}</span>
-              </td></tr>
-            </table>
+          <td style="padding:20px 32px;text-align:right;vertical-align:middle;">
+            <p style="margin:0 0 3px 0;font-size:9.5px;color:#8FADD4;font-family:Arial,Helvetica,sans-serif;"><span style="color:#BFD3F0;font-weight:700;">REF&nbsp;</span>${d.requestId}</p>
+            <p style="margin:0 0 3px 0;font-size:9.5px;color:#8FADD4;font-family:Arial,Helvetica,sans-serif;"><span style="color:#BFD3F0;font-weight:700;">DATE&nbsp;</span>${d.date}</p>
+            <span style="display:inline-block;margin-top:4px;padding:3px 10px;background:${badgeBg};border-radius:20px;font-size:9.5px;font-weight:700;color:#FFFFFF;letter-spacing:1px;text-transform:uppercase;font-family:Arial,Helvetica,sans-serif;">${isAdvance ? 'HIGH PRIORITY' : 'APPROVED'}</span>
           </td>
         </tr>
       </table>
     </td>
   </tr>
 
-  ${showPriorityRibbon ? `<!-- PRIORITY RIBBON -->
+  <!-- ═══════════════════ ACTION REQUIRED BANNER ═══════════════════ -->
   <tr>
-    <td style="background:${ribbonBg};padding:9px 36px;text-align:center;">
-      <p style="margin:0;font-size:11.5px;font-weight:700;color:#FFFFFF;letter-spacing:1.2px;text-transform:uppercase;">
-        &#9888;&nbsp; HIGH PRIORITY — PAYMENT AUTHORIZATION REQUIRED &nbsp;|&nbsp; أولوية عالية — مطلوب تفويض الدفع
+    <td style="background:${accentColor};padding:10px 32px;text-align:center;">
+      <p style="margin:0;font-size:11px;font-weight:700;color:#FFFFFF;letter-spacing:1.5px;text-transform:uppercase;font-family:Arial,Helvetica,sans-serif;">
+        &#9654;&nbsp; FINANCE TEAM ACTION REQUIRED &nbsp;·&nbsp; إجراء مطلوب من فريق المالية
       </p>
     </td>
-  </tr>` : ''}
+  </tr>
 
-  <!-- BLUE ACCENT LINE -->
-  <tr><td style="height:3px;background:linear-gradient(90deg,#2962FF,#00C6FF);"></td></tr>
-
-  <!-- BODY -->
+  <!-- ═══════════════════ AMOUNT HERO ═══════════════════ -->
   <tr>
-    <td style="padding:38px 36px 32px;">
-
-      <p style="margin:0 0 6px 0;font-size:10px;color:#6B7280;text-transform:uppercase;letter-spacing:1.5px;font-weight:700;font-family:Arial,Helvetica,sans-serif;">Official Payment Request &nbsp;/&nbsp; طلب دفع رسمي</p>
-      <p style="margin:0 0 24px 0;font-size:16px;color:#111827;font-family:Georgia,'Times New Roman',Times,serif;">Dear <strong>${d.recipientName}</strong>,</p>
-
-      <!-- FINANCIAL HIGHLIGHT CARD -->
-      <table width="100%" cellpadding="0" cellspacing="0" style="background:#F0F4FF;border:2px solid #2962FF;border-radius:8px;margin-bottom:26px;overflow:hidden;">
+    <td style="background:${accentLight};border-bottom:2px solid ${accentBorder};padding:28px 32px;text-align:center;">
+      <p style="margin:0 0 4px 0;font-size:11px;color:${accentColor};text-transform:uppercase;letter-spacing:1.8px;font-weight:700;font-family:Arial,Helvetica,sans-serif;">${isAdvance ? 'Total Approved Amount' : 'Total Amount Requested'} &nbsp;/&nbsp; ${isAdvance ? 'إجمالي المبلغ المعتمد' : 'إجمالي المبلغ المطلوب'}</p>
+      <p style="margin:0 0 2px 0;font-size:38px;font-weight:900;color:#0F2041;line-height:1;font-family:Arial,Helvetica,sans-serif;letter-spacing:-0.5px;">${fmt(d.totalAmount)}</p>
+      ${totalUsd !== null ? `<p style="margin:6px 0 0 0;font-size:14px;font-weight:700;color:#1D4ED8;font-family:Arial,Helvetica,sans-serif;">&#8776; USD ${totalUsd.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} <span style="font-size:10px;font-weight:400;color:#6B7280;">(@ 1 USD = ${d.usdRate?.toLocaleString()} ${d.currency})</span></p>` : ''}
+      <table cellpadding="0" cellspacing="0" style="margin:14px auto 0;">
         <tr>
-          <td style="padding:20px;border-right:1px solid #C7D7FF;text-align:center;width:34%;">
-            <p style="margin:0;font-size:10px;color:#2962FF;text-transform:uppercase;letter-spacing:1px;font-weight:700;">Total ${d.fundingType === 'advance' ? 'Approved' : 'Requested'}</p>
-            <p style="margin:8px 0 2px 0;font-size:20px;font-weight:900;color:#0F2041;line-height:1;">${fmt(d.totalAmount)}</p>
-            <p style="margin:0;font-size:9px;color:#6B7280;">المبلغ الإجمالي ${d.fundingType === 'advance' ? 'المعتمد' : 'المطلوب'}</p>
+          <td style="padding:0 10px;text-align:center;border-right:1px solid ${accentBorder};">
+            <p style="margin:0;font-size:22px;font-weight:900;color:#0F2041;font-family:Arial,Helvetica,sans-serif;">${d.count}</p>
+            <p style="margin:2px 0 0 0;font-size:9.5px;color:#6B7280;text-transform:uppercase;letter-spacing:1px;font-family:Arial,Helvetica,sans-serif;">Request${d.count !== 1 ? 's' : ''} / طلب</p>
           </td>
-          <td style="padding:20px;border-right:1px solid #C7D7FF;text-align:center;width:33%;">
-            <p style="margin:0;font-size:10px;color:#2962FF;text-transform:uppercase;letter-spacing:1px;font-weight:700;">Requests</p>
-            <p style="margin:8px 0 2px 0;font-size:28px;font-weight:900;color:#0F2041;line-height:1;">${d.count}</p>
-            <p style="margin:0;font-size:9px;color:#6B7280;">عدد الطلبات</p>
-          </td>
-          <td style="padding:20px;text-align:center;width:33%;">
-            <p style="margin:0;font-size:10px;color:#2962FF;text-transform:uppercase;letter-spacing:1px;font-weight:700;">Group</p>
-            <p style="margin:8px 0 2px 0;font-size:14px;font-weight:800;color:#0F2041;line-height:1.2;">${d.groupLabel}</p>
-            <p style="margin:0;font-size:9px;color:#6B7280;">المجموعة</p>
+          <td style="padding:0 10px;text-align:center;">
+            <p style="margin:0;font-size:13px;font-weight:800;color:#0F2041;font-family:Arial,Helvetica,sans-serif;">${d.groupLabel}</p>
+            <p style="margin:2px 0 0 0;font-size:9.5px;color:#6B7280;text-transform:uppercase;letter-spacing:1px;font-family:Arial,Helvetica,sans-serif;">Group / المجموعة</p>
           </td>
         </tr>
       </table>
+    </td>
+  </tr>
+
+  <!-- ═══════════════════ BODY ═══════════════════ -->
+  <tr>
+    <td style="padding:30px 32px 28px;">
+
+      <!-- GREETING -->
+      <p style="margin:0 0 5px 0;font-size:9.5px;color:#9CA3AF;text-transform:uppercase;letter-spacing:1.5px;font-weight:700;">Official Payment Request &nbsp;/&nbsp; طلب دفع رسمي</p>
+      <p style="margin:0 0 22px 0;font-size:15px;color:#111827;line-height:1.5;">Dear <strong>${d.recipientName}</strong>,</p>
 
       <!-- INSTRUCTION -->
-      <p style="margin:0 0 18px 0;font-size:13.5px;color:#1F2937;line-height:1.8;font-family:Georgia,'Times New Roman',Times,serif;">
+      <p style="margin:0 0 22px 0;font-size:13.5px;color:#374151;line-height:1.85;border-left:3px solid ${accentColor};padding-left:14px;">
         ${d.isBulk
-          ? d.fundingType === 'operational_cost'
-            ? `Please find the attached report containing <strong>${d.count} approved operational cost submission${d.count !== 1 ? 's' : ''}</strong>. Kindly review the details, authorize the payments, and confirm disbursement at your earliest convenience.`
-            : `Please find the attached report containing <strong>${d.count} approved transportation advance request${d.count !== 1 ? 's' : ''}</strong> from <strong>${d.mmpLabel}</strong>. Kindly review the details, authorize the disbursements, and confirm receipt at your earliest convenience.`
-          : d.fundingType === 'operational_cost'
-            ? `An operational cost submission has been fully approved and is ready for payment processing. Kindly review the details below and process the payment at your earliest convenience.`
-            : `A transportation advance request has been fully approved and is ready for payment processing. Kindly review the details below and process the disbursement at your earliest convenience.`
+          ? isOpCost
+            ? `Please find the attached PDF &amp; Excel report containing <strong>${d.count} fully approved operational cost submission${d.count !== 1 ? 's' : ''}</strong>. Kindly review the details, authorize the payments, and confirm disbursement at your earliest convenience.`
+            : `Please find the attached PDF &amp; Excel report containing <strong>${d.count} fully approved transportation advance request${d.count !== 1 ? 's' : ''}</strong> from <strong>${d.mmpLabel}</strong>. Kindly review, authorize the disbursements, and confirm receipt at your earliest convenience.`
+          : isOpCost
+            ? `An operational cost submission has been fully approved through the two-tier review process and is ready for payment. Kindly review the details below and process the payment at your earliest convenience.`
+            : `A transportation advance request has been fully approved and is ready for disbursement. Kindly review the details below and process payment at your earliest convenience.`
         }
       </p>
 
-      <!-- DETAILS TABLE -->
-      <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin:0 0 18px 0;font-size:12.5px;border-radius:6px;overflow:hidden;border:1px solid #D1D5DB;font-family:Arial,Helvetica,sans-serif;">
+      <!-- ── DETAILS TABLE ── -->
+      <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin:0 0 22px 0;border-radius:8px;overflow:hidden;border:1px solid #E5E7EB;">
+        <!-- Table header -->
         <tr style="background:#0F2041;">
-          <td style="padding:6px 12px;color:#FFFFFF;font-weight:700;font-size:11px;letter-spacing:0.5px;text-transform:uppercase;width:40%;line-height:1.2;">Field / الحقل</td>
-          <td style="padding:6px 12px;color:#FFFFFF;font-weight:700;font-size:11px;letter-spacing:0.5px;text-transform:uppercase;line-height:1.2;">Detail / التفصيل</td>
-        </tr>
-        <tr style="background:#F8FAFC;">
-          <td style="padding:5px 12px;font-weight:600;color:#4B5563;border-bottom:1px solid #E5E7EB;border-right:1px solid #E5E7EB;font-size:12.5px;line-height:1.3;">Reference No / رقم المرجع</td>
-          <td style="padding:5px 12px;color:#111827;border-bottom:1px solid #E5E7EB;font-size:12.5px;line-height:1.3;">${d.requestId}</td>
-        </tr>
-        <tr style="background:#FFFFFF;">
-          <td style="padding:5px 12px;font-weight:600;color:#4B5563;border-bottom:1px solid #E5E7EB;border-right:1px solid #E5E7EB;font-size:12.5px;line-height:1.3;">MMP / الخطة الشهرية</td>
-          <td style="padding:5px 12px;color:#0F2041;border-bottom:1px solid #E5E7EB;font-weight:700;font-size:14px;line-height:1.3;">${d.mmpLabel}</td>
-        </tr>
-        <tr style="background:#F8FAFC;">
-          <td style="padding:5px 12px;font-weight:600;color:#4B5563;border-bottom:1px solid #E5E7EB;border-right:1px solid #E5E7EB;font-size:12.5px;line-height:1.3;">Type / النوع</td>
-          <td style="padding:5px 12px;color:#111827;border-bottom:1px solid #E5E7EB;font-size:12.5px;line-height:1.3;">${fundingLabel} / ${fundingLabelAr}</td>
-        </tr>
-        <tr style="background:#FFFFFF;">
-          <td style="padding:5px 12px;font-weight:600;color:#4B5563;border-bottom:1px solid #E5E7EB;border-right:1px solid #E5E7EB;font-size:12.5px;line-height:1.3;">Category / الفئة</td>
-          <td style="padding:5px 12px;color:#111827;border-bottom:1px solid #E5E7EB;font-size:12.5px;line-height:1.3;">${d.category}</td>
-        </tr>
-        <tr style="background:#F8FAFC;">
-          <td style="padding:5px 12px;font-weight:600;color:#4B5563;border-bottom:1px solid #E5E7EB;border-right:1px solid #E5E7EB;font-size:12.5px;line-height:1.3;">Total Amount / المبلغ الإجمالي</td>
-          <td style="padding:5px 12px;color:#065F46;font-weight:700;border-bottom:1px solid #E5E7EB;font-size:14px;line-height:1.3;">${fmt(d.totalAmount)}</td>
-        </tr>
-        ${totalUsd !== null ? `<tr style="background:#FFFFFF;">
-          <td style="padding:5px 12px;font-weight:600;color:#4B5563;border-bottom:1px solid #E5E7EB;border-right:1px solid #E5E7EB;font-size:12.5px;line-height:1.3;">USD Equivalent / المعادل بالدولار<br><span style="font-weight:400;font-size:11px;color:#9CA3AF;">Rate: 1 USD = ${d.usdRate?.toLocaleString()} ${d.currency}</span></td>
-          <td style="padding:5px 12px;color:#1D4ED8;font-weight:700;border-bottom:1px solid #E5E7EB;font-size:14px;line-height:1.3;">USD ${totalUsd.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-        </tr>` : ''}
-        <tr style="background:${totalUsd !== null ? '#F8FAFC' : '#FFFFFF'};">
-          <td style="padding:5px 12px;font-weight:600;color:#4B5563;border-bottom:1px solid #E5E7EB;border-right:1px solid #E5E7EB;font-size:12.5px;line-height:1.3;">Project / المشروع</td>
-          <td style="padding:5px 12px;color:#111827;border-bottom:1px solid #E5E7EB;font-size:12.5px;line-height:1.3;">${d.project}</td>
-        </tr>
-        <tr style="background:#F8FAFC;">
-          <td style="padding:5px 12px;font-weight:600;color:#4B5563;border-right:1px solid #E5E7EB;font-size:12.5px;line-height:1.3;">Approved By / تمت الموافقة من</td>
-          <td style="padding:5px 12px;color:#111827;font-size:12.5px;line-height:1.3;">${d.approverName}</td>
-        </tr>
-      </table>
-
-      <!-- ACTION BUTTONS -->
-      <table width="100%" cellpadding="0" cellspacing="0" style="margin:20px 0 24px 0;">
-        <tr>
-          <td style="padding:0 5px 0 0;width:50%;">
-            <a href="${fullActionUrl}" style="display:block;padding:12px 16px;background:#0F2041;color:#FFFFFF;text-decoration:none;border-radius:6px;font-weight:700;font-size:13px;text-align:center;line-height:1.35;">
-              View &amp; Process Payment
-              <span style="display:block;font-size:11px;font-weight:400;opacity:0.85;margin-top:2px;">عرض ومعالجة الدفع</span>
-            </a>
+          <td colspan="2" style="padding:8px 14px;">
+            <p style="margin:0;font-size:10px;font-weight:700;color:#93C5FD;text-transform:uppercase;letter-spacing:1.5px;font-family:Arial,Helvetica,sans-serif;">Request Details &nbsp;/&nbsp; تفاصيل الطلب</p>
           </td>
-          <td style="padding:0 0 0 5px;width:50%;">
-            <a href="${fullActionUrl}" style="display:block;padding:12px 16px;background:#1D3461;color:#FFFFFF;text-decoration:none;border-radius:6px;font-weight:700;font-size:13px;text-align:center;line-height:1.35;">
-              Download Report
-              <span style="display:block;font-size:11px;font-weight:400;opacity:0.85;margin-top:2px;">تحميل التقرير</span>
-            </a>
+        </tr>
+        <!-- Reference -->
+        <tr style="background:#F8FAFC;">
+          <td style="padding:9px 14px;font-size:12px;font-weight:600;color:#6B7280;border-bottom:1px solid #E5E7EB;border-right:1px solid #E5E7EB;width:38%;font-family:Arial,Helvetica,sans-serif;">Reference No<br><span style="font-weight:400;font-size:11px;color:#9CA3AF;">رقم المرجع</span></td>
+          <td style="padding:9px 14px;font-size:12.5px;color:#111827;border-bottom:1px solid #E5E7EB;font-family:Arial,Helvetica,sans-serif;font-weight:600;">${d.requestId}</td>
+        </tr>
+        <!-- MMP -->
+        <tr style="background:#FFFFFF;">
+          <td style="padding:9px 14px;font-size:12px;font-weight:600;color:#6B7280;border-bottom:1px solid #E5E7EB;border-right:1px solid #E5E7EB;font-family:Arial,Helvetica,sans-serif;">MMP / Plan<br><span style="font-weight:400;font-size:11px;color:#9CA3AF;">الخطة الشهرية</span></td>
+          <td style="padding:9px 14px;font-size:13px;color:#0F2041;border-bottom:1px solid #E5E7EB;font-weight:700;font-family:Arial,Helvetica,sans-serif;">${d.mmpLabel}</td>
+        </tr>
+        <!-- Type -->
+        <tr style="background:#F8FAFC;">
+          <td style="padding:9px 14px;font-size:12px;font-weight:600;color:#6B7280;border-bottom:1px solid #E5E7EB;border-right:1px solid #E5E7EB;font-family:Arial,Helvetica,sans-serif;">Type<br><span style="font-weight:400;font-size:11px;color:#9CA3AF;">النوع</span></td>
+          <td style="padding:9px 14px;border-bottom:1px solid #E5E7EB;font-family:Arial,Helvetica,sans-serif;">
+            <span style="display:inline-block;padding:2px 9px;background:${accentLight};border:1px solid ${accentBorder};border-radius:4px;font-size:11.5px;font-weight:700;color:${accentColor};">${fundingLabel}</span>
+            <span style="display:block;font-size:11px;color:#6B7280;margin-top:3px;">${fundingLabelAr}</span>
+          </td>
+        </tr>
+        <!-- Category -->
+        <tr style="background:#FFFFFF;">
+          <td style="padding:9px 14px;font-size:12px;font-weight:600;color:#6B7280;border-bottom:1px solid #E5E7EB;border-right:1px solid #E5E7EB;font-family:Arial,Helvetica,sans-serif;">Category<br><span style="font-weight:400;font-size:11px;color:#9CA3AF;">الفئة</span></td>
+          <td style="padding:9px 14px;font-size:12.5px;color:#111827;border-bottom:1px solid #E5E7EB;font-family:Arial,Helvetica,sans-serif;">${d.category}</td>
+        </tr>
+        <!-- Amount -->
+        <tr style="background:${accentLight};">
+          <td style="padding:10px 14px;font-size:12px;font-weight:700;color:${accentColor};border-bottom:1px solid ${accentBorder};border-right:1px solid ${accentBorder};font-family:Arial,Helvetica,sans-serif;">Total Amount<br><span style="font-weight:400;font-size:11px;">المبلغ الإجمالي</span></td>
+          <td style="padding:10px 14px;font-size:18px;font-weight:900;color:#0F2041;border-bottom:1px solid ${accentBorder};font-family:Arial,Helvetica,sans-serif;">
+            ${fmt(d.totalAmount)}
+            ${totalUsd !== null ? `<span style="display:block;font-size:12px;font-weight:600;color:#1D4ED8;margin-top:2px;">&#8776; USD ${totalUsd.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>` : ''}
+          </td>
+        </tr>
+        <!-- Project -->
+        <tr style="background:#FFFFFF;">
+          <td style="padding:9px 14px;font-size:12px;font-weight:600;color:#6B7280;border-bottom:1px solid #E5E7EB;border-right:1px solid #E5E7EB;font-family:Arial,Helvetica,sans-serif;">Project<br><span style="font-weight:400;font-size:11px;color:#9CA3AF;">المشروع</span></td>
+          <td style="padding:9px 14px;font-size:12.5px;color:#111827;border-bottom:1px solid #E5E7EB;font-family:Arial,Helvetica,sans-serif;">${d.project}</td>
+        </tr>
+        <!-- Approved By -->
+        <tr style="background:#F8FAFC;">
+          <td style="padding:9px 14px;font-size:12px;font-weight:600;color:#6B7280;border-right:1px solid #E5E7EB;font-family:Arial,Helvetica,sans-serif;">Approved By<br><span style="font-weight:400;font-size:11px;color:#9CA3AF;">تمت الموافقة من</span></td>
+          <td style="padding:9px 14px;font-size:12.5px;color:#111827;font-family:Arial,Helvetica,sans-serif;">
+            <strong>${d.approverName}</strong>
+            <span style="display:inline-block;margin-left:6px;padding:1px 7px;background:#D1FAE5;border-radius:4px;font-size:10px;font-weight:700;color:#065F46;">&#10003; VERIFIED</span>
           </td>
         </tr>
       </table>
 
-      ${d.fundingType === 'advance' ? `<!-- RECONCILIATION NOTICE -->
-      <table width="100%" cellpadding="0" cellspacing="0" style="background:#FFFBEB;border:1px solid #FDE68A;border-left:4px solid #F59E0B;border-radius:5px;margin-bottom:30px;">
+      <!-- ── ACTION BUTTON ── -->
+      <table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 22px 0;">
         <tr>
-          <td style="padding:14px 16px;">
-            <p style="margin:0 0 5px 0;font-size:13px;font-weight:700;color:#92400E;">&#9888; Reconciliation Requirement / اشتراط التسوية</p>
-            <p style="margin:0;font-size:12.5px;color:#78350F;line-height:1.65;">
-              All recipients must submit receipts and return any unused funds within <strong>5 working days</strong> of disbursement.
-            </p>
-            <p dir="rtl" style="margin:5px 0 0 0;font-size:12.5px;color:#78350F;line-height:1.65;text-align:right;">
-              يجب على جميع المستلمين تقديم الإيصالات وإرجاع أي أموال غير مستخدمة خلال <strong>5 أيام عمل</strong> من صرف المبلغ.
-            </p>
+          <td>
+            <a href="${fullActionUrl}" style="display:block;padding:14px 20px;background:#0F2041;color:#FFFFFF;text-decoration:none;border-radius:8px;font-weight:700;font-size:14px;text-align:center;font-family:Arial,Helvetica,sans-serif;line-height:1.4;">
+              &#128196;&nbsp; View &amp; Process Payment &nbsp;/&nbsp; عرض ومعالجة الدفع
+            </a>
+          </td>
+        </tr>
+      </table>
+
+      ${isAdvance ? `<!-- ── RECONCILIATION NOTICE ── -->
+      <table width="100%" cellpadding="0" cellspacing="0" style="background:#FFFBEB;border:1px solid #FDE68A;border-left:4px solid #F59E0B;border-radius:6px;margin-bottom:24px;">
+        <tr>
+          <td style="padding:13px 16px;">
+            <p style="margin:0 0 5px 0;font-size:12.5px;font-weight:700;color:#92400E;font-family:Arial,Helvetica,sans-serif;">&#9888;&nbsp; Reconciliation Requirement &nbsp;/&nbsp; اشتراط التسوية</p>
+            <p style="margin:0 0 4px 0;font-size:12px;color:#78350F;line-height:1.65;font-family:Arial,Helvetica,sans-serif;">All recipients must submit receipts and return any unused funds within <strong>5 working days</strong> of disbursement.</p>
+            <p dir="rtl" style="margin:0;font-size:12px;color:#78350F;line-height:1.65;text-align:right;font-family:'Segoe UI',Tahoma,Arial,sans-serif;">يجب على جميع المستلمين تقديم الإيصالات وإرجاع أي أموال غير مستخدمة خلال <strong>5 أيام عمل</strong> من صرف المبلغ.</p>
           </td>
         </tr>
       </table>` : ''}
 
-      <hr style="border:none;border-top:1px solid #E5E7EB;margin:26px 0;">
+      <hr style="border:none;border-top:1px solid #E5E7EB;margin:24px 0;">
 
-      <!-- ARABIC SECTION -->
-      <div dir="rtl" style="text-align:right;font-family:'Segoe UI',Tahoma,Arial,sans-serif;">
-        <p style="margin:0 0 6px 0;font-size:15px;color:#111827;">عزيزي <strong>${d.recipientName}</strong>،</p>
-        <h3 style="margin:12px 0 8px 0;font-size:17px;font-weight:700;color:#0F2041;">طلب دفع رقم ${d.requestId} | ${d.groupLabel} | ${fundingLabelAr}</h3>
-        <p style="margin:0;font-size:14px;color:#374151;line-height:1.85;">
-          ${d.isBulk
-            ? d.fundingType === 'operational_cost'
-              ? `يرجى مراجعة التقرير المرفق الذي يحتوي على <strong>${d.count} تقديم تكاليف تشغيلية معتمد</strong>. يُرجى مراجعة التفاصيل واعتماد المدفوعات وتأكيد الصرف في أقرب وقت ممكن.`
-              : `تمت الموافقة الكاملة على طلبات السلفة المرفقة وهي جاهزة للمعالجة المالية. يرجى مراجعة التقرير المرفق واعتماد الصرف وتأكيد الاستلام في أقرب وقت ممكن.`
-            : d.fundingType === 'operational_cost'
-              ? `تمت الموافقة الكاملة على تقديم التكاليف التشغيلية وهو جاهز لمعالجة الدفع. يرجى مراجعة التفاصيل أدناه وإتمام الدفع في أقرب وقت ممكن.`
-              : `تمت الموافقة الكاملة على هذا الطلب وهو جاهز لمعالجة الدفع. يرجى مراجعة التفاصيل واعتماد الصرف في أقرب وقت ممكن.`
-          }
-          ${d.fundingType === 'advance' ? '<br><br><strong>ملاحظة:</strong> يجب على المستلمين تقديم الإيصالات وإعادة أي أموال غير مستخدمة خلال فترة التسوية المحددة.' : ''}
-        </p>
-      </div>
+      <!-- ── ARABIC SECTION ── -->
+      <table width="100%" cellpadding="0" cellspacing="0" style="background:#F9FAFB;border:1px solid #E5E7EB;border-radius:8px;margin-bottom:24px;">
+        <tr>
+          <td style="padding:6px 14px;background:#1D3461;border-radius:8px 8px 0 0;">
+            <p style="margin:0;font-size:9.5px;font-weight:700;color:#93C5FD;text-transform:uppercase;letter-spacing:1.5px;font-family:Arial,Helvetica,sans-serif;text-align:right;" dir="rtl">النص العربي — Arabic Version</p>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:16px 18px;" dir="rtl">
+            <p style="margin:0 0 8px 0;font-size:15px;color:#111827;text-align:right;font-family:'Segoe UI',Tahoma,Arial,sans-serif;">عزيزي <strong>${d.recipientName}</strong>،</p>
+            <p style="margin:0 0 14px 0;font-size:17px;font-weight:700;color:#0F2041;text-align:right;font-family:'Segoe UI',Tahoma,Arial,sans-serif;">طلب دفع رسمي — ${fundingLabelAr}</p>
+            <p style="margin:0 0 12px 0;font-size:13px;color:#374151;line-height:1.85;text-align:right;font-family:'Segoe UI',Tahoma,Arial,sans-serif;border-right:3px solid ${accentColor};padding-right:12px;">
+              ${d.isBulk
+                ? isOpCost
+                  ? `يرجى مراجعة التقرير المرفق الذي يحتوي على <strong>${d.count} تقديم تكاليف تشغيلية معتمد</strong>. يُرجى مراجعة التفاصيل واعتماد المدفوعات وتأكيد الصرف في أقرب وقت ممكن.`
+                  : `تمت الموافقة الكاملة على طلبات السلفة المرفقة وهي جاهزة للمعالجة المالية. يرجى مراجعة التقرير المرفق واعتماد الصرف وتأكيد الاستلام في أقرب وقت ممكن.`
+                : isOpCost
+                  ? `تمت الموافقة الكاملة على تقديم التكاليف التشغيلية وهو جاهز لمعالجة الدفع. يرجى مراجعة التفاصيل أدناه وإتمام الدفع في أقرب وقت ممكن.`
+                  : `تمت الموافقة الكاملة على هذا الطلب وهو جاهز لمعالجة الدفع. يرجى مراجعة التفاصيل واعتماد الصرف في أقرب وقت ممكن.`
+              }
+              ${isAdvance ? '<br><strong>ملاحظة:</strong> يجب على المستلمين تقديم الإيصالات وإعادة أي أموال غير مستخدمة خلال فترة التسوية المحددة.' : ''}
+            </p>
+            <!-- Arabic Amount Row -->
+            <table width="100%" cellpadding="0" cellspacing="0" style="background:${accentLight};border:1px solid ${accentBorder};border-radius:6px;">
+              <tr>
+                <td style="padding:10px 14px;text-align:right;">
+                  <p style="margin:0;font-size:10px;color:${accentColor};font-weight:700;letter-spacing:1px;font-family:'Segoe UI',Tahoma,Arial,sans-serif;">${isAdvance ? 'إجمالي المبلغ المعتمد' : 'إجمالي المبلغ المطلوب'}</p>
+                  <p style="margin:4px 0 0 0;font-size:22px;font-weight:900;color:#0F2041;font-family:'Segoe UI',Tahoma,Arial,sans-serif;">${fmt(d.totalAmount)}</p>
+                  <p style="margin:3px 0 0 0;font-size:11px;color:#6B7280;font-family:'Segoe UI',Tahoma,Arial,sans-serif;">رقم المرجع: ${d.requestId} &nbsp;·&nbsp; ${d.date}</p>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+      </table>
 
-      <hr style="border:none;border-top:1px solid #E5E7EB;margin:26px 0;">
-
-      <!-- SIGN-OFF -->
+      <!-- ── SIGN-OFF ── -->
       <table width="100%" cellpadding="0" cellspacing="0">
         <tr>
-          <td style="vertical-align:top;">
-            <p style="margin:0 0 3px 0;font-size:14px;color:#374151;font-family:Georgia,'Times New Roman',Times,serif;font-style:italic;">Yours faithfully,</p>
-            <p style="margin:8px 0 2px 0;font-size:15px;font-weight:700;color:#0F2041;font-family:Arial,Helvetica,sans-serif;">${d.approverName}</p>
-            <p style="margin:0 0 1px 0;font-size:11.5px;color:#6B7280;font-family:Arial,Helvetica,sans-serif;letter-spacing:0.3px;">Approving Officer — PACT Command Center</p>
-            <p style="margin:0;font-size:11.5px;color:#6B7280;font-family:Arial,Helvetica,sans-serif;letter-spacing:0.3px;">On behalf of the PACT Operations Team</p>
+          <td style="vertical-align:top;padding-right:20px;">
+            <p style="margin:0 0 2px 0;font-size:13px;color:#6B7280;font-style:italic;font-family:Georgia,'Times New Roman',Times,serif;">Yours faithfully,</p>
+            <p style="margin:6px 0 1px 0;font-size:14px;font-weight:700;color:#0F2041;font-family:Arial,Helvetica,sans-serif;">${d.approverName}</p>
+            <p style="margin:0;font-size:11px;color:#9CA3AF;font-family:Arial,Helvetica,sans-serif;">Approving Officer — PACT Command Center</p>
           </td>
           <td style="vertical-align:top;text-align:right;" dir="rtl">
-            <p style="margin:0 0 3px 0;font-size:14px;color:#374151;font-family:'Segoe UI',Tahoma,Arial,sans-serif;font-style:italic;">مع خالص التقدير،</p>
-            <p style="margin:8px 0 2px 0;font-size:15px;font-weight:700;color:#0F2041;font-family:'Segoe UI',Tahoma,Arial,sans-serif;">${d.approverName}</p>
-            <p style="margin:0;font-size:11.5px;color:#6B7280;font-family:'Segoe UI',Tahoma,Arial,sans-serif;">مسؤول الموافقة — مركز قيادة باكت</p>
+            <p style="margin:0 0 2px 0;font-size:13px;color:#6B7280;font-family:'Segoe UI',Tahoma,Arial,sans-serif;">مع خالص التقدير،</p>
+            <p style="margin:6px 0 1px 0;font-size:14px;font-weight:700;color:#0F2041;font-family:'Segoe UI',Tahoma,Arial,sans-serif;">${d.approverName}</p>
+            <p style="margin:0;font-size:11px;color:#9CA3AF;font-family:'Segoe UI',Tahoma,Arial,sans-serif;">مركز قيادة باكت</p>
           </td>
         </tr>
       </table>
@@ -492,30 +504,21 @@ function buildEnhancedPaymentEmailHTML(d: {
     </td>
   </tr>
 
-  <!-- FOOTER -->
+  <!-- ═══════════════════ FOOTER ═══════════════════ -->
   <tr>
-    <td style="background:#F1F5F9;border-top:1px solid #E2E8F0;padding:18px 36px;">
-      <p style="margin:0 0 8px 0;font-size:11px;color:#94A3B8;line-height:1.65;text-align:center;">
-        <strong style="color:#64748B;">CONFIDENTIAL:</strong> This communication and any attachments are confidential and intended solely for the named recipient(s).
-        If received in error, please notify the sender immediately and delete this message.
+    <td style="background:#F1F5F9;border-top:2px solid #E2E8F0;padding:16px 32px;">
+      <p style="margin:0 0 6px 0;font-size:10.5px;color:#94A3B8;line-height:1.65;text-align:center;font-family:Arial,Helvetica,sans-serif;">
+        <strong style="color:#64748B;">CONFIDENTIAL</strong> — This message and any attachments are intended solely for the named recipient(s).
       </p>
-      <p dir="rtl" style="margin:0 0 10px 0;font-size:11px;color:#94A3B8;line-height:1.65;text-align:center;">
-        <strong style="color:#64748B;">سري:</strong> هذه الرسالة ومرفقاتها سرية وموجهة حصراً للمستلم المحدد. إذا وصلت إليك بالخطأ، يرجى إخطار المُرسِل فوراً وحذف الرسالة.
+      <p dir="rtl" style="margin:0 0 10px 0;font-size:10.5px;color:#94A3B8;line-height:1.65;text-align:center;font-family:'Segoe UI',Tahoma,Arial,sans-serif;">
+        <strong style="color:#64748B;">سري</strong> — هذه الرسالة موجهة حصراً للمستلم المحدد.
       </p>
       <hr style="border:none;border-top:1px solid #E2E8F0;margin:10px 0;">
-      <table width="100%" cellpadding="0" cellspacing="0">
-        <tr>
-          <td align="center" style="padding-bottom:8px;">
-            <img src="${PACT_LOGO_B64}" alt="PACT" width="28" height="28" style="display:inline-block;vertical-align:middle;border-radius:5px;border:0;margin-right:7px;" />
-            <span style="font-size:13px;font-weight:700;color:#475569;vertical-align:middle;">PACT</span>
-          </td>
-        </tr>
-      </table>
-      <p style="margin:0 0 4px 0;font-size:10.5px;color:#94A3B8;text-align:center;line-height:1.5;">
-        Automated notification &nbsp;·&nbsp; PACT Command Center Platform &nbsp;·&nbsp; <strong>PACT Platform v2</strong><br>
-        مركز قيادة باكت — رسالة آلية
+      <p style="margin:0 0 4px 0;font-size:10.5px;color:#94A3B8;text-align:center;font-family:Arial,Helvetica,sans-serif;">
+        <strong style="color:#64748B;">PACT</strong> &nbsp;·&nbsp; Command Center Platform &nbsp;·&nbsp; Automated Notification
       </p>
-      <p style="margin:0;font-size:10px;color:#94A3B8;text-align:center;">© ${new Date().getFullYear()} PACT. All rights reserved.</p>
+      <p style="margin:0 0 4px 0;font-size:10px;color:#94A3B8;text-align:center;font-family:Arial,Helvetica,sans-serif;">مركز قيادة باكت — إشعار آلي</p>
+      <p style="margin:0;font-size:10px;color:#CBD5E1;text-align:center;font-family:Arial,Helvetica,sans-serif;">© ${new Date().getFullYear()} PACT. All rights reserved.</p>
     </td>
   </tr>
 

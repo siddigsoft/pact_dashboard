@@ -1192,7 +1192,11 @@ const CostSubmission = () => {
         console.warn('[BulkEmail] Excel generation failed:', xlErr);
       }
 
-      const recalcTotalSdg = approvedSubmissions.reduce((sum, s) => sum + (s.amount_cents || 0) / 100, 0);
+      const recalcTotalSdg = approvedSubmissions.reduce((sum, s) => {
+        const fromCents = s.amount_cents && s.amount_cents > 0 ? s.amount_cents / 100 : 0;
+        const direct = (s as any).total_amount || (s as any).amount || 0;
+        return sum + (fromCents > 0 ? fromCents : direct);
+      }, 0);
       const effectiveTotalSdg = recalcTotalSdg > 0 ? recalcTotalSdg : totalSdg;
 
       const result = await EmailNotificationService.sendPaymentRequestToFinanceWithRecipients(
