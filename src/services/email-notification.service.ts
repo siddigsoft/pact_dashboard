@@ -1797,12 +1797,12 @@ PACT Command Center | مركز قيادة باكت`;
       const { data: fomUsers } = await supabase
         .from('profiles')
         .select('email, full_name')
-        .eq('role', 'fom')
+        .in('role', ['fom', 'admin'])
         .eq('status', 'approved');
 
       if (!fomUsers || fomUsers.length === 0) {
-        console.log('[EMAIL] No FOM users found to notify about cost submission');
-        return { success: true, messageId: 'no-fom' };
+        console.log('[EMAIL] No FOM/Admin users found to notify about cost submission');
+        return { success: true, messageId: 'no-fom-admin' };
       }
 
       const fundingLabel = fundingType === 'advance' ? 'Advance Request' : 'Reimbursement';
@@ -1810,7 +1810,7 @@ PACT Command Center | مركز قيادة باكت`;
 
       const recipients = fomUsers
         .filter(u => u.email)
-        .map(u => ({ email: u.email!, name: u.full_name || 'FOM' }));
+        .map(u => ({ email: u.email!, name: u.full_name || 'FOM/Admin' }));
 
       if (recipients.length === 0) {
         return { success: true, messageId: 'no-fom-emails' };
@@ -1837,7 +1837,7 @@ PACT Command Center | مركز قيادة باكت`;
       };
 
       const result = await this.sendBulk(recipients, options);
-      console.log(`[EMAIL] Cost submission FOM notification: sent to ${result.successful}/${result.total} FOM users`);
+      console.log(`[EMAIL] Cost submission FOM/Admin notification: sent to ${result.successful}/${result.total} users`);
 
       return {
         success: result.successful > 0,
@@ -1866,17 +1866,17 @@ PACT Command Center | مركز قيادة باكت`;
       const { data: fomUsers } = await supabase
         .from('profiles')
         .select('email, full_name')
-        .eq('role', 'fom')
+        .in('role', ['fom', 'admin', 'super_admin'])
         .eq('status', 'approved');
 
       if (!fomUsers || fomUsers.length === 0) {
-        console.log('[EMAIL] No FOM users found to notify about advance approval');
-        return { success: true, messageId: 'no-fom' };
+        console.log('[EMAIL] No FOM/Admin/SuperAdmin users found to notify about advance approval');
+        return { success: true, messageId: 'no-management' };
       }
 
       const recipients = fomUsers
         .filter(u => u.email)
-        .map(u => ({ email: u.email!, name: u.full_name || 'FOM' }));
+        .map(u => ({ email: u.email!, name: u.full_name || 'Management' }));
 
       if (recipients.length === 0) {
         return { success: true, messageId: 'no-fom-emails' };
@@ -1903,7 +1903,7 @@ PACT Command Center | مركز قيادة باكت`;
       };
 
       const result = await this.sendBulk(recipients, options);
-      console.log(`[EMAIL] Advance approval FOM notification (${approvalStage}): sent to ${result.successful}/${result.total} FOM users`);
+      console.log(`[EMAIL] Advance approval management notification (${approvalStage}): sent to ${result.successful}/${result.total} users`);
 
       return {
         success: result.successful > 0,
