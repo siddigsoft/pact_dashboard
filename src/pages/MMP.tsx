@@ -2834,7 +2834,8 @@ const MMP = () => {
       forwarded: forwardedMMPs.length,
       verified: verifiedMMPs.length,
       totalMmpFiles: mmpFiles.length,
-      mmpIdsWithVerifiedSites: mmpIdsWithVerifiedSites.size
+      mmpIdsWithVerifiedSites: mmpIdsWithVerifiedSites.size,
+      verifiedSample: (verifiedMMPs || []).slice(0,10).map(m => ({ id: m.id, name: m.name, projectId: m.projectId, states: (m.siteEntries||[]).map((s:any)=>s.state).filter(Boolean).slice(0,5) }))
     });
     
     return {
@@ -3571,7 +3572,11 @@ const MMP = () => {
                 .from('mmp_site_entries')
                 .select(selectColumns)
                 .in('mmp_file_id', batch)
-                .in('status', ['costed', 'Costed', 'approved and costed', 'Approved and Costed', 'Approved And Costed'])
+                .in('status', [
+                  'costed', 'Costed',
+                  'approved and costed', 'Approved and Costed', 'Approved And Costed',
+                  'approved', 'Approved'
+                ])
                 .order('created_at', { ascending: false })
                 .limit(2000)
             );
