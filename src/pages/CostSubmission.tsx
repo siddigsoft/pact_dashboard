@@ -4265,6 +4265,35 @@ const CostSubmission = () => {
                   </>
                 )}
 
+                {Array.isArray(oc.supporting_documents) && oc.supporting_documents.length > 0 && (
+                  <>
+                    <Separator />
+                    <div className="space-y-2">
+                      <h4 className="font-semibold text-sm flex items-center gap-2">
+                        <Paperclip className="h-4 w-4" />
+                        Submission Attachments / مرفقات التقديم
+                        <span className="text-xs font-normal text-muted-foreground">({oc.supporting_documents.length})</span>
+                      </h4>
+                      <div className="flex flex-wrap gap-2">
+                        {(oc.supporting_documents as any[]).map((doc: any, idx: number) => (
+                          <a
+                            key={idx}
+                            href={doc.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 text-sm text-blue-700 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-900/40 transition-colors"
+                            data-testid={`link-detail-doc-${idx}`}
+                          >
+                            <FileText className="h-3.5 w-3.5 shrink-0" />
+                            <span className="max-w-[160px] truncate">{doc.filename || `Document ${idx + 1}`}</span>
+                            <Eye className="h-3.5 w-3.5 shrink-0 opacity-60" />
+                          </a>
+                        ))}
+                      </div>
+                    </div>
+                  </>
+                )}
+
                 <Separator />
 
                 <div className="space-y-3">
