@@ -21,6 +21,7 @@ export function MMPFileUpload({ existingMmp }: MMPFileUploadProps) {
   const [parsedEntries, setParsedEntries] = useState<any[]>([]);
   const [parseErrors, setParseErrors] = useState<string[]>([]);
   const [parseWarnings, setParseWarnings] = useState<string[]>([]);
+  const [showWarnings, setShowWarnings] = useState<boolean>(false);
   const [duplicatesResult, setDuplicatesResult] = useState<any | null>(null);
   const [duplicateNameSet, setDuplicateNameSet] = useState<Set<string>>(new Set());
   const [duplicateCodeSet, setDuplicateCodeSet] = useState<Set<string>>(new Set());
@@ -318,8 +319,29 @@ export function MMPFileUpload({ existingMmp }: MMPFileUploadProps) {
 
                   {parseWarnings.length > 0 && (
                     <div className="text-yellow-800 bg-yellow-50 p-2 rounded">
-                      <div className="font-medium">Warnings ({parseWarnings.length})</div>
-                      <div className="text-xs">These are non-blocking; upload may proceed.</div>
+                      <div
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => setShowWarnings((s) => !s)}
+                        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') setShowWarnings((s) => !s); }}
+                        className="font-medium flex items-center justify-between cursor-pointer"
+                        aria-expanded={showWarnings}
+                        aria-controls="mmp-warnings-list"
+                      >
+                        <span>Warnings ({parseWarnings.length})</span>
+                        <span className="text-xs ml-2 text-muted-foreground">{showWarnings ? 'Hide details' : 'View details'}</span>
+                      </div>
+                      <div className="text-xs mt-1">These are non-blocking issues. You can continue to upload, but please review the warnings — they may affect site matching or data accuracy.</div>
+
+                      {showWarnings && (
+                        <div id="mmp-warnings-list" className="mt-2 text-xs">
+                          <ul className="list-disc ml-5 space-y-1">
+                            {parseWarnings.map((w, idx) => (
+                              <li key={idx} className="break-words">{w}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
                     </div>
                   )}
 
