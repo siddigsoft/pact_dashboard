@@ -349,9 +349,9 @@ export function MMPFileUpload({ existingMmp }: MMPFileUploadProps) {
                           <input aria-label="Search entries" placeholder="Search" className="text-xs border rounded px-2 py-1 w-full md:w-auto" value={searchQuery} onChange={(e)=>setSearchQuery(e.target.value)} />
                           <div className="text-xs hidden sm:inline">Filter:</div>
                           <div className="flex items-center gap-1">
-                            <button onClick={() => setViewFilter('new')} className={`px-2 py-1 text-xs rounded ${viewFilter==='new'?'bg-slate-100':'bg-white'}`}>New</button>
-                            <button onClick={() => setViewFilter('existing')} className={`px-2 py-1 text-xs rounded ${viewFilter==='existing'?'bg-slate-100':'bg-white'}`}>Existing</button>
-                            <button onClick={() => setViewFilter('all')} className={`px-2 py-1 text-xs rounded ${viewFilter==='all'?'bg-slate-100':'bg-white'}`}>All</button>
+                            <button onClick={() => setViewFilter('new')} className={`px-2 py-1 text-xs rounded ${viewFilter==='new' ? 'bg-slate-100 border border-black' : 'bg-white'}`}>New</button>
+                            <button onClick={() => setViewFilter('existing')} className={`px-2 py-1 text-xs rounded ${viewFilter==='existing' ? 'bg-slate-100 border border-black' : 'bg-white'}`}>Existing</button>
+                            <button onClick={() => setViewFilter('all')} className={`px-2 py-1 text-xs rounded ${viewFilter==='all' ? 'bg-slate-100 border border-black' : 'bg-white'}`}>All</button>
                           </div>
 
                           <div className="ml-0 md:ml-2 flex items-center gap-1 overflow-auto">
