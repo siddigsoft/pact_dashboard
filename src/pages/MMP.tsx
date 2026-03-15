@@ -4509,7 +4509,7 @@ const MMP = () => {
       }
     });
     
-    // Check if all entries for each MMP are approved and costed
+    // Check if all entries for each MMP are approved and costedabcdf
     for (const [mmpId, entries] of entriesByMmp.entries()) {
       if (!map[mmpId]) {
         map[mmpId] = { exists: false, hasCosted: false, hasAssigned: false, hasInProgress: false, hasAccepted: false, hasCompleted: false, hasRejected: false, hasDispatched: false, allApprovedAndCosted: false };

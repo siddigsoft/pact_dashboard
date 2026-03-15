@@ -12,6 +12,7 @@ import MMPVersionHistory from '@/components/MMPVersionHistory';
 import MMPSiteInformation from '@/components/MMPSiteInformation';
 import MMPSiteEntriesTable from '@/components/mmp/MMPSiteEntriesTable';
 import MMPPartialUpdate from '@/components/mmp/MMPPartialUpdate';
+import MMPFileUpload from '@/components/mmp/MMPFileUpload';
 import { ActivityManager } from '@/components/project/activity/ActivityManager';
 import { useToast } from '@/hooks/use-toast';
 import FieldTeamMapPermissions from '@/components/map/FieldTeamMapPermissions';
@@ -26,7 +27,7 @@ const EditMMP: React.FC = () => {
   const { toast } = useToast();
   const [loading, setLoading] = useState(true);
   const [mmpFile, setMmpFile] = useState<any>(null);
-  const [activeTab, setActiveTab] = useState<string>('details');
+  const [activeTab, setActiveTab] = useState<string>('upload');
 
   const isAdmin = hasAnyRole(['admin']);
   const isFOM = hasAnyRole(['fom', 'Field Operation Manager (FOM)']);
@@ -59,7 +60,10 @@ const EditMMP: React.FC = () => {
 
   useEffect(() => {
     const initialTab = searchParams.get('tab');
-    if (initialTab) setActiveTab(initialTab);
+    // Keep 'upload' as the default active tab on load. Only honor the URL tab param
+    // if it explicitly requests 'upload'. This prevents 'partial-update' from
+    // becoming active by default when arriving at the page.
+    if (initialTab === 'upload') setActiveTab('upload');
   }, [searchParams]);
 
   useEffect(() => {
@@ -214,6 +218,7 @@ const EditMMP: React.FC = () => {
           <CardContent>
             <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
               <TabsList>
+                <TabsTrigger value="upload">Upload Update</TabsTrigger>
                 <TabsTrigger value="details">MMP Details</TabsTrigger>
                 <TabsTrigger value="sites">Sites</TabsTrigger>
                 <TabsTrigger value="partial-update">Partial Update</TabsTrigger>
@@ -251,6 +256,10 @@ const EditMMP: React.FC = () => {
                     if (updated) setMmpFile(updated);
                   }}
                 />
+              </TabsContent>
+
+              <TabsContent value="upload" className="space-y-4">
+                <MMPFileUpload existingMmp={mmpFile} />
               </TabsContent>
 
               <TabsContent value="activities" className="space-y-4">

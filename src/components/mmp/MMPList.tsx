@@ -296,6 +296,10 @@ export const MMPList = ({ mmpFiles, showActions = true }: MMPListProps) => {
                           Edit Site Entries
                         </DropdownMenuItem>
                       )}
+
+                      <DropdownMenuItem onClick={() => navigate(`/mmp/${mmp.id}/edit?tab=partial-update`)}>
+                        MMP Update (Upload File)
+                      </DropdownMenuItem>
                       
                       {canForwardMMP && !isForwarded && (
                         <DropdownMenuItem onClick={() => handleForward(mmp)}>
