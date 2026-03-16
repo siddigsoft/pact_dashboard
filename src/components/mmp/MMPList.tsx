@@ -34,9 +34,18 @@ import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { checkRecallAllowed, performRecall, canForceRecall, getRecallTierForRole } from '@/utils/recallUtils';
-import { RotateCcw, AlertTriangle, CheckCircle } from 'lucide-react';
+import { RotateCcw, AlertTriangle, CheckCircle, Pencil } from 'lucide-react';
 import { RecallDialog } from './RecallDialog';
 import MMPProgressDialog from './MMPProgressDialog';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 
 interface MMPListProps {
   mmpFiles: MMPFile[];
@@ -61,6 +70,9 @@ export const MMPList = ({ mmpFiles, showActions = true }: MMPListProps) => {
   const [showProgressDialog, setShowProgressDialog] = useState(false);
   const [selectedMMPForProgress, setSelectedMMPForProgress] = useState<MMPFile | null>(null);
   const [verifyingId, setVerifyingId] = useState<string | null>(null);
+  const [renameMMPTarget, setRenameMMPTarget] = useState<MMPFile | null>(null);
+  const [renameValue, setRenameValue] = useState('');
+  const [isSavingRename, setIsSavingRename] = useState(false);
 
   // Check permissions (case-insensitive fallback for possible lowercase stored roles)
   const isAdmin = hasAnyRole(['Admin', 'admin']);
@@ -158,6 +170,32 @@ export const MMPList = ({ mmpFiles, showActions = true }: MMPListProps) => {
       });
     } finally {
       setVerifyingId(null);
+    }
+  };
+
+  const handleRenameOpen = (mmp: MMPFile) => {
+    setRenameMMPTarget(mmp);
+    setRenameValue(mmp.name);
+  };
+
+  const handleRenameSubmit = async () => {
+    if (!renameMMPTarget || !renameValue.trim()) return;
+    setIsSavingRename(true);
+    try {
+      const { error } = await supabase
+        .from('mmp_files')
+        .update({ name: renameValue.trim() })
+        .eq('id', renameMMPTarget.id);
+      if (error) throw error;
+      await refreshMMPFiles();
+      toast({ title: 'MMP renamed successfully' });
+      setRenameMMPTarget(null);
+      setRenameValue('');
+    } catch (err) {
+      console.error('Rename MMP error:', err);
+      toast({ title: 'Error', description: 'Failed to rename MMP. Please try again.', variant: 'destructive' });
+    } finally {
+      setIsSavingRename(false);
     }
   };
 
@@ -286,6 +324,16 @@ export const MMPList = ({ mmpFiles, showActions = true }: MMPListProps) => {
                       <DropdownMenuItem onClick={() => navigate(`/mmp/${mmp.id}/view`)}>
                         View Details
                       </DropdownMenuItem>
+
+                      {(isSuperAdmin || isAdmin || isICT) && (
+                        <DropdownMenuItem
+                          onClick={() => handleRenameOpen(mmp)}
+                          data-testid={`button-rename-mmp-${mmp.id}`}
+                        >
+                          <Pencil className="h-4 w-4 mr-2" />
+                          Rename MMP
+                        </DropdownMenuItem>
+                      )}
                       
                       <DropdownMenuItem onClick={() => handleViewProgress(mmp)}>
                         MMP Progress
@@ -417,6 +465,43 @@ export const MMPList = ({ mmpFiles, showActions = true }: MMPListProps) => {
         onOpenChange={setShowProgressDialog}
         mmpFile={selectedMMPForProgress}
       />
+
+      {/* Rename MMP Dialog */}
+      <Dialog open={!!renameMMPTarget} onOpenChange={(open) => { if (!open) { setRenameMMPTarget(null); setRenameValue(''); } }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Pencil className="h-4 w-4" />
+              Rename MMP
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-2 py-2">
+            <Label htmlFor="mmp-rename-input">MMP Name</Label>
+            <Input
+              id="mmp-rename-input"
+              value={renameValue}
+              onChange={(e) => setRenameValue(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') handleRenameSubmit(); }}
+              placeholder="Enter new MMP name"
+              data-testid="input-rename-mmp"
+              autoFocus
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setRenameMMPTarget(null); setRenameValue(''); }} disabled={isSavingRename}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleRenameSubmit}
+              disabled={isSavingRename || !renameValue.trim() || renameValue.trim() === renameMMPTarget?.name}
+              className="bg-[#0F2041] hover:bg-[#1D3461] text-white"
+              data-testid="button-rename-mmp-save"
+            >
+              {isSavingRename ? 'Saving...' : 'Save'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Delete Confirmation Dialog */}
       <AlertDialog open={confirmId !== null} onOpenChange={open => { if (!open) setConfirmId(null); }}>
