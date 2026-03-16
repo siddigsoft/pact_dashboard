@@ -1360,7 +1360,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
           if (createError) throw createError;
 
-          await supabase.from('wallet_transactions').insert({
+          const { data: newTx } = await supabase.from('wallet_transactions').insert({
             wallet_id: newWallet.id,
             user_id: userId,
             type: 'adjustment',
@@ -1371,7 +1371,13 @@ export function WalletProvider({ children }: { children: ReactNode }) {
             balance_after: amount,
             created_by: currentUser.id,
             metadata: { adjustmentType, adminReason: reason },
-          });
+          }).select('id').single();
+
+          try {
+            await NotificationTriggerService.walletCredited(userId, amount, currency, `Admin credit: ${reason}`, newTx?.id);
+          } catch (notifErr) {
+            console.warn('[Wallet] Failed to send wallet credited notification:', notifErr);
+          }
 
           toast({
             title: 'Balance Adjusted',
@@ -1402,7 +1408,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
       if (updateError) throw updateError;
 
-      const { error: transactionError } = await supabase.from('wallet_transactions').insert({
+      const { data: insertedTx, error: transactionError } = await supabase.from('wallet_transactions').insert({
         wallet_id: targetWallet.id,
         user_id: userId,
         type: 'adjustment',
@@ -1413,9 +1419,19 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         balance_after: newBalance,
         created_by: currentUser.id,
         metadata: { adjustmentType, adminReason: reason },
-      });
+      }).select('id').single();
 
       if (transactionError) throw transactionError;
+
+      try {
+        if (adjustmentType === 'credit') {
+          await NotificationTriggerService.walletCredited(userId, amount, currency, `Admin credit: ${reason}`, insertedTx?.id);
+        } else {
+          await NotificationTriggerService.walletDebited(userId, amount, currency, `Admin debit: ${reason}`, insertedTx?.id);
+        }
+      } catch (notifErr) {
+        console.warn('[Wallet] Failed to send wallet adjustment notification:', notifErr);
+      }
 
       toast({
         title: 'Balance Adjusted',

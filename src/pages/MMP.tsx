@@ -21,6 +21,7 @@ import { Badge } from '@/components/ui/badge';
 import type { SiteVisitRow } from '@/components/mmp/MMPCategorySitesTable';
 import MMPSiteEntriesTable from '@/components/mmp/MMPSiteEntriesTable';
 import { insertNotifications } from '@/services/mmpActions';
+import { NotificationTriggerService } from '@/services/NotificationTriggerService';
 import { supabase } from '@/integrations/supabase/client';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
@@ -1802,6 +1803,18 @@ const MMP = () => {
       } else {
         // Wallet transaction will be handled when syncing site_visit_complete
         console.log('💰 Wallet transaction will be processed when syncing completion');
+      }
+
+      // Notify coordinator (or assignee) that site visit was completed
+      try {
+        const coordinatorId = updateData?.[0]?.forwarded_to_user_id ?? (site as any).forwarded_to_user_id ?? (site as any).forwardedToUserId;
+        const siteName = site.site_name || site.siteName || 'Site';
+        const collectorName = (currentUser as any)?.fullName ?? (currentUser as any)?.full_name ?? (currentUser as any)?.email ?? 'Data collector';
+        if (coordinatorId) {
+          await NotificationTriggerService.siteVisitCompleted(coordinatorId, siteName, collectorName, site.id);
+        }
+      } catch (notifErr) {
+        console.warn('[MMP] Failed to send site visit completed notification:', notifErr);
       }
 
       toast({

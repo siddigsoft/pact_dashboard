@@ -178,23 +178,28 @@ export const ForwardToCoordinatorsDialog: React.FC<ForwardToCoordinatorsDialogPr
             await supabase.from('mmp_site_entries').update({ workflow: next }).eq('id', siteId);
           }
 
-          // Insert notifications for coordinators in this group
-          const rows = coordinatorIds.map(uid => ({
-            recipient_id: uid,
-            user_id: uid, // Also set for RLS policy compatibility
-            title_en: 'Sites forwarded to you',
-            title_ar: 'تم إرسال مواقع إليك',
-            message_en: `${siteNamesInGroup.join(', ')} (${group.stateName}${group.localityName ? ` - ${group.localityName}` : ''}) have been forwarded to you for verification`,
-            message_ar: `تم إرسال ${siteNamesInGroup.join(', ')} (${group.stateName}${group.localityName ? ` - ${group.localityName}` : ''}) إليك للتحقق`,
-            action_url: `/mmp/${mmpId}`,
-            entity_id: siteIdsInGroup[0], // Use first site ID as reference
-            entity_type: 'mmpSiteEntry',
-            event_type: 'assignments',
-            status: 'pending',
-            priority: 'normal'
-          }));
-          const { error: nErr } = await supabase.from('notifications').insert(rows);
-          if (nErr) throw nErr;
+          // Notify coordinators in this group via NotificationTriggerService
+          const messageEn = `${siteNamesInGroup.join(', ')} (${group.stateName}${group.localityName ? ` - ${group.localityName}` : ''}) have been forwarded to you for verification`;
+          const messageAr = `تم إرسال ${siteNamesInGroup.join(', ')} (${group.stateName}${group.localityName ? ` - ${group.localityName}` : ''}) إليك للتحقق`;
+          for (const uid of coordinatorIds) {
+            try {
+              await NotificationTriggerService.send({
+                userId: uid,
+                title: 'Sites forwarded to you',
+                titleAr: 'تم إرسال مواقع إليك',
+                message: messageEn,
+                messageAr: messageAr,
+                type: 'info',
+                category: 'assignments',
+                priority: 'normal',
+                link: mmpId ? `/mmp/${mmpId}` : '/mmp',
+                relatedEntityId: siteIdsInGroup[0] ?? mmpId,
+                relatedEntityType: 'siteVisit',
+              });
+            } catch (e) {
+              console.warn('[ForwardToCoordinators] Notification failed for coordinator:', uid, e);
+            }
+          }
 
           // Send email notifications directly to coordinators
           const forwarderName = (currentUser as any)?.full_name || (currentUser as any)?.fullName || currentUser?.email || 'Field Operations Manager';
@@ -299,24 +304,23 @@ export const ForwardToCoordinatorsDialog: React.FC<ForwardToCoordinatorsDialogPr
             // Don't fail the whole operation if supervisor notification fails
           }
 
-          // Notify the forwarder
+          // Notify the forwarder via NotificationTriggerService
           try {
             const { data: auth } = await supabase.auth.getUser();
             const forwarderId = auth?.user?.id;
             if (forwarderId) {
-              await supabase.from('notifications').insert({
-                recipient_id: forwarderId,
-                user_id: forwarderId, // Also set for RLS policy compatibility
-                title_en: 'Sites forwarded',
-                title_ar: 'تم إرسال المواقع',
-                message_en: `You forwarded ${siteNamesInGroup.join(', ')} (${group.stateName}${group.localityName ? ` - ${group.localityName}` : ''}) to ${coordinatorIds.length} Coordinator(s)`,
-                message_ar: `قمت بإرسال ${siteNamesInGroup.join(', ')} (${group.stateName}${group.localityName ? ` - ${group.localityName}` : ''}) إلى ${coordinatorIds.length} منسق(ين)`,
-                action_url: `/mmp/${mmpId}`,
-                entity_id: siteIdsInGroup[0],
-                entity_type: 'mmpSiteEntry',
-                event_type: 'system',
-                status: 'pending',
-                priority: 'normal'
+              await NotificationTriggerService.send({
+                userId: forwarderId,
+                title: 'Sites forwarded',
+                titleAr: 'تم إرسال المواقع',
+                message: `You forwarded ${siteNamesInGroup.join(', ')} (${group.stateName}${group.localityName ? ` - ${group.localityName}` : ''}) to ${coordinatorIds.length} Coordinator(s)`,
+                messageAr: `قمت بإرسال ${siteNamesInGroup.join(', ')} (${group.stateName}${group.localityName ? ` - ${group.localityName}` : ''}) إلى ${coordinatorIds.length} منسق(ين)`,
+                type: 'info',
+                category: 'system',
+                priority: 'normal',
+                link: mmpId ? `/mmp/${mmpId}` : '/mmp',
+                relatedEntityId: siteIdsInGroup[0] ?? mmpId,
+                relatedEntityType: 'siteVisit',
               });
             }
           } catch {}
@@ -409,24 +413,28 @@ export const ForwardToCoordinatorsDialog: React.FC<ForwardToCoordinatorsDialogPr
           await supabase.from('mmp_site_entries').update({ workflow: next }).eq('id', siteId);
         }
 
-        // Insert notifications for each coordinator
+        // Notify each coordinator via NotificationTriggerService
         const ids = Array.from(selected);
         const siteNamesStr = siteNames?.join(', ') || 'sites';
-        const rows = ids.map(uid => ({
-          recipient_id: uid,
-          title_en: 'Sites forwarded to you',
-          title_ar: 'تم إرسال مواقع إليك',
-          message_en: `${siteNamesStr} have been forwarded to you for verification`,
-          message_ar: `تم إرسال ${siteNamesStr} إليك للتحقق`,
-          action_url: `/mmp/${mmpId}`,
-          entity_id: siteIds![0], // Use first site ID as reference
-          entity_type: 'mmpSiteEntry',
-          event_type: 'assignments',
-          status: 'pending',
-          priority: 'normal'
-        }));
-        const { error: nErr } = await supabase.from('notifications').insert(rows);
-        if (nErr) throw nErr;
+        for (const uid of ids) {
+          try {
+            await NotificationTriggerService.send({
+              userId: uid,
+              title: 'Sites forwarded to you',
+              titleAr: 'تم إرسال مواقع إليك',
+              message: `${siteNamesStr} have been forwarded to you for verification`,
+              messageAr: `تم إرسال ${siteNamesStr} إليك للتحقق`,
+              type: 'info',
+              category: 'assignments',
+              priority: 'normal',
+              link: mmpId ? `/mmp/${mmpId}` : '/mmp',
+              relatedEntityId: siteIds?.[0] ?? mmpId,
+              relatedEntityType: 'siteVisit',
+            });
+          } catch (e) {
+            console.warn('[ForwardToCoordinators] Notification failed for coordinator:', uid, e);
+          }
+        }
 
         // Send email notifications directly to coordinators
         const forwarderNameNonGrouped = (currentUser as any)?.full_name || (currentUser as any)?.fullName || currentUser?.email || 'Field Operations Manager';
@@ -545,24 +553,23 @@ export const ForwardToCoordinatorsDialog: React.FC<ForwardToCoordinatorsDialogPr
           // Don't fail the whole operation if supervisor notification fails
         }
 
-        // Notify the forwarder
+        // Notify the forwarder via NotificationTriggerService
         try {
           const { data: auth } = await supabase.auth.getUser();
           const forwarderId = auth?.user?.id;
           if (forwarderId) {
-            await supabase.from('notifications').insert({
-              recipient_id: forwarderId,
-              user_id: forwarderId, // Also set for RLS policy compatibility
-              title_en: 'Sites forwarded',
-              title_ar: 'تم إرسال المواقع',
-              message_en: `You forwarded ${siteNamesStr} to ${ids.length} Coordinator(s)`,
-              message_ar: `قمت بإرسال ${siteNamesStr} إلى ${ids.length} منسق(ين)`,
-              action_url: `/mmp/${mmpId}`,
-              entity_id: siteIds![0],
-              entity_type: 'mmpSiteEntry',
-              event_type: 'system',
-              status: 'pending',
-              priority: 'normal'
+            await NotificationTriggerService.send({
+              userId: forwarderId,
+              title: 'Sites forwarded',
+              titleAr: 'تم إرسال المواقع',
+              message: `You forwarded ${siteNamesStr} to ${ids.length} Coordinator(s)`,
+              messageAr: `قمت بإرسال ${siteNamesStr} إلى ${ids.length} منسق(ين)`,
+              type: 'info',
+              category: 'system',
+              priority: 'normal',
+              link: mmpId ? `/mmp/${mmpId}` : '/mmp',
+              relatedEntityId: siteIds?.[0] ?? mmpId,
+              relatedEntityType: 'siteVisit',
             });
           }
         } catch {}
@@ -621,25 +628,29 @@ export const ForwardToCoordinatorsDialog: React.FC<ForwardToCoordinatorsDialogPr
         // Forward MMP to coordinators (existing logic)
         console.log(`[COORDINATOR_EMAIL] === MMP-level Forward Path ===`);
         
-        // Insert notifications
+        // Notify each coordinator via NotificationTriggerService
         const ids = Array.from(selected);
         console.log(`[COORDINATOR_EMAIL] Forwarding MMP to ${ids.length} coordinators: ${ids.join(', ')}`);
         
-        const rows = ids.map(uid => ({
-          recipient_id: uid,
-          title_en: 'MMP forwarded to you',
-          title_ar: 'تم إرسال خطة المراقبة الشهرية إليك',
-          message_en: `${mmpName || 'MMP'} has been forwarded to you for verification`,
-          message_ar: `تم إرسال ${mmpName || 'خطة المراقبة الشهرية'} إليك للتحقق`,
-          action_url: `/mmp/${mmpId}`,
-          entity_id: mmpId,
-          entity_type: 'mmpFile',
-          event_type: 'assignments',
-          status: 'pending',
-          priority: 'normal'
-        }));
-        const { error: nErr } = await supabase.from('notifications').insert(rows);
-        if (nErr) throw nErr;
+        for (const uid of ids) {
+          try {
+            await NotificationTriggerService.send({
+              userId: uid,
+              title: 'MMP forwarded to you',
+              titleAr: 'تم إرسال خطة المراقبة الشهرية إليك',
+              message: `${mmpName || 'MMP'} has been forwarded to you for verification`,
+              messageAr: `تم إرسال ${mmpName || 'خطة المراقبة الشهرية'} إليك للتحقق`,
+              type: 'info',
+              category: 'assignments',
+              priority: 'normal',
+              link: mmpId ? `/mmp/${mmpId}` : '/mmp',
+              relatedEntityId: mmpId,
+              relatedEntityType: 'mmpFile',
+            });
+          } catch (e) {
+            console.warn('[ForwardToCoordinators] Notification failed for coordinator:', uid, e);
+          }
+        }
 
         // Send email notifications directly to coordinators
         const forwarderNameMMP = (currentUser as any)?.full_name || (currentUser as any)?.fullName || currentUser?.email || 'Field Operations Manager';
@@ -743,24 +754,23 @@ export const ForwardToCoordinatorsDialog: React.FC<ForwardToCoordinatorsDialogPr
           // Don't fail the whole operation if supervisor notification fails
         }
 
-        // Notify the forwarder themself
+        // Notify the forwarder via NotificationTriggerService
         try {
           const { data: auth } = await supabase.auth.getUser();
           const forwarderId = auth?.user?.id;
           if (forwarderId) {
-            await supabase.from('notifications').insert({
-              recipient_id: forwarderId,
-              user_id: forwarderId, // Also set for RLS policy compatibility
-              title_en: 'MMP forwarded',
-              title_ar: 'تم إرسال خطة المراقبة الشهرية',
-              message_en: `You forwarded ${mmpName || 'MMP'} to ${ids.length} Coordinator(s)`,
-              message_ar: `قمت بإرسال ${mmpName || 'خطة المراقبة الشهرية'} إلى ${ids.length} منسق(ين)`,
-              action_url: `/mmp/${mmpId}`,
-              entity_id: mmpId,
-              entity_type: 'mmpFile',
-              event_type: 'system',
-              status: 'pending',
-              priority: 'normal'
+            await NotificationTriggerService.send({
+              userId: forwarderId,
+              title: 'MMP forwarded',
+              titleAr: 'تم إرسال خطة المراقبة الشهرية',
+              message: `You forwarded ${mmpName || 'MMP'} to ${ids.length} Coordinator(s)`,
+              messageAr: `قمت بإرسال ${mmpName || 'خطة المراقبة الشهرية'} إلى ${ids.length} منسق(ين)`,
+              type: 'info',
+              category: 'system',
+              priority: 'normal',
+              link: mmpId ? `/mmp/${mmpId}` : '/mmp',
+              relatedEntityId: mmpId,
+              relatedEntityType: 'mmpFile',
             });
           }
         } catch {}

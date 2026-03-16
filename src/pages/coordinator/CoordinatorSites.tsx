@@ -1601,15 +1601,16 @@ const CoordinatorSites: React.FC = () => {
           .eq('id', selectedMmpIdForReturn)
           .single();
         if (mmpData?.uploaded_by) {
-          await supabase.from('notifications').insert({
-            recipient_id: mmpData.uploaded_by,
-            title_en: 'Sites Returned by Coordinator',
-            title_ar: 'تم إرجاع المواقع من المنسق',
-            message_en: `${eligibleSiteIds.length} sites in ${selectedStateForReturn.state} (${selectedMmpNameForReturn}) have been returned to FOM. Reason: ${returnStateToFOMReason}`,
-            message_ar: `تم إرجاع ${eligibleSiteIds.length} مواقع في ${selectedStateForReturn.state} (${selectedMmpNameForReturn}) إلى مدير العمليات الميدانية. السبب: ${returnStateToFOMReason}`,
-            event_type: 'approvals',
-            status: 'pending',
-            priority: 'high'
+          await NotificationTriggerService.send({
+            userId: mmpData.uploaded_by,
+            title: 'Sites Returned by Coordinator',
+            titleAr: 'تم إرجاع المواقع من المنسق',
+            message: `${eligibleSiteIds.length} sites in ${selectedStateForReturn.state} (${selectedMmpNameForReturn}) have been returned to FOM. Reason: ${returnStateToFOMReason}`,
+            messageAr: `تم إرجاع ${eligibleSiteIds.length} مواقع في ${selectedStateForReturn.state} (${selectedMmpNameForReturn}) إلى مدير العمليات الميدانية. السبب: ${returnStateToFOMReason}`,
+            type: 'warning',
+            category: 'approvals',
+            priority: 'high',
+            link: '/mmp',
           });
         }
       } catch (notifErr) {
@@ -1695,19 +1696,22 @@ const CoordinatorSites: React.FC = () => {
 
             if (mmpData?.uploaded_by) {
               const sitesForThisMmp = sitesToReturn.filter(s => s.mmp_file_id === mmpFileId);
-              await supabase.from('notifications').insert({
-                recipient_id: mmpData.uploaded_by,
-                title_en: 'Sites Returned by Coordinator',
-                title_ar: 'تم إرجاع المواقع من المنسق',
-                message_en: sitesToReturn.length > 1 
-                  ? `${sitesToReturn.length} sites in ${stateForPermitVerification.state} have been returned. Reason: ${reason}`
-                  : `Site has been returned. Reason: ${reason}`,
-                message_ar: sitesToReturn.length > 1 
-                  ? `تم إرجاع ${sitesToReturn.length} مواقع في ${stateForPermitVerification.state}. السبب: ${reason}`
-                  : `تم إرجاع الموقع. السبب: ${reason}`,
-                event_type: 'approvals',
-                status: 'pending',
-                priority: 'high'
+              const msgEn = sitesToReturn.length > 1
+                ? `${sitesToReturn.length} sites in ${stateForPermitVerification.state} have been returned. Reason: ${reason}`
+                : `Site has been returned. Reason: ${reason}`;
+              const msgAr = sitesToReturn.length > 1
+                ? `تم إرجاع ${sitesToReturn.length} مواقع في ${stateForPermitVerification.state}. السبب: ${reason}`
+                : `تم إرجاع الموقع. السبب: ${reason}`;
+              await NotificationTriggerService.send({
+                userId: mmpData.uploaded_by,
+                title: 'Sites Returned by Coordinator',
+                titleAr: 'تم إرجاع المواقع من المنسق',
+                message: msgEn,
+                messageAr: msgAr,
+                type: 'warning',
+                category: 'approvals',
+                priority: 'high',
+                link: '/mmp',
               });
             }
           } catch (notifErr) {
@@ -1809,19 +1813,22 @@ const CoordinatorSites: React.FC = () => {
 
           if (mmpData?.uploaded_by) {
             const sitesForThisMmp = sitesToReturn.filter(s => s.mmp_file_id === mmpFileId);
-            await supabase.from('notifications').insert({
-              recipient_id: mmpData.uploaded_by,
-              title_en: 'Sites Returned by Coordinator',
-              title_ar: 'تم إرجاع المواقع من المنسق',
-              message_en: sitesToReturn.length > 1 
-                ? `${sitesToReturn.length} sites have been returned. Reason: ${reason}`
-                : `Site ${sitesToReturn[0].site_name} has been returned. Reason: ${reason}`,
-              message_ar: sitesToReturn.length > 1 
-                ? `تم إرجاع ${sitesToReturn.length} مواقع. السبب: ${reason}`
-                : `تم إرجاع الموقع ${sitesToReturn[0].site_name}. السبب: ${reason}`,
-              event_type: 'approvals',
-              status: 'pending',
-              priority: 'high'
+            const msgEn = sitesToReturn.length > 1
+              ? `${sitesToReturn.length} sites have been returned. Reason: ${reason}`
+              : `Site ${sitesToReturn[0].site_name} has been returned. Reason: ${reason}`;
+            const msgAr = sitesToReturn.length > 1
+              ? `تم إرجاع ${sitesToReturn.length} مواقع. السبب: ${reason}`
+              : `تم إرجاع الموقع ${sitesToReturn[0].site_name}. السبب: ${reason}`;
+            await NotificationTriggerService.send({
+              userId: mmpData.uploaded_by,
+              title: 'Sites Returned by Coordinator',
+              titleAr: 'تم إرجاع المواقع من المنسق',
+              message: msgEn,
+              messageAr: msgAr,
+              type: 'warning',
+              category: 'approvals',
+              priority: 'high',
+              link: '/mmp',
             });
           }
         } catch (notifErr) {

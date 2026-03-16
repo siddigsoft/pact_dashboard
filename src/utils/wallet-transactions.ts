@@ -7,6 +7,7 @@
  */
 
 import { supabase } from '@/integrations/supabase/client';
+import { NotificationTriggerService } from '@/services/NotificationTriggerService';
 
 export interface CreateSiteVisitTransactionOptions {
   /** The site entry ID (mmp_site_entries.id) */
@@ -537,6 +538,19 @@ export async function createSiteVisitWalletTransaction(
       } catch (reconcileErr: any) {
         console.warn(`[WalletTransaction] Failed to mark advances as reconciled (non-fatal): ${reconcileErr.message}`);
       }
+    }
+
+    // Create persistent notification for wallet credited (site visit payment)
+    try {
+      await NotificationTriggerService.walletCredited(
+        userIdToPay,
+        amount,
+        'SDG',
+        transactionDescription,
+        transaction.id
+      );
+    } catch (notifErr: any) {
+      console.warn('[WalletTransaction] Failed to send wallet credited notification (non-fatal):', notifErr?.message || notifErr);
     }
 
     return {

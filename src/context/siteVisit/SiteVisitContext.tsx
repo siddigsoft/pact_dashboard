@@ -562,6 +562,8 @@ export const SiteVisitProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       }
 
       const supervisors = users.filter(u => u.role === 'supervisor');
+      const collectorName = currentUser?.name || currentUser?.fullName || (currentUser as any)?.email || 'Data collector';
+      const siteName = siteVisit?.siteName || 'Site';
       supervisors.forEach(supervisor => {
         addNotification({
           userId: supervisor.id,
@@ -573,6 +575,14 @@ export const SiteVisitProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           relatedEntityType: "siteVisit",
         });
       });
+      // Persistent notification for supervisors (DB)
+      for (const supervisor of supervisors) {
+        try {
+          await NotificationTriggerService.siteVisitCompleted(supervisor.id, siteName, collectorName, siteVisitId);
+        } catch (e) {
+          console.warn('[SiteVisitContext] Failed to send site visit completed notification to supervisor:', supervisor.id, e);
+        }
+      }
 
       const complexityMap: Record<string, number> = {
         'low': 1.0,

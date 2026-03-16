@@ -9,6 +9,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
 import { useMMP } from '@/context/mmp/MMPContext';
 import { clearForwardedWorkflow } from '@/services/mmpActions';
+import { NotificationTriggerService } from '@/services/NotificationTriggerService';
 
 interface BulkClearForwardedDialogProps {
   open: boolean;
@@ -125,18 +126,19 @@ export const BulkClearForwardedDialog: React.FC<BulkClearForwardedDialogProps> =
           .in('mmp_file_id', ids);
       }
 
-      // Notification summary
+      // Notification summary via NotificationTriggerService
       if (adminId) {
-        await supabase.from('notifications').insert({
-          recipient_id: adminId,
-          title_en: 'Forwarded sites cleared',
-          title_ar: 'تم مسح المواقع المُحالة',
-          message_en: `Cleared ${mmpRows.length} MMP(s); reset ${includeSiteVisitDeletion ? totalSiteVisits : 0} site entry status(es).`,
-          message_ar: `تم مسح ${mmpRows.length} خطة مراقبة شهرية؛ إعادة تعيين ${includeSiteVisitDeletion ? totalSiteVisits : 0} حالة إدخال موقع.`,
-          entity_type: 'mmpFile',
-          event_type: 'system',
-          status: 'pending',
-          priority: 'normal'
+        await NotificationTriggerService.send({
+          userId: adminId,
+          title: 'Forwarded sites cleared',
+          titleAr: 'تم مسح المواقع المُحالة',
+          message: `Cleared ${mmpRows.length} MMP(s); reset ${includeSiteVisitDeletion ? totalSiteVisits : 0} site entry status(es).`,
+          messageAr: `تم مسح ${mmpRows.length} خطة مراقبة شهرية؛ إعادة تعيين ${includeSiteVisitDeletion ? totalSiteVisits : 0} حالة إدخال موقع.`,
+          type: 'info',
+          category: 'system',
+          priority: 'normal',
+          link: '/mmp',
+          relatedEntityType: 'mmpFile',
         });
       }
 
