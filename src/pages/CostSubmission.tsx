@@ -1192,7 +1192,11 @@ const CostSubmission = () => {
         console.warn('[BulkEmail] Excel generation failed:', xlErr);
       }
 
-      const recalcTotalSdg = approvedSubmissions.reduce((sum, s) => sum + (s.amount_cents || 0) / 100, 0);
+      const recalcTotalSdg = approvedSubmissions.reduce((sum, s) => {
+        const fromCents = s.amount_cents && s.amount_cents > 0 ? s.amount_cents / 100 : 0;
+        const direct = (s as any).total_amount || (s as any).amount || 0;
+        return sum + (fromCents > 0 ? fromCents : direct);
+      }, 0);
       const effectiveTotalSdg = recalcTotalSdg > 0 ? recalcTotalSdg : totalSdg;
 
       const result = await EmailNotificationService.sendPaymentRequestToFinanceWithRecipients(
@@ -2993,6 +2997,31 @@ const CostSubmission = () => {
                             </div>
                           )}
 
+                          {Array.isArray(oc.supporting_documents) && oc.supporting_documents.length > 0 && (
+                            <div className="pt-1 border-t space-y-1.5" data-testid={`docs-section-${oc.id}`}>
+                              <p className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+                                <Paperclip className="h-3 w-3" />
+                                Attachments / المرفقات ({oc.supporting_documents.length})
+                              </p>
+                              <div className="flex flex-wrap gap-1.5">
+                                {(oc.supporting_documents as any[]).map((doc: any, idx: number) => (
+                                  <a
+                                    key={idx}
+                                    href={doc.url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 text-xs text-blue-700 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-900/40 transition-colors max-w-[180px]"
+                                    data-testid={`link-doc-${oc.id}-${idx}`}
+                                  >
+                                    <FileText className="h-3 w-3 shrink-0" />
+                                    <span className="truncate">{doc.filename || `Document ${idx + 1}`}</span>
+                                    <Eye className="h-3 w-3 shrink-0 opacity-60" />
+                                  </a>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
                           <div className="flex items-center gap-2 pt-1 border-t flex-wrap">
                             {canTier1Approve(oc) && (
                               <>
@@ -3467,9 +3496,29 @@ const CostSubmission = () => {
                         </button>
                       </div>
                     )}
-                    <div className="flex items-center gap-1.5 text-muted-foreground">
-                      <Paperclip className="h-3 w-3 shrink-0" />
-                      <span>{docCount} document{docCount !== 1 ? 's' : ''} attached</span>
+                    <div className={`${docCount > 0 ? 'col-span-2' : ''} space-y-1.5`}>
+                      <div className="flex items-center gap-1.5 text-muted-foreground">
+                        <Paperclip className="h-3 w-3 shrink-0" />
+                        <span>{docCount} attachment{docCount !== 1 ? 's' : ''}</span>
+                      </div>
+                      {docCount > 0 && (
+                        <div className="flex flex-wrap gap-1.5">
+                          {(sub.supporting_documents as any[]).map((doc: any, idx: number) => (
+                            <a
+                              key={idx}
+                              href={doc.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 text-xs text-blue-700 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-900/40 transition-colors max-w-[200px]"
+                              data-testid={`link-approval-doc-${idx}`}
+                            >
+                              <FileText className="h-3 w-3 shrink-0" />
+                              <span className="truncate">{doc.filename || `Document ${idx + 1}`}</span>
+                              <Eye className="h-3 w-3 shrink-0 opacity-60" />
+                            </a>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -4212,6 +4261,35 @@ const CostSubmission = () => {
                     <div className="space-y-1">
                       <p className="text-xs text-muted-foreground">Description / الوصف</p>
                       <p className="text-sm whitespace-pre-line">{oc.description}</p>
+                    </div>
+                  </>
+                )}
+
+                {Array.isArray(oc.supporting_documents) && oc.supporting_documents.length > 0 && (
+                  <>
+                    <Separator />
+                    <div className="space-y-2">
+                      <h4 className="font-semibold text-sm flex items-center gap-2">
+                        <Paperclip className="h-4 w-4" />
+                        Submission Attachments / مرفقات التقديم
+                        <span className="text-xs font-normal text-muted-foreground">({oc.supporting_documents.length})</span>
+                      </h4>
+                      <div className="flex flex-wrap gap-2">
+                        {(oc.supporting_documents as any[]).map((doc: any, idx: number) => (
+                          <a
+                            key={idx}
+                            href={doc.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 text-sm text-blue-700 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-900/40 transition-colors"
+                            data-testid={`link-detail-doc-${idx}`}
+                          >
+                            <FileText className="h-3.5 w-3.5 shrink-0" />
+                            <span className="max-w-[160px] truncate">{doc.filename || `Document ${idx + 1}`}</span>
+                            <Eye className="h-3.5 w-3.5 shrink-0 opacity-60" />
+                          </a>
+                        ))}
+                      </div>
                     </div>
                   </>
                 )}

@@ -1,0 +1,1250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>All Email Templates — PACT Command Center</title>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:'Segoe UI',Arial,sans-serif;background:#0f172a;color:#e2e8f0}
+    .layout{display:flex;min-height:100vh}
+    .nav{width:210px;flex-shrink:0;background:#020817;padding:16px 0;position:sticky;top:0;height:100vh;overflow-y:auto;border-right:1px solid #1e293b}
+    .nav-brand{padding:10px 14px 16px;border-bottom:1px solid #1e293b;margin-bottom:6px}
+    .nav-brand h1{font-size:12px;font-weight:800;color:#60a5fa;letter-spacing:.5px}
+    .nav-brand p{font-size:10px;color:#475569;margin-top:2px}
+    .nav-group{padding:2px 0}
+    .nav-label{padding:6px 14px 3px;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:#334155}
+    .nav a{display:block;padding:4px 14px;font-size:11px;color:#94a3b8;text-decoration:none;border-left:2px solid transparent;transition:.12s}
+    .nav a:hover{color:#e2e8f0;border-left-color:#60a5fa;background:#0f172a}
+    .main{flex:1;padding:28px 20px 64px;max-width:740px}
+    .page-title{font-size:22px;font-weight:800;color:#f1f5f9;margin-bottom:3px}
+    .page-sub{font-size:12px;color:#64748b;margin-bottom:36px}
+    .section-hdr{display:flex;align-items:center;gap:10px;margin:44px 0 18px;scroll-margin-top:20px}
+    .section-hdr .dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+    .section-hdr h2{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:#64748b;white-space:nowrap}
+    .section-hdr::after{content:'';flex:1;height:1px;background:#1e293b}
+    .tmpl{margin-bottom:36px;scroll-margin-top:20px}
+    .tmpl-meta{display:flex;align-items:center;gap:7px;margin-bottom:9px;flex-wrap:wrap}
+    .badge-num{background:#1e293b;color:#94a3b8;font-size:10px;font-weight:700;padding:2px 6px;border-radius:4px;white-space:nowrap}
+    .tmpl-meta h3{font-size:12px;font-weight:700;color:#cbd5e1}
+    .tmpl-meta .to{font-size:11px;color:#64748b;margin-left:auto}
+    .pill{display:inline-block;padding:2px 6px;border-radius:99px;font-size:10px;font-weight:700;margin:0 2px}
+    .pill-all{background:#1e3a5f;color:#60a5fa}
+    .pill-admin{background:#14432a;color:#34d399}
+    .pill-fom{background:#2d1b4e;color:#a78bfa}
+    .pill-super{background:#3b1f1f;color:#f87171}
+    .pill-requester{background:#1a2e2e;color:#2dd4bf}
+    .pill-collector{background:#2a2200;color:#fbbf24}
+    .email-wrap{background:#e5e7eb;padding:18px 8px;border-radius:10px}
+    .email{max-width:580px;margin:0 auto;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 2px 10px rgba(0,0,0,.14)}
+    .e-hdr{background:#0F2041;padding:18px 28px 14px}
+    .e-hdr .brand{font-size:20px;font-weight:800;color:#fff;letter-spacing:.4px}
+    .e-hdr .sub{font-size:11px;color:#8FADD4;margin-top:3px}
+    .accent{height:4px;background:linear-gradient(90deg,#2962FF,#00C6FF)}
+    .e-body{padding:28px 28px 22px}
+    .greeting{font-size:14px;color:#111827}
+    .subject{font-size:18px;font-weight:700;color:#0F2041;line-height:1.3;margin:12px 0 8px}
+    .msg{font-size:13.5px;color:#374151;line-height:1.7;margin-bottom:12px}
+    .dtbl{width:100%;border-collapse:collapse;margin:12px 0;font-size:12.5px}
+    .dtbl td{padding:7px 10px;border:1px solid #e5e7eb}
+    .dtbl tr:nth-child(odd) td{background:#f8fafc}
+    .dtbl .lbl{font-weight:600;color:#374151;width:42%}
+    .btn-wrap{text-align:center;margin:20px 0}
+    .btn{display:inline-block;padding:11px 26px;background:#0F2041;color:#fff;text-decoration:none;border-radius:6px;font-weight:700;font-size:13px}
+    .divider{border:none;border-top:1px solid #e5e7eb;margin:20px 0 16px}
+    .ar{text-align:right;direction:rtl}
+    .ar-greet{font-size:14px;color:#111827;margin-bottom:6px}
+    .ar-subject{font-size:15px;font-weight:700;color:#0F2041;margin:10px 0 6px}
+    .ar-msg{font-size:13px;color:#374151;line-height:1.8}
+    .signoff{margin-top:14px}
+    .signoff p{font-size:12px;color:#374151;margin-bottom:2px}
+    .signoff .name{font-size:13px;font-weight:700;color:#0F2041}
+    .signoff .team{font-size:11px;color:#6b7280}
+    .signoff .behalf{font-size:11px;color:#9ca3af;font-style:italic;margin-top:2px!important}
+    .e-footer{background:#f8fafc;border-top:1px solid #e5e7eb;padding:10px 28px;text-align:center;font-size:10px;color:#9ca3af;line-height:1.6}
+    .type-info .subject{border-left:3px solid #3b82f6;padding-left:8px}
+    .type-success .subject{border-left:3px solid #10b981;padding-left:8px}
+    .type-warning .subject{border-left:3px solid #f59e0b;padding-left:8px}
+    .type-error .subject{border-left:3px solid #ef4444;padding-left:8px}
+    /* OTP special */
+    .otp-wrap{background:#f5f5f5;padding:18px 8px;border-radius:10px}
+    .otp-card{background:#fff;border-radius:8px;padding:32px;max-width:540px;margin:0 auto;box-shadow:0 2px 4px rgba(0,0,0,.1)}
+    .otp-brand{text-align:center;margin-bottom:24px}
+    .otp-brand h1{font-size:21px;color:#1a1a2e}
+    .otp-brand p{font-size:12px;color:#666;margin-top:3px}
+    .otp-code{background:#e3f2fd;border-left:4px solid #2196f3;border-radius:4px;padding:16px;margin:14px 0;text-align:center}
+    .otp-code .code{font-size:32px;font-weight:700;letter-spacing:8px;color:#1a1a2e}
+    .otp-code .exp{font-size:11px;color:#999;margin-top:4px}
+    /* Dispatch special */
+    .dispatch-box{background:#e8f5e9;border-left:4px solid #4caf50;border-radius:4px;padding:12px;margin:12px 0;font-size:12px;color:#333;line-height:1.8}
+    .dispatch-btn{display:inline-block;padding:12px 26px;background:#4caf50;color:#fff;text-decoration:none;border-radius:6px;font-weight:700;font-size:14px}
+  </style>
+</head>
+<body>
+<div class="layout">
+
+<nav class="nav">
+  <div class="nav-brand"><h1>Email Templates</h1><p>PACT Command Center</p></div>
+  <div class="nav-group">
+    <div class="nav-label">Account</div>
+    <a href="#t6">T6 — Welcome</a>
+    <a href="#t6a">T6A — New Registration</a>
+    <a href="#t22">T22 — OTP Code</a>
+    <a href="#t23">T23 — Role Changed</a>
+    <a href="#t24">T24 — Deactivated</a>
+    <a href="#t25">T25 — Reactivated</a>
+  </div>
+  <div class="nav-group">
+    <div class="nav-label">MMP &amp; Field Ops</div>
+    <a href="#t19">T19 — MMP Upload</a>
+    <a href="#t6b-fom">T6B — MMP → FOM</a>
+    <a href="#t6c">T6C — MMP → Coordinators</a>
+    <a href="#t6d">T6D — Site Verified</a>
+    <a href="#t6e">T6E — Sites → Coordinator</a>
+    <a href="#t6b-dc">T6B-DC — Site Dispatched</a>
+    <a href="#t7">T7 — Site Assignment</a>
+    <a href="#t8">T8 — Assign Reminder</a>
+    <a href="#t9">T9 — Visit Completed</a>
+    <a href="#t26">T26 — Project Assignment</a>
+    <a href="#t27">T27 — Weekly Report</a>
+  </div>
+  <div class="nav-group">
+    <div class="nav-label">Finance</div>
+    <a href="#t10">T10 — Approval Request</a>
+    <a href="#t11">T11 — Approved</a>
+    <a href="#t12">T12 — Rejected</a>
+    <a href="#t13">T13 — Withdrawal Submitted</a>
+    <a href="#t14">T14 — Withdrawal Approved</a>
+    <a href="#t15">T15 — Withdrawal Rejected</a>
+    <a href="#t16">T16 — Cost Received</a>
+    <a href="#t16b">T16B — Cost → Super Admin</a>
+    <a href="#t16b2">T16B2 — Cost → FOM/Admin</a>
+    <a href="#t16b3">T16B3 — Advance Approval</a>
+    <a href="#t16c">T16C — Payment Request to Finance</a>
+    <a href="#t16c-adv">T16C-ADV — Advance Request to Finance</a>
+    <a href="#t17">T17 — Budget Alert</a>
+    <a href="#t18">T18 — Budget Exceeded</a>
+    <a href="#t28">T28 — Bank Transfer OK</a>
+    <a href="#t29">T29 — Bank Transfer Rejected</a>
+    <a href="#t30">T30 — Down Payment Request</a>
+  </div>
+  <div class="nav-group">
+    <div class="nav-label">Signatures</div>
+    <a href="#t20">T20 — Signature Request</a>
+    <a href="#t21">T21 — Signature Done</a>
+  </div>
+</nav>
+
+<main class="main">
+<p class="page-title">All Email Templates</p>
+<p class="page-sub">Every outgoing email sent by PACT Command Center — 30 templates, bilingual EN/AR. Use the left nav to jump to any template.</p>
+
+<!-- ══ ACCOUNT ══ -->
+<div class="section-hdr" id="sec-account"><div class="dot" style="background:#60a5fa"></div><h2>Account &amp; Identity</h2></div>
+
+<div class="tmpl" id="t6">
+  <div class="tmpl-meta"><span class="badge-num">T6</span><h3>Welcome Email — Account Approved</h3><span class="to">→ <span class="pill pill-requester">New User</span></span></div>
+  <div class="email-wrap"><div class="email">
+    <div class="e-hdr"><p class="brand">PACT Command Center</p><p class="sub">مركز قيادة باكت &nbsp;|&nbsp; ICT Team Platform</p></div>
+    <div class="accent"></div>
+    <div class="e-body type-success">
+      <p class="greeting">Dear Sara Abdullah,</p>
+      <h2 class="subject">Welcome to PACT Command Center</h2>
+      <p class="msg">Your account has been approved and is now active. You can now log in to access your dashboard and start managing your assignments.</p>
+      <table class="dtbl"><tr><td class="lbl">Role</td><td>Data Collector</td></tr></table>
+      <div class="btn-wrap"><a class="btn" href="#">Log In &nbsp;|&nbsp; تسجيل الدخول</a></div>
+      <hr class="divider">
+      <div class="ar"><p class="ar-greet">عزيزي سارة عبدالله،</p><h3 class="ar-subject">مرحباً بك في مركز قيادة باكت</h3><p class="ar-msg">تمت الموافقة على حسابك وأصبح نشطاً الآن. يمكنك الآن تسجيل الدخول للوصول إلى لوحة التحكم الخاصة بك.</p></div>
+      <hr class="divider">
+      <div class="signoff"><p>Kind regards,</p><p class="name">PACT Command Center</p><p class="team">ICT Team &nbsp;|&nbsp; فريق تكنولوجيا المعلومات</p><p class="behalf">On behalf of the PACT Operations Team &nbsp;|&nbsp; نيابةً عن فريق عمليات باكت</p></div>
+    </div>
+    <div class="e-footer">This is an automated notification from the PACT Command Center Platform.<br>هذه رسالة آلية من منصة مركز قيادة باكت &nbsp;|&nbsp; <strong>PACT Platform v2</strong></div>
+  </div></div>
+</div>
+
+<div class="tmpl" id="t6a">
+  <div class="tmpl-meta"><span class="badge-num">T6A</span><h3>New User Registration — Approval Required</h3><span class="to">→ <span class="pill pill-super">Super Admin</span></span></div>
+  <div class="email-wrap"><div class="email">
+    <div class="e-hdr"><p class="brand">PACT Command Center</p><p class="sub">مركز قيادة باكت &nbsp;|&nbsp; ICT Team Platform</p></div>
+    <div class="accent"></div>
+    <div class="e-body type-warning">
+      <p class="greeting">Dear Admin,</p>
+      <h2 class="subject">New User Registration - Approval Required</h2>
+      <p class="msg">A new user "Mohamed Hassan" (m.hassan@pact.org) has registered as Coordinator in North Kordofan Hub. Please review and approve their account.</p>
+      <table class="dtbl">
+        <tr><td class="lbl">Name</td><td>Mohamed Hassan</td></tr>
+        <tr><td class="lbl">Email</td><td>m.hassan@pact.org</td></tr>
+        <tr><td class="lbl">Role</td><td>Coordinator</td></tr>
+        <tr><td class="lbl">Hub</td><td>North Kordofan Hub</td></tr>
+      </table>
+      <div class="btn-wrap"><a class="btn" href="#">Review &amp; Approve &nbsp;|&nbsp; عرض التفاصيل</a></div>
+      <hr class="divider">
+      <div class="ar"><p class="ar-greet">عزيزي المسؤول،</p><h3 class="ar-subject">تسجيل مستخدم جديد - يتطلب الموافقة</h3><p class="ar-msg">قام المستخدم "محمد حسن" بالتسجيل كـ منسق في مركز شمال كردفان. يرجى مراجعة حسابه والموافقة عليه.</p></div>
+      <hr class="divider">
+      <div class="signoff"><p>Kind regards,</p><p class="name">PACT Command Center</p><p class="team">ICT Team &nbsp;|&nbsp; فريق تكنولوجيا المعلومات</p><p class="behalf">On behalf of the PACT Operations Team &nbsp;|&nbsp; نيابةً عن فريق عمليات باكت</p></div>
+    </div>
+    <div class="e-footer">This is an automated notification from the PACT Command Center Platform.<br>هذه رسالة آلية من منصة مركز قيادة باكت &nbsp;|&nbsp; <strong>PACT Platform v2</strong></div>
+  </div></div>
+</div>
+
+<div class="tmpl" id="t22">
+  <div class="tmpl-meta"><span class="badge-num">T22</span><h3>OTP Verification Code</h3><span class="to">→ <span class="pill pill-requester">Any User</span></span></div>
+  <div class="otp-wrap"><div class="otp-card">
+    <div class="otp-brand"><h1>PACT Command Center</h1><p>مركز قيادة باكت</p></div>
+    <p style="font-size:14px;color:#333;margin-bottom:6px">Hello Sara Abdullah,</p>
+    <p style="font-size:14px;color:#333">Your verification code is:</p>
+    <div class="otp-code"><p class="code">847 293</p><p class="exp">This code expires in 10 minutes</p></div>
+    <p style="font-size:12px;color:#555;line-height:1.5;margin-top:8px">Enter this code to complete your verification. Do not share this code with anyone.</p>
+    <hr style="border:none;border-top:1px solid #eee;margin:20px 0">
+    <div style="direction:rtl;text-align:right">
+      <p style="font-size:14px;color:#333;margin-bottom:6px">مرحباً سارة عبدالله،</p>
+      <p style="font-size:14px;color:#333;line-height:1.8">رمز التحقق الخاص بك هو:</p>
+      <div class="otp-code" style="border-left:none;border-right:4px solid #2196f3"><p class="code">847 293</p><p class="exp">ينتهي هذا الرمز خلال 10 دقائق</p></div>
+      <p style="font-size:12px;color:#555;line-height:1.8;margin-top:8px">أدخل هذا الرمز لإكمال التحقق. لا تشارك هذا الرمز مع أي شخص.</p>
+    </div>
+    <hr style="border:none;border-top:1px solid #eee;margin:18px 0">
+    <p style="font-size:10px;color:#999;text-align:center">Automated message — PACT Command Center Platform | ICT Team</p>
+  </div></div>
+</div>
+
+<div class="tmpl" id="t23">
+  <div class="tmpl-meta"><span class="badge-num">T23</span><h3>Role Changed</h3><span class="to">→ <span class="pill pill-requester">Affected User</span></span></div>
+  <div class="email-wrap"><div class="email">
+    <div class="e-hdr"><p class="brand">PACT Command Center</p><p class="sub">مركز قيادة باكت &nbsp;|&nbsp; ICT Team Platform</p></div>
+    <div class="accent"></div>
+    <div class="e-body type-info">
+      <p class="greeting">Dear Ahmed Omar,</p>
+      <h2 class="subject">Your Role Has Been Updated - PACT Platform</h2>
+      <p class="msg">Your role and permissions have been updated. Please log out and log back in to see your updated access.</p>
+      <table class="dtbl">
+        <tr><td class="lbl">Previous Role</td><td>Coordinator</td></tr>
+        <tr><td class="lbl">New Role</td><td>Supervisor</td></tr>
+        <tr><td class="lbl">Changed By</td><td>Fatima Omar (Admin)</td></tr>
+        <tr><td class="lbl">Effective Date</td><td>12 Mar 2026</td></tr>
+      </table>
+      <div class="btn-wrap"><a class="btn" href="#">Go to Dashboard &nbsp;|&nbsp; عرض التفاصيل</a></div>
+      <hr class="divider">
+      <div class="ar"><p class="ar-greet">عزيزي أحمد عمر،</p><h3 class="ar-subject">تم تحديث دورك - منصة باكت</h3><p class="ar-msg">تم تحديث دورك وصلاحياتك. يرجى تسجيل الخروج وإعادة تسجيل الدخول لمشاهدة صلاحياتك المحدثة.</p></div>
+      <hr class="divider">
+      <div class="signoff"><p>Kind regards,</p><p class="name">PACT Command Center</p><p class="team">ICT Team &nbsp;|&nbsp; فريق تكنولوجيا المعلومات</p><p class="behalf">On behalf of the PACT Operations Team &nbsp;|&nbsp; نيابةً عن فريق عمليات باكت</p></div>
+    </div>
+    <div class="e-footer">This is an automated notification from the PACT Command Center Platform.<br>هذه رسالة آلية من منصة مركز قيادة باكت &nbsp;|&nbsp; <strong>PACT Platform v2</strong></div>
+  </div></div>
+</div>
+
+<div class="tmpl" id="t24">
+  <div class="tmpl-meta"><span class="badge-num">T24</span><h3>Account Deactivated</h3><span class="to">→ <span class="pill pill-requester">Affected User</span></span></div>
+  <div class="email-wrap"><div class="email">
+    <div class="e-hdr"><p class="brand">PACT Command Center</p><p class="sub">مركز قيادة باكت &nbsp;|&nbsp; ICT Team Platform</p></div>
+    <div class="accent"></div>
+    <div class="e-body type-error">
+      <p class="greeting">Dear Khalid Ibrahim,</p>
+      <h2 class="subject">Account Deactivated - PACT Platform</h2>
+      <p class="msg">Your access to PACT Workflow Platform has been deactivated. If you believe this is an error, please contact your administrator.</p>
+      <table class="dtbl">
+        <tr><td class="lbl">Status</td><td>Account Deactivated</td></tr>
+        <tr><td class="lbl">Deactivated By</td><td>Super Admin</td></tr>
+        <tr><td class="lbl">Date</td><td>12 Mar 2026</td></tr>
+        <tr><td class="lbl">Reason</td><td>End of contract period</td></tr>
+      </table>
+      <hr class="divider">
+      <div class="ar"><p class="ar-greet">عزيزي خالد إبراهيم،</p><h3 class="ar-subject">تم تعطيل الحساب - منصة باكت</h3><p class="ar-msg">تم تعطيل وصولك إلى منصة باكت. إذا كنت تعتقد أن هذا خطأ، يرجى التواصل مع المسؤول.</p></div>
+      <hr class="divider">
+      <div class="signoff"><p>Kind regards,</p><p class="name">PACT Command Center</p><p class="team">ICT Team &nbsp;|&nbsp; فريق تكنولوجيا المعلومات</p><p class="behalf">On behalf of the PACT Operations Team &nbsp;|&nbsp; نيابةً عن فريق عمليات باكت</p></div>
+    </div>
+    <div class="e-footer">This is an automated notification from the PACT Command Center Platform.<br>هذه رسالة آلية من منصة مركز قيادة باكت &nbsp;|&nbsp; <strong>PACT Platform v2</strong></div>
+  </div></div>
+</div>
+
+<div class="tmpl" id="t25">
+  <div class="tmpl-meta"><span class="badge-num">T25</span><h3>Account Reactivated</h3><span class="to">→ <span class="pill pill-requester">Affected User</span></span></div>
+  <div class="email-wrap"><div class="email">
+    <div class="e-hdr"><p class="brand">PACT Command Center</p><p class="sub">مركز قيادة باكت &nbsp;|&nbsp; ICT Team Platform</p></div>
+    <div class="accent"></div>
+    <div class="e-body type-success">
+      <p class="greeting">Dear Khalid Ibrahim,</p>
+      <h2 class="subject">Account Reactivated - PACT Platform</h2>
+      <p class="msg">Your access to PACT Workflow Platform has been restored. You can now log in and access your dashboard.</p>
+      <table class="dtbl">
+        <tr><td class="lbl">Status</td><td>Account Active</td></tr>
+        <tr><td class="lbl">Reactivated By</td><td>Super Admin</td></tr>
+        <tr><td class="lbl">Date</td><td>12 Mar 2026</td></tr>
+      </table>
+      <div class="btn-wrap"><a class="btn" href="#">Log In Now &nbsp;|&nbsp; عرض التفاصيل</a></div>
+      <hr class="divider">
+      <div class="ar"><p class="ar-greet">عزيزي خالد إبراهيم،</p><h3 class="ar-subject">تم تفعيل الحساب - منصة باكت</h3><p class="ar-msg">تمت استعادة وصولك إلى منصة باكت. يمكنك الآن تسجيل الدخول والوصول إلى لوحة التحكم.</p></div>
+      <hr class="divider">
+      <div class="signoff"><p>Kind regards,</p><p class="name">PACT Command Center</p><p class="team">ICT Team &nbsp;|&nbsp; فريق تكنولوجيا المعلومات</p><p class="behalf">On behalf of the PACT Operations Team &nbsp;|&nbsp; نيابةً عن فريق عمليات باكت</p></div>
+    </div>
+    <div class="e-footer">This is an automated notification from the PACT Command Center Platform.<br>هذه رسالة آلية من منصة مركز قيادة باكت &nbsp;|&nbsp; <strong>PACT Platform v2</strong></div>
+  </div></div>
+</div>
+
+<!-- ══ MMP & FIELD OPS ══ -->
+<div class="section-hdr" id="sec-field"><div class="dot" style="background:#34d399"></div><h2>MMP &amp; Field Operations</h2></div>
+
+<div class="tmpl" id="t19">
+  <div class="tmpl-meta"><span class="badge-num">T19</span><h3>MMP Upload Successful</h3><span class="to">→ <span class="pill pill-requester">Uploader</span></span></div>
+  <div class="email-wrap"><div class="email">
+    <div class="e-hdr"><p class="brand">PACT Command Center</p><p class="sub">مركز قيادة باكت &nbsp;|&nbsp; ICT Team Platform</p></div>
+    <div class="accent"></div>
+    <div class="e-body type-success">
+      <p class="greeting">Dear Ahmed Hassan (Field Operations Manager),</p>
+      <h2 class="subject">MMP Upload Successful - MMP-2026-Q1-NKordofan</h2>
+      <p class="msg">The MMP file has been uploaded successfully and sites are now available for assignment.</p>
+      <table class="dtbl">
+        <tr><td class="lbl">MMP Name</td><td>MMP-2026-Q1-NKordofan</td></tr>
+        <tr><td class="lbl">Project</td><td>WASH — North Kordofan</td></tr>
+        <tr><td class="lbl">Total Sites</td><td>47</td></tr>
+        <tr><td class="lbl">Upload Date</td><td>12 Mar 2026, 09:14</td></tr>
+      </table>
+      <div class="btn-wrap"><a class="btn" href="#">View MMP &nbsp;|&nbsp; عرض التفاصيل</a></div>
+      <hr class="divider">
+      <div class="ar"><p class="ar-greet">عزيزي أحمد حسن (مدير العمليات الميدانية)،</p><h3 class="ar-subject">تم رفع خطة المراقبة الشهرية بنجاح</h3><p class="ar-msg">تم رفع ملف خطة المراقبة الشهرية بنجاح وأصبحت المواقع متاحة للتعيين.</p></div>
+      <hr class="divider">
+      <div class="signoff"><p>Kind regards,</p><p class="name">PACT Command Center</p><p class="team">ICT Team &nbsp;|&nbsp; فريق تكنولوجيا المعلومات</p><p class="behalf">On behalf of the PACT Operations Team &nbsp;|&nbsp; نيابةً عن فريق عمليات باكت</p></div>
+    </div>
+    <div class="e-footer">This is an automated notification from the PACT Command Center Platform.<br>هذه رسالة آلية من منصة مركز قيادة باكت &nbsp;|&nbsp; <strong>PACT Platform v2</strong></div>
+  </div></div>
+</div>
+
+<div class="tmpl" id="t6b-fom">
+  <div class="tmpl-meta"><span class="badge-num">T6B</span><h3>MMP Forwarded to FOM</h3><span class="to">→ <span class="pill pill-fom">FOM</span></span></div>
+  <div class="email-wrap"><div class="email">
+    <div class="e-hdr"><p class="brand">PACT Command Center</p><p class="sub">مركز قيادة باكت &nbsp;|&nbsp; ICT Team Platform</p></div>
+    <div class="accent"></div>
+    <div class="e-body type-info">
+      <p class="greeting">Dear Ahmed Hassan (Field Operations Manager),</p>
+      <h2 class="subject">MMP "MMP-2026-Q1-NKordofan" Forwarded to You</h2>
+      <p class="msg">An MMP has been forwarded to you for permit attachment. Please review the sites and attach the required permits before sending to coordinators.</p>
+      <table class="dtbl">
+        <tr><td class="lbl">MMP</td><td>MMP-2026-Q1-NKordofan</td></tr>
+        <tr><td class="lbl">Forwarded By</td><td>Super Admin</td></tr>
+        <tr><td class="lbl">Action</td><td>Attach Permits</td></tr>
+        <tr><td class="lbl">Date</td><td>12 Mar 2026</td></tr>
+      </table>
+      <div class="btn-wrap"><a class="btn" href="#">View MMP &nbsp;|&nbsp; عرض التفاصيل</a></div>
+      <hr class="divider">
+      <div class="ar"><p class="ar-greet">عزيزي أحمد حسن (مدير العمليات الميدانية)،</p><h3 class="ar-subject">تم إرسال خطة المراقبة الشهرية إليك</h3><p class="ar-msg">تم إعادة توجيه خطة المراقبة الشهرية إليك لإرفاق التصاريح اللازمة.</p></div>
+      <hr class="divider">
+      <div class="signoff"><p>Kind regards,</p><p class="name">PACT Command Center</p><p class="team">ICT Team &nbsp;|&nbsp; فريق تكنولوجيا المعلومات</p><p class="behalf">On behalf of the PACT Operations Team &nbsp;|&nbsp; نيابةً عن فريق عمليات باكت</p></div>
+    </div>
+    <div class="e-footer">This is an automated notification from the PACT Command Center Platform.<br>هذه رسالة آلية من منصة مركز قيادة باكت &nbsp;|&nbsp; <strong>PACT Platform v2</strong></div>
+  </div></div>
+</div>
+
+<div class="tmpl" id="t6c">
+  <div class="tmpl-meta"><span class="badge-num">T6C</span><h3>MMP Forwarded to Coordinators</h3><span class="to">→ <span class="pill pill-admin">Coordinator</span></span></div>
+  <div class="email-wrap"><div class="email">
+    <div class="e-hdr"><p class="brand">PACT Command Center</p><p class="sub">مركز قيادة باكت &nbsp;|&nbsp; ICT Team Platform</p></div>
+    <div class="accent"></div>
+    <div class="e-body type-info">
+      <p class="greeting">Dear Nour Ahmed (Coordinator),</p>
+      <h2 class="subject">New MMP Assigned — MMP-2026-Q1-NKordofan</h2>
+      <p class="msg">A new Monthly Monitoring Plan has been assigned to your area. Please review the sites and begin the dispatch process for your data collectors.</p>
+      <table class="dtbl">
+        <tr><td class="lbl">MMP</td><td>MMP-2026-Q1-NKordofan</td></tr>
+        <tr><td class="lbl">Forwarded By</td><td>Ahmed Hassan (FOM)</td></tr>
+        <tr><td class="lbl">Sites in Your Area</td><td>12 sites</td></tr>
+        <tr><td class="lbl">Date</td><td>12 Mar 2026</td></tr>
+      </table>
+      <div class="btn-wrap"><a class="btn" href="#">View MMP &nbsp;|&nbsp; عرض التفاصيل</a></div>
+      <hr class="divider">
+      <div class="ar"><p class="ar-greet">عزيزي نور أحمد (المنسق)،</p><h3 class="ar-subject">تم تعيين خطة مراقبة شهرية جديدة</h3><p class="ar-msg">تم تعيين خطة مراقبة شهرية جديدة لمنطقتك. يرجى مراجعة المواقع والبدء في عملية التوزيع على جامعي البيانات.</p></div>
+      <hr class="divider">
+      <div class="signoff"><p>Kind regards,</p><p class="name">PACT Command Center</p><p class="team">ICT Team &nbsp;|&nbsp; فريق تكنولوجيا المعلومات</p><p class="behalf">On behalf of the PACT Operations Team &nbsp;|&nbsp; نيابةً عن فريق عمليات باكت</p></div>
+    </div>
+    <div class="e-footer">This is an automated notification from the PACT Command Center Platform.<br>هذه رسالة آلية من منصة مركز قيادة باكت &nbsp;|&nbsp; <strong>PACT Platform v2</strong></div>
+  </div></div>
+</div>
+
+<div class="tmpl" id="t6d">
+  <div class="tmpl-meta"><span class="badge-num">T6D</span><h3>Site Verified by Coordinator</h3><span class="to">→ <span class="pill pill-fom">FOM</span> <span class="pill pill-super">Super Admin</span></span></div>
+  <div class="email-wrap"><div class="email">
+    <div class="e-hdr"><p class="brand">PACT Command Center</p><p class="sub">مركز قيادة باكت &nbsp;|&nbsp; ICT Team Platform</p></div>
+    <div class="accent"></div>
+    <div class="e-body type-success">
+      <p class="greeting">Dear Ahmed Hassan (Field Operations Manager),</p>
+      <h2 class="subject">Site Verified — Abu Shouk IDP Camp</h2>
+      <p class="msg">The site "Abu Shouk IDP Camp" has been verified by Coordinator Nour Ahmed. The site is now ready for FOM review and approval.</p>
+      <table class="dtbl">
+        <tr><td class="lbl">Site</td><td>Abu Shouk IDP Camp</td></tr>
+        <tr><td class="lbl">MMP</td><td>MMP-2026-Q1-NKordofan</td></tr>
+        <tr><td class="lbl">Verified By</td><td>Nour Ahmed (Coordinator)</td></tr>
+        <tr><td class="lbl">Date</td><td>12 Mar 2026</td></tr>
+      </table>
+      <div class="btn-wrap"><a class="btn" href="#">Review Site &nbsp;|&nbsp; عرض التفاصيل</a></div>
+      <hr class="divider">
+      <div class="ar"><p class="ar-greet">عزيزي أحمد حسن (مدير العمليات الميدانية)،</p><h3 class="ar-subject">تم التحقق من الموقع</h3><p class="ar-msg">تم التحقق من الموقع "مخيم أبو شوك للنازحين" بواسطة المنسق نور أحمد. الموقع جاهز الآن لمراجعة مدير العمليات الميدانية.</p></div>
+      <hr class="divider">
+      <div class="signoff"><p>Kind regards,</p><p class="name">PACT Command Center</p><p class="team">ICT Team &nbsp;|&nbsp; فريق تكنولوجيا المعلومات</p><p class="behalf">On behalf of the PACT Operations Team &nbsp;|&nbsp; نيابةً عن فريق عمليات باكت</p></div>
+    </div>
+    <div class="e-footer">This is an automated notification from the PACT Command Center Platform.<br>هذه رسالة آلية من منصة مركز قيادة باكت &nbsp;|&nbsp; <strong>PACT Platform v2</strong></div>
+  </div></div>
+</div>
+
+<div class="tmpl" id="t6e">
+  <div class="tmpl-meta"><span class="badge-num">T6E</span><h3>Sites Forwarded to Coordinator</h3><span class="to">→ <span class="pill pill-admin">Coordinator</span></span></div>
+  <div class="email-wrap"><div class="email">
+    <div class="e-hdr"><p class="brand">PACT Command Center</p><p class="sub">مركز قيادة باكت &nbsp;|&nbsp; ICT Team Platform</p></div>
+    <div class="accent"></div>
+    <div class="e-body type-info">
+      <p class="greeting">Dear Nour Ahmed (Coordinator),</p>
+      <h2 class="subject">Sites Forwarded to You — Action Required</h2>
+      <p class="msg">Sites from MMP "MMP-2026-Q1-NKordofan" have been forwarded to you for dispatch. Please assign them to your data collectors.</p>
+      <table class="dtbl">
+        <tr><td class="lbl">MMP</td><td>MMP-2026-Q1-NKordofan</td></tr>
+        <tr><td class="lbl">Sites Count</td><td>8 sites</td></tr>
+        <tr><td class="lbl">Forwarded By</td><td>Ahmed Hassan (FOM)</td></tr>
+        <tr><td class="lbl">Date</td><td>12 Mar 2026</td></tr>
+      </table>
+      <div class="btn-wrap"><a class="btn" href="#">Assign Sites &nbsp;|&nbsp; عرض التفاصيل</a></div>
+      <hr class="divider">
+      <div class="ar"><p class="ar-greet">عزيزي نور أحمد (المنسق)،</p><h3 class="ar-subject">تم إعادة توجيه المواقع إليك</h3><p class="ar-msg">تم إعادة توجيه المواقع من خطة المراقبة الشهرية إليك للتوزيع. يرجى تعيينها لجامعي البيانات.</p></div>
+      <hr class="divider">
+      <div class="signoff"><p>Kind regards,</p><p class="name">PACT Command Center</p><p class="team">ICT Team &nbsp;|&nbsp; فريق تكنولوجيا المعلومات</p><p class="behalf">On behalf of the PACT Operations Team &nbsp;|&nbsp; نيابةً عن فريق عمليات باكت</p></div>
+    </div>
+    <div class="e-footer">This is an automated notification from the PACT Command Center Platform.<br>هذه رسالة آلية من منصة مركز قيادة باكت &nbsp;|&nbsp; <strong>PACT Platform v2</strong></div>
+  </div></div>
+</div>
+
+<div class="tmpl" id="t6b-dc">
+  <div class="tmpl-meta"><span class="badge-num">T6B-DC</span><h3>Site(s) Dispatched to Data Collector</h3><span class="to">→ <span class="pill pill-collector">Data Collector</span></span></div>
+  <div class="otp-wrap"><div class="otp-card">
+    <div class="otp-brand"><h1>PACT Command Center</h1><p>مركز قيادة باكت</p></div>
+    <p style="font-size:14px;color:#333;margin-bottom:6px">Dear Hassan Ali,</p>
+    <p style="font-size:14px;color:#333;line-height:1.5;margin-bottom:4px">You have been assigned <strong>3 site(s)</strong> for data collection. Please review and complete your visits according to the schedule.</p>
+    <div class="dispatch-box">
+      <strong>Sites Assigned:</strong> 3<br>
+      <strong>Sites:</strong> Abu Shouk IDP Camp, Zamzam Camp, El Fasher Hospital<br>
+      <strong>Location:</strong> North Darfur — El Fasher<br>
+      <strong>MMP:</strong> MMP-2026-Q1-NDarfur<br>
+      <strong>Transport Budget:</strong> 8,500 SDG<br>
+      <strong>Assigned By:</strong> Nour Ahmed (Coordinator)
+    </div>
+    <p style="color:#1976d2;font-size:12px;font-weight:600">Please complete your site visits and submit your reports on time.</p>
+    <div style="text-align:center;margin:18px 0"><a class="dispatch-btn" href="#">View My Sites | عرض مواقعي</a></div>
+    <hr style="border:none;border-top:1px solid #eee;margin:18px 0">
+    <div style="direction:rtl;text-align:right">
+      <p style="font-size:14px;color:#333;margin-bottom:6px">عزيزي حسن علي،</p>
+      <p style="font-size:14px;color:#333;line-height:1.8;margin-bottom:6px">تم تعيينك لـ 3 موقع(ًا) لجمع البيانات.</p>
+      <div class="dispatch-box" style="border-left:none;border-right:4px solid #4caf50">
+        <strong>المواقع المعينة:</strong> 3<br>
+        <strong>الموقع:</strong> شمال دارفور — الفاشر<br>
+        <strong>خطة المراقبة الشهرية:</strong> MMP-2026-Q1-NDarfur<br>
+        <strong>ميزانية النقل:</strong> 8,500 جنيه سوداني<br>
+        <strong>تم التعيين بواسطة:</strong> نور أحمد (المنسق)
+      </div>
+    </div>
+    <hr style="border:none;border-top:1px solid #eee;margin:16px 0">
+    <p style="font-size:10px;color:#999;text-align:center">Automated — PACT Command Center | مركز قيادة باكت</p>
+  </div></div>
+</div>
+
+<div class="tmpl" id="t7">
+  <div class="tmpl-meta"><span class="badge-num">T7</span><h3>Site Assignment</h3><span class="to">→ <span class="pill pill-collector">Data Collector</span></span></div>
+  <div class="email-wrap"><div class="email">
+    <div class="e-hdr"><p class="brand">PACT Command Center</p><p class="sub">مركز قيادة باكت &nbsp;|&nbsp; ICT Team Platform</p></div>
+    <div class="accent"></div>
+    <div class="e-body type-info">
+      <p class="greeting">Dear Hassan Ali,</p>
+      <h2 class="subject">New Site Assignment - Abu Shouk IDP Camp</h2>
+      <p class="msg">You have been assigned to visit this site. Please review the site details and confirm your assignment within 48 hours.</p>
+      <table class="dtbl">
+        <tr><td class="lbl">Site</td><td>Abu Shouk IDP Camp</td></tr>
+        <tr><td class="lbl">Location</td><td>North Darfur — El Fasher</td></tr>
+        <tr><td class="lbl">MMP</td><td>MMP-2026-Q1-NDarfur</td></tr>
+      </table>
+      <div class="btn-wrap"><a class="btn" href="#">View Assignment &nbsp;|&nbsp; عرض التفاصيل</a></div>
+      <hr class="divider">
+      <div class="ar"><p class="ar-greet">عزيزي حسن علي،</p><h3 class="ar-subject">تعيين موقع جديد</h3><p class="ar-msg">تم تعيينك لزيارة هذا الموقع. يرجى مراجعة تفاصيل الموقع وتأكيد تعيينك خلال 48 ساعة.</p></div>
+      <hr class="divider">
+      <div class="signoff"><p>Kind regards,</p><p class="name">PACT Command Center</p><p class="team">ICT Team &nbsp;|&nbsp; فريق تكنولوجيا المعلومات</p><p class="behalf">On behalf of the PACT Operations Team &nbsp;|&nbsp; نيابةً عن فريق عمليات باكت</p></div>
+    </div>
+    <div class="e-footer">This is an automated notification from the PACT Command Center Platform.<br>هذه رسالة آلية من منصة مركز قيادة باكت &nbsp;|&nbsp; <strong>PACT Platform v2</strong></div>
+  </div></div>
+</div>
+
+<div class="tmpl" id="t8">
+  <div class="tmpl-meta"><span class="badge-num">T8</span><h3>Assignment Confirmation Reminder</h3><span class="to">→ <span class="pill pill-collector">Data Collector</span></span></div>
+  <div class="email-wrap"><div class="email">
+    <div class="e-hdr"><p class="brand">PACT Command Center</p><p class="sub">مركز قيادة باكت &nbsp;|&nbsp; ICT Team Platform</p></div>
+    <div class="accent"></div>
+    <div class="e-body type-warning">
+      <p class="greeting">Dear Hassan Ali,</p>
+      <h2 class="subject">Reminder: Confirm your site assignment - Abu Shouk IDP Camp</h2>
+      <p class="msg">Your assignment is pending confirmation. If you do not confirm within the deadline, the site may be reassigned to another team member.</p>
+      <table class="dtbl">
+        <tr><td class="lbl">Site</td><td>Abu Shouk IDP Camp</td></tr>
+        <tr><td class="lbl">Deadline</td><td>14 Mar 2026, 18:00</td></tr>
+        <tr><td class="lbl">Time Remaining</td><td>2 days</td></tr>
+      </table>
+      <div class="btn-wrap"><a class="btn" href="#">Confirm Now &nbsp;|&nbsp; عرض التفاصيل</a></div>
+      <hr class="divider">
+      <div class="ar"><p class="ar-greet">عزيزي حسن علي،</p><h3 class="ar-subject">تذكير: تأكيد تعيين موقعك</h3><p class="ar-msg">تعيينك في انتظار التأكيد. إذا لم تقم بالتأكيد خلال الموعد المحدد، قد يتم إعادة تعيين الموقع لعضو آخر.</p></div>
+      <hr class="divider">
+      <div class="signoff"><p>Kind regards,</p><p class="name">PACT Command Center</p><p class="team">ICT Team &nbsp;|&nbsp; فريق تكنولوجيا المعلومات</p><p class="behalf">On behalf of the PACT Operations Team &nbsp;|&nbsp; نيابةً عن فريق عمليات باكت</p></div>
+    </div>
+    <div class="e-footer">This is an automated notification from the PACT Command Center Platform.<br>هذه رسالة آلية من منصة مركز قيادة باكت &nbsp;|&nbsp; <strong>PACT Platform v2</strong></div>
+  </div></div>
+</div>
+
+<div class="tmpl" id="t9">
+  <div class="tmpl-meta"><span class="badge-num">T9</span><h3>Site Visit Completed</h3><span class="to">→ <span class="pill pill-admin">Coordinator</span></span></div>
+  <div class="email-wrap"><div class="email">
+    <div class="e-hdr"><p class="brand">PACT Command Center</p><p class="sub">مركز قيادة باكت &nbsp;|&nbsp; ICT Team Platform</p></div>
+    <div class="accent"></div>
+    <div class="e-body type-success">
+      <p class="greeting">Dear Nour Ahmed (Coordinator),</p>
+      <h2 class="subject">Site Visit Completed - Abu Shouk IDP Camp</h2>
+      <p class="msg">The site visit report is now available for review.</p>
+      <table class="dtbl">
+        <tr><td class="lbl">Site</td><td>Abu Shouk IDP Camp</td></tr>
+        <tr><td class="lbl">Completed By</td><td>Hassan Ali</td></tr>
+        <tr><td class="lbl">Completion Time</td><td>12 Mar 2026, 14:32</td></tr>
+        <tr><td class="lbl">GPS Coordinates</td><td>13.6247° N, 25.3468° E</td></tr>
+      </table>
+      <div class="btn-wrap"><a class="btn" href="#">View Report &nbsp;|&nbsp; عرض التفاصيل</a></div>
+      <hr class="divider">
+      <div class="ar"><p class="ar-greet">عزيزي نور أحمد (المنسق)،</p><h3 class="ar-subject">اكتملت زيارة الموقع</h3><p class="ar-msg">تقرير زيارة الموقع متاح الآن للمراجعة.</p></div>
+      <hr class="divider">
+      <div class="signoff"><p>Kind regards,</p><p class="name">PACT Command Center</p><p class="team">ICT Team &nbsp;|&nbsp; فريق تكنولوجيا المعلومات</p><p class="behalf">On behalf of the PACT Operations Team &nbsp;|&nbsp; نيابةً عن فريق عمليات باكت</p></div>
+    </div>
+    <div class="e-footer">This is an automated notification from the PACT Command Center Platform.<br>هذه رسالة آلية من منصة مركز قيادة باكت &nbsp;|&nbsp; <strong>PACT Platform v2</strong></div>
+  </div></div>
+</div>
+
+<div class="tmpl" id="t26">
+  <div class="tmpl-meta"><span class="badge-num">T26</span><h3>Project Assignment</h3><span class="to">→ <span class="pill pill-requester">Any User</span></span></div>
+  <div class="email-wrap"><div class="email">
+    <div class="e-hdr"><p class="brand">PACT Command Center</p><p class="sub">مركز قيادة باكت &nbsp;|&nbsp; ICT Team Platform</p></div>
+    <div class="accent"></div>
+    <div class="e-body type-info">
+      <p class="greeting">Dear Nour Ahmed,</p>
+      <h2 class="subject">You've Been Assigned to Project: WASH — North Kordofan</h2>
+      <p class="msg">You have been assigned to this project. Please review the project details and your responsibilities.</p>
+      <table class="dtbl">
+        <tr><td class="lbl">Project</td><td>WASH — North Kordofan</td></tr>
+        <tr><td class="lbl">Your Role</td><td>Coordinator</td></tr>
+        <tr><td class="lbl">Start Date</td><td>15 Mar 2026</td></tr>
+        <tr><td class="lbl">Assigned By</td><td>Ahmed Hassan (FOM)</td></tr>
+      </table>
+      <div class="btn-wrap"><a class="btn" href="#">View Project &nbsp;|&nbsp; عرض التفاصيل</a></div>
+      <hr class="divider">
+      <div class="ar"><p class="ar-greet">عزيزي نور أحمد،</p><h3 class="ar-subject">تم تعيينك في مشروع: WASH — شمال كردفان</h3><p class="ar-msg">تم تعيينك في هذا المشروع. يرجى مراجعة تفاصيل المشروع ومسؤولياتك.</p></div>
+      <hr class="divider">
+      <div class="signoff"><p>Kind regards,</p><p class="name">PACT Command Center</p><p class="team">ICT Team &nbsp;|&nbsp; فريق تكنولوجيا المعلومات</p><p class="behalf">On behalf of the PACT Operations Team &nbsp;|&nbsp; نيابةً عن فريق عمليات باكت</p></div>
+    </div>
+    <div class="e-footer">This is an automated notification from the PACT Command Center Platform.<br>هذه رسالة آلية من منصة مركز قيادة باكت &nbsp;|&nbsp; <strong>PACT Platform v2</strong></div>
+  </div></div>
+</div>
+
+<div class="tmpl" id="t27">
+  <div class="tmpl-meta"><span class="badge-num">T27</span><h3>Weekly Report Ready</h3><span class="to">→ <span class="pill pill-fom">FOM</span> <span class="pill pill-super">Super Admin</span></span></div>
+  <div class="email-wrap"><div class="email">
+    <div class="e-hdr"><p class="brand">PACT Command Center</p><p class="sub">مركز قيادة باكت &nbsp;|&nbsp; ICT Team Platform</p></div>
+    <div class="accent"></div>
+    <div class="e-body type-info">
+      <p class="greeting">Dear Ahmed Hassan (Field Operations Manager),</p>
+      <h2 class="subject">Weekly Report Ready - 12 Mar 2026</h2>
+      <p class="msg">Your weekly report is now available. Click the button below to view and download.</p>
+      <table class="dtbl">
+        <tr><td class="lbl">Report Period</td><td>6 Mar – 12 Mar 2026</td></tr>
+        <tr><td class="lbl">Generated On</td><td>12 Mar 2026</td></tr>
+        <tr><td class="lbl">Report Type</td><td>Coverage &amp; Financial Summary</td></tr>
+      </table>
+      <div class="btn-wrap"><a class="btn" href="#">View Report &nbsp;|&nbsp; عرض التفاصيل</a></div>
+      <hr class="divider">
+      <div class="ar"><p class="ar-greet">عزيزي أحمد حسن (مدير العمليات الميدانية)،</p><h3 class="ar-subject">التقرير الأسبوعي جاهز</h3><p class="ar-msg">تقريرك الأسبوعي متاح الآن. انقر على الزر أدناه للعرض والتنزيل.</p></div>
+      <hr class="divider">
+      <div class="signoff"><p>Kind regards,</p><p class="name">PACT Command Center</p><p class="team">ICT Team &nbsp;|&nbsp; فريق تكنولوجيا المعلومات</p><p class="behalf">On behalf of the PACT Operations Team &nbsp;|&nbsp; نيابةً عن فريق عمليات باكت</p></div>
+    </div>
+    <div class="e-footer">This is an automated notification from the PACT Command Center Platform.<br>هذه رسالة آلية من منصة مركز قيادة باكت &nbsp;|&nbsp; <strong>PACT Platform v2</strong></div>
+  </div></div>
+</div>
+
+<!-- ══ FINANCE ══ -->
+<div class="section-hdr" id="sec-finance"><div class="dot" style="background:#f59e0b"></div><h2>Finance &amp; Approvals</h2></div>
+
+<div class="tmpl" id="t10">
+  <div class="tmpl-meta"><span class="badge-num">T10</span><h3>Approval Request</h3><span class="to">→ <span class="pill pill-admin">Admin</span> <span class="pill pill-super">Super Admin</span></span></div>
+  <div class="email-wrap"><div class="email">
+    <div class="e-hdr"><p class="brand">PACT Command Center</p><p class="sub">مركز قيادة باكت &nbsp;|&nbsp; ICT Team Platform</p></div>
+    <div class="accent"></div>
+    <div class="e-body type-warning">
+      <p class="greeting">Dear Fatima Omar (Administrator),</p>
+      <h2 class="subject">Approval Required: Withdrawal — SDG 15,000</h2>
+      <p class="msg">This item requires your review and approval. Please take action at your earliest convenience.</p>
+      <table class="dtbl">
+        <tr><td class="lbl">Type</td><td>Withdrawal</td></tr>
+        <tr><td class="lbl">Item</td><td>SDG 15,000</td></tr>
+        <tr><td class="lbl">Requested By</td><td>Hassan Ali</td></tr>
+        <tr><td class="lbl">Amount</td><td>SDG 15,000</td></tr>
+      </table>
+      <div class="btn-wrap"><a class="btn" href="#">Review Now &nbsp;|&nbsp; عرض التفاصيل</a></div>
+      <hr class="divider">
+      <div class="ar"><p class="ar-greet">عزيزي فاطمة عمر (المسؤول)،</p><h3 class="ar-subject">مطلوب موافقة: سحب — 15,000 جنيه</h3><p class="ar-msg">يتطلب هذا العنصر مراجعتك وموافقتك. يرجى اتخاذ الإجراء في أقرب وقت ممكن.</p></div>
+      <hr class="divider">
+      <div class="signoff"><p>Kind regards,</p><p class="name">PACT Command Center</p><p class="team">ICT Team &nbsp;|&nbsp; فريق تكنولوجيا المعلومات</p><p class="behalf">On behalf of the PACT Operations Team &nbsp;|&nbsp; نيابةً عن فريق عمليات باكت</p></div>
+    </div>
+    <div class="e-footer">This is an automated notification from the PACT Command Center Platform.<br>هذه رسالة آلية من منصة مركز قيادة باكت &nbsp;|&nbsp; <strong>PACT Platform v2</strong></div>
+  </div></div>
+</div>
+
+<div class="tmpl" id="t11">
+  <div class="tmpl-meta"><span class="badge-num">T11</span><h3>Approved</h3><span class="to">→ <span class="pill pill-requester">Requester</span></span></div>
+  <div class="email-wrap"><div class="email">
+    <div class="e-hdr"><p class="brand">PACT Command Center</p><p class="sub">مركز قيادة باكت &nbsp;|&nbsp; ICT Team Platform</p></div>
+    <div class="accent"></div>
+    <div class="e-body type-success">
+      <p class="greeting">Dear Hassan Ali,</p>
+      <h2 class="subject">Approved: Withdrawal — SDG 15,000</h2>
+      <p class="msg">Your request has been approved and is now being processed.</p>
+      <table class="dtbl">
+        <tr><td class="lbl">Status</td><td>Approved</td></tr>
+        <tr><td class="lbl">Type</td><td>Withdrawal</td></tr>
+        <tr><td class="lbl">Amount</td><td>SDG 15,000</td></tr>
+        <tr><td class="lbl">Approved By</td><td>Fatima Omar (Admin)</td></tr>
+        <tr><td class="lbl">Approved On</td><td>12 Mar 2026</td></tr>
+      </table>
+      <div class="btn-wrap"><a class="btn" href="#">View Details &nbsp;|&nbsp; عرض التفاصيل</a></div>
+      <hr class="divider">
+      <div class="ar"><p class="ar-greet">عزيزي حسن علي،</p><h3 class="ar-subject">تمت الموافقة</h3><p class="ar-msg">تمت الموافقة على طلبك وجارٍ معالجته الآن.</p></div>
+      <hr class="divider">
+      <div class="signoff"><p>Kind regards,</p><p class="name">PACT Command Center</p><p class="team">ICT Team &nbsp;|&nbsp; فريق تكنولوجيا المعلومات</p><p class="behalf">On behalf of the PACT Operations Team &nbsp;|&nbsp; نيابةً عن فريق عمليات باكت</p></div>
+    </div>
+    <div class="e-footer">This is an automated notification from the PACT Command Center Platform.<br>هذه رسالة آلية من منصة مركز قيادة باكت &nbsp;|&nbsp; <strong>PACT Platform v2</strong></div>
+  </div></div>
+</div>
+
+<div class="tmpl" id="t12">
+  <div class="tmpl-meta"><span class="badge-num">T12</span><h3>Rejected</h3><span class="to">→ <span class="pill pill-requester">Requester</span></span></div>
+  <div class="email-wrap"><div class="email">
+    <div class="e-hdr"><p class="brand">PACT Command Center</p><p class="sub">مركز قيادة باكت &nbsp;|&nbsp; ICT Team Platform</p></div>
+    <div class="accent"></div>
+    <div class="e-body type-error">
+      <p class="greeting">Dear Hassan Ali,</p>
+      <h2 class="subject">Rejected: Withdrawal — SDG 15,000</h2>
+      <p class="msg">Please review the reason for rejection and contact your administrator if you have questions.</p>
+      <table class="dtbl">
+        <tr><td class="lbl">Status</td><td>Rejected</td></tr>
+        <tr><td class="lbl">Amount</td><td>SDG 15,000</td></tr>
+        <tr><td class="lbl">Rejected By</td><td>Fatima Omar (Admin)</td></tr>
+        <tr><td class="lbl">Reason</td><td>Insufficient documentation provided</td></tr>
+      </table>
+      <div class="btn-wrap"><a class="btn" href="#">View Details &nbsp;|&nbsp; عرض التفاصيل</a></div>
+      <hr class="divider">
+      <div class="ar"><p class="ar-greet">عزيزي حسن علي،</p><h3 class="ar-subject">تم الرفض</h3><p class="ar-msg">يرجى مراجعة سبب الرفض والتواصل مع المسؤول إذا كان لديك أسئلة.</p></div>
+      <hr class="divider">
+      <div class="signoff"><p>Kind regards,</p><p class="name">PACT Command Center</p><p class="team">ICT Team &nbsp;|&nbsp; فريق تكنولوجيا المعلومات</p><p class="behalf">On behalf of the PACT Operations Team &nbsp;|&nbsp; نيابةً عن فريق عمليات باكت</p></div>
+    </div>
+    <div class="e-footer">This is an automated notification from the PACT Command Center Platform.<br>هذه رسالة آلية من منصة مركز قيادة باكت &nbsp;|&nbsp; <strong>PACT Platform v2</strong></div>
+  </div></div>
+</div>
+
+<div class="tmpl" id="t13">
+  <div class="tmpl-meta"><span class="badge-num">T13</span><h3>Withdrawal Request Submitted</h3><span class="to">→ <span class="pill pill-requester">Requester</span></span></div>
+  <div class="email-wrap"><div class="email">
+    <div class="e-hdr"><p class="brand">PACT Command Center</p><p class="sub">مركز قيادة باكت &nbsp;|&nbsp; ICT Team Platform</p></div>
+    <div class="accent"></div>
+    <div class="e-body type-info">
+      <p class="greeting">Dear Hassan Ali,</p>
+      <h2 class="subject">Withdrawal Request Submitted - SDG 15,000</h2>
+      <p class="msg">Your withdrawal request has been submitted and is awaiting approval. You will receive a notification once it has been processed.</p>
+      <table class="dtbl">
+        <tr><td class="lbl">Amount</td><td>SDG 15,000</td></tr>
+        <tr><td class="lbl">Request ID</td><td>WDR-2026-0312-001</td></tr>
+        <tr><td class="lbl">Submitted</td><td>12 Mar 2026, 10:45</td></tr>
+        <tr><td class="lbl">Status</td><td>Pending Approval</td></tr>
+      </table>
+      <div class="btn-wrap"><a class="btn" href="#">View Wallet &nbsp;|&nbsp; عرض التفاصيل</a></div>
+      <hr class="divider">
+      <div class="ar"><p class="ar-greet">عزيزي حسن علي،</p><h3 class="ar-subject">تم تقديم طلب السحب</h3><p class="ar-msg">تم تقديم طلب السحب الخاص بك وهو في انتظار الموافقة.</p></div>
+      <hr class="divider">
+      <div class="signoff"><p>Kind regards,</p><p class="name">PACT Command Center</p><p class="team">ICT Team &nbsp;|&nbsp; فريق تكنولوجيا المعلومات</p><p class="behalf">On behalf of the PACT Operations Team &nbsp;|&nbsp; نيابةً عن فريق عمليات باكت</p></div>
+    </div>
+    <div class="e-footer">This is an automated notification from the PACT Command Center Platform.<br>هذه رسالة آلية من منصة مركز قيادة باكت &nbsp;|&nbsp; <strong>PACT Platform v2</strong></div>
+  </div></div>
+</div>
+
+<div class="tmpl" id="t14">
+  <div class="tmpl-meta"><span class="badge-num">T14</span><h3>Withdrawal Approved</h3><span class="to">→ <span class="pill pill-requester">Requester</span></span></div>
+  <div class="email-wrap"><div class="email">
+    <div class="e-hdr"><p class="brand">PACT Command Center</p><p class="sub">مركز قيادة باكت &nbsp;|&nbsp; ICT Team Platform</p></div>
+    <div class="accent"></div>
+    <div class="e-body type-success">
+      <p class="greeting">Dear Hassan Ali,</p>
+      <h2 class="subject">Withdrawal Approved - SDG 15,000</h2>
+      <p class="msg">Your withdrawal request has been approved and is being processed. Funds will be transferred shortly.</p>
+      <table class="dtbl">
+        <tr><td class="lbl">Amount</td><td>SDG 15,000</td></tr>
+        <tr><td class="lbl">Request ID</td><td>WDR-2026-0312-001</td></tr>
+        <tr><td class="lbl">Approved By</td><td>Fatima Omar (Admin)</td></tr>
+        <tr><td class="lbl">Status</td><td>Approved — Processing</td></tr>
+      </table>
+      <div class="btn-wrap"><a class="btn" href="#">View Wallet &nbsp;|&nbsp; عرض التفاصيل</a></div>
+      <hr class="divider">
+      <div class="ar"><p class="ar-greet">عزيزي حسن علي،</p><h3 class="ar-subject">تمت الموافقة على السحب</h3><p class="ar-msg">تمت الموافقة على طلب السحب الخاص بك وجارٍ معالجته. سيتم تحويل الأموال قريبًا.</p></div>
+      <hr class="divider">
+      <div class="signoff"><p>Kind regards,</p><p class="name">PACT Command Center</p><p class="team">ICT Team &nbsp;|&nbsp; فريق تكنولوجيا المعلومات</p><p class="behalf">On behalf of the PACT Operations Team &nbsp;|&nbsp; نيابةً عن فريق عمليات باكت</p></div>
+    </div>
+    <div class="e-footer">This is an automated notification from the PACT Command Center Platform.<br>هذه رسالة آلية من منصة مركز قيادة باكت &nbsp;|&nbsp; <strong>PACT Platform v2</strong></div>
+  </div></div>
+</div>
+
+<div class="tmpl" id="t15">
+  <div class="tmpl-meta"><span class="badge-num">T15</span><h3>Withdrawal Rejected</h3><span class="to">→ <span class="pill pill-requester">Requester</span></span></div>
+  <div class="email-wrap"><div class="email">
+    <div class="e-hdr"><p class="brand">PACT Command Center</p><p class="sub">مركز قيادة باكت &nbsp;|&nbsp; ICT Team Platform</p></div>
+    <div class="accent"></div>
+    <div class="e-body type-error">
+      <p class="greeting">Dear Hassan Ali,</p>
+      <h2 class="subject">Withdrawal Rejected - SDG 15,000</h2>
+      <p class="msg">Your withdrawal request has been rejected. Please contact your administrator for more details.</p>
+      <table class="dtbl">
+        <tr><td class="lbl">Amount</td><td>SDG 15,000</td></tr>
+        <tr><td class="lbl">Request ID</td><td>WDR-2026-0312-001</td></tr>
+        <tr><td class="lbl">Rejected By</td><td>Fatima Omar (Admin)</td></tr>
+        <tr><td class="lbl">Reason</td><td>Duplicate request — already processed</td></tr>
+      </table>
+      <div class="btn-wrap"><a class="btn" href="#">View Wallet &nbsp;|&nbsp; عرض التفاصيل</a></div>
+      <hr class="divider">
+      <div class="ar"><p class="ar-greet">عزيزي حسن علي،</p><h3 class="ar-subject">تم رفض السحب</h3><p class="ar-msg">تم رفض طلب السحب الخاص بك. يرجى التواصل مع المسؤول لمزيد من التفاصيل.</p></div>
+      <hr class="divider">
+      <div class="signoff"><p>Kind regards,</p><p class="name">PACT Command Center</p><p class="team">ICT Team &nbsp;|&nbsp; فريق تكنولوجيا المعلومات</p><p class="behalf">On behalf of the PACT Operations Team &nbsp;|&nbsp; نيابةً عن فريق عمليات باكت</p></div>
+    </div>
+    <div class="e-footer">This is an automated notification from the PACT Command Center Platform.<br>هذه رسالة آلية من منصة مركز قيادة باكت &nbsp;|&nbsp; <strong>PACT Platform v2</strong></div>
+  </div></div>
+</div>
+
+<div class="tmpl" id="t16">
+  <div class="tmpl-meta"><span class="badge-num">T16</span><h3>Cost Submission Received (Confirmation to Submitter)</h3><span class="to">→ <span class="pill pill-requester">Submitter</span></span></div>
+  <div class="email-wrap"><div class="email">
+    <div class="e-hdr"><p class="brand">PACT Command Center</p><p class="sub">مركز قيادة باكت &nbsp;|&nbsp; ICT Team Platform</p></div>
+    <div class="accent"></div>
+    <div class="e-body type-info">
+      <p class="greeting">Dear Hassan Ali,</p>
+      <h2 class="subject">Cost Submission Received - Transportation</h2>
+      <p class="msg">Your cost submission has been received and is pending review.</p>
+      <table class="dtbl">
+        <tr><td class="lbl">Category</td><td>Transportation</td></tr>
+        <tr><td class="lbl">Amount</td><td>SDG 8,500</td></tr>
+        <tr><td class="lbl">Site</td><td>Abu Shouk IDP Camp</td></tr>
+        <tr><td class="lbl">Status</td><td>Pending Review</td></tr>
+      </table>
+      <div class="btn-wrap"><a class="btn" href="#">View Submission &nbsp;|&nbsp; عرض التفاصيل</a></div>
+      <hr class="divider">
+      <div class="ar"><p class="ar-greet">عزيزي حسن علي،</p><h3 class="ar-subject">تم استلام تقديم التكلفة</h3><p class="ar-msg">تم استلام تقديم تكلفتك وهو في انتظار المراجعة.</p></div>
+      <hr class="divider">
+      <div class="signoff"><p>Kind regards,</p><p class="name">PACT Command Center</p><p class="team">ICT Team &nbsp;|&nbsp; فريق تكنولوجيا المعلومات</p><p class="behalf">On behalf of the PACT Operations Team &nbsp;|&nbsp; نيابةً عن فريق عمليات باكت</p></div>
+    </div>
+    <div class="e-footer">This is an automated notification from the PACT Command Center Platform.<br>هذه رسالة آلية من منصة مركز قيادة باكت &nbsp;|&nbsp; <strong>PACT Platform v2</strong></div>
+  </div></div>
+</div>
+
+<div class="tmpl" id="t16b">
+  <div class="tmpl-meta"><span class="badge-num">T16B</span><h3>New Cost Submission — Alert to Super Admins</h3><span class="to">→ <span class="pill pill-super">Super Admin</span></span></div>
+  <div class="email-wrap"><div class="email">
+    <div class="e-hdr"><p class="brand">PACT Command Center</p><p class="sub">مركز قيادة باكت &nbsp;|&nbsp; ICT Team Platform</p></div>
+    <div class="accent"></div>
+    <div class="e-body type-warning">
+      <p class="greeting">Dear Super Admin,</p>
+      <h2 class="subject">New Operational Cost Submission — Advance Request</h2>
+      <p class="msg">Mohamed Ali (m.ali@pact.org) has submitted a new advance request titled "Field Visit — South Kordofan Q2" for your review and approval.</p>
+      <table class="dtbl">
+        <tr><td class="lbl">Submitted By / مقدم من</td><td>Mohamed Ali</td></tr>
+        <tr><td class="lbl">Request Title / عنوان الطلب</td><td>Field Visit — South Kordofan Q2</td></tr>
+        <tr><td class="lbl">Type / النوع</td><td>Advance Request / طلب سلفة</td></tr>
+        <tr><td class="lbl">Category / الفئة</td><td>Transportation, Accommodation</td></tr>
+        <tr><td class="lbl">Total Amount / المبلغ الإجمالي</td><td>SDG 45,000</td></tr>
+        <tr><td class="lbl">Items / العناصر</td><td>3 items</td></tr>
+        <tr><td class="lbl">Project / المشروع</td><td>WASH — South Kordofan</td></tr>
+        <tr><td class="lbl">Status / الحالة</td><td>Pending Approval / في انتظار الموافقة</td></tr>
+      </table>
+      <div class="btn-wrap"><a class="btn" href="#">Review Submission &nbsp;|&nbsp; عرض التفاصيل</a></div>
+      <hr class="divider">
+      <div class="ar"><p class="ar-greet">عزيزي المسؤول الأعلى،</p><h3 class="ar-subject">طلب تكلفة تشغيلية جديد — طلب سلفة</h3><p class="ar-msg">قام محمد علي بتقديم طلب سلفة جديد لمراجعتك والموافقة عليه.</p></div>
+      <hr class="divider">
+      <div class="signoff"><p>Kind regards,</p><p class="name">PACT Command Center</p><p class="team">ICT Team &nbsp;|&nbsp; فريق تكنولوجيا المعلومات</p><p class="behalf">On behalf of the PACT Operations Team &nbsp;|&nbsp; نيابةً عن فريق عمليات باكت</p></div>
+    </div>
+    <div class="e-footer">This is an automated notification from the PACT Command Center Platform.<br>هذه رسالة آلية من منصة مركز قيادة باكت &nbsp;|&nbsp; <strong>PACT Platform v2</strong></div>
+  </div></div>
+</div>
+
+<div class="tmpl" id="t16b2">
+  <div class="tmpl-meta"><span class="badge-num">T16B2</span><h3>New Cost Submission — Alert to FOM &amp; Admin</h3><span class="to">→ <span class="pill pill-fom">FOM</span> <span class="pill pill-admin">Admin</span></span></div>
+  <div class="email-wrap"><div class="email">
+    <div class="e-hdr"><p class="brand">PACT Command Center</p><p class="sub">مركز قيادة باكت &nbsp;|&nbsp; ICT Team Platform</p></div>
+    <div class="accent"></div>
+    <div class="e-body type-warning">
+      <p class="greeting">Dear Ahmed Hassan (Field Operations Manager),</p>
+      <h2 class="subject">New Operational Cost Submission — Advance Request</h2>
+      <p class="msg">Mohamed Ali (m.ali@pact.org) has submitted a new advance request titled "Field Visit — South Kordofan Q2" that requires your awareness.</p>
+      <table class="dtbl">
+        <tr><td class="lbl">Submitted By / مقدم من</td><td>Mohamed Ali</td></tr>
+        <tr><td class="lbl">Request Title / عنوان الطلب</td><td>Field Visit — South Kordofan Q2</td></tr>
+        <tr><td class="lbl">Type / النوع</td><td>Advance Request / طلب سلفة</td></tr>
+        <tr><td class="lbl">Category / الفئة</td><td>Transportation, Accommodation</td></tr>
+        <tr><td class="lbl">Total Amount / المبلغ الإجمالي</td><td>SDG 45,000</td></tr>
+        <tr><td class="lbl">Items / العناصر</td><td>3 items</td></tr>
+        <tr><td class="lbl">Project / المشروع</td><td>WASH — South Kordofan</td></tr>
+        <tr><td class="lbl">Status / الحالة</td><td>Pending Approval / في انتظار الموافقة</td></tr>
+      </table>
+      <div class="btn-wrap"><a class="btn" href="#">View Submission &nbsp;|&nbsp; عرض التفاصيل</a></div>
+      <hr class="divider">
+      <div class="ar"><p class="ar-greet">عزيزي أحمد حسن (مدير العمليات الميدانية)،</p><h3 class="ar-subject">طلب تكلفة تشغيلية جديد — طلب سلفة</h3><p class="ar-msg">قام محمد علي بتقديم طلب سلفة جديد بعنوان "Field Visit — South Kordofan Q2" لإطلاعك عليه.</p></div>
+      <hr class="divider">
+      <div class="signoff"><p>Kind regards,</p><p class="name">PACT Command Center</p><p class="team">ICT Team &nbsp;|&nbsp; فريق تكنولوجيا المعلومات</p><p class="behalf">On behalf of the PACT Operations Team &nbsp;|&nbsp; نيابةً عن فريق عمليات باكت</p></div>
+    </div>
+    <div class="e-footer">This is an automated notification from the PACT Command Center Platform.<br>هذه رسالة آلية من منصة مركز قيادة باكت &nbsp;|&nbsp; <strong>PACT Platform v2</strong></div>
+  </div></div>
+</div>
+
+<div class="tmpl" id="t16b3">
+  <div class="tmpl-meta"><span class="badge-num">T16B3</span><h3>Advance Approved — Management Notification</h3><span class="to">→ <span class="pill pill-fom">FOM</span> <span class="pill pill-admin">Admin</span> <span class="pill pill-super">Super Admin</span></span></div>
+  <div class="email-wrap"><div class="email">
+    <div class="e-hdr"><p class="brand">PACT Command Center</p><p class="sub">مركز قيادة باكت &nbsp;|&nbsp; ICT Team Platform</p></div>
+    <div class="accent"></div>
+    <div class="e-body type-success">
+      <p class="greeting">Dear Ahmed Hassan (Field Operations Manager),</p>
+      <h2 class="subject">Advance Request Approved by Supervisor</h2>
+      <p class="msg">A field team advance (down-payment) request for "Abu Shouk IDP Camp" has been approved by Khalid Ibrahim (Supervisor).</p>
+      <table class="dtbl">
+        <tr><td class="lbl">Requester / مقدم الطلب</td><td>Mohamed Ali</td></tr>
+        <tr><td class="lbl">Site / الموقع</td><td>Abu Shouk IDP Camp</td></tr>
+        <tr><td class="lbl">Approved Amount / المبلغ المعتمد</td><td>SDG 32,500</td></tr>
+        <tr><td class="lbl">Approved By / اعتمد من قبل</td><td>Khalid Ibrahim (Supervisor)</td></tr>
+        <tr><td class="lbl">Approval Stage / مرحلة الاعتماد</td><td>Supervisor Approval / اعتماد المشرف</td></tr>
+      </table>
+      <div class="btn-wrap"><a class="btn" href="#">View Request &nbsp;|&nbsp; عرض التفاصيل</a></div>
+      <hr class="divider">
+      <div class="ar"><p class="ar-greet">عزيزي أحمد حسن (مدير العمليات الميدانية)،</p><h3 class="ar-subject">تمت الموافقة على طلب السلفة من قبل المشرف</h3><p class="ar-msg">تمت الموافقة على طلب سلفة الفريق الميداني لـ "مخيم أبو شوك" من قبل خالد إبراهيم (المشرف).</p></div>
+      <hr class="divider">
+      <div class="signoff"><p>Kind regards,</p><p class="name">PACT Command Center</p><p class="team">ICT Team &nbsp;|&nbsp; فريق تكنولوجيا المعلومات</p><p class="behalf">On behalf of the PACT Operations Team &nbsp;|&nbsp; نيابةً عن فريق عمليات باكت</p></div>
+    </div>
+    <div class="e-footer">This is an automated notification from the PACT Command Center Platform.<br>هذه رسالة آلية من منصة مركز قيادة باكت &nbsp;|&nbsp; <strong>PACT Platform v2</strong></div>
+  </div></div>
+</div>
+
+<div class="tmpl" id="t16c">
+  <div class="tmpl-meta"><span class="badge-num">T16C</span><h3>Payment Request to Finance — Operational Cost (Bulk)</h3><span class="to">→ <span class="pill pill-admin">Finance Admin</span> <span class="pill pill-super">Super Admin</span> <span class="pill pill-admin">Admin</span></span></div>
+  <div class="email-wrap">
+    <table width="100%" cellpadding="0" cellspacing="0" style="background:#DDE3ED;padding:28px 14px;">
+    <tr><td align="center">
+    <table width="100%" cellpadding="0" cellspacing="0" style="max-width:580px;width:100%;background:#FFFFFF;border-radius:12px;overflow:hidden;box-shadow:0 8px 40px rgba(15,32,65,0.18);font-family:Arial,Helvetica,sans-serif;">
+      <!-- HEADER -->
+      <tr><td style="background:#0F2041;padding:0;">
+        <table width="100%" cellpadding="0" cellspacing="0"><tr>
+          <td style="padding:22px 28px 18px;">
+            <table cellpadding="0" cellspacing="0"><tr>
+              <td style="vertical-align:middle;padding-right:11px;">
+                <table cellpadding="0" cellspacing="0" style="background:#E87722;border-radius:9px;width:40px;height:40px;">
+                  <tr><td align="center" valign="middle"><span style="font-size:19px;font-weight:900;color:#fff;font-family:Arial;line-height:40px;display:block;">P</span></td></tr>
+                </table>
+              </td>
+              <td style="vertical-align:middle;">
+                <p style="margin:0;font-size:22px;font-weight:900;color:#fff;letter-spacing:0.5px;line-height:1;">PACT</p>
+                <p style="margin:2px 0 0;font-size:9.5px;color:#7FA5CC;letter-spacing:2.2px;text-transform:uppercase;">Command Center &nbsp;·&nbsp; Finance</p>
+              </td>
+            </tr></table>
+          </td>
+          <td style="padding:18px 28px;text-align:right;vertical-align:middle;">
+            <p style="margin:0 0 2px;font-size:9.5px;color:#8FADD4;"><span style="color:#BFD3F0;font-weight:700;">REF&nbsp;</span>BULK-5-20260312</p>
+            <p style="margin:0 0 2px;font-size:9.5px;color:#8FADD4;"><span style="color:#BFD3F0;font-weight:700;">DATE&nbsp;</span>12 Mar 2026</p>
+            <span style="display:inline-block;margin-top:4px;padding:3px 10px;background:#10B981;border-radius:20px;font-size:9.5px;font-weight:700;color:#fff;letter-spacing:1px;text-transform:uppercase;">APPROVED</span>
+          </td>
+        </tr></table>
+      </td></tr>
+      <!-- ACTION REQUIRED BANNER -->
+      <tr><td style="background:#065F46;padding:10px 28px;text-align:center;">
+        <p style="margin:0;font-size:11px;font-weight:700;color:#fff;letter-spacing:1.5px;text-transform:uppercase;">▶ FINANCE TEAM ACTION REQUIRED &nbsp;·&nbsp; إجراء مطلوب من فريق المالية</p>
+      </td></tr>
+      <!-- AMOUNT HERO -->
+      <tr><td style="background:#ECFDF5;border-bottom:2px solid #6EE7B7;padding:26px 28px;text-align:center;">
+        <p style="margin:0 0 4px;font-size:11px;color:#065F46;text-transform:uppercase;letter-spacing:1.8px;font-weight:700;">Total Amount Requested &nbsp;/&nbsp; إجمالي المبلغ المطلوب</p>
+        <p style="margin:0 0 2px;font-size:36px;font-weight:900;color:#0F2041;line-height:1;letter-spacing:-0.5px;">SDG 247,500</p>
+        <p style="margin:6px 0 0;font-size:14px;font-weight:700;color:#1D4ED8;">≈ USD 412.50 <span style="font-size:10px;font-weight:400;color:#6B7280;">(@ 1 USD = 600 SDG)</span></p>
+        <table cellpadding="0" cellspacing="0" style="margin:14px auto 0;"><tr>
+          <td style="padding:0 10px;text-align:center;border-right:1px solid #6EE7B7;">
+            <p style="margin:0;font-size:22px;font-weight:900;color:#0F2041;">5</p>
+            <p style="margin:2px 0 0;font-size:9.5px;color:#6B7280;text-transform:uppercase;letter-spacing:1px;">Submissions / طلب</p>
+          </td>
+          <td style="padding:0 10px;text-align:center;">
+            <p style="margin:0;font-size:13px;font-weight:800;color:#0F2041;">North Darfur Hub</p>
+            <p style="margin:2px 0 0;font-size:9.5px;color:#6B7280;text-transform:uppercase;letter-spacing:1px;">Group / المجموعة</p>
+          </td>
+        </tr></table>
+      </td></tr>
+      <!-- BODY -->
+      <tr><td style="padding:28px 28px 26px;">
+        <p style="margin:0 0 5px;font-size:9.5px;color:#9CA3AF;text-transform:uppercase;letter-spacing:1.5px;font-weight:700;">Official Payment Request &nbsp;/&nbsp; طلب دفع رسمي</p>
+        <p style="margin:0 0 20px;font-size:15px;color:#111827;">Dear <strong>Sarah Johnson (Finance Admin)</strong>,</p>
+        <p style="margin:0 0 20px;font-size:13px;color:#374151;line-height:1.85;border-left:3px solid #065F46;padding-left:14px;">
+          Please find the attached PDF &amp; Excel report containing <strong>5 fully approved operational cost submissions</strong>. Kindly review the details, authorize the payments, and confirm disbursement at your earliest convenience.
+        </p>
+        <!-- Details Table -->
+        <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin:0 0 20px;border-radius:8px;overflow:hidden;border:1px solid #E5E7EB;">
+          <tr style="background:#0F2041;"><td colspan="2" style="padding:8px 14px;"><p style="margin:0;font-size:10px;font-weight:700;color:#93C5FD;text-transform:uppercase;letter-spacing:1.5px;">Request Details &nbsp;/&nbsp; تفاصيل الطلب</p></td></tr>
+          <tr style="background:#F8FAFC;"><td style="padding:9px 14px;font-size:12px;font-weight:600;color:#6B7280;border-bottom:1px solid #E5E7EB;border-right:1px solid #E5E7EB;width:38%;">Reference No<br><span style="font-weight:400;font-size:11px;color:#9CA3AF;">رقم المرجع</span></td><td style="padding:9px 14px;font-size:12.5px;color:#111827;border-bottom:1px solid #E5E7EB;font-weight:600;">BULK-5-20260312</td></tr>
+          <tr style="background:#fff;"><td style="padding:9px 14px;font-size:12px;font-weight:600;color:#6B7280;border-bottom:1px solid #E5E7EB;border-right:1px solid #E5E7EB;">MMP / Plan<br><span style="font-weight:400;font-size:11px;color:#9CA3AF;">الخطة الشهرية</span></td><td style="padding:9px 14px;font-size:13px;color:#0F2041;border-bottom:1px solid #E5E7EB;font-weight:700;">MMP-2026-03-NDK</td></tr>
+          <tr style="background:#F8FAFC;"><td style="padding:9px 14px;font-size:12px;font-weight:600;color:#6B7280;border-bottom:1px solid #E5E7EB;border-right:1px solid #E5E7EB;">Type<br><span style="font-weight:400;font-size:11px;color:#9CA3AF;">النوع</span></td><td style="padding:9px 14px;border-bottom:1px solid #E5E7EB;"><span style="display:inline-block;padding:2px 9px;background:#ECFDF5;border:1px solid #6EE7B7;border-radius:4px;font-size:11.5px;font-weight:700;color:#065F46;">Operational Cost Submission</span><span style="display:block;font-size:11px;color:#6B7280;margin-top:3px;">تقديم تكاليف تشغيلية</span></td></tr>
+          <tr style="background:#fff;"><td style="padding:9px 14px;font-size:12px;font-weight:600;color:#6B7280;border-bottom:1px solid #E5E7EB;border-right:1px solid #E5E7EB;">Category<br><span style="font-weight:400;font-size:11px;color:#9CA3AF;">الفئة</span></td><td style="padding:9px 14px;font-size:12.5px;color:#111827;border-bottom:1px solid #E5E7EB;">Multiple (Office Supplies, Travel, Fuel, Accommodation, Other)</td></tr>
+          <tr style="background:#ECFDF5;"><td style="padding:10px 14px;font-size:12px;font-weight:700;color:#065F46;border-bottom:1px solid #6EE7B7;border-right:1px solid #6EE7B7;">Total Amount<br><span style="font-weight:400;font-size:11px;">المبلغ الإجمالي</span></td><td style="padding:10px 14px;font-size:18px;font-weight:900;color:#0F2041;border-bottom:1px solid #6EE7B7;">SDG 247,500 <span style="display:block;font-size:12px;font-weight:600;color:#1D4ED8;margin-top:2px;">≈ USD 412.50</span></td></tr>
+          <tr style="background:#fff;"><td style="padding:9px 14px;font-size:12px;font-weight:600;color:#6B7280;border-bottom:1px solid #E5E7EB;border-right:1px solid #E5E7EB;">Project<br><span style="font-weight:400;font-size:11px;color:#9CA3AF;">المشروع</span></td><td style="padding:9px 14px;font-size:12.5px;color:#111827;border-bottom:1px solid #E5E7EB;">USAID-2026-NDK-Field-Operations</td></tr>
+          <tr style="background:#F8FAFC;"><td style="padding:9px 14px;font-size:12px;font-weight:600;color:#6B7280;border-right:1px solid #E5E7EB;">Approved By<br><span style="font-weight:400;font-size:11px;color:#9CA3AF;">تمت الموافقة من</span></td><td style="padding:9px 14px;font-size:12.5px;color:#111827;"><strong>Khalid Ibrahim</strong> <span style="display:inline-block;margin-left:6px;padding:1px 7px;background:#D1FAE5;border-radius:4px;font-size:10px;font-weight:700;color:#065F46;">✓ VERIFIED</span></td></tr>
+        </table>
+        <!-- Action Button -->
+        <table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 22px;">
+          <tr><td><a href="#" style="display:block;padding:14px 20px;background:#0F2041;color:#fff;text-decoration:none;border-radius:8px;font-weight:700;font-size:14px;text-align:center;">📄 View &amp; Process Payment &nbsp;/&nbsp; عرض ومعالجة الدفع</a></td></tr>
+        </table>
+        <hr style="border:none;border-top:1px solid #E5E7EB;margin:22px 0;">
+        <!-- Arabic Section -->
+        <table width="100%" cellpadding="0" cellspacing="0" style="background:#F9FAFB;border:1px solid #E5E7EB;border-radius:8px;margin-bottom:22px;">
+          <tr><td style="padding:6px 14px;background:#1D3461;border-radius:8px 8px 0 0;"><p style="margin:0;font-size:9.5px;font-weight:700;color:#93C5FD;text-transform:uppercase;letter-spacing:1.5px;text-align:right;">النص العربي — Arabic Version</p></td></tr>
+          <tr><td style="padding:16px 18px;" dir="rtl">
+            <p style="margin:0 0 8px;font-size:15px;color:#111827;text-align:right;font-family:'Segoe UI',Tahoma,Arial,sans-serif;">عزيزي <strong>سارة جونسون (مدير مالي)</strong>،</p>
+            <p style="margin:0 0 12px;font-size:17px;font-weight:700;color:#0F2041;text-align:right;font-family:'Segoe UI',Tahoma,Arial,sans-serif;">طلب دفع رسمي — تقديم تكاليف تشغيلية</p>
+            <p style="margin:0 0 12px;font-size:13px;color:#374151;line-height:1.85;text-align:right;border-right:3px solid #065F46;padding-right:12px;font-family:'Segoe UI',Tahoma,Arial,sans-serif;">يرجى مراجعة التقرير المرفق الذي يحتوي على <strong>5 تقديمات تكاليف تشغيلية معتمدة</strong>. يُرجى مراجعة التفاصيل واعتماد المدفوعات وتأكيد الصرف في أقرب وقت ممكن.</p>
+            <table width="100%" cellpadding="0" cellspacing="0" style="background:#ECFDF5;border:1px solid #6EE7B7;border-radius:6px;">
+              <tr><td style="padding:10px 14px;text-align:right;">
+                <p style="margin:0;font-size:10px;color:#065F46;font-weight:700;letter-spacing:1px;font-family:'Segoe UI',Tahoma,Arial,sans-serif;">إجمالي المبلغ المطلوب</p>
+                <p style="margin:4px 0 0;font-size:22px;font-weight:900;color:#0F2041;font-family:'Segoe UI',Tahoma,Arial,sans-serif;">SDG 247,500</p>
+                <p style="margin:3px 0 0;font-size:11px;color:#6B7280;font-family:'Segoe UI',Tahoma,Arial,sans-serif;">رقم المرجع: BULK-5-20260312 · 12 مارس 2026</p>
+              </td></tr>
+            </table>
+          </td></tr>
+        </table>
+        <!-- Sign-off -->
+        <table width="100%" cellpadding="0" cellspacing="0"><tr>
+          <td style="vertical-align:top;padding-right:20px;">
+            <p style="margin:0 0 2px;font-size:13px;color:#6B7280;font-style:italic;">Yours faithfully,</p>
+            <p style="margin:6px 0 1px;font-size:14px;font-weight:700;color:#0F2041;">Khalid Ibrahim</p>
+            <p style="margin:0;font-size:11px;color:#9CA3AF;">Approving Officer — PACT Command Center</p>
+          </td>
+          <td style="vertical-align:top;text-align:right;" dir="rtl">
+            <p style="margin:0 0 2px;font-size:13px;color:#6B7280;">مع خالص التقدير،</p>
+            <p style="margin:6px 0 1px;font-size:14px;font-weight:700;color:#0F2041;">خالد إبراهيم</p>
+            <p style="margin:0;font-size:11px;color:#9CA3AF;">مركز قيادة باكت</p>
+          </td>
+        </tr></table>
+      </td></tr>
+      <!-- FOOTER -->
+      <tr><td style="background:#F1F5F9;border-top:2px solid #E2E8F0;padding:14px 28px;">
+        <p style="margin:0 0 5px;font-size:10.5px;color:#94A3B8;text-align:center;"><strong style="color:#64748B;">CONFIDENTIAL</strong> — Intended solely for the named recipient(s).</p>
+        <p dir="rtl" style="margin:0 0 8px;font-size:10.5px;color:#94A3B8;text-align:center;"><strong style="color:#64748B;">سري</strong> — هذه الرسالة موجهة حصراً للمستلم المحدد.</p>
+        <hr style="border:none;border-top:1px solid #E2E8F0;margin:8px 0;">
+        <p style="margin:0 0 3px;font-size:10.5px;color:#94A3B8;text-align:center;"><strong style="color:#64748B;">PACT</strong> &nbsp;·&nbsp; Command Center Platform &nbsp;·&nbsp; Automated Notification</p>
+        <p style="margin:0;font-size:10px;color:#CBD5E1;text-align:center;">© 2026 PACT. All rights reserved.</p>
+      </td></tr>
+    </table>
+    </td></tr></table>
+  </div>
+</div>
+
+<div class="tmpl" id="t16c-adv">
+  <div class="tmpl-meta"><span class="badge-num">T16C-ADV</span><h3>Payment Request to Finance — Transport Advance (Bulk)</h3><span class="to">→ <span class="pill pill-admin">Finance Admin</span> <span class="pill pill-super">Super Admin</span> <span class="pill pill-admin">Admin</span></span></div>
+  <div class="email-wrap">
+    <table width="100%" cellpadding="0" cellspacing="0" style="background:#DDE3ED;padding:28px 14px;">
+    <tr><td align="center">
+    <table width="100%" cellpadding="0" cellspacing="0" style="max-width:580px;width:100%;background:#FFFFFF;border-radius:12px;overflow:hidden;box-shadow:0 8px 40px rgba(15,32,65,0.18);font-family:Arial,Helvetica,sans-serif;">
+      <!-- HEADER -->
+      <tr><td style="background:#0F2041;padding:0;">
+        <table width="100%" cellpadding="0" cellspacing="0"><tr>
+          <td style="padding:22px 28px 18px;">
+            <table cellpadding="0" cellspacing="0"><tr>
+              <td style="vertical-align:middle;padding-right:11px;">
+                <table cellpadding="0" cellspacing="0" style="background:#E87722;border-radius:9px;width:40px;height:40px;">
+                  <tr><td align="center" valign="middle"><span style="font-size:19px;font-weight:900;color:#fff;font-family:Arial;line-height:40px;display:block;">P</span></td></tr>
+                </table>
+              </td>
+              <td style="vertical-align:middle;">
+                <p style="margin:0;font-size:22px;font-weight:900;color:#fff;">PACT</p>
+                <p style="margin:2px 0 0;font-size:9.5px;color:#7FA5CC;letter-spacing:2.2px;text-transform:uppercase;">Command Center &nbsp;·&nbsp; Finance</p>
+              </td>
+            </tr></table>
+          </td>
+          <td style="padding:18px 28px;text-align:right;vertical-align:middle;">
+            <p style="margin:0 0 2px;font-size:9.5px;color:#8FADD4;"><span style="color:#BFD3F0;font-weight:700;">REF&nbsp;</span>BULK-12-20260312</p>
+            <p style="margin:0 0 2px;font-size:9.5px;color:#8FADD4;"><span style="color:#BFD3F0;font-weight:700;">DATE&nbsp;</span>12 Mar 2026</p>
+            <span style="display:inline-block;margin-top:4px;padding:3px 10px;background:#F59E0B;border-radius:20px;font-size:9.5px;font-weight:700;color:#fff;letter-spacing:1px;text-transform:uppercase;">HIGH PRIORITY</span>
+          </td>
+        </tr></table>
+      </td></tr>
+      <!-- ACTION REQUIRED BANNER (amber for advance) -->
+      <tr><td style="background:#B45309;padding:10px 28px;text-align:center;">
+        <p style="margin:0;font-size:11px;font-weight:700;color:#fff;letter-spacing:1.5px;text-transform:uppercase;">▶ FINANCE TEAM ACTION REQUIRED &nbsp;·&nbsp; إجراء مطلوب من فريق المالية</p>
+      </td></tr>
+      <!-- AMOUNT HERO (amber) -->
+      <tr><td style="background:#FFFBEB;border-bottom:2px solid #FDE68A;padding:26px 28px;text-align:center;">
+        <p style="margin:0 0 4px;font-size:11px;color:#B45309;text-transform:uppercase;letter-spacing:1.8px;font-weight:700;">Total Approved Amount &nbsp;/&nbsp; إجمالي المبلغ المعتمد</p>
+        <p style="margin:0 0 2px;font-size:36px;font-weight:900;color:#0F2041;line-height:1;letter-spacing:-0.5px;">SDG 384,000</p>
+        <p style="margin:6px 0 0;font-size:14px;font-weight:700;color:#1D4ED8;">≈ USD 640.00 <span style="font-size:10px;font-weight:400;color:#6B7280;">(@ 1 USD = 600 SDG)</span></p>
+        <table cellpadding="0" cellspacing="0" style="margin:14px auto 0;"><tr>
+          <td style="padding:0 10px;text-align:center;border-right:1px solid #FDE68A;">
+            <p style="margin:0;font-size:22px;font-weight:900;color:#0F2041;">12</p>
+            <p style="margin:2px 0 0;font-size:9.5px;color:#6B7280;text-transform:uppercase;letter-spacing:1px;">Requests / طلب</p>
+          </td>
+          <td style="padding:0 10px;text-align:center;">
+            <p style="margin:0;font-size:13px;font-weight:800;color:#0F2041;">MMP-2026-03-KRT</p>
+            <p style="margin:2px 0 0;font-size:9.5px;color:#6B7280;text-transform:uppercase;letter-spacing:1px;">Plan / الخطة</p>
+          </td>
+        </tr></table>
+      </td></tr>
+      <!-- BODY -->
+      <tr><td style="padding:28px 28px 26px;">
+        <p style="margin:0 0 5px;font-size:9.5px;color:#9CA3AF;text-transform:uppercase;letter-spacing:1.5px;font-weight:700;">Official Payment Request &nbsp;/&nbsp; طلب دفع رسمي</p>
+        <p style="margin:0 0 20px;font-size:15px;color:#111827;">Dear <strong>Sarah Johnson (Finance Admin)</strong>,</p>
+        <p style="margin:0 0 20px;font-size:13px;color:#374151;line-height:1.85;border-left:3px solid #B45309;padding-left:14px;">
+          Please find the attached PDF &amp; Excel report containing <strong>12 fully approved transportation advance requests</strong> from <strong>MMP-2026-03-KRT</strong>. Kindly review, authorize the disbursements, and confirm receipt at your earliest convenience.
+        </p>
+        <!-- Details Table -->
+        <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin:0 0 20px;border-radius:8px;overflow:hidden;border:1px solid #E5E7EB;">
+          <tr style="background:#0F2041;"><td colspan="2" style="padding:8px 14px;"><p style="margin:0;font-size:10px;font-weight:700;color:#93C5FD;text-transform:uppercase;letter-spacing:1.5px;">Request Details &nbsp;/&nbsp; تفاصيل الطلب</p></td></tr>
+          <tr style="background:#F8FAFC;"><td style="padding:9px 14px;font-size:12px;font-weight:600;color:#6B7280;border-bottom:1px solid #E5E7EB;border-right:1px solid #E5E7EB;width:38%;">Reference No<br><span style="font-weight:400;font-size:11px;color:#9CA3AF;">رقم المرجع</span></td><td style="padding:9px 14px;font-size:12.5px;color:#111827;border-bottom:1px solid #E5E7EB;font-weight:600;">BULK-12-20260312</td></tr>
+          <tr style="background:#fff;"><td style="padding:9px 14px;font-size:12px;font-weight:600;color:#6B7280;border-bottom:1px solid #E5E7EB;border-right:1px solid #E5E7EB;">MMP / Plan<br><span style="font-weight:400;font-size:11px;color:#9CA3AF;">الخطة الشهرية</span></td><td style="padding:9px 14px;font-size:13px;color:#0F2041;border-bottom:1px solid #E5E7EB;font-weight:700;">MMP-2026-03-KRT</td></tr>
+          <tr style="background:#F8FAFC;"><td style="padding:9px 14px;font-size:12px;font-weight:600;color:#6B7280;border-bottom:1px solid #E5E7EB;border-right:1px solid #E5E7EB;">Type<br><span style="font-weight:400;font-size:11px;color:#9CA3AF;">النوع</span></td><td style="padding:9px 14px;border-bottom:1px solid #E5E7EB;"><span style="display:inline-block;padding:2px 9px;background:#FFFBEB;border:1px solid #FDE68A;border-radius:4px;font-size:11.5px;font-weight:700;color:#B45309;">Transport Advance Request</span><span style="display:block;font-size:11px;color:#6B7280;margin-top:3px;">طلب سلفة نقل</span></td></tr>
+          <tr style="background:#fff;"><td style="padding:9px 14px;font-size:12px;font-weight:600;color:#6B7280;border-bottom:1px solid #E5E7EB;border-right:1px solid #E5E7EB;">Category<br><span style="font-weight:400;font-size:11px;color:#9CA3AF;">الفئة</span></td><td style="padding:9px 14px;font-size:12.5px;color:#111827;border-bottom:1px solid #E5E7EB;">Transportation Advance (Multiple)</td></tr>
+          <tr style="background:#FFFBEB;"><td style="padding:10px 14px;font-size:12px;font-weight:700;color:#B45309;border-bottom:1px solid #FDE68A;border-right:1px solid #FDE68A;">Total Amount<br><span style="font-weight:400;font-size:11px;">المبلغ الإجمالي</span></td><td style="padding:10px 14px;font-size:18px;font-weight:900;color:#0F2041;border-bottom:1px solid #FDE68A;">SDG 384,000 <span style="display:block;font-size:12px;font-weight:600;color:#1D4ED8;margin-top:2px;">≈ USD 640.00</span></td></tr>
+          <tr style="background:#fff;"><td style="padding:9px 14px;font-size:12px;font-weight:600;color:#6B7280;border-bottom:1px solid #E5E7EB;border-right:1px solid #E5E7EB;">Project<br><span style="font-weight:400;font-size:11px;color:#9CA3AF;">المشروع</span></td><td style="padding:9px 14px;font-size:12.5px;color:#111827;border-bottom:1px solid #E5E7EB;">OCHA-2026-KRT-Field-Operations</td></tr>
+          <tr style="background:#F8FAFC;"><td style="padding:9px 14px;font-size:12px;font-weight:600;color:#6B7280;border-right:1px solid #E5E7EB;">Approved By<br><span style="font-weight:400;font-size:11px;color:#9CA3AF;">تمت الموافقة من</span></td><td style="padding:9px 14px;font-size:12.5px;color:#111827;"><strong>Mohammed Al-Rashid</strong> <span style="display:inline-block;margin-left:6px;padding:1px 7px;background:#D1FAE5;border-radius:4px;font-size:10px;font-weight:700;color:#065F46;">✓ VERIFIED</span></td></tr>
+        </table>
+        <!-- Action Button -->
+        <table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 20px;">
+          <tr><td><a href="#" style="display:block;padding:14px 20px;background:#0F2041;color:#fff;text-decoration:none;border-radius:8px;font-weight:700;font-size:14px;text-align:center;">📄 View &amp; Process Payment &nbsp;/&nbsp; عرض ومعالجة الدفع</a></td></tr>
+        </table>
+        <!-- Reconciliation Notice -->
+        <table width="100%" cellpadding="0" cellspacing="0" style="background:#FFFBEB;border:1px solid #FDE68A;border-left:4px solid #F59E0B;border-radius:6px;margin-bottom:22px;">
+          <tr><td style="padding:12px 14px;">
+            <p style="margin:0 0 4px;font-size:12.5px;font-weight:700;color:#92400E;">⚠ Reconciliation Requirement &nbsp;/&nbsp; اشتراط التسوية</p>
+            <p style="margin:0 0 4px;font-size:12px;color:#78350F;line-height:1.65;">All recipients must submit receipts and return any unused funds within <strong>5 working days</strong> of disbursement.</p>
+            <p dir="rtl" style="margin:0;font-size:12px;color:#78350F;line-height:1.65;text-align:right;">يجب على جميع المستلمين تقديم الإيصالات وإرجاع أي أموال غير مستخدمة خلال <strong>5 أيام عمل</strong> من صرف المبلغ.</p>
+          </td></tr>
+        </table>
+        <hr style="border:none;border-top:1px solid #E5E7EB;margin:22px 0;">
+        <!-- Arabic Section -->
+        <table width="100%" cellpadding="0" cellspacing="0" style="background:#F9FAFB;border:1px solid #E5E7EB;border-radius:8px;margin-bottom:22px;">
+          <tr><td style="padding:6px 14px;background:#1D3461;border-radius:8px 8px 0 0;"><p style="margin:0;font-size:9.5px;font-weight:700;color:#93C5FD;text-transform:uppercase;letter-spacing:1.5px;text-align:right;">النص العربي — Arabic Version</p></td></tr>
+          <tr><td style="padding:16px 18px;" dir="rtl">
+            <p style="margin:0 0 8px;font-size:15px;color:#111827;text-align:right;">عزيزي <strong>سارة جونسون (مدير مالي)</strong>،</p>
+            <p style="margin:0 0 12px;font-size:17px;font-weight:700;color:#0F2041;text-align:right;">طلب دفع رسمي — طلب سلفة نقل</p>
+            <p style="margin:0 0 12px;font-size:13px;color:#374151;line-height:1.85;text-align:right;border-right:3px solid #B45309;padding-right:12px;">تمت الموافقة الكاملة على طلبات السلفة المرفقة وهي جاهزة للمعالجة المالية. يرجى مراجعة التقرير المرفق واعتماد الصرف وتأكيد الاستلام في أقرب وقت ممكن.<br><strong>ملاحظة:</strong> يجب على المستلمين تقديم الإيصالات وإعادة أي أموال غير مستخدمة خلال فترة التسوية المحددة.</p>
+            <table width="100%" cellpadding="0" cellspacing="0" style="background:#FFFBEB;border:1px solid #FDE68A;border-radius:6px;">
+              <tr><td style="padding:10px 14px;text-align:right;">
+                <p style="margin:0;font-size:10px;color:#B45309;font-weight:700;letter-spacing:1px;">إجمالي المبلغ المعتمد</p>
+                <p style="margin:4px 0 0;font-size:22px;font-weight:900;color:#0F2041;">SDG 384,000</p>
+                <p style="margin:3px 0 0;font-size:11px;color:#6B7280;">رقم المرجع: BULK-12-20260312 · 12 مارس 2026</p>
+              </td></tr>
+            </table>
+          </td></tr>
+        </table>
+        <!-- Sign-off -->
+        <table width="100%" cellpadding="0" cellspacing="0"><tr>
+          <td style="vertical-align:top;padding-right:20px;">
+            <p style="margin:0 0 2px;font-size:13px;color:#6B7280;font-style:italic;">Yours faithfully,</p>
+            <p style="margin:6px 0 1px;font-size:14px;font-weight:700;color:#0F2041;">Mohammed Al-Rashid</p>
+            <p style="margin:0;font-size:11px;color:#9CA3AF;">Approving Officer — PACT Command Center</p>
+          </td>
+          <td style="vertical-align:top;text-align:right;" dir="rtl">
+            <p style="margin:0 0 2px;font-size:13px;color:#6B7280;">مع خالص التقدير،</p>
+            <p style="margin:6px 0 1px;font-size:14px;font-weight:700;color:#0F2041;">محمد الراشد</p>
+            <p style="margin:0;font-size:11px;color:#9CA3AF;">مركز قيادة باكت</p>
+          </td>
+        </tr></table>
+      </td></tr>
+      <!-- FOOTER -->
+      <tr><td style="background:#F1F5F9;border-top:2px solid #E2E8F0;padding:14px 28px;">
+        <p style="margin:0 0 5px;font-size:10.5px;color:#94A3B8;text-align:center;"><strong style="color:#64748B;">CONFIDENTIAL</strong> — Intended solely for the named recipient(s).</p>
+        <p dir="rtl" style="margin:0 0 8px;font-size:10.5px;color:#94A3B8;text-align:center;"><strong style="color:#64748B;">سري</strong> — هذه الرسالة موجهة حصراً للمستلم المحدد.</p>
+        <hr style="border:none;border-top:1px solid #E2E8F0;margin:8px 0;">
+        <p style="margin:0 0 3px;font-size:10.5px;color:#94A3B8;text-align:center;"><strong style="color:#64748B;">PACT</strong> &nbsp;·&nbsp; Command Center Platform &nbsp;·&nbsp; Automated Notification</p>
+        <p style="margin:0;font-size:10px;color:#CBD5E1;text-align:center;">© 2026 PACT. All rights reserved.</p>
+      </td></tr>
+    </table>
+    </td></tr></table>
+  </div>
+</div>
+
+<div class="tmpl" id="t17">
+  <div class="tmpl-meta"><span class="badge-num">T17</span><h3>Budget Alert (80%+)</h3><span class="to">→ <span class="pill pill-fom">FOM</span> <span class="pill pill-super">Super Admin</span></span></div>
+  <div class="email-wrap"><div class="email">
+    <div class="e-hdr"><p class="brand">PACT Command Center</p><p class="sub">مركز قيادة باكت &nbsp;|&nbsp; ICT Team Platform</p></div>
+    <div class="accent"></div>
+    <div class="e-body type-warning">
+      <p class="greeting">Dear Ahmed Hassan (Field Operations Manager),</p>
+      <h2 class="subject">Budget Alert: WASH — South Kordofan at 84%</h2>
+      <p class="msg">The budget for this project is reaching its limit. Please review and take action if necessary.</p>
+      <table class="dtbl">
+        <tr><td class="lbl">Project</td><td>WASH — South Kordofan</td></tr>
+        <tr><td class="lbl">Budget Used</td><td>84%</td></tr>
+        <tr><td class="lbl">Total Budget</td><td>SDG 500,000</td></tr>
+        <tr><td class="lbl">Remaining</td><td>SDG 80,000</td></tr>
+      </table>
+      <div class="btn-wrap"><a class="btn" href="#">View Budget &nbsp;|&nbsp; عرض التفاصيل</a></div>
+      <hr class="divider">
+      <div class="ar"><p class="ar-greet">عزيزي أحمد حسن (مدير العمليات الميدانية)،</p><h3 class="ar-subject">تنبيه الميزانية: WASH — جنوب كردفان عند 84%</h3><p class="ar-msg">ميزانية هذا المشروع تقترب من حدها. يرجى المراجعة واتخاذ الإجراء اللازم.</p></div>
+      <hr class="divider">
+      <div class="signoff"><p>Kind regards,</p><p class="name">PACT Command Center</p><p class="team">ICT Team &nbsp;|&nbsp; فريق تكنولوجيا المعلومات</p><p class="behalf">On behalf of the PACT Operations Team &nbsp;|&nbsp; نيابةً عن فريق عمليات باكت</p></div>
+    </div>
+    <div class="e-footer">This is an automated notification from the PACT Command Center Platform.<br>هذه رسالة آلية من منصة مركز قيادة باكت &nbsp;|&nbsp; <strong>PACT Platform v2</strong></div>
+  </div></div>
+</div>
+
+<div class="tmpl" id="t18">
+  <div class="tmpl-meta"><span class="badge-num">T18</span><h3>Budget Exceeded — URGENT</h3><span class="to">→ <span class="pill pill-fom">FOM</span> <span class="pill pill-super">Super Admin</span></span></div>
+  <div class="email-wrap"><div class="email">
+    <div class="e-hdr"><p class="brand">PACT Command Center</p><p class="sub">مركز قيادة باكت &nbsp;|&nbsp; ICT Team Platform</p></div>
+    <div class="accent"></div>
+    <div class="e-body type-error">
+      <p class="greeting">Dear Ahmed Hassan (Field Operations Manager),</p>
+      <h2 class="subject">URGENT: Budget Exceeded - WASH — South Kordofan</h2>
+      <p class="msg">The budget for this project has been exceeded. Immediate attention is required. Further spending may be restricted.</p>
+      <table class="dtbl">
+        <tr><td class="lbl">Project</td><td>WASH — South Kordofan</td></tr>
+        <tr><td class="lbl">Budget Used</td><td>107%</td></tr>
+        <tr><td class="lbl">Over Budget By</td><td>SDG 35,000</td></tr>
+        <tr><td class="lbl">Status</td><td>Requires Immediate Attention</td></tr>
+      </table>
+      <div class="btn-wrap"><a class="btn" href="#">View Budget &nbsp;|&nbsp; عرض التفاصيل</a></div>
+      <hr class="divider">
+      <div class="ar"><p class="ar-greet">عزيزي أحمد حسن (مدير العمليات الميدانية)،</p><h3 class="ar-subject">عاجل: تجاوز الميزانية</h3><p class="ar-msg">تم تجاوز ميزانية هذا المشروع. مطلوب اهتمام فوري. قد يتم تقييد الإنفاق الإضافي.</p></div>
+      <hr class="divider">
+      <div class="signoff"><p>Kind regards,</p><p class="name">PACT Command Center</p><p class="team">ICT Team &nbsp;|&nbsp; فريق تكنولوجيا المعلومات</p><p class="behalf">On behalf of the PACT Operations Team &nbsp;|&nbsp; نيابةً عن فريق عمليات باكت</p></div>
+    </div>
+    <div class="e-footer">This is an automated notification from the PACT Command Center Platform.<br>هذه رسالة آلية من منصة مركز قيادة باكت &nbsp;|&nbsp; <strong>PACT Platform v2</strong></div>
+  </div></div>
+</div>
+
+<div class="tmpl" id="t28">
+  <div class="tmpl-meta"><span class="badge-num">T28</span><h3>Bank Transfer Receipt Validated</h3><span class="to">→ <span class="pill pill-requester">Requester</span></span></div>
+  <div class="email-wrap"><div class="email">
+    <div class="e-hdr"><p class="brand">PACT Command Center</p><p class="sub">مركز قيادة باكت &nbsp;|&nbsp; ICT Team Platform</p></div>
+    <div class="accent"></div>
+    <div class="e-body type-success">
+      <p class="greeting">Dear Hassan Ali,</p>
+      <h2 class="subject">Bank Transfer Validated - Receipt #BT-2026-0312-004</h2>
+      <p class="msg">Your bank transfer receipt has been validated and the funds have been credited to your wallet.</p>
+      <table class="dtbl">
+        <tr><td class="lbl">Receipt Number</td><td>BT-2026-0312-004</td></tr>
+        <tr><td class="lbl">Bank</td><td>Omdurman National Bank</td></tr>
+        <tr><td class="lbl">Amount</td><td>SDG 32,500</td></tr>
+        <tr><td class="lbl">Transaction Date</td><td>12 Mar 2026</td></tr>
+        <tr><td class="lbl">Validated By</td><td>Fatima Omar (Admin)</td></tr>
+      </table>
+      <div class="btn-wrap"><a class="btn" href="#">View Wallet &nbsp;|&nbsp; عرض التفاصيل</a></div>
+      <hr class="divider">
+      <div class="ar"><p class="ar-greet">عزيزي حسن علي،</p><h3 class="ar-subject">تم التحقق من إيصال التحويل البنكي</h3><p class="ar-msg">تم التحقق من إيصال التحويل البنكي الخاص بك وتم إضافة الأموال إلى محفظتك.</p></div>
+      <hr class="divider">
+      <div class="signoff"><p>Kind regards,</p><p class="name">PACT Command Center</p><p class="team">ICT Team &nbsp;|&nbsp; فريق تكنولوجيا المعلومات</p><p class="behalf">On behalf of the PACT Operations Team &nbsp;|&nbsp; نيابةً عن فريق عمليات باكت</p></div>
+    </div>
+    <div class="e-footer">This is an automated notification from the PACT Command Center Platform.<br>هذه رسالة آلية من منصة مركز قيادة باكت &nbsp;|&nbsp; <strong>PACT Platform v2</strong></div>
+  </div></div>
+</div>
+
+<div class="tmpl" id="t29">
+  <div class="tmpl-meta"><span class="badge-num">T29</span><h3>Bank Transfer Receipt Rejected</h3><span class="to">→ <span class="pill pill-requester">Requester</span></span></div>
+  <div class="email-wrap"><div class="email">
+    <div class="e-hdr"><p class="brand">PACT Command Center</p><p class="sub">مركز قيادة باكت &nbsp;|&nbsp; ICT Team Platform</p></div>
+    <div class="accent"></div>
+    <div class="e-body type-error">
+      <p class="greeting">Dear Hassan Ali,</p>
+      <h2 class="subject">Bank Transfer Rejected - Receipt #BT-2026-0312-004</h2>
+      <p class="msg">Your bank transfer receipt has been rejected. Please review the reason and submit a new receipt if necessary.</p>
+      <table class="dtbl">
+        <tr><td class="lbl">Receipt Number</td><td>BT-2026-0312-004</td></tr>
+        <tr><td class="lbl">Bank</td><td>Omdurman National Bank</td></tr>
+        <tr><td class="lbl">Amount</td><td>SDG 32,500</td></tr>
+        <tr><td class="lbl">Rejected By</td><td>Fatima Omar (Admin)</td></tr>
+        <tr><td class="lbl">Reason</td><td>Receipt image is unclear — please resubmit</td></tr>
+      </table>
+      <div class="btn-wrap"><a class="btn" href="#">View Wallet &nbsp;|&nbsp; عرض التفاصيل</a></div>
+      <hr class="divider">
+      <div class="ar"><p class="ar-greet">عزيزي حسن علي،</p><h3 class="ar-subject">تم رفض إيصال التحويل البنكي</h3><p class="ar-msg">تم رفض إيصال التحويل البنكي الخاص بك. يرجى مراجعة السبب وإعادة تقديم إيصال جديد إذا لزم الأمر.</p></div>
+      <hr class="divider">
+      <div class="signoff"><p>Kind regards,</p><p class="name">PACT Command Center</p><p class="team">ICT Team &nbsp;|&nbsp; فريق تكنولوجيا المعلومات</p><p class="behalf">On behalf of the PACT Operations Team &nbsp;|&nbsp; نيابةً عن فريق عمليات باكت</p></div>
+    </div>
+    <div class="e-footer">This is an automated notification from the PACT Command Center Platform.<br>هذه رسالة آلية من منصة مركز قيادة باكت &nbsp;|&nbsp; <strong>PACT Platform v2</strong></div>
+  </div></div>
+</div>
+
+<div class="tmpl" id="t30">
+  <div class="tmpl-meta"><span class="badge-num">T30</span><h3>Down Payment Request</h3><span class="to">→ <span class="pill pill-admin">Admin</span> <span class="pill pill-super">Super Admin</span></span></div>
+  <div class="email-wrap"><div class="email">
+    <div class="e-hdr"><p class="brand">PACT Command Center</p><p class="sub">مركز قيادة باكت &nbsp;|&nbsp; ICT Team Platform</p></div>
+    <div class="accent"></div>
+    <div class="e-body type-warning">
+      <p class="greeting">Dear Fatima Omar (Administrator),</p>
+      <h2 class="subject">Down Payment Request - WASH — South Kordofan</h2>
+      <p class="msg">A down payment has been requested for this project. Please review and approve or reject.</p>
+      <table class="dtbl">
+        <tr><td class="lbl">Project</td><td>WASH — South Kordofan</td></tr>
+        <tr><td class="lbl">Amount</td><td>SDG 32,500</td></tr>
+        <tr><td class="lbl">Requested By</td><td>Mohamed Ali</td></tr>
+        <tr><td class="lbl">Purpose</td><td>Field visit transportation and accommodation</td></tr>
+      </table>
+      <div class="btn-wrap"><a class="btn" href="#">Review Request &nbsp;|&nbsp; عرض التفاصيل</a></div>
+      <hr class="divider">
+      <div class="ar"><p class="ar-greet">عزيزي فاطمة عمر (المسؤول)،</p><h3 class="ar-subject">طلب دفعة مقدمة — WASH جنوب كردفان</h3><p class="ar-msg">تم طلب دفعة مقدمة لهذا المشروع. يرجى المراجعة والموافقة أو الرفض.</p></div>
+      <hr class="divider">
+      <div class="signoff"><p>Kind regards,</p><p class="name">PACT Command Center</p><p class="team">ICT Team &nbsp;|&nbsp; فريق تكنولوجيا المعلومات</p><p class="behalf">On behalf of the PACT Operations Team &nbsp;|&nbsp; نيابةً عن فريق عمليات باكت</p></div>
+    </div>
+    <div class="e-footer">This is an automated notification from the PACT Command Center Platform.<br>هذه رسالة آلية من منصة مركز قيادة باكت &nbsp;|&nbsp; <strong>PACT Platform v2</strong></div>
+  </div></div>
+</div>
+
+<!-- ══ SIGNATURES ══ -->
+<div class="section-hdr" id="sec-sigs"><div class="dot" style="background:#a78bfa"></div><h2>Signatures &amp; Documents</h2></div>
+
+<div class="tmpl" id="t20">
+  <div class="tmpl-meta"><span class="badge-num">T20</span><h3>Signature Required</h3><span class="to">→ <span class="pill pill-requester">Signer</span></span></div>
+  <div class="email-wrap"><div class="email">
+    <div class="e-hdr"><p class="brand">PACT Command Center</p><p class="sub">مركز قيادة باكت &nbsp;|&nbsp; ICT Team Platform</p></div>
+    <div class="accent"></div>
+    <div class="e-body type-warning">
+      <p class="greeting">Dear Hassan Ali,</p>
+      <h2 class="subject">Signature Required: Payment Disbursement Certificate Q1-2026</h2>
+      <p class="msg">Your signature is required on this document. Please review and sign at your earliest convenience.</p>
+      <table class="dtbl">
+        <tr><td class="lbl">Document</td><td>Payment Disbursement Certificate Q1-2026</td></tr>
+        <tr><td class="lbl">Requested By</td><td>Fatima Omar (Admin)</td></tr>
+        <tr><td class="lbl">Due Date</td><td>15 Mar 2026</td></tr>
+        <tr><td class="lbl">Type</td><td>Digital Signature</td></tr>
+      </table>
+      <div class="btn-wrap"><a class="btn" href="#">Sign Document &nbsp;|&nbsp; عرض التفاصيل</a></div>
+      <hr class="divider">
+      <div class="ar"><p class="ar-greet">عزيزي حسن علي،</p><h3 class="ar-subject">مطلوب توقيع: شهادة صرف المدفوعات Q1-2026</h3><p class="ar-msg">مطلوب توقيعك على هذه الوثيقة. يرجى المراجعة والتوقيع في أقرب وقت ممكن.</p></div>
+      <hr class="divider">
+      <div class="signoff"><p>Kind regards,</p><p class="name">PACT Command Center</p><p class="team">ICT Team &nbsp;|&nbsp; فريق تكنولوجيا المعلومات</p><p class="behalf">On behalf of the PACT Operations Team &nbsp;|&nbsp; نيابةً عن فريق عمليات باكت</p></div>
+    </div>
+    <div class="e-footer">This is an automated notification from the PACT Command Center Platform.<br>هذه رسالة آلية من منصة مركز قيادة باكت &nbsp;|&nbsp; <strong>PACT Platform v2</strong></div>
+  </div></div>
+</div>
+
+<div class="tmpl" id="t21">
+  <div class="tmpl-meta"><span class="badge-num">T21</span><h3>Document Signed &amp; Verified</h3><span class="to">→ <span class="pill pill-requester">Document Requester</span></span></div>
+  <div class="email-wrap"><div class="email">
+    <div class="e-hdr"><p class="brand">PACT Command Center</p><p class="sub">مركز قيادة باكت &nbsp;|&nbsp; ICT Team Platform</p></div>
+    <div class="accent"></div>
+    <div class="e-body type-success">
+      <p class="greeting">Dear Fatima Omar (Administrator),</p>
+      <h2 class="subject">Document Signed: Payment Disbursement Certificate Q1-2026</h2>
+      <p class="msg">The document has been signed and verified. A copy has been stored in the system.</p>
+      <table class="dtbl">
+        <tr><td class="lbl">Document</td><td>Payment Disbursement Certificate Q1-2026</td></tr>
+        <tr><td class="lbl">Signed By</td><td>Hassan Ali</td></tr>
+        <tr><td class="lbl">Signed On</td><td>12 Mar 2026, 14:22</td></tr>
+        <tr><td class="lbl">Verification Hash</td><td>a3f9d2c1e84b7056...</td></tr>
+      </table>
+      <div class="btn-wrap"><a class="btn" href="#">View Document &nbsp;|&nbsp; عرض التفاصيل</a></div>
+      <hr class="divider">
+      <div class="ar"><p class="ar-greet">عزيزي فاطمة عمر (المسؤول)،</p><h3 class="ar-subject">تم التوقيع على الوثيقة والتحقق منها</h3><p class="ar-msg">تم التوقيع على الوثيقة والتحقق منها. تم تخزين نسخة في النظام.</p></div>
+      <hr class="divider">
+      <div class="signoff"><p>Kind regards,</p><p class="name">PACT Command Center</p><p class="team">ICT Team &nbsp;|&nbsp; فريق تكنولوجيا المعلومات</p><p class="behalf">On behalf of the PACT Operations Team &nbsp;|&nbsp; نيابةً عن فريق عمليات باكت</p></div>
+    </div>
+    <div class="e-footer">This is an automated notification from the PACT Command Center Platform.<br>هذه رسالة آلية من منصة مركز قيادة باكت &nbsp;|&nbsp; <strong>PACT Platform v2</strong></div>
+  </div></div>
+</div>
+
+</main>
+</div>
+</body>
+</html>

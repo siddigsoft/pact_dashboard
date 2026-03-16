@@ -213,7 +213,7 @@ interface DuplicateSiteCheckResult {
  * Check if any sites in the upload file already exist for the same month
  * This prevents the same site from being monitored multiple times in the same month
  */
-async function checkDuplicateSitesInMonth(
+export async function checkDuplicateSitesInMonth(
   sites: SiteForRegistry[],
   month: string,
   projectId?: string
@@ -949,7 +949,7 @@ export async function parseAndCountEntries(file: File, sheetName?: string): Prom
 
 export async function uploadMMPFile(
   file: File,
-  metadata?: { name?: string; hub?: string; month?: string; projectId?: string },
+  metadata?: { name?: string; hub?: string; month?: string; projectId?: string; targetMmpId?: string },
   onProgress?: (progress: { current: number; total: number; stage: string }) => void
 ): Promise<{ success: boolean; mmpData?: MMPFile; error?: string; validationReport?: string; validationErrors?: CSVValidationError[]; validationWarnings?: CSVValidationError[] }> {
   try {
@@ -1179,7 +1179,11 @@ export async function uploadMMPFile(
       ...(metadata?.projectId && { project_id: metadata.projectId })
     };
 
-    // Preflight: prevent duplicate MMP uploads
+    // If caller provided a target existing MMP id, attach entries to that MMP instead
+    // metadata may include `targetMmpId` (string)
+    const targetMmpId = (metadata as any)?.targetMmpId as string | undefined;
+
+    // Preflight: prevent duplicate MMP uploads (skip if attaching to existing MMP)
     // Business rule: Block only if same (project + month) combination already has an active MMP
     // This allows reusing the same file/template for different months (recurring monitoring)
     
@@ -1198,7 +1202,7 @@ export async function uploadMMPFile(
 
     // Primary duplicate check: Same project + month + file name combination
     // This allows the same file to be used for different months
-    if (metadata?.projectId && normalizedMonth) {
+    if (!targetMmpId && metadata?.projectId && normalizedMonth) {
       const { data: existingMmps, error: existingErr } = await supabase
         .from('mmp_files')
         .select('id,name,status,month,original_filename')
@@ -1271,69 +1275,30 @@ export async function uploadMMPFile(
     
     console.log('[MMP Duplicate Check] All checks passed, proceeding with upload...');
 
-    console.log('Inserting MMP record into database:', dbData);
+    // If targetMmpId provided: attach parsed entries to the existing MMP
+    if (targetMmpId) {
+      console.log('Attaching parsed entries to existing MMP:', targetMmpId);
 
-    // Insert the record into Supabase with timeout
-    const insertPromise = supabase
-      .from('mmp_files')
-      .insert(dbData)
-      .select('*')
-      .single();
+      // Fetch existing entries for dedupe (by registry_site_id or site_code)
+      const { data: existingEntries = [] } = await supabase
+        .from('mmp_site_entries')
+        .select('id,registry_site_id,site_code')
+        .eq('mmp_file_id', targetMmpId);
 
-    const insertTimeoutPromise = new Promise((_, reject) =>
-      setTimeout(() => reject(new Error('Database insert timeout after 5 minutes')), 300000)
-    );
+      const existingRegistryIds = new Set<string>(existingEntries.filter((e:any)=>e.registry_site_id).map((e:any)=>String(e.registry_site_id)));
+      const existingSiteCodes = new Set<string>(existingEntries.filter((e:any)=>e.site_code).map((e:any)=>String(e.site_code).toLowerCase()));
 
-    const { data: insertedData, error: insertError } = await Promise.race([
-      insertPromise,
-      insertTimeoutPromise
-    ]) as any;
-      
-    if (insertError) {
-      // If database insert fails, attempt to clean up the uploaded file
-      try {
-        await supabase.storage.from('mmp-files').remove([filePath]);
-        console.log('Cleaned up storage after failed insert');
-      } catch (cleanupError) {
-        console.error('Error cleaning up storage after failed insert:', cleanupError);
-      }
-      console.error('Database insert error:', insertError);
-      toast.error('Failed to save MMP data');
-      const insertErrMsg = insertError?.message || JSON.stringify(insertError);
-      return { success: false, error: 'Failed to save MMP data: ' + insertErrMsg };
-    }
-    
-    // Use the returned row; if it's not present, fetch by unique key (file_path)
-    let insertedRow: any = insertedData;
-    if (!insertedRow) {
-      const { data: fetchedRow, error: fetchError } = await supabase
-        .from('mmp_files')
-        .select('*')
-        .eq('file_path', filePath)
-        .single();
+      const BATCH_SIZE = 200;
+      let insertedTotal = 0;
+      const totalBatches = Math.ceil(entries.length / BATCH_SIZE);
 
-      if (fetchError) {
-        console.error('Failed to fetch inserted MMP row:', fetchError);
-        toast.error('Failed to confirm saved MMP data');
-        return { success: false, error: 'Failed to confirm saved MMP data: ' + fetchError.message };
-      }
-      insertedRow = fetchedRow;
-    }
+      onProgress?.({ current: 50, total: 100, stage: 'Saving site entries to existing MMP' });
 
-    console.log('MMP file record created successfully:', insertedRow);
+      for (let i = 0; i < entries.length; i += BATCH_SIZE) {
+        const batch = entries.slice(i, i + BATCH_SIZE);
+        const batchNumber = Math.floor(i / BATCH_SIZE) + 1;
 
-    // Now insert site entries in batches (larger batches = fewer round-trips for big MMPs e.g. 6000 sites)
-    const BATCH_SIZE = 200;
-    const mmpId = insertedRow.id;
-    const totalBatches = Math.ceil(entries.length / BATCH_SIZE);
-
-    onProgress?.({ current: 50, total: 100, stage: 'Saving site entries to database' });
-
-    for (let i = 0; i < entries.length; i += BATCH_SIZE) {
-      const batch = entries.slice(i, i + BATCH_SIZE);
-      const batchNumber = Math.floor(i / BATCH_SIZE) + 1;
-
-      const siteEntriesData = batch.map((entry, batchIdx) => {
+        const siteEntriesData = batch.map((entry, batchIdx) => {
         const entryIndex = i + batchIdx;
         const registryMatch = registryValidation?.matches[entryIndex];
         
@@ -1371,7 +1336,7 @@ export async function uploadMMPFile(
         }
         
         return {
-          mmp_file_id: mmpId,
+          mmp_file_id: targetMmpId,
           registry_site_id: registrySiteId, // Link to Sites Registry
           site_code: entry.siteCode,
           hub_office: entry.hubOffice,
@@ -1391,107 +1356,240 @@ export async function uploadMMPFile(
           additional_data: additionalData,
           status: entry.status || 'Pending'
         };
-      });
+      })
 
-      const { error: batchError } = await supabase
-        .from('mmp_site_entries')
-        .insert(siteEntriesData);
+        // Filter out duplicates by registrySiteId or siteCode
+        .filter((row) => {
+          const regId = row.registry_site_id ? String(row.registry_site_id) : null;
+          const code = row.site_code ? String(row.site_code).toLowerCase() : null;
+          if (regId && existingRegistryIds.has(regId)) return false;
+          if (code && existingSiteCodes.has(code)) return false;
+          return true;
+        });
 
-      if (batchError) {
-        console.error('Error inserting site entries batch:', batchError);
-        // Clean up the partially created MMP record
-        try {
-          await supabase.from('mmp_files').delete().eq('id', mmpId);
-          await supabase.storage.from('mmp-files').remove([filePath]);
-        } catch (cleanupError) {
-          console.error('Error cleaning up after batch insert failure:', cleanupError);
+        if (siteEntriesData.length === 0) {
+          console.log(`Batch ${batchNumber} had no new entries after dedupe, skipping`);
+          const progressPercent = 50 + Math.round((batchNumber / totalBatches) * 40);
+          onProgress?.({ current: progressPercent, total: 100, stage: `Skipping empty batch (${batchNumber}/${totalBatches})` });
+          continue;
         }
-        return { success: false, error: 'Failed to insert site entries: ' + batchError.message };
+
+        const { error: batchError } = await supabase
+          .from('mmp_site_entries')
+          .insert(siteEntriesData);
+
+        if (batchError) {
+          console.error('Error inserting site entries batch into existing MMP:', batchError);
+          return { success: false, error: 'Failed to insert site entries: ' + batchError.message };
+        }
+
+        insertedTotal += siteEntriesData.length;
+
+        // Update progress
+        const progressPercent = 50 + Math.round((batchNumber / totalBatches) * 40); // 50-90%
+        onProgress?.({ current: progressPercent, total: 100, stage: `Saving site entries (${batchNumber}/${totalBatches})` });
+
+        console.log(`Inserted batch ${batchNumber} of ${totalBatches} into existing MMP`);
       }
 
-      // Update progress
-      const progressPercent = 50 + Math.round((batchNumber / totalBatches) * 40); // 50-90%
-      onProgress?.({
-        current: progressPercent,
-        total: 100,
-        stage: `Saving site entries (${batchNumber}/${totalBatches})`
-      });
+      // Update the existing MMP record counts
+      try {
+        const { data: existingMmpRow } = await supabase.from('mmp_files').select('entries,processed_entries').eq('id', targetMmpId).single();
+        const newEntries = (existingMmpRow?.entries || 0) + insertedTotal;
+        const newProcessed = (existingMmpRow?.processed_entries || 0) + insertedTotal;
+        await supabase.from('mmp_files').update({ entries: newEntries, processed_entries: newProcessed }).eq('id', targetMmpId);
+      } catch (e) {
+        console.warn('Failed to update existing MMP counts:', e);
+      }
 
-      console.log(`Inserted batch ${batchNumber} of ${totalBatches}`);
+      toast.success(`MMP updated successfully; added ${insertedTotal} new entries`);
+
+      // Fetch and return the updated MMP record
+      try {
+        const { data: finalRecord, error: fetchError } = await supabase
+          .from('mmp_files')
+          .select(`*, mmp_site_entries (*)`)
+          .eq('id', targetMmpId)
+          .single();
+
+        if (fetchError) {
+          console.error('Error fetching updated MMP record:', fetchError);
+          const mmpData = transformDBToMMPFile({ id: targetMmpId, name: mmpName });
+          await notifyStakeholdersOnUpload({ id: mmpData.id, name: mmpData.name, hub: metadata?.hub });
+          return { success: true, mmpData, validationWarnings: rawWarnings };
+        }
+
+        const mmpData = transformDBToMMPFile(finalRecord);
+        await notifyStakeholdersOnUpload({ id: mmpData.id, name: mmpData.name, hub: mmpData.hub });
+        return { success: true, mmpData, validationWarnings: rawWarnings };
+      } catch (e) {
+        console.error('Failed to finalize existing MMP update:', e);
+        return { success: true, mmpData: { id: targetMmpId } as any };
+      }
     }
 
-    // Update the MMP record with the correct processed_entries count
-    const { error: updateError } = await supabase
-      .from('mmp_files')
-      .update({ processed_entries: count })
-      .eq('id', mmpId);
+    // No targetMmpId provided -> create a new MMP record and insert entries
+    console.log('No target MMP provided. Creating a new MMP record...');
+    onProgress?.({ current: 50, total: 100, stage: 'Creating MMP record' });
 
-    if (updateError) {
-      console.error('Error updating processed entries count:', updateError);
-      // Don't fail the upload for this, just log it
-    }
-
-    toast.success(`MMP file uploaded successfully with ${count} entries`);
-
-    // Fetch the final record with site entries
-    const { data: finalRecord, error: fetchError } = await supabase
-      .from('mmp_files')
-      .select(`
-        *,
-        mmp_site_entries (*)
-      `)
-      .eq('id', mmpId)
-      .single();
-
-    if (fetchError) {
-      console.error('Error fetching final MMP record:', fetchError);
-      // Return the basic record without site entries
-      const mmpData = transformDBToMMPFile(insertedRow);
-      // Fire notifications (best-effort)
-      await notifyStakeholdersOnUpload({ id: mmpData.id, name: mmpData.name, hub: mmpData.hub });
-      return {
-        success: true,
-        mmpData: mmpData,
-        validationWarnings: rawWarnings
-      };
-    }
-
-    // Transform the final data to match the MMPFile interface
-    const mmpData = transformDBToMMPFile(finalRecord);
-
-    // Fire notifications (best-effort)
-    await notifyStakeholdersOnUpload({ id: mmpData.id, name: mmpData.name, hub: mmpData.hub });
-    
-    // Index the document in the Document Registry (best-effort, don't fail upload)
+    // Insert the MMP metadata row first
     try {
-      const monthBucket = format(new Date(), 'yyyy-MM');
-      await DocumentIndexService.recordDocument({
-        fileName: mmpData.originalFilename || mmpData.name || 'Untitled MMP',
-        fileUrl: mmpData.fileUrl || '',
-        category: 'mmp_file',
-        uploadedAt: mmpData.uploadedAt || new Date().toISOString(),
-        uploadedBy: mmpData.uploadedBy,
-        projectId: mmpData.projectId,
-        projectName: mmpData.projectName,
-        mmpId: mmpData.id,
-        mmpName: mmpData.name,
-        monthBucket,
-        status: 'pending',
-        verified: false,
-        sourceType: 'mmp',
-        sourceTable: 'mmp_files',
-        sourceId: mmpData.id
-      });
-      console.log('[MMP Upload] Document indexed successfully');
-    } catch (indexError) {
-      console.warn('[MMP Upload] Failed to index document (non-critical):', indexError);
-    }
+      const { data: createdRows, error: createError } = await supabase
+        .from('mmp_files')
+        .insert(dbData)
+        .select('id')
+        .single();
 
-    return {
-      success: true,
-      mmpData: mmpData,
-      validationWarnings: rawWarnings
-    };
+      if (createError || !createdRows) {
+        console.error('Failed to create MMP record:', createError);
+        try { await supabase.storage.from('mmp-files').remove([filePath]); } catch {}
+        return { success: false, error: 'Failed to create MMP record: ' + (createError?.message || 'Unknown') };
+      }
+
+      const newMmpId = (createdRows as any).id as string;
+
+      // Insert site entries in batches
+      const BATCH_SIZE = 200;
+      let insertedTotal = 0;
+      const totalBatches = Math.ceil(entries.length / BATCH_SIZE) || 1;
+
+      // Local dedupe sets to avoid duplicate rows within the same file
+      const seenRegistryIds = new Set<string>();
+      const seenSiteCodes = new Set<string>();
+
+      onProgress?.({ current: 55, total: 100, stage: 'Saving site entries to new MMP' });
+
+      for (let i = 0; i < entries.length; i += BATCH_SIZE) {
+        const batch = entries.slice(i, i + BATCH_SIZE);
+        const batchNumber = Math.floor(i / BATCH_SIZE) + 1;
+
+        const siteEntriesData = batch.map((entry, batchIdx) => {
+          const entryIndex = i + batchIdx;
+          const registryMatch = registryValidation?.matches[entryIndex];
+
+          const registrySiteId = getRegistrySiteId(siteRegistryMap, {
+            siteCode: entry.siteCode,
+            siteName: entry.siteName,
+            state: entry.state,
+            locality: entry.locality,
+          });
+
+          const additionalData: Record<string, any> = {
+            ...(entry.additionalData || {}),
+          };
+
+          if (registryMatch) {
+            additionalData.registry_linkage = registryMatch.registryLinkage;
+            if (registryMatch.autoAccepted && registryMatch.gpsCoordinates) {
+              additionalData.registry_gps = {
+                latitude: registryMatch.gpsCoordinates.latitude,
+                longitude: registryMatch.gpsCoordinates.longitude,
+                accuracy_meters: registryMatch.gpsCoordinates.accuracy_meters,
+                source: 'sites_registry',
+                site_id: registryMatch.matchedRegistry?.id,
+                site_code: registryMatch.matchedRegistry?.site_code,
+                match_type: registryMatch.matchType,
+                match_confidence: registryMatch.matchConfidence,
+                matched_at: registryMatch.registryLinkage.audit.matched_at,
+              };
+            }
+          }
+
+          return {
+            mmp_file_id: newMmpId,
+            registry_site_id: registrySiteId,
+            site_code: entry.siteCode,
+            hub_office: entry.hubOffice,
+            state: entry.state,
+            locality: entry.locality,
+            site_name: entry.siteName,
+            cp_name: entry.cpName,
+            visit_type: entry.visitType,
+            visit_date: entry.visitDate,
+            main_activity: entry.mainActivity,
+            activity_at_site: entry.siteActivity,
+            monitoring_by: entry.monitoringBy,
+            survey_tool: entry.surveyTool,
+            use_market_diversion: entry.useMarketDiversion,
+            use_warehouse_monitoring: entry.useWarehouseMonitoring,
+            comments: entry.comments,
+            additional_data: additionalData,
+            status: entry.status || 'Pending'
+          };
+        })
+        // filter duplicates within this new MMP upload
+        .filter((row) => {
+          const regId = row.registry_site_id ? String(row.registry_site_id) : null;
+          const code = row.site_code ? String(row.site_code).toLowerCase() : null;
+          if (regId) {
+            if (seenRegistryIds.has(regId)) return false;
+            seenRegistryIds.add(regId);
+          }
+          if (code) {
+            if (seenSiteCodes.has(code)) return false;
+            seenSiteCodes.add(code);
+          }
+          return true;
+        });
+
+        if (siteEntriesData.length === 0) {
+          console.log(`Batch ${batchNumber} had no new entries after dedupe, skipping`);
+          const progressPercent = 55 + Math.round((batchNumber / totalBatches) * 35);
+          onProgress?.({ current: progressPercent, total: 100, stage: `Skipping empty batch (${batchNumber}/${totalBatches})` });
+          continue;
+        }
+
+        const { error: batchError } = await supabase
+          .from('mmp_site_entries')
+          .insert(siteEntriesData);
+
+        if (batchError) {
+          console.error('Error inserting site entries batch into new MMP:', batchError);
+          return { success: false, error: 'Failed to insert site entries: ' + batchError.message };
+        }
+
+        insertedTotal += siteEntriesData.length;
+
+        const progressPercent = 55 + Math.round((batchNumber / totalBatches) * 35); // 55-90%
+        onProgress?.({ current: progressPercent, total: 100, stage: `Saving site entries (${batchNumber}/${totalBatches})` });
+
+        console.log(`Inserted batch ${batchNumber} of ${totalBatches} into new MMP`);
+      }
+
+      // Update mmp_files counts
+      try {
+        await supabase.from('mmp_files').update({ entries: entries.length, processed_entries: insertedTotal }).eq('id', newMmpId);
+      } catch (e) {
+        console.warn('Failed to update new MMP counts:', e);
+      }
+
+      toast.success(`MMP created successfully; added ${insertedTotal} entries`);
+
+      // Fetch and return the created MMP record
+      try {
+        const { data: finalRecord, error: fetchError } = await supabase
+          .from('mmp_files')
+          .select(`*, mmp_site_entries (*)`)
+          .eq('id', newMmpId)
+          .single();
+
+        if (fetchError || !finalRecord) {
+          console.error('Error fetching created MMP record:', fetchError);
+          return { success: true, mmpData: { id: newMmpId, name: mmpName } as any, validationWarnings: rawWarnings };
+        }
+
+        const mmpData = transformDBToMMPFile(finalRecord);
+        await notifyStakeholdersOnUpload({ id: mmpData.id, name: mmpData.name, hub: mmpData.hub });
+        return { success: true, mmpData, validationWarnings: rawWarnings };
+      } catch (e) {
+        console.error('Failed to finalize new MMP creation:', e);
+        return { success: true, mmpData: { id: newMmpId } as any };
+      }
+    } catch (e) {
+      console.error('Failed creating new MMP:', e);
+      try { await supabase.storage.from('mmp-files').remove([filePath]); } catch {}
+      return { success: false, error: 'Failed creating new MMP: ' + (e instanceof Error ? e.message : String(e)) };
+    }
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     console.error('MMP upload error:', error);

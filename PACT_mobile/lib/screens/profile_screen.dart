@@ -1407,7 +1407,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
             if (bankAccount.branchCode?.isNotEmpty ?? false) ...[
               const SizedBox(height: 8),
               _buildInfoRow(
-                'Branch Code',
+                'Branch Name',
                 bankAccount.branchCode!,
                 icon: Icons.location_city,
               ),
@@ -1592,12 +1592,12 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
                         ),
                       ),
                       const SizedBox(height: 14),
-                      // Branch Code (optional)
+                      // Branch Name (required)
                       TextFormField(
                         controller: branchCodeCtrl,
                         style: GoogleFonts.poppins(),
                         decoration: InputDecoration(
-                          labelText: 'Branch Code / رمز الفرع (optional)',
+                          labelText: 'Branch Name / اسم الفرع *',
                           labelStyle: GoogleFonts.poppins(
                             color: Colors.grey[600],
                           ),
@@ -1606,6 +1606,12 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
                             borderRadius: BorderRadius.circular(12),
                           ),
                         ),
+                        validator: (value) {
+                          if (value == null || value.trim().isEmpty) {
+                            return 'Branch Name is required / اسم الفرع مطلوب';
+                          }
+                          return null;
+                        },
                       ),
                       const SizedBox(height: 24),
                       // Save button
@@ -1635,11 +1641,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
                                                 ? null
                                                 : accountNameCtrl.text.trim(),
                                             branchCode:
-                                                branchCodeCtrl.text
-                                                    .trim()
-                                                    .isEmpty
-                                                ? null
-                                                : branchCodeCtrl.text.trim(),
+                                                branchCodeCtrl.text.trim(),
                                           ),
                                         );
                                     if (ctx.mounted) Navigator.of(ctx).pop();
