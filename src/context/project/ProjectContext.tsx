@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useCallback, useRef, useEff
 import { Project, ProjectActivity, SubActivity } from '@/types/project';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { ensureValidSession } from '@/lib/session-health';
 import { validateProject } from '@/utils/projectValidation';
 import { useRealtimeTables } from '@/hooks/useRealtimeResource';
 import { useProjectsQuery, useInvalidateProjectsQueries, mapDbProjectToProject, mapProjectToDbProject } from './projectQueries';
@@ -66,6 +67,8 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
   });
 
   const addProject = async (project: Project): Promise<Project | null> => {
+    const session = await ensureValidSession();
+    if (!session.success) return null;
     try {
       setError(null);
 
@@ -113,6 +116,8 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
   };
 
   const updateProject = async (updatedProject: Project) => {
+    const session = await ensureValidSession();
+    if (!session.success) return;
     try {
       setError(null);
 
@@ -240,6 +245,8 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
   };
 
   const updateProjectTeam = async (projectId: string, team: Project['team']) => {
+    const session = await ensureValidSession();
+    if (!session.success) return;
     try {
       const { error } = await supabase
         .from('projects')
@@ -270,6 +277,8 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
   };
 
   const deleteProject = async (id: string) => {
+    const session = await ensureValidSession();
+    if (!session.success) return;
     try {
       const { error } = await supabase
         .from('projects')

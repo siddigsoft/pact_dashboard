@@ -1,4 +1,5 @@
 import { supabase } from '@/integrations/supabase/client';
+import { ensureValidSession } from '@/lib/session-health';
 import { logForwardingAudit, logStatusChangeAudit, logSiteEntryAction } from '@/services/mmpAudit.service';
 
 // Fetch FOM users (role = 'fom')
@@ -96,7 +97,10 @@ export async function clearForwardedWorkflow(mmpId: string) {
 // DEPRECATED: Old column names (user_id, title, message, type, link) are still supported for backward compatibility
 export async function insertNotifications(rows: any[]) {
   if (!rows?.length) return;
-  
+
+  const session = await ensureValidSession();
+  if (!session.success) return;
+
   // Database has extended columns: recipient_id, title_en, title_ar, message_en, message_ar, 
   // event_type, entity_id, entity_type, action_url, priority, status, etc.
   // Also has legacy columns: user_id, title, message, type, link, related_entity_id, related_entity_type

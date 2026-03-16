@@ -3,6 +3,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { ensureValidSession } from '@/lib/session-health';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
@@ -79,6 +80,8 @@ export const BulkClearForwardedDialog: React.FC<BulkClearForwardedDialogProps> =
 
   const handleClear = async () => {
     if (confirmText.trim().toUpperCase() !== 'CLEAR') return;
+    const session = await ensureValidSession();
+    if (!session.success) return;
     setClearing(true);
     try {
       // Get admin id for notification

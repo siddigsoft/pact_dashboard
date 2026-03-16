@@ -19,6 +19,7 @@ import {
 import { useUser } from '@/context/user/UserContext';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
+import { ensureValidSession } from '@/lib/session-health';
 import { NotificationTriggerService } from '@/services/NotificationTriggerService';
 import { format } from 'date-fns';
 
@@ -517,6 +518,9 @@ export default function AdminBroadcastPage() {
     }
     setResendingId(bid);
     try {
+      const session = await ensureValidSession();
+      if (!session.success) { setResendingId(null); return; }
+
       const { data: orig } = await supabase
         .from('notifications')
         .select('title_ar, message_ar, action_url')
@@ -628,6 +632,9 @@ export default function AdminBroadcastPage() {
   };
 
   const executeSend = async (params: { titleEn: string; titleAr: string; messageEn: string; messageAr: string; audience: string; stateFilter: string; priority: string; actionLink: string; sendEmail: boolean; targetUserIds: string[] }) => {
+    const session = await ensureValidSession();
+    if (!session.success) throw new Error('Session expired. Please refresh and try again.');
+
     const { titleEn: tEn, titleAr: tAr, messageEn: mEn, messageAr: mAr, priority: pri, actionLink: al, sendEmail: se, targetUserIds } = params;
     const titleText = tEn.trim();
     const titleArText = tAr.trim() || titleText;

@@ -3,7 +3,7 @@ import { QueryClient } from '@tanstack/react-query';
 export const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      staleTime: 1000 * 60 * 2,
+      staleTime: 1000 * 60, // 1 min — refetch sooner after idle
       gcTime: 1000 * 60 * 10,
       retry: (failureCount, error: any) => {
         const status = error?.status;
@@ -15,7 +15,7 @@ export const queryClient = new QueryClient({
       refetchOnWindowFocus: true,
       refetchOnReconnect: true,
       refetchOnMount: true,
-      networkMode: 'offlineFirst',
+      networkMode: 'online',
     },
     mutations: {
       retry: (failureCount, error: any) => {
@@ -23,7 +23,7 @@ export const queryClient = new QueryClient({
         if (status === 401 || status === 403) return failureCount < 1;
         return false;
       },
-      networkMode: 'offlineFirst',
+      networkMode: 'online',
     },
   },
 });

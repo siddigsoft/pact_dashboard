@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
+import { ensureValidSession } from '@/lib/session-health';
 import { useAppContext } from '@/context/AppContext';
 import { Package, Plus, Search, RefreshCw, X, Wrench, CheckCircle, AlertTriangle, Filter } from 'lucide-react';
 
@@ -81,6 +82,8 @@ export default function EquipmentPage() {
       toast({ title: 'Name and type are required', variant: 'destructive' });
       return;
     }
+    const session = await ensureValidSession();
+    if (!session.success) return;
     setSubmitting(true);
     try {
       const { error } = await supabase.from('equipment').insert({ ...form, created_by: user?.id });
@@ -97,6 +100,8 @@ export default function EquipmentPage() {
   }
 
   async function updateStatus(id: string, status: string) {
+    const session = await ensureValidSession();
+    if (!session.success) return;
     try {
       await supabase.from('equipment').update({ status, last_checked: new Date().toISOString() }).eq('id', id);
       toast({ title: 'Status updated' });

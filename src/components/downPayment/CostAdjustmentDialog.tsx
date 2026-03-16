@@ -8,6 +8,7 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { useUser } from '@/context/user/UserContext';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { ensureValidSession } from '@/lib/session-health';
 import { AdjustmentType } from '@/types/cost-adjustment';
 import { Calculator, AlertCircle } from 'lucide-react';
 
@@ -59,6 +60,9 @@ export function CostAdjustmentDialog({
 
   const handleSubmit = async () => {
     if (!currentUser) return;
+
+    const session = await ensureValidSession();
+    if (!session.success) return;
 
     if (!adjustmentReason.trim()) {
       toast({

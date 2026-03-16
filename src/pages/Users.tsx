@@ -68,6 +68,7 @@ import {
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
+import { ensureValidSession } from '@/lib/session-health';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useRoleManagement } from '@/context/role-management/RoleManagementContext';
 import { useAppContextSelector } from '@/context/AppContext';
@@ -441,6 +442,8 @@ const Users = () => {
 
   const executeAction = async () => {
     if (!confirmDialog.userId) return;
+    const session = await ensureValidSession();
+    if (!session.success) return;
     setDeletingUserId(confirmDialog.userId);
     try {
       if (confirmDialog.action === 'delete') {

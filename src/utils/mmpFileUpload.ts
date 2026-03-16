@@ -1,4 +1,5 @@
 import { supabase } from '@/integrations/supabase/client';
+import { ensureValidSession } from '@/lib/session-health';
 import { safeUploadFile } from '@/lib/safeUpload';
 import { MMPFile, MMPSiteEntry } from '@/types';
 import { toast } from 'sonner';
@@ -166,6 +167,9 @@ async function notifyStakeholdersOnUpload(mmp: { id: string; name: string; hub?:
 // Update workflow to awaitingPermits after initial upload and sharing
 async function setWorkflowStageAwaitingPermits(mmpId: string) {
   try {
+    const session = await ensureValidSession();
+    if (!session.success) return;
+
     const { data: row } = await supabase
       .from('mmp_files')
       .select('workflow')
@@ -949,6 +953,11 @@ export async function uploadMMPFile(
   onProgress?: (progress: { current: number; total: number; stage: string }) => void
 ): Promise<{ success: boolean; mmpData?: MMPFile; error?: string; validationReport?: string; validationErrors?: CSVValidationError[]; validationWarnings?: CSVValidationError[] }> {
   try {
+    const session = await ensureValidSession();
+    if (!session.success) {
+      return { success: false, error: 'Session expired. Please refresh the page and try again.' };
+    }
+
     console.log('Starting MMP file upload:', file.name);
     onProgress?.({ current: 0, total: 100, stage: 'Starting upload process' });
 

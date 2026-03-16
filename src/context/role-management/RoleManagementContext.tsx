@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/components/ui/use-toast';
+import { ensureValidSession } from '@/lib/session-health';
  import { 
   Role, 
   Permission, 
@@ -108,6 +109,8 @@ export const RoleManagementProvider: React.FC<{ children: React.ReactNode }> = (
               });
             if (missing.length > 0) {
               try {
+                const session = await ensureValidSession();
+                if (!session.success) return;
                 await supabase.from('permissions').upsert(missing, { onConflict: 'role_id,resource,action' });
               } catch {
                 // permissions table may not exist in some deployments
@@ -142,6 +145,8 @@ export const RoleManagementProvider: React.FC<{ children: React.ReactNode }> = (
   }, []);
 
   const createRole = async (roleData: CreateRoleRequest): Promise<Role | null> => {
+    const session = await ensureValidSession();
+    if (!session.success) return null;
     setIsLoading(true);
     try {
       const { data: roleResult, error: roleError } = await supabase
@@ -194,6 +199,8 @@ export const RoleManagementProvider: React.FC<{ children: React.ReactNode }> = (
   };
 
   const updateRole = async (roleId: string, roleData: UpdateRoleRequest): Promise<boolean> => {
+    const session = await ensureValidSession();
+    if (!session.success) return false;
     setIsLoading(true);
     try {
       const updates: any = {};
@@ -284,6 +291,8 @@ export const RoleManagementProvider: React.FC<{ children: React.ReactNode }> = (
   };
 
   const deleteRole = async (roleId: string): Promise<boolean> => {
+    const session = await ensureValidSession();
+    if (!session.success) return false;
     setIsLoading(true);
     try {
       const { error } = await supabase
@@ -309,6 +318,8 @@ export const RoleManagementProvider: React.FC<{ children: React.ReactNode }> = (
   };
 
   const assignRoleToUser = async (assignData: AssignRoleRequest): Promise<boolean> => {
+    const session = await ensureValidSession();
+    if (!session.success) return false;
     setIsLoading(true);
     try {
       const { data: auth } = await supabase.auth.getUser();
@@ -367,6 +378,8 @@ export const RoleManagementProvider: React.FC<{ children: React.ReactNode }> = (
   };
 
   const removeRoleFromUser = async (userId: string, roleId?: string, role?: AppRole): Promise<boolean> => {
+    const session = await ensureValidSession();
+    if (!session.success) return false;
     setIsLoading(true);
     try {
       if (!roleId && !role) throw new Error('Specify roleId or role to remove');

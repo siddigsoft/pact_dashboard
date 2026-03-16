@@ -12,6 +12,7 @@ import { useMMP } from '@/context/mmp/MMPContext';
 import { useAppContext } from '@/context/AppContext';
 import { insertNotifications } from '@/services/mmpActions';
 import { supabase } from '@/integrations/supabase/client';
+import { ensureValidSession } from '@/lib/session-health';
 import { sudanStates } from '@/data/sudanStates';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { useNavigate } from 'react-router-dom';
@@ -479,6 +480,8 @@ const MMPPermitVerification: React.FC<MMPPermitVerificationProps> = ({
     // Update the corresponding mmp_site_entries record to status 'approved'
     (async () => {
       try {
+        const session = await ensureValidSession();
+        if (!session.success) return;
         // Use decidedDoc.id as mmp_site_entry id if possible
         if (decidedDoc?.id) {
           await supabase.from('mmp_site_entries').update({ status: 'Approved' }).eq('id', decidedDoc.id);

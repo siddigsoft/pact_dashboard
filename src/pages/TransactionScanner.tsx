@@ -13,6 +13,7 @@ const XLSXStyle: any = (_XLSXStyleNS as any).default ?? _XLSXStyleNS;
 import { format, parse, isValid } from 'date-fns';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { ensureValidSession } from '@/lib/session-health';
 
 type TxRow = {
   id: string;
@@ -453,6 +454,8 @@ export default function TransactionScanner() {
 
   const saveSession = useCallback(async (name: string) => {
     if (!doneRows.length) return;
+    const session = await ensureValidSession();
+    if (!session.success) return;
     setSaving(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
@@ -488,6 +491,8 @@ export default function TransactionScanner() {
 
   const appendToSession = useCallback(async (targetId: string) => {
     if (!doneRows.length || !targetId) return;
+    const session = await ensureValidSession();
+    if (!session.success) return;
     setSaving(true);
     try {
       const { data: existing, error: fetchErr } = await supabase
@@ -534,6 +539,8 @@ export default function TransactionScanner() {
 
   const deleteSession = useCallback(async (id: string) => {
     if (!confirm('Delete this saved scan session?')) return;
+    const session = await ensureValidSession();
+    if (!session.success) return;
     const { error } = await supabase.from('bank_transaction_scans').delete().eq('id', id);
     if (error) { toast({ title: 'Delete failed', description: error.message, variant: 'destructive' }); return; }
     toast({ title: 'Session deleted' });

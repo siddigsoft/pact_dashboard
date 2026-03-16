@@ -26,6 +26,7 @@ import OutstandingAdvances from "@/components/cost-submission/OutstandingAdvance
 import { MobileTabBar } from "@/components/mobile/MobileTabBar";
 import { MobileStatsCard } from "@/components/mobile/MobileStatsCard";
 import { supabase } from "@/integrations/supabase/client";
+import { ensureValidSession } from "@/lib/session-health";
 import { format } from "date-fns";
 import { SignatureConfirmationModal } from "@/components/signatures/SignatureConfirmationModal";
 import type { SignatureMethod } from "@/types/signature";
@@ -442,6 +443,8 @@ const MobileCostSubmission = () => {
     signatureData?: { signatureId: string; signatureHash: string; method: SignatureMethod; signedAt: string }
   ) => {
     if (!currentUser?.id) return;
+    const session = await ensureValidSession();
+    if (!session.success) return;
     setApprovalProcessing(true);
     try {
       const updates: Record<string, any> = {};
@@ -620,6 +623,8 @@ const MobileCostSubmission = () => {
 
   const handleMarkAsPaid = async (oc: OperationalCostSubmission) => {
     if (!currentUser?.id) return;
+    const session = await ensureValidSession();
+    if (!session.success) return;
     setActionProcessing(true);
     try {
       const now = new Date().toISOString();
@@ -766,6 +771,8 @@ const MobileCostSubmission = () => {
 
   const handleDeleteSubmission = async () => {
     if (!deleteConfirm) return;
+    const session = await ensureValidSession();
+    if (!session.success) return;
     setActionProcessing(true);
     try {
       const { error } = await supabase.from('operational_cost_submissions').delete().eq('id', deleteConfirm.id).eq('tier1_status', 'pending').eq('tier2_status', 'pending');
@@ -785,6 +792,8 @@ const MobileCostSubmission = () => {
 
   const handleRecallSubmission = async () => {
     if (!recallConfirm) return;
+    const session = await ensureValidSession();
+    if (!session.success) return;
     setActionProcessing(true);
     try {
       const { error } = await supabase.from('operational_cost_submissions').update({

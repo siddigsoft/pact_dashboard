@@ -5,6 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
+import { ensureValidSession } from '@/lib/session-health';
 import { useAppContext } from '@/context/AppContext';
 import {
   AlertTriangle, Shield, Phone, MapPin, Users, CheckCircle,
@@ -82,6 +83,8 @@ export default function SafetyHub() {
   }
 
   async function triggerSOS() {
+    const session = await ensureValidSession();
+    if (!session.success) return;
     setSosActive(true);
     try {
       const { data: profile } = await supabase

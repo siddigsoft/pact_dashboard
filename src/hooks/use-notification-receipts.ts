@@ -1,5 +1,6 @@
 import { useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { ensureValidSession } from '@/lib/session-health';
 import { useNotifications } from '@/context/notifications/NotificationContext';
 import type { Notification } from '@/types';
 
@@ -31,6 +32,9 @@ export function useNotificationReceipts() {
       clearTimeout(timer);
       reminderTimersRef.current.delete(notificationId);
     }
+
+    const session = await ensureValidSession();
+    if (!session.success) return;
 
     try {
       const { data: { user } } = await supabase.auth.getUser();

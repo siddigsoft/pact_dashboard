@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { ensureValidSession } from '@/lib/session-health';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -164,6 +165,8 @@ export default function MobileSupportTickets() {
 
   const updateStatusMutation = useMutation({
     mutationFn: async ({ ticketId, status }: { ticketId: string; status: string }) => {
+      const session = await ensureValidSession();
+      if (!session.success) return;
       const updateData: any = { status, updated_at: new Date().toISOString() };
       if (status === 'resolved' || status === 'closed') {
         updateData.resolved_at = new Date().toISOString();
@@ -182,6 +185,8 @@ export default function MobileSupportTickets() {
 
   const updateCategoryMutation = useMutation({
     mutationFn: async ({ ticketId, category }: { ticketId: string; category: string }) => {
+      const session = await ensureValidSession();
+      if (!session.success) return;
       const { error } = await supabase
         .from('support_tickets')
         .update({ category, updated_at: new Date().toISOString() })
@@ -196,6 +201,8 @@ export default function MobileSupportTickets() {
 
   const updatePriorityMutation = useMutation({
     mutationFn: async ({ ticketId, priority }: { ticketId: string; priority: string }) => {
+      const session = await ensureValidSession();
+      if (!session.success) return;
       const { error } = await supabase
         .from('support_tickets')
         .update({ priority, updated_at: new Date().toISOString() })
@@ -210,6 +217,8 @@ export default function MobileSupportTickets() {
 
   const assignMutation = useMutation({
     mutationFn: async ({ ticketId, userId }: { ticketId: string; userId: string | null }) => {
+      const session = await ensureValidSession();
+      if (!session.success) return;
       const { error } = await supabase
         .from('support_tickets')
         .update({ assigned_to: userId, updated_at: new Date().toISOString() })
@@ -224,6 +233,8 @@ export default function MobileSupportTickets() {
 
   const deleteTicketMutation = useMutation({
     mutationFn: async (ticketId: string) => {
+      const session = await ensureValidSession();
+      if (!session.success) return;
       await supabase.from('ticket_messages').delete().eq('ticket_id', ticketId);
       const { error } = await supabase.from('support_tickets').delete().eq('id', ticketId);
       if (error) throw error;
@@ -238,6 +249,8 @@ export default function MobileSupportTickets() {
 
   const sendReplyMutation = useMutation({
     mutationFn: async ({ ticketId, message }: { ticketId: string; message: string }) => {
+      const session = await ensureValidSession();
+      if (!session.success) return;
       const { data: { user } } = await supabase.auth.getUser();
       const { error } = await supabase.from('ticket_messages').insert({
         ticket_id: ticketId,

@@ -27,7 +27,7 @@ const SessionManager: React.FC<SessionManagerProps> = ({ children }) => {
   const isHealthyRef = useRef(true);
   const lastRecoveryAttemptRef = useRef(0);
   const healthCheckFnRef = useRef<(() => void) | null>(null);
-  const RECOVERY_COOLDOWN_MS = 2 * 60 * 1000;
+  const RECOVERY_COOLDOWN_MS = 30 * 1000;
   
   // Expose placeholder immediately so function exists even before useEffect runs
   if (typeof window !== 'undefined' && !(window as any).__checkSessionHealth) {
@@ -130,10 +130,10 @@ const SessionManager: React.FC<SessionManagerProps> = ({ children }) => {
       performHealthCheck(true); // Silent initial check
     }, 5000);
 
-    // Set up periodic health checks every 90 seconds
+    // Periodic health checks every 60 seconds
     checkIntervalRef.current = setInterval(() => {
-      performHealthCheck(true); // Silent periodic checks
-    }, 90000);
+      performHealthCheck(true);
+    }, 60000);
 
     // Listen for Supabase auth state changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {

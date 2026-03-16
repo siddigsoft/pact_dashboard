@@ -5,7 +5,7 @@ const rawAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
 const url = rawUrl?.trim();
 const anonKey = rawAnonKey?.trim();
 const isDev = import.meta.env.DEV;
-const CLIENT_REPLACE_COOLDOWN_MS = 30_000;
+const CLIENT_REPLACE_COOLDOWN_MS = 15_000;
 
 export const isSupabaseConfigured = Boolean(url && anonKey);
 
@@ -124,3 +124,37 @@ export const supabase = new Proxy({} as SupabaseClient, {
     return ((_client as unknown) as Record<string, unknown>)[prop];
   },
 });
+
+/**
+ * Lightweight auth heartbeat: calls getSession() every 60s while the tab is
+ * visible. This keeps the GoTrue auto-refresh timer alive so the refresh token
+ * is never considered "inactive" by the server-side inactivity timeout.
+ */
+let _heartbeatId: ReturnType<typeof setInterval> | null = null;
+
+function startHeartbeat() {
+  if (_heartbeatId) return;
+  _heartbeatId = setInterval(() => {
+    if (document.visibilityState === 'visible') {
+      _client.auth.getSession().catch(() => {});
+    }
+  }, 60_000);
+}
+
+function stopHeartbeat() {
+  if (_heartbeatId) {
+    clearInterval(_heartbeatId);
+    _heartbeatId = null;
+  }
+}
+
+if (typeof document !== 'undefined') {
+  startHeartbeat();
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') {
+      startHeartbeat();
+    } else {
+      stopHeartbeat();
+    }
+  });
+}

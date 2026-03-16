@@ -271,6 +271,9 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const createWithdrawalRequest = async (amount: number, reason: string, paymentMethod?: string) => {
     if (!currentUser?.id || !wallet) return;
 
+    const session = await ensureValidSession();
+    if (!session.success) return;
+
     const currentBalance = wallet.balances.SDG || 0;
     if (amount > currentBalance) {
       toast({
@@ -311,6 +314,9 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   };
 
   const cancelWithdrawalRequest = async (requestId: string) => {
+    const session = await ensureValidSession();
+    if (!session.success) return;
+
     try {
       const { error } = await supabase
         .from('withdrawal_requests')

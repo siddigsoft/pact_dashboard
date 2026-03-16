@@ -32,6 +32,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useSuperAdmin } from '@/context/superAdmin/SuperAdminContext';
 import { useUser } from '@/context/user/UserContext';
 import { supabase } from '@/integrations/supabase/client';
+import { ensureValidSession } from '@/lib/session-health';
 import { 
   Shield, 
   RotateCcw, 
@@ -676,8 +677,9 @@ export function SuperAdminDataManagement() {
 
     setProcessing(true);
     try {
-      // Return to "verified" status (the stage that appears in New Sites tab)
-      // This clears ALL dispatch/cost-related fields so the site starts fresh in the workflow
+      const session = await ensureValidSession();
+      if (!session.success) { setProcessing(false); return; }
+
       const { error } = await supabase
         .from('mmp_site_entries')
         .update({
@@ -729,6 +731,9 @@ export function SuperAdminDataManagement() {
 
     setProcessing(true);
     try {
+      const session = await ensureValidSession();
+      if (!session.success) { setProcessing(false); return; }
+
       const { error } = await supabase
         .from('mmp_site_entries')
         .update({

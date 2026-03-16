@@ -6,6 +6,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Upload, FileText, AlertTriangle, CheckCircle2, X, Eye, EyeOff } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
+import { ensureValidSession } from '@/lib/session-health';
 import { safeUploadFile } from '@/lib/safeUpload';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
@@ -69,6 +70,9 @@ export const StatePermitUpload: React.FC<StatePermitUploadProps> = ({
 
   const handleUpload = async () => {
     if (!selectedFile || !issueDate || !expiryDate) return;
+
+    const session = await ensureValidSession();
+    if (!session.success) return;
 
     if (expiryDate <= issueDate) {
       toast({ title: 'Invalid dates', description: 'Expiry date must be after the issue date.', variant: 'destructive' });

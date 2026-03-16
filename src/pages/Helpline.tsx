@@ -7,6 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
+import { ensureValidSession } from '@/lib/session-health';
 import { useAppContext } from '@/context/AppContext';
 import { Phone, Plus, X, Search, RefreshCw, Edit2, Trash2, Shield, Ambulance, Building, User } from 'lucide-react';
 
@@ -85,6 +86,8 @@ export default function Helpline() {
       toast({ title: 'Name and phone are required', variant: 'destructive' });
       return;
     }
+    const session = await ensureValidSession();
+    if (!session.success) return;
     setSubmitting(true);
     try {
       if (editingId) {
@@ -107,6 +110,8 @@ export default function Helpline() {
 
   async function deleteContact(id: string) {
     if (!confirm('Delete this contact?')) return;
+    const session = await ensureValidSession();
+    if (!session.success) return;
     try {
       await supabase.from('support_contacts').delete().eq('id', id);
       toast({ title: 'Contact removed' });
@@ -117,6 +122,8 @@ export default function Helpline() {
   }
 
   async function toggleActive(id: string, current: boolean) {
+    const session = await ensureValidSession();
+    if (!session.success) return;
     await supabase.from('support_contacts').update({ is_active: !current }).eq('id', id);
     fetchContacts();
   }

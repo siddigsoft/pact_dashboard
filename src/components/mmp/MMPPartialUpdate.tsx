@@ -20,6 +20,7 @@ import {
   MapPin, Building2, Filter, Download, Eye, ArrowRight, Info, Loader2, Shield
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
+import { ensureValidSession } from '@/lib/session-health';
 import { parseAndCountEntries } from '@/utils/mmpFileUpload';
 import { getExcelSheetInfo, ExcelSheetInfo } from '@/utils/csvValidator';
 import { sudanStates } from '@/data/sudanStates';
@@ -301,6 +302,9 @@ const MMPPartialUpdate: React.FC<MMPPartialUpdateProps> = ({ mmpFile, onComplete
     setResult(null);
 
     try {
+      const session = await ensureValidSession();
+      if (!session.success) { setProcessing(false); return; }
+
       const mmpId = mmpFile.id;
       let deletedCount = 0;
       let addedCount = 0;

@@ -18,6 +18,7 @@ import { useSiteVisitContext } from '@/context/siteVisit/SiteVisitContext';
 import { useProjectContext } from '@/context/project/ProjectContext';
 import { fetchHubs } from '@/services/mmpActions';
 import { supabase } from '@/integrations/supabase/client';
+import { ensureValidSession } from '@/lib/session-health';
 import { sudanStates } from '@/data/sudanStates';
 import { format, parseISO } from 'date-fns';
 // Dynamic imports for heavy export libraries (loaded on-demand to improve initial page load)
@@ -420,6 +421,9 @@ export default function TrackerPreparationPlan() {
     }
 
     try {
+      const session = await ensureValidSession();
+      if (!session.success) return;
+
       const config: any = {
         id: `config-${Date.now()}`,
         name: configName,

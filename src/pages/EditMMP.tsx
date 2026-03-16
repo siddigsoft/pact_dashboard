@@ -16,6 +16,7 @@ import { ActivityManager } from '@/components/project/activity/ActivityManager';
 import { useToast } from '@/hooks/use-toast';
 import FieldTeamMapPermissions from '@/components/map/FieldTeamMapPermissions';
 import { supabase } from '@/integrations/supabase/client';
+import { ensureValidSession } from '@/lib/session-health';
 
 const EditMMP: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -108,7 +109,9 @@ const EditMMP: React.FC = () => {
   const handleUpdateSites = async (sites: any[]): Promise<boolean> => {
     if (!mmpFile || !id) return false;
     try {
-      // Persist each edited site directly to mmp_site_entries
+      const session = await ensureValidSession();
+      if (!session.success) return false;
+
       for (const site of sites) {
         // Migrate data from additional_data to columns if needed
         const ad = site.additionalData || site.additional_data || {};

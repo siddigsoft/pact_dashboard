@@ -63,8 +63,16 @@ class RealtimeSubscriptionManager {
     if (typeof window !== 'undefined') {
       window.addEventListener('online', this.handleOnline);
       window.addEventListener('offline', this.handleOffline);
+      document.addEventListener('visibilitychange', this.handleVisibilityChange);
     }
   }
+
+  private handleVisibilityChange = () => {
+    if (document.visibilityState === 'visible' && this.isOnline) {
+      console.log('[RealtimeManager] Tab visible — reconnecting all channels');
+      this.reconnectAll();
+    }
+  };
 
   private handleOnline = () => {
     this.isOnline = true;
@@ -270,6 +278,12 @@ class RealtimeSubscriptionManager {
     }
   }
 
+  reconnectAllChannels(): void {
+    if (!this.isOnline || this.subscriptions.size === 0) return;
+    console.log('[RealtimeManager] Reconnecting all', this.subscriptions.size, 'channels');
+    this.reconnectAll();
+  }
+
   getActiveSubscriptions(): string[] {
     return Array.from(this.subscriptions.keys());
   }
@@ -291,6 +305,7 @@ class RealtimeSubscriptionManager {
     if (typeof window !== 'undefined') {
       window.removeEventListener('online', this.handleOnline);
       window.removeEventListener('offline', this.handleOffline);
+      document.removeEventListener('visibilitychange', this.handleVisibilityChange);
     }
 
     for (const sub of this.subscriptions.values()) {

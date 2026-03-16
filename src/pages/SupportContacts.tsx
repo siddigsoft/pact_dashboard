@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { ensureValidSession } from '@/lib/session-health';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -107,6 +108,8 @@ export default function SupportContacts() {
   const addContactMutation = useMutation({
     mutationFn: async (data: ContactFormData) => {
       if (!isAdmin) throw new Error("Unauthorized: Admin access required");
+      const session = await ensureValidSession();
+      if (!session.success) return;
       const { error } = await supabase.from("support_contacts").insert({
         name: data.name,
         name_ar: data.name_ar || null,
@@ -135,6 +138,8 @@ export default function SupportContacts() {
   const updateContactMutation = useMutation({
     mutationFn: async ({ id, data }: { id: string; data: ContactFormData }) => {
       if (!isAdmin) throw new Error("Unauthorized: Admin access required");
+      const session = await ensureValidSession();
+      if (!session.success) return;
       const { error } = await supabase
         .from("support_contacts")
         .update({
@@ -166,6 +171,8 @@ export default function SupportContacts() {
   const deleteContactMutation = useMutation({
     mutationFn: async (id: string) => {
       if (!isAdmin) throw new Error("Unauthorized: Admin access required");
+      const session = await ensureValidSession();
+      if (!session.success) return;
       const { error } = await supabase.from("support_contacts").delete().eq("id", id);
       if (error) throw error;
     },
@@ -181,6 +188,8 @@ export default function SupportContacts() {
   const toggleActiveStatus = useMutation({
     mutationFn: async ({ id, isActive }: { id: string; isActive: boolean }) => {
       if (!isAdmin) throw new Error("Unauthorized: Admin access required");
+      const session = await ensureValidSession();
+      if (!session.success) return;
       const { error } = await supabase
         .from("support_contacts")
         .update({ is_active: isActive, updated_at: new Date().toISOString() })
