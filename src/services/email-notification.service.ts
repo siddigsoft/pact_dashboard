@@ -1800,12 +1800,12 @@ PACT Command Center | مركز قيادة باكت`;
       const { data: fomUsers } = await supabase
         .from('profiles')
         .select('email, full_name')
-        .in('role', ['fom', 'admin'])
+        .in('role', ['fom', 'super_admin'])
         .eq('status', 'approved');
 
       if (!fomUsers || fomUsers.length === 0) {
-        console.log('[EMAIL] No FOM/Admin users found to notify about cost submission');
-        return { success: true, messageId: 'no-fom-admin' };
+        console.log('[EMAIL] No FOM/SuperAdmin users found to notify about cost submission');
+        return { success: true, messageId: 'no-fom-superadmin' };
       }
 
       const fundingLabel = fundingType === 'advance' ? 'Advance Request' : 'Reimbursement';
@@ -1869,11 +1869,11 @@ PACT Command Center | مركز قيادة باكت`;
       const { data: fomUsers } = await supabase
         .from('profiles')
         .select('email, full_name')
-        .in('role', ['fom', 'admin', 'super_admin'])
+        .in('role', ['fom', 'super_admin'])
         .eq('status', 'approved');
 
       if (!fomUsers || fomUsers.length === 0) {
-        console.log('[EMAIL] No FOM/Admin/SuperAdmin users found to notify about advance approval');
+        console.log('[EMAIL] No FOM/SuperAdmin users found to notify about advance approval');
         return { success: true, messageId: 'no-management' };
       }
 
