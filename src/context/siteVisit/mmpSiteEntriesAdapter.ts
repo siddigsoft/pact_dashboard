@@ -237,32 +237,49 @@ const mapStatusToDb = (appStatus: SiteVisit['status']): string => {
  * Fetches site visits from mmp_site_entries table
  */
 export const fetchSiteVisitsFromMMPEntries = async (): Promise<SiteVisit[]> => {
-  const { data, error } = await supabase
-    .from('mmp_site_entries')
-    .select(`
-      *,
-      mmp_files (
-        id,
-        mmp_id,
-        name,
-        uploaded_by,
-        uploaded_at,
-        approved_by,
-        approved_at,
-        hub,
-        month,
-        project_id,
-        workflow
-      )
-    `)
-    .order('created_at', { ascending: false });
-  
-  if (error) {
-    console.error('Error fetching mmp_site_entries:', error);
-    throw error;
+  const PAGE_SIZE = 1000;
+  let allData: any[] = [];
+  let from = 0;
+  let hasMore = true;
+
+  while (hasMore) {
+    const { data, error } = await supabase
+      .from('mmp_site_entries')
+      .select(`
+        *,
+        mmp_files (
+          id,
+          mmp_id,
+          name,
+          uploaded_by,
+          uploaded_at,
+          approved_by,
+          approved_at,
+          hub,
+          month,
+          project_id,
+          workflow
+        )
+      `)
+      .order('created_at', { ascending: false })
+      .range(from, from + PAGE_SIZE - 1);
+
+    if (error) {
+      console.error('Error fetching mmp_site_entries:', error);
+      throw error;
+    }
+
+    if (data && data.length > 0) {
+      allData = allData.concat(data);
+      from += PAGE_SIZE;
+      hasMore = data.length === PAGE_SIZE;
+    } else {
+      hasMore = false;
+    }
   }
-  
-  return (data || []).map(mapMMPSiteEntryToSiteVisit);
+
+  console.log(`[SiteVisits] Fetched ${allData.length} total site entries (paginated)`);
+  return allData.map(mapMMPSiteEntryToSiteVisit);
 };
 
 /**

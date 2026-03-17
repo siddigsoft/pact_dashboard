@@ -264,28 +264,36 @@ export const FOMZone: React.FC = () => {
     const loadFinancial = async () => {
       setFinancialLoading(true);
       try {
-        // Get site visit costs summary
-        const { data: visitsData } = await supabase
-          .from('site_visits')
-          .select('cost, status')
-          .limit(1000);
+        // Paginated fetch helper
+        const fetchAllPages = async (table: string, fields: string) => {
+          const PAGE = 1000;
+          let all: any[] = [];
+          let offset = 0;
+          let more = true;
+          while (more) {
+            const { data: page } = await supabase.from(table).select(fields).range(offset, offset + PAGE - 1);
+            if (page && page.length > 0) { all = all.concat(page); offset += PAGE; more = page.length === PAGE; }
+            else more = false;
+          }
+          return all;
+        };
+
+        // Get site visit costs summary (all pages)
+        const visitsData = await fetchAllPages('site_visits', 'cost, status');
         
-        // Get MMP-related financial data
-        const { data: mmpData } = await supabase
-          .from('mmp_site_entries')
-          .select('cost')
-          .limit(1000);
+        // Get MMP-related financial data (all pages)
+        const mmpData = await fetchAllPages('mmp_site_entries', 'cost');
 
         if (!cancelled) {
-          const totalVisitsCost = (visitsData || []).reduce((sum, v) => sum + (Number(v.cost) || 0), 0);
-          const totalMMPCost = (mmpData || []).reduce((sum, m) => sum + (Number(m.cost) || 0), 0);
-          const completedVisits = (visitsData || []).filter(v => v.status === 'completed').length;
+          const totalVisitsCost = visitsData.reduce((sum: number, v: any) => sum + (Number(v.cost) || 0), 0);
+          const totalMMPCost = mmpData.reduce((sum: number, m: any) => sum + (Number(m.cost) || 0), 0);
+          const completedVisits = visitsData.filter((v: any) => v.status === 'completed').length;
           
           setFinancialData({
             totalVisitsCost,
             totalMMPCost,
             completedVisits,
-            totalVisits: visitsData?.length || 0
+            totalVisits: visitsData.length
           });
         }
       } catch (err) {
