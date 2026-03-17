@@ -1757,6 +1757,35 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
                   </span>
                 </div>
               )}
+
+              {request.paymentProofUrl && (
+                <div className="flex items-center gap-1.5 pt-0.5" data-testid={`text-payment-receipt-${request.id}`}>
+                  <span className="font-semibold text-muted-foreground min-w-[22px]">
+                    <FileText className="h-3.5 w-3.5 inline" />
+                  </span>
+                  <span className="flex items-center gap-2 flex-wrap">
+                    <span className="text-muted-foreground">Payment Receipt / إيصال الدفع:</span>
+                    <a
+                      href={request.paymentProofUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 text-blue-600 dark:text-blue-400 hover:underline font-medium"
+                      data-testid={`link-payment-receipt-${request.id}`}
+                    >
+                      <Eye className="h-3 w-3" />
+                      View Receipt / عرض الإيصال
+                    </a>
+                    {request.paymentProofUploadedAt && (
+                      <span className="text-muted-foreground">
+                        — {format(new Date(request.paymentProofUploadedAt), 'MMM d, yyyy h:mm a')}
+                      </span>
+                    )}
+                    {request.paymentProofNotes && (
+                      <span className="text-muted-foreground italic">— {request.paymentProofNotes}</span>
+                    )}
+                  </span>
+                </div>
+              )}
             </div>
           )}
 
