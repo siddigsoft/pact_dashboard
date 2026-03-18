@@ -307,6 +307,16 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
     }).sort((a, b) => a.name.localeCompare(b.name));
   }, [requests, users]);
 
+  const allUniqueRequesters = useMemo(() => {
+    const ids = [...new Set(requests.map(r => r.requestedBy).filter(Boolean))];
+    return ids.map(id => {
+      const stored = requests.find(r => r.requestedBy === id)?.requestedByName;
+      const u = users?.find(u => u.id === id);
+      const name = (stored && stored !== 'Unknown') ? stored : ((u as any)?.fullName || (u as any)?.full_name || u?.email || 'Unknown');
+      return { id: id!, name };
+    }).sort((a, b) => a.name.localeCompare(b.name));
+  }, [requests, users]);
+
   const filteredRequests = useMemo(() => filterDownPayments(requests, filters), [requests, filters]);
 
   const approvedForPayment = useMemo(() =>
@@ -2323,6 +2333,23 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
                 <SelectItem value="all">All Localities</SelectItem>
                 {uniqueLocalities.map(loc => (
                   <SelectItem key={loc} value={loc || ''}>{loc}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label className="text-xs">Data Collector</Label>
+            <Select
+              value={filters.dataCollectorId || 'all'}
+              onValueChange={v => setFilters(f => ({ ...f, dataCollectorId: v === 'all' ? undefined : v }))}
+            >
+              <SelectTrigger data-testid="select-filter-data-collector">
+                <SelectValue placeholder="All Collectors" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Collectors</SelectItem>
+                {allUniqueRequesters.map(e => (
+                  <SelectItem key={e.id} value={e.id}>{e.name}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
