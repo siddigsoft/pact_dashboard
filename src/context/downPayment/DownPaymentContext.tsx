@@ -1163,6 +1163,72 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
           emailActionLabel: 'View Request',
         }).catch(console.error);
       });
+
+      // Notify supervisors, FOM, and coordinators for affected hubs/states
+      if (data.notifyStakeholders && success > 0) {
+        (async () => {
+          try {
+            const approvedRequestObjs = data.requestIds
+              .map(id => requests.find(r => r.id === id))
+              .filter(Boolean) as typeof requests;
+            const affectedHubIds = [...new Set(approvedRequestObjs.map(r => r.hubId).filter(Boolean))];
+            const affectedHubNames = [...new Set(approvedRequestObjs.map(r => r.hubName).filter(Boolean))];
+            const affectedStateNames = [...new Set(approvedRequestObjs.map(r => r.stateName).filter(Boolean))];
+            const totalApprovedCount = success;
+            const totalApprovedAmount = approvedRequestObjs.reduce((sum, r) => {
+              const amt = calculateApprovedAmount(r.requestedAmount, data.approvalType, data.approvalPercentage, data.customAmount);
+              return sum + amt;
+            }, 0);
+            const collectorLabel = data.collectorName ? `for ${data.collectorName}` : '';
+            const hubLabel = affectedHubNames.join(', ') || affectedHubIds.join(', ');
+            const stateLabel = affectedStateNames.join(', ');
+            const summaryMsg = `${totalApprovedCount} transport advance request${totalApprovedCount > 1 ? 's' : ''} ${collectorLabel} have been bulk-approved (SDG ${totalApprovedAmount.toLocaleString()}) — Hub: ${hubLabel}${stateLabel ? ', State: ' + stateLabel : ''}.`;
+
+            // Fetch stakeholders: supervisors + hub supervisors for affected hubs, plus all FOMs and coordinators
+            const { data: stakeholders, error: stakeholderErr } = await supabase
+              .from('profiles')
+              .select('id, full_name, email, role, hub_id')
+              .in('role', ['supervisor', 'hubSupervisor', 'fom', 'coordinator', 'countrydirector']);
+            if (stakeholderErr || !stakeholders) return;
+
+            const notifyIds = new Set<string>();
+            // Exclude the approver themselves and the data collectors
+            const collectorIds = new Set(approvedRequestObjs.map(r => r.requestedBy).filter(Boolean));
+            const skipIds = new Set([data.approvedBy, ...collectorIds]);
+
+            for (const s of stakeholders) {
+              if (!s.id || skipIds.has(s.id)) continue;
+              const role = (s.role || '').toLowerCase();
+              // FOMs and country directors → always notify (they oversee everything)
+              if (['fom', 'countrydirector', 'country_director'].includes(role)) {
+                notifyIds.add(s.id);
+              }
+              // Coordinators and supervisors → notify only if linked to an affected hub
+              if (['coordinator', 'supervisor', 'hubsupervisor'].includes(role)) {
+                if (!s.hub_id || affectedHubIds.includes(s.hub_id)) {
+                  notifyIds.add(s.id);
+                }
+              }
+            }
+
+            notifyIds.forEach(uid => {
+              NotificationTriggerService.send({
+                userId: uid,
+                title: `Bulk Advance Approval — ${totalApprovedCount} Requests / موافقة جماعية على السلف`,
+                message: summaryMsg,
+                type: 'info',
+                category: 'financial',
+                priority: 'normal',
+                link: '/down-payment-approval',
+                sendEmail: true,
+                emailActionLabel: 'View Approvals',
+              }).catch(console.error);
+            });
+          } catch (e) {
+            console.error('[BulkApprove] stakeholder notification error:', e);
+          }
+        })();
+      }
     }
 
     if (failed > 0 && success === 0) {

@@ -238,4 +238,6 @@ export interface BulkApprovalRequest {
   notes?: string;
   approvedBy: string;
   approvedByName?: string;
+  notifyStakeholders?: boolean;
+  collectorName?: string;
 }

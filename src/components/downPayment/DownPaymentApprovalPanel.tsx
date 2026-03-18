@@ -476,7 +476,7 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
     }
   };
 
-  const handleBulkApprove = async () => {
+  const handleBulkApprove = async (opts?: { notifyStakeholders?: boolean; collectorName?: string }) => {
     if (!currentUser || selectedIds.size === 0) return;
 
     setProcessing(true);
@@ -489,9 +489,36 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
         notes,
         approvedBy: currentUser.id,
         approvedByName: currentUser.fullName || currentUser.email,
+        notifyStakeholders: opts?.notifyStakeholders ?? false,
+        collectorName: opts?.collectorName,
       });
       setSelectedIds(new Set());
       closeDialog();
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  const handleQuickApproveByCollector = async () => {
+    if (!currentUser || !filters.dataCollectorId) return;
+    const collectorReqs = pendingRequests.filter(r => r.requestedBy === filters.dataCollectorId);
+    if (collectorReqs.length === 0) return;
+    selectAll(collectorReqs);
+    const collectorName = allUniqueRequesters.find(e => e.id === filters.dataCollectorId)?.name;
+    setProcessing(true);
+    try {
+      await bulkApprove({
+        requestIds: collectorReqs.map(r => r.id),
+        approvalType,
+        approvalPercentage: approvalType === 'percentage' ? customPercentage : undefined,
+        customAmount: approvalType === 'custom' ? customAmount : undefined,
+        notes,
+        approvedBy: currentUser.id,
+        approvedByName: currentUser.fullName || currentUser.email,
+        notifyStakeholders: true,
+        collectorName,
+      });
+      setSelectedIds(new Set());
     } finally {
       setProcessing(false);
     }
@@ -2574,6 +2601,42 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
             <Card><CardContent className="py-8 text-center text-muted-foreground">No pending requests</CardContent></Card>
           ) : (
             <div>
+              {filters.dataCollectorId && (() => {
+                const collectorReqs = pendingRequests.filter(r => r.requestedBy === filters.dataCollectorId);
+                const collectorName = allUniqueRequesters.find(e => e.id === filters.dataCollectorId)?.name || 'this collector';
+                const totalAmount = collectorReqs.reduce((s, r) => s + r.requestedAmount, 0);
+                if (collectorReqs.length === 0) return null;
+                return (
+                  <Card className="mb-3 border-primary/30 bg-primary/5">
+                    <CardContent className="p-3">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                        <div>
+                          <p className="text-sm font-semibold flex items-center gap-2">
+                            <Users className="h-4 w-4 text-primary" />
+                            {collectorName}
+                          </p>
+                          <p className="text-xs text-muted-foreground mt-0.5">
+                            {collectorReqs.length} pending request{collectorReqs.length > 1 ? 's' : ''} · SDG {totalAmount.toLocaleString()} total
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            Supervisors, FOM &amp; Coordinators will be notified automatically.
+                          </p>
+                        </div>
+                        <Button
+                          size="sm"
+                          onClick={handleQuickApproveByCollector}
+                          disabled={processing}
+                          className="shrink-0"
+                          data-testid="button-quick-approve-by-collector"
+                        >
+                          <CheckCircle2 className="h-4 w-4 mr-1" />
+                          Approve All ({collectorReqs.length})
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })()}
               <div className="flex items-center gap-2 mb-2">
                 <Button variant="ghost" size="sm" onClick={() => selectAll(pendingRequests)} data-testid="button-select-all">
                   Select All
