@@ -60,7 +60,7 @@ export function SuperAdminManagementPage() {
     if (!currentUser || !selectedUserId) return;
 
     if (!appointmentReason.trim()) {
-      alert('Please provide a reason for this appointment');
+      toast({ title: 'Reason Required', description: 'Please provide a reason for this appointment.', variant: 'destructive' });
       return;
     }
 
@@ -83,7 +83,7 @@ export function SuperAdminManagementPage() {
     if (!currentUser || !selectedSuperAdminId) return;
 
     if (!deactivationReason.trim()) {
-      alert('Please provide a reason for deactivation');
+      toast({ title: 'Reason Required', description: 'Please provide a reason for deactivation.', variant: 'destructive' });
       return;
     }
 
@@ -116,7 +116,7 @@ export function SuperAdminManagementPage() {
     if (!currentUser || !selectedSuperAdminId) return;
 
     if (!deleteReason.trim()) {
-      alert('Please provide a reason for deletion');
+      toast({ title: 'Reason Required', description: 'Please provide a reason for deletion.', variant: 'destructive' });
       return;
     }
 

@@ -335,23 +335,16 @@ function exportToExcel(rows: Array<Partial<TxRow> & Record<string, any>>, sessio
     ? `PACT_Transfers_${sessionName.replace(/[^a-zA-Z0-9_-]/g, '_')}_${format(new Date(), 'yyyyMMdd')}.xlsx`
     : `PACT_Bank_Transfers_${format(new Date(), 'yyyyMMdd_HHmm')}.xlsx`;
 
-  try {
-    // In browser environments, writeFile (which relies on fs) is disabled.
-    // Always use Blob + object URL to trigger download.
-    const buf: ArrayBuffer = XLSXStyle.write(wb, { bookType: 'xlsx', type: 'array' });
-    const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = fname;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    setTimeout(() => URL.revokeObjectURL(url), 2000);
-  } catch (err: any) {
-    console.error('[Export] Download error:', err);
-    alert(`Export failed: ${err?.message || 'Unknown error'}. Please try again.`);
-  }
+  const buf: ArrayBuffer = XLSXStyle.write(wb, { bookType: 'xlsx', type: 'array' });
+  const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = fname;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 2000);
 }
 
 function fmtDate(iso: string) {
@@ -378,6 +371,16 @@ function computeUniqueRecipients(sourceRows: Array<any>) {
 
 export default function TransactionScanner() {
   const { toast } = useToast();
+
+  const handleExportToExcel = (rows: Array<Partial<TxRow> & Record<string, any>>, sessionName?: string) => {
+    try {
+      exportToExcel(rows, sessionName);
+    } catch (err: any) {
+      console.error('[Export] Download error:', err);
+      toast({ title: 'Export Failed', description: err?.message || 'Unknown error. Please try again.', variant: 'destructive' });
+    }
+  };
+
   const [rows, setRows] = useState<TxRow[]>([]);
   const [quotaError, setQuotaError] = useState<string | null>(null);
   const [savedSessions, setSavedSessions] = useState<SavedSession[]>([]);
@@ -571,7 +574,7 @@ export default function TransactionScanner() {
 
   useEffect(() => {
     if (rows.length >= 1 && doneRows.length === rows.length && errorRows.length === 0 && !autoSaved && !processing) {
-      exportToExcel(rows);
+      handleExportToExcel(rows);
     }
   }, [doneRows.length, rows.length, errorRows.length, autoSaved, processing]);
 
@@ -708,7 +711,7 @@ export default function TransactionScanner() {
                 <Filter className="h-3.5 w-3.5" />
                 Export by Account
               </Button>
-              <Button onClick={() => exportToExcel(rows)} className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white h-8 text-sm">
+              <Button onClick={() => handleExportToExcel(rows)} className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white h-8 text-sm">
                 <Download className="h-4 w-4" />
                 All ({doneCount})
               </Button>
@@ -921,7 +924,7 @@ export default function TransactionScanner() {
               <Upload className="h-3 w-3" /> Add more images
             </button>
             <span>·</span>
-            <button onClick={() => exportToExcel(rows)} className="text-[#1D3461] hover:underline font-medium">
+            <button onClick={() => handleExportToExcel(rows)} className="text-[#1D3461] hover:underline font-medium">
               Download Excel
             </button>
             <span>·</span>
@@ -1019,7 +1022,7 @@ export default function TransactionScanner() {
                             <Filter className="h-3 w-3" /> Filter
                           </button>
                           <button
-                            onClick={() => exportToExcel(session.receipts, session.session_name || undefined)}
+                            onClick={() => handleExportToExcel(session.receipts, session.session_name || undefined)}
                             className="inline-flex items-center gap-1 px-2 py-1 rounded text-[#1D3461] bg-[#1D3461]/10 hover:bg-[#1D3461]/20 transition-colors font-medium"
                             title="Download all as Excel"
                           >
@@ -1149,7 +1152,7 @@ export default function TransactionScanner() {
                 const label = selectedAccounts.size === 1
                   ? Array.from(selectedAccounts)[0].slice(-8)
                   : `${selectedAccounts.size}_accounts`;
-                exportToExcel(filtered, filterExportSessionName);
+                handleExportToExcel(filtered, filterExportSessionName);
                 setFilterExportOpen(false);
               }}
               className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white"
