@@ -62,6 +62,7 @@ import {
   Trash2,
   Hash,
   Shield,
+  ShieldCheck,
   Eye,
   Banknote,
   Pencil,
@@ -214,6 +215,7 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
   const [signatureRequest, setSignatureRequest] = useState<DownPaymentRequest | null>(null);
   const [notes, setNotes] = useState('');
   const [rejectionReason, setRejectionReason] = useState('');
+  const [rejectConfirmStep, setRejectConfirmStep] = useState(false);
   const [paymentAmount, setPaymentAmount] = useState(0);
   const [processing, setProcessing] = useState(false);
   const [payProofFile, setPayProofFile] = useState<File | null>(null);
@@ -592,6 +594,7 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
     setAction(null);
     setNotes('');
     setRejectionReason('');
+    setRejectConfirmStep(false);
     setPaymentAmount(0);
     setApprovalType('full');
     setCustomPercentage(100);
@@ -1657,9 +1660,16 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
               </div>
             </div>
             <div className="flex flex-col items-end gap-1 flex-shrink-0">
-              <span className="text-lg font-bold" data-testid={`text-amount-${request.id}`}>
-                SDG {(request.approvedAmount || request.requestedAmount).toLocaleString()}
-              </span>
+              <div className="flex flex-col items-end" data-testid={`text-amount-${request.id}`}>
+                <span className="text-lg font-bold">
+                  SDG {(request.approvedAmount || request.requestedAmount).toLocaleString()}
+                </span>
+                {request.approvedAmount && request.approvedAmount !== request.requestedAmount && (
+                  <span className="text-xs text-muted-foreground line-through">
+                    req. {request.requestedAmount.toLocaleString()}
+                  </span>
+                )}
+              </div>
               {getStatusBadge(request.status)}
             </div>
           </div>
@@ -1667,6 +1677,32 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
           <div className="mt-2">
             <WorkflowTimeline request={request} />
           </div>
+
+          {request.status === 'rejected' && (request.supervisorRejectionReason || request.adminRejectionReason) && (
+            <div className="flex items-start gap-2 rounded-md bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 px-3 py-2 text-xs text-red-700 dark:text-red-400" data-testid={`text-rejection-reason-${request.id}`}>
+              <XCircle className="h-3.5 w-3.5 flex-shrink-0 mt-0.5" />
+              <span><span className="font-semibold">Rejection reason: </span>{request.adminRejectionReason || request.supervisorRejectionReason}</span>
+            </div>
+          )}
+
+          {request.paymentType === 'installments' && Array.isArray(request.installmentPlan) && request.installmentPlan.length > 0 && (
+            <div className="space-y-1" data-testid={`installment-progress-${request.id}`}>
+              <div className="flex items-center justify-between text-xs text-muted-foreground">
+                <span className="font-medium">Installments</span>
+                <span>{request.installmentPlan.filter((i: any) => i.paid).length} / {request.installmentPlan.length} paid</span>
+              </div>
+              <div className="flex gap-1">
+                {request.installmentPlan.map((inst: any, idx: number) => (
+                  <div
+                    key={idx}
+                    className={`h-2 flex-1 rounded-full ${inst.paid ? 'bg-emerald-500' : 'bg-muted-foreground/20'}`}
+                    title={inst.paid ? `Installment ${idx + 1}: Paid` : `Installment ${idx + 1}: Pending`}
+                    data-testid={`installment-bar-${request.id}-${idx}`}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
 
           {isNotReceived && (
             <div className="flex items-center gap-2 rounded-md bg-red-50 dark:bg-red-950/30 border border-red-300 dark:border-red-700 px-3 py-2 text-xs font-medium text-red-700 dark:text-red-400" data-testid={`alert-not-received-${request.id}`}>
@@ -1718,6 +1754,16 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
                     {request.adminProcessedAt && (
                       <span className="text-muted-foreground"> ({format(new Date(request.adminProcessedAt), 'MMM d, yyyy h:mm a')})</span>
                     )}
+                  </span>
+                </div>
+              )}
+
+              {(request.metadata as any)?.super_admin_bypass && request.supervisorApprovedBy && request.adminProcessedBy && (
+                <div className="flex items-center gap-1.5" data-testid={`text-bypass-badge-${request.id}`}>
+                  <span className="font-semibold text-muted-foreground min-w-[22px]" />
+                  <span className="inline-flex items-center gap-1 rounded-full bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 text-[10px] font-semibold px-2 py-0.5 border border-blue-200 dark:border-blue-700">
+                    <ShieldCheck className="h-3 w-3" />
+                    Both tiers approved by admin override
                   </span>
                 </div>
               )}
@@ -3053,18 +3099,42 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
             </div>
           )}
 
+          {rejectConfirmStep && selectedRequest && (
+            <div className="rounded-md border border-destructive bg-red-50 dark:bg-red-950/30 p-3 space-y-1" data-testid="container-reject-confirm">
+              <p className="text-sm font-semibold text-destructive flex items-center gap-2">
+                <AlertTriangle className="h-4 w-4" />
+                Confirm rejection — this cannot be undone
+              </p>
+              <p className="text-sm text-muted-foreground">
+                Rejecting <strong>{selectedRequest.requestedByName || 'this requester'}</strong>'s advance of <strong>{selectedRequest.requestedAmount.toLocaleString()} SDG</strong> for <strong>{selectedRequest.siteName}</strong>.
+              </p>
+              <p className="text-xs text-muted-foreground italic">Reason: "{rejectionReason.trim()}"</p>
+            </div>
+          )}
+
           <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={closeDialog} data-testid="button-cancel-reject">
-              Cancel
+            <Button variant="outline" onClick={() => { if (rejectConfirmStep) { setRejectConfirmStep(false); } else { closeDialog(); } }} data-testid="button-cancel-reject">
+              {rejectConfirmStep ? 'Go Back' : 'Cancel'}
             </Button>
-            <Button 
-              variant="destructive" 
-              onClick={handleReject} 
-              disabled={processing || !rejectionReason.trim()} 
-              data-testid="button-confirm-reject"
-            >
-              {processing ? 'Processing...' : 'Reject'}
-            </Button>
+            {!rejectConfirmStep ? (
+              <Button
+                variant="destructive"
+                onClick={() => setRejectConfirmStep(true)}
+                disabled={!rejectionReason.trim()}
+                data-testid="button-reject-step1"
+              >
+                Reject
+              </Button>
+            ) : (
+              <Button
+                variant="destructive"
+                onClick={handleReject}
+                disabled={processing}
+                data-testid="button-confirm-reject"
+              >
+                {processing ? 'Processing...' : 'Yes, Reject'}
+              </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>
