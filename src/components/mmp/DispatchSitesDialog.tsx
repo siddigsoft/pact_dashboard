@@ -65,6 +65,7 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
 }) => {
   const [step, setStep] = useState<"select" | "costs">("select");
   const [loading, setLoading] = useState(false);
+  const [pendingFinancialOverride, setPendingFinancialOverride] = useState(false);
   const [collectors, setCollectors] = useState<DataCollector[]>([]);
   const [selectedState, setSelectedState] = useState<string>("");
   const [selectedLocality, setSelectedLocality] = useState<string>("");
@@ -755,14 +756,16 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
         if (pendingCount > 0) parts.push(`${pendingCount} pending advance(s)`);
 
         if (unresolvedDisbursed.length > 0) {
-          // Hard block only for unresolved disbursed advances
-          const confirmed = window.confirm(
-            `⚠ FINANCIAL ALERT\n\n` +
-            `This dispatch involves site(s) with ${unresolvedDisbursed.length} unresolved disbursed advance(s) still requiring manual reconciliation.\n\n` +
-            `Re-dispatching before reconciliation creates new financial exposure.\n\n` +
-            `Do you want to proceed anyway? This will be logged.`
-          );
-          if (!confirmed) return;
+          if (!pendingFinancialOverride) {
+            setPendingFinancialOverride(true);
+            toast({
+              title: '⚠ Financial Alert — Click Dispatch Again to Confirm',
+              description: `${unresolvedDisbursed.length} unresolved disbursed advance(s) require manual reconciliation. Re-dispatching creates new financial exposure. This will be logged.`,
+              variant: 'destructive',
+            });
+            return;
+          }
+          setPendingFinancialOverride(false);
           console.warn('[DISPATCH OVERRIDE] Admin bypassed financial lockout for sites:', selectedIds);
         } else if (parts.length > 0) {
           // Non-blocking warning for resolved/pending-only
