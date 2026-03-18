@@ -111,6 +111,7 @@ function AdvanceRequestsReportContent() {
     sending: boolean;
   }>({ open: false, request: null, isBulk: false, bulkRequests: [], bulkGroupBy: '', bulkGroupValue: '', availableRecipients: [], selectedRecipientIds: [], ccEmails: [], loading: false, sending: false });
   const [markPaidProcessing, setMarkPaidProcessing] = useState(false);
+  const [confirmMarkPaidDialog, setConfirmMarkPaidDialog] = useState<{ open: boolean; req: DownPaymentRequest | null; notes: string }>({ open: false, req: null, notes: '' });
   const [remindersExpanded, setRemindersExpanded] = useState(false);
 
   const debouncedSearchTerm = useDebounce(searchTerm, 300);
@@ -635,8 +636,13 @@ function AdvanceRequestsReportContent() {
     }
   };
 
-  const handleMarkAsPaid = async (req: DownPaymentRequest) => {
-    if (!currentUser?.id) return;
+  const handleMarkAsPaid = (req: DownPaymentRequest) => {
+    setConfirmMarkPaidDialog({ open: true, req, notes: '' });
+  };
+
+  const handleConfirmMarkAsPaid = async () => {
+    const req = confirmMarkPaidDialog.req;
+    if (!req || !currentUser?.id) return;
     setMarkPaidProcessing(true);
     try {
       const now = new Date().toISOString();
@@ -647,12 +653,14 @@ function AdvanceRequestsReportContent() {
           total_paid_amount: req.approvedAmount || req.requestedAmount,
           remaining_amount: 0,
           updated_at: now,
+          ...(confirmMarkPaidDialog.notes.trim() ? { payment_proof_notes: confirmMarkPaidDialog.notes.trim() } : {}),
         } as any)
         .eq('id', req.id);
       if (error) {
         toast({ title: "Failed / فشل", description: error.message, variant: "destructive" });
       } else {
         toast({ title: "Marked as Paid / تم التحديد كمدفوع", description: "The advance has been marked as fully paid. / تم تحديد السلفة كمدفوعة بالكامل." });
+        setConfirmMarkPaidDialog({ open: false, req: null, notes: '' });
         refreshRequests();
       }
     } catch {
@@ -4093,6 +4101,57 @@ function AdvanceRequestsReportContent() {
               ) : (
                 <><Mail className="h-4 w-4 mr-1" /> Send Request</>
               )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={confirmMarkPaidDialog.open} onOpenChange={(open) => { if (!open) setConfirmMarkPaidDialog({ open: false, req: null, notes: '' }); }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <WalletIcon className="h-5 w-5 text-green-600" />
+              Confirm Mark as Paid / تأكيد التحديد كمدفوع
+            </DialogTitle>
+            <DialogDescription>
+              This will mark the advance as fully paid. This action should only be done after the funds have been physically disbursed. / سيتم تحديد السلفة كمدفوعة بالكامل. يجب أن يتم هذا فقط بعد صرف المبلغ فعلياً.
+            </DialogDescription>
+          </DialogHeader>
+          {confirmMarkPaidDialog.req && (
+            <div className="space-y-3">
+              <div className="rounded-lg bg-muted/50 p-3 text-sm space-y-1">
+                <p className="font-medium">{confirmMarkPaidDialog.req.siteName}</p>
+                <p className="text-lg font-bold tabular-nums text-green-600">
+                  {(confirmMarkPaidDialog.req.approvedAmount || confirmMarkPaidDialog.req.requestedAmount).toLocaleString()} SDG
+                </p>
+                {confirmMarkPaidDialog.req.requestedByName && (
+                  <p className="text-muted-foreground text-xs">Recipient: {confirmMarkPaidDialog.req.requestedByName}</p>
+                )}
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-sm font-medium">Notes / ملاحظات <span className="text-muted-foreground font-normal">(optional)</span></Label>
+                <Textarea
+                  value={confirmMarkPaidDialog.notes}
+                  onChange={e => setConfirmMarkPaidDialog(prev => ({ ...prev, notes: e.target.value }))}
+                  placeholder="e.g. Cash disbursed on site / تم الصرف نقداً في الموقع"
+                  rows={2}
+                  className="text-sm resize-none"
+                  data-testid="textarea-confirm-mark-paid-notes"
+                />
+              </div>
+            </div>
+          )}
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setConfirmMarkPaidDialog({ open: false, req: null, notes: '' })} disabled={markPaidProcessing} data-testid="button-cancel-confirm-mark-paid">
+              Cancel / إلغاء
+            </Button>
+            <Button
+              onClick={handleConfirmMarkAsPaid}
+              disabled={markPaidProcessing}
+              className="bg-green-600 hover:bg-green-700 text-white"
+              data-testid="button-confirm-mark-paid"
+            >
+              {markPaidProcessing ? <><RefreshCw className="h-4 w-4 mr-1 animate-spin" /> Processing...</> : <><CheckCircle2 className="h-4 w-4 mr-1" /> Confirm Paid / تأكيد الدفع</>}
             </Button>
           </DialogFooter>
         </DialogContent>
