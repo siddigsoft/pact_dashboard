@@ -752,7 +752,8 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
       if (transactionError) throw transactionError;
 
       const newPaidAmount = request.totalPaidAmount + data.amount;
-      const newRemainingAmount = request.requestedAmount - newPaidAmount;
+      const effectiveApprovedAmount = request.approvedAmount || request.requestedAmount;
+      const newRemainingAmount = effectiveApprovedAmount - newPaidAmount;
       const transactionIds = [...request.walletTransactionIds, transactionData.id];
 
       let newStatus: DownPaymentStatus = 'partially_paid';
@@ -992,7 +993,8 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
     // Separate eligible requests into buckets
     const supervisorRows: Record<string, any>[] = [];
     const adminRows: Record<string, any>[] = [];
-    const approvedUserIds: { userId: string; siteName: string; amount: number }[] = [];
+    const fullyApprovedUserIds: { userId: string; siteName: string; amount: number }[] = [];
+    const pendingAdminUserIds: { userId: string; siteName: string; amount: number }[] = [];
 
     for (const requestId of data.requestIds) {
       const request = requests.find(r => r.id === requestId);
@@ -1055,7 +1057,11 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
           });
         }
         if (request.requestedBy) {
-          approvedUserIds.push({ userId: request.requestedBy, siteName: request.siteName || '', amount: approvedAmount });
+          if (isAdminRole) {
+            fullyApprovedUserIds.push({ userId: request.requestedBy, siteName: request.siteName || '', amount: approvedAmount });
+          } else {
+            pendingAdminUserIds.push({ userId: request.requestedBy, siteName: request.siteName || '', amount: approvedAmount });
+          }
         }
       } else if (request.status === 'pending_admin' && isAdminRole) {
         adminRows.push({
@@ -1075,7 +1081,7 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
           },
         });
         if (request.requestedBy) {
-          approvedUserIds.push({ userId: request.requestedBy, siteName: request.siteName || '', amount: approvedAmount });
+          fullyApprovedUserIds.push({ userId: request.requestedBy, siteName: request.siteName || '', amount: approvedAmount });
         }
       } else {
         console.warn(`[BulkApprove] Skipping ${requestId}: status=${request.status}, role=${userRole}`);
@@ -1131,17 +1137,30 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
         description: `${success} approved successfully${failed > 0 ? ` · ${failed} failed` : ''}`,
       });
       // Fire notifications in background — don't block the UI
-      approvedUserIds.slice(0, success).forEach(({ userId, siteName, amount }) => {
+      fullyApprovedUserIds.forEach(({ userId, siteName, amount }) => {
         NotificationTriggerService.send({
           userId,
-          title: 'Down-Payment Request Approved',
-          message: `Your down-payment request for "${siteName}" (${amount.toLocaleString()} SDG) has been approved.`,
+          title: 'Down-Payment Request Fully Approved',
+          message: `Your down-payment request for "${siteName}" (${amount.toLocaleString()} SDG) has been fully approved and is ready for payment processing.`,
           type: 'success',
           category: 'financial',
           priority: 'high',
           link: '/wallet',
           sendEmail: true,
           emailActionLabel: 'View Wallet',
+        }).catch(console.error);
+      });
+      pendingAdminUserIds.forEach(({ userId, siteName, amount }) => {
+        NotificationTriggerService.send({
+          userId,
+          title: 'Down-Payment Request Approved by Supervisor',
+          message: `Your down-payment request for "${siteName}" (${amount.toLocaleString()} SDG) has been approved by your supervisor and forwarded to admin for final approval.`,
+          type: 'success',
+          category: 'financial',
+          priority: 'high',
+          link: '/down-payment-approval',
+          sendEmail: true,
+          emailActionLabel: 'View Request',
         }).catch(console.error);
       });
     }
@@ -1275,6 +1294,7 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
         updateData = {
           ...updateData,
           total_paid_amount: 0,
+          remaining_amount: request.approvedAmount || request.requestedAmount,
           metadata: updatedMetadata,
         };
       }
