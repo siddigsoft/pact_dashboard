@@ -404,6 +404,7 @@ const MMP = () => {
   // Subcategory state for Verified Sites (Admin/ICT only)
   const [verifiedSubTab, setVerifiedSubTab] = useState<'newSites' | 'approvedCosted' | 'dispatched' | 'smartAssigned' | 'accepted' | 'ongoing' | 'completed' | 'rejected'>('newSites');
   const [isBulkApproving, setIsBulkApproving] = useState(false);
+  const [pendingBulkApproveCount, setPendingBulkApproveCount] = useState(0);
   const [tableFilteredSiteIds, setTableFilteredSiteIds] = useState<Set<string>>(new Set());
   const [tableFilteredCount, setTableFilteredCount] = useState<number>(0);
   const [tableFilteredEntries, setTableFilteredEntries] = useState<any[]>([]);
@@ -5186,8 +5187,14 @@ const MMP = () => {
                               }
                             }
 
-                            const confirmMsg = `Are you sure you want to approve and cost ${verifiedEntries.length} site(s)?${tableFilteredCount > 0 ? ` (filtered from ${filteredVerifiedCategorySiteRows.length} total)` : ''}`;
-                            if (!window.confirm(confirmMsg)) return;
+                            if (pendingBulkApproveCount === 0) {
+                              const count = verifiedEntries.length;
+                              const filteredNote = tableFilteredCount > 0 ? ` (filtered from ${filteredVerifiedCategorySiteRows.length} total)` : '';
+                              setPendingBulkApproveCount(count);
+                              toast({ title: 'Click "Approve and Cost" again to confirm', description: `Will approve and cost ${count} site(s)${filteredNote}.` });
+                              return;
+                            }
+                            setPendingBulkApproveCount(0);
 
                             if (!verifiedEntries || verifiedEntries.length === 0) {
                               toast({
@@ -5326,6 +5333,8 @@ const MMP = () => {
                             <span className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent" />
                             Processing...
                           </span>
+                        ) : pendingBulkApproveCount > 0 ? (
+                          <>Click again to confirm ({pendingBulkApproveCount} sites)</>
                         ) : (
                           <>Approve for Costing ({tableFilteredCount > 0 ? `${tableFilteredCount} filtered` : filteredVerifiedCategorySiteRows.length} sites)</>
                         )}

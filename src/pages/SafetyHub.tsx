@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -39,6 +40,7 @@ const SEVERITY_COLORS: Record<string, string> = {
 };
 
 export default function SafetyHub() {
+  const navigate = useNavigate();
   const { user } = useAppContext();
   const { toast } = useToast();
   const [contacts, setContacts] = useState<EmergencyContact[]>([]);
@@ -219,7 +221,7 @@ export default function SafetyHub() {
                 <AlertTriangle className="w-6 h-6 text-orange-600" />
                 <span className="text-xs">Incident Reports</span>
               </Button>
-              <Button variant="outline" className="h-20 flex-col gap-2" onClick={() => window.location.href = '/incident-reports'} data-testid="button-new-incident">
+              <Button variant="outline" className="h-20 flex-col gap-2" onClick={() => navigate('/incident-reports')} data-testid="button-new-incident">
                 <Plus className="w-6 h-6 text-red-600" />
                 <span className="text-xs">New Incident</span>
               </Button>
@@ -290,7 +292,7 @@ export default function SafetyHub() {
         <div className="space-y-4">
           <div className="flex justify-between items-center">
             <p className="text-sm text-muted-foreground">{alerts.length} incidents recorded</p>
-            <Button size="sm" onClick={() => window.location.href = '/incident-reports'} data-testid="button-create-incident">
+            <Button size="sm" onClick={() => navigate('/incident-reports')} data-testid="button-create-incident">
               <Plus className="w-4 h-4 mr-2" /> New Incident Report
             </Button>
           </div>

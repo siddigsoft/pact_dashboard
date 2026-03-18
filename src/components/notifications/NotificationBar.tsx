@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Bell, Check, CheckCheck, Trash2, X, AlertTriangle, Clock, Mail } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -14,6 +15,7 @@ import { cn } from '@/lib/utils';
 import { formatDistanceToNow } from 'date-fns';
 
 export function NotificationBar() {
+  const navigate = useNavigate();
   const {
     persistentNotifications,
     unreadCount,
@@ -54,7 +56,11 @@ export function NotificationBar() {
       await markAsRead(notification.id);
     }
     if (notification.action_url) {
-      window.location.href = notification.action_url;
+      if (notification.action_url.startsWith('/')) {
+        navigate(notification.action_url);
+      } else {
+        window.location.href = notification.action_url;
+      }
       setIsOpen(false);
     }
   };

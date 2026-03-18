@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react';
+import { useToast } from '@/hooks/use-toast';
+import { ToastAction } from '@/components/ui/toast';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
@@ -42,17 +44,25 @@ export function OfflineDataDashboard({ className }: OfflineDataDashboardProps) {
   } = useOffline();
 
   const [isClearing, setIsClearing] = useState(false);
+  const { toast } = useToast();
 
-  const handleClearData = async () => {
-    if (confirm('Are you sure you want to clear all offline data? This cannot be undone.')) {
-      setIsClearing(true);
-      try {
-        await clearAllOfflineData();
-        await refreshPrefetchStats();
-      } finally {
-        setIsClearing(false);
-      }
+  const doClearData = async () => {
+    setIsClearing(true);
+    try {
+      await clearAllOfflineData();
+      await refreshPrefetchStats();
+    } finally {
+      setIsClearing(false);
     }
+  };
+
+  const handleClearData = () => {
+    toast({
+      title: 'Clear all offline data?',
+      description: 'All cached data will be removed. This cannot be undone.',
+      variant: 'destructive',
+      action: <ToastAction altText="Confirm clear" onClick={doClearData}>Clear</ToastAction>,
+    });
   };
 
   const totalCached = prefetchStats 

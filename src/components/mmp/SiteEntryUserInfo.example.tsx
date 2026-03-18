@@ -177,10 +177,10 @@ export const ExampleVerifySiteEntry: React.FC<{
         .eq('id', siteEntryId);
 
       if (error) throw error;
-      alert('Site entry verified successfully!');
+      console.log('Site entry verified successfully!');
     } catch (error) {
       console.error('Error verifying site entry:', error);
-      alert('Failed to verify site entry');
+      console.error('Failed to verify site entry');
     }
   };
 
@@ -215,10 +215,10 @@ export const ExampleCompleteSiteEntry: React.FC<{
         .eq('id', siteEntryId);
 
       if (error) throw error;
-      alert('Site entry completed successfully!');
+      console.log('Site entry completed successfully!');
     } catch (error) {
       console.error('Error completing site entry:', error);
-      alert('Failed to complete site entry');
+      console.error('Failed to complete site entry');
     }
   };
 

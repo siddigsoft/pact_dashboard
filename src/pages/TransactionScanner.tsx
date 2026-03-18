@@ -13,6 +13,7 @@ const XLSXStyle: any = (_XLSXStyleNS as any).default ?? _XLSXStyleNS;
 import { format, parse, isValid } from 'date-fns';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { ToastAction } from '@/components/ui/toast';
 import { ensureValidSession } from '@/lib/session-health';
 
 type TxRow = {
@@ -540,8 +541,7 @@ export default function TransactionScanner() {
     }
   }, [doneRows, loadSessions, toast]);
 
-  const deleteSession = useCallback(async (id: string) => {
-    if (!confirm('Delete this saved scan session?')) return;
+  const doDeleteSession = useCallback(async (id: string) => {
     const session = await ensureValidSession();
     if (!session.success) return;
     const { error } = await supabase.from('bank_transaction_scans').delete().eq('id', id);
@@ -549,6 +549,15 @@ export default function TransactionScanner() {
     toast({ title: 'Session deleted' });
     setSavedSessions(prev => prev.filter(s => s.id !== id));
   }, [toast]);
+
+  const deleteSession = useCallback((id: string) => {
+    toast({
+      title: 'Delete this session?',
+      description: 'All scan receipts in this session will be permanently removed.',
+      variant: 'destructive',
+      action: <ToastAction altText="Confirm deletion" onClick={() => doDeleteSession(id)}>Delete</ToastAction>,
+    });
+  }, [toast, doDeleteSession]);
 
   const loadSession = useCallback((session: SavedSession) => {
     const restored: TxRow[] = (session.receipts || []).map((r: any) => ({

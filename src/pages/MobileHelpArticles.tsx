@@ -14,6 +14,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useToast } from '@/hooks/use-toast';
+import { ToastAction } from '@/components/ui/toast';
 import { 
   BookOpen, 
   Plus, 
@@ -609,9 +610,12 @@ export default function MobileHelpArticles() {
                               size="sm"
                               variant="destructive"
                               onClick={() => {
-                                if (confirm('Are you sure you want to delete this article?')) {
-                                  deleteMutation.mutate(article.id);
-                                }
+                                toast({
+                                  title: 'Delete this article?',
+                                  description: 'This action cannot be undone.',
+                                  variant: 'destructive',
+                                  action: <ToastAction altText="Confirm deletion" onClick={() => deleteMutation.mutate(article.id)}>Delete</ToastAction>,
+                                });
                               }}
                               data-testid={`button-delete-${article.id}`}
                             >

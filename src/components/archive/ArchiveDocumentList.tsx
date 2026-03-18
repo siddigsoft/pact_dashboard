@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 import { useArchive } from '@/context/archive/ArchiveContext';
+import { useToast } from '@/hooks/use-toast';
+import { ToastAction } from '@/components/ui/toast';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { FileText, Download, Eye, Trash2, Upload } from 'lucide-react';
@@ -77,10 +79,15 @@ const ArchiveDocumentList: React.FC = () => {
     setIsPreviewOpen(true);
   };
   
-  const handleDeleteDoc = async (docId: string) => {
-    if (window.confirm('Are you sure you want to delete this document?')) {
-      await deleteDocument(docId);
-    }
+  const { toast } = useToast();
+
+  const handleDeleteDoc = (docId: string) => {
+    toast({
+      title: 'Delete this document?',
+      description: 'This action cannot be undone.',
+      variant: 'destructive',
+      action: <ToastAction altText="Confirm deletion" onClick={() => deleteDocument(docId)}>Delete</ToastAction>,
+    });
   };
   
   if (loading) {

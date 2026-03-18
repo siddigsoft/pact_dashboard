@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
+import { ToastAction } from '@/components/ui/toast';
 import { supabase } from '@/integrations/supabase/client';
 import { ensureValidSession } from '@/lib/session-health';
 import { useAppContext } from '@/context/AppContext';
@@ -109,7 +110,6 @@ export default function Helpline() {
   }
 
   async function deleteContact(id: string) {
-    if (!confirm('Delete this contact?')) return;
     const session = await ensureValidSession();
     if (!session.success) return;
     try {
@@ -119,6 +119,15 @@ export default function Helpline() {
     } catch {
       toast({ title: 'Failed to delete', variant: 'destructive' });
     }
+  }
+
+  function confirmDeleteContact(id: string) {
+    toast({
+      title: 'Delete this contact?',
+      description: 'This action cannot be undone.',
+      variant: 'destructive',
+      action: <ToastAction altText="Confirm deletion" onClick={() => deleteContact(id)}>Delete</ToastAction>,
+    });
   }
 
   async function toggleActive(id: string, current: boolean) {
@@ -322,7 +331,7 @@ export default function Helpline() {
                           {isAdmin && (
                             <div className="flex gap-1 ml-2 shrink-0">
                               <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => startEdit(contact)} data-testid={`button-edit-${contact.id}`}><Edit2 className="w-3 h-3" /></Button>
-                              <Button variant="ghost" size="icon" className="h-7 w-7 text-red-500" onClick={() => deleteContact(contact.id)} data-testid={`button-delete-${contact.id}`}><Trash2 className="w-3 h-3" /></Button>
+                              <Button variant="ghost" size="icon" className="h-7 w-7 text-red-500" onClick={() => confirmDeleteContact(contact.id)} data-testid={`button-delete-${contact.id}`}><Trash2 className="w-3 h-3" /></Button>
                             </div>
                           )}
                         </div>

@@ -30,6 +30,7 @@ export function EmergencySOS({ isVisible, onClose }: EmergencySOSProps) {
   const { onlineUserIds } = useGlobalPresence();
   const [isHolding, setIsHolding] = useState(false);
   const [holdProgress, setHoldProgress] = useState(0);
+  const [sosError, setSosError] = useState<string | null>(null);
   const [isActivated, setIsActivated] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [sent, setSent] = useState(false);
@@ -218,7 +219,7 @@ export function EmergencySOS({ isVisible, onClose }: EmergencySOSProps) {
         } else if (recipientMode === 'online') {
           message = 'No users are online right now. Please try supervisors or select a specific person.';
         }
-        alert(message);
+        setSosError(message);
         setIsSending(false);
         return;
       }
@@ -265,7 +266,7 @@ export function EmergencySOS({ isVisible, onClose }: EmergencySOSProps) {
     } catch (error) {
       console.error('[SOS] Failed to send alert:', error);
       triggerHaptic('error');
-      alert('Failed to send emergency alert. Please try again or call directly.');
+      setSosError('Failed to send emergency alert. Please try again or call directly.');
     } finally {
       setIsSending(false);
     }
@@ -609,9 +610,16 @@ export function EmergencySOS({ isVisible, onClose }: EmergencySOSProps) {
                     </p>
                   </div>
 
+                  {sosError && (
+                    <div className="w-full rounded-xl bg-red-100 dark:bg-red-900/40 border border-red-300 dark:border-red-700 px-4 py-3 text-sm text-red-800 dark:text-red-200 flex items-start gap-2">
+                      <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+                      <span>{sosError}</span>
+                    </div>
+                  )}
+
                   <Button
                     className="w-full h-14 rounded-full bg-destructive hover:bg-destructive/90 text-white font-bold text-lg"
-                    onClick={handleSendSOS}
+                    onClick={() => { setSosError(null); handleSendSOS(); }}
                     disabled={isSending || !canSend}
                     data-testid="button-sos-confirm"
                     aria-label="Confirm and send emergency alert"

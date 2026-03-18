@@ -60,6 +60,7 @@ export default function ExchangeRates() {
   const [saving, setSaving] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState<number>(0);
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   
   const [newRate, setNewRate] = useState({
     source_bank: 'bank_of_khartoum',
@@ -174,8 +175,6 @@ export default function ExchangeRates() {
   };
 
   const handleDeleteRate = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this rate?')) return;
-
     try {
       const { error } = await supabase
         .from('exchange_rates')
@@ -631,15 +630,23 @@ export default function ExchangeRates() {
                               >
                                 <Edit className="h-4 w-4" />
                               </Button>
-                              <Button
-                                size="icon"
-                                variant="ghost"
-                                onClick={() => handleDeleteRate(rate.id)}
-                                className="text-destructive hover:text-destructive"
-                                data-testid={`button-delete-rate-${rate.id}`}
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
+                              {pendingDeleteId === rate.id ? (
+                                <div className="flex items-center gap-1">
+                                  <span className="text-xs text-muted-foreground">Sure?</span>
+                                  <Button size="sm" variant="destructive" className="h-7 px-2 text-xs" onClick={() => { handleDeleteRate(rate.id); setPendingDeleteId(null); }} data-testid={`button-confirm-delete-rate-${rate.id}`}>Yes</Button>
+                                  <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={() => setPendingDeleteId(null)} data-testid={`button-cancel-delete-rate-${rate.id}`}>No</Button>
+                                </div>
+                              ) : (
+                                <Button
+                                  size="icon"
+                                  variant="ghost"
+                                  onClick={() => setPendingDeleteId(rate.id)}
+                                  className="text-destructive hover:text-destructive"
+                                  data-testid={`button-delete-rate-${rate.id}`}
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              )}
                             </div>
                           </TableCell>
                         </TableRow>

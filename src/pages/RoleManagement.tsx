@@ -16,6 +16,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { useApproval } from '@/context/approval/ApprovalContext';
 import { useToast } from '@/hooks/use-toast';
+import { ToastAction } from '@/components/ui/toast';
 
 const RoleManagement = () => {
   const { currentUser, users, refreshUsers } = useAppContext();
@@ -76,15 +77,10 @@ const RoleManagement = () => {
     return ok;
   };
 
-  const handleDeleteRole = async (roleId: string) => {
+  const doDeleteRole = async (roleId: string) => {
     const roleToDelete = roles.find(r => r.id === roleId);
     if (!roleToDelete) return;
 
-    if (!confirm('Are you sure you want to delete this role? This action cannot be undone.')) {
-      return;
-    }
-
-    // SuperAdmin can bypass approval and delete directly
     if (canBypassApproval()) {
       await deleteRole(roleId);
       toast({
@@ -98,7 +94,6 @@ const RoleManagement = () => {
         variant: "destructive"
       });
     } else {
-      // Non-SuperAdmin: create approval request
       const result = await createApprovalRequest({
         type: 'delete_role',
         resourceType: 'role',
@@ -119,6 +114,17 @@ const RoleManagement = () => {
         });
       }
     }
+  };
+
+  const handleDeleteRole = (roleId: string) => {
+    const roleToDelete = roles.find(r => r.id === roleId);
+    if (!roleToDelete) return;
+    toast({
+      title: 'Delete this role?',
+      description: `"${roleToDelete.display_name || roleToDelete.name}" will be permanently deleted. This cannot be undone.`,
+      variant: 'destructive',
+      action: <ToastAction altText="Confirm deletion" onClick={() => doDeleteRole(roleId)}>Delete</ToastAction>,
+    });
   };
 
   const handleViewUsers = (role: RoleWithPermissions) => {

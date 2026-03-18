@@ -1,5 +1,6 @@
 
 import React, { useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { MMPFile } from '@/types/mmp';
 import { Button } from '@/components/ui/button';
@@ -14,7 +15,8 @@ interface ApprovedMMPListProps {
 }
 
 const ApprovedMMPList: React.FC<ApprovedMMPListProps> = ({ mmps, onSelectMMP }) => {
-  
+  const navigate = useNavigate();
+
   // Log MMPs for debugging
   useEffect(() => {
     console.log('MMPs passed to ApprovedMMPList:', mmps);
@@ -113,7 +115,7 @@ const ApprovedMMPList: React.FC<ApprovedMMPListProps> = ({ mmps, onSelectMMP }) 
               <Button 
                 variant="outline" 
                 className="mt-4"
-                onClick={() => window.location.href = "/mmp"}
+                onClick={() => navigate("/mmp")}
               >
                 Go to MMP Management
               </Button>

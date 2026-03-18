@@ -273,9 +273,7 @@ export function BaselineCostManagement({ onBaselineUpdated }: BaselineCostManage
     }
   };
 
-  const handleDeleteBaseline = async (site: SiteWithCostStatus) => {
-    if (!confirm(`Remove baseline cost for ${site.site_name}?`)) return;
-
+  const doDeleteBaseline = async (site: SiteWithCostStatus) => {
     setSaving(true);
     try {
       const result = await CostPredictionService.deleteBaselineCost(site.id);
@@ -292,6 +290,15 @@ export function BaselineCostManagement({ onBaselineUpdated }: BaselineCostManage
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleDeleteBaseline = (site: SiteWithCostStatus) => {
+    toast(`Remove baseline cost for ${site.site_name}?`, {
+      action: {
+        label: 'Remove',
+        onClick: () => doDeleteBaseline(site),
+      },
+    });
   };
 
   const handleBulkUpload = async () => {

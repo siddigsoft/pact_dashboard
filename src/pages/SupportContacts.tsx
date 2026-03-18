@@ -10,6 +10,7 @@ import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useToast } from "@/hooks/use-toast";
+import { ToastAction } from "@/components/ui/toast";
 import { useAppContext } from "@/context/AppContext";
 import {
   Dialog,
@@ -452,9 +453,12 @@ export default function SupportContacts() {
                           <DropdownMenuItem
                             className="text-destructive"
                             onClick={() => {
-                              if (confirm("Are you sure you want to delete this contact?")) {
-                                deleteContactMutation.mutate(contact.id);
-                              }
+                              toast({
+                                title: 'Delete this contact?',
+                                description: 'This action cannot be undone.',
+                                variant: 'destructive',
+                                action: <ToastAction altText="Confirm deletion" onClick={() => deleteContactMutation.mutate(contact.id)}>Delete</ToastAction>,
+                              });
                             }}
                           >
                             <Trash2 className="h-4 w-4 mr-2" />
