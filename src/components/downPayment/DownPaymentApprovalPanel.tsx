@@ -395,12 +395,7 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
   };
 
   const handleReject = async () => {
-    if (!selectedRequest || !currentUser) return;
-
-    if (!rejectionReason.trim()) {
-      alert('Please provide a reason for rejection');
-      return;
-    }
+    if (!selectedRequest || !currentUser || !rejectionReason.trim()) return;
 
     setProcessing(true);
     try {
@@ -430,7 +425,12 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
     if (!selectedRequest || !currentUser) return;
 
     if (paymentAmount <= 0) {
-      alert('Please enter a valid payment amount');
+      toast({ title: 'Invalid Amount / مبلغ غير صالح', description: 'Please enter a payment amount greater than zero.', variant: 'destructive' });
+      return;
+    }
+
+    if (paymentAmount > selectedRequest.remainingAmount) {
+      toast({ title: 'Amount Exceeds Remaining / المبلغ يتجاوز المتبقي', description: `Payment of ${paymentAmount.toLocaleString()} SDG exceeds the remaining balance of ${selectedRequest.remainingAmount.toLocaleString()} SDG.`, variant: 'destructive' });
       return;
     }
 
@@ -3164,6 +3164,12 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
                     max={selectedRequest.remainingAmount}
                     data-testid="input-payment-amount"
                   />
+                  {paymentAmount > selectedRequest.remainingAmount && (
+                    <p className="text-xs text-destructive mt-1 flex items-center gap-1" data-testid="text-overpayment-warning">
+                      <AlertTriangle className="h-3 w-3" />
+                      Exceeds remaining balance ({selectedRequest.remainingAmount.toLocaleString()} SDG)
+                    </p>
+                  )}
                 </div>
 
                 <div>

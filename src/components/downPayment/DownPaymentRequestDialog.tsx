@@ -7,6 +7,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { useDownPayment } from '@/context/downPayment/DownPaymentContext';
 import { useUser } from '@/context/user/UserContext';
+import { useToast } from '@/hooks/use-toast';
 import { Plus, Trash2, DollarSign, AlertTriangle, Banknote } from 'lucide-react';
 import { PaymentType, InstallmentPlan } from '@/types/down-payment';
 
@@ -37,6 +38,7 @@ export function DownPaymentRequestDialog({
 }: DownPaymentRequestDialogProps) {
   const { currentUser } = useUser();
   const { createRequest } = useDownPayment();
+  const { toast } = useToast();
   
   const [paymentType, setPaymentType] = useState<PaymentType>('full_advance');
   const [requestedAmount, setRequestedAmount] = useState(transportationBudget);
@@ -65,29 +67,29 @@ export function DownPaymentRequestDialog({
     if (!currentUser) return;
 
     if (!currentUser.bankAccount?.accountNumber) {
-      alert('Please add your bank account details in Settings → Profile → Bank Account before requesting an advance.');
+      toast({ title: 'Bank Account Required / مطلوب حساب بنكي', description: 'Please add your bank account details in Settings → Profile → Bank Account before requesting an advance.', variant: 'destructive' });
       return;
     }
 
     if (!justification.trim()) {
-      alert('Please provide justification for this request');
+      toast({ title: 'Justification Required / المبرر مطلوب', description: 'Please provide a justification for this request.', variant: 'destructive' });
       return;
     }
 
     if (requestedAmount <= 0) {
-      alert('Requested amount must be greater than zero');
+      toast({ title: 'Invalid Amount / مبلغ غير صالح', description: 'Requested amount must be greater than zero.', variant: 'destructive' });
       return;
     }
 
     if (requestedAmount > transportationBudget) {
-      alert(`Requested amount (${requestedAmount.toLocaleString()} SDG) cannot exceed transportation budget (${transportationBudget.toLocaleString()} SDG)`);
+      toast({ title: 'Budget Exceeded / تجاوز الميزانية', description: `Requested amount (${requestedAmount.toLocaleString()} SDG) cannot exceed the transportation budget (${transportationBudget.toLocaleString()} SDG).`, variant: 'destructive' });
       return;
     }
 
     if (paymentType === 'installments') {
       const total = installments.reduce((sum, inst) => sum + inst.amount, 0);
       if (total !== requestedAmount) {
-        alert(`Installment total (${total} SDG) must equal requested amount (${requestedAmount} SDG)`);
+        toast({ title: 'Installment Mismatch / خطأ في الأقساط', description: `Installment total (${total.toLocaleString()} SDG) must equal the requested amount (${requestedAmount.toLocaleString()} SDG).`, variant: 'destructive' });
         return;
       }
     }

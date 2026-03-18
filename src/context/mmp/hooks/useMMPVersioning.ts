@@ -70,10 +70,8 @@ export const useMMPVersioning = (setMMPFiles: React.Dispatch<React.SetStateActio
 
       if (error) {
         console.error('Supabase version update error:', error);
-        toast.error('Database version update failed, using local storage');
-        const existingFiles = JSON.parse(localStorage.getItem('mock_mmp_files') || '[]');
-        const updatedFiles = existingFiles.map((m: MMPFile) => m.id === id ? updatedMMP : m);
-        localStorage.setItem('mock_mmp_files', JSON.stringify(updatedFiles));
+        toast.error('Failed to save version update. Please try again.');
+        return false;
       } else {
         toast.success('MMP version updated successfully');
       }
