@@ -31,13 +31,19 @@ import {
 } from 'lucide-react';
 import { format, isToday, isYesterday, isThisWeek, parseISO } from 'date-fns';
 
+// Web category chips should reflect DB `event_type` + priority (not title keyword heuristics).
+// Matches rows like: event_type=assignments|financial|broadcast|account|system|approvals|calls|messages|...
 const NOTIFICATION_CATEGORIES = [
   { id: 'all', label: 'All', icon: Bell, count: 0 },
   { id: 'urgent', label: 'Urgent', icon: AlertCircle, count: 0, color: 'text-red-600' },
+  { id: 'assignments', label: 'Assignments', icon: MapPin, count: 0, color: 'text-cyan-600' },
+  { id: 'financial', label: 'Financial', icon: DollarSign, count: 0, color: 'text-emerald-600' },
+  { id: 'approvals', label: 'Approvals', icon: CheckCircle, count: 0, color: 'text-green-600' },
+  { id: 'broadcast', label: 'Broadcasts', icon: Megaphone, count: 0, color: 'text-amber-600' },
+  { id: 'account', label: 'Account', icon: Users, count: 0, color: 'text-orange-600' },
+  { id: 'system', label: 'System', icon: RefreshCw, count: 0, color: 'text-slate-600' },
   { id: 'messages', label: 'Messages', icon: MessageSquare, count: 0, color: 'text-blue-600' },
-  { id: 'calls', label: 'Calls', icon: Phone, count: 0, color: 'text-green-600' },
-  { id: 'tasks', label: 'Tasks', icon: CheckCircle, count: 0, color: 'text-purple-600' },
-  { id: 'updates', label: 'Updates', icon: RefreshCw, count: 0, color: 'text-amber-600' },
+  { id: 'calls', label: 'Calls', icon: Phone, count: 0, color: 'text-purple-600' },
 ];
 
 const SEND_NOTIFICATION_TEMPLATES = [
@@ -121,13 +127,19 @@ const Notifications: React.FC = () => {
     }
     if (selectedCategory !== 'all') {
       filtered = filtered.filter(n => {
-        const title = (n.title || '').toLowerCase();
         switch (selectedCategory) {
-          case 'urgent': return title.includes('urgent') || title.includes('alert') || title.includes('error');
-          case 'messages': return title.includes('message') || title.includes('chat');
-          case 'calls': return title.includes('call') || title.includes('missed');
-          case 'tasks': return title.includes('task') || title.includes('assigned') || title.includes('complete');
-          case 'updates': return title.includes('update') || title.includes('change') || title.includes('new');
+          case 'urgent':
+            return n.priority === 'urgent' || n.priority === 'high';
+          case 'messages':
+          case 'calls':
+          case 'assignments':
+          case 'financial':
+          case 'approvals':
+          case 'broadcast':
+          case 'account':
+          case 'system':
+            // `category` is mapped from DB `event_type` in NotificationContext.
+            return (n.category || '').toLowerCase() === selectedCategory;
           default: return true;
         }
       });
@@ -139,14 +151,13 @@ const Notifications: React.FC = () => {
 
   const categoryCounts = useMemo(() => {
     const counts: Record<string, number> = { all: notifications.length };
-    notifications.forEach(n => {
-      const title = (n.title || '').toLowerCase();
-      if (title.includes('urgent') || title.includes('alert')) counts['urgent'] = (counts['urgent'] || 0) + 1;
-      if (title.includes('message') || title.includes('chat')) counts['messages'] = (counts['messages'] || 0) + 1;
-      if (title.includes('call')) counts['calls'] = (counts['calls'] || 0) + 1;
-      if (title.includes('task') || title.includes('assigned')) counts['tasks'] = (counts['tasks'] || 0) + 1;
-      if (title.includes('update')) counts['updates'] = (counts['updates'] || 0) + 1;
-    });
+    for (const n of notifications) {
+      const cat = (n.category || '').toLowerCase();
+      if (n.priority === 'urgent' || n.priority === 'high') {
+        counts.urgent = (counts.urgent || 0) + 1;
+      }
+      if (cat) counts[cat] = (counts[cat] || 0) + 1;
+    }
     return counts;
   }, [notifications]);
 
