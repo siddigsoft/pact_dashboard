@@ -362,9 +362,7 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
 
     setProcessing(true);
     try {
-      const useSupervisorPath =
-      userRole === 'supervisor' ||
-      selectedRequest.status === 'pending_supervisor';
+      const useSupervisorPath = userRole === 'supervisor';
 
     const success = useSupervisorPath
         ? await supervisorApprove({
@@ -532,40 +530,6 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
     }
   };
 
-  const handleBulkMarkPaid = async () => {
-    if (!currentUser || selectedIds.size === 0) return;
-    setProcessing(true);
-    try {
-      let successCount = 0;
-      let failCount = 0;
-      const now = new Date().toISOString();
-      const ids = Array.from(selectedIds);
-      for (const id of ids) {
-        const req = requests.find(r => r.id === id);
-        if (!req || req.status !== 'approved') { failCount++; continue; }
-        try {
-          const { error } = await supabase
-            .from('down_payment_requests')
-            .update({
-              status: 'fully_paid',
-              total_paid_amount: req.approvedAmount || req.requestedAmount,
-              remaining_amount: 0,
-              updated_at: now,
-            } as any)
-            .eq('id', id);
-          if (error) failCount++; else successCount++;
-        } catch { failCount++; }
-      }
-      setSelectedIds(new Set());
-      await refreshRequests();
-      toast({
-        title: `Bulk Mark Paid Complete / اكتمال التحديد كمدفوع`,
-        description: `${successCount} marked as paid${failCount > 0 ? `, ${failCount} failed` : ''}`,
-      });
-    } finally {
-      setProcessing(false);
-    }
-  };
 
   const handleBulkDelete = async () => {
     if (!currentUser || selectedIds.size === 0) return;
@@ -2744,10 +2708,7 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
                     <DollarSign className="h-4 w-4 mr-1" />
                     Process Payment
                   </Button>
-                  <Button size="sm" variant="outline" onClick={handleBulkMarkPaid} disabled={approvedCount === 0 || processing} data-testid="button-selected-mark-paid">
-                    <Wallet className="h-4 w-4 mr-1" />
-                    Mark Paid ({approvedCount})
-                  </Button>
+
                   <Button size="sm" variant="outline" onClick={() => {
                     if (selectedProcessing.length > 0) handleDownloadBulkPdf(selectedProcessing, `${selectedProcessing.length} Selected`);
                   }} disabled={processing} data-testid="button-selected-bulk-pdf">

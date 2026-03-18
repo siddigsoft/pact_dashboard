@@ -320,6 +320,7 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
       if (error) throw error;
 
       // If no rows updated, RLS may be blocking — try super admin bypass (approve both tiers)
+      let bypassFired = false;
       if (!updated || updated.length === 0) {
         const { data: bypass, error: bypassErr } = await supabase
           .from('down_payment_requests')
@@ -347,34 +348,39 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
         if (!bypass || bypass.length === 0) {
           throw new Error('Approval failed: permission denied. Contact your database administrator to update the RLS policy for down_payment_requests.');
         }
+        bypassFired = true;
       }
 
       if (!data.silent) {
         if (request.requestedBy) {
           NotificationTriggerService.send({
             userId: request.requestedBy,
-            title: 'Down-Payment Request Approved by Supervisor',
-            message: `Your down-payment request for "${request.siteName}" (${approvedAmount.toLocaleString()} SDG) has been approved by supervisor and forwarded to admin.`,
+            title: bypassFired ? 'Down-Payment Request Fully Approved' : 'Down-Payment Request Approved by Supervisor',
+            message: bypassFired
+              ? `Your down-payment request for "${request.siteName}" (${approvedAmount.toLocaleString()} SDG) has been fully approved and is ready for payment processing.`
+              : `Your down-payment request for "${request.siteName}" (${approvedAmount.toLocaleString()} SDG) has been approved by supervisor and forwarded to admin.`,
             type: 'success',
             category: 'financial',
             priority: 'high',
-            link: '/down-payment-approval',
+            link: bypassFired ? '/wallet' : '/down-payment-approval',
             sendEmail: true,
-            emailActionLabel: 'View Request'
+            emailActionLabel: bypassFired ? 'View Wallet' : 'View Request'
           }).catch(console.error);
         }
         EmailNotificationService.sendAdvanceApprovalToFOM(
           data.approvedByName || 'Supervisor',
-          'supervisor',
+          bypassFired ? 'admin' : 'supervisor',
           request.requestedByName || 'Field Staff',
           request.siteName || 'Unknown Site',
           approvedAmount,
           'SDG',
-          'supervisor'
+          bypassFired ? 'admin' : 'supervisor'
         ).catch(console.error);
         toast({
-          title: 'Request Approved',
-          description: `Approved ${approvedAmount.toLocaleString()} SDG - forwarded to admin`,
+          title: bypassFired ? 'Request Fully Approved' : 'Request Approved',
+          description: bypassFired
+            ? `Approved ${approvedAmount.toLocaleString()} SDG - ready for payment processing`
+            : `Approved ${approvedAmount.toLocaleString()} SDG - forwarded to admin`,
         });
         refreshRequests().catch(console.error);
       }
@@ -482,24 +488,35 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
       const approvedAmount = data.customAmount !== undefined 
         ? data.customAmount 
         : (request.approvedAmount || request.requestedAmount);
-      
+
+      const isPendingSupervisor = request.status === 'pending_supervisor';
+      const now = new Date().toISOString();
+      const adminUpdatePayload: Record<string, any> = {
+        admin_status: 'approved',
+        admin_processed_by: data.approvedBy,
+        admin_processed_at: now,
+        admin_notes: data.notes,
+        remaining_amount: approvedAmount - request.totalPaidAmount,
+        status: 'approved',
+        updated_at: now,
+        metadata: {
+          ...request.metadata,
+          admin_processed_by_name: data.approvedByName,
+          admin_approved_amount: approvedAmount,
+          approved_amount: approvedAmount,
+          ...(isPendingSupervisor ? { super_admin_bypass: true } : {}),
+        },
+      };
+      if (isPendingSupervisor) {
+        adminUpdatePayload.supervisor_status = 'approved';
+        adminUpdatePayload.supervisor_approved_by = data.approvedBy;
+        adminUpdatePayload.supervisor_approved_at = now;
+        adminUpdatePayload.supervisor_notes = data.notes;
+      }
+
       const { data: adminUpdated, error } = await supabase
         .from('down_payment_requests')
-        .update({
-          admin_status: 'approved',
-          admin_processed_by: data.approvedBy,
-          admin_processed_at: new Date().toISOString(),
-          admin_notes: data.notes,
-          remaining_amount: approvedAmount - request.totalPaidAmount,
-          status: 'approved',
-          updated_at: new Date().toISOString(),
-          metadata: {
-            ...request.metadata,
-            admin_processed_by_name: data.approvedByName,
-            admin_approved_amount: approvedAmount,
-            approved_amount: approvedAmount,
-          },
-        })
+        .update(adminUpdatePayload)
         .eq('id', data.requestId)
         .select('id');
 
