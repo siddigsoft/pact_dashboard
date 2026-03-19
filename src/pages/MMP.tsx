@@ -5343,7 +5343,7 @@ const MMP = () => {
                   )}
                   <VerifiedSitesDisplay 
                     verifiedSites={filteredVerifiedCategorySiteRows} 
-                    showApproveButton={isAdmin || isICT || isFOM}
+                    showApproveButton={isAdmin || isICT || isFOM || isDataTeam}
                     onFilteredSiteIdsChange={(ids, count, hasFilter, entries) => {
                       setTableFilteredSiteIds(ids);
                       setTableFilteredCount(hasFilter ? count : 0);
@@ -5433,7 +5433,7 @@ const MMP = () => {
                         <h3 className="text-lg font-semibold">Approved & Costed Site Entries</h3>
                         <Badge variant="secondary">{approvedCostedSiteEntries.length} entries</Badge>
                       </div>
-                      {(isAdmin || isICT) && approvedCostedSiteEntries.length > 0 && (
+                      {(isAdmin || isICT || isDataTeam) && approvedCostedSiteEntries.length > 0 && (
                         <div className="mb-4 flex flex-wrap gap-2">
                           <Button
                             variant="default"
