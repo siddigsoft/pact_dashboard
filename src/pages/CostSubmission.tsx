@@ -53,6 +53,7 @@ import { EmailCCInput } from '@/components/EmailCCInput';
 import { generateFinancialStatementPdf, type StatementRow, type StatementConfig } from '@/utils/financialStatementPdf';
 import { generateFinancialStatementExcel } from '@/utils/financialStatementExcel';
 import { generateBulkCostPDFBase64, generateBulkCostExcelBase64, type BulkSubmission, type BulkUserMap, type BulkProjectMap } from '@/utils/bulkCostEmailAttachments';
+import { NotificationTriggerService } from '@/services/NotificationTriggerService';
 import { getStatesInHub, normalizeHubId } from '@/data/sudanStates';
 import { getHubAccessInfo, isStateInAnyHub } from '@/utils/hubAccessControl';
 
@@ -226,6 +227,17 @@ const CostSubmission = () => {
     notes: string;
     uploading: boolean;
   }>({ open: false, submission: null, proofFile: null, proofPreviewUrl: null, notes: '', uploading: false });
+
+  const [selectedCostIds, setSelectedCostIds] = useState<Set<string>>(new Set());
+  const [batchCostPayDialog, setBatchCostPayDialog] = useState<{
+    open: boolean;
+    submissions: OperationalCostSubmission[];
+    proofFile: File | null;
+    proofPreviewUrl: string | null;
+    notes: string;
+    uploading: boolean;
+  }>({ open: false, submissions: [], proofFile: null, proofPreviewUrl: null, notes: '', uploading: false });
+
   const [viewAdvanceDetails, setViewAdvanceDetails] = useState<OperationalCostSubmission | null>(null);
   const [activeReconciliation, setActiveReconciliation] = useState<OperationalCostSubmission | null>(null);
   const [reconcileNotes, setReconcileNotes] = useState('');
@@ -994,6 +1006,19 @@ const CostSubmission = () => {
           title: "Payment Sent / تم إرسال الدفعة",
           description: "Marked as paid. The recipient can now view the receipt and confirm in their Cost Submissions tab. / تم التحديد كمدفوع. يمكن للمستلم الآن الاطلاع على الإيصال والتأكيد."
         });
+        // Notify the submitter
+        const amount = (oc.amount_cents / 100).toLocaleString();
+        NotificationTriggerService.send({
+          userId: oc.submitted_by,
+          title: 'Cost Submission Paid / تم صرف المطالبة',
+          message: `Your cost submission "${oc.reference_number || oc.id.slice(0, 8)}" (${oc.currency} ${amount}) has been paid. Please confirm receipt in your Cost Submissions tab.`,
+          type: 'success',
+          category: 'financial',
+          priority: 'high',
+          link: '/cost-submission',
+          sendEmail: true,
+          emailActionLabel: 'View Submission',
+        }).catch(console.error);
         setMarkAsPaidDialog({ open: false, submission: null, proofFile: null, proofPreviewUrl: null, notes: '', uploading: false });
         fetchOperationalCosts();
       }
@@ -1006,6 +1031,104 @@ const CostSubmission = () => {
   };
 
   const handleMarkAsPaid = (oc: OperationalCostSubmission) => openMarkAsPaidDialog(oc);
+
+  const toggleCostSelection = (id: string) => {
+    setSelectedCostIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const handleOpenBatchCostPay = (subs: OperationalCostSubmission[]) => {
+    const eligible = subs.filter(s => canMarkAsPaid(s));
+    if (eligible.length === 0) return;
+    setBatchCostPayDialog({ open: true, submissions: eligible, proofFile: null, proofPreviewUrl: null, notes: '', uploading: false });
+  };
+
+  const handleBatchCostPayProofFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const previewUrl = file.type.startsWith('image/') ? URL.createObjectURL(file) : null;
+    setBatchCostPayDialog(prev => ({ ...prev, proofFile: file, proofPreviewUrl: previewUrl }));
+  };
+
+  const handleConfirmBatchCostPay = async () => {
+    const { submissions: subs, proofFile, notes } = batchCostPayDialog;
+    if (!currentUser?.id || subs.length === 0) return;
+    if (!proofFile) {
+      toast({ title: "Receipt Required / الإيصال مطلوب", description: "Attach one receipt that covers all selected payments.", variant: "destructive" });
+      return;
+    }
+    setBatchCostPayDialog(prev => ({ ...prev, uploading: true }));
+    try {
+      const timestamp = Date.now();
+      const random = Math.random().toString(36).substring(2, 8);
+      const extension = proofFile.name.split('.').pop()?.toLowerCase() || 'file';
+      const filePath = `payment-proofs/batch_cost_${timestamp}_${random}.${extension}`;
+      const { error: uploadErr } = await supabase.storage.from('mmp-files').upload(filePath, proofFile, { cacheControl: '3600', upsert: false });
+      if (uploadErr) throw new Error(uploadErr.message);
+      const proofUrl = supabase.storage.from('mmp-files').getPublicUrl(filePath).data.publicUrl;
+      const now = new Date().toISOString();
+
+      let successCount = 0;
+      let failCount = 0;
+      for (const sub of subs) {
+        const { error } = await supabase.from('operational_cost_submissions').update({
+          status: 'paid',
+          paid_at: now,
+          paid_by: currentUser.id,
+          updated_at: now,
+          payment_proof_url: proofUrl,
+          payment_proof_uploaded_at: now,
+          ...(notes.trim() ? { payment_proof_notes: notes.trim() } : {}),
+        }).eq('id', sub.id);
+        if (error) { failCount++; } else { successCount++; }
+      }
+
+      // Consolidated notifications — one per submitter covering all their paid submissions
+      const byUser = subs.reduce<Record<string, Array<{ ref: string; amount: number; currency: string }>>>((acc, sub) => {
+        const uid = sub.submitted_by;
+        if (!acc[uid]) acc[uid] = [];
+        acc[uid].push({ ref: sub.reference_number || sub.id.slice(0, 8), amount: sub.amount_cents / 100, currency: sub.currency });
+        return acc;
+      }, {});
+
+      Object.entries(byUser).forEach(([userId, items]) => {
+        const isSingle = items.length === 1;
+        const total = items.reduce((s, i) => s + i.amount, 0);
+        const currency = items[0].currency;
+        const breakdown = items.map(i => `• Ref ${i.ref} — ${i.currency} ${i.amount.toLocaleString()}`).join('\n');
+        NotificationTriggerService.send({
+          userId,
+          title: isSingle
+            ? 'Cost Submission Paid / تم صرف المطالبة'
+            : `${items.length} Cost Submissions Paid / تم صرف ${items.length} مطالبات`,
+          message: isSingle
+            ? `Your cost submission "${items[0].ref}" (${currency} ${items[0].amount.toLocaleString()}) has been paid. Please confirm receipt in your Cost Submissions tab.`
+            : `${items.length} of your cost submissions have been paid.\n\nTotal: ${currency} ${total.toLocaleString()}\n\n${breakdown}\n\nPlease confirm receipt in your Cost Submissions tab.`,
+          type: 'success',
+          category: 'financial',
+          priority: 'high',
+          link: '/cost-submission',
+          sendEmail: true,
+          emailActionLabel: 'View Submissions',
+        }).catch(console.error);
+      });
+
+      toast({
+        title: `Batch Payment Complete / اكتمل الدفع الجماعي`,
+        description: `${successCount} submission${successCount > 1 ? 's' : ''} paid with one shared receipt${failCount > 0 ? ` · ${failCount} failed` : ''}.`,
+      });
+      setBatchCostPayDialog({ open: false, submissions: [], proofFile: null, proofPreviewUrl: null, notes: '', uploading: false });
+      setSelectedCostIds(new Set());
+      fetchOperationalCosts();
+    } catch (err: any) {
+      toast({ title: "Error / خطأ", description: err.message || "Batch payment failed.", variant: "destructive" });
+    } finally {
+      setBatchCostPayDialog(prev => ({ ...prev, uploading: false }));
+    }
+  };
 
   const canRequestPayment = (oc: OperationalCostSubmission): boolean => {
     const derivedStatus = getOperationalDerivedStatus(oc);
@@ -2710,6 +2833,58 @@ const CostSubmission = () => {
             </Button>
           </div>
 
+          {/* Batch Pay selection bar — visible when ≥1 payable submission is selected */}
+          {(() => {
+            const payableOcs = filteredOperationalCosts.filter(canMarkAsPaid);
+            const selectedPayable = payableOcs.filter(oc => selectedCostIds.has(oc.id));
+            if (payableOcs.length === 0) return null;
+            return (
+              <div className="flex items-center justify-between gap-2 flex-wrap rounded-lg border border-emerald-200 dark:border-emerald-800 bg-emerald-50/50 dark:bg-emerald-950/20 px-3 py-2">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-7 px-2 text-xs"
+                    onClick={() => {
+                      if (selectedPayable.length === payableOcs.length) {
+                        setSelectedCostIds(prev => {
+                          const next = new Set(prev);
+                          payableOcs.forEach(oc => next.delete(oc.id));
+                          return next;
+                        });
+                      } else {
+                        setSelectedCostIds(prev => {
+                          const next = new Set(prev);
+                          payableOcs.forEach(oc => next.add(oc.id));
+                          return next;
+                        });
+                      }
+                    }}
+                    data-testid="button-select-all-payable"
+                  >
+                    {selectedPayable.length === payableOcs.length ? 'Deselect All' : `Select All Approved (${payableOcs.length})`}
+                  </Button>
+                  {selectedPayable.length > 0 && (
+                    <span className="text-xs text-muted-foreground">
+                      {selectedPayable.length} selected · {selectedPayable[0].currency} {selectedPayable.reduce((s, oc) => s + oc.amount_cents / 100, 0).toLocaleString()} total
+                    </span>
+                  )}
+                </div>
+                {selectedPayable.length >= 2 && (
+                  <Button
+                    size="sm"
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white h-7 px-3 text-xs"
+                    onClick={() => handleOpenBatchCostPay(selectedPayable)}
+                    data-testid="button-batch-cost-pay"
+                  >
+                    <Wallet className="h-3.5 w-3.5 mr-1" />
+                    Batch Pay ({selectedPayable.length})
+                  </Button>
+                )}
+              </div>
+            );
+          })()}
+
           {/* Operational Cost Submissions */}
           {operationalCostsLoading && filteredOperationalCosts.length === 0 && (
             <Card>
@@ -2772,9 +2947,20 @@ const CostSubmission = () => {
                     return (
                       <div
                         key={oc.id}
-                        className="rounded-md border bg-background p-4 space-y-3"
+                        className={`rounded-md border bg-background p-4 space-y-3 transition-colors ${selectedCostIds.has(oc.id) ? 'border-emerald-400 bg-emerald-50/30 dark:bg-emerald-950/10' : ''}`}
                         data-testid={`operational-cost-${oc.id}`}
                       >
+                          {canMarkAsPaid(oc) && (
+                            <div className="flex items-center gap-2 mb-1">
+                              <Checkbox
+                                id={`select-cost-${oc.id}`}
+                                checked={selectedCostIds.has(oc.id)}
+                                onCheckedChange={() => toggleCostSelection(oc.id)}
+                                data-testid={`checkbox-select-cost-${oc.id}`}
+                              />
+                              <label htmlFor={`select-cost-${oc.id}`} className="text-xs text-muted-foreground cursor-pointer">Select for batch payment</label>
+                            </div>
+                          )}
                           <div className="flex items-start justify-between gap-3 flex-wrap">
                             <div className="flex-1 min-w-0 space-y-1">
                               <div className="flex items-center gap-2 flex-wrap">
@@ -4612,6 +4798,148 @@ const CostSubmission = () => {
                 <><RefreshCw className="h-4 w-4 mr-1.5 animate-spin" /> {markAsPaidDialog.proofFile ? 'Uploading...' : 'Saving...'}</>
               ) : (
                 <><CheckCircle className="h-4 w-4 mr-1.5" /> Confirm Payment / تأكيد الدفع</>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Batch Cost Pay — one shared receipt for multiple submissions */}
+      <Dialog
+        open={batchCostPayDialog.open}
+        onOpenChange={(open) => {
+          if (!open && !batchCostPayDialog.uploading) {
+            if (batchCostPayDialog.proofPreviewUrl) URL.revokeObjectURL(batchCostPayDialog.proofPreviewUrl);
+            setBatchCostPayDialog({ open: false, submissions: [], proofFile: null, proofPreviewUrl: null, notes: '', uploading: false });
+          }
+        }}
+      >
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Wallet className="h-5 w-5 text-emerald-600" />
+              Batch Cost Payment / دفع مصاريف جماعي
+            </DialogTitle>
+            <DialogDescription>
+              One receipt covers all selected submissions. The same receipt will be attached to every submission below.
+            </DialogDescription>
+          </DialogHeader>
+
+          {batchCostPayDialog.submissions.length > 0 && (
+            <div className="space-y-4">
+              {/* Summary */}
+              <div className="rounded-lg bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 p-3 space-y-1">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-semibold text-emerald-800 dark:text-emerald-300">
+                    {batchCostPayDialog.submissions.length} Submission{batchCostPayDialog.submissions.length > 1 ? 's' : ''}
+                  </span>
+                  <span className="text-lg font-bold tabular-nums text-emerald-700 dark:text-emerald-400">
+                    {batchCostPayDialog.submissions[0]?.currency} {batchCostPayDialog.submissions.reduce((s, sub) => s + sub.amount_cents / 100, 0).toLocaleString()}
+                  </span>
+                </div>
+                <p className="text-xs text-muted-foreground">Total covered by this single receipt</p>
+              </div>
+
+              {/* Breakdown */}
+              <div className="rounded-lg border divide-y max-h-48 overflow-y-auto">
+                {batchCostPayDialog.submissions.map((sub) => {
+                  const submitterName = users.find(u => u.id === sub.submitted_by)?.name || 'Unknown';
+                  const ref = sub.reference_number || sub.id.slice(0, 8).toUpperCase();
+                  return (
+                    <div key={sub.id} className="flex items-center justify-between px-3 py-2 text-sm">
+                      <div className="min-w-0">
+                        <p className="font-medium truncate">{sub.description?.split('\n')[0]?.replace(/^\[.*?\]\s*/, '') || ref}</p>
+                        <p className="text-xs text-muted-foreground">{submitterName} · Ref {ref}</p>
+                      </div>
+                      <span className="font-semibold tabular-nums shrink-0 ml-2">
+                        {sub.currency} {(sub.amount_cents / 100).toLocaleString()}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Receipt upload */}
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">
+                  Shared Receipt / الإيصال المشترك <span className="text-red-500">*</span>
+                </Label>
+                <div className="border-2 border-dashed border-muted-foreground/30 rounded-lg p-4 text-center hover:border-emerald-400 transition-colors relative">
+                  <input
+                    type="file"
+                    accept="image/*,application/pdf"
+                    className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                    onChange={handleBatchCostPayProofFileChange}
+                    disabled={batchCostPayDialog.uploading}
+                    data-testid="input-batch-cost-payment-proof"
+                  />
+                  {batchCostPayDialog.proofFile ? (
+                    <div className="space-y-2">
+                      {batchCostPayDialog.proofPreviewUrl ? (
+                        <img src={batchCostPayDialog.proofPreviewUrl} alt="Receipt preview" className="max-h-32 mx-auto rounded object-contain" />
+                      ) : (
+                        <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
+                          <FileText className="h-8 w-8 text-red-500" />
+                          <span>{batchCostPayDialog.proofFile.name}</span>
+                        </div>
+                      )}
+                      <p className="text-xs text-muted-foreground">Click to change / انقر للتغيير</p>
+                    </div>
+                  ) : (
+                    <div className="text-muted-foreground">
+                      <ImageIcon className="h-8 w-8 mx-auto mb-1 opacity-40" />
+                      <p className="text-sm">Upload the batch receipt (image or PDF)</p>
+                      <p className="text-xs opacity-60">This one file links to all {batchCostPayDialog.submissions.length} submissions</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Notes */}
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">
+                  Notes / ملاحظات <span className="text-muted-foreground font-normal">(optional)</span>
+                </Label>
+                <Textarea
+                  value={batchCostPayDialog.notes}
+                  onChange={(e) => setBatchCostPayDialog(prev => ({ ...prev, notes: e.target.value }))}
+                  placeholder="e.g. Bank transfer batch ref: TXN-BATCH-001..."
+                  className="resize-none h-20 text-sm"
+                  disabled={batchCostPayDialog.uploading}
+                  data-testid="input-batch-cost-payment-notes"
+                />
+              </div>
+
+              <p className="text-xs text-muted-foreground bg-muted/50 rounded p-2">
+                Each submitter receives one consolidated payment notification listing all their paid submissions.
+              </p>
+            </div>
+          )}
+
+          <DialogFooter className="gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                if (batchCostPayDialog.proofPreviewUrl) URL.revokeObjectURL(batchCostPayDialog.proofPreviewUrl);
+                setBatchCostPayDialog({ open: false, submissions: [], proofFile: null, proofPreviewUrl: null, notes: '', uploading: false });
+              }}
+              disabled={batchCostPayDialog.uploading}
+              data-testid="button-cancel-batch-cost-pay"
+            >
+              Cancel / إلغاء
+            </Button>
+            <Button
+              type="button"
+              onClick={handleConfirmBatchCostPay}
+              disabled={batchCostPayDialog.uploading || !batchCostPayDialog.proofFile}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white"
+              data-testid="button-confirm-batch-cost-pay"
+            >
+              {batchCostPayDialog.uploading ? (
+                <><RefreshCw className="h-4 w-4 mr-1.5 animate-spin" /> Processing...</>
+              ) : (
+                <><CheckCircle className="h-4 w-4 mr-1.5" /> Pay {batchCostPayDialog.submissions.length} Submission{batchCostPayDialog.submissions.length > 1 ? 's' : ''}</>
               )}
             </Button>
           </DialogFooter>
