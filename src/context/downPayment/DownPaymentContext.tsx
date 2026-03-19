@@ -1136,12 +1136,26 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
         title: `${success} Request${success > 1 ? 's' : ''} Approved / تمت الموافقة`,
         description: `${success} approved successfully${failed > 0 ? ` · ${failed} failed` : ''}`,
       });
-      // Fire notifications in background — don't block the UI
-      fullyApprovedUserIds.forEach(({ userId, siteName, amount }) => {
+      // Fire consolidated notifications — one notification per requester, not one per request
+      const fullyApprovedByUser = fullyApprovedUserIds.reduce<Record<string, Array<{ siteName: string; amount: number }>>>(
+        (acc, { userId, siteName, amount }) => {
+          if (!acc[userId]) acc[userId] = [];
+          acc[userId].push({ siteName, amount });
+          return acc;
+        }, {}
+      );
+      Object.entries(fullyApprovedByUser).forEach(([userId, items]) => {
+        const isSingle = items.length === 1;
+        const totalAmount = items.reduce((s, i) => s + i.amount, 0);
+        const siteList = items.map(i => `• ${i.siteName} — ${i.amount.toLocaleString()} SDG`).join('\n');
         NotificationTriggerService.send({
           userId,
-          title: 'Down-Payment Request Fully Approved',
-          message: `Your down-payment request for "${siteName}" (${amount.toLocaleString()} SDG) has been fully approved and is ready for payment processing.`,
+          title: isSingle
+            ? 'Transport Advance Approved / تمت الموافقة على السلفة'
+            : `${items.length} Transport Advances Approved / تمت الموافقة على ${items.length} سلف`,
+          message: isSingle
+            ? `Your transport advance for "${items[0].siteName}" (${items[0].amount.toLocaleString()} SDG) has been fully approved and is ready for payment processing.`
+            : `${items.length} of your transport advance requests have been approved.\n\nTotal: ${totalAmount.toLocaleString()} SDG\n\n${siteList}\n\nAll requests are ready for payment processing.`,
           type: 'success',
           category: 'financial',
           priority: 'high',
@@ -1150,17 +1164,32 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
           emailActionLabel: 'View Wallet',
         }).catch(console.error);
       });
-      pendingAdminUserIds.forEach(({ userId, siteName, amount }) => {
+
+      const pendingAdminByUser = pendingAdminUserIds.reduce<Record<string, Array<{ siteName: string; amount: number }>>>(
+        (acc, { userId, siteName, amount }) => {
+          if (!acc[userId]) acc[userId] = [];
+          acc[userId].push({ siteName, amount });
+          return acc;
+        }, {}
+      );
+      Object.entries(pendingAdminByUser).forEach(([userId, items]) => {
+        const isSingle = items.length === 1;
+        const totalAmount = items.reduce((s, i) => s + i.amount, 0);
+        const siteList = items.map(i => `• ${i.siteName} — ${i.amount.toLocaleString()} SDG`).join('\n');
         NotificationTriggerService.send({
           userId,
-          title: 'Down-Payment Request Approved by Supervisor',
-          message: `Your down-payment request for "${siteName}" (${amount.toLocaleString()} SDG) has been approved by your supervisor and forwarded to admin for final approval.`,
+          title: isSingle
+            ? 'Advance Approved by Supervisor / وافق المشرف على السلفة'
+            : `${items.length} Advances Approved by Supervisor / وافق المشرف على ${items.length} سلف`,
+          message: isSingle
+            ? `Your transport advance for "${items[0].siteName}" (${items[0].amount.toLocaleString()} SDG) has been approved by your supervisor and forwarded to admin for final approval.`
+            : `${items.length} of your transport advance requests have been approved by your supervisor.\n\nTotal: ${totalAmount.toLocaleString()} SDG\n\n${siteList}\n\nAll are pending final admin approval.`,
           type: 'success',
           category: 'financial',
           priority: 'high',
           link: '/down-payment-approval',
           sendEmail: true,
-          emailActionLabel: 'View Request',
+          emailActionLabel: 'View Requests',
         }).catch(console.error);
       });
 
