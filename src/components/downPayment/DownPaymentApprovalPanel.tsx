@@ -259,6 +259,15 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
     uploading: boolean;
   }>({ open: false, request: null, proofFile: null, proofPreviewUrl: null, notes: '', uploading: false });
 
+  const [batchPayDialog, setBatchPayDialog] = useState<{
+    open: boolean;
+    requests: DownPaymentRequest[];
+    proofFile: File | null;
+    proofPreviewUrl: string | null;
+    notes: string;
+    uploading: boolean;
+  }>({ open: false, requests: [], proofFile: null, proofPreviewUrl: null, notes: '', uploading: false });
+
   const [editDialog, setEditDialog] = useState<{
     open: boolean;
     request: DownPaymentRequest | null;
@@ -1437,6 +1446,94 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
 
   const handleMarkAsPaid = (req: DownPaymentRequest) => {
     setMarkAsPaidDialog({ open: true, request: req, proofFile: null, proofPreviewUrl: null, notes: '', uploading: false });
+  };
+
+  const handleOpenBatchPay = (reqs: DownPaymentRequest[]) => {
+    const eligible = reqs.filter(r => r.status === 'approved');
+    if (eligible.length === 0) return;
+    setBatchPayDialog({ open: true, requests: eligible, proofFile: null, proofPreviewUrl: null, notes: '', uploading: false });
+  };
+
+  const handleBatchPayProofFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const previewUrl = file.type.startsWith('image/') ? URL.createObjectURL(file) : null;
+    setBatchPayDialog(prev => ({ ...prev, proofFile: file, proofPreviewUrl: previewUrl }));
+  };
+
+  const handleConfirmBatchPay = async () => {
+    const { requests: reqs, proofFile, notes } = batchPayDialog;
+    if (!currentUser?.id || reqs.length === 0) return;
+    if (!proofFile) {
+      toast({ title: "Receipt Required / الإيصال مطلوب", description: "Attach one receipt that covers all selected payments.", variant: "destructive" });
+      return;
+    }
+    setBatchPayDialog(prev => ({ ...prev, uploading: true }));
+    try {
+      const timestamp = Date.now();
+      const random = Math.random().toString(36).substring(2, 8);
+      const extension = proofFile.name.split('.').pop()?.toLowerCase() || 'file';
+      const filePath = `payment-proofs/batch_${timestamp}_${random}.${extension}`;
+      const { error: uploadErr } = await supabase.storage.from('mmp-files').upload(filePath, proofFile, { cacheControl: '3600', upsert: false });
+      if (uploadErr) throw new Error(uploadErr.message);
+      const proofUrl = supabase.storage.from('mmp-files').getPublicUrl(filePath).data.publicUrl;
+      const now = new Date().toISOString();
+
+      let successCount = 0;
+      let failCount = 0;
+      for (const req of reqs) {
+        const { error } = await supabase.from('down_payment_requests').update({
+          status: 'fully_paid',
+          total_paid_amount: req.approvedAmount || req.requestedAmount,
+          remaining_amount: 0,
+          updated_at: now,
+          payment_proof_url: proofUrl,
+          payment_proof_uploaded_at: now,
+          ...(notes.trim() ? { payment_proof_notes: notes.trim() } : {}),
+        } as any).eq('id', req.id);
+        if (error) { failCount++; } else { successCount++; }
+      }
+
+      // Consolidated notifications — one per requester
+      const byUser = reqs.reduce<Record<string, Array<{ siteName: string; amount: number }>>>((acc, req) => {
+        const uid = req.requestedBy;
+        if (!acc[uid]) acc[uid] = [];
+        acc[uid].push({ siteName: req.siteName, amount: req.approvedAmount || req.requestedAmount });
+        return acc;
+      }, {});
+      Object.entries(byUser).forEach(([userId, items]) => {
+        const isSingle = items.length === 1;
+        const total = items.reduce((s, i) => s + i.amount, 0);
+        const breakdown = items.map(i => `• ${i.siteName} — ${i.amount.toLocaleString()} SDG`).join('\n');
+        NotificationTriggerService.send({
+          userId,
+          title: isSingle
+            ? 'Transport Advance Paid / تم صرف السلفة'
+            : `${items.length} Transport Advances Paid / تم صرف ${items.length} سلف`,
+          message: isSingle
+            ? `Your transport advance for "${items[0].siteName}" (${items[0].amount.toLocaleString()} SDG) has been paid. Please confirm receipt in your wallet.`
+            : `${items.length} of your transport advances have been paid.\n\nTotal: ${total.toLocaleString()} SDG\n\n${breakdown}\n\nPlease confirm receipt in your wallet.`,
+          type: 'success',
+          category: 'financial',
+          priority: 'high',
+          link: '/wallet',
+          sendEmail: true,
+          emailActionLabel: 'Confirm in Wallet',
+        }).catch(console.error);
+      });
+
+      toast({
+        title: `Batch Payment Complete / اكتمل الدفع الجماعي`,
+        description: `${successCount} paid with one shared receipt${failCount > 0 ? ` · ${failCount} failed` : ''}.`,
+      });
+      setBatchPayDialog({ open: false, requests: [], proofFile: null, proofPreviewUrl: null, notes: '', uploading: false });
+      clearSelection();
+      refreshRequests();
+    } catch (err: any) {
+      toast({ title: "Error / خطأ", description: err.message || "Batch payment failed.", variant: "destructive" });
+    } finally {
+      setBatchPayDialog(prev => ({ ...prev, uploading: false }));
+    }
   };
 
   const isApprovedOrPaid = (status: string) => ['approved', 'partially_paid', 'fully_paid'].includes(status);
@@ -2845,6 +2942,16 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
                     Process Payment
                   </Button>
 
+                  {approvedCount > 1 && (
+                    <Button size="sm" variant="default" className="bg-emerald-600 hover:bg-emerald-700 text-white" onClick={() => {
+                      const selected = selectedProcessing.filter(r => r.status === 'approved');
+                      handleOpenBatchPay(selected);
+                    }} disabled={processing} data-testid="button-batch-pay">
+                      <Wallet className="h-4 w-4 mr-1" />
+                      Batch Pay ({approvedCount})
+                    </Button>
+                  )}
+
                   <Button size="sm" variant="outline" onClick={() => {
                     if (selectedProcessing.length > 0) handleDownloadBulkPdf(selectedProcessing, `${selectedProcessing.length} Selected`);
                   }} disabled={processing} data-testid="button-selected-bulk-pdf">
@@ -4074,6 +4181,144 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
                 <><RefreshCw className="h-4 w-4 mr-1.5 animate-spin" /> Uploading...</>
               ) : (
                 <><CheckCircle2 className="h-4 w-4 mr-1.5" /> Confirm Payment / تأكيد الدفع</>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Batch Pay — one shared receipt for multiple requests */}
+      <Dialog
+        open={batchPayDialog.open}
+        onOpenChange={(open) => {
+          if (!open && !batchPayDialog.uploading) {
+            if (batchPayDialog.proofPreviewUrl) URL.revokeObjectURL(batchPayDialog.proofPreviewUrl);
+            setBatchPayDialog({ open: false, requests: [], proofFile: null, proofPreviewUrl: null, notes: '', uploading: false });
+          }
+        }}
+      >
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Wallet className="h-5 w-5 text-emerald-600" />
+              Batch Payment / دفع جماعي
+            </DialogTitle>
+            <DialogDescription>
+              One receipt covers all selected requests. The same receipt will be attached to every request below.
+            </DialogDescription>
+          </DialogHeader>
+
+          {batchPayDialog.requests.length > 0 && (
+            <div className="space-y-4">
+              {/* Summary */}
+              <div className="rounded-lg bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 p-3 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-semibold text-emerald-800 dark:text-emerald-300">
+                    {batchPayDialog.requests.length} Request{batchPayDialog.requests.length > 1 ? 's' : ''}
+                  </span>
+                  <span className="text-lg font-bold tabular-nums text-emerald-700 dark:text-emerald-400">
+                    SDG {batchPayDialog.requests.reduce((s, r) => s + (r.approvedAmount || r.requestedAmount), 0).toLocaleString()}
+                  </span>
+                </div>
+                <div className="text-xs text-muted-foreground">Total covered by this single receipt</div>
+              </div>
+
+              {/* Breakdown */}
+              <div className="rounded-lg border divide-y max-h-48 overflow-y-auto">
+                {batchPayDialog.requests.map((req) => (
+                  <div key={req.id} className="flex items-center justify-between px-3 py-2 text-sm">
+                    <div className="min-w-0">
+                      <p className="font-medium truncate">{req.siteName}</p>
+                      <p className="text-xs text-muted-foreground truncate">{req.requestedByName || req.requestedBy}</p>
+                    </div>
+                    <span className="font-semibold tabular-nums shrink-0 ml-2">
+                      {(req.approvedAmount || req.requestedAmount).toLocaleString()} SDG
+                    </span>
+                  </div>
+                ))}
+              </div>
+
+              {/* Receipt upload */}
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">
+                  Shared Receipt / الإيصال المشترك <span className="text-red-500">*</span>
+                </Label>
+                <div className="border-2 border-dashed border-muted-foreground/30 rounded-lg p-4 text-center hover:border-emerald-400 transition-colors relative">
+                  <input
+                    type="file"
+                    accept="image/*,application/pdf"
+                    className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                    onChange={handleBatchPayProofFileChange}
+                    disabled={batchPayDialog.uploading}
+                    data-testid="input-batch-payment-proof"
+                  />
+                  {batchPayDialog.proofFile ? (
+                    <div className="space-y-2">
+                      {batchPayDialog.proofPreviewUrl ? (
+                        <img src={batchPayDialog.proofPreviewUrl} alt="Receipt preview" className="max-h-32 mx-auto rounded object-contain" />
+                      ) : (
+                        <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
+                          <FileText className="h-8 w-8 text-red-500" />
+                          <span>{batchPayDialog.proofFile.name}</span>
+                        </div>
+                      )}
+                      <p className="text-xs text-muted-foreground">Click to change / انقر للتغيير</p>
+                    </div>
+                  ) : (
+                    <div className="text-muted-foreground">
+                      <ImageIcon className="h-8 w-8 mx-auto mb-1 opacity-40" />
+                      <p className="text-sm">Upload the batch receipt (image or PDF)</p>
+                      <p className="text-xs opacity-60">This one file will be linked to all {batchPayDialog.requests.length} requests</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Notes */}
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">
+                  Notes / ملاحظات <span className="text-muted-foreground font-normal">(optional)</span>
+                </Label>
+                <Textarea
+                  value={batchPayDialog.notes}
+                  onChange={(e) => setBatchPayDialog(prev => ({ ...prev, notes: e.target.value }))}
+                  placeholder="e.g. Bank transfer batch ref: TXN-BATCH-001..."
+                  className="resize-none h-20 text-sm"
+                  disabled={batchPayDialog.uploading}
+                  data-testid="input-batch-payment-notes"
+                />
+              </div>
+
+              <p className="text-xs text-muted-foreground bg-muted/50 rounded p-2">
+                Each requester will receive a single consolidated payment notification listing all their paid advances.
+              </p>
+            </div>
+          )}
+
+          <DialogFooter className="gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                if (batchPayDialog.proofPreviewUrl) URL.revokeObjectURL(batchPayDialog.proofPreviewUrl);
+                setBatchPayDialog({ open: false, requests: [], proofFile: null, proofPreviewUrl: null, notes: '', uploading: false });
+              }}
+              disabled={batchPayDialog.uploading}
+              data-testid="button-cancel-batch-pay"
+            >
+              Cancel / إلغاء
+            </Button>
+            <Button
+              type="button"
+              onClick={handleConfirmBatchPay}
+              disabled={batchPayDialog.uploading || !batchPayDialog.proofFile}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white"
+              data-testid="button-confirm-batch-pay"
+            >
+              {batchPayDialog.uploading ? (
+                <><RefreshCw className="h-4 w-4 mr-1.5 animate-spin" /> Processing...</>
+              ) : (
+                <><CheckCircle2 className="h-4 w-4 mr-1.5" /> Pay {batchPayDialog.requests.length} Request{batchPayDialog.requests.length > 1 ? 's' : ''}</>
               )}
             </Button>
           </DialogFooter>
