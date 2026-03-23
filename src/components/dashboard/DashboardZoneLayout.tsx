@@ -4,12 +4,8 @@ import {
   ClipboardList, 
   Users, 
   Calendar, 
-  Shield, 
-  TrendingUp,
   Briefcase,
   MapPin,
-  DollarSign,
-  Server,
   FolderKanban
 } from 'lucide-react';
 import { useAppContext } from '@/context/AppContext';
@@ -18,7 +14,7 @@ import { ConnectionStatus } from './ConnectionStatus';
 import { useLiveDashboard } from '@/hooks/useLiveDashboard';
 import { MmpGlobalFilter } from './filters/MmpGlobalFilter';
 
-export type DashboardZone = 'operations' | 'team' | 'planning' | 'compliance' | 'performance' | 'fom' | 'data-collector' | 'financial' | 'ict' | 'project-manager';
+export type DashboardZone = 'operations' | 'team' | 'planning' | 'fom' | 'data-collector' | 'project-manager';
 
 interface DashboardZoneLayoutProps {
   activeZone: DashboardZone;
@@ -66,38 +62,6 @@ const zones = [
     description: 'Strategic planning',
     color: 'text-green-500',
     roles: ['admin', 'fom', 'ict']
-  },
-  {
-    id: 'compliance' as DashboardZone,
-    label: 'Compliance',
-    icon: Shield,
-    description: 'Risk & compliance',
-    color: 'text-orange-500',
-    roles: ['admin', 'ict', 'reviewer']
-  },
-  {
-    id: 'performance' as DashboardZone,
-    label: 'Performance',
-    icon: TrendingUp,
-    description: 'Analytics & goals',
-    color: 'text-indigo-500',
-    roles: ['admin', 'fom', 'financialadmin']
-  },
-  {
-    id: 'financial' as DashboardZone,
-    label: 'Financial',
-    icon: DollarSign,
-    description: 'Budget & costs',
-    color: 'text-green-500',
-    roles: ['admin', 'financialadmin']
-  },
-  {
-    id: 'ict' as DashboardZone,
-    label: 'ICT',
-    icon: Server,
-    description: 'System health',
-    color: 'text-cyan-500',
-    roles: ['admin', 'ict']
   },
   {
     id: 'project-manager' as DashboardZone,

@@ -4,8 +4,6 @@ export type DashboardZone =
   | 'team'             // Supervisor - team activity & compliance
   | 'planning'         // Coordinator - site verification, MMP status
   | 'dataCollector'    // DataCollector - my sites, wallet, upcoming visits
-  | 'financial'        // FinancialAdmin - budget, cost approvals
-  | 'ict'              // ICT - system health, user stats
   | 'projectManager';  // Project Manager - full project oversight, budget approval, deadlines
 
 export interface MenuPreferences {
@@ -46,8 +44,8 @@ export const DEFAULT_DASHBOARD_PREFERENCES: DashboardPreferences = {
 export const ROLE_DEFAULT_ZONES: Record<string, DashboardZone> = {
   superAdmin: 'operations',
   admin: 'operations',
-  ict: 'ict',
-  financialAdmin: 'financial',
+  ict: 'operations',
+  financialAdmin: 'operations',
   projectManager: 'projectManager',
   fom: 'fom',
   'field operation manager (fom)': 'fom',
@@ -69,9 +67,9 @@ export interface DashboardWidget {
 
 export const DASHBOARD_WIDGETS: DashboardWidget[] = [
   { id: 'pending-approvals', title: 'Pending Approvals', description: 'MMPs and requests awaiting approval', zones: ['operations', 'fom', 'projectManager'], size: 'medium', priority: 1 },
-  { id: 'system-overview', title: 'System Overview', description: 'Key system metrics', zones: ['operations', 'ict'], size: 'large', priority: 1 },
+  { id: 'system-overview', title: 'System Overview', description: 'Key system metrics', zones: ['operations'], size: 'large', priority: 1 },
   { id: 'active-projects', title: 'Active Projects', description: 'Current project status', zones: ['operations', 'fom', 'planning', 'projectManager'], size: 'medium', priority: 2 },
-  { id: 'mmp-pipeline', title: 'MMP Pipeline', description: 'MMP workflow status', zones: ['operations', 'fom', 'planning', 'ict', 'projectManager'], size: 'medium', priority: 2 },
+  { id: 'mmp-pipeline', title: 'MMP Pipeline', description: 'MMP workflow status', zones: ['operations', 'fom', 'planning', 'projectManager'], size: 'medium', priority: 2 },
   { id: 'site-visits-today', title: "Today's Site Visits", description: 'Scheduled visits for today', zones: ['operations', 'fom', 'team', 'dataCollector', 'projectManager'], size: 'medium', priority: 1 },
   { id: 'team-locations', title: 'Team Locations', description: 'Live team member locations', zones: ['fom', 'team', 'projectManager'], size: 'large', priority: 2 },
   { id: 'team-activity', title: 'Team Activity', description: 'Recent team member activity', zones: ['fom', 'team', 'projectManager'], size: 'medium', priority: 3 },
@@ -81,12 +79,12 @@ export const DASHBOARD_WIDGETS: DashboardWidget[] = [
   { id: 'my-sites', title: 'My Assigned Sites', description: 'Your site assignments', zones: ['dataCollector'], size: 'large', priority: 1 },
   { id: 'my-wallet', title: 'My Wallet', description: 'Wallet balance and transactions', zones: ['dataCollector'], size: 'medium', priority: 2 },
   { id: 'upcoming-visits', title: 'Upcoming Visits', description: 'Your scheduled site visits', zones: ['dataCollector'], size: 'medium', priority: 3 },
-  { id: 'budget-tracking', title: 'Budget Tracking', description: 'Budget utilization overview', zones: ['financial', 'operations', 'projectManager'], size: 'large', priority: 1 },
-  { id: 'cost-approvals', title: 'Cost Approvals', description: 'Pending cost submissions', zones: ['financial', 'projectManager'], size: 'medium', priority: 1 },
-  { id: 'wallet-overview', title: 'Wallet Overview', description: 'All wallets summary', zones: ['financial', 'projectManager'], size: 'medium', priority: 2 },
-  { id: 'user-stats', title: 'User Statistics', description: 'User registration and activity', zones: ['ict', 'operations'], size: 'medium', priority: 2 },
-  { id: 'system-health', title: 'System Health', description: 'System performance metrics', zones: ['ict'], size: 'medium', priority: 1 },
-  { id: 'recent-activity', title: 'Recent Activity', description: 'Latest system activity', zones: ['operations', 'ict', 'projectManager'], size: 'medium', priority: 4 },
+  { id: 'budget-tracking', title: 'Budget Tracking', description: 'Budget utilization overview', zones: ['operations', 'projectManager'], size: 'large', priority: 1 },
+  { id: 'cost-approvals', title: 'Cost Approvals', description: 'Pending cost submissions', zones: ['operations', 'projectManager'], size: 'medium', priority: 1 },
+  { id: 'wallet-overview', title: 'Wallet Overview', description: 'All wallets summary', zones: ['operations', 'projectManager'], size: 'medium', priority: 2 },
+  { id: 'user-stats', title: 'User Statistics', description: 'User registration and activity', zones: ['operations'], size: 'medium', priority: 2 },
+  { id: 'system-health', title: 'System Health', description: 'System performance metrics', zones: ['operations'], size: 'medium', priority: 1 },
+  { id: 'recent-activity', title: 'Recent Activity', description: 'Latest system activity', zones: ['operations', 'projectManager'], size: 'medium', priority: 4 },
   { id: 'project-overview', title: 'Project Overview', description: 'Complete project status and progress', zones: ['projectManager'], size: 'large', priority: 1 },
   { id: 'budget-approval', title: 'Budget Approvals', description: 'Pending budget requests requiring approval', zones: ['projectManager'], size: 'medium', priority: 1 },
   { id: 'deadline-tracker', title: 'Deadline Tracker', description: 'Upcoming deadlines and milestones', zones: ['projectManager'], size: 'medium', priority: 2 },
