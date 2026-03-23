@@ -1,5 +1,4 @@
 import { supabase } from '@/integrations/supabase/client';
-import { v4 as uuidv4 } from 'uuid';
 import type { AuditModule, AuditAction, AuditSeverity, AuditLogEntry, WorkflowStep } from '@/types/audit-trail';
 
 const STORAGE_KEY = 'pact_audit_logs';
@@ -32,10 +31,9 @@ export async function logAuditEvent(data: ServiceAuditLogInput): Promise<string 
     const sessionId = session?.session?.access_token?.substring(0, 16) || 'system-session';
     
     const timestamp = new Date().toISOString();
-    const id = uuidv4();
+    const localFallbackId = `local-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
     
     const dbRecord = {
-      id,
       module: data.module,
       action: data.action,
       entity_type: data.entityType,
@@ -61,18 +59,21 @@ export async function logAuditEvent(data: ServiceAuditLogInput): Promise<string 
       session_id: sessionId,
     };
 
-    const { error } = await supabase
+    const { data: insertedLog, error } = await supabase
       .from('audit_logs')
-      .insert(dbRecord);
+      .insert(dbRecord)
+      .select('id')
+      .single();
 
     if (error) {
       console.warn('[AuditLogger] Failed to save to database, caching locally:', error);
-      const camelCaseLog = dbLogToCamelCase(dbRecord);
+      const camelCaseLog = dbLogToCamelCase({ ...dbRecord, id: localFallbackId });
       cacheLocalLog(camelCaseLog);
       addToPendingSync(camelCaseLog);
+      return localFallbackId;
     }
 
-    return id;
+    return insertedLog?.id ?? localFallbackId;
   } catch (error) {
     console.warn('[AuditLogger] Error logging audit event:', error);
     return null;

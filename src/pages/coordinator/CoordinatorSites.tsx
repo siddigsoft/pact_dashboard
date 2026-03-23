@@ -1620,7 +1620,7 @@ const CoordinatorSites: React.FC = () => {
       await supabase.from('audit_logs').insert({
         action: 'return_state_sites_to_fom',
         details: `Returned ${eligibleSiteIds.length} pending sites in state "${selectedStateForReturn.state}" (MMP: ${selectedMmpNameForReturn}) to FOM. Reason: ${returnStateToFOMReason}`,
-        performed_by: currentUser?.id || '',
+        performed_by: currentUser?.id || null,
         username: currentUser?.username || currentUser?.fullName || 'System',
       });
 
