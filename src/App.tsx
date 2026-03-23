@@ -63,6 +63,7 @@ const Archive = lazy(() => import('./pages/Archive'));
 const Calendar = lazy(() => import('./pages/Calendar'));
 const RoleManagement = lazy(() => import('./pages/RoleManagement'));
 const MonitoringPlanPage = lazy(() => import('./pages/MonitoringPlanPage'));
+const FieldOperationManagerPage = lazy(() => import('./pages/FieldOperationManager'));
 const GlobalSearchPage = lazy(() => import('./pages/GlobalSearchPage'));
 const WalletPage = lazy(() => import('./pages/Wallet'));
 const AdminWallets = lazy(() => import('./pages/AdminWallets'));
@@ -135,6 +136,7 @@ import { NotificationStack } from './components/NotificationStack';
 import { GlobalBroadcastAlert } from './components/GlobalBroadcastAlert';
 import { useNotifications } from './context/NotificationContext';
 import ErrorBoundary from './components/ErrorBoundary';
+import { debugDatabase } from './utils/debug-db';
 import { useFCM } from './hooks/useFCM';
 import { MobilePermissionGuard } from './components/mobile/MobilePermissionGuard';
 import { LiveDashboardProvider } from './context/realtime/LiveDashboardContext';
@@ -325,6 +327,7 @@ const AppRoutes = () => {
         <Route path="/super-admin-management" element={<SuperAdminManagement />} />
         <Route path="/super-admin-data" element={<SuperAdminDataManagement />} />
   <Route path="/monitoring-plan" element={<MonitoringPlanPage />} />
+  <Route path="/field-operation-manager" element={<FieldOperationManagerPage />} />
   <Route path="/search" element={<GlobalSearchPage />} />
   {/* Coordinator: Sites for Verification */}
   <Route path="/coordinator/sites-for-verification" element={<SitesForVerification />} />
@@ -385,6 +388,12 @@ function App() {
     }
   }, []);
 
+  // Add debug function to window for testing
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      (window as any).debugDatabase = debugDatabase;
+    }
+  }, []);
 
   // Set platform attribute for mobile-specific styling
   useEffect(() => {

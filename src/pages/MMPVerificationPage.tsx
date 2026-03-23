@@ -20,8 +20,7 @@ const MMPVerificationPage: React.FC = () => {
   const isAdmin = hasAnyRole(['admin']);
   const isFOM = hasAnyRole(['fom', 'fieldOpManager']);
   const isCoordinator = hasAnyRole(['coordinator']);
-  const isSupervisor = hasAnyRole(['supervisor', 'hubsupervisor']);
-  const hasVerificationAccess = isAdmin || isFOM || isCoordinator || isSupervisor || checkPermission('mmp', 'approve');
+  const hasVerificationAccess = isAdmin || isFOM || isCoordinator || checkPermission('mmp', 'approve');
   const canApprove = checkPermission('mmp', 'approve') || isAdmin;
   if (!hasVerificationAccess) {
     return (

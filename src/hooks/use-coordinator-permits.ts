@@ -34,31 +34,6 @@ export const useCoordinatorLocalityPermits = () => {
       const top = await list(base);
       const stateDirs = (top || []).filter((e: any) => !e.metadata);
 
-      // Best-effort: load verified flags from coordinator_locality_permits (if present).
-      // This table is used for dashboard indexing and verification status.
-      let dbPermits: Array<{
-        state_id: string;
-        locality_id: string;
-        verified: boolean | null;
-        verified_by: string | null;
-        verified_at: string | null;
-      }> = [];
-      try {
-        const { data: permitRows } = await supabase
-          .from('coordinator_locality_permits')
-          .select('state_id, locality_id, verified, verified_by, verified_at')
-          .eq('coordinator_id', currentUser.id);
-        dbPermits = (permitRows || []) as any[];
-      } catch (e) {
-        // Table may not exist in all environments; storage is still the source of truth for upload.
-        dbPermits = [];
-      }
-
-      const permitByKey = new Map<string, (typeof dbPermits)[number]>();
-      dbPermits.forEach((p) => {
-        permitByKey.set(`${p.state_id}|${p.locality_id}`, p);
-      });
-
       const collected: CoordinatorLocalityPermit[] = [];
       for (const s of stateDirs) {
         const stateId = s.name;
@@ -73,8 +48,6 @@ export const useCoordinatorLocalityPermits = () => {
             const { data: urlData } = supabase.storage.from(bucket).getPublicUrl(fullPath);
             const uploadedAt = (f as any).created_at || new Date().toISOString();
             const ts = uploadedAt;
-            const dbKey = `${stateId}|${localityId}`;
-            const dbPermit = permitByKey.get(dbKey);
             collected.push({
               id: fullPath,
               coordinatorId: currentUser.id,
@@ -83,9 +56,7 @@ export const useCoordinatorLocalityPermits = () => {
               permitFileName: f.name,
               permitFileUrl: urlData.publicUrl,
               uploadedAt: ts,
-              verified: !!dbPermit?.verified,
-              verifiedBy: dbPermit?.verified_by ?? undefined,
-              verifiedAt: dbPermit?.verified_at ?? undefined,
+              verified: false,
               createdAt: ts,
               updatedAt: ts,
             } as CoordinatorLocalityPermit);
@@ -156,28 +127,6 @@ export const useCoordinatorLocalityPermits = () => {
         updatedAt: uploadedAt,
       } as CoordinatorLocalityPermit;
 
-      // Best-effort: also persist to coordinator_locality_permits table for dashboard indexing.
-      // RLS policies should allow owner inserts (auth.uid() = coordinator_id).
-      try {
-        await supabase
-          .from('coordinator_locality_permits')
-          .upsert(
-            {
-              coordinator_id: currentUser.id,
-              state_id: stateId,
-              locality_id: localityId,
-              permit_file_name: file.name,
-              permit_file_url: publicUrl,
-              verified: false,
-              verified_by: null,
-              verified_at: null,
-            } as any,
-            { onConflict: 'coordinator_id,state_id,locality_id' }
-          );
-      } catch (e) {
-        console.warn('[useCoordinatorLocalityPermits] Failed to upsert coordinator_locality_permits (best-effort):', e);
-      }
-
       setPermits(prev => [inserted, ...prev]);
       return inserted;
     } catch (err) {
@@ -217,18 +166,6 @@ export const useCoordinatorLocalityPermits = () => {
 
       // Update local state
       setPermits(prev => prev.filter(p => p.id !== permitId));
-
-      // Best-effort: remove the indexed DB row for this permit as well.
-      try {
-        await supabase
-          .from('coordinator_locality_permits')
-          .delete()
-          .eq('coordinator_id', currentUser.id)
-          .eq('state_id', permit.stateId)
-          .eq('locality_id', permit.localityId);
-      } catch (e) {
-        console.warn('[useCoordinatorLocalityPermits] Failed to delete coordinator_locality_permits row (best-effort):', e);
-      }
 
       return true;
     } catch (err) {

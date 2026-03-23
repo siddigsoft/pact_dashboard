@@ -1,5 +1,5 @@
 
-import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { User } from '@/types';
 import { useToast } from '@/hooks/use-toast';
 import { useRoles } from '@/hooks/use-roles';
@@ -59,17 +59,38 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return null;
   });
 
-  const loadUsersFromStorage = (): User[] => {
-    const users: User[] = [];
+  const loadUsersFromStorage = () => {
+    const storedUsersMap: Record<string, Partial<User>> = {};
+    
+    const initialUsers: User[] = [];
+    
     for (let i = 0; i < localStorage.length; i++) {
       const key = localStorage.key(i);
-      if (!key?.startsWith('user-')) continue;
-      try {
-        const raw = localStorage.getItem(key);
-        if (!raw) continue;
-        const storedUser: Partial<User> = JSON.parse(raw);
-        if (!storedUser.id) continue;
-        users.push({
+      if (key && key.startsWith('user-')) {
+        try {
+          const userId = key.split('user-')[1];
+          const userData = JSON.parse(localStorage.getItem(key) || '');
+          if (!userData.availability) {
+            userData.availability = 'offline';
+          }
+          storedUsersMap[userId] = userData;
+        } catch (err) {
+          console.error("Error parsing stored user:", err);
+        }
+      }
+    }
+    
+    const mergedUsers = initialUsers.map(user => {
+      if (storedUsersMap[user.id]) {
+        return { ...user, ...storedUsersMap[user.id] };
+      }
+      return user;
+    });
+    
+    Object.values(storedUsersMap).forEach(storedUser => {
+      if (storedUser.id && !mergedUsers.some(u => u.id === storedUser.id)) {
+        // Ensure required fields are present before adding to mergedUsers
+        const completeUser: User = {
           id: storedUser.id,
           name: storedUser.name || 'Unknown',
           email: storedUser.email || '',
@@ -77,12 +98,12 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
           lastActive: storedUser.lastActive || new Date().toISOString(),
           availability: storedUser.availability || 'offline',
           ...storedUser,
-        });
-      } catch (err) {
-        console.error('Error parsing stored user:', err);
+        };
+        mergedUsers.push(completeUser);
       }
-    }
-    return users;
+    });
+    
+    return mergedUsers;
   };
 
   const [appUsers, setAppUsers] = useState<User[]>(loadUsersFromStorage);
@@ -136,9 +157,10 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setAppUsers([]);
         return;
       }
+      console.log("Refreshing users from Supabase...");
       const { data: profilesData, error: profilesError } = await supabase
         .from('profiles')
-        .select('id, full_name, username, email, role, status, availability, avatar_url, phone, employee_id, state_id, hub_id, secondary_hub_id, locality_id, location, created_at');
+        .select('*');
       
       if (profilesError) {
         console.error("Error fetching profiles:", profilesError);
@@ -152,7 +174,7 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (profilesData && profilesData.length > 0) {
         const { data: userRoles, error: rolesError } = await supabase
           .from('user_roles')
-          .select('user_id, role');
+          .select('*');
           
         if (rolesError) {
           console.error("Error fetching user roles:", rolesError);
@@ -166,6 +188,7 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
               allUserRoles[r.user_id].push(r.role as AppRole);
             }
           });
+          console.log("User roles fetched:", Object.keys(allUserRoles).length);
         }
         
         const supabaseUsers = profilesData.map(profile => {
@@ -224,10 +247,17 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
           } as User;
         });
         
-        supabaseUsers.forEach(user => {
-          localStorage.setItem(`user-${user.id}`, JSON.stringify(user));
+        const mergedUsers = [
+          ...supabaseUsers
+        ];
+        
+        mergedUsers.forEach(user => {
+          const storageKey = `user-${user.id}`;
+          localStorage.setItem(storageKey, JSON.stringify(user));
         });
-        setAppUsers(supabaseUsers);
+        
+        console.log("Total merged users:", mergedUsers.length);
+        setAppUsers(mergedUsers);
       }
     } catch (error) {
       console.error("Error in fetchUsers:", error);
@@ -238,30 +268,41 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
     refreshUsers();
 
     // Set up real-time subscriptions for users and roles
-    // Listen only to INSERT/DELETE on profiles — UPDATE is handled optimistically
-    // by the 'profiles-updates' channel below to avoid a redundant full re-fetch.
     const usersChannel = supabase
       .channel('users-changes')
       .on(
         'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'profiles' },
-        () => { refreshUsers(); }
+        {
+          event: '*',
+          schema: 'public',
+          table: 'profiles'
+        },
+        (payload) => {
+          console.log('Profiles change detected:', payload);
+          refreshUsers();
+        }
       )
       .on(
         'postgres_changes',
-        { event: 'DELETE', schema: 'public', table: 'profiles' },
-        () => { refreshUsers(); }
-      )
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'user_roles' },
-        () => { refreshUsers(); }
+        {
+          event: '*',
+          schema: 'public',
+          table: 'user_roles'
+        },
+        (payload) => {
+          console.log('User roles change detected:', payload);
+          refreshUsers();
+        }
       )
       .subscribe((status) => {
-        if (status === 'CHANNEL_ERROR') {
-          console.error('[UserContext] Real-time subscription error — check Supabase replication settings');
+        if (status === 'SUBSCRIBED') {
+          console.log('✅ Users real-time subscription active');
+        } else if (status === 'CHANNEL_ERROR') {
+          console.error('❌ Users real-time subscription error - Check if replication is enabled in Supabase');
         } else if (status === 'TIMED_OUT') {
-          console.warn('[UserContext] Real-time subscription timed out');
+          console.warn('⏱️ Users real-time subscription timed out');
+        } else {
+          console.log('Users subscription status:', status);
         }
       });
 
@@ -323,34 +364,36 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
   }, []);
 
-  // Use a ref so the interval callback always reads the latest user ID
-  // without the effect needing to restart every time currentUser changes.
-  const currentUserRef = useRef(currentUser);
-  currentUserRef.current = currentUser;
-
   useEffect(() => {
     const activityInterval = setInterval(() => {
-      const user = currentUserRef.current;
-      if (!user) return;
+      if (currentUser) {
+        setCurrentUser(prev => {
+          if (!prev) return prev;
+          const updated = {
+            ...prev,
+            lastActive: new Date().toISOString()
+          };
+          
+          localStorage.setItem('PACTCurrentUser', JSON.stringify(updated));
+          
+          return updated;
+        });
 
-      setCurrentUser(prev => {
-        if (!prev) return prev;
-        const updated = { ...prev, lastActive: new Date().toISOString() };
-        localStorage.setItem('PACTCurrentUser', JSON.stringify(updated));
-        return updated;
-      });
-
-      setAppUsers(prev =>
-        prev.map(u =>
-          u.id === user.id ? { ...u, lastActive: new Date().toISOString() } : u
-        )
-      );
+        setAppUsers(prev => 
+          prev.map(user => 
+            user.id === currentUser.id 
+              ? { ...user, lastActive: new Date().toISOString() }
+              : user
+          )
+        );
+      }
+      
+      // Note: Removed random availability simulation - availability should only change 
+      // when users explicitly update their status or based on real session activity
     }, 60000);
-
+    
     return () => clearInterval(activityInterval);
-  // Empty deps — interval is created once; currentUserRef.current is always fresh.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [currentUser]);
 
   // Hydrate current user from existing Supabase session (OAuth/email) and listen for auth state changes
   const setUserFromAuthUser = async (authUser: any): Promise<boolean> => {
@@ -377,11 +420,9 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return false;
       }
       
-      const PROFILE_COLUMNS = 'id, full_name, username, email, role, status, availability, avatar_url, phone, employee_id, state_id, hub_id, secondary_hub_id, locality_id, location, created_at';
-
       let { data: profileData } = await supabase
         .from('profiles')
-        .select(PROFILE_COLUMNS)
+        .select('*')
         .eq('id', authUser.id)
         .single();
 
@@ -389,17 +430,17 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (!profileData && authUser.email) {
         const { data: profileByEmail } = await supabase
           .from('profiles')
-          .select(PROFILE_COLUMNS)
+          .select('*')
           .eq('email', authUser.email)
           .single();
-
+        
         if (profileByEmail) {
           // Update the profile ID to match auth user ID for future logins
           const { data: updatedProfile } = await supabase
             .from('profiles')
             .update({ id: authUser.id })
             .eq('email', authUser.email)
-            .select(PROFILE_COLUMNS)
+            .select('*')
             .single();
           
           profileData = updatedProfile || profileByEmail;

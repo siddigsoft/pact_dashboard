@@ -286,8 +286,8 @@
     if (!isHidden('/projects') && (isSuperAdmin || isAdmin || isICT || perms.projects)) {
       planningItems.push({ id: 'projects', title: "Projects", url: "/projects", icon: FolderKanban, priority: 1, isPinned: isPinned('/projects') });
     }
-    if (!isHidden('/mmp') && (isSuperAdmin || isAdmin || isICT || isDataTeam || perms.mmp || isCoordinator || isSupervisor || isDataCollector || isFOM)) {
-      const mmpTitle = (!isSuperAdmin && (isDataCollector || isCoordinator || isSupervisor)) ? "My Sites Management" : "MMP Management";
+    if (!isHidden('/mmp') && (isSuperAdmin || isAdmin || isICT || isDataTeam || perms.mmp || isCoordinator || isDataCollector || isFOM || isSupervisor)) {
+      const mmpTitle = (!isSuperAdmin && (isDataCollector || isCoordinator)) ? "My Sites Management" : "MMP Management";
       planningItems.push({ id: 'mmp-management', title: mmpTitle, url: "/mmp", icon: Database, priority: 2, isPinned: isPinned('/mmp') });
     }
     if (!isHidden('/hub-operations') && (isSuperAdmin || isAdmin)) {
@@ -305,6 +305,9 @@
     if (!isHidden('/field-team') && (isSuperAdmin || ((isAdmin || perms.fieldTeam) && !isICT))) {
       fieldOpsItems.push({ id: 'field-team', title: "Field Team", url: "/field-team", icon: Activity, priority: 2, isPinned: isPinned('/field-team') });
     }
+    if (!isHidden('/field-operation-manager') && (isSuperAdmin || ((isAdmin || isFOM || perms.fieldOpManager) && !isCoordinator))) {
+      fieldOpsItems.push({ id: 'field-op-manager', title: "Field Operation Manager", url: "/field-operation-manager", icon: MapPin, priority: 3, isPinned: isPinned('/field-operation-manager') });
+    }
     if (!isHidden('/safety-hub')) {
       fieldOpsItems.push({ id: 'safety-hub', title: "Safety Hub", url: "/safety-hub", icon: Siren, priority: 4, isPinned: isPinned('/safety-hub') });
     }
@@ -314,7 +317,7 @@
     if (!isHidden('/equipment') && (isSuperAdmin || isAdmin || isFOM)) {
       fieldOpsItems.push({ id: 'equipment', title: "Equipment Tracking", url: "/equipment", icon: Package, priority: 6, isPinned: isPinned('/equipment') });
     }
-    if (!isHidden('/monitoring-form') && (isSuperAdmin || isAdmin || isDataCollector || isCoordinator || isSupervisor || isFOM)) {
+    if (!isHidden('/monitoring-form') && (isSuperAdmin || isAdmin || isDataCollector || isCoordinator || isFOM)) {
       fieldOpsItems.push({ id: 'monitoring-form', title: "Monitoring Form", url: "/monitoring-form", icon: ClipboardCheck, priority: 7, isPinned: isPinned('/monitoring-form') });
     }
     if (fieldOpsItems.length) groups.push({ id: 'field-ops', label: "Field Operations", order: 3, items: fieldOpsItems });
@@ -330,10 +333,8 @@
 
     const verificationItems: MenuGroup['items'] = [];
     if (!isHidden('/coordinator/sites') && (isSuperAdmin || isCoordinator || isSupervisor)) {
-      verificationItems.push({ id: 'site-verification', title: "Site Verification", url: "/coordinator/sites", icon: CheckCircle, priority: 1, isPinned: isPinned('/coordinator/sites') });
-    }
-    if (!isHidden('/coordinator/sites-for-verification') && (isSuperAdmin || isCoordinator || isSupervisor)) {
-      verificationItems.push({ id: 'sites-for-verification', title: "Sites for Verification", url: "/coordinator/sites-for-verification", icon: CheckCircle, priority: 1.1, isPinned: isPinned('/coordinator/sites-for-verification') });
+      const siteVerifTitle = isSupervisor && !isSuperAdmin && !isCoordinator ? "Coordinator Overview" : "Site Verification";
+      verificationItems.push({ id: 'site-verification', title: siteVerifTitle, url: "/coordinator/sites", icon: CheckCircle, priority: 1, isPinned: isPinned('/coordinator/sites') });
     }
     if (!isHidden('/archive') && (isSuperAdmin || isAdmin || perms.archive)) {
       verificationItems.push({ id: 'archive', title: "Archive", url: "/archive", icon: Archive, priority: 2, isPinned: isPinned('/archive') });
@@ -607,8 +608,7 @@
     }, [menuPrefs.favoritePages, updateMenuPreferences]);
 
     const perms = {
-      // Dashboard isn't a permission ResourceType; keep visible by default.
-      dashboard: true,
+      dashboard: checkPermission('dashboard', 'read'),
       projects: checkPermission('projects', 'read') || isAdmin || hasAnyRole(['ict']),
       mmp: checkPermission('mmp', 'read') || isAdmin || hasAnyRole(['ict']),
       monitoringPlan: checkPermission('mmp', 'read') || isAdmin || hasAnyRole(['ict']),
@@ -953,29 +953,29 @@
           })()}
         </SidebarContent>
 
-        <SidebarFooter className="border-t p-2">
+        <SidebarFooter className="border-t p-0">
           {currentUser && (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button
                   variant="ghost"
-                  className="w-full justify-start gap-2 px-2 py-1.5 h-9 hover:bg-blue-50 dark:hover:bg-gray-800 rounded-lg"
+                  className="w-full justify-start gap-1 px-0.5 py-0 h-6 hover:bg-blue-50 dark:hover:bg-gray-800"
                   data-testid="button-user-menu"
                 >
-                  <div className="relative shrink-0">
-                    <Avatar className="h-6 w-6">
+                  <div className="relative">
+                    <Avatar className="h-4 w-4">
                       <AvatarImage src={currentUser.avatar} alt={currentUser.name} />
-                      <AvatarFallback className="bg-blue-600 text-white text-[9px]">
+                      <AvatarFallback className="bg-blue-600 text-white text-[7px]">
                         {getInitials(currentUser.name)}
                       </AvatarFallback>
                     </Avatar>
                     <RealtimeStatusDot className="absolute -bottom-0.5 -right-0.5" />
                   </div>
-                  <div className="flex flex-col items-start text-left leading-tight group-data-[collapsible=icon]:hidden min-w-0 flex-1">
-                    <span className="text-xs font-semibold text-gray-900 dark:text-gray-100 truncate w-full">{currentUser.name}</span>
-                    <span className="text-[10px] text-gray-500 dark:text-gray-400 truncate w-full">{getPrimaryRole()}</span>
+                  <div className="flex flex-col items-start text-left text-[11px] leading-tight group-data-[collapsible=icon]:hidden">
+                    <span className="font-semibold text-gray-900 dark:text-gray-100">{currentUser.name}</span>
+                    <span className="text-[10px] text-gray-500 dark:text-gray-400">{getPrimaryRole()}</span>
                   </div>
-                  <ChevronUp className="ml-auto h-3 w-3 text-muted-foreground group-data-[collapsible=icon]:hidden shrink-0" />
+                  <ChevronUp className="ml-auto h-2 w-2 text-muted-foreground group-data-[collapsible=icon]:hidden" />
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent side="top" align="end" className="w-56">

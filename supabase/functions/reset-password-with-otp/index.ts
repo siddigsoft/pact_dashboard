@@ -1,6 +1,5 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { createRateLimitResponse, enforceRateLimits, getRequestIp } from '../_shared/rate-limit.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -43,34 +42,13 @@ serve(async (req) => {
       auth: { autoRefreshToken: false, persistSession: false }
     })
 
-    const normalizedEmail = email.toLowerCase()
-    const requestIp = getRequestIp(req)
-    const rateLimit = await enforceRateLimits(supabaseUrl, serviceRoleKey, [
-      {
-        key: `reset-password-with-otp:ip:${requestIp}`,
-        windowMs: 60_000,
-        maxRequests: 10,
-        name: 'reset_password_with_otp_ip',
-      },
-      {
-        key: `reset-password-with-otp:email:${normalizedEmail}`,
-        windowMs: 15 * 60_000,
-        maxRequests: 5,
-        name: 'reset_password_with_otp_email',
-      },
-    ])
-
-    if (!rateLimit.allowed) {
-      return createRateLimitResponse('Too many reset attempts. Please wait before trying again.', rateLimit.retryAfterSec, corsHeaders)
-    }
-
-    console.log(`Password reset attempt for email: ${normalizedEmail}, OTP provided: ${otp}`)
+    console.log(`Password reset attempt for email: ${email.toLowerCase()}, OTP provided: ${otp}`)
 
     // Verify the OTP first - get the latest unused token for this email
     const { data: storedTokens, error: tokenError } = await supabase
       .from('password_reset_tokens')
       .select('*')
-      .eq('email', normalizedEmail)
+      .eq('email', email.toLowerCase())
       .eq('used', false)
       .order('created_at', { ascending: false })
       .limit(1)
@@ -120,7 +98,7 @@ serve(async (req) => {
     const { data: profile, error: profileError } = await supabase
       .from('profiles')
       .select('id')
-      .eq('email', normalizedEmail)
+      .eq('email', email.toLowerCase())
       .maybeSingle()
     
     console.log('Profile lookup result:', { profile, profileError })
@@ -134,7 +112,7 @@ serve(async (req) => {
     }
 
     if (!profile) {
-      console.error('No profile found for email:', normalizedEmail)
+      console.error('No profile found for email:', email.toLowerCase())
       return new Response(
         JSON.stringify({ success: false, error: 'No account found with this email.' }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
@@ -160,7 +138,7 @@ serve(async (req) => {
     await supabase
       .from('password_reset_tokens')
       .update({ used: true })
-      .eq('email', normalizedEmail)
+      .eq('email', email.toLowerCase())
 
     // Log the password reset
     try {

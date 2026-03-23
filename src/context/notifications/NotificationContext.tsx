@@ -224,31 +224,17 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
         let allNotifications: any[] = [];
         
         // First, fetch user's own notifications
-        const [recipientResult, userResult] = await Promise.all([
-          supabase
-            .from('notifications')
-            .select('*')
-            .eq('recipient_id', currentUserId)
-            .order('created_at', { ascending: false })
-            .limit(50),
-          supabase
-            .from('notifications')
-            .select('*')
-            .eq('user_id', currentUserId)
-            .order('created_at', { ascending: false })
-            .limit(50),
-        ]);
-
-        const userError = recipientResult.error || userResult.error;
+        const { data: userNotifications, error: userError } = await supabase
+          .from('notifications')
+          .select('*')
+          .or(`recipient_id.eq.${currentUserId},user_id.eq.${currentUserId}`)
+          .order('created_at', { ascending: false })
+          .limit(50);
+        
         if (userError) {
           console.error('[NotificationContext] Error fetching notifications:', userError);
-        } else {
-          const merged = [...(recipientResult.data || []), ...(userResult.data || [])];
-          const deduped = Array.from(
-            new Map(merged.map((n: any) => [n.id, n])).values()
-          );
-          deduped.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-          allNotifications = deduped.slice(0, 50);
+        } else if (userNotifications) {
+          allNotifications = userNotifications;
         }
         
         // If admin, also fetch system and assignment notifications related to MMPs and site visits

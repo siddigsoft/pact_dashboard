@@ -3,18 +3,16 @@ import { ensureValidSessionForMutation } from '@/lib/session-health';
 import { queryClient } from '@/lib/queryClient';
 import { useToast } from '@/hooks/use-toast';
 import { realtimeManager } from '@/lib/realtime-manager';
-import { replaceSupabaseClient } from '@/integrations/supabase/client';
 
+const KEEPALIVE_INTERVAL = 90 * 1000; // 90s — must be shorter than idle threshold
 const IDLE_THRESHOLD = 60 * 1000; // 1 minute — detect idle sooner
 const DEBOUNCE_MS = 2000;
-const RECOVERY_COOLDOWN_MS = 30 * 1000;
 
 export function SessionGuard({ children }: { children: React.ReactNode }) {
   const { toast } = useToast();
   const lastActivityRef = useRef(Date.now());
   const checkInProgressRef = useRef(false);
   const lastCheckRef = useRef(0);
-  const lastRecoveryRef = useRef(0);
 
   const trackActivity = useCallback(() => {
     lastActivityRef.current = Date.now();
@@ -39,27 +37,18 @@ export function SessionGuard({ children }: { children: React.ReactNode }) {
     lastCheckRef.current = now;
 
     try {
-      // Proactively rotate the client once after long idle to avoid stale/frozen auth locks.
-      if (now - lastRecoveryRef.current > RECOVERY_COOLDOWN_MS) {
-        replaceSupabaseClient(true);
-        lastRecoveryRef.current = now;
-      }
-
       const isValid = await ensureValidSessionForMutation();
       if (!isValid) {
         toast({
           title: 'Session expired',
-          description: 'Your session has expired. Redirecting to sign in...',
+          description: 'Your session has timed out. Please log in again.',
           variant: 'destructive',
         });
-        setTimeout(() => {
-          window.location.assign('/auth');
-        }, 300);
         return;
       }
 
       realtimeManager.reconnectAllChannels();
-      queryClient.refetchQueries({ type: 'active' }).catch(() => {});
+      queryClient.invalidateQueries();
       lastActivityRef.current = Date.now();
     } finally {
       checkInProgressRef.current = false;
@@ -84,18 +73,23 @@ export function SessionGuard({ children }: { children: React.ReactNode }) {
       toast({ title: 'Back online', description: 'Reconnected. Refreshing data...' });
       await ensureValidSessionForMutation();
       realtimeManager.reconnectAllChannels();
-      queryClient.refetchQueries({ type: 'active' }).catch(() => {});
+      queryClient.invalidateQueries();
     };
 
     document.addEventListener('visibilitychange', handleVisibility);
     window.addEventListener('focus', handleFocus);
     window.addEventListener('online', handleOnline);
 
+    const interval = setInterval(() => {
+      ensureValidSessionForMutation();
+    }, KEEPALIVE_INTERVAL);
+
     return () => {
       events.forEach(e => document.removeEventListener(e, trackActivity));
       document.removeEventListener('visibilitychange', handleVisibility);
       window.removeEventListener('focus', handleFocus);
       window.removeEventListener('online', handleOnline);
+      clearInterval(interval);
     };
   }, [trackActivity, handleReturnFromIdle, toast]);
 

@@ -29,9 +29,11 @@ export async function initializeCrashlytics(): Promise<boolean> {
         const { FirebaseCrashlytics } = await import('@capacitor-firebase/crashlytics');
         await FirebaseCrashlytics.setEnabled({ enabled: true });
         nativeCrashlyticsAvailable = true;
+        console.log('[Crashlytics] Native Firebase Crashlytics enabled');
+        
         const { crashed } = await FirebaseCrashlytics.didCrashOnPreviousExecution();
         if (crashed) {
-          console.warn('[Crashlytics] App crashed on previous execution');
+          console.log('[Crashlytics] App crashed on previous execution');
         }
       } catch (error) {
         console.warn('[Crashlytics] Native Crashlytics not available:', error);
@@ -55,6 +57,7 @@ export async function initializeCrashlytics(): Promise<boolean> {
         if (app) {
           const { getAnalytics } = await import('firebase/analytics');
           analyticsInstance = getAnalytics(app);
+          console.log('[Crashlytics] Firebase Analytics initialized');
         }
       }
     } catch (analyticsError) {
@@ -62,6 +65,7 @@ export async function initializeCrashlytics(): Promise<boolean> {
     }
 
     crashlyticsInitialized = true;
+    console.log('[Crashlytics] Initialized - Native:', nativeCrashlyticsAvailable, 'Analytics:', !!analyticsInstance);
     return true;
   } catch (error) {
     console.warn('[Crashlytics] Failed to initialize:', error);
@@ -89,7 +93,7 @@ export async function setUser(userId: string, properties?: Record<string, string
         setUserProperties(analyticsInstance, properties);
       }
     }
-    // Intentionally not logging userId — avoid PII in browser console
+    console.log('[Crashlytics] User set:', userId);
   } catch (error) {
     console.error('[Crashlytics] Failed to set user:', error);
   }
@@ -273,6 +277,7 @@ export function setupGlobalErrorHandler(): void {
     }
   };
 
+  console.log('[Crashlytics] Global error handlers configured');
 }
 
 

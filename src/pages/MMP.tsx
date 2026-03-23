@@ -1808,7 +1808,7 @@ const MMP = () => {
 
       // Notify coordinator (or assignee) that site visit was completed
       try {
-        const coordinatorId = (site as any).forwarded_to_user_id ?? (site as any).forwardedToUserId;
+        const coordinatorId = updateData?.[0]?.forwarded_to_user_id ?? (site as any).forwarded_to_user_id ?? (site as any).forwardedToUserId;
         const siteName = site.site_name || site.siteName || 'Site';
         const collectorName = (currentUser as any)?.fullName ?? (currentUser as any)?.full_name ?? (currentUser as any)?.email ?? 'Data collector';
         if (coordinatorId) {
@@ -2123,12 +2123,12 @@ const MMP = () => {
   const isAdmin = hasRole(['Admin', 'admin', 'Super Admin', 'superadmin', 'super admin']);
   const isICT = hasRole(['ICT', 'ict']);
   const isFOM = hasRole(['Field Operation Manager (FOM)', 'fom', 'field operation manager']);
-  const isSupervisor = hasRole(['Supervisor', 'supervisor', 'hubsupervisor', 'hub_supervisor']);
+  const isSupervisor = hasRole(['Supervisor', 'supervisor']);
   const isCoordinator = hasRole(['Coordinator', 'coordinator']);
   const isDataCollector = hasRole(['DataCollector', 'datacollector', 'Data Collector', 'data collector', 'enumerator', 'Enumerator']);
   const isDataTeam = hasRole(['DataTeam', 'dataTeam', 'data_team', 'Data Team']);
-  // Coordinators and supervisors have full field-worker capabilities (can claim sites, view transport fees, etc.)
-  const canClaimSites = isDataCollector || isCoordinator || isSupervisor;
+  // Coordinators have full data collector capabilities (can claim sites, view transport fees, etc.)
+  const canClaimSites = isDataCollector || isCoordinator;
   
   // Hub-based access control for supervisors
   // Supervisors should only see operations within their assigned hub

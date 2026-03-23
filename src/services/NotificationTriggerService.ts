@@ -9,38 +9,30 @@ export type NotificationCategory = 'assignments' | 'approvals' | 'financial' | '
  */
 export const formatRoleName = (role: string | null | undefined): { en: string; ar: string } => {
   if (!role) return { en: 'Team Member', ar: 'عضو الفريق' };
-
-  // Normalize to lowercase with underscores so the map works regardless of
-  // whether the caller passes 'SuperAdmin', 'superAdmin', 'super_admin', etc.
-  const normalized = role
-    .replace(/\s*\([^)]*\)/g, '')         // strip parenthetical suffixes e.g. "(FOM)"
-    .replace(/([a-z])([A-Z])/g, '$1_$2') // camelCase → snake_case
-    .replace(/[\s-]+/g, '_')
-    .toLowerCase();
-
+  
   const roleMap: Record<string, { en: string; ar: string }> = {
-    'super_admin':              { en: 'Super Administrator',      ar: 'المدير العام' },
-    'admin':                    { en: 'Administrator',            ar: 'المدير' },
-    'country_director':         { en: 'Country Director',         ar: 'المدير القُطري' },
-    'ict':                      { en: 'ICT',                      ar: 'تقنية المعلومات' },
-    'field_operation_manager':  { en: 'Field Operations Manager', ar: 'مدير العمليات الميدانية' },
-    // legacy shorthands
-    'fom':                      { en: 'Field Operations Manager', ar: 'مدير العمليات الميدانية' },
-    'financial_admin':          { en: 'Finance Officer',          ar: 'موظف المالية' },
-    'finance':                  { en: 'Finance Officer',          ar: 'موظف المالية' },
-    'project_manager':          { en: 'Project Manager',          ar: 'مدير المشروع' },
-    'senior_operations_lead':   { en: 'Senior Operations Lead',   ar: 'قائد العمليات الأول' },
-    'supervisor':               { en: 'Hub Supervisor',           ar: 'مشرف المحور' },
-    'coordinator':              { en: 'Coordinator',              ar: 'المنسق' },
-    'data_team':                { en: 'Data Team',                ar: 'فريق البيانات' },
-    'data_collector':           { en: 'Data Collector',           ar: 'جامع البيانات' },
-    'enumerator':               { en: 'Enumerator',               ar: 'العداد' },
-    'reviewer':                 { en: 'Reviewer',                 ar: 'المراجع' },
-    'auditor':                  { en: 'Auditor',                  ar: 'المدقق' },
-    'viewer':                   { en: 'Viewer',                   ar: 'مشاهد' },
+    'super_admin': { en: 'Super Administrator', ar: 'المدير العام' },
+    'superAdmin': { en: 'Super Administrator', ar: 'المدير العام' },
+    'SuperAdmin': { en: 'Super Administrator', ar: 'المدير العام' },
+    'admin': { en: 'Administrator', ar: 'المدير' },
+    'Admin': { en: 'Administrator', ar: 'المدير' },
+    'fom': { en: 'Field Operations Manager', ar: 'مدير العمليات الميدانية' },
+    'FOM': { en: 'Field Operations Manager', ar: 'مدير العمليات الميدانية' },
+    'supervisor': { en: 'Hub Supervisor', ar: 'مشرف المحور' },
+    'Supervisor': { en: 'Hub Supervisor', ar: 'مشرف المحور' },
+    'coordinator': { en: 'Coordinator', ar: 'المنسق' },
+    'Coordinator': { en: 'Coordinator', ar: 'المنسق' },
+    'data_collector': { en: 'Data Collector', ar: 'جامع البيانات' },
+    'dataCollector': { en: 'Data Collector', ar: 'جامع البيانات' },
+    'enumerator': { en: 'Enumerator', ar: 'العداد' },
+    'Enumerator': { en: 'Enumerator', ar: 'العداد' },
+    'finance': { en: 'Finance Officer', ar: 'موظف المالية' },
+    'Finance': { en: 'Finance Officer', ar: 'موظف المالية' },
+    'viewer': { en: 'Viewer', ar: 'مشاهد' },
+    'Viewer': { en: 'Viewer', ar: 'مشاهد' },
   };
-
-  return roleMap[normalized] ?? { en: role.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()), ar: role };
+  
+  return roleMap[role] || { en: role.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()), ar: role };
 };
 
 // Type for hub management users with role information
@@ -697,8 +689,8 @@ export const NotificationTriggerService = {
             .eq('project_id', projectId);
           
           if (!teamError && teamMembers) {
-            const projectUserIds = new Set(teamMembers.map(m => m.user_id).filter(Boolean));
-            targetUserIds = targetUserIds.filter(id => projectUserIds.has(id));
+            const projectUserIds = teamMembers.map(m => m.user_id);
+            targetUserIds = targetUserIds.filter(id => projectUserIds.includes(id));
           }
         } catch {
           // team_members table may not exist - skip project filtering
@@ -775,31 +767,10 @@ export const NotificationTriggerService = {
     }
     
     // If no roles specified, send to all users
-    const PAGE_SIZE = 500;
-    let from = 0;
-    const userIds: string[] = [];
-
-    while (true) {
-      const { data: users, error } = await supabase
-        .from('profiles')
-        .select('id')
-        .range(from, from + PAGE_SIZE - 1);
-
-      if (error) {
-        console.error('Failed to fetch users for system update:', error);
-        return 0;
-      }
-
-      if (!users || users.length === 0) break;
-      userIds.push(...users.map(u => u.id));
-
-      if (users.length < PAGE_SIZE) break;
-      from += PAGE_SIZE;
-    }
-
-    if (userIds.length === 0) return 0;
-
-    return await this.sendBulk(userIds, {
+    const { data: users } = await supabase.from('profiles').select('id').limit(100);
+    if (!users) return 0;
+    
+    return await this.sendBulk(users.map(u => u.id), {
       title,
       message,
       type: 'info',
@@ -824,11 +795,8 @@ export const NotificationTriggerService = {
     projectId?: string
   ): Promise<number> {
     try {
-      const normalizedClaimerRole = (claimerRole || '').toLowerCase();
-      const isDataCollector = ['data_collector', 'enumerator', 'dc'].includes(normalizedClaimerRole);
-      // Supervisors should mirror coordinator claim notification behavior.
-      const isCoordinator = ['coordinator', 'field_coordinator'].includes(normalizedClaimerRole) ||
-        ['supervisor', 'hubsupervisor', 'hub_supervisor'].includes(normalizedClaimerRole);
+      const isDataCollector = ['data_collector', 'enumerator', 'dc'].includes(claimerRole?.toLowerCase() || '');
+      const isCoordinator = ['coordinator', 'field_coordinator'].includes(claimerRole?.toLowerCase() || '');
 
       let targetRoles: string[] = [];
       let additionalUserIds: string[] = [];
@@ -843,7 +811,7 @@ export const NotificationTriggerService = {
             .from('profiles')
             .select('id')
             .eq('hub_id', hubId)
-            .in('role', ['supervisor', 'hubsupervisor', 'hub_supervisor']);
+            .eq('role', 'supervisor');
           
           if (hubSupervisors) {
             additionalUserIds = hubSupervisors.map(s => s.id).filter(id => id !== claimerUserId);

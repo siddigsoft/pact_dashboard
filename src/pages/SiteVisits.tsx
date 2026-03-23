@@ -165,18 +165,11 @@ const SiteVisits = () => {
     return role === 'coordinator';
   }, [currentUser]);
 
-  // Check if user is a field worker who can claim sites (data collector OR coordinator OR supervisor)
-  // Coordinators and supervisors can monitor and claim sites within their assigned geography.
+  // Check if user is a field worker who can claim sites (data collector OR coordinator)
+  // Coordinators can monitor and claim sites within their locality just like data collectors
   const isFieldWorker = useMemo(() => {
-    if (!currentUser) return false;
-    const role = (currentUser.role || '').toLowerCase().trim();
-    const isSupervisorFieldWorker =
-      role === 'supervisor' ||
-      role === 'hubsupervisor' ||
-      role === 'hub_supervisor';
-
-    return isDataCollector || isCoordinator || isSupervisorFieldWorker;
-  }, [currentUser, isDataCollector, isCoordinator]);
+    return isDataCollector || isCoordinator;
+  }, [isDataCollector, isCoordinator]);
 
   // Check if user is FOM (Field Operations Manager)
   const isFOM = useMemo(() => {

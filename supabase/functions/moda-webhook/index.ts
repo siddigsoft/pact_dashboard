@@ -1,6 +1,5 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { createRateLimitResponse, enforceRateLimits, getRequestIp } from '../_shared/rate-limit.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -363,20 +362,6 @@ serve(async (req) => {
     const supabase = createClient(supabaseUrl, serviceRoleKey, {
       auth: { autoRefreshToken: false, persistSession: false }
     })
-
-    const requestIp = getRequestIp(req)
-    const webhookRateLimit = await enforceRateLimits(supabaseUrl, serviceRoleKey, [
-      {
-        key: `moda-webhook:ip:${requestIp}`,
-        windowMs: 60_000,
-        maxRequests: 60,
-        name: 'moda_webhook_ip',
-      },
-    ])
-
-    if (!webhookRateLimit.allowed) {
-      return createRateLimitResponse('Too many webhook requests. Please retry later.', webhookRateLimit.retryAfterSec, corsHeaders)
-    }
 
     const rawPayload = await req.json()
     console.log('[MoDa Webhook] Received submission:', JSON.stringify(rawPayload).substring(0, 500))

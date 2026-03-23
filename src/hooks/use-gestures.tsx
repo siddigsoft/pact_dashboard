@@ -36,14 +36,7 @@ export function useGestures(handlers?: SwipeHandlers, options?: GestureOptions) 
   const lastTapRef = useRef<number>(0);
   const longPressTimerRef = useRef<NodeJS.Timeout | null>(null);
   const [isSwipeEnabled, setIsSwipeEnabled] = useState(false);
-
-  // Keep latest handlers/config in refs so the effect never needs to re-run
-  // just because the caller passed a new object literal on each render.
-  const handlersRef = useRef(handlers);
-  handlersRef.current = handlers;
-  const optionsRef = useRef(options);
-  optionsRef.current = options;
-
+  
   const config = { ...defaultOptions, ...options };
 
   const clearLongPressTimer = useCallback(() => {
@@ -59,8 +52,6 @@ export function useGestures(handlers?: SwipeHandlers, options?: GestureOptions) 
     }
 
     const handleTouchStart = (e: TouchEvent) => {
-      const h = handlersRef.current;
-      const cfg = { ...defaultOptions, ...optionsRef.current };
       const now = Date.now();
       touchStartRef.current = {
         x: e.touches[0].clientX,
@@ -68,21 +59,21 @@ export function useGestures(handlers?: SwipeHandlers, options?: GestureOptions) 
         time: now
       };
 
-      if (h?.onDoubleTap) {
-        if (now - lastTapRef.current < cfg.doubleTapDelay!) {
-          h.onDoubleTap();
-          if (cfg.enableHaptics) hapticPresets.toggle();
+      if (handlers?.onDoubleTap) {
+        if (now - lastTapRef.current < config.doubleTapDelay!) {
+          handlers.onDoubleTap();
+          if (config.enableHaptics) hapticPresets.toggle();
           lastTapRef.current = 0;
         } else {
           lastTapRef.current = now;
         }
       }
 
-      if (h?.onLongPress) {
+      if (handlers?.onLongPress) {
         longPressTimerRef.current = setTimeout(() => {
-          handlersRef.current?.onLongPress!();
-          if (cfg.enableHaptics) hapticPresets.longPress();
-        }, cfg.longPressDelay!);
+          handlers.onLongPress!();
+          if (config.enableHaptics) hapticPresets.longPress();
+        }, config.longPressDelay!);
       }
     };
 
@@ -92,40 +83,38 @@ export function useGestures(handlers?: SwipeHandlers, options?: GestureOptions) 
 
     const handleTouchEnd = (e: TouchEvent) => {
       clearLongPressTimer();
-
+      
       if (!isSwipeEnabled) return;
-
-      const h = handlersRef.current;
-      const cfg = { ...defaultOptions, ...optionsRef.current };
+      
       const touchEnd = {
         x: e.changedTouches[0].clientX,
         y: e.changedTouches[0].clientY
       };
-
+      
       const deltaX = touchEnd.x - touchStartRef.current.x;
       const deltaY = touchEnd.y - touchStartRef.current.y;
-
+      
       if (Math.abs(deltaX) > Math.abs(deltaY)) {
-        if (deltaX > cfg.minSwipeDistance!) {
-          if (h?.onSwipeRight) {
-            h.onSwipeRight();
-            if (cfg.enableHaptics) hapticPresets.swipe();
+        if (deltaX > config.minSwipeDistance!) {
+          if (handlers?.onSwipeRight) {
+            handlers.onSwipeRight();
+            if (config.enableHaptics) hapticPresets.swipe();
           } else if (deviceInfo.platform === 'ios') {
             navigate(-1);
           }
-        } else if (deltaX < -cfg.minSwipeDistance!) {
-          if (h?.onSwipeLeft) {
-            h.onSwipeLeft();
-            if (cfg.enableHaptics) hapticPresets.swipe();
+        } else if (deltaX < -config.minSwipeDistance!) {
+          if (handlers?.onSwipeLeft) {
+            handlers.onSwipeLeft();
+            if (config.enableHaptics) hapticPresets.swipe();
           }
         }
       } else {
-        if (deltaY > cfg.minSwipeDistance! && h?.onSwipeDown) {
-          h.onSwipeDown();
-          if (cfg.enableHaptics) hapticPresets.swipe();
-        } else if (deltaY < -cfg.minSwipeDistance! && h?.onSwipeUp) {
-          h.onSwipeUp();
-          if (cfg.enableHaptics) hapticPresets.swipe();
+        if (deltaY > config.minSwipeDistance! && handlers?.onSwipeDown) {
+          handlers.onSwipeDown();
+          if (config.enableHaptics) hapticPresets.swipe();
+        } else if (deltaY < -config.minSwipeDistance! && handlers?.onSwipeUp) {
+          handlers.onSwipeUp();
+          if (config.enableHaptics) hapticPresets.swipe();
         }
       }
     };
@@ -142,9 +131,7 @@ export function useGestures(handlers?: SwipeHandlers, options?: GestureOptions) 
       document.removeEventListener('touchend', handleTouchEnd);
       clearLongPressTimer();
     };
-  // handlers/options are intentionally excluded — read via refs inside the callbacks
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isNative, isSwipeEnabled, deviceInfo, navigate, clearLongPressTimer]);
+  }, [isNative, isSwipeEnabled, deviceInfo, navigate, handlers, config, clearLongPressTimer]);
 
   return { isSwipeEnabled };
 }

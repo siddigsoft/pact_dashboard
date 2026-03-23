@@ -4,7 +4,6 @@ import path from "path";
 import { componentTagger } from "lovable-tagger";
 import { config } from 'dotenv';
 import type { IncomingMessage, ServerResponse } from 'http';
-import { ocrPostProcess } from './src/utils/ocrPostProcess';
 
 // Load environment variables from .env file
 config();
@@ -17,26 +16,8 @@ const GEMINI_MODELS = [
   'gemini-2.5-pro-exp-03-25',// experimental pro, separate quota
   'gemini-2.0-pro-exp',      // experimental pro fallback
 ];
-// Track which models are unavailable and when they were marked so.
-// Daily-quota exhaustions reset at midnight Pacific; we use a 23-hour TTL so
-// the dev server automatically retries without needing a restart.
-const MODEL_UNAVAILABLE_TTL_MS = 23 * 60 * 60 * 1000;
-const unavailableModels = new Map<string, number>(); // model → timestamp marked unavailable
-const unavailableGroqModels = new Map<string, number>();
-
-function isModelUnavailable(map: Map<string, number>, model: string): boolean {
-  const markedAt = map.get(model);
-  if (markedAt === undefined) return false;
-  if (Date.now() - markedAt > MODEL_UNAVAILABLE_TTL_MS) {
-    map.delete(model); // TTL expired — give it another chance
-    return false;
-  }
-  return true;
-}
-
-function markModelUnavailable(map: Map<string, number>, model: string): void {
-  map.set(model, Date.now());
-}
+// Track which models are unavailable this server session (exhausted daily OR 404/not-found)
+const unavailableModels = new Set<string>();
 
 function buildBatchPrompt(count: number): string {
   return `You are a Bank of Khartoum transfer receipt OCR expert. Analyze ${count} screenshot${count > 1 ? 's' : ''} of Bank of Khartoum transfer receipts. There are TWO receipt styles — handle both:
@@ -75,7 +56,7 @@ async function callGeminiWithRotation(
 
   // Try each model in order, skipping ones we know are unavailable
   for (const model of GEMINI_MODELS) {
-    if (isModelUnavailable(unavailableModels, model)) {
+    if (unavailableModels.has(model)) {
       console.log(`[Gemini OCR] Skipping ${model} (unavailable)`);
       continue;
     }
@@ -105,7 +86,7 @@ async function callGeminiWithRotation(
 
         if (isModelNotFound || isDailyExhausted) {
           console.log(`[Gemini OCR] Model ${model} unavailable (${isModelNotFound ? '404' : 'daily exhausted'}) — rotating`);
-          markModelUnavailable(unavailableModels, model);
+          unavailableModels.add(model);
           break; // try next model
         }
 
@@ -133,6 +114,7 @@ const GROQ_MODELS = [
   'meta-llama/llama-4-scout-17b-16e-instruct',   // Llama 4 Scout — vision capable, primary
   'meta-llama/llama-4-maverick-17b-128e-instruct', // Llama 4 Maverick — vision capable, fallback
 ];
+const unavailableGroqModels = new Set<string>();
 
 async function callGroqOCR(
   images: Array<{ base64: string; mimeType: string }>,
@@ -144,7 +126,7 @@ async function callGroqOCR(
   const prompt = buildBatchPrompt(images.length);
 
   for (const model of GROQ_MODELS) {
-    if (isModelUnavailable(unavailableGroqModels, model)) {
+    if (unavailableGroqModels.has(model)) {
       console.log(`[Groq OCR] Skipping ${model} (unavailable)`);
       continue;
     }
@@ -177,7 +159,7 @@ async function callGroqOCR(
         });
 
         if (!res.ok) {
-          const errBody = await res.json().catch(() => ({})) as { error?: { message?: string } };
+          const errBody = await res.json().catch(() => ({}));
           const errMsg = errBody?.error?.message || `HTTP ${res.status}`;
           const isNotFound = res.status === 404 || errMsg.includes('not found') || errMsg.includes('does not exist');
           const isDailyLimit = res.status === 429 && errMsg.toLowerCase().includes('day');
@@ -185,7 +167,7 @@ async function callGroqOCR(
 
           if (isNotFound || isDailyLimit) {
             console.log(`[Groq OCR] Model ${model} unavailable (${isNotFound ? '404' : 'daily limit'}) — rotating`);
-            markModelUnavailable(unavailableGroqModels, model);
+            unavailableGroqModels.add(model);
             break;
           }
           if (isMinuteLimit) {
@@ -197,7 +179,7 @@ async function callGroqOCR(
           throw new Error(`Groq API error: ${errMsg}`);
         }
 
-        const data = await res.json() as { choices?: Array<{ message?: { content?: string } }> };
+        const data = await res.json();
         const text = (data.choices?.[0]?.message?.content || '')
           .replace(/```json\n?|```\n?/g, '').trim();
         console.log(`[Groq OCR] Success with ${model}`);
@@ -215,8 +197,23 @@ async function callGroqOCR(
   throw new Error('All Groq models unavailable. Check GROQ_API_KEY or try again later.');
 }
 
-// postProcess is imported from src/utils/ocrPostProcess.ts
-const postProcess = ocrPostProcess;
+function postProcess(text: string): string {
+  try {
+    const arr = JSON.parse(text);
+    if (Array.isArray(arr)) {
+      arr.forEach((obj: any) => {
+        if (obj.from_account) obj.from_account = String(obj.from_account).replace(/\s+/g, '');
+        if (obj.to_account) obj.to_account = String(obj.to_account).replace(/\s+/g, '');
+        if (obj.amount != null) {
+          const n = parseFloat(String(obj.amount).replace(/,/g, ''));
+          obj.amount = isNaN(n) ? 0 : n;
+        }
+      });
+      return JSON.stringify(arr);
+    }
+  } catch { /* leave as-is */ }
+  return text;
+}
 
 function geminiOcrPlugin() {
   return {
@@ -225,51 +222,9 @@ function geminiOcrPlugin() {
       server.middlewares.use('/api/extract-transaction', async (req: IncomingMessage, res: ServerResponse, next: () => void) => {
         if (req.method !== 'POST') return next();
 
-        // ── Auth check ───────────────────────────────────────────────────
-        // Require a shared dev secret so arbitrary clients on the network
-        // cannot burn through Gemini/Groq quotas.
-        const OCR_SECRET = process.env.OCR_DEV_SECRET;
-        if (OCR_SECRET) {
-          const authHeader = req.headers['authorization'] || '';
-          if (authHeader !== `Bearer ${OCR_SECRET}`) {
-            res.statusCode = 401;
-            res.setHeader('Content-Type', 'application/json');
-            res.end(JSON.stringify({ error: 'Unauthorized' }));
-            return;
-          }
-        }
-
-        // ── Body collection with size guard (10 MB) ──────────────────────
-        const MAX_BODY_BYTES = 10 * 1024 * 1024;
-        const chunks: Buffer[] = [];
-        let totalBytes = 0;
-        let aborted = false;
-
-        req.on('error', (err) => {
-          console.error('[OCR] Request stream error:', err.message);
-          if (!res.headersSent) {
-            res.statusCode = 400;
-            res.setHeader('Content-Type', 'application/json');
-            res.end(JSON.stringify({ error: 'Request stream error' }));
-          }
-        });
-
-        req.on('data', (chunk: Buffer) => {
-          totalBytes += chunk.length;
-          if (totalBytes > MAX_BODY_BYTES) {
-            aborted = true;
-            res.statusCode = 413;
-            res.setHeader('Content-Type', 'application/json');
-            res.end(JSON.stringify({ error: 'Request body too large (max 10 MB)' }));
-            req.destroy();
-            return;
-          }
-          chunks.push(chunk);
-        });
-
+        let body = '';
+        req.on('data', (chunk: Buffer) => { body += chunk.toString(); });
         req.on('end', async () => {
-          if (aborted) return;
-          const body = Buffer.concat(chunks).toString();
           try {
             const parsed = JSON.parse(body);
             const images: Array<{ base64: string; mimeType: string }> = parsed.images
@@ -296,25 +251,15 @@ function geminiOcrPlugin() {
               ({ text, model } = await callGroqOCR(images));
             }
 
-            // ── Post-process and validate output ─────────────────────────
-            const processed = postProcess(text);
-            try {
-              JSON.parse(processed); // verify output is valid JSON before sending
-            } catch {
-              console.error('[OCR] postProcess returned invalid JSON:', processed.slice(0, 200));
-              throw new Error('OCR model returned unparseable output. Try again.');
-            }
-
             res.setHeader('Content-Type', 'application/json');
-            res.end(JSON.stringify({ text: processed, model }));
+            res.end(JSON.stringify({ text: postProcess(text), model }));
 
           } catch (err: any) {
             const msg = err.message || 'OCR failed';
             const noKey = msg.includes('GROQ_API_KEY not configured');
             const allExhausted = msg.includes('All Gemini') || msg.includes('All Groq');
-            const isClientError = msg.includes('unparseable output') || msg.includes('Request body');
             console.error('[OCR] Fatal:', msg.slice(0, 300));
-            res.statusCode = noKey ? 503 : allExhausted ? 429 : isClientError ? 422 : 500;
+            res.statusCode = noKey ? 503 : 429;
             res.setHeader('Content-Type', 'application/json');
             res.end(JSON.stringify({
               error: noKey
@@ -361,8 +306,8 @@ export default defineConfig(({ mode }) => ({
     ]
   },
   esbuild: {
-    // Remove console output in production bundles
-    drop: mode === 'production' ? ['console', 'debugger'] : [],
+    // Keep console in production to debug white screen / errors in browser DevTools
+    drop: mode === 'production' ? ['debugger'] : [],
   },
   resolve: {
     alias: {
@@ -384,7 +329,6 @@ export default defineConfig(({ mode }) => ({
     'import.meta.env.VITE_FIREBASE_VAPID_PUBLIC_KEY': JSON.stringify(process.env.VITE_FIREBASE_VAPID_PUBLIC_KEY),
     'import.meta.env.VITE_APP_VERSION': JSON.stringify(process.env.VITE_APP_VERSION || '1.0.0'),
     'import.meta.env.VITE_BUILD_NUMBER': JSON.stringify(process.env.VITE_BUILD_NUMBER || '1'),
-    'import.meta.env.VITE_OCR_DEV_SECRET': JSON.stringify(process.env.VITE_OCR_DEV_SECRET || ''),
   },
   build: {
     chunkSizeWarningLimit: 1000,

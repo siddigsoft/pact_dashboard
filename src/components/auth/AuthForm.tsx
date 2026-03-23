@@ -938,12 +938,12 @@ const AuthForm = ({ mode }: AuthFormProps) => {
 
       <Button
         type="submit"
-        className="w-full bg-blue-600 hover:bg-blue-700 text-white transition-colors 
-           transform hover:scale-105 active:scale-95 
-           duration-300 ease-in-out relative
-           animate-fade-in hover:animate-pulse-slow
-           disabled:opacity-70 disabled:cursor-not-allowed
-           disabled:hover:scale-100 disabled:hover:bg-blue-600"
+        className="w-full bg-[#9b87f5] hover:bg-[#8b77e5] transition-colors 
+                 transform hover:scale-105 active:scale-95 
+                 duration-300 ease-in-out relative
+                 animate-fade-in hover:animate-pulse-slow
+                 disabled:opacity-70 disabled:cursor-not-allowed
+                 disabled:hover:scale-100 disabled:hover:bg-[#9b87f5]"
         disabled={isLoading}
       >
         {isLoading ? (

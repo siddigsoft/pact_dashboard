@@ -45,6 +45,7 @@ const ALL_PAGES: PageEntry[] = [
   { title: 'Site Visits', url: '/site-visits', icon: ClipboardList, group: 'Field Operations', keywords: ['visit', 'field'] },
   { title: 'Create Site Visit', url: '/site-visits/create', icon: ClipboardList, group: 'Field Operations', keywords: ['new visit'] },
   { title: 'Field Team', url: '/field-team', icon: Activity, group: 'Field Operations', keywords: ['team', 'map'] },
+  { title: 'Field Operation Manager', url: '/field-operation-manager', icon: MapPin, group: 'Field Operations', keywords: ['fom'] },
 
   { title: 'Site Verification', url: '/coordinator/sites', icon: CheckCircle, group: 'Verification', keywords: ['verify', 'coordinator'] },
   { title: 'Coordinator Dashboard', url: '/coordinator-dashboard', icon: CheckCircle, group: 'Verification', keywords: ['coordinator'] },

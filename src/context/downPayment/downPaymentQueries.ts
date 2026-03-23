@@ -33,9 +33,9 @@ function transformFromDB(data: any): DownPaymentRequest {
     mmpName: mmpEntry?.mmp_files?.name || data.metadata?.mmp_name || undefined,
     stateName,
     localityName: mmpEntry?.locality || data.metadata?.locality_name || undefined,
-    projectName: mmpEntry?.cp_name || mmpEntry?.mmp_files?.projects?.name || data.metadata?.project_name || 'WFP TPM',
-    wfpProjectName: mmpEntry?.mmp_files?.projects?.name || data.metadata?.project_name || undefined,
-    activityType: data.metadata?.activity_type || undefined,
+    projectName: mmpEntry?.cp_name || mmpEntry?.mmp_files?.projects?.name || mmpEntry?.mmp_files?.project_name || data.metadata?.project_name || 'WFP TPM',
+    wfpProjectName: mmpEntry?.mmp_files?.projects?.name || mmpEntry?.mmp_files?.project_name || data.metadata?.project_name || undefined,
+    activityType: mmpEntry?.activity_type || data.metadata?.activity_type || undefined,
     requestedBy: data.requested_by,
     requestedByName: data.metadata?.requested_by_name || undefined,
     requestedAt: data.requested_at,
@@ -90,7 +90,14 @@ async function fetchDownPaymentRequests(user: UserForDownPayment): Promise<DownP
       state,
       locality,
       cp_name,
-      mmp_file_id
+      activity_type,
+      mmp_files (
+        name,
+        project_name,
+        projects (
+          name
+        )
+      )
     )
   `);
 
@@ -115,16 +122,12 @@ async function fetchDownPaymentRequests(user: UserForDownPayment): Promise<DownP
     return q;
   };
 
-  let { data, error } = await applyRoleFilter(query)
-    .order('created_at', { ascending: false })
-    .limit(200);
+  let { data, error } = await applyRoleFilter(query).order('created_at', { ascending: false });
 
   if (error) {
     console.warn('[DownPayment] Join query failed, retrying without join:', error.message);
     const plain = applyRoleFilter(supabase.from('down_payment_requests').select('id, site_visit_id, mmp_site_entry_id, site_name, metadata, requested_by, requested_at, requester_role, hub_id, hub_name, total_transportation_budget, requested_amount, payment_type, installment_plan, paid_installments, justification, supporting_documents, supervisor_id, supervisor_status, supervisor_approved_by, supervisor_approved_at, supervisor_notes, supervisor_rejection_reason, admin_status, admin_processed_by, admin_processed_at, admin_notes, admin_rejection_reason, status, total_paid_amount, remaining_amount, wallet_transaction_ids, created_at, updated_at, payment_proof_url, payment_proof_notes, payment_proof_uploaded_at'));
-    const fallback = await plain
-      .order('created_at', { ascending: false })
-      .limit(200);
+    const fallback = await plain.order('created_at', { ascending: false });
     data = fallback.data;
     error = fallback.error;
   }

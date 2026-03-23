@@ -1,6 +1,5 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { createRateLimitResponse, enforceRateLimits, getRequestIp } from '../_shared/rate-limit.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -36,33 +35,11 @@ serve(async (req) => {
       auth: { autoRefreshToken: false, persistSession: false }
     })
 
-    const normalizedEmail = email.toLowerCase()
-    const requestIp = getRequestIp(req)
-
     if (action === 'generate') {
-      const generateRateLimit = await enforceRateLimits(supabaseUrl, serviceRoleKey, [
-        {
-          key: `verify-reset-otp:generate:ip:${requestIp}`,
-          windowMs: 15 * 60_000,
-          maxRequests: 10,
-          name: 'verify_reset_generate_ip',
-        },
-        {
-          key: `verify-reset-otp:generate:email:${normalizedEmail}`,
-          windowMs: 15 * 60_000,
-          maxRequests: 3,
-          name: 'verify_reset_generate_email',
-        },
-      ])
-
-      if (!generateRateLimit.allowed) {
-        return createRateLimitResponse('Too many reset code requests. Please try again later.', generateRateLimit.retryAfterSec, corsHeaders)
-      }
-
       const { data: userData, error: lookupError } = await supabase
         .from('profiles')
         .select('id, full_name, email')
-        .eq('email', normalizedEmail)
+        .eq('email', email.toLowerCase())
         .maybeSingle()
 
       if (lookupError || !userData) {
@@ -83,19 +60,19 @@ serve(async (req) => {
       const { error: deleteError } = await supabase
         .from('password_reset_tokens')
         .delete()
-        .eq('email', normalizedEmail)
+        .eq('email', email.toLowerCase())
 
       if (deleteError) {
         console.log('Warning: Could not delete old tokens:', deleteError.message)
       }
 
       // Now insert a fresh token
-      console.log(`[DEBUG v2] Inserting OTP for ${normalizedEmail}: otp=${generatedOtp}, expires=${expiresAt}`)
+      console.log(`[DEBUG v2] Inserting OTP for ${email.toLowerCase()}: otp=${generatedOtp}, expires=${expiresAt}`)
       
       const { data: insertData, error: storeError } = await supabase
         .from('password_reset_tokens')
         .insert({
-          email: normalizedEmail,
+          email: email.toLowerCase(),
           otp: generatedOtp,
           expires_at: expiresAt,
           used: false
@@ -112,7 +89,7 @@ serve(async (req) => {
         )
       }
       
-      console.log(`[DEBUG v2] OTP stored successfully in database for ${normalizedEmail}`)
+      console.log(`[DEBUG v2] OTP stored successfully in database for ${email.toLowerCase()}`)
 
       const smtpHost = Deno.env.get('SMTP_HOST')
       const smtpPort = Deno.env.get('SMTP_PORT') || '465'
@@ -314,30 +291,11 @@ serve(async (req) => {
       )
     }
 
-    const verifyRateLimit = await enforceRateLimits(supabaseUrl, serviceRoleKey, [
-      {
-        key: `verify-reset-otp:verify:ip:${requestIp}`,
-        windowMs: 5 * 60_000,
-        maxRequests: 15,
-        name: 'verify_reset_verify_ip',
-      },
-      {
-        key: `verify-reset-otp:verify:email:${normalizedEmail}`,
-        windowMs: 10 * 60_000,
-        maxRequests: 6,
-        name: 'verify_reset_verify_email',
-      },
-    ])
-
-    if (!verifyRateLimit.allowed) {
-      return createRateLimitResponse('Too many verification attempts. Please wait and try again.', verifyRateLimit.retryAfterSec, corsHeaders)
-    }
-
     // Get the latest unused token for this email
     const { data: storedTokens, error: tokenError } = await supabase
       .from('password_reset_tokens')
       .select('*')
-      .eq('email', normalizedEmail)
+      .eq('email', email.toLowerCase())
       .eq('used', false)
       .order('created_at', { ascending: false })
       .limit(1)
@@ -357,9 +315,9 @@ serve(async (req) => {
     if (storedToken) {
       const isExpired = new Date(storedToken.expires_at) < new Date()
       isValid = storedToken.otp === otp && !isExpired
-      console.log(`OTP verification for ${normalizedEmail}: stored=${storedToken.otp}, provided=${otp}, expired=${isExpired}, valid=${isValid}`)
+      console.log(`OTP verification for ${email.toLowerCase()}: stored=${storedToken.otp}, provided=${otp}, expired=${isExpired}, valid=${isValid}`)
     } else {
-      console.log(`No token found in database for ${normalizedEmail}`)
+      console.log(`No token found in database for ${email.toLowerCase()}`)
     }
 
     if (!isValid) {

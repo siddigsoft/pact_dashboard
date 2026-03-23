@@ -4,12 +4,6 @@ importScripts('https://www.gstatic.com/firebasejs/10.7.0/firebase-messaging-comp
 let vapidKey = null;
 let firebaseInitialized = false;
 let messaging = null;
-const isDebugEnvironment = self.location.hostname === 'localhost' || self.location.hostname === '127.0.0.1';
-const debugLog = (...args) => {
-  if (isDebugEnvironment) {
-    console.log(...args);
-  }
-};
 
 self.addEventListener('message', (event) => {
   if (event.data && event.data.type === 'SET_VAPID_KEY') {
@@ -23,10 +17,10 @@ self.addEventListener('message', (event) => {
         firebase.initializeApp(config);
         messaging = firebase.messaging();
         firebaseInitialized = true;
-        debugLog('[firebase-messaging-sw.js] Firebase initialized via postMessage');
+        console.log('[firebase-messaging-sw.js] Firebase initialized via postMessage');
         
         messaging.onBackgroundMessage((payload) => {
-          debugLog('[firebase-messaging-sw.js] Received background message:', payload);
+          console.log('[firebase-messaging-sw.js] Received background message:', payload);
           handleBackgroundMessage(payload);
         });
       }
@@ -63,7 +57,7 @@ self.addEventListener('push', (event) => {
 
   try {
     const payload = event.data.json();
-    debugLog('[firebase-messaging-sw.js] Push event received:', payload);
+    console.log('[firebase-messaging-sw.js] Push event received:', payload);
     
     event.waitUntil(
       handleBackgroundMessage(payload)
@@ -82,7 +76,7 @@ self.addEventListener('push', (event) => {
 });
 
 self.addEventListener('notificationclick', (event) => {
-  debugLog('[firebase-messaging-sw.js] Notification click:', event);
+  console.log('[firebase-messaging-sw.js] Notification click:', event);
   event.notification.close();
 
   if (event.action === 'dismiss') {
@@ -107,11 +101,11 @@ self.addEventListener('notificationclick', (event) => {
 });
 
 self.addEventListener('install', (event) => {
-  debugLog('[firebase-messaging-sw.js] Installing...');
+  console.log('[firebase-messaging-sw.js] Installing...');
   self.skipWaiting();
 });
 
 self.addEventListener('activate', (event) => {
-  debugLog('[firebase-messaging-sw.js] Activated');
+  console.log('[firebase-messaging-sw.js] Activated');
   event.waitUntil(clients.claim());
 });

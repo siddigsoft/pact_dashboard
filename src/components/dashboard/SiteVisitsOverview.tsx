@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useMemo } from 'react';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
@@ -26,26 +26,13 @@ interface SiteVisitsOverviewProps {
 const SiteVisitsOverview: React.FC<SiteVisitsOverviewProps> = ({ currentUserId, isAdmin = false, siteVisits: propSiteVisits }) => {
   const { siteVisits: contextSiteVisits, loading } = useSiteVisitContext();
   const siteVisits = propSiteVisits || contextSiteVisits;
-  const ITEMS_PER_PAGE = 5;
-  const [pendingPage, setPendingPage] = useState(1);
-  const [assignedPage, setAssignedPage] = useState(1);
-  const [completedPage, setCompletedPage] = useState(1);
 
   const { pendingVisits, assignedVisits, completedVisits, totalCount, completionRate } = useMemo(() => {
-    // If visits are passed as props, they are already role-filtered by parent zone.
-    const hasPreFilteredVisits = !!propSiteVisits;
-    const filteredVisits = hasPreFilteredVisits
-      ? siteVisits
-      : isAdmin
-        ? siteVisits
-        : siteVisits.filter(visit => visit.assignedTo === currentUserId);
-
-    const pendingStatuses = new Set(['pending', 'permitverified', 'verified', 'dispatched']);
-    const assignedStatuses = new Set(['assigned', 'inprogress', 'in progress', 'accepted']);
-
-    const pending = filteredVisits.filter((visit) => pendingStatuses.has((visit.status || '').toLowerCase()));
-    const assigned = filteredVisits.filter((visit) => assignedStatuses.has((visit.status || '').toLowerCase()));
-    const completed = filteredVisits.filter((visit) => (visit.status || '').toLowerCase() === 'completed');
+    const filteredVisits = isAdmin ? siteVisits : siteVisits.filter(visit => visit.assignedTo === currentUserId);
+    
+    const pending = filteredVisits.filter(visit => ['pending', 'permitVerified'].includes(visit.status));
+    const assigned = filteredVisits.filter(visit => ['assigned', 'inProgress'].includes(visit.status));
+    const completed = filteredVisits.filter(visit => visit.status === 'completed');
     const total = filteredVisits.length;
     const rate = total > 0 ? Math.round((completed.length / total) * 100) : 0;
 
@@ -56,21 +43,7 @@ const SiteVisitsOverview: React.FC<SiteVisitsOverviewProps> = ({ currentUserId, 
       totalCount: total,
       completionRate: rate
     };
-  }, [siteVisits, isAdmin, currentUserId, propSiteVisits]);
-
-  useEffect(() => {
-    setPendingPage(1);
-    setAssignedPage(1);
-    setCompletedPage(1);
-  }, [siteVisits]);
-
-  const pendingTotalPages = Math.max(1, Math.ceil(pendingVisits.length / ITEMS_PER_PAGE));
-  const assignedTotalPages = Math.max(1, Math.ceil(assignedVisits.length / ITEMS_PER_PAGE));
-  const completedTotalPages = Math.max(1, Math.ceil(completedVisits.length / ITEMS_PER_PAGE));
-
-  const pagedPendingVisits = pendingVisits.slice((pendingPage - 1) * ITEMS_PER_PAGE, pendingPage * ITEMS_PER_PAGE);
-  const pagedAssignedVisits = assignedVisits.slice((assignedPage - 1) * ITEMS_PER_PAGE, assignedPage * ITEMS_PER_PAGE);
-  const pagedCompletedVisits = completedVisits.slice((completedPage - 1) * ITEMS_PER_PAGE, completedPage * ITEMS_PER_PAGE);
+  }, [siteVisits, isAdmin, currentUserId]);
 
   if (loading) {
     return (
@@ -151,7 +124,7 @@ const SiteVisitsOverview: React.FC<SiteVisitsOverviewProps> = ({ currentUserId, 
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {pagedPendingVisits.map((visit) => (
+                    {pendingVisits.map((visit) => (
                       <TableRow key={visit.id}>
                         <TableCell>
                           <div className="text-xs font-medium text-primary">
@@ -184,28 +157,7 @@ const SiteVisitsOverview: React.FC<SiteVisitsOverviewProps> = ({ currentUserId, 
                   </TableBody>
                 </Table>
               </CardContent>
-              <CardFooter className="flex items-center justify-between gap-3 p-4">
-                <div className="flex items-center gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={pendingPage === 1}
-                    onClick={() => setPendingPage((p) => Math.max(1, p - 1))}
-                  >
-                    Prev
-                  </Button>
-                  <span className="text-xs text-muted-foreground">
-                    Page {pendingPage} of {pendingTotalPages}
-                  </span>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={pendingPage === pendingTotalPages}
-                    onClick={() => setPendingPage((p) => Math.min(pendingTotalPages, p + 1))}
-                  >
-                    Next
-                  </Button>
-                </div>
+              <CardFooter className="flex justify-end p-4">
                 <Button asChild variant="ghost" size="sm">
                   <Link to="/site-visits?status=pending">View All</Link>
                 </Button>
@@ -236,7 +188,7 @@ const SiteVisitsOverview: React.FC<SiteVisitsOverviewProps> = ({ currentUserId, 
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {pagedAssignedVisits.map((visit) => (
+                    {assignedVisits.map((visit) => (
                       <TableRow key={visit.id}>
                         <TableCell>
                           <div className="text-xs font-medium text-primary">
@@ -271,28 +223,7 @@ const SiteVisitsOverview: React.FC<SiteVisitsOverviewProps> = ({ currentUserId, 
                   </TableBody>
                 </Table>
               </CardContent>
-              <CardFooter className="flex items-center justify-between gap-3 p-4">
-                <div className="flex items-center gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={assignedPage === 1}
-                    onClick={() => setAssignedPage((p) => Math.max(1, p - 1))}
-                  >
-                    Prev
-                  </Button>
-                  <span className="text-xs text-muted-foreground">
-                    Page {assignedPage} of {assignedTotalPages}
-                  </span>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={assignedPage === assignedTotalPages}
-                    onClick={() => setAssignedPage((p) => Math.min(assignedTotalPages, p + 1))}
-                  >
-                    Next
-                  </Button>
-                </div>
+              <CardFooter className="flex justify-end p-4">
                 <Button asChild variant="ghost" size="sm">
                   <Link to="/site-visits?status=assigned">View All</Link>
                 </Button>
@@ -323,7 +254,7 @@ const SiteVisitsOverview: React.FC<SiteVisitsOverviewProps> = ({ currentUserId, 
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {pagedCompletedVisits.map((visit) => (
+                    {completedVisits.map((visit) => (
                       <TableRow key={visit.id}>
                         <TableCell>
                           <div className="text-xs font-medium text-primary">
@@ -356,28 +287,7 @@ const SiteVisitsOverview: React.FC<SiteVisitsOverviewProps> = ({ currentUserId, 
                   </TableBody>
                 </Table>
               </CardContent>
-              <CardFooter className="flex items-center justify-between gap-3 p-4">
-                <div className="flex items-center gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={completedPage === 1}
-                    onClick={() => setCompletedPage((p) => Math.max(1, p - 1))}
-                  >
-                    Prev
-                  </Button>
-                  <span className="text-xs text-muted-foreground">
-                    Page {completedPage} of {completedTotalPages}
-                  </span>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={completedPage === completedTotalPages}
-                    onClick={() => setCompletedPage((p) => Math.min(completedTotalPages, p + 1))}
-                  >
-                    Next
-                  </Button>
-                </div>
+              <CardFooter className="flex justify-end p-4">
                 <Button asChild variant="ghost" size="sm">
                   <Link to="/site-visits?status=completed">View All</Link>
                 </Button>

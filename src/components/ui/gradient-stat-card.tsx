@@ -1,18 +1,18 @@
-import { Card, CardContent } from '@/components/ui/card';
-import { LucideIcon } from 'lucide-react';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { LucideIcon, Sparkles } from 'lucide-react';
 
 type GradientColor = 'blue' | 'green' | 'purple' | 'orange' | 'cyan' | 'pink' | 'indigo' | 'teal';
 type CardSize = 'sm' | 'default';
 
-const colorConfig: Record<GradientColor, { icon: string; value: string; border: string; bg: string }> = {
-  blue:   { icon: 'bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400',    value: 'text-blue-700 dark:text-blue-300',    border: 'border-l-blue-500',   bg: 'bg-blue-50/50 dark:bg-blue-900/10' },
-  green:  { icon: 'bg-green-100 dark:bg-green-900/40 text-green-600 dark:text-green-400', value: 'text-green-700 dark:text-green-300',  border: 'border-l-green-500',  bg: 'bg-green-50/50 dark:bg-green-900/10' },
-  cyan:   { icon: 'bg-cyan-100 dark:bg-cyan-900/40 text-cyan-600 dark:text-cyan-400',     value: 'text-cyan-700 dark:text-cyan-300',    border: 'border-l-cyan-500',   bg: 'bg-cyan-50/50 dark:bg-cyan-900/10' },
-  orange: { icon: 'bg-orange-100 dark:bg-orange-900/40 text-orange-600 dark:text-orange-400', value: 'text-orange-700 dark:text-orange-300', border: 'border-l-orange-500', bg: 'bg-orange-50/50 dark:bg-orange-900/10' },
-  purple: { icon: 'bg-purple-100 dark:bg-purple-900/40 text-purple-600 dark:text-purple-400', value: 'text-purple-700 dark:text-purple-300', border: 'border-l-purple-500', bg: 'bg-purple-50/50 dark:bg-purple-900/10' },
-  pink:   { icon: 'bg-pink-100 dark:bg-pink-900/40 text-pink-600 dark:text-pink-400',     value: 'text-pink-700 dark:text-pink-300',    border: 'border-l-pink-500',   bg: 'bg-pink-50/50 dark:bg-pink-900/10' },
-  indigo: { icon: 'bg-indigo-100 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-400', value: 'text-indigo-700 dark:text-indigo-300', border: 'border-l-indigo-500', bg: 'bg-indigo-50/50 dark:bg-indigo-900/10' },
-  teal:   { icon: 'bg-teal-100 dark:bg-teal-900/40 text-teal-600 dark:text-teal-400',     value: 'text-teal-700 dark:text-teal-300',    border: 'border-l-teal-500',   bg: 'bg-teal-50/50 dark:bg-teal-900/10' },
+const gradientClasses: Record<GradientColor, string> = {
+  blue: 'bg-gradient-to-br from-blue-500 to-blue-700',
+  green: 'bg-gradient-to-br from-green-500 to-emerald-700',
+  purple: 'bg-gradient-to-br from-purple-500 to-purple-700',
+  orange: 'bg-gradient-to-br from-orange-500 to-red-600',
+  cyan: 'bg-gradient-to-br from-cyan-500 to-cyan-700',
+  pink: 'bg-gradient-to-br from-pink-500 to-pink-700',
+  indigo: 'bg-gradient-to-br from-indigo-500 to-indigo-700',
+  teal: 'bg-gradient-to-br from-teal-500 to-teal-700',
 };
 
 interface GradientStatCardProps {
@@ -38,44 +38,39 @@ export function GradientStatCard({
   className = '',
   'data-testid': testId,
 }: GradientStatCardProps) {
-  const cfg = colorConfig[color];
+  const gradientClass = gradientClasses[color];
   const isClickable = !!onClick;
   const isSmall = size === 'sm';
 
   return (
     <Card
       className={`
-        border border-gray-200 dark:border-gray-800
-        border-l-4 ${cfg.border}
-        bg-white dark:bg-gray-900
-        overflow-hidden
-        shadow-none
-        ${isClickable ? 'cursor-pointer hover:shadow-md hover:-translate-y-0.5 transition-all duration-200' : ''}
+        ${gradientClass}
+        text-white 
+        border-0 
+        overflow-hidden 
+        relative
+        ${isClickable ? 'hover-elevate active-elevate-2 cursor-pointer' : ''}
         ${className}
       `}
       onClick={onClick}
       data-testid={testId}
     >
-      <CardContent className={isSmall ? 'p-3' : 'p-4'}>
-        <div className="flex items-start justify-between gap-3">
-          <div className="flex-1 min-w-0">
-            <p className={`font-medium text-gray-500 dark:text-gray-400 truncate ${isSmall ? 'text-xs' : 'text-sm'}`}>
-              {title}
-            </p>
-            <p className={`font-bold text-gray-900 dark:text-white mt-1 ${isSmall ? 'text-xl' : 'text-2xl'}`}>
-              {value}
-            </p>
-            {subtitle && (
-              <p className={`text-gray-500 dark:text-gray-400 mt-1 ${isSmall ? 'text-[10px]' : 'text-xs'}`}>
-                {subtitle}
-              </p>
-            )}
-          </div>
-          <div className={`rounded-lg p-2 shrink-0 ${cfg.icon} ${isSmall ? 'p-1.5' : 'p-2'}`}>
-            <Icon className={isSmall ? 'h-4 w-4' : 'h-5 w-5'} />
-          </div>
-        </div>
+      <CardHeader className={`flex flex-row items-center justify-between gap-2 space-y-0 ${isSmall ? 'p-2.5 pb-1' : 'pb-2'}`}>
+        <CardTitle className={`font-medium text-white/90 ${isSmall ? 'text-xs' : 'text-sm'}`}>
+          {title}
+        </CardTitle>
+        <Icon className={`text-white/80 ${isSmall ? 'h-4 w-4' : 'h-5 w-5'}`} />
+      </CardHeader>
+      <CardContent className={isSmall ? 'p-2.5 pt-0' : ''}>
+        <div className={`font-bold text-white ${isSmall ? 'text-2xl' : 'text-3xl'}`}>{value}</div>
+        {subtitle && (
+          <p className={`text-white/80 ${isSmall ? 'text-[10px] mt-0.5' : 'text-xs mt-1'}`}>
+            {subtitle}
+          </p>
+        )}
       </CardContent>
+      <Sparkles className={`absolute text-white/10 ${isSmall ? '-right-3 -bottom-3 h-16 w-16' : '-right-4 -bottom-4 h-24 w-24'}`} />
     </Card>
   );
 }

@@ -180,20 +180,20 @@ export const PlanningZone: React.FC = () => {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4 max-w-3xl h-auto p-1 bg-muted/30 mx-auto rounded-xl border border-border/40">
-          <TabsTrigger value="calendar" className="gap-1.5 text-muted-foreground data-[state=active]:text-foreground data-[state=active]:bg-background data-[state=active]:shadow-sm data-[state=active]:border data-[state=active]:border-border/60 min-h-[44px] sm:min-h-[40px] px-2 py-2 sm:py-1.5">
+        <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4 max-w-3xl h-auto p-1 bg-muted/30 mx-auto">
+          <TabsTrigger value="calendar" className="gap-1.5 data-[state=active]:bg-background data-[state=active]:shadow-sm min-h-[44px] sm:min-h-[40px] px-2 py-2 sm:py-1.5">
             <Calendar className="h-4 w-4 sm:h-3.5 sm:w-3.5" />
             <span className="text-xs sm:text-xs">Calendar</span>
           </TabsTrigger>
-          <TabsTrigger value="site-visits" className="gap-1.5 text-muted-foreground data-[state=active]:text-foreground data-[state=active]:bg-background data-[state=active]:shadow-sm data-[state=active]:border data-[state=active]:border-border/60 min-h-[44px] sm:min-h-[40px] px-2 py-2 sm:py-1.5">
+          <TabsTrigger value="site-visits" className="gap-1.5 data-[state=active]:bg-background data-[state=active]:shadow-sm min-h-[44px] sm:min-h-[40px] px-2 py-2 sm:py-1.5">
             <MapPin className="h-4 w-4 sm:h-3.5 sm:w-3.5" />
             <span className="text-xs sm:text-xs">Site Visits</span>
           </TabsTrigger>
-          <TabsTrigger value="mmps" className="gap-1.5 text-muted-foreground data-[state=active]:text-foreground data-[state=active]:bg-background data-[state=active]:shadow-sm data-[state=active]:border data-[state=active]:border-border/60 min-h-[44px] sm:min-h-[40px] px-2 py-2 sm:py-1.5">
+          <TabsTrigger value="mmps" className="gap-1.5 data-[state=active]:bg-background data-[state=active]:shadow-sm min-h-[44px] sm:min-h-[40px] px-2 py-2 sm:py-1.5">
             <FileText className="h-4 w-4 sm:h-3.5 sm:w-3.5" />
             <span className="text-xs sm:text-xs">MMPs</span>
           </TabsTrigger>
-          <TabsTrigger value="forwarded" className="gap-1.5 text-muted-foreground data-[state=active]:text-foreground data-[state=active]:bg-background data-[state=active]:shadow-sm data-[state=active]:border data-[state=active]:border-border/60 min-h-[44px] sm:min-h-[40px] px-2 py-2 sm:py-1.5">
+          <TabsTrigger value="forwarded" className="gap-1.5 data-[state=active]:bg-background data-[state=active]:shadow-sm min-h-[44px] sm:min-h-[40px] px-2 py-2 sm:py-1.5">
             <Share2 className="h-4 w-4 sm:h-3.5 sm:w-3.5" />
             <span className="text-xs sm:text-xs">Forwarded</span>
           </TabsTrigger>
@@ -251,17 +251,17 @@ export const PlanningZone: React.FC = () => {
           </div>
 
           <Tabs value={mmpSubTab} onValueChange={setMmpSubTab} className="w-full">
-            <TabsList className="w-full max-w-2xl rounded-lg border border-border/40 bg-muted/30 p-1">
-              <TabsTrigger value="overview" className="flex-1 gap-1.5 text-muted-foreground data-[state=active]:text-foreground data-[state=active]:bg-background data-[state=active]:border data-[state=active]:border-border/60">
+            <TabsList className="w-full max-w-2xl">
+              <TabsTrigger value="overview" className="flex-1 gap-1.5">
                 <FileText className="h-3.5 w-3.5" />
                 Overview
               </TabsTrigger>
-              <TabsTrigger value="analytics" className="flex-1 gap-1.5 text-muted-foreground data-[state=active]:text-foreground data-[state=active]:bg-background data-[state=active]:border data-[state=active]:border-border/60">
+              <TabsTrigger value="analytics" className="flex-1 gap-1.5">
                 <BarChart3 className="h-3.5 w-3.5" />
                 Analytics
               </TabsTrigger>
               {canAccessVersioning && (
-                <TabsTrigger value="versions" className="flex-1 gap-1.5 text-muted-foreground data-[state=active]:text-foreground data-[state=active]:bg-background data-[state=active]:border data-[state=active]:border-border/60">
+                <TabsTrigger value="versions" className="flex-1 gap-1.5">
                   <GitBranch className="h-3.5 w-3.5" />
                   Versions
                 </TabsTrigger>

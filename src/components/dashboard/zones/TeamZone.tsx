@@ -210,20 +210,20 @@ export const TeamZone: React.FC = () => {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-4 max-w-2xl h-auto p-1 bg-muted/30 mx-auto rounded-xl border border-border/40">
-          <TabsTrigger value="overview" className="gap-1.5 text-muted-foreground data-[state=active]:text-foreground data-[state=active]:bg-background data-[state=active]:shadow-sm data-[state=active]:border data-[state=active]:border-border/60 min-h-[44px] sm:min-h-[40px] px-2 py-2 sm:py-1.5">
+        <TabsList className="grid w-full grid-cols-4 max-w-2xl h-auto p-1 bg-muted/30 mx-auto">
+          <TabsTrigger value="overview" className="gap-1.5 data-[state=active]:bg-background data-[state=active]:shadow-sm min-h-[44px] sm:min-h-[40px] px-2 py-2 sm:py-1.5">
             <UserCircle className="h-4 w-4 sm:h-3.5 sm:w-3.5" />
             <span className="text-xs sm:text-xs">Team</span>
           </TabsTrigger>
-          <TabsTrigger value="mmp-analytics" className="gap-1.5 text-muted-foreground data-[state=active]:text-foreground data-[state=active]:bg-background data-[state=active]:shadow-sm data-[state=active]:border data-[state=active]:border-border/60 min-h-[44px] sm:min-h-[40px] px-2 py-2 sm:py-1.5">
+          <TabsTrigger value="mmp-analytics" className="gap-1.5 data-[state=active]:bg-background data-[state=active]:shadow-sm min-h-[44px] sm:min-h-[40px] px-2 py-2 sm:py-1.5">
             <BarChart3 className="h-4 w-4 sm:h-3.5 sm:w-3.5" />
             <span className="text-xs sm:text-xs">MMPs</span>
           </TabsTrigger>
-          <TabsTrigger value="map" className="gap-1.5 text-muted-foreground data-[state=active]:text-foreground data-[state=active]:bg-background data-[state=active]:shadow-sm data-[state=active]:border data-[state=active]:border-border/60 min-h-[44px] sm:min-h-[40px] px-2 py-2 sm:py-1.5">
+          <TabsTrigger value="map" className="gap-1.5 data-[state=active]:bg-background data-[state=active]:shadow-sm min-h-[44px] sm:min-h-[40px] px-2 py-2 sm:py-1.5">
             <MapPin className="h-4 w-4 sm:h-3.5 sm:w-3.5" />
             <span className="text-xs sm:text-xs">Live Map</span>
           </TabsTrigger>
-          <TabsTrigger value="communication" className="gap-1.5 text-muted-foreground data-[state=active]:text-foreground data-[state=active]:bg-background data-[state=active]:shadow-sm data-[state=active]:border data-[state=active]:border-border/60 min-h-[44px] sm:min-h-[40px] px-2 py-2 sm:py-1.5">
+          <TabsTrigger value="communication" className="gap-1.5 data-[state=active]:bg-background data-[state=active]:shadow-sm min-h-[44px] sm:min-h-[40px] px-2 py-2 sm:py-1.5">
             <MessageSquare className="h-4 w-4 sm:h-3.5 sm:w-3.5" />
             <span className="text-xs sm:text-xs">Comms</span>
           </TabsTrigger>
