@@ -1,5 +1,6 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { createRateLimitResponse, enforceRateLimits, getRequestIp } from '../_shared/rate-limit.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -92,6 +93,26 @@ serve(async (req) => {
         JSON.stringify({ success: false, error: 'Insufficient permissions. Only admins can update user emails.' }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 403 }
       )
+    }
+
+    const requestIp = getRequestIp(req)
+    const rateLimit = await enforceRateLimits(supabaseUrl, serviceRoleKey, [
+      {
+        key: `admin-update-email:ip:${requestIp}`,
+        windowMs: 60_000,
+        maxRequests: 40,
+        name: 'admin_update_email_ip',
+      },
+      {
+        key: `admin-update-email:user:${callerUser.id}`,
+        windowMs: 60_000,
+        maxRequests: 20,
+        name: 'admin_update_email_user',
+      },
+    ])
+
+    if (!rateLimit.allowed) {
+      return createRateLimitResponse('Too many email update requests. Please try again shortly.', rateLimit.retryAfterSec, corsHeaders)
     }
 
     const { userId, newEmail } = await req.json()
