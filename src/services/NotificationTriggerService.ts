@@ -697,8 +697,8 @@ export const NotificationTriggerService = {
             .eq('project_id', projectId);
           
           if (!teamError && teamMembers) {
-            const projectUserIds = teamMembers.map(m => m.user_id);
-            targetUserIds = targetUserIds.filter(id => projectUserIds.includes(id));
+            const projectUserIds = new Set(teamMembers.map(m => m.user_id).filter(Boolean));
+            targetUserIds = targetUserIds.filter(id => projectUserIds.has(id));
           }
         } catch {
           // team_members table may not exist - skip project filtering
@@ -775,10 +775,31 @@ export const NotificationTriggerService = {
     }
     
     // If no roles specified, send to all users
-    const { data: users } = await supabase.from('profiles').select('id').limit(100);
-    if (!users) return 0;
-    
-    return await this.sendBulk(users.map(u => u.id), {
+    const PAGE_SIZE = 500;
+    let from = 0;
+    const userIds: string[] = [];
+
+    while (true) {
+      const { data: users, error } = await supabase
+        .from('profiles')
+        .select('id')
+        .range(from, from + PAGE_SIZE - 1);
+
+      if (error) {
+        console.error('Failed to fetch users for system update:', error);
+        return 0;
+      }
+
+      if (!users || users.length === 0) break;
+      userIds.push(...users.map(u => u.id));
+
+      if (users.length < PAGE_SIZE) break;
+      from += PAGE_SIZE;
+    }
+
+    if (userIds.length === 0) return 0;
+
+    return await this.sendBulk(userIds, {
       title,
       message,
       type: 'info',
