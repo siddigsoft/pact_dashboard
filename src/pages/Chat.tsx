@@ -595,36 +595,59 @@ const Chat: React.FC = () => {
     );
   }
 
-  // WEB VIEW - Uber Style Black/White Theme
+  // WEB VIEW
   return (
-    <div className="h-full w-full flex bg-white dark:bg-black overflow-hidden" data-testid="chat-page">
-      {/* Left Panel - Conversation List */}
-      <div className="w-[340px] min-w-[340px] max-w-[340px] h-full flex flex-col flex-shrink-0 border-r border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-950">
-        {/* Header with Search */}
-        <div className="p-4 border-b border-gray-200 dark:border-gray-800">
-          <div className="flex items-center justify-between mb-3">
+    <div className="h-full w-full flex bg-gray-50 dark:bg-gray-950 overflow-hidden" data-testid="chat-page">
+      {/* Left Panel */}
+      <div className="w-[320px] min-w-[320px] max-w-[320px] h-full flex flex-col flex-shrink-0 border-r border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900">
+
+        {/* Sidebar Header */}
+        <div className="px-4 pt-5 pb-4 border-b border-gray-100 dark:border-gray-800">
+          <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2">
-              <h2 className="text-lg font-semibold text-black dark:text-white">Messages</h2>
+              <h2 className="text-lg font-bold text-gray-900 dark:text-white">Messages</h2>
               <RealtimeStatusDot className="h-2.5 w-2.5" />
             </div>
-            <button 
+            <button
               onClick={() => setActiveTab('contacts')}
-              className="w-8 h-8 rounded-full bg-black dark:bg-white text-white dark:text-black flex items-center justify-center hover:opacity-90 transition-opacity"
+              className="h-8 w-8 rounded-lg bg-blue-600 hover:bg-blue-700 text-white flex items-center justify-center transition-colors"
               data-testid="button-new-chat"
+              title="New message"
             >
               <Plus className="h-4 w-4" />
             </button>
           </div>
 
-          {/* Online Now Section */}
+          {/* Search */}
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+            <input
+              type="text"
+              placeholder={activeTab === 'conversations' ? "Search messages..." : "Search contacts..."}
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full h-9 pl-9 pr-8 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white placeholder:text-gray-400 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
+              data-testid="input-search"
+            />
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery('')}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 rounded-full bg-gray-300 dark:bg-gray-600 flex items-center justify-center hover:bg-gray-400 transition-colors"
+              >
+                <X className="h-2.5 w-2.5 text-gray-600 dark:text-gray-300" />
+              </button>
+            )}
+          </div>
+
+          {/* Online Now */}
           {onlineCount > 0 && (
-            <div className="mb-3 flex items-center gap-3 p-2 rounded-lg bg-gray-100 dark:bg-gray-900" data-testid="online-users-section-web">
-              <div className="flex items-center gap-1.5">
-                <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-                <span className="text-green-600 dark:text-green-400 text-xs font-medium">{onlineCount} Online</span>
+            <div className="mt-3 flex items-center gap-2.5 px-2.5 py-2 rounded-lg bg-green-50 dark:bg-green-900/20 border border-green-100 dark:border-green-900/40" data-testid="online-users-section-web">
+              <div className="flex items-center gap-1.5 shrink-0">
+                <div className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse" />
+                <span className="text-green-700 dark:text-green-400 text-xs font-medium">{onlineCount} online</span>
               </div>
-              <div className="flex -space-x-2 flex-1">
-                {onlineUsers.slice(0, 6).map((user) => {
+              <div className="flex -space-x-1.5 flex-1">
+                {onlineUsers.slice(0, 7).map((user) => {
                   const userName = user.fullName || user.name || user.username || 'U';
                   return (
                     <button
@@ -634,83 +657,65 @@ const Chat: React.FC = () => {
                       title={userName}
                       data-testid={`online-avatar-web-${user.id}`}
                     >
-                      <Avatar className="h-7 w-7 border-2 border-gray-50 dark:border-gray-950">
+                      <Avatar className="h-6 w-6 border-2 border-white dark:border-gray-900">
                         <AvatarImage src={user.avatar} alt={userName} />
-                        <AvatarFallback className="bg-green-500 text-white text-[10px] font-bold">
+                        <AvatarFallback className="bg-green-500 text-white text-[9px] font-bold">
                           {getInitials(userName)}
                         </AvatarFallback>
                       </Avatar>
                     </button>
                   );
                 })}
-                {onlineCount > 6 && (
-                  <div className="h-7 w-7 rounded-full bg-gray-200 dark:bg-gray-800 border-2 border-gray-50 dark:border-gray-950 flex items-center justify-center">
-                    <span className="text-gray-600 dark:text-gray-400 text-[10px] font-bold">+{onlineCount - 6}</span>
+                {onlineCount > 7 && (
+                  <div className="h-6 w-6 rounded-full bg-gray-200 dark:bg-gray-700 border-2 border-white dark:border-gray-900 flex items-center justify-center">
+                    <span className="text-gray-600 dark:text-gray-300 text-[9px] font-bold">+{onlineCount - 7}</span>
                   </div>
                 )}
               </div>
             </div>
           )}
-          
-          {/* Search */}
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-            <input
-              type="text"
-              placeholder={activeTab === 'conversations' ? "Search messages..." : "Search contacts..."}
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full h-10 pl-10 pr-10 rounded-lg bg-gray-100 dark:bg-gray-900 text-black dark:text-white placeholder:text-gray-500 text-sm focus:outline-none focus:ring-2 focus:ring-black dark:focus:ring-white transition-all"
-              data-testid="input-search"
-            />
-            {searchQuery && (
-              <button 
-                onClick={() => setSearchQuery('')}
-                className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 rounded-full bg-gray-300 dark:bg-gray-700 flex items-center justify-center hover:bg-gray-400 dark:hover:bg-gray-600 transition-colors"
-              >
-                <X className="h-3 w-3 text-gray-600 dark:text-gray-400" />
-              </button>
-            )}
-          </div>
         </div>
 
         {/* Tabs */}
-        <div className="px-4 py-2 border-b border-gray-200 dark:border-gray-800">
-          <div className="flex rounded-lg bg-gray-100 dark:bg-gray-900 p-1">
-            <button 
-              className={`flex-1 py-2 px-3 rounded-md text-sm font-medium transition-colors flex items-center justify-center gap-2 ${
-                activeTab === 'contacts' ? 'bg-black dark:bg-white text-white dark:text-black shadow-sm' : 'text-gray-600 dark:text-gray-400 hover:text-black dark:hover:text-white'
+        <div className="px-4 py-2.5 border-b border-gray-100 dark:border-gray-800">
+          <div className="flex rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
+            <button
+              className={`flex-1 py-2 text-sm font-medium transition-colors flex items-center justify-center gap-1.5 ${
+                activeTab === 'contacts'
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-white dark:bg-gray-900 text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800'
               }`}
               onClick={() => setActiveTab('contacts')}
               data-testid="tab-contacts"
             >
-              <Users className="h-4 w-4" />
+              <Users className="h-3.5 w-3.5" />
               Contacts
             </button>
-            <button 
-              className={`flex-1 py-2 px-3 rounded-md text-sm font-medium transition-colors flex items-center justify-center gap-2 ${
-                activeTab === 'conversations' ? 'bg-black dark:bg-white text-white dark:text-black shadow-sm' : 'text-gray-600 dark:text-gray-400 hover:text-black dark:hover:text-white'
+            <button
+              className={`flex-1 py-2 text-sm font-medium transition-colors flex items-center justify-center gap-1.5 ${
+                activeTab === 'conversations'
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-white dark:bg-gray-900 text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800'
               }`}
               onClick={() => setActiveTab('conversations')}
               data-testid="tab-conversations"
             >
-              <MessageSquare className="h-4 w-4" />
+              <MessageSquare className="h-3.5 w-3.5" />
               Chats
             </button>
           </div>
         </div>
 
-        {/* Content based on active tab */}
+        {/* List */}
         <ScrollArea className="flex-1">
           {activeTab === 'contacts' ? (
-            /* Contact List */
             filteredUsers.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-12 px-6">
-                <div className="w-14 h-14 rounded-full bg-gray-100 dark:bg-gray-900 flex items-center justify-center mb-4">
-                  <Users className="h-7 w-7 text-gray-500" />
+              <div className="flex flex-col items-center justify-center py-14 px-6 text-center">
+                <div className="w-12 h-12 rounded-xl bg-gray-100 dark:bg-gray-800 flex items-center justify-center mb-3">
+                  <Users className="h-6 w-6 text-gray-400" />
                 </div>
-                <p className="text-black dark:text-white font-medium">No contacts found</p>
-                <p className="text-gray-500 text-center text-sm mt-1">Try a different search term</p>
+                <p className="font-medium text-gray-700 dark:text-gray-300 text-sm">No contacts found</p>
+                <p className="text-gray-400 text-xs mt-1">Try a different search term</p>
               </div>
             ) : (
               <div className="py-1">
@@ -722,28 +727,28 @@ const Chat: React.FC = () => {
                       key={user.id}
                       onClick={() => handleStartChatWithUser(user.id)}
                       disabled={isLoading}
-                      className="w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-100 dark:hover:bg-gray-900 transition-colors disabled:opacity-50"
+                      className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors disabled:opacity-50 group"
                       data-testid={`contact-${user.id}`}
                     >
-                      <div className="relative">
-                        <Avatar className="h-10 w-10">
+                      <div className="relative shrink-0">
+                        <Avatar className="h-9 w-9">
                           <AvatarImage src={user.avatar} alt={userName} />
-                          <AvatarFallback className="bg-black dark:bg-white text-white dark:text-black text-sm font-medium">
+                          <AvatarFallback className="bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 text-sm font-semibold">
                             {getInitials(userName)}
                           </AvatarFallback>
                         </Avatar>
-                        <div className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 ${userStatus.dotColor} rounded-full border-2 border-gray-50 dark:border-gray-950`} />
+                        <div className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 ${userStatus.dotColor} rounded-full border-2 border-white dark:border-gray-900`} />
                       </div>
                       <div className="flex-1 min-w-0 text-left">
-                        <span className="font-medium text-sm text-black dark:text-white truncate block">{userName}</span>
+                        <span className="font-medium text-sm text-gray-900 dark:text-white truncate block">{userName}</span>
                         <span className={`text-xs truncate block ${userStatus.color}`}>{userStatus.text}</span>
                       </div>
-                      <div className="flex items-center gap-2">
-                        <div className="w-8 h-8 rounded-full bg-black dark:bg-white flex items-center justify-center">
-                          <MessageSquare className="h-4 w-4 text-white dark:text-black" />
+                      <div className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <div className="w-7 h-7 rounded-lg bg-blue-50 dark:bg-blue-900/30 flex items-center justify-center hover:bg-blue-100 dark:hover:bg-blue-900/50">
+                          <MessageSquare className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
                         </div>
-                        <div 
-                          className="w-8 h-8 rounded-full bg-gray-200 dark:bg-gray-800 flex items-center justify-center hover:bg-gray-300 dark:hover:bg-gray-700 transition-colors"
+                        <div
+                          className="w-7 h-7 rounded-lg bg-gray-100 dark:bg-gray-700 flex items-center justify-center hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
                           onClick={(e) => {
                             e.stopPropagation();
                             const targetUser = users.find(u => u.id === user.id);
@@ -753,7 +758,7 @@ const Chat: React.FC = () => {
                             }
                           }}
                         >
-                          <Phone className="h-4 w-4 text-gray-600 dark:text-gray-400" />
+                          <Phone className="h-3.5 w-3.5 text-gray-500 dark:text-gray-400" />
                         </div>
                       </div>
                     </button>
@@ -762,74 +767,80 @@ const Chat: React.FC = () => {
               </div>
             )
           ) : (
-            /* Chat List */
             filteredChats.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-12 px-6">
-                <div className="w-14 h-14 rounded-full bg-gray-100 dark:bg-gray-900 flex items-center justify-center mb-4">
-                  <MessageSquare className="h-7 w-7 text-gray-500" />
+              <div className="flex flex-col items-center justify-center py-14 px-6 text-center">
+                <div className="w-12 h-12 rounded-xl bg-gray-100 dark:bg-gray-800 flex items-center justify-center mb-3">
+                  <MessageSquare className="h-6 w-6 text-gray-400" />
                 </div>
-                <p className="text-black dark:text-white font-medium">No messages yet</p>
-                <p className="text-gray-500 text-center text-sm mt-1">Your conversations will appear here</p>
-                <button 
+                <p className="font-medium text-gray-700 dark:text-gray-300 text-sm">No conversations yet</p>
+                <p className="text-gray-400 text-xs mt-1">Start a message to connect with your team</p>
+                <button
                   onClick={() => setActiveTab('contacts')}
-                  className="mt-4 h-9 px-4 rounded-lg bg-black dark:bg-white text-white dark:text-black font-medium text-sm hover:opacity-90 transition-opacity flex items-center gap-2"
+                  className="mt-3 h-8 px-3 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-medium text-xs flex items-center gap-1.5 transition-colors"
                   data-testid="button-new-message"
                 >
-                  <Plus className="h-4 w-4" />
+                  <Plus className="h-3.5 w-3.5" />
                   New Message
                 </button>
               </div>
             ) : (
               <div className="py-1">
-                {filteredChats.map((chat) => (
-                  <button
-                    key={chat.id}
-                    onClick={() => handleSelectChat(chat.id)}
-                    className={`w-full px-4 py-3 flex items-center gap-3 transition-all ${
-                      activeChat?.id === chat.id 
-                        ? 'bg-black/5 dark:bg-white/5' 
-                        : 'hover:bg-gray-100 dark:hover:bg-gray-900'
-                    }`}
-                    data-testid={`chat-item-${chat.id}`}
-                  >
-                    <div className="relative">
-                      <Avatar className="h-10 w-10">
-                        <AvatarFallback className={`text-sm font-medium ${activeChat?.id === chat.id ? 'bg-black dark:bg-white text-white dark:text-black' : 'bg-gray-200 dark:bg-gray-800 text-gray-600 dark:text-gray-400'}`}>
-                          {chat.type === 'group' || chat.type === 'state-group' ? (
-                            <Users className="h-4 w-4" />
-                          ) : (
-                            chat.name.charAt(0).toUpperCase()
-                          )}
-                        </AvatarFallback>
-                      </Avatar>
-                      {chat.type === 'private' && (() => {
-                        const chatStatus = getChatUserStatus(chat);
-                        return <div className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 ${chatStatus?.dotColor || 'bg-gray-400'} rounded-full border-2 border-gray-50 dark:border-gray-950`} />;
-                      })()}
-                    </div>
-                    <div className="flex-1 min-w-0 text-left">
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="font-medium text-sm text-black dark:text-white truncate">{chat.name}</span>
-                        <span className="text-xs text-gray-500 shrink-0">
-                          {formatTime(chat.lastMessage?.timestamp)}
-                        </span>
+                {filteredChats.map((chat) => {
+                  const isActive = activeChat?.id === chat.id;
+                  return (
+                    <button
+                      key={chat.id}
+                      onClick={() => handleSelectChat(chat.id)}
+                      className={`w-full px-4 py-3 flex items-center gap-3 transition-all ${
+                        isActive
+                          ? 'bg-blue-50 dark:bg-blue-900/20 border-r-2 border-blue-600'
+                          : 'hover:bg-gray-50 dark:hover:bg-gray-800'
+                      }`}
+                      data-testid={`chat-item-${chat.id}`}
+                    >
+                      <div className="relative shrink-0">
+                        <Avatar className="h-10 w-10">
+                          <AvatarFallback className={`text-sm font-semibold ${
+                            isActive
+                              ? 'bg-blue-600 text-white'
+                              : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300'
+                          }`}>
+                            {chat.type === 'group' || chat.type === 'state-group' ? (
+                              <Users className="h-4 w-4" />
+                            ) : (
+                              chat.name.charAt(0).toUpperCase()
+                            )}
+                          </AvatarFallback>
+                        </Avatar>
+                        {chat.type === 'private' && (() => {
+                          const chatStatus = getChatUserStatus(chat);
+                          return <div className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 ${chatStatus?.dotColor || 'bg-gray-400'} rounded-full border-2 border-white dark:border-gray-900`} />;
+                        })()}
                       </div>
-                      <div className="flex items-center justify-between gap-2 mt-0.5">
-                        <p className="truncate text-xs text-gray-500 flex items-center gap-1">
-                          {chat.lastMessage?.senderId === currentUser?.id && (
-                            <CheckCheck className="h-3 w-3 shrink-0 text-black dark:text-white" />
-                          )}
-                          {chat.lastMessage?.content || 'Start a conversation'}
-                        </p>
-                        {chat.unreadCount > 0 && activeChat?.id !== chat.id && (
-                          <span className="min-w-[20px] h-5 px-1.5 rounded-full bg-black dark:bg-white text-white dark:text-black text-[10px] font-bold flex items-center justify-center">
-                            {chat.unreadCount}
+                      <div className="flex-1 min-w-0 text-left">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className={`font-semibold text-sm truncate ${isActive ? 'text-blue-700 dark:text-blue-300' : 'text-gray-900 dark:text-white'}`}>{chat.name}</span>
+                          <span className="text-[11px] text-gray-400 shrink-0">
+                            {formatTime(chat.lastMessage?.timestamp)}
                           </span>
-                        )}
+                        </div>
+                        <div className="flex items-center justify-between gap-2 mt-0.5">
+                          <p className="truncate text-xs text-gray-500 flex items-center gap-1">
+                            {chat.lastMessage?.senderId === currentUser?.id && (
+                              <CheckCheck className="h-3 w-3 shrink-0 text-blue-500" />
+                            )}
+                            {chat.lastMessage?.content || 'Start a conversation'}
+                          </p>
+                          {chat.unreadCount > 0 && !isActive && (
+                            <span className="min-w-[18px] h-[18px] px-1 rounded-full bg-blue-600 text-white text-[10px] font-bold flex items-center justify-center">
+                              {chat.unreadCount}
+                            </span>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  </button>
-                ))}
+                    </button>
+                  );
+                })}
               </div>
             )
           )}
@@ -837,22 +848,22 @@ const Chat: React.FC = () => {
       </div>
 
       {/* Right Panel - Chat Window */}
-      <div className="flex-1 min-w-0 h-full flex flex-col bg-white dark:bg-black overflow-hidden">
+      <div className="flex-1 min-w-0 h-full flex flex-col bg-white dark:bg-gray-950 overflow-hidden">
         {activeChat ? (
           <ChatWindow />
         ) : (
-          <div className="flex-1 flex flex-col items-center justify-center">
-            <div className="text-center max-w-md px-6">
-              <div className="w-16 h-16 rounded-full bg-gray-100 dark:bg-gray-900 flex items-center justify-center mx-auto mb-4">
-                <MessageSquare className="h-8 w-8 text-gray-500" />
+          <div className="flex-1 h-full flex flex-col items-center justify-center bg-gray-50 dark:bg-gray-950">
+            <div className="text-center max-w-sm px-6">
+              <div className="w-16 h-16 rounded-2xl bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-900/40 flex items-center justify-center mx-auto mb-5">
+                <MessageSquare className="h-8 w-8 text-blue-500" />
               </div>
-              <h3 className="text-xl font-semibold text-black dark:text-white">Start a conversation</h3>
-              <p className="text-gray-500 text-sm mt-2">
-                Select a chat or browse contacts to start messaging
+              <h3 className="text-xl font-bold text-gray-900 dark:text-white">Start a conversation</h3>
+              <p className="text-gray-500 dark:text-gray-400 text-sm mt-2 leading-relaxed">
+                Select a chat from the list or browse your contacts to begin messaging.
               </p>
-              <button 
+              <button
                 onClick={() => setActiveTab('contacts')}
-                className="mt-4 h-10 px-5 rounded-lg bg-black dark:bg-white text-white dark:text-black font-medium text-sm flex items-center gap-2 mx-auto"
+                className="mt-5 h-10 px-5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-medium text-sm flex items-center gap-2 mx-auto transition-colors"
                 data-testid="button-browse-contacts"
               >
                 <Users className="h-4 w-4" />
