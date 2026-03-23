@@ -33,9 +33,9 @@ function transformFromDB(data: any): DownPaymentRequest {
     mmpName: mmpEntry?.mmp_files?.name || data.metadata?.mmp_name || undefined,
     stateName,
     localityName: mmpEntry?.locality || data.metadata?.locality_name || undefined,
-    projectName: mmpEntry?.cp_name || mmpEntry?.mmp_files?.projects?.name || mmpEntry?.mmp_files?.project_name || data.metadata?.project_name || 'WFP TPM',
-    wfpProjectName: mmpEntry?.mmp_files?.projects?.name || mmpEntry?.mmp_files?.project_name || data.metadata?.project_name || undefined,
-    activityType: mmpEntry?.activity_type || data.metadata?.activity_type || undefined,
+    projectName: mmpEntry?.cp_name || mmpEntry?.mmp_files?.projects?.name || data.metadata?.project_name || 'WFP TPM',
+    wfpProjectName: mmpEntry?.mmp_files?.projects?.name || data.metadata?.project_name || undefined,
+    activityType: data.metadata?.activity_type || undefined,
     requestedBy: data.requested_by,
     requestedByName: data.metadata?.requested_by_name || undefined,
     requestedAt: data.requested_at,
@@ -90,10 +90,8 @@ async function fetchDownPaymentRequests(user: UserForDownPayment): Promise<DownP
       state,
       locality,
       cp_name,
-      activity_type,
       mmp_files (
         name,
-        project_name,
         projects (
           name
         )
