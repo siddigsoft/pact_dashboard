@@ -150,7 +150,6 @@ const CoordinatorLocalityPermitUpload: React.FC<{
 const SitesForVerification: React.FC = () => {
   const { currentUser, siteVisits } = useAppContext();
   const navigate = useNavigate();
-  const isSupervisorUser = ['supervisor', 'hubsupervisor', 'hub_supervisor'].includes((currentUser?.role || '').toLowerCase());
   const { localitiesWithPermitStatus, totalLocalities, localitiesWithPermits, localitiesWithoutPermits } = useLocalityPermitStatus(siteVisits);
 
 
@@ -218,25 +217,13 @@ const SitesForVerification: React.FC = () => {
             </div>
           ) : (
             <div className="space-y-3 sm:space-y-6"> {/* Adjusted spacing */}
-              {/* Localities without permits */}
+              {/* Localities without permits - show upload prompts */}
               {localitiesWithoutPermits.map((locality) => (
-                isSupervisorUser ? (
-                  <Card key={`${locality.stateId}-${locality.localityId}`} className="border-orange-200 bg-orange-50/30 shadow-sm">
-                    <CardContent className="flex items-center gap-3 py-4 px-4">
-                      <AlertTriangle className="h-5 w-5 text-orange-500 flex-shrink-0" />
-                      <div>
-                        <p className="font-medium text-orange-800 text-sm">{locality.locality}, {locality.state}</p>
-                        <p className="text-xs text-orange-600 mt-0.5">Local permit not yet uploaded by coordinator</p>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ) : (
-                  <CoordinatorLocalityPermitUpload
-                    key={`${locality.stateId}-${locality.localityId}`}
-                    locality={locality}
-                    onPermitUploaded={handlePermitUploaded}
-                  />
-                )
+                <CoordinatorLocalityPermitUpload
+                  key={`${locality.stateId}-${locality.localityId}`}
+                  locality={locality}
+                  onPermitUploaded={handlePermitUploaded}
+                />
               ))}
 
               {/* Localities with permits - show site access */}
@@ -340,8 +327,7 @@ const SitesForVerification: React.FC = () => {
                                       onClick={() => navigate(`/mmp/${site.mmpDetails?.mmpId}/verification`)}
                                       className="w-full sm:w-auto min-h-[40px] py-2 px-3 sm:px-4 active:scale-95 transition-all shadow-sm hover:shadow-md"
                                     >
-                                      <Eye className="h-3.5 w-3.5 mr-1.5" />
-                                      {isSupervisorUser ? 'View' : 'Review & Verify'}
+                                      Review & Verify
                                     </Button>
                                   </div>
                                 </div>
