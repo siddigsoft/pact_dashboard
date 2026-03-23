@@ -62,9 +62,15 @@ export function ClaimSiteButton({
   const { isSuperAdmin } = useSuperAdmin();
   const { logSiteVisitEvent } = useAuditLog();
 
-  const isFieldWorker = currentUser?.role === 'dataCollector' || 
-                        currentUser?.role === 'datacollector' || 
-                        currentUser?.role === 'coordinator';
+  const userRole = (currentUser?.role || '').toLowerCase().trim();
+  const isFieldWorker = userRole === 'datacollector' ||
+                        userRole === 'data_collector' ||
+                        userRole === 'enumerator' ||
+                        userRole === 'coordinator' ||
+                        userRole === 'field_coordinator' ||
+                        userRole === 'supervisor' ||
+                        userRole === 'hubsupervisor' ||
+                        userRole === 'hub_supervisor';
   
   const canSeeBreakdown = !isFieldWorker;
 

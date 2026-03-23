@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { useMMP } from '@/context/mmp/MMPContext';
 import { useAppContext } from '@/context/AppContext';
 import { useUserProjects } from '@/hooks/useUserProjects';
+import { getHubAccessInfo, isStateInAnyHub } from '@/utils/hubAccessControl';
 import {
   useCoordinatorSiteEntriesQuery,
   type CoordinatorSiteEntryRow,
@@ -127,11 +128,18 @@ export const useCoordinatorSites = () => {
   const { mmpFiles: contextMmpFiles, loading: contextLoading, refreshMMPFiles } = useMMP();
   const { isAdminOrSuperUser } = useUserProjects();
 
+  const role = (currentUser?.role || '').toLowerCase().trim();
+  const isSupervisor = role === 'supervisor' || role === 'hubsupervisor' || role === 'hub_supervisor';
+  const hubAccessInfo = isSupervisor ? getHubAccessInfo(currentUser) : null;
+
+  // Supervisors mirror coordinator capabilities, but we cannot rely on the coordinator-only RPC.
+  // For supervisors we disable the RPC and filter relevant site entries from MMP context by hub/state.
+  const rpcUserId = isSupervisor ? null : currentUser?.id ?? null;
   const {
     data: coordinatorRows,
     isLoading: coordinatorQueryLoading,
     refetch: refetchCoordinatorQuery,
-  } = useCoordinatorSiteEntriesQuery(currentUser?.id ?? null, isAdminOrSuperUser ?? false);
+  } = useCoordinatorSiteEntriesQuery(rpcUserId, isAdminOrSuperUser ?? false);
 
   const coordinatorSites = useMemo(() => {
     const rpcSites = (coordinatorRows ?? []).map(mapCoordinatorRowToSiteVisit);
@@ -140,19 +148,61 @@ export const useCoordinatorSites = () => {
     }
 
     const allSites: SiteVisit[] = [];
+    const supervisorHubIds = hubAccessInfo?.hubIds ?? [];
+    const allowedSupervisorStatuses = new Set([
+      // Pre-pipeline
+      'pending',
+      'inprogress',
+      'in_progress',
+      'forwarded',
+      'forwarded_to_coordinator',
+      'forwarded_to_coordinators',
+      'new',
+      'dispatched',
+      'assigned',
+      'accepted',
+      // Permit/cp verification + post verification
+      'permits_attached',
+      'cp_verified',
+      'cp_verification',
+      'locality_permit_verified',
+      'verified',
+      'approved',
+      'approved_and_costed',
+      'costed',
+      'completed',
+      'rejected',
+      'returned_to_fom',
+    ]);
+
     contextMmpFiles.forEach((mmp: any) => {
       if (!mmp.siteEntries || !Array.isArray(mmp.siteEntries)) return;
       mmp.siteEntries.forEach((entry: any) => {
         if (!isAdminOrSuperUser) {
-          const forwardedToMe = entry.forwardedToUserId === currentUser.id;
-          const assignedToMe = (entry.additionalData?.assigned_to || entry.additional_data?.assigned_to) === currentUser.id;
-          const acceptedByMe = entry.accepted_by === currentUser.id;
-          const workflow = entry.workflow || {};
-          const forwardedIds: string[] = Array.isArray(workflow.forwardedToCoordinatorIds)
-            ? workflow.forwardedToCoordinatorIds
-            : [];
-          const listedInWorkflow = forwardedIds.includes(currentUser.id);
-          if (!forwardedToMe && !assignedToMe && !acceptedByMe && !listedInWorkflow) return;
+          // Supervisors: filter by hub/state access + pipeline statuses.
+          if (isSupervisor) {
+            const normalizedStatus = (entry.status || '')
+              .toLowerCase()
+              .trim()
+              .replace(/\s+/g, '_');
+            if (!allowedSupervisorStatuses.has(normalizedStatus)) return;
+
+            if (!hubAccessInfo?.isHubSupervisor || supervisorHubIds.length === 0) return;
+            const entryStateName = (entry.state || entry.state_name || entry.stateName || '').toString();
+            if (!entryStateName) return;
+            if (!isStateInAnyHub(entryStateName, supervisorHubIds)) return;
+          } else {
+            // Coordinators: keep strict "assigned/forwarded/accepted" ownership filter.
+            const forwardedToMe = entry.forwardedToUserId === currentUser.id;
+            const assignedToMe = (entry.additionalData?.assigned_to || entry.additional_data?.assigned_to) === currentUser.id;
+            const acceptedByMe = entry.accepted_by === currentUser.id;
+            const workflow = entry.workflow || {};
+            const forwardedIds: string[] = Array.isArray(workflow.forwardedToCoordinatorIds)
+              ? workflow.forwardedToCoordinatorIds
+              : [];
+            const listedInWorkflow = forwardedIds.includes(currentUser.id);
+            if (!forwardedToMe && !assignedToMe && !acceptedByMe && !listedInWorkflow) return;
+          }
         }
         const isUnverified = entry.status === 'Pending' || entry.status === 'Dispatched' ||
                             entry.status === 'assigned' || entry.status === 'inProgress' ||
@@ -196,7 +246,18 @@ export const useCoordinatorSites = () => {
     allSites.forEach((site) => merged.set(site.id, site));
     rpcSites.forEach((site) => merged.set(site.id, site));
     return Array.from(merged.values());
-  }, [coordinatorRows, contextMmpFiles, contextLoading, currentUser?.id, isAdminOrSuperUser]);
+  }, [
+    coordinatorRows,
+    contextMmpFiles,
+    contextLoading,
+    currentUser?.id,
+    currentUser?.role,
+    (currentUser as any)?.hubId,
+    (currentUser as any)?.secondaryHubId,
+    isAdminOrSuperUser,
+    isSupervisor,
+    hubAccessInfo?.hubIds.join('|'),
+  ]);
 
   const siteCounts = useMemo(() => computeCounts(coordinatorSites), [coordinatorSites]);
 

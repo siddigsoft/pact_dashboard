@@ -803,8 +803,11 @@ export const NotificationTriggerService = {
     projectId?: string
   ): Promise<number> {
     try {
-      const isDataCollector = ['data_collector', 'enumerator', 'dc'].includes(claimerRole?.toLowerCase() || '');
-      const isCoordinator = ['coordinator', 'field_coordinator'].includes(claimerRole?.toLowerCase() || '');
+      const normalizedClaimerRole = (claimerRole || '').toLowerCase();
+      const isDataCollector = ['data_collector', 'enumerator', 'dc'].includes(normalizedClaimerRole);
+      // Supervisors should mirror coordinator claim notification behavior.
+      const isCoordinator = ['coordinator', 'field_coordinator'].includes(normalizedClaimerRole) ||
+        ['supervisor', 'hubsupervisor', 'hub_supervisor'].includes(normalizedClaimerRole);
 
       let targetRoles: string[] = [];
       let additionalUserIds: string[] = [];
@@ -819,7 +822,7 @@ export const NotificationTriggerService = {
             .from('profiles')
             .select('id')
             .eq('hub_id', hubId)
-            .eq('role', 'supervisor');
+            .in('role', ['supervisor', 'hubsupervisor', 'hub_supervisor']);
           
           if (hubSupervisors) {
             additionalUserIds = hubSupervisors.map(s => s.id).filter(id => id !== claimerUserId);

@@ -146,7 +146,7 @@ export const WORKFLOW_MENU_GROUPS: MenuGroup[] = [
     label: 'Verification & Review',
     order: 4,
     items: [
-      { id: 'site-verification', title: 'Site Verification', url: '/coordinator/sites', icon: 'CheckCircle', roles: ['coordinator'], priority: 1 },
+      { id: 'site-verification', title: 'Site Verification', url: '/coordinator/sites', icon: 'CheckCircle', roles: ['coordinator', 'supervisor'], priority: 1 },
       { id: 'archive', title: 'Archive', url: '/archive', icon: 'Archive', priority: 2 }
     ]
   },

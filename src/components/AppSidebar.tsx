@@ -286,8 +286,8 @@
     if (!isHidden('/projects') && (isSuperAdmin || isAdmin || isICT || perms.projects)) {
       planningItems.push({ id: 'projects', title: "Projects", url: "/projects", icon: FolderKanban, priority: 1, isPinned: isPinned('/projects') });
     }
-    if (!isHidden('/mmp') && (isSuperAdmin || isAdmin || isICT || isDataTeam || perms.mmp || isCoordinator || isDataCollector || isFOM)) {
-      const mmpTitle = (!isSuperAdmin && (isDataCollector || isCoordinator)) ? "My Sites Management" : "MMP Management";
+    if (!isHidden('/mmp') && (isSuperAdmin || isAdmin || isICT || isDataTeam || perms.mmp || isCoordinator || isSupervisor || isDataCollector || isFOM)) {
+      const mmpTitle = (!isSuperAdmin && (isDataCollector || isCoordinator || isSupervisor)) ? "My Sites Management" : "MMP Management";
       planningItems.push({ id: 'mmp-management', title: mmpTitle, url: "/mmp", icon: Database, priority: 2, isPinned: isPinned('/mmp') });
     }
     if (!isHidden('/hub-operations') && (isSuperAdmin || isAdmin)) {
@@ -314,7 +314,7 @@
     if (!isHidden('/equipment') && (isSuperAdmin || isAdmin || isFOM)) {
       fieldOpsItems.push({ id: 'equipment', title: "Equipment Tracking", url: "/equipment", icon: Package, priority: 6, isPinned: isPinned('/equipment') });
     }
-    if (!isHidden('/monitoring-form') && (isSuperAdmin || isAdmin || isDataCollector || isCoordinator || isFOM)) {
+    if (!isHidden('/monitoring-form') && (isSuperAdmin || isAdmin || isDataCollector || isCoordinator || isSupervisor || isFOM)) {
       fieldOpsItems.push({ id: 'monitoring-form', title: "Monitoring Form", url: "/monitoring-form", icon: ClipboardCheck, priority: 7, isPinned: isPinned('/monitoring-form') });
     }
     if (fieldOpsItems.length) groups.push({ id: 'field-ops', label: "Field Operations", order: 3, items: fieldOpsItems });
@@ -329,8 +329,11 @@
     if (cycleItems.length) groups.push({ id: 'cycle-management', label: "Cycle Management", order: 3.5, items: cycleItems });
 
     const verificationItems: MenuGroup['items'] = [];
-    if (!isHidden('/coordinator/sites') && (isSuperAdmin || isCoordinator)) {
+    if (!isHidden('/coordinator/sites') && (isSuperAdmin || isCoordinator || isSupervisor)) {
       verificationItems.push({ id: 'site-verification', title: "Site Verification", url: "/coordinator/sites", icon: CheckCircle, priority: 1, isPinned: isPinned('/coordinator/sites') });
+    }
+    if (!isHidden('/coordinator/sites-for-verification') && (isSuperAdmin || isCoordinator || isSupervisor)) {
+      verificationItems.push({ id: 'sites-for-verification', title: "Sites for Verification", url: "/coordinator/sites-for-verification", icon: CheckCircle, priority: 1.1, isPinned: isPinned('/coordinator/sites-for-verification') });
     }
     if (!isHidden('/archive') && (isSuperAdmin || isAdmin || perms.archive)) {
       verificationItems.push({ id: 'archive', title: "Archive", url: "/archive", icon: Archive, priority: 2, isPinned: isPinned('/archive') });
@@ -604,7 +607,8 @@
     }, [menuPrefs.favoritePages, updateMenuPreferences]);
 
     const perms = {
-      dashboard: checkPermission('dashboard', 'read'),
+      // Dashboard isn't a permission ResourceType; keep visible by default.
+      dashboard: true,
       projects: checkPermission('projects', 'read') || isAdmin || hasAnyRole(['ict']),
       mmp: checkPermission('mmp', 'read') || isAdmin || hasAnyRole(['ict']),
       monitoringPlan: checkPermission('mmp', 'read') || isAdmin || hasAnyRole(['ict']),

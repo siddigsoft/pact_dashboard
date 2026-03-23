@@ -33,7 +33,8 @@ const EditMMP: React.FC = () => {
   const isAdmin = hasAnyRole(['admin']);
   const isFOM = hasAnyRole(['fom', 'Field Operation Manager (FOM)']);
   const isCoordinator = hasAnyRole(['coordinator']);
-  const canEdit = checkPermission('mmp', 'update') || isAdmin || isCoordinator || isFOM;
+  const isSupervisor = hasAnyRole(['supervisor', 'hubsupervisor']);
+  const canEdit = checkPermission('mmp', 'update') || isAdmin || isCoordinator || isSupervisor || isFOM;
 
   if (!canEdit) {
     return (

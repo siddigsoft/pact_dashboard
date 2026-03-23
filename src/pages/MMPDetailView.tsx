@@ -102,9 +102,10 @@ const MMPDetailView = () => {
   const isAdmin = hasAnyRole(['admin']);
   const isFOM = hasAnyRole(['fom']);
   const isCoordinator = hasAnyRole(['coordinator']);
+  const isSupervisor = hasAnyRole(['supervisor', 'hubsupervisor']);
   const isDataTeam = hasAnyRole(['DataTeam', 'dataTeam', 'data_team', 'Data Team']);
-  const canRead = checkPermission('mmp', 'read') || isAdmin || isFOM || isCoordinator || isDataTeam;
-  const canEdit = (checkPermission('mmp', 'update') || isAdmin || isCoordinator) ? true : false;
+  const canRead = checkPermission('mmp', 'read') || isAdmin || isFOM || isCoordinator || isSupervisor || isDataTeam;
+  const canEdit = (checkPermission('mmp', 'update') || isAdmin || isCoordinator || isSupervisor) ? true : false;
   const canDelete = (checkPermission('mmp', 'delete') || isAdmin) ? true : false;
   const canArchive = (checkPermission('mmp', 'archive') || isAdmin) ? true : false;
   const canApprove = (checkPermission('mmp', 'approve') || isAdmin) && mmpFile?.status === 'pending';
@@ -744,7 +745,7 @@ const MMPDetailView = () => {
           </>
         )}
 
-        {(isCoordinator || isAdmin) && (mmpFile as any)?.workflow?.forwardedToCoordinators && (
+        {(isCoordinator || isSupervisor || isAdmin) && (mmpFile as any)?.workflow?.forwardedToCoordinators && (
           <Button 
             onClick={handleMarkAsVerified}
             className="bg-purple-600 hover:bg-purple-700"
