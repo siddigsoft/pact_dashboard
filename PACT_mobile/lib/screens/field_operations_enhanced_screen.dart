@@ -975,7 +975,7 @@ class _MMPScreenState extends State<MMPScreen> {
       var query = supabase
           .from('mmp_site_entries')
           .select('*, mmp_files(id, name, project_id)')
-          .ilike('status', 'Dispatched');
+          .or('status.eq.Dispatched,status.eq.dispatched');
 
       // Filter by state - must match web behavior exactly
       // Web app: Users MUST have a state_id assigned to see claimable sites
@@ -1166,7 +1166,7 @@ class _MMPScreenState extends State<MMPScreen> {
       final response = await supabase
           .from('mmp_site_entries')
           .select('*, mmp_files(id, name, project_id)')
-          .ilike('status', 'Assigned')
+          .or('status.eq.Assigned,status.eq.assigned')
           .eq('accepted_by', _userId!)
           .order('created_at', ascending: false)
           .limit(1000);
@@ -1690,7 +1690,7 @@ class _MMPScreenState extends State<MMPScreen> {
           .from('mmp_site_entries')
           .select('*, mmp_files(id, name, project_id)')
           .eq('accepted_by', _userId!)
-          .ilike('status', 'Completed')
+          .or('status.eq.Completed,status.eq.completed')
           .order('created_at', ascending: false)
           .limit(100);
 

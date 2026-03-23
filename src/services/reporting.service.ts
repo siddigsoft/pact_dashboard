@@ -207,9 +207,11 @@ export class ReportingService {
     mmpId?: string
   ): Promise<ProductivityMetrics[]> {
     try {
-      let siteEntriesQuery = supabase.from('mmp_site_entries').select('*');
+      let siteEntriesQuery = supabase
+        .from('mmp_site_entries')
+        .select('id, assigned_to, status, visit_started_at, visit_completed_at, due_date, visit_date, project_id, mmp_file_id');
       const profilesQuery = supabase.from('profiles').select('id, full_name, email, role');
-      let walletsQuery = supabase.from('wallets').select('*');
+      let walletsQuery = supabase.from('wallets').select('user_id, total_earned');
 
       if (dateRange?.from) {
         siteEntriesQuery = siteEntriesQuery.gte('visit_date', dateRange.from.toISOString());
@@ -327,7 +329,9 @@ export class ReportingService {
     mmpId?: string
   ): Promise<OperationalEfficiency> {
     try {
-      let siteEntriesQuery = supabase.from('mmp_site_entries').select('*');
+      let siteEntriesQuery = supabase
+        .from('mmp_site_entries')
+        .select('id, status, rejection_reason, state, hub_office, hub, due_date, created_at, assigned_at, visit_started_at, visit_completed_at, project_id, mmp_file_id');
       
       if (dateRange?.from) {
         siteEntriesQuery = siteEntriesQuery.gte('created_at', dateRange.from.toISOString());
@@ -595,7 +599,7 @@ export class ReportingService {
     dateRange?: { from: Date; to: Date }
   ): Promise<AuditSummary> {
     try {
-      let auditQuery = supabase.from('audit_logs').select('*');
+      let auditQuery = supabase.from('audit_logs').select('id, action, user_id, details, created_at');
       const profilesQuery = supabase.from('profiles').select('id, full_name, email');
 
       if (dateRange?.from) {
