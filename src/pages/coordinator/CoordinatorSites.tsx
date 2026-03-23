@@ -563,7 +563,12 @@ const CoordinatorSites: React.FC = () => {
   const [permitQuestionDialogOpen, setPermitQuestionDialogOpen] = useState(false);
   const [workWithoutPermitDialogOpen, setWorkWithoutPermitDialogOpen] = useState(false);
   const [selectedLocalityForWorkflow, setSelectedLocalityForWorkflow] = useState<any>(null);
+  const isSupervisorUser = ['supervisor', 'hubsupervisor', 'hub_supervisor'].includes((currentUser?.role || '').toLowerCase());
   const [readOnlyMode, setReadOnlyMode] = useState(false);
+  // Lock supervisors into read-only mode — they can view but not take coordinator actions
+  React.useEffect(() => {
+    if (isSupervisorUser) setReadOnlyMode(true);
+  }, [isSupervisorUser]);
   const [expandedStates, setExpandedStates] = useState<Set<string>>(new Set());
   const [expandedLocalities, setExpandedLocalities] = useState<Set<string>>(new Set());
   const [expandedPermitsAttachedLocalities, setExpandedPermitsAttachedLocalities] = useState<Set<string>>(new Set());
