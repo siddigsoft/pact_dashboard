@@ -2127,8 +2127,8 @@ const MMP = () => {
   const isCoordinator = hasRole(['Coordinator', 'coordinator']);
   const isDataCollector = hasRole(['DataCollector', 'datacollector', 'Data Collector', 'data collector', 'enumerator', 'Enumerator']);
   const isDataTeam = hasRole(['DataTeam', 'dataTeam', 'data_team', 'Data Team']);
-  // Coordinators and supervisors have full field-worker capabilities (can claim sites, view transport fees, etc.)
-  const canClaimSites = isDataCollector || isCoordinator || isSupervisor;
+  // Data collectors and coordinators can claim/accept sites; supervisors are oversight-only and do NOT claim sites
+  const canClaimSites = isDataCollector || isCoordinator;
   
   // Hub-based access control for supervisors
   // Supervisors should only see operations within their assigned hub
@@ -5061,7 +5061,7 @@ const MMP = () => {
               )}
 
               {/* Subcategory tabs - below filters */}
-              {(isAdmin || isICT || isFOM || isCoordinator || isDataTeam) && (
+              {(isAdmin || isICT || isFOM || isCoordinator || isDataTeam || isSupervisor) && (
                 <div className="mb-3">
                   <div className="text-xs font-medium text-muted-foreground mb-2">{t('mmpPage.subcategory')}:</div>
                   <div className="flex gap-1.5 overflow-x-auto pb-1 flex-wrap">
