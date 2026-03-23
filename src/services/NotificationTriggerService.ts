@@ -9,30 +9,38 @@ export type NotificationCategory = 'assignments' | 'approvals' | 'financial' | '
  */
 export const formatRoleName = (role: string | null | undefined): { en: string; ar: string } => {
   if (!role) return { en: 'Team Member', ar: 'عضو الفريق' };
-  
+
+  // Normalize to lowercase with underscores so the map works regardless of
+  // whether the caller passes 'SuperAdmin', 'superAdmin', 'super_admin', etc.
+  const normalized = role
+    .replace(/\s*\([^)]*\)/g, '')         // strip parenthetical suffixes e.g. "(FOM)"
+    .replace(/([a-z])([A-Z])/g, '$1_$2') // camelCase → snake_case
+    .replace(/[\s-]+/g, '_')
+    .toLowerCase();
+
   const roleMap: Record<string, { en: string; ar: string }> = {
-    'super_admin': { en: 'Super Administrator', ar: 'المدير العام' },
-    'superAdmin': { en: 'Super Administrator', ar: 'المدير العام' },
-    'SuperAdmin': { en: 'Super Administrator', ar: 'المدير العام' },
-    'admin': { en: 'Administrator', ar: 'المدير' },
-    'Admin': { en: 'Administrator', ar: 'المدير' },
-    'fom': { en: 'Field Operations Manager', ar: 'مدير العمليات الميدانية' },
-    'FOM': { en: 'Field Operations Manager', ar: 'مدير العمليات الميدانية' },
-    'supervisor': { en: 'Hub Supervisor', ar: 'مشرف المحور' },
-    'Supervisor': { en: 'Hub Supervisor', ar: 'مشرف المحور' },
-    'coordinator': { en: 'Coordinator', ar: 'المنسق' },
-    'Coordinator': { en: 'Coordinator', ar: 'المنسق' },
-    'data_collector': { en: 'Data Collector', ar: 'جامع البيانات' },
-    'dataCollector': { en: 'Data Collector', ar: 'جامع البيانات' },
-    'enumerator': { en: 'Enumerator', ar: 'العداد' },
-    'Enumerator': { en: 'Enumerator', ar: 'العداد' },
-    'finance': { en: 'Finance Officer', ar: 'موظف المالية' },
-    'Finance': { en: 'Finance Officer', ar: 'موظف المالية' },
-    'viewer': { en: 'Viewer', ar: 'مشاهد' },
-    'Viewer': { en: 'Viewer', ar: 'مشاهد' },
+    'super_admin':              { en: 'Super Administrator',      ar: 'المدير العام' },
+    'admin':                    { en: 'Administrator',            ar: 'المدير' },
+    'country_director':         { en: 'Country Director',         ar: 'المدير القُطري' },
+    'ict':                      { en: 'ICT',                      ar: 'تقنية المعلومات' },
+    'field_operation_manager':  { en: 'Field Operations Manager', ar: 'مدير العمليات الميدانية' },
+    // legacy shorthands
+    'fom':                      { en: 'Field Operations Manager', ar: 'مدير العمليات الميدانية' },
+    'financial_admin':          { en: 'Finance Officer',          ar: 'موظف المالية' },
+    'finance':                  { en: 'Finance Officer',          ar: 'موظف المالية' },
+    'project_manager':          { en: 'Project Manager',          ar: 'مدير المشروع' },
+    'senior_operations_lead':   { en: 'Senior Operations Lead',   ar: 'قائد العمليات الأول' },
+    'supervisor':               { en: 'Hub Supervisor',           ar: 'مشرف المحور' },
+    'coordinator':              { en: 'Coordinator',              ar: 'المنسق' },
+    'data_team':                { en: 'Data Team',                ar: 'فريق البيانات' },
+    'data_collector':           { en: 'Data Collector',           ar: 'جامع البيانات' },
+    'enumerator':               { en: 'Enumerator',               ar: 'العداد' },
+    'reviewer':                 { en: 'Reviewer',                 ar: 'المراجع' },
+    'auditor':                  { en: 'Auditor',                  ar: 'المدقق' },
+    'viewer':                   { en: 'Viewer',                   ar: 'مشاهد' },
   };
-  
-  return roleMap[role] || { en: role.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()), ar: role };
+
+  return roleMap[normalized] ?? { en: role.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()), ar: role };
 };
 
 // Type for hub management users with role information

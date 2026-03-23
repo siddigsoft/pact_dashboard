@@ -136,7 +136,6 @@ import { NotificationStack } from './components/NotificationStack';
 import { GlobalBroadcastAlert } from './components/GlobalBroadcastAlert';
 import { useNotifications } from './context/NotificationContext';
 import ErrorBoundary from './components/ErrorBoundary';
-import { debugDatabase } from './utils/debug-db';
 import { useFCM } from './hooks/useFCM';
 import { MobilePermissionGuard } from './components/mobile/MobilePermissionGuard';
 import { LiveDashboardProvider } from './context/realtime/LiveDashboardContext';
@@ -388,12 +387,6 @@ function App() {
     }
   }, []);
 
-  // Add debug function to window for testing
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      (window as any).debugDatabase = debugDatabase;
-    }
-  }, []);
 
   // Set platform attribute for mobile-specific styling
   useEffect(() => {
