@@ -263,7 +263,6 @@ export const fetchSiteVisitsFromMMPEntries = async (): Promise<SiteVisit[]> => {
     }
   }
 
-  // Fetch parent MMP metadata once and join in-memory (avoids per-row lateral embeds).
   const mmpFileIds = [...new Set(allData.map((row) => row.mmp_file_id).filter(Boolean))] as string[];
   let mmpFileMap = new Map<string, any>();
   if (mmpFileIds.length > 0) {
@@ -275,7 +274,7 @@ export const fetchSiteVisitsFromMMPEntries = async (): Promise<SiteVisit[]> => {
       console.error('Error fetching parent mmp_files:', mmpFilesError);
       throw mmpFilesError;
     }
-    mmpFileMap = new Map((mmpFiles || []).map((f: any) => [f.id, f]));
+    mmpFileMap = new Map((mmpFiles || []).map((file: any) => [file.id, file]));
   }
 
   console.log(`[SiteVisits] Fetched ${allData.length} total site entries (paginated)`);

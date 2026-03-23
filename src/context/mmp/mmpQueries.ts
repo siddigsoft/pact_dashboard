@@ -57,8 +57,7 @@ async function fetchMMPFiles(): Promise<MMPFile[]> {
     rows = fallbackData;
   }
 
-  // Avoid loading full mmp_site_entries payload on list fetch.
-  // Site entries are loaded on-demand in MMP context helpers.
+  // Keep list fetch lightweight; site entries are loaded on-demand.
   return (rows || []).map((row: any) =>
     transformDBToMMPFile({
       ...row,
