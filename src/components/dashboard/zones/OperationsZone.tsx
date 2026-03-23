@@ -241,7 +241,7 @@ export const OperationsZone: React.FC = () => {
         const { data: sites, error } = await supabase
           .from('mmp_site_entries')
           .select('*')
-          .ilike('status', 'Dispatched')
+          .eq('status', 'Dispatched')
           .is('accepted_by', null)
           .ilike('state', `%${stateName}%`)
           .limit(500);

@@ -2195,7 +2195,7 @@ const MMP = () => {
         let query = supabase
           .from('mmp_site_entries')
           .select('id, site_code, hub_office, state, locality, site_name, cp_name, visit_type, visit_date, main_activity, activity_at_site, monitoring_by, survey_tool, use_market_diversion, use_warehouse_monitoring, comments, cost, enumerator_fee, transport_fee, dispatched_by, dispatched_at, accepted_by, accepted_at, cost_acknowledged, additional_data, status, mmp_file_id, created_at')
-          .ilike('status', 'Dispatched')
+          .in('status', ['Dispatched', 'dispatched'])
           .is('accepted_by', null);
 
         // Use OR for multiple variants, simple ilike for single variant
@@ -6377,8 +6377,7 @@ const MMP = () => {
                 const { data: dispatchedEntries, error: allError } = await supabase
                   .from('mmp_site_entries')
                   .select('*')
-                  .ilike('status', 'Dispatched')
-                  .not('status', 'ilike', 'accepted')
+                  .in('status', ['Dispatched', 'dispatched'])
                   .is('accepted_by', null)
                   .order('dispatched_at', { ascending: false })
                   .limit(1000);
@@ -6703,7 +6702,7 @@ const MMP = () => {
                         let availableSitesQuery = supabase
                           .from('mmp_site_entries')
                           .select('*')
-                          .ilike('status', 'Dispatched')
+                          .in('status', ['Dispatched', 'dispatched'])
                           .is('accepted_by', null)
                           .order('created_at', { ascending: false })
                           .limit(1000);
@@ -6721,7 +6720,7 @@ const MMP = () => {
                         const smartAssignedQuery = supabase
                           .from('mmp_site_entries')
                           .select('*')
-                          .ilike('status', 'Assigned')
+                          .in('status', ['Assigned', 'assigned'])
                           .eq('accepted_by', currentUser.id)
                           .order('created_at', { ascending: false })
                           .limit(1000);

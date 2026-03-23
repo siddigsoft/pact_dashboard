@@ -481,7 +481,7 @@ export function SuperAdminDataManagement() {
       const { data, error } = await supabase
         .from('mmp_site_entries')
         .select('id, site_name, site_code, state, locality, status, dispatched_by, dispatched_at, main_activity, activity_at_site, hub_office')
-        .ilike('status', 'dispatched')
+        .in('status', ['Dispatched', 'dispatched'])
         .is('accepted_by', null)
         .order('dispatched_at', { ascending: false })
         .limit(500);
