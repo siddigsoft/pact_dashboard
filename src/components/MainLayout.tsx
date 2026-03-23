@@ -105,7 +105,9 @@ const MainLayoutContent: React.FC<MainLayoutContentProps> = ({ children }) => {
             )}
             {/* Global Refresh Bar - Mobile only (desktop has per-page refresh controls) */}
             {isMobile && <GlobalRefreshBar />}
-            <div className={`flex-1 flex flex-col relative z-0 min-w-0 min-h-0 ${isMobile ? 'px-1 pb-12 pt-0.5 bg-gray-50 dark:bg-gray-900 overflow-y-auto overflow-x-hidden scroll-smooth' : 'overflow-hidden bg-slate-50/70 dark:bg-gray-900/70'}`}>
+            <div
+              className={`global-scrollable flex-1 flex flex-col relative z-0 min-w-0 min-h-0 ${isMobile ? 'px-1 pb-12 pt-0.5 bg-gray-50 dark:bg-gray-900' : 'bg-slate-50/70 dark:bg-gray-900/70'}`}
+            >
               {children || <Outlet />}
             </div>
             {isMobile && <MobileBottomNav />}

@@ -1,3 +1,5 @@
+// User status type for chat presence display
+type UserStatus = { text: string; color: string; dotColor: string };
 import { useEffect, useMemo, useState, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAppContext } from '@/context/AppContext';
@@ -142,11 +144,17 @@ const Chat: React.FC = () => {
       if (isMobile) {
         setActiveView('chat');
       }
+      const userWithStatus: UserWithStatus = user as UserWithStatus;
       toast({
         title: 'Chat started',
         description: `You can now message ${userName}`,
       });
     }
+  };
+  // Extend User type locally to include isLoggedIn and lastLogout
+  type UserWithStatus = User & {
+    isLoggedIn?: boolean;
+    lastLogout?: string;
   };
 
   const getTargetUser = () => {
@@ -234,17 +242,19 @@ const Chat: React.FC = () => {
     return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
   };
 
-  const getUserStatusDisplay = (user: User) => {
-    const isOnline = onlineUserIds.includes(user.id);
-    if (isOnline) {
-      return { text: 'Online', color: 'text-green-500', dotColor: 'bg-green-500' };
-    }
-    const lastSeenTime = user.location?.lastUpdated || user.lastActive;
-    if (lastSeenTime) {
+  const getUserStatusDisplay = (user: User): UserStatus => {
+    // Use lastActive for last seen, show Online if active in last 5 minutes
+    const lastActive = user.lastActive;
+    if (lastActive) {
       try {
-        const lastSeenDate = parseISO(lastSeenTime);
-        return { 
-          text: `Last seen ${formatDistanceToNow(lastSeenDate, { addSuffix: false })} ago`,
+        const lastActiveDate = new Date(lastActive);
+        const now = new Date();
+        const diffMs = now.getTime() - lastActiveDate.getTime();
+        if (diffMs < 5 * 60 * 1000) {
+          return { text: 'Online', color: 'text-green-500', dotColor: 'bg-green-500' };
+        }
+        return {
+          text: `Last seen ${formatDistanceToNow(lastActiveDate, { addSuffix: false })} ago`,
           color: 'text-gray-500',
           dotColor: 'bg-gray-400'
         };
@@ -255,7 +265,7 @@ const Chat: React.FC = () => {
     return { text: 'Offline', color: 'text-gray-500', dotColor: 'bg-gray-400' };
   };
 
-  const getChatUserStatus = (chat: any) => {
+  const getChatUserStatus = (chat: any): UserStatus | null => {
     if (chat.type !== 'private') return null;
     const targetUserId = chat.participants.find((id: string) => id !== currentUser?.id);
     if (!targetUserId) return null;
@@ -559,10 +569,16 @@ const Chat: React.FC = () => {
                       </div>
                       <div>
                         <h2 className="font-semibold text-white text-sm">{activeChat.name}</h2>
-                        {(() => {
-                          const chatStatus = getChatUserStatus(activeChat);
-                          return <p className={`text-[10px] font-medium ${chatStatus?.color === 'text-green-500' ? 'text-green-400' : 'text-gray-400'}`}>{chatStatus?.text || 'Group chat'}</p>;
-                        })()}
+                        {activeChat.type === 'private' ? (
+                          (() => {
+                            const chatStatus = getChatUserStatus(activeChat);
+                            return (
+                              <p className={`text-[10px] font-medium ${chatStatus?.color === 'text-green-500' ? 'text-green-400' : 'text-gray-400'}`}>{chatStatus?.text}</p>
+                            );
+                          })()
+                        ) : (
+                          <p className="text-[10px] font-medium text-gray-400">Group chat</p>
+                        )}
                       </div>
                     </div>
                   )}
