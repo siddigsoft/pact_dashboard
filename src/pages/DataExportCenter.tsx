@@ -143,31 +143,50 @@ const DataExportCenter = () => {
   const exportSiteVisits = useCallback(async () => {
     setJobStatus('visits', 'exporting', 10);
     try {
-      let query = supabase
-        .from('site_visits')
-        .select('*')
-        .order('created_at', { ascending: false });
+      // Fetch from mmp_site_entries instead of site_visits
+      let allSites: any[] = [];
+      let page = 0;
+      const pageSize = 1000;
+      let hasMore = true;
+      while (hasMore) {
+        const { data, error } = await supabase
+          .from('mmp_site_entries')
+          .select('*')
+          .range(page * pageSize, (page + 1) * pageSize - 1);
+        if (error) throw error;
+        if (data && data.length > 0) {
+          allSites = allSites.concat(data);
+          hasMore = data.length === pageSize;
+          page++;
+        } else {
+          hasMore = false;
+        }
+      }
 
-      if (statusFilter !== 'all') query = query.eq('status', statusFilter);
-      if (dateFrom) query = query.gte('created_at', dateFrom);
-      if (dateTo) query = query.lte('created_at', dateTo);
-
-      setJobStatus('visits', 'exporting', 30);
-      const { data, error } = await query.limit(5000);
-      if (error) throw error;
+      // Apply filters in-memory (status, dateFrom, dateTo)
+      let filteredSites = allSites;
+      if (statusFilter !== 'all') {
+        filteredSites = filteredSites.filter(s => (s.status || '').toLowerCase() === statusFilter.toLowerCase());
+      }
+      if (dateFrom) {
+        filteredSites = filteredSites.filter(s => s.created_at && s.created_at >= dateFrom);
+      }
+      if (dateTo) {
+        filteredSites = filteredSites.filter(s => s.created_at && s.created_at <= dateTo);
+      }
 
       setJobStatus('visits', 'exporting', 70);
 
       const mmpLookup: Record<string, string> = {};
       (mmpFiles || []).forEach(m => { mmpLookup[m.id] = m.name; });
 
-      const exportData = (data || []).map((s: any) => ({
+      const exportData = (filteredSites || []).map((s: any) => ({
         'Site Name': s.site_name || '',
         'Site Code': s.site_code || '',
         'State': s.state || '',
         'Locality': s.locality || '',
         'Status': s.status || '',
-        'MMP': mmpLookup[s.mmp_id] || s.mmp_id || '',
+        'MMP': mmpLookup[s.mmp_file_id] || s.mmp_file_id || '',
         'Visit Date': s.visit_date || '',
         'Not Covered': s.not_covered_flag ? 'Yes' : 'No',
         'Reason': s.not_covered_reason || '',
@@ -195,51 +214,48 @@ const DataExportCenter = () => {
   const exportCoverageAnalytics = useCallback(async () => {
     setJobStatus('analytics', 'exporting', 10);
     try {
-      const allMmps = mmpFiles || [];
-      if (allMmps.length === 0) {
-        toast({ title: 'No Data', description: 'No MMPs found to analyze.', variant: 'destructive' });
-        setJobStatus('analytics', 'idle', 0);
-        return;
-      }
-
       setJobStatus('analytics', 'exporting', 30);
-
-      const mmpIds = allMmps.map(m => m.id);
+      // Fetch all site entries (global, not filtered by MMPs)
       let allSites: any[] = [];
-
-      const batchSize = 50;
-      for (let i = 0; i < mmpIds.length; i += batchSize) {
-        const batch = mmpIds.slice(i, i + batchSize);
-        const { data } = await supabase
-          .from('site_visits')
-          .select('mmp_id, status, not_covered_flag, not_covered_reason')
-          .in('mmp_id', batch);
-        if (data) allSites = allSites.concat(data);
+      let page = 0;
+      const pageSize = 1000;
+      let hasMore = true;
+      while (hasMore) {
+        const { data, error } = await supabase
+          .from('mmp_site_entries')
+          .select('id, mmp_file_id, status, not_covered_flag, hub_office')
+          .range(page * pageSize, (page + 1) * pageSize - 1);
+        if (error) throw error;
+        if (data && data.length > 0) {
+          allSites = allSites.concat(data);
+          hasMore = data.length === pageSize;
+          page++;
+        } else {
+          hasMore = false;
+        }
       }
 
       setJobStatus('analytics', 'exporting', 70);
 
-      const hubMap: Record<string, { total: number; completed: number; uncovered: number; cycles: number }> = {};
-      allMmps.forEach(c => {
-        const mmpAny = c as any;
-        const hubName = mmpAny.hub || mmpAny.hubOffice || mmpAny.projectName || mmpAny.project_name || 'Unknown';
-        if (!hubMap[hubName]) hubMap[hubName] = { total: 0, completed: 0, uncovered: 0, cycles: 0 };
-        hubMap[hubName].cycles++;
-        const sites = allSites.filter(s => s.mmp_id === c.id);
-        hubMap[hubName].total += sites.length;
-        hubMap[hubName].completed += sites.filter(s => s.status === 'completed').length;
-        hubMap[hubName].uncovered += sites.filter(s => s.not_covered_flag).length;
-      });
+      // Dashboard logic: global stats
+      const totalSites = allSites.length;
+      const completed = allSites.filter(s => (s.status || '').toLowerCase() === 'completed').length;
+      // Uncovered: all sites not completed
+      const uncovered = allSites.filter(s => (s.status || '').toLowerCase() !== 'completed').length;
+      const uniqueMmpIds = Array.from(new Set(allSites.map(s => s.mmp_file_id).filter(Boolean)));
+      const totalMmps = uniqueMmpIds.length;
+      const coverageRate = totalSites > 0 ? `${Math.round((completed / totalSites) * 100)}%` : 'N/A';
+      const uncoveredRate = totalSites > 0 ? `${Math.round((uncovered / totalSites) * 100)}%` : 'N/A';
 
-      const exportData = Object.entries(hubMap).map(([hub, d]) => ({
-        'Hub / Project': hub,
-        'Total MMPs': d.cycles,
-        'Total Sites': d.total,
-        'Completed Sites': d.completed,
-        'Uncovered Sites': d.uncovered,
-        'Coverage Rate': d.total > 0 ? `${Math.round((d.completed / d.total) * 100)}%` : 'N/A',
-        'Uncovered Rate': d.total > 0 ? `${Math.round((d.uncovered / d.total) * 100)}%` : 'N/A',
-      }));
+      const exportData = [{
+        'Hub / Project': 'All',
+        'Total MMPs': totalMmps,
+        'Total Sites': totalSites,
+        'Completed Sites': completed,
+        'Uncovered Sites': uncovered,
+        'Coverage Rate': coverageRate,
+        'Uncovered Rate': uncoveredRate,
+      }];
 
       const filename = `coverage-analytics-${new Date().toISOString().slice(0, 10)}`;
       if (format === 'excel') {
@@ -249,12 +265,12 @@ const DataExportCenter = () => {
       }
 
       setJobStatus('analytics', 'done', 100);
-      toast({ title: 'Export Complete', description: `Exported analytics for ${exportData.length} hubs/projects.` });
+      toast({ title: 'Export Complete', description: `Exported analytics for all site entries.` });
     } catch (err: any) {
       setJobStatus('analytics', 'error', 0);
       toast({ title: 'Export Failed', description: err.message, variant: 'destructive' });
     }
-  }, [mmpFiles, format, toast]);
+  }, [format, toast]);
 
   const exportAllMmps = useCallback(async () => {
     setJobStatus('allmmps', 'exporting', 10);
@@ -268,28 +284,38 @@ const DataExportCenter = () => {
 
       setJobStatus('allmmps', 'exporting', 30);
 
-      const mmpIds = allMmps.map(m => m.id);
-      let allSites: any[] = [];
-      const batchSize = 50;
-      for (let i = 0; i < mmpIds.length; i += batchSize) {
-        const batch = mmpIds.slice(i, i + batchSize);
-        const { data } = await supabase
-          .from('site_visits')
-          .select('mmp_id, status, not_covered_flag')
-          .in('mmp_id', batch);
-        if (data) allSites = allSites.concat(data);
+      // Fetch all site entries from mmp_site_entries
+      let allSites = [];
+      let page = 0;
+      const pageSize = 1000;
+      let hasMore = true;
+      while (hasMore) {
+        const { data, error } = await supabase
+          .from('mmp_site_entries')
+          .select('*')
+          .range(page * pageSize, (page + 1) * pageSize - 1);
+        if (error) throw error;
+        if (data && data.length > 0) {
+          allSites = allSites.concat(data);
+          hasMore = data.length === pageSize;
+          page++;
+        } else {
+          hasMore = false;
+        }
       }
 
       setJobStatus('allmmps', 'exporting', 70);
 
       const exportData = allMmps.map(m => {
         const mmpAny = m as any;
-        const sites = allSites.filter(s => s.mmp_id === m.id);
-        const completed = sites.filter(s => s.status === 'completed').length;
-        const pending = sites.filter(s => s.status === 'pending').length;
-        const assigned = sites.filter(s => s.status === 'assigned').length;
-        const dispatched = sites.filter(s => s.status === 'dispatched').length;
-        const uncovered = sites.filter(s => s.not_covered_flag).length;
+        // Map mmp_file_id in site entries to m.id
+        const sites = allSites.filter(s => s.mmp_file_id === m.id);
+        const completed = sites.filter(s => (s.status || '').toLowerCase() === 'completed').length;
+        const pending = sites.filter(s => (s.status || '').toLowerCase() === 'pending').length;
+        const assigned = sites.filter(s => (s.status || '').toLowerCase() === 'assigned').length;
+        const dispatched = sites.filter(s => (s.status || '').toLowerCase() === 'dispatched').length;
+        // Uncovered: all sites not completed
+        const uncovered = sites.filter(s => (s.status || '').toLowerCase() !== 'completed').length;
         const cycleStatus = mmpAny.cycle_status || mmpAny.cycleStatus || 'active';
         return {
           'MMP Name': m.name,
