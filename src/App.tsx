@@ -63,7 +63,6 @@ const Archive = lazy(() => import('./pages/Archive'));
 const Calendar = lazy(() => import('./pages/Calendar'));
 const RoleManagement = lazy(() => import('./pages/RoleManagement'));
 const MonitoringPlanPage = lazy(() => import('./pages/MonitoringPlanPage'));
-const FieldOperationManagerPage = lazy(() => import('./pages/FieldOperationManager'));
 const GlobalSearchPage = lazy(() => import('./pages/GlobalSearchPage'));
 const WalletPage = lazy(() => import('./pages/Wallet'));
 const AdminWallets = lazy(() => import('./pages/AdminWallets'));
@@ -326,7 +325,6 @@ const AppRoutes = () => {
         <Route path="/super-admin-management" element={<SuperAdminManagement />} />
         <Route path="/super-admin-data" element={<SuperAdminDataManagement />} />
   <Route path="/monitoring-plan" element={<MonitoringPlanPage />} />
-  <Route path="/field-operation-manager" element={<FieldOperationManagerPage />} />
   <Route path="/search" element={<GlobalSearchPage />} />
   {/* Coordinator: Sites for Verification */}
   <Route path="/coordinator/sites-for-verification" element={<SitesForVerification />} />

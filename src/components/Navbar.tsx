@@ -46,7 +46,6 @@ const featureList = [
         { name: 'Approved Users', path: '/users?tab=approved-users' },
         { name: 'Coordinator Dashboard', path: '/coordinator-dashboard' },
         { name: 'Supervisor Dashboard', path: '/supervisor-dashboard' },
-        { name: 'Field Operation Manager', path: '/field-operation-manager' },
         // ...add more as your app grows
 ];
 

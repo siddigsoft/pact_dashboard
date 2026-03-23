@@ -141,7 +141,6 @@ export const WORKFLOW_MENU_GROUPS: MenuGroup[] = [
     items: [
       { id: 'site-visits', title: 'Site Visits', url: '/site-visits', icon: 'ClipboardList', priority: 1 },
       { id: 'field-team', title: 'Field Team', url: '/field-team', icon: 'Activity', priority: 2 },
-      { id: 'field-op-manager', title: 'Field Operation Manager', url: '/field-operation-manager', icon: 'MapPin', priority: 3 }
     ]
   },
   {
