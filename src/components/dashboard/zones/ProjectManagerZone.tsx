@@ -524,10 +524,10 @@ export const ProjectManagerZone: React.FC = () => {
       <Card className="border-border/50 bg-gradient-to-r from-muted/30 via-background to-muted/30">
         <CardContent className="p-2">
           <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-            <TabsList className="grid w-full grid-cols-6 h-auto p-0.5 bg-transparent border border-border/30">
+            <TabsList className="grid w-full grid-cols-6 h-auto p-0.5 bg-transparent border border-border/40 rounded-xl">
               <TabsTrigger 
                 value="overview" 
-                className="gap-1 px-2 py-1.5 data-[state=active]:bg-primary/10 data-[state=active]:border-primary/20 data-[state=active]:shadow-sm border border-transparent"
+                className="gap-1 px-2 py-1.5 text-muted-foreground data-[state=active]:text-foreground data-[state=active]:bg-primary/10 data-[state=active]:border-primary/20 data-[state=active]:shadow-sm border border-transparent"
                 data-testid="tab-overview"
               >
                 <BarChart3 className="h-3 w-3" />
@@ -535,7 +535,7 @@ export const ProjectManagerZone: React.FC = () => {
               </TabsTrigger>
               <TabsTrigger 
                 value="approvals" 
-                className="gap-1 px-2 py-1.5 data-[state=active]:bg-orange-500/10 data-[state=active]:border-orange-500/20 data-[state=active]:shadow-sm border border-transparent"
+                className="gap-1 px-2 py-1.5 text-muted-foreground data-[state=active]:text-foreground data-[state=active]:bg-orange-500/10 data-[state=active]:border-orange-500/20 data-[state=active]:shadow-sm border border-transparent"
                 data-testid="tab-approvals"
               >
                 <ClipboardCheck className="h-3 w-3" />
@@ -546,7 +546,7 @@ export const ProjectManagerZone: React.FC = () => {
               </TabsTrigger>
               <TabsTrigger 
                 value="budget" 
-                className="gap-1 px-2 py-1.5 data-[state=active]:bg-green-500/10 data-[state=active]:border-green-500/20 data-[state=active]:shadow-sm border border-transparent"
+                className="gap-1 px-2 py-1.5 text-muted-foreground data-[state=active]:text-foreground data-[state=active]:bg-green-500/10 data-[state=active]:border-green-500/20 data-[state=active]:shadow-sm border border-transparent"
                 data-testid="tab-budget"
               >
                 <DollarSign className="h-3 w-3" />
@@ -554,7 +554,7 @@ export const ProjectManagerZone: React.FC = () => {
               </TabsTrigger>
               <TabsTrigger 
                 value="deadlines" 
-                className="gap-1 px-2 py-1.5 data-[state=active]:bg-purple-500/10 data-[state=active]:border-purple-500/20 data-[state=active]:shadow-sm border border-transparent"
+                className="gap-1 px-2 py-1.5 text-muted-foreground data-[state=active]:text-foreground data-[state=active]:bg-purple-500/10 data-[state=active]:border-purple-500/20 data-[state=active]:shadow-sm border border-transparent"
                 data-testid="tab-deadlines"
               >
                 <Calendar className="h-3 w-3" />
@@ -565,7 +565,7 @@ export const ProjectManagerZone: React.FC = () => {
               </TabsTrigger>
               <TabsTrigger 
                 value="team" 
-                className="gap-1 px-2 py-1.5 data-[state=active]:bg-blue-500/10 data-[state=active]:border-blue-500/20 data-[state=active]:shadow-sm border border-transparent"
+                className="gap-1 px-2 py-1.5 text-muted-foreground data-[state=active]:text-foreground data-[state=active]:bg-blue-500/10 data-[state=active]:border-blue-500/20 data-[state=active]:shadow-sm border border-transparent"
                 data-testid="tab-team"
               >
                 <Users className="h-3 w-3" />
@@ -573,7 +573,7 @@ export const ProjectManagerZone: React.FC = () => {
               </TabsTrigger>
               <TabsTrigger 
                 value="reports" 
-                className="gap-1 px-2 py-1.5 data-[state=active]:bg-cyan-500/10 data-[state=active]:border-cyan-500/20 data-[state=active]:shadow-sm border border-transparent"
+                className="gap-1 px-2 py-1.5 text-muted-foreground data-[state=active]:text-foreground data-[state=active]:bg-cyan-500/10 data-[state=active]:border-cyan-500/20 data-[state=active]:shadow-sm border border-transparent"
                 data-testid="tab-reports"
               >
                 <FileText className="h-3 w-3" />

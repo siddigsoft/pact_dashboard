@@ -949,29 +949,29 @@
           })()}
         </SidebarContent>
 
-        <SidebarFooter className="border-t p-0">
+        <SidebarFooter className="border-t p-2">
           {currentUser && (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button
                   variant="ghost"
-                  className="w-full justify-start gap-1 px-0.5 py-0 h-6 hover:bg-blue-50 dark:hover:bg-gray-800"
+                  className="w-full justify-start gap-2 px-2 py-1.5 h-9 hover:bg-blue-50 dark:hover:bg-gray-800 rounded-lg"
                   data-testid="button-user-menu"
                 >
-                  <div className="relative">
-                    <Avatar className="h-4 w-4">
+                  <div className="relative shrink-0">
+                    <Avatar className="h-6 w-6">
                       <AvatarImage src={currentUser.avatar} alt={currentUser.name} />
-                      <AvatarFallback className="bg-blue-600 text-white text-[7px]">
+                      <AvatarFallback className="bg-blue-600 text-white text-[9px]">
                         {getInitials(currentUser.name)}
                       </AvatarFallback>
                     </Avatar>
                     <RealtimeStatusDot className="absolute -bottom-0.5 -right-0.5" />
                   </div>
-                  <div className="flex flex-col items-start text-left text-[11px] leading-tight group-data-[collapsible=icon]:hidden">
-                    <span className="font-semibold text-gray-900 dark:text-gray-100">{currentUser.name}</span>
-                    <span className="text-[10px] text-gray-500 dark:text-gray-400">{getPrimaryRole()}</span>
+                  <div className="flex flex-col items-start text-left leading-tight group-data-[collapsible=icon]:hidden min-w-0 flex-1">
+                    <span className="text-xs font-semibold text-gray-900 dark:text-gray-100 truncate w-full">{currentUser.name}</span>
+                    <span className="text-[10px] text-gray-500 dark:text-gray-400 truncate w-full">{getPrimaryRole()}</span>
                   </div>
-                  <ChevronUp className="ml-auto h-2 w-2 text-muted-foreground group-data-[collapsible=icon]:hidden" />
+                  <ChevronUp className="ml-auto h-3 w-3 text-muted-foreground group-data-[collapsible=icon]:hidden shrink-0" />
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent side="top" align="end" className="w-56">

@@ -433,7 +433,7 @@ export const OperationsZone: React.FC = () => {
   };
 
   return (
-    <div className="p-3 sm:p-4 md:p-6 lg:p-8 space-y-4 sm:space-y-6">
+    <div className="p-3 sm:p-4 md:p-6 lg:p-8 pb-12 sm:pb-14 lg:pb-16 space-y-5 sm:space-y-7">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 sm:gap-5">
         <div className="flex items-center gap-4">

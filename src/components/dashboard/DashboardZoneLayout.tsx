@@ -137,8 +137,10 @@ export const DashboardZoneLayout: React.FC<DashboardZoneLayoutProps> = ({
       </nav>
 
       {/* Main Content */}
-      <main className="flex-1 p-4 lg:p-6 overflow-y-auto bg-gray-50 dark:bg-gray-950">
-        {children}
+      <main className="flex-1 px-4 pt-5 pb-16 lg:px-6 lg:pt-6 lg:pb-20 overflow-y-auto bg-gray-50 dark:bg-gray-950">
+        <div className="mx-auto w-full max-w-[1500px] px-1 sm:px-2 lg:px-3">
+          {children}
+        </div>
       </main>
     </div>
   );
