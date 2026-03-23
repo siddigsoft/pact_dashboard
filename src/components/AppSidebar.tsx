@@ -541,6 +541,22 @@
     const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
     const [isFavoritesCollapsed, setIsFavoritesCollapsed] = useState(false);
     const [pendingReclaimCount, setPendingReclaimCount] = useState(0);
+    const [pendingCostApprovalCount, setPendingCostApprovalCount] = useState(0);
+
+    // Fetch count of Tier-1 pending cost submissions that the supervisor needs to approve
+    useEffect(() => {
+      const isSupervisorRole = hasAnyRole(['supervisor', 'Supervisor', 'hubSupervisor', 'hub_supervisor']);
+      if (!isSupervisorRole || !currentUser?.id || !currentUser?.hubId) return;
+      supabase
+        .from('operational_cost_submissions')
+        .select('id', { count: 'exact', head: true })
+        .eq('hub_id', currentUser.hubId)
+        .eq('tier1_status', 'pending')
+        .neq('submitted_by', currentUser.id)
+        .then(({ count }) => {
+          setPendingCostApprovalCount(count || 0);
+        });
+    }, [currentUser?.id, currentUser?.hubId, hasAnyRole]);
 
     useEffect(() => {
       const isFinancialRole = isSuperAdmin || hasAnyRole(['admin', 'Admin', 'superadmin', 'super_admin', 'financial_auditor', 'financialadmin', 'fom', 'FOM']);
@@ -781,6 +797,11 @@
                             {item.id === 'advance-requests-report' && pendingReclaimCount > 0 && (
                               <span className="ml-auto shrink-0 inline-flex items-center justify-center h-4 min-w-[16px] px-1 rounded-full bg-orange-500 text-white text-[9px] font-bold leading-none" data-testid="badge-reconciliation-count">
                                 {pendingReclaimCount > 99 ? '99+' : pendingReclaimCount}
+                              </span>
+                            )}
+                            {item.id === 'cost-submission' && pendingCostApprovalCount > 0 && (
+                              <span className="ml-auto shrink-0 inline-flex items-center justify-center h-4 min-w-[16px] px-1 rounded-full bg-red-500 text-white text-[9px] font-bold leading-none" data-testid="badge-cost-approval-count">
+                                {pendingCostApprovalCount > 99 ? '99+' : pendingCostApprovalCount}
                               </span>
                             )}
                           </Link>

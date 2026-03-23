@@ -4,7 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ChevronLeft, Clock, CheckCircle, XCircle, AlertCircle, Sparkles, DollarSign, FileText, Users, Shield, Receipt, ThumbsUp, ThumbsDown, ArrowRight, Calendar, MapPin, Building2, FolderOpen, Hash, Paperclip, Download, Pencil, Trash2, RotateCcw, SendHorizonal, FileSpreadsheet, FileDown, Info, RefreshCw, CircleDollarSign, ClipboardCheck, HelpCircle, Wallet, Ticket, Gift, Wifi, GraduationCap, Car, Package, Printer, Coffee, MoreHorizontal, Briefcase, Mail, Upload, Eye, ImageIcon, Unlock, ShieldCheck } from "lucide-react";
+import { ChevronLeft, Clock, CheckCircle, CheckCircle2, XCircle, AlertCircle, Sparkles, DollarSign, FileText, Users, Shield, Receipt, ThumbsUp, ThumbsDown, ArrowRight, Calendar, MapPin, Building2, FolderOpen, Hash, Paperclip, Download, Pencil, Trash2, RotateCcw, SendHorizonal, FileSpreadsheet, FileDown, Info, RefreshCw, CircleDollarSign, ClipboardCheck, HelpCircle, Wallet, Ticket, Gift, Wifi, GraduationCap, Car, Package, Printer, Coffee, MoreHorizontal, Briefcase, Mail, Upload, Eye, ImageIcon, Unlock, ShieldCheck } from "lucide-react";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
@@ -1737,6 +1737,59 @@ const CostSubmission = () => {
           { step: 4, role: 'النظام', action: 'يُضيف رصيداً لمحفظتك', description: 'يُضاف المبلغ المعتمد تلقائياً إلى رصيد محفظتك. يمكنك بعدها طلب سحب من صفحة محفظتي.' },
         ]}
       />
+
+      {/* Supervisor Hub Overview — only visible to supervisors (not admins) */}
+      {isSupervisor && !isAdmin && !isSuperAdmin && (() => {
+        const pendingTier1 = operationalCosts.filter(oc => canTier1Approve(oc));
+        const totalPendingAmt = pendingTier1.reduce((s, oc) => s + oc.amount_cents / 100, 0);
+        const submitterMap: Record<string, { name: string; count: number; total: number; currency: string }> = {};
+        pendingTier1.forEach(oc => {
+          const profile = users.find(u => u.id === oc.submitted_by);
+          const name = (profile as any)?.fullName || (profile as any)?.full_name || (profile as any)?.name || oc.submitted_by || 'Unknown';
+          if (!submitterMap[oc.submitted_by]) submitterMap[oc.submitted_by] = { name, count: 0, total: 0, currency: oc.currency };
+          submitterMap[oc.submitted_by].count++;
+          submitterMap[oc.submitted_by].total += oc.amount_cents / 100;
+        });
+        const submitters = Object.values(submitterMap).sort((a, b) => b.total - a.total);
+        return (
+          <div className="rounded-xl border border-blue-200 dark:border-blue-800 bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-950/40 dark:to-indigo-950/40 p-4 sm:p-5 mb-1">
+            <div className="flex items-center gap-2 mb-3">
+              <div className="h-7 w-7 rounded-lg bg-blue-600 flex items-center justify-center">
+                <Users className="h-4 w-4 text-white" />
+              </div>
+              <h2 className="font-semibold text-blue-900 dark:text-blue-100 text-sm sm:text-base">Hub Overview — Pending Your Approval</h2>
+              {pendingTier1.length > 0 && (
+                <span className="ml-auto inline-flex items-center justify-center h-5 min-w-[20px] px-1.5 rounded-full bg-red-500 text-white text-[10px] font-bold">
+                  {pendingTier1.length}
+                </span>
+              )}
+            </div>
+            {pendingTier1.length === 0 ? (
+              <p className="text-sm text-blue-700 dark:text-blue-300 flex items-center gap-2">
+                <CheckCircle2 className="h-4 w-4 text-green-500" />
+                All caught up — no pending Tier 1 approvals in your hub.
+              </p>
+            ) : (
+              <div className="space-y-2">
+                <p className="text-xs text-blue-700 dark:text-blue-300 mb-2">
+                  {pendingTier1.length} submission{pendingTier1.length !== 1 ? 's' : ''} from {submitters.length} team member{submitters.length !== 1 ? 's' : ''} totalling <strong>SDG {totalPendingAmt.toLocaleString()}</strong>
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {submitters.map(s => (
+                    <div key={s.name} className="flex items-center gap-1.5 bg-white dark:bg-blue-900/50 border border-blue-200 dark:border-blue-700 rounded-lg px-2.5 py-1.5 text-xs">
+                      <div className="h-5 w-5 rounded-full bg-blue-600 flex items-center justify-center text-white text-[9px] font-bold shrink-0">
+                        {s.name.charAt(0).toUpperCase()}
+                      </div>
+                      <span className="font-medium text-blue-900 dark:text-blue-100 max-w-[100px] truncate">{s.name}</span>
+                      <span className="text-blue-500 dark:text-blue-400 shrink-0">{s.count} × {s.currency} {s.total.toLocaleString()}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       {/* Stats Cards - Cyber Tech Theme */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4">

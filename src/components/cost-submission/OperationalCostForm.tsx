@@ -13,6 +13,7 @@ import CostDocumentUpload from "./CostDocumentUpload";
 import { Loader2, DollarSign, FileText, Calendar, Building2, Receipt, Info, Plus, Trash2, ChevronDown, ChevronUp } from "lucide-react";
 import { useAppContext } from "@/context/AppContext";
 import { supabase } from "@/integrations/supabase/client";
+import { NotificationTriggerService } from "@/services/NotificationTriggerService";
 import { Label } from "@/components/ui/label";
 
 interface LineItem {
@@ -172,6 +173,29 @@ const OperationalCostForm = ({ hubs = [], projects = [], onSuccess }: Operationa
           userMessage = 'Invalid expense category. Please run the latest database migration to update allowed categories.';
         }
         throw new Error(userMessage);
+      }
+
+      // Notify supervisor(s) in the hub that a new submission needs Tier 1 approval
+      const hubId = currentUser.hubId;
+      if (hubId) {
+        supabase
+          .from('user_profiles')
+          .select('id')
+          .eq('hub_id', hubId)
+          .in('role', ['supervisor', 'hubSupervisor', 'hub_supervisor'])
+          .then(({ data: supervisors }) => {
+            if (supervisors && supervisors.length > 0) {
+              const totalSdg = lineItems.reduce((s, i) => s + i.amountCents / 100, 0);
+              const categories = [...new Set(lineItems.map(i => i.expenseCategory))].join(', ');
+              NotificationTriggerService.costSubmissionCreated(
+                supervisors.map(s => s.id),
+                currentUser.fullName || currentUser.email || 'Unknown',
+                totalSdg,
+                'SDG',
+                categories
+              ).catch(console.error);
+            }
+          }).catch(console.error);
       }
 
       toast({

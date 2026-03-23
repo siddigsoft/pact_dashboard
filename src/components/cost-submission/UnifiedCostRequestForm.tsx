@@ -44,6 +44,7 @@ import { useAppContext } from "@/context/AppContext";
 import { supabase } from "@/integrations/supabase/client";
 import { v4 as uuidv4 } from "uuid";
 import { EmailNotificationService } from "@/services/email-notification.service";
+import { NotificationTriggerService } from "@/services/NotificationTriggerService";
 
 const EXPENSE_CATEGORIES = {
   permits: { label: "Permits & Licenses", icon: Ticket, color: "from-purple-500 to-purple-600" },
@@ -508,19 +509,39 @@ export default function UnifiedCostRequestForm({
         }
 
         const totalAmt = lineItems.reduce((s, i) => s + i.amount, 0);
-        toast({
-          title: fundingType === 'advance' ? "Advance Request Submitted" : "Reimbursement Submitted",
-          description: lineItems.length === 1
-            ? `Your request for ${lineItems[0].currency} ${lineItems[0].amount.toLocaleString()} has been submitted.`
-            : `${lineItems.length} items totalling ${totalCurrency} ${totalAmt.toLocaleString()} have been submitted.`,
-        });
-
         const selectedProject = projects.find(p => p.id === resolvedProjectId);
         const projectLabel = selectedProject?.name || 'N/A';
         const categoryLabels = lineItems.map(i => {
           const catKey = i.expenseCategory as keyof typeof EXPENSE_CATEGORIES;
           return EXPENSE_CATEGORIES[catKey]?.label || i.expenseCategory;
         }).join(', ');
+
+        // Notify supervisor(s) in the hub that a new submission needs Tier 1 approval
+        if (resolvedHubId) {
+          supabase
+            .from('user_profiles')
+            .select('id')
+            .eq('hub_id', resolvedHubId)
+            .in('role', ['supervisor', 'hubSupervisor', 'hub_supervisor'])
+            .then(({ data: supervisors }) => {
+              if (supervisors && supervisors.length > 0) {
+                NotificationTriggerService.costSubmissionCreated(
+                  supervisors.map(s => s.id),
+                  currentUser.fullName || currentUser.email || 'Unknown',
+                  totalAmt,
+                  totalCurrency,
+                  categoryLabels
+                ).catch(console.error);
+              }
+            }).catch(console.error);
+        }
+
+        toast({
+          title: fundingType === 'advance' ? "Advance Request Submitted" : "Reimbursement Submitted",
+          description: lineItems.length === 1
+            ? `Your request for ${lineItems[0].currency} ${lineItems[0].amount.toLocaleString()} has been submitted.`
+            : `${lineItems.length} items totalling ${totalCurrency} ${totalAmt.toLocaleString()} have been submitted.`,
+        });
 
         EmailNotificationService.sendCostSubmissionToSuperAdmins(
           currentUser.fullName || currentUser.email || 'Unknown User',
