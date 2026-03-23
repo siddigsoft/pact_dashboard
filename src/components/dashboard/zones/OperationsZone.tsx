@@ -435,14 +435,14 @@ export const OperationsZone: React.FC = () => {
   return (
     <div className="p-3 sm:p-4 md:p-6 lg:p-8 space-y-4 sm:space-y-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-lg bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center flex-shrink-0">
-            <ClipboardList className="h-5 w-5 sm:h-6 sm:w-6 text-white" />
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 sm:gap-5">
+        <div className="flex items-center gap-4">
+          <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-xl bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center flex-shrink-0 shadow-sm">
+            <ClipboardList className="h-6 w-6 sm:h-7 sm:w-7 text-white" />
           </div>
           <div className="min-w-0 flex-1">
-            <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold truncate">Operations Center</h1>
-            <p className="text-xs sm:text-sm text-muted-foreground">
+            <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold leading-tight truncate">Operations Center</h1>
+            <p className="text-sm sm:text-base text-muted-foreground">
               Field operations command and control
             </p>
           </div>

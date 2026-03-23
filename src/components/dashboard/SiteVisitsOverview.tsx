@@ -28,11 +28,20 @@ const SiteVisitsOverview: React.FC<SiteVisitsOverviewProps> = ({ currentUserId, 
   const siteVisits = propSiteVisits || contextSiteVisits;
 
   const { pendingVisits, assignedVisits, completedVisits, totalCount, completionRate } = useMemo(() => {
-    const filteredVisits = isAdmin ? siteVisits : siteVisits.filter(visit => visit.assignedTo === currentUserId);
-    
-    const pending = filteredVisits.filter(visit => ['pending', 'permitVerified'].includes(visit.status));
-    const assigned = filteredVisits.filter(visit => ['assigned', 'inProgress'].includes(visit.status));
-    const completed = filteredVisits.filter(visit => visit.status === 'completed');
+    // If visits are passed as props, they are already role-filtered by parent zone.
+    const hasPreFilteredVisits = !!propSiteVisits;
+    const filteredVisits = hasPreFilteredVisits
+      ? siteVisits
+      : isAdmin
+        ? siteVisits
+        : siteVisits.filter(visit => visit.assignedTo === currentUserId);
+
+    const pendingStatuses = new Set(['pending', 'permitverified', 'verified', 'dispatched']);
+    const assignedStatuses = new Set(['assigned', 'inprogress', 'in progress', 'accepted']);
+
+    const pending = filteredVisits.filter((visit) => pendingStatuses.has((visit.status || '').toLowerCase()));
+    const assigned = filteredVisits.filter((visit) => assignedStatuses.has((visit.status || '').toLowerCase()));
+    const completed = filteredVisits.filter((visit) => (visit.status || '').toLowerCase() === 'completed');
     const total = filteredVisits.length;
     const rate = total > 0 ? Math.round((completed.length / total) * 100) : 0;
 
@@ -43,7 +52,7 @@ const SiteVisitsOverview: React.FC<SiteVisitsOverviewProps> = ({ currentUserId, 
       totalCount: total,
       completionRate: rate
     };
-  }, [siteVisits, isAdmin, currentUserId]);
+  }, [siteVisits, isAdmin, currentUserId, propSiteVisits]);
 
   if (loading) {
     return (
