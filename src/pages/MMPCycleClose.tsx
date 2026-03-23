@@ -297,7 +297,7 @@ const MMPCycleClose = () => {
     try {
       const { data, error } = await supabase
         .from('mmp_files')
-        .select('id, name, month, year, region, cycle_status, cycle_closed_at')
+        .select('id, name, month, hub, cycle_status, cycle_closed_at')
         .eq('cycle_status', 'closed')
         .order('cycle_closed_at', { ascending: false });
 
@@ -307,8 +307,8 @@ const MMPCycleClose = () => {
         id: m.id,
         name: m.name,
         month: m.month,
-        year: m.year,
-        region: m.region,
+        year: null,
+        region: (m as any).hub || 'Unknown',
         cycle_status: m.cycle_status || 'closed',
         cycle_closed_at: m.cycle_closed_at,
         totalSites: 0,
@@ -584,15 +584,16 @@ const MMPCycleClose = () => {
       try {
         const { data } = await supabase
           .from('site_visits')
-          .select('mmp_id, quality_score')
-          .not('quality_score', 'is', null);
+          .select('mmp_id, additional_data');
         if (data && data.length > 0) {
           const hubScores: Record<string, { total: number; count: number }> = {};
           data.forEach((s: any) => {
+            const qualityScore = Number(s?.additional_data?.quality_score);
+            if (!Number.isFinite(qualityScore)) return;
             const mmp = mmpFiles?.find(m => m.id === s.mmp_id);
             const hub = mmp?.hub || mmp?.region || 'Unknown';
             if (!hubScores[hub]) hubScores[hub] = { total: 0, count: 0 };
-            hubScores[hub].total += s.quality_score;
+            hubScores[hub].total += qualityScore;
             hubScores[hub].count++;
           });
           setQualityData(Object.entries(hubScores).map(([hub, d]) => ({

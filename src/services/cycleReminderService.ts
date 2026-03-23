@@ -21,7 +21,7 @@ export async function checkAndSendCycleReminders(): Promise<{ sent: number; cycl
 
     const { data: overdueCycles, error } = await supabase
       .from('mmp_files')
-      .select('id, name, hub, region, cycle_close_deadline, last_reminder_sent')
+      .select('id, name, hub, cycle_close_deadline, last_reminder_sent')
       .eq('cycle_status', 'closing')
       .lt('cycle_close_deadline', now.toISOString());
 
@@ -44,7 +44,7 @@ export async function checkAndSendCycleReminders(): Promise<{ sent: number; cycl
       .eq('status', 'approved');
 
     for (const cycle of eligibleCycles) {
-      const mmpHub = (cycle as any).hub || (cycle as any).region || '';
+      const mmpHub = (cycle as any).hub || '';
       const deadlineStr = cycle.cycle_close_deadline
         ? new Date(cycle.cycle_close_deadline).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
         : 'N/A';

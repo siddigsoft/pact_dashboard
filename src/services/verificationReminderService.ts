@@ -106,7 +106,7 @@ export async function checkAndSendVerificationReminders(): Promise<{ sent: numbe
 
     const { data: activeMmps, error: mmpError } = await supabase
       .from('mmp_files')
-      .select('id, name, hub, region, status')
+      .select('id, name, hub, status')
       .in('status', ['in_progress', 'forwarded', 'dispatched', 'active']);
 
     if (mmpError || !activeMmps || activeMmps.length === 0) {

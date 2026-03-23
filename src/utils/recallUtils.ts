@@ -345,7 +345,7 @@ export async function performTieredRecall(
   try {
     const { data: mmpData, error: fetchError } = await supabase
       .from('mmp_files')
-      .select('*, mmp_site_entries(*)')
+      .select('*')
       .eq('id', request.mmpId)
       .single();
 
@@ -981,7 +981,7 @@ export async function approveRecall(
   try {
     const { data: mmpData, error: fetchError } = await supabase
       .from('mmp_files')
-      .select('*, mmp_site_entries(*)')
+      .select('*')
       .eq('id', mmpId)
       .single();
 
