@@ -2700,39 +2700,43 @@ const MMP = () => {
       if (userProjectIds.length > 0) {
         filteredMMPs = mmpFiles.filter(mmp => {
           const inProject = mmp.projectId ? userProjectIds.includes(mmp.projectId) : false;
-          if (isFOM || isSupervisor) {
+          if (isFOM) {
             const workflow = mmp.workflow as any;
             const forwardedToFomIds = workflow?.forwardedToFomIds || [];
             const isForwarded = forwardedToFomIds.includes(currentUser?.id || '');
             return inProject || isForwarded;
           }
-          // Non-FOM/Supervisor path
+          // Supervisor and non-FOM path: show all MMPs in their projects
           return inProject;
         });
       } else if (userProjectIds.length === 0) {
         // User is not admin and has no project assignments - show no MMPs
         // But allow Data Collectors to see Available Sites (handled separately)
-        // For FOMs and Supervisors with no project membership, we still allow forwarded MMPs
-        if (isFOM || isSupervisor) {
+        // For FOMs with no project membership, allow forwarded MMPs; Supervisors see all (hub-scoped)
+        if (isFOM) {
           filteredMMPs = mmpFiles.filter(mmp => {
             const workflow = mmp.workflow as any;
             const forwardedToFomIds = workflow?.forwardedToFomIds || [];
             return forwardedToFomIds.includes(currentUser?.id || '');
           });
+        } else if (isSupervisor) {
+          // Supervisors see all MMPs (hub filter applied later for oversight)
+          filteredMMPs = mmpFiles;
         } else if (!canClaimSites) {
           filteredMMPs = [];
         }
       }
     }
 
-    // For FOM and Supervisor users, only show MMPs forwarded to them or their verified MMPs
-    if ((isFOM || isSupervisor) && currentUser) {
+    // For FOM users only, restrict to MMPs forwarded to them or their verified MMPs
+    // Supervisors see all MMPs in their scope (hub-filtered) for oversight/follow-up
+    if (isFOM && currentUser) {
       filteredMMPs = filteredMMPs.filter(mmp => {
         const workflow = mmp.workflow as any;
         const forwardedToFomIds = workflow?.forwardedToFomIds || [];
         const isForwardedToThisUser = forwardedToFomIds.includes(currentUser.id);
         
-        // Include MMPs forwarded to this FOM/Supervisor or verified MMPs
+        // Include MMPs forwarded to this FOM or verified MMPs
         return isForwardedToThisUser || mmp.type === 'verified-template';
       });
     }
@@ -2747,16 +2751,16 @@ const MMP = () => {
     }
 
     const newMMPs = filteredMMPs.filter(mmp => {
-      if (isFOM || isSupervisor) {
-        // For FOM/Supervisor: New MMPs are all items forwarded to them (regardless of coordinator forwarding)
+      if (isFOM) {
+        // For FOM: New MMPs are all items forwarded to them (regardless of coordinator forwarding)
         const workflow = mmp.workflow as any;
         const forwardedToFomIds = workflow?.forwardedToFomIds || [];
         return forwardedToFomIds.includes(currentUser?.id || '');
       } else if (isCoordinator) {
         // For Coordinator: They don't see "new" MMPs, only verified ones with sites to verify
         return false;
-      } else if (isAdmin || isICT || isDataTeam) {
-        // For admin/ICT/DataTeam: New MMPs are those uploaded but not forwarded to any FOM yet
+      } else if (isAdmin || isICT || isDataTeam || isSupervisor) {
+        // For admin/ICT/DataTeam/Supervisor: New MMPs are those uploaded but not forwarded to any FOM yet
         return mmp.status === 'pending' && 
                (!(mmp.workflow as any)?.forwardedToFomIds || (mmp.workflow as any)?.forwardedToFomIds.length === 0);
       }
@@ -2776,15 +2780,15 @@ const MMP = () => {
         return false; // Exclude from Forwarded - should be in New MMPs only
       }
       
-      if (isFOM || isSupervisor) {
-        // For FOM/Supervisor: Forwarded means MMPs they've processed and sent to coordinators
+      if (isFOM) {
+        // For FOM: Forwarded means MMPs they've processed and sent to coordinators
         return workflow?.forwardedToCoordinators === true ||
                workflow?.currentStage === 'coordinatorReview';
       } else if (isCoordinator) {
         // For Coordinator: They don't have a "forwarded" category
         return false;
-      } else if (isAdmin || isICT || isDataTeam) {
-        // For admin/ICT/DataTeam: Forwarded means MMPs that have been forwarded to FOMs or coordinators
+      } else if (isAdmin || isICT || isDataTeam || isSupervisor) {
+        // For admin/ICT/DataTeam/Supervisor: Forwarded means MMPs that have been forwarded to FOMs or coordinators
         const hasForwardedToFomIds = workflow?.forwardedToFomIds && workflow?.forwardedToFomIds.length > 0;
         const hasForwardedToCoordinators = workflow?.forwardedToCoordinators === true || 
                                            (workflow?.forwardedToCoordinatorAt && !workflow?.isRecalled) ||
@@ -2821,14 +2825,15 @@ const MMP = () => {
       if (isCoordinator) {
         // For Coordinator: Show MMPs that have been forwarded to coordinators
         return workflow?.forwardedToCoordinators === true;
-      } else if (isFOM || isSupervisor) {
-        // For FOM/Supervisor: Verified means MMPs with sites available for verification
+      } else if (isFOM) {
+        // For FOM: Verified means MMPs with sites available for verification
         return mmp.type === 'verified-template' || 
                normalizedStatus === 'verified' ||
                normalizedStatus === 'approved' ||
                hasVerifiedSites ||
                (workflow?.currentStage && ['permitsVerified', 'cpVerification', 'completed'].includes(workflow?.currentStage));
       } else {
+        // For admin/ICT/DataTeam/Supervisor and others: full admin-style verified criteria
         // For admin/other roles: Include verified, approved, specific workflow stages, OR MMPs with verified sites
         // Also catch any MMP not already shown in New or Forwarded tabs so nothing is invisible
         const matchesVerifiedCriteria = normalizedStatus === 'verified' ||
@@ -4654,7 +4659,7 @@ const MMP = () => {
                 {!canClaimSites && (
                   <TabsTrigger value="forwarded" className="flex items-center gap-1.5 data-[state=active]:bg-gradient-to-r data-[state=active]:from-amber-500 data-[state=active]:to-orange-500 data-[state=active]:text-white data-[state=active]:shadow-md min-h-[32px] text-xs flex-shrink-0 whitespace-nowrap rounded-md px-3 text-blue-100 hover:text-white transition-all">
                     <Send className="h-3.5 w-3.5" />
-                    {(isFOM || isSupervisor) ? t('mmpPage.tabs.forwardedSites') : t('mmpPage.tabs.forwardedMMPs')}
+                    {isFOM ? t('mmpPage.tabs.forwardedSites') : t('mmpPage.tabs.forwardedMMPs')}
                     <Badge className="bg-amber-400/30 text-white border-0 text-[10px] px-1.5 py-0">{categorizedMMPs.forwarded.length}</Badge>
                   </TabsTrigger>
                 )}
@@ -4680,7 +4685,7 @@ const MMP = () => {
                   <div className="mb-3">
                     <div className="text-xs font-medium text-muted-foreground mb-2">{t('mmpPage.subcategory')}:</div>
                     <div className="flex gap-1.5 flex-wrap">
-                        {(isFOM || isSupervisor) && (
+                        {isFOM && (
                           <>
                             <Button 
                               variant={newFomSubTab === 'pending' ? 'default' : 'outline'} 
@@ -5019,7 +5024,7 @@ const MMP = () => {
                 ) : (
                   <MMPList mmpFiles={(isAdmin || isICT || isFOM || isSupervisor || isDataTeam) ? forwardedSubcategories[forwardedSubTab] : categorizedMMPs.forwarded} />
                 )}
-                {(isFOM || isSupervisor) && (
+                {isFOM && (
                   <SitesDisplayTable 
                     siteRows={forwardedCategorySiteRows}
                     editable={true}
