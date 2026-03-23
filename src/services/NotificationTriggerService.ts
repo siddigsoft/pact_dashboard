@@ -1391,6 +1391,24 @@ export const NotificationTriggerService = {
         }
       }
 
+      // 3. Notify hub supervisors in-app so they are aware of the verification
+      //    (They receive email CC via ccEmails above but no dedicated in-app message)
+      try {
+        const supervisorCount = await this.notifyHubSupervisor(hubId, {
+          title: 'Site Visit Verified',
+          message: `Site "${siteName}" from MMP "${mmpName}" has been verified by ${coordinatorName} and is now ready for FOM approval.`,
+          type: 'success',
+          category: 'assignments',
+          priority: 'normal',
+          link: siteId ? `/mmp?site=${siteId}` : '/mmp',
+          relatedEntityId: siteId,
+          relatedEntityType: 'siteVisit'
+        });
+        successCount += supervisorCount;
+      } catch (supError) {
+        console.error('[NOTIFICATION] Failed to notify supervisors of site verification:', supError);
+      }
+
       return successCount;
     } catch (error) {
       console.error('Failed to send site verified notifications:', error);

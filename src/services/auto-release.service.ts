@@ -16,6 +16,7 @@ interface SiteVisitRow {
   assigned_to: string | null;
   status: string;
   visit_data: SiteVisitData | null;
+  mmp_file_id: string | null;
 }
 
 interface AutoReleaseResult {
@@ -41,7 +42,7 @@ export const AutoReleaseService = {
     try {
       const { data: pendingSites, error: fetchError } = await supabase
         .from('site_visits')
-        .select('id, site_name, assigned_to, status, visit_data')
+        .select('id, site_name, assigned_to, status, visit_data, mmp_file_id')
         .not('assigned_to', 'is', null)
         .in('status', ['dispatched', 'in_progress', 'claimed', 'assigned'])
         .limit(500);
@@ -85,7 +86,7 @@ export const AutoReleaseService = {
   },
 
   async releaseSite(site: SiteVisitRow): Promise<AutoReleaseResult> {
-    const { id: siteId, site_name: siteName, assigned_to: formerAssignee, visit_data } = site;
+    const { id: siteId, site_name: siteName, assigned_to: formerAssignee, visit_data, mmp_file_id } = site;
     
     if (!formerAssignee) {
       return {
@@ -130,6 +131,32 @@ export const AutoReleaseService = {
       }
 
       await NotificationTriggerService.siteAutoReleased(formerAssignee, siteName, siteId);
+
+      // Notify hub supervisors that a site was auto-released (coverage gap risk)
+      if (mmp_file_id) {
+        try {
+          const { data: mmpInfo } = await supabase
+            .from('mmp_files')
+            .select('hub_id')
+            .eq('id', mmp_file_id)
+            .single();
+
+          if (mmpInfo?.hub_id) {
+            await NotificationTriggerService.notifyHubSupervisor(mmpInfo.hub_id, {
+              title: 'Site Auto-Released',
+              message: `Site "${siteName}" was automatically released back to the dispatch pool — the assigned data collector did not confirm before the deadline. Reassignment may be needed.`,
+              type: 'warning',
+              category: 'assignments',
+              priority: 'high',
+              link: '/mmp',
+              relatedEntityId: siteId,
+              relatedEntityType: 'siteVisit'
+            });
+          }
+        } catch (hubNotifError) {
+          console.error(`[AUTO-RELEASE] Failed to notify supervisors for site ${siteId}:`, hubNotifError);
+        }
+      }
 
       console.log(`Site ${siteName} (${siteId}) auto-released from user ${formerAssignee}`);
       
