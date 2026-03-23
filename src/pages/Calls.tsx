@@ -263,595 +263,437 @@ const Calls = () => {
   const getInitials = (name: string) => 
     name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
 
-  const UberStatusDot = ({ status }: { status: string }) => (
-    <div className={`w-2.5 h-2.5 rounded-full border-2 border-white dark:border-black ${
-      status === 'online' ? 'bg-green-500' : 
-      status === 'away' ? 'bg-amber-500' : 
+  const StatusDot = ({ status }: { status: string }) => (
+    <div className={`w-2.5 h-2.5 rounded-full border-2 border-white dark:border-gray-900 ${
+      status === 'online' ? 'bg-green-500' :
+      status === 'away' ? 'bg-amber-500' :
       'bg-gray-400'
     }`} />
   );
 
   return (
-    <div
-      className="min-h-screen w-full max-w-full flex flex-col bg-white dark:bg-black overflow-hidden"
-      style={{ paddingBottom: 'env(safe-area-inset-bottom)', paddingTop: 'env(safe-area-inset-top)' }}
-      data-testid="calls-page"
-    >
-      <div className="flex-1 flex flex-col overflow-hidden">
-        {/* Compact Header with safe area for notch */}
-        <div 
-          className="fixed top-0 left-0 right-0 shrink-0 bg-black px-4 pb-3 z-50"
-          style={{ paddingTop: 'calc(env(safe-area-inset-top) + 12px)' }}
-        >
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <button 
-                onClick={() => navigate(-1)}
-                className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center hover:bg-white/20 transition-colors"
-                data-testid="button-go-back"
-              >
-                <ArrowLeft className="h-4 w-4 text-white" />
-              </button>
-              <div>
-                <h1 className="text-xl font-bold text-white" data-testid="text-page-title">Calls</h1>
-                <div className="flex items-center gap-1.5">
-                  <span className="text-xs text-white/60">Voice & Video</span>
-                  {isRealtimeConnected ? (
-                    <span className="px-1.5 py-0.5 rounded-full bg-green-500/20 text-green-400 text-[10px] font-semibold">Live</span>
-                  ) : (
-                    <span className="px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-400 text-[10px] font-semibold flex items-center gap-0.5">
-                      <WifiOff className="h-2.5 w-2.5" />
-                      Connecting
-                    </span>
-                  )}
-                </div>
-              </div>
+    <div className="flex flex-col h-full bg-gray-50 dark:bg-gray-950 overflow-hidden" data-testid="calls-page">
+
+      {/* Page Header */}
+      <div className="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 px-6 py-4 shrink-0">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-xl font-bold text-gray-900 dark:text-white" data-testid="text-page-title">Calls</h1>
+            <div className="flex items-center gap-2 mt-0.5">
+              <span className="text-sm text-gray-500">Voice &amp; Video</span>
+              {isRealtimeConnected ? (
+                <span className="px-2 py-0.5 rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-xs font-semibold flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse inline-block" />
+                  Live
+                </span>
+              ) : (
+                <span className="px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 text-xs font-medium flex items-center gap-1">
+                  <WifiOff className="h-3 w-3" />
+                  Connecting
+                </span>
+              )}
             </div>
-            <div className="flex items-center gap-1.5">
-              <button
-                onClick={() => navigate('/call-analytics')}
-                className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center hover:bg-white/20 transition-colors"
-                data-testid="button-call-analytics"
-                title="Call Analytics"
-              >
-                <BarChart3 className="h-4 w-4 text-white" />
-              </button>
-              <button 
-                onClick={() => window.location.reload()}
-                className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center hover:bg-white/20 transition-colors"
-                data-testid="button-refresh"
-              >
-                <RotateCcw className="h-4 w-4 text-white" />
-              </button>
-              <button 
-                onClick={() => navigate('/chat')}
-                className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center hover:bg-white/20 transition-colors"
-                data-testid="button-go-chat"
-              >
-                <MessageSquare className="h-4 w-4 text-white" />
-              </button>
-              <button 
-                onClick={() => navigate('/notifications')}
-                className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center hover:bg-white/20 transition-colors relative"
-                data-testid="button-go-notifications"
-              >
-                <Bell className="h-4 w-4 text-white" />
-                <span className="absolute -top-0.5 -right-0.5 min-w-[14px] h-[14px] px-1 rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center">3</span>
-              </button>
-            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => navigate('/call-analytics')}
+              className="h-9 px-3 rounded-lg border border-gray-200 dark:border-gray-700 flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+              data-testid="button-call-analytics"
+            >
+              <BarChart3 className="h-3.5 w-3.5" />
+              Analytics
+            </button>
+            <button
+              onClick={() => navigate('/chat')}
+              className="h-9 px-3 rounded-lg border border-gray-200 dark:border-gray-700 flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+              data-testid="button-go-chat"
+            >
+              <MessageSquare className="h-3.5 w-3.5" />
+              Messages
+            </button>
+            <button
+              onClick={() => window.location.reload()}
+              className="h-9 px-3 rounded-lg border border-gray-200 dark:border-gray-700 flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+              data-testid="button-refresh"
+            >
+              <RotateCcw className="h-3.5 w-3.5" />
+              Refresh
+            </button>
           </div>
         </div>
 
-        <div className="flex-1 overflow-auto p-3 space-y-3" style={{ paddingTop: 'calc(env(safe-area-inset-top) + 100px)' }}>
-          {/* Online Users - Compact */}
-          {onlineUsers.length > 0 && !isCallActive && (
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <h3 className="text-xs font-semibold text-black dark:text-white uppercase tracking-wide">Online Now</h3>
-                <span className="px-1.5 py-0.5 rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-[10px] font-semibold">{onlineUsers.length} active</span>
+        {/* Online now strip */}
+        {onlineUsers.length > 0 && !isCallActive && (
+          <div className="mt-4 flex items-center gap-3">
+            <div className="flex items-center gap-1.5 shrink-0">
+              <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse inline-block" />
+              <span className="text-xs font-semibold text-green-700 dark:text-green-400">{onlineUsers.length} online</span>
+            </div>
+            <div className="flex gap-2 overflow-x-auto pb-0.5 scrollbar-hide">
+              {onlineUsers.slice(0, 10).map((user) => (
+                <button
+                  key={user.id}
+                  onClick={() => handleInitiateCall(user.id)}
+                  className="flex flex-col items-center gap-1 min-w-[52px] group"
+                  data-testid={`online-user-${user.id}`}
+                  title={user.name}
+                >
+                  <div className="relative">
+                    <Avatar className="h-9 w-9 ring-2 ring-green-500 ring-offset-1 ring-offset-white dark:ring-offset-gray-900 transition-transform group-hover:scale-110">
+                      <AvatarImage src={user.avatar} alt={user.name} />
+                      <AvatarFallback className="bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300 text-xs font-bold">
+                        {getInitials(user.name)}
+                      </AvatarFallback>
+                    </Avatar>
+                  </div>
+                  <span className="text-[10px] text-gray-500 dark:text-gray-400 truncate max-w-[52px] group-hover:text-green-600 dark:group-hover:text-green-400 transition-colors">
+                    {user.name.split(' ')[0]}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Active Call Banner */}
+      {isCallActive && callState.recipient && (
+        <div className={`mx-4 mt-4 rounded-2xl overflow-hidden shadow-lg ${
+          isIncoming ? 'bg-green-600' : 'bg-blue-600'
+        }`}>
+          <div className="py-8 px-6">
+            <div className="flex flex-col items-center gap-4">
+              <div className="relative">
+                <Avatar className="h-20 w-20 ring-4 ring-white/30">
+                  <AvatarImage src={callState.recipient.avatar} alt={callState.recipient.name} />
+                  <AvatarFallback className="bg-white/20 text-white text-2xl font-bold">
+                    {getInitials(callState.recipient.name)}
+                  </AvatarFallback>
+                </Avatar>
+                {(isOutgoing || isIncoming) && (
+                  <div className="absolute -inset-3 rounded-full border-2 border-white/30 animate-ping" />
+                )}
               </div>
-              <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
-                {onlineUsers.slice(0, 8).map((user) => {
-                  const location = getUserLocation(user.id);
-                  return (
+              <div className="text-center text-white">
+                <h3 className="text-xl font-bold">{callState.recipient.name}</h3>
+                {isIncoming && <p className="text-white/80 text-sm mt-1">Incoming call...</p>}
+                {isOutgoing && <p className="text-white/80 text-sm mt-1">Calling...</p>}
+                {isConnected && (
+                  <span className="inline-block mt-2 px-3 py-1 rounded-full bg-white/20 text-white text-base font-bold">
+                    {formatDuration(callDuration)}
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center gap-3">
+                {isIncoming && (
+                  <>
+                    <button className="w-12 h-12 rounded-full bg-red-500 hover:bg-red-600 flex items-center justify-center shadow-lg transition-all hover:scale-105" onClick={rejectCall} data-testid="button-reject-call">
+                      <PhoneOff className="h-5 w-5 text-white" />
+                    </button>
+                    <button className="w-12 h-12 rounded-full bg-white flex items-center justify-center shadow-lg transition-all hover:scale-105 animate-pulse" onClick={acceptCall} data-testid="button-accept-call">
+                      <Phone className="h-5 w-5 text-green-600" />
+                    </button>
+                  </>
+                )}
+                {isOutgoing && (
+                  <button className="w-12 h-12 rounded-full bg-red-500 hover:bg-red-600 flex items-center justify-center shadow-lg transition-all hover:scale-105" onClick={endCall} data-testid="button-cancel-call">
+                    <PhoneOff className="h-5 w-5 text-white" />
+                  </button>
+                )}
+                {isConnected && (
+                  <>
+                    <button className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${isMuted ? 'bg-red-500' : 'bg-white/20 hover:bg-white/30'}`} onClick={toggleMute} data-testid="button-toggle-mute">
+                      {isMuted ? <MicOff className="h-4 w-4 text-white" /> : <Mic className="h-4 w-4 text-white" />}
+                    </button>
+                    <button className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${isVideoEnabled ? 'bg-white' : 'bg-white/20 hover:bg-white/30'}`} onClick={toggleVideo} data-testid="button-toggle-video">
+                      {isVideoEnabled ? <Video className="h-4 w-4 text-blue-600" /> : <VideoOff className="h-4 w-4 text-white" />}
+                    </button>
+                    <button className="w-12 h-12 rounded-full bg-red-500 hover:bg-red-600 flex items-center justify-center shadow-lg transition-all hover:scale-105" onClick={endCall} data-testid="button-end-call">
+                      <PhoneOff className="h-5 w-5 text-white" />
+                    </button>
+                    <button className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${isSpeakerOn ? 'bg-white' : 'bg-white/20 hover:bg-white/30'}`} onClick={() => setIsSpeakerOn(!isSpeakerOn)} data-testid="button-toggle-speaker">
+                      {isSpeakerOn ? <Volume2 className="h-4 w-4 text-blue-600" /> : <VolumeX className="h-4 w-4 text-white" />}
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Search + Tabs toolbar */}
+      {!isCallActive && (
+        <div className="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 px-6 py-3 flex items-center gap-3 shrink-0">
+          <div className="relative flex-1 max-w-sm">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+            <input
+              type="text"
+              placeholder="Search contacts..."
+              className="w-full h-9 pl-9 pr-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white placeholder:text-gray-400 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              data-testid="input-search"
+            />
+          </div>
+          <div className="flex rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
+            <button
+              className={`px-4 py-2 text-sm font-medium transition-colors flex items-center gap-1.5 ${
+                activeTab === 'contacts' ? 'bg-blue-600 text-white' : 'bg-white dark:bg-gray-900 text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800'
+              }`}
+              onClick={() => setActiveTab('contacts')}
+              data-testid="tab-contacts"
+            >
+              <Users className="h-3.5 w-3.5" />
+              Contacts
+            </button>
+            <button
+              className={`px-4 py-2 text-sm font-medium transition-colors flex items-center gap-1.5 ${
+                activeTab === 'history' ? 'bg-blue-600 text-white' : 'bg-white dark:bg-gray-900 text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800'
+              }`}
+              onClick={() => setActiveTab('history')}
+              data-testid="tab-history"
+            >
+              <Clock className="h-3.5 w-3.5" />
+              Recent
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* List content */}
+      {!isCallActive && (
+        <div className="flex-1 overflow-auto px-4 py-3">
+          {activeTab === 'contacts' && (
+            <div className="max-w-3xl space-y-1">
+              {filteredUsers.map((user) => {
+                const status = getUserOnlineStatus(user.id);
+                const isFavorite = favorites.includes(user.id);
+                const location = getUserLocation(user.id);
+                return (
+                  <div
+                    key={user.id}
+                    className="flex items-center gap-3 px-4 py-3 bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 hover:border-gray-200 dark:hover:border-gray-700 transition-all group"
+                    data-testid={`contact-${user.id}`}
+                  >
+                    <div className="relative shrink-0">
+                      <Avatar className={`h-10 w-10 ${status === 'online' ? 'ring-2 ring-green-500 ring-offset-1' : ''}`}>
+                        <AvatarImage src={user.avatar} alt={user.name} />
+                        <AvatarFallback className="bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 text-sm font-bold">
+                          {getInitials(user.name)}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className="absolute -bottom-0.5 -right-0.5">
+                        <StatusDot status={status} />
+                      </div>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-semibold text-sm text-gray-900 dark:text-white truncate">{user.name}</span>
+                        {isFavorite && <Star className="h-3 w-3 fill-amber-400 text-amber-400 shrink-0" />}
+                      </div>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        <span className="text-xs text-gray-500">{user.role}</span>
+                        {location && (
+                          <span className="px-1.5 py-0.5 rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-[10px] font-medium flex items-center gap-0.5">
+                            <MapPin className="h-2.5 w-2.5" />
+                            On site
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button
+                        onClick={() => toggleFavorite(user.id)}
+                        className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                        data-testid={`favorite-${user.id}`}
+                      >
+                        <Star className={`h-4 w-4 ${isFavorite ? 'fill-amber-400 text-amber-400' : 'text-gray-400'}`} />
+                      </button>
+                      <button
+                        onClick={() => navigate(`/chat?userId=${user.id}`)}
+                        className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                        data-testid={`message-${user.id}`}
+                      >
+                        <MessageSquare className="h-4 w-4 text-gray-500" />
+                      </button>
+                    </div>
                     <button
-                      key={user.id}
                       onClick={() => handleInitiateCall(user.id)}
-                      className="flex flex-col items-center gap-1 min-w-[56px] group"
-                      data-testid={`online-user-${user.id}`}
+                      className="h-9 px-4 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold flex items-center gap-1.5 transition-colors shrink-0"
+                      data-testid={`call-${user.id}`}
                     >
-                      <div className="relative">
-                        <Avatar className="h-10 w-10 ring-2 ring-green-500 transition-transform group-hover:scale-105">
+                      <Phone className="h-3.5 w-3.5" />
+                      Call
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {activeTab === 'history' && (
+            <div className="max-w-3xl space-y-1">
+              {loadingHistory ? (
+                <div className="flex flex-col items-center justify-center py-16 text-center">
+                  <div className="w-8 h-8 border-2 border-gray-200 border-t-blue-600 rounded-full animate-spin mb-3" />
+                  <p className="text-sm text-gray-500">Loading call history...</p>
+                </div>
+              ) : callHistory.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-16 text-center" data-testid="empty-call-history">
+                  <div className="w-14 h-14 rounded-2xl bg-gray-100 dark:bg-gray-800 flex items-center justify-center mb-4">
+                    <Phone className="h-7 w-7 text-gray-400" />
+                  </div>
+                  <p className="font-semibold text-gray-700 dark:text-gray-300">No recent calls</p>
+                  <p className="text-sm text-gray-400 mt-1 max-w-xs">Your call history will appear here after you make or receive calls</p>
+                </div>
+              ) : (
+                callHistory.map((call) => {
+                  const user = users.find(u => u.id === call.recipientId);
+                  if (!user) return null;
+                  const isMissed = call.status === 'missed' || call.status === 'no_answer';
+                  const status = getUserOnlineStatus(user.id);
+                  return (
+                    <div
+                      key={call.id}
+                      className="flex items-center gap-3 px-4 py-3 bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 hover:border-gray-200 dark:hover:border-gray-700 transition-all"
+                      data-testid={`call-history-${call.id}`}
+                    >
+                      <div className="relative shrink-0">
+                        <Avatar className="h-10 w-10">
                           <AvatarImage src={user.avatar} alt={user.name} />
-                          <AvatarFallback className="bg-black dark:bg-white text-white dark:text-black text-xs font-bold">
+                          <AvatarFallback className="bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 text-sm font-bold">
                             {getInitials(user.name)}
                           </AvatarFallback>
                         </Avatar>
-                        <div className="absolute bottom-0 right-0">
-                          <UberStatusDot status="online" />
+                        <div className="absolute -bottom-0.5 -right-0.5">
+                          <StatusDot status={status} />
                         </div>
                       </div>
-                      <span className="text-[10px] text-gray-500 dark:text-gray-400 truncate max-w-[56px] group-hover:text-black dark:group-hover:text-white transition-colors">
-                        {user.name.split(' ')[0]}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-          
-          {/* Active Call UI - Compact */}
-          {isCallActive && callState.recipient && (
-            <div className="rounded-xl overflow-hidden">
-              <div className={`relative ${
-                isConnected ? 'bg-black dark:bg-white' : isIncoming ? 'bg-green-600' : 'bg-black dark:bg-white'
-              }`}>
-                <div className="relative py-8 px-4">
-                  <div className="flex flex-col items-center space-y-4">
-                    <div className="relative">
-                      <Avatar className="h-20 w-20 ring-4 ring-white/20">
-                        <AvatarImage src={callState.recipient.avatar} alt={callState.recipient.name} />
-                        <AvatarFallback className="bg-white/20 text-white text-2xl font-bold">
-                          {getInitials(callState.recipient.name)}
-                        </AvatarFallback>
-                      </Avatar>
-                      {(isOutgoing || isIncoming) && (
-                        <div className="absolute -inset-3 rounded-full border-2 border-white/30 animate-ping" />
-                      )}
-                    </div>
-                    
-                    <div className="text-center text-white dark:text-black">
-                      <h3 className="text-xl font-bold">{callState.recipient.name}</h3>
-                      {isIncoming && <p className="text-white/80 dark:text-black/80 text-sm mt-1">Incoming call...</p>}
-                      {isOutgoing && <p className="text-white/80 dark:text-black/80 text-sm mt-1">Calling...</p>}
-                      {isConnected && (
-                        <div className="mt-2">
-                          <span className="px-3 py-1 rounded-full bg-white/20 text-white dark:bg-black/20 dark:text-black text-base font-bold">
-                            {formatDuration(callDuration)}
-                          </span>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className={`font-semibold text-sm truncate ${isMissed ? 'text-red-500' : 'text-gray-900 dark:text-white'}`}>{user.name}</span>
+                          {isMissed && <span className="px-1.5 py-0.5 rounded-full bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 text-[10px] font-semibold shrink-0">Missed</span>}
                         </div>
-                      )}
-                    </div>
-                    
-                    <div className="flex items-center gap-3 pt-2">
-                      {isIncoming && (
-                        <>
-                          <button 
-                            className="w-12 h-12 rounded-full bg-red-500 flex items-center justify-center shadow-lg transition-transform hover:scale-105 active:scale-95"
-                            onClick={rejectCall}
-                            data-testid="button-reject-call"
-                          >
-                            <PhoneOff className="h-5 w-5 text-white" />
-                          </button>
-                          <button 
-                            className="w-12 h-12 rounded-full bg-green-500 flex items-center justify-center shadow-lg transition-transform hover:scale-105 active:scale-95 animate-pulse"
-                            onClick={acceptCall}
-                            data-testid="button-accept-call"
-                          >
-                            <Phone className="h-5 w-5 text-white" />
-                          </button>
-                        </>
-                      )}
-                      
-                      {isOutgoing && (
-                        <button 
-                          className="w-12 h-12 rounded-full bg-red-500 flex items-center justify-center shadow-lg transition-transform hover:scale-105 active:scale-95"
-                          onClick={endCall}
-                          data-testid="button-cancel-call"
-                        >
-                          <PhoneOff className="h-5 w-5 text-white" />
+                        <div className="flex items-center gap-1.5 text-xs text-gray-500 mt-0.5">
+                          {call.direction === 'outgoing' ? <PhoneOutgoing className="h-3 w-3" /> : <PhoneIncoming className="h-3 w-3" />}
+                          <span>{formatTime(call.timestamp)}</span>
+                          {!isMissed && <span>· {formatDuration(call.duration)}</span>}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        {isMissed && (
+                          <>
+                            <button onClick={() => handleMissedCallAction(user.id, user.name, user.avatar)} className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors" data-testid={`missed-message-${call.id}`}>
+                              <MessageSquare className="h-4 w-4 text-gray-500" />
+                            </button>
+                            <button onClick={() => handleMissedCallAction(user.id, user.name, user.avatar)} className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors" data-testid={`missed-notify-${call.id}`}>
+                              <Bell className="h-4 w-4 text-gray-500" />
+                            </button>
+                          </>
+                        )}
+                        <button onClick={() => handleStartCall(user.id)} className="h-8 w-8 rounded-lg bg-blue-600 hover:bg-blue-700 flex items-center justify-center transition-colors" data-testid={`callback-${call.id}`}>
+                          <Phone className="h-3.5 w-3.5 text-white" />
                         </button>
-                      )}
-                      
-                      {isConnected && (
-                        <>
-                          <button 
-                            className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${isMuted ? 'bg-red-500' : 'bg-white/20'}`}
-                            onClick={toggleMute}
-                            data-testid="button-toggle-mute"
-                          >
-                            {isMuted ? <MicOff className="h-4 w-4 text-white" /> : <Mic className="h-4 w-4 text-white dark:text-black" />}
-                          </button>
-                          <button 
-                            className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${isVideoEnabled ? 'bg-white text-black' : 'bg-white/20'}`}
-                            onClick={toggleVideo}
-                            data-testid="button-toggle-video"
-                          >
-                            {isVideoEnabled ? <Video className="h-4 w-4" /> : <VideoOff className="h-4 w-4 text-white dark:text-black" />}
-                          </button>
-                          <button 
-                            className="w-12 h-12 rounded-full bg-red-500 flex items-center justify-center shadow-lg transition-transform hover:scale-105 active:scale-95"
-                            onClick={endCall}
-                            data-testid="button-end-call"
-                          >
-                            <PhoneOff className="h-5 w-5 text-white" />
-                          </button>
-                          <button 
-                            className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${isSpeakerOn ? 'bg-white text-black' : 'bg-white/20'}`}
-                            onClick={() => setIsSpeakerOn(!isSpeakerOn)}
-                            data-testid="button-toggle-speaker"
-                          >
-                            {isSpeakerOn ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4 text-white dark:text-black" />}
-                          </button>
-                        </>
-                      )}
+                      </div>
                     </div>
-                  </div>
-                </div>
-              </div>
+                  );
+                })
+              )}
             </div>
-          )}
-          
-          {/* Search and Tabs - Compact */}
-          {!isCallActive && (
-            <>
-              <div className="relative">
-                <div className="absolute left-0 inset-y-0 flex items-center pl-3 pointer-events-none">
-                  <Search className="h-4 w-4 text-muted-foreground" />
-                </div>
-                <Input
-                  type="text"
-                  placeholder="Search contacts..."
-                  style={{ paddingLeft: '2.75rem' }}
-                  className="h-9 bg-gray-100 dark:bg-gray-900 text-black dark:text-white placeholder:text-gray-500 text-sm font-medium"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  data-testid="input-search"
-                />
-              </div>
-
-              <div className="flex rounded-xl bg-gray-100 dark:bg-gray-900 p-0.5">
-                <button 
-                  className={`flex-1 py-2 px-3 rounded-lg text-xs font-semibold transition-colors flex items-center justify-center gap-1.5 ${
-                    activeTab === 'contacts' ? 'bg-black dark:bg-white text-white dark:text-black' : 'text-gray-600 dark:text-gray-400'
-                  }`}
-                  onClick={() => setActiveTab('contacts')}
-                  data-testid="tab-contacts"
-                >
-                  <Users className="h-3.5 w-3.5" />
-                  Contacts
-                </button>
-                <button 
-                  className={`flex-1 py-2 px-3 rounded-lg text-xs font-semibold transition-colors flex items-center justify-center gap-1.5 ${
-                    activeTab === 'history' ? 'bg-black dark:bg-white text-white dark:text-black' : 'text-gray-600 dark:text-gray-400'
-                  }`}
-                  onClick={() => setActiveTab('history')}
-                  data-testid="tab-history"
-                >
-                  <Clock className="h-3.5 w-3.5" />
-                  Recent
-                </button>
-              </div>
-              
-              <ScrollArea className="flex-1">
-                {activeTab === 'contacts' && (
-                  <div className="space-y-0.5">
-                    {filteredUsers.map((user) => {
-                      const status = getUserOnlineStatus(user.id);
-                      const isFavorite = favorites.includes(user.id);
-                      const location = getUserLocation(user.id);
-                      
-                      return (
-                        <div 
-                          key={user.id} 
-                          className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-900/50 transition-colors"
-                          data-testid={`contact-${user.id}`}
-                        >
-                          <div className="relative">
-                            <Avatar className={`h-9 w-9 ${status === 'online' ? 'ring-2 ring-green-500' : ''}`}>
-                              <AvatarImage src={user.avatar} alt={user.name} />
-                              <AvatarFallback className="bg-gray-200 dark:bg-gray-800 text-black dark:text-white text-xs font-bold">
-                                {getInitials(user.name)}
-                              </AvatarFallback>
-                            </Avatar>
-                            <div className="absolute bottom-0 right-0">
-                              <UberStatusDot status={status} />
-                            </div>
-                          </div>
-                          
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-1.5">
-                              <span className="font-semibold text-sm text-black dark:text-white truncate">{user.name}</span>
-                              {isFavorite && <Star className="h-3 w-3 fill-amber-400 text-amber-400" />}
-                            </div>
-                            <div className="flex items-center gap-1.5">
-                              <span className="text-xs text-gray-500">{user.role}</span>
-                              {location && (
-                                <span className="px-1 py-0.5 rounded bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-[9px] font-medium flex items-center gap-0.5">
-                                  <MapPin className="h-2 w-2" />
-                                  On site
-                                </span>
-                              )}
-                            </div>
-                          </div>
-                          
-                          <div className="flex items-center gap-1">
-                            <button
-                              onClick={() => toggleFavorite(user.id)}
-                              className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
-                              data-testid={`favorite-${user.id}`}
-                              title="Toggle favorite"
-                            >
-                              <Star className={`h-4 w-4 ${isFavorite ? 'fill-amber-400 text-amber-400' : 'text-gray-400'}`} />
-                            </button>
-                            <button
-                              onClick={() => navigate(`/chat?userId=${user.id}`)}
-                              className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
-                              data-testid={`message-${user.id}`}
-                              title="Send message"
-                            >
-                              <MessageSquare className="h-4 w-4 text-gray-600 dark:text-gray-400" />
-                            </button>
-                            <button
-                              onClick={() => handleInitiateCall(user.id)}
-                              className="h-8 px-3 rounded-full bg-black dark:bg-white text-white dark:text-black text-xs font-semibold flex items-center gap-1.5 hover:opacity-90 transition-opacity"
-                              data-testid={`call-${user.id}`}
-                              title="Start a call"
-                            >
-                              <Phone className="h-3.5 w-3.5" />
-                              Call
-                            </button>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-
-                {activeTab === 'history' && (
-                  <div className="space-y-0.5">
-                    {loadingHistory ? (
-                      <div className="flex flex-col items-center justify-center py-12 text-center">
-                        <div className="w-8 h-8 border-2 border-gray-300 border-t-black dark:border-t-white rounded-full animate-spin mb-4" />
-                        <p className="text-xs text-gray-500">Loading call history...</p>
-                      </div>
-                    ) : callHistory.length === 0 ? (
-                      <div className="flex flex-col items-center justify-center py-12 text-center" data-testid="empty-call-history">
-                        <div className="w-16 h-16 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center mb-4">
-                          <Phone className="h-8 w-8 text-gray-400" />
-                        </div>
-                        <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-1">No recent calls</h3>
-                        <p className="text-xs text-gray-500 max-w-[200px]">Your call history will appear here after you make or receive calls</p>
-                      </div>
-                    ) : (
-                      callHistory.map((call) => {
-                        const user = users.find(u => u.id === call.recipientId);
-                        if (!user) return null;
-                        
-                        const isMissed = call.status === 'missed' || call.status === 'no_answer';
-                        const isRejected = call.status === 'rejected';
-                        const status = getUserOnlineStatus(user.id);
-                        
-                        return (
-                          <div 
-                            key={call.id} 
-                            className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-900/50 transition-colors"
-                            data-testid={`call-history-${call.id}`}
-                          >
-                            <div className="relative">
-                              <Avatar className="h-9 w-9">
-                                <AvatarImage src={user.avatar} alt={user.name} />
-                                <AvatarFallback className="bg-gray-200 dark:bg-gray-800 text-black dark:text-white text-xs font-bold">
-                                  {getInitials(user.name)}
-                                </AvatarFallback>
-                              </Avatar>
-                              <div className="absolute bottom-0 right-0">
-                                <UberStatusDot status={status} />
-                              </div>
-                            </div>
-                            
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-1.5">
-                                <span className={`font-semibold text-sm ${isMissed ? 'text-red-500' : 'text-black dark:text-white'}`}>
-                                  {user.name}
-                                </span>
-                                {isMissed && (
-                                  <span className="px-1 py-0.5 rounded bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 text-[9px] font-medium">Missed</span>
-                                )}
-                              </div>
-                              <div className="flex items-center gap-1.5 text-xs text-gray-500">
-                                {call.direction === 'outgoing' ? (
-                                  <PhoneOutgoing className="h-3 w-3" />
-                                ) : (
-                                  <PhoneIncoming className="h-3 w-3" />
-                                )}
-                                <span>{formatTime(call.timestamp)}</span>
-                                {!isMissed && <span>{formatDuration(call.duration)}</span>}
-                              </div>
-                            </div>
-                            
-                            <div className="flex items-center gap-1">
-                              {isMissed && (
-                                <>
-                                  <button
-                                    onClick={() => handleMissedCallAction(user.id, user.name, user.avatar)}
-                                    className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
-                                    data-testid={`missed-message-${call.id}`}
-                                  >
-                                    <MessageSquare className="h-4 w-4 text-gray-600 dark:text-gray-400" />
-                                  </button>
-                                  <button
-                                    onClick={() => handleMissedCallAction(user.id, user.name, user.avatar)}
-                                    className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
-                                    data-testid={`missed-notify-${call.id}`}
-                                  >
-                                    <Bell className="h-4 w-4 text-gray-600 dark:text-gray-400" />
-                                  </button>
-                                </>
-                              )}
-                              <button
-                                onClick={() => handleStartCall(user.id)}
-                                className="h-8 px-3 rounded-full bg-black dark:bg-white text-white dark:text-black text-xs font-semibold flex items-center gap-1"
-                                data-testid={`callback-${call.id}`}
-                              >
-                                <Phone className="h-3.5 w-3.5" />
-                              </button>
-                            </div>
-                          </div>
-                        );
-                      })
-                    )}
-                  </div>
-                )}
-              </ScrollArea>
-            </>
           )}
         </div>
+      )}
 
-        {/* Dialog */}
-        <Dialog open={showMissedCallDialog} onOpenChange={setShowMissedCallDialog}>
-          <DialogContent className="max-w-sm">
-            <DialogHeader>
-              <DialogTitle className="font-bold flex items-center gap-2 text-base">
-                {missedCallUser && (
-                  <Avatar className="h-8 w-8">
-                    <AvatarImage src={missedCallUser.avatar} />
-                    <AvatarFallback className="bg-gray-200 dark:bg-gray-800 text-xs font-bold">
-                      {missedCallUser.name ? getInitials(missedCallUser.name) : '?'}
-                    </AvatarFallback>
-                  </Avatar>
-                )}
-                Follow up with {missedCallUser?.name}
-              </DialogTitle>
-              <DialogDescription className="text-xs">
-                Choose how you'd like to reach out
-              </DialogDescription>
-            </DialogHeader>
+      {/* Follow-up Dialog */}
+      <Dialog open={showMissedCallDialog} onOpenChange={setShowMissedCallDialog}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="font-bold flex items-center gap-2 text-base">
+              {missedCallUser && (
+                <Avatar className="h-8 w-8">
+                  <AvatarImage src={missedCallUser.avatar} />
+                  <AvatarFallback className="bg-blue-100 dark:bg-blue-900/40 text-blue-700 text-xs font-bold">
+                    {missedCallUser.name ? getInitials(missedCallUser.name) : '?'}
+                  </AvatarFallback>
+                </Avatar>
+              )}
+              Follow up with {missedCallUser?.name}
+            </DialogTitle>
+            <DialogDescription className="text-xs">Choose how you'd like to reach out</DialogDescription>
+          </DialogHeader>
 
-            <div className="flex rounded-xl bg-gray-100 dark:bg-gray-900 p-0.5 mt-3">
-              <button 
-                className={`flex-1 py-1.5 px-2 rounded-lg text-xs font-semibold transition-colors flex items-center justify-center gap-1 ${
-                  activeFollowupTab === 'message' ? 'bg-black dark:bg-white text-white dark:text-black' : 'text-gray-600 dark:text-gray-400'
-                }`}
-                onClick={() => setActiveFollowupTab('message')}
-              >
-                <MessageSquare className="h-3 w-3" />
-                Message
-              </button>
-              <button 
-                className={`flex-1 py-1.5 px-2 rounded-lg text-xs font-semibold transition-colors flex items-center justify-center gap-1 ${
-                  activeFollowupTab === 'notification' ? 'bg-black dark:bg-white text-white dark:text-black' : 'text-gray-600 dark:text-gray-400'
-                }`}
-                onClick={() => setActiveFollowupTab('notification')}
-              >
-                <Bell className="h-3 w-3" />
-                Notify
+          <div className="flex rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden mt-3">
+            <button
+              className={`flex-1 py-2 text-xs font-semibold transition-colors flex items-center justify-center gap-1.5 ${activeFollowupTab === 'message' ? 'bg-blue-600 text-white' : 'bg-white dark:bg-gray-900 text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-800'}`}
+              onClick={() => setActiveFollowupTab('message')}
+            >
+              <MessageSquare className="h-3 w-3" />Message
+            </button>
+            <button
+              className={`flex-1 py-2 text-xs font-semibold transition-colors flex items-center justify-center gap-1.5 ${activeFollowupTab === 'notification' ? 'bg-blue-600 text-white' : 'bg-white dark:bg-gray-900 text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-800'}`}
+              onClick={() => setActiveFollowupTab('notification')}
+            >
+              <Bell className="h-3 w-3" />Notify
+            </button>
+          </div>
+
+          {activeFollowupTab === 'message' && (
+            <div className="space-y-2 mt-3">
+              <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">Quick Messages</p>
+              <div className="flex flex-wrap gap-1.5">
+                {MESSAGE_TEMPLATES.map((template) => (
+                  <button
+                    key={template.id}
+                    className={`px-2.5 py-1 rounded-full text-xs font-medium transition-all ${selectedTemplate === template.text ? 'bg-blue-600 text-white' : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'}`}
+                    onClick={() => { setSelectedTemplate(template.text); setCustomMessage(''); }}
+                  >{template.label}</button>
+                ))}
+              </div>
+              <div className="border-t border-gray-100 dark:border-gray-800 my-2" />
+              <textarea
+                placeholder="Or type a custom message..."
+                className="w-full min-h-[60px] p-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-xs resize-none focus:outline-none focus:ring-2 focus:ring-blue-500"
+                value={customMessage}
+                onChange={(e) => { setCustomMessage(e.target.value); setSelectedTemplate(''); }}
+              />
+              <button onClick={handleSendMessage} disabled={!selectedTemplate && !customMessage} className="w-full h-9 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold disabled:opacity-50 flex items-center justify-center gap-1.5 transition-colors">
+                <Send className="h-3.5 w-3.5" />Send Message
               </button>
             </div>
+          )}
 
-            {activeFollowupTab === 'message' && (
-              <div className="space-y-2 mt-3">
-                <div className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">Quick Messages</div>
-                <div className="flex flex-wrap gap-1.5">
-                  {MESSAGE_TEMPLATES.map((template) => (
-                    <button
-                      key={template.id}
-                      className={`px-2 py-1 rounded-full text-[11px] font-medium transition-all ${
-                        selectedTemplate === template.text 
-                          ? 'bg-black dark:bg-white text-white dark:text-black' 
-                          : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
-                      }`}
-                      onClick={() => {
-                        setSelectedTemplate(template.text);
-                        setCustomMessage('');
-                      }}
-                    >
-                      {template.label}
-                    </button>
-                  ))}
-                </div>
-                
-                <div className="border-t border-gray-100 dark:border-gray-800 my-2" />
-                
-                <textarea
-                  placeholder="Or type a custom message..."
-                  className="w-full min-h-[60px] p-2 rounded-xl bg-gray-100 dark:bg-gray-900 border-0 text-xs resize-none focus:outline-none"
-                  value={customMessage}
-                  onChange={(e) => {
-                    setCustomMessage(e.target.value);
-                    setSelectedTemplate('');
-                  }}
-                />
-                
-                <button
-                  onClick={handleSendMessage}
-                  disabled={!selectedTemplate && !customMessage}
-                  className="w-full h-9 rounded-full bg-black dark:bg-white text-white dark:text-black text-xs font-semibold disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-1.5"
-                >
-                  <Send className="h-3.5 w-3.5" />
-                  Send Message
-                </button>
+          {activeFollowupTab === 'notification' && (
+            <div className="space-y-2 mt-3">
+              <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">Notification Templates</p>
+              <div className="space-y-1.5">
+                {NOTIFICATION_TEMPLATES.map((template) => (
+                  <button
+                    key={template.id}
+                    className={`w-full text-left p-2.5 rounded-xl border transition-all ${selectedTemplate === template.title ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20' : 'border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-900 hover:border-gray-200 dark:hover:border-gray-700'}`}
+                    onClick={() => { setSelectedTemplate(template.title); setCustomMessage(''); }}
+                  >
+                    <div className={`font-semibold text-xs ${selectedTemplate === template.title ? 'text-blue-700 dark:text-blue-300' : 'text-gray-900 dark:text-white'}`}>{template.title}</div>
+                    <div className="text-[10px] mt-0.5 text-gray-500">{template.message}</div>
+                  </button>
+                ))}
               </div>
-            )}
+              <button onClick={handleSendNotification} disabled={!selectedTemplate} className="w-full h-9 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold disabled:opacity-50 flex items-center justify-center gap-1.5 transition-colors">
+                <Bell className="h-3.5 w-3.5" />Send Notification
+              </button>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
-            {activeFollowupTab === 'notification' && (
-              <div className="space-y-2 mt-3">
-                <div className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">Notification Templates</div>
-                <div className="space-y-1.5">
-                  {NOTIFICATION_TEMPLATES.map((template) => (
-                    <button
-                      key={template.id}
-                      className={`w-full text-left p-2 rounded-xl transition-all ${
-                        selectedTemplate === template.title 
-                          ? 'bg-black dark:bg-white text-white dark:text-black' 
-                          : 'bg-gray-100 dark:bg-gray-900 hover:bg-gray-200 dark:hover:bg-gray-800'
-                      }`}
-                      onClick={() => {
-                        setSelectedTemplate(template.title);
-                        setCustomMessage('');
-                      }}
-                    >
-                      <div className="font-semibold text-xs">{template.title}</div>
-                      <div className={`text-[10px] mt-0.5 ${selectedTemplate === template.title ? 'text-white/70 dark:text-black/70' : 'text-gray-500'}`}>
-                        {template.message}
-                      </div>
-                    </button>
-                  ))}
-                </div>
-                
-                <button
-                  onClick={handleSendNotification}
-                  disabled={!selectedTemplate}
-                  className="w-full h-9 rounded-full bg-black dark:bg-white text-white dark:text-black text-xs font-semibold disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-1.5"
-                >
-                  <Bell className="h-3.5 w-3.5" />
-                  Send Notification
-                </button>
-              </div>
-            )}
-          </DialogContent>
-        </Dialog>
+      {/* Call Method Dialog */}
+      <CallMethodDialog
+        isOpen={showCallMethodDialog}
+        onClose={() => { setShowCallMethodDialog(false); setPendingCallUser(null); }}
+        onSelect={handleCallMethodSelect}
+        recipientName={pendingCallUser?.name || ''}
+      />
 
-        {/* FAB */}
-        {!isCallActive && onlineUsers.length > 0 && (
-          <button 
-            className="fixed bottom-20 right-4 w-12 h-12 rounded-full bg-black dark:bg-white text-white dark:text-black shadow-lg flex items-center justify-center hover:scale-105 active:scale-95 transition-transform"
-            onClick={() => {
-              const firstOnlineUser = onlineUsers[0];
-              if (firstOnlineUser) {
-                handleInitiateCall(firstOnlineUser.id);
-              }
-            }}
-            data-testid="fab-new-call"
-            title="Quick call to available contact"
-          >
-            <Phone className="h-5 w-5" />
-          </button>
-        )}
-
-        {/* Call Method Selection Dialog */}
-        <CallMethodDialog
-          isOpen={showCallMethodDialog}
-          onClose={() => {
-            setShowCallMethodDialog(false);
-            setPendingCallUser(null);
-          }}
-          onSelect={handleCallMethodSelect}
-          recipientName={pendingCallUser?.name || ''}
-        />
-
-      </div>
     </div>
   );
 };

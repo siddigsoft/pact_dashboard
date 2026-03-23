@@ -1277,13 +1277,6 @@ const Settings = () => {
                     </SelectItem>
                     <SelectItem value="team">Team Management</SelectItem>
                     <SelectItem value="planning">Planning</SelectItem>
-                    <SelectItem value="compliance">Compliance</SelectItem>
-                    <SelectItem value="performance">
-                      Performance & Analytics
-                    </SelectItem>
-                    <SelectItem value="financial">
-                      Financial Operations
-                    </SelectItem>
                     <SelectItem value="data-collector">
                       Data Collector
                     </SelectItem>

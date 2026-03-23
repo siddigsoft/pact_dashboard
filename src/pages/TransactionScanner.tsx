@@ -107,9 +107,13 @@ async function extractBatch(
   onStatus?: (msg: string) => void,
 ): Promise<Array<Partial<TxRow>>> {
   for (let attempt = 0; attempt < 3; attempt++) {
+    const ocrSecret = import.meta.env.VITE_OCR_DEV_SECRET;
     const res = await fetch('/api/extract-transaction', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        ...(ocrSecret ? { 'Authorization': `Bearer ${ocrSecret}` } : {}),
+      },
       body: JSON.stringify({ images }),
     });
     const data = await res.json().catch(() => ({ error: res.statusText }));

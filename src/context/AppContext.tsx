@@ -1,5 +1,6 @@
 import React, { useMemo, useCallback } from 'react';
 import { createContext, useContext, useContextSelector } from 'use-context-selector';
+import { calculateDistanceFee as _calculateDistanceFee } from '@/utils/distanceFee';
 import { UserProvider, useUser } from './user/UserContext';
 import { MMPProvider, useMMP } from './mmp/MMPContext';
 import { NotificationProvider, useNotifications } from './notifications/NotificationContext';
@@ -96,16 +97,10 @@ const CompositeContextProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     return roleManagement.hasPermission(userContext.currentUser.id, resource, action);
   }, [userContext.currentUser, roleManagement]);
   
-  const calculateDistanceFee = useCallback((latitude: number, longitude: number): number => {
-    const baseLatitude = 15.5007;
-    const baseLongitude = 32.5599;
-    
-    const latDiff = Math.abs(latitude - baseLatitude);
-    const lngDiff = Math.abs(longitude - baseLongitude);
-    const distance = Math.sqrt(latDiff * latDiff + lngDiff * lngDiff);
-    
-    return Math.round(distance * 50);
-  }, []);
+  const calculateDistanceFee = useCallback(
+    (latitude: number, longitude: number) => _calculateDistanceFee(latitude, longitude),
+    [],
+  );
   
   // Memoized context value to prevent unnecessary re-renders
   const contextValue = useMemo<CompositeContextType>(() => ({

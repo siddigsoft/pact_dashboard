@@ -12,12 +12,8 @@ import { Loader2 } from 'lucide-react';
 const OperationsZone = lazy(() => import('@/components/dashboard/zones/OperationsZone').then(m => ({ default: m.OperationsZone })));
 const TeamZone = lazy(() => import('@/components/dashboard/zones/TeamZone').then(m => ({ default: m.TeamZone })));
 const PlanningZone = lazy(() => import('@/components/dashboard/zones/PlanningZone').then(m => ({ default: m.PlanningZone })));
-const ComplianceZone = lazy(() => import('@/components/dashboard/zones/ComplianceZone').then(m => ({ default: m.ComplianceZone })));
-const PerformanceZone = lazy(() => import('@/components/dashboard/zones/PerformanceZone').then(m => ({ default: m.PerformanceZone })));
 const FOMZone = lazy(() => import('@/components/dashboard/zones/FOMZone').then(m => ({ default: m.FOMZone })));
 const DataCollectorZone = lazy(() => import('@/components/dashboard/zones/DataCollectorZone').then(m => ({ default: m.DataCollectorZone })));
-const FinancialZone = lazy(() => import('@/components/dashboard/zones/FinancialZone').then(m => ({ default: m.FinancialZone })));
-const ICTZone = lazy(() => import('@/components/dashboard/zones/ICTZone').then(m => ({ default: m.ICTZone })));
 const ProjectManagerZone = lazy(() => import('@/components/dashboard/zones/ProjectManagerZone').then(m => ({ default: m.ProjectManagerZone })));
 
 const ZoneLoadingFallback = () => (
@@ -52,7 +48,7 @@ const Dashboard = () => {
     if (dashboardPreferences?.defaultZone) {
       const rawPref = dashboardPreferences.defaultZone as unknown as DashboardZoneType;
       const normalizedPref = (rawPref === 'dataCollector' ? 'data-collector' : rawPref === 'projectManager' ? 'project-manager' : rawPref) as DashboardZone;
-      if (['operations', 'fom', 'data-collector', 'team', 'planning', 'compliance', 'performance', 'financial', 'ict', 'project-manager'].includes(normalizedPref)) {
+      if (['operations', 'fom', 'data-collector', 'team', 'planning', 'project-manager'].includes(normalizedPref)) {
         return normalizedPref;
       }
     }
@@ -66,14 +62,8 @@ const Dashboard = () => {
     const isCoordinator = roles?.some(r => normalizeRole(r).includes('coordinator'));
     if (isCoordinator) return 'planning';
 
-    const isFinancialAdmin = roles?.some(r => normalizeRole(r).includes('financialadmin'));
-    if (isFinancialAdmin) return 'performance';
-
     const isProjectManager = roles?.some(r => normalizeRole(r).includes('projectmanager'));
     if (isProjectManager) return 'project-manager';
-
-    const isICT = roles?.some(r => normalizeRole(r) === 'ict');
-    if (isICT) return 'operations';
     
     return 'operations';
   }, [roles, dashboardPreferences?.defaultZone, currentUser?.role]);
@@ -100,14 +90,6 @@ const Dashboard = () => {
         return <TeamZone />;
       case 'planning':
         return <PlanningZone />;
-      case 'compliance':
-        return <ComplianceZone />;
-      case 'performance':
-        return <PerformanceZone />;
-      case 'financial':
-        return <FinancialZone />;
-      case 'ict':
-        return <ICTZone />;
       case 'project-manager':
         return <ProjectManagerZone />;
       default:

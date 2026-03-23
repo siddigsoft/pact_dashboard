@@ -130,11 +130,18 @@ export function SuperAdminProvider({ children }: { children: React.ReactNode }) 
   const [loading, setLoading] = useState(true);
   const [isSuperAdmin, setIsSuperAdmin] = useState(false);
 
+  const normalizedUserRole = (currentUser?.role || '').toLowerCase().replace(/[\s_-]/g, '');
+  const isLikelySuperAdminRole = normalizedUserRole === 'superadmin';
+  const isLikelyAdminRole = normalizedUserRole === 'admin' || normalizedUserRole === 'ict';
+
   const checkSuperAdminStatus = useCallback(async (userId: string): Promise<boolean> => {
+    // Avoid unnecessary / fragile table reads for non-super-admin roles.
+    if (!isLikelySuperAdminRole) return false;
+
     try {
       const { data, error } = await supabase
         .from('super_admins')
-        .select('*')
+        .select('id, user_id, is_active')
         .eq('user_id', userId)
         .eq('is_active', true)
         .maybeSingle();
@@ -155,13 +162,11 @@ export function SuperAdminProvider({ children }: { children: React.ReactNode }) 
       }
       return false;
     }
-  }, []);
+  }, [isLikelySuperAdminRole]);
 
   const refreshSuperAdmins = useCallback(async () => {
     // Only admins should fetch super-admin data
-    const userRole = currentUser?.role?.toLowerCase()?.replace(/[\s_-]/g, '');
-    const adminRoles = ['admin', 'superadmin', 'ict'];
-    if (!currentUser || !adminRoles.includes(userRole || '')) {
+    if (!currentUser || (!isLikelyAdminRole && !isLikelySuperAdminRole)) {
       setSuperAdmins([]);
       setStats(null);
       setLoading(false);
@@ -172,7 +177,7 @@ export function SuperAdminProvider({ children }: { children: React.ReactNode }) 
       setLoading(true);
       const { data, error } = await supabase
         .from('super_admins')
-        .select('*')
+        .select('id, user_id, appointed_by, appointed_at, appointment_reason, is_active, deactivated_at, deactivated_by, deactivation_reason, last_activity_at, deletion_count, adjustment_count, total_actions_count, created_at, updated_at, metadata')
         .order('created_at', { ascending: false });
 
       if (error) {
@@ -218,7 +223,7 @@ export function SuperAdminProvider({ children }: { children: React.ReactNode }) 
     } finally {
       setLoading(false);
     }
-  }, [currentUser, toast]);
+  }, [currentUser, isLikelyAdminRole, isLikelySuperAdminRole, toast]);
 
   const refreshDeletionLogs = useCallback(async () => {
     try {

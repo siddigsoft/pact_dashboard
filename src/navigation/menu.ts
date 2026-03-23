@@ -78,7 +78,7 @@ export const getWorkflowMenuGroups = (
   if (!isHidden('/dashboard') && (isAdmin || isICT || isProjectManager || isCountryDirector || perms.dashboard)) {
     overviewItems.push({ id: 'dashboard', title: 'Dashboard', url: '/dashboard', icon: LayoutDashboard, priority: 1, isPinned: isPinned('/dashboard') });
   }
-  if (!isHidden('/cost-submission') && (isDataCollector || isAdmin || isCoordinator || isCountryDirector)) {
+  if (!isHidden('/cost-submission') && (isDataCollector || isAdmin || isCoordinator || isSupervisor || isCountryDirector)) {
     overviewItems.push({ id: 'cost-submission', title: 'Cost Submission', url: '/cost-submission', icon: Receipt, priority: 3, isPinned: isPinned('/cost-submission') });
   }
   if (overviewItems.length) groups.push({ id: 'overview', label: 'Overview', order: 1, items: overviewItems });
@@ -100,8 +100,8 @@ export const getWorkflowMenuGroups = (
   if (!isHidden('/projects') && (isAdmin || isICT || isProjectManager || perms.projects)) {
     planningItems.push({ id: 'projects', title: 'Projects', url: '/projects', icon: FolderKanban, priority: 1, isPinned: isPinned('/projects') });
   }
-  if (!isHidden('/mmp') && (isAdmin || isICT || perms.mmp || isCoordinator || isDataCollector || isFOM || isCountryDirector)) {
-    const mmpTitle = (isDataCollector || isCoordinator) ? 'My Sites Management' : 'MMP Management';
+  if (!isHidden('/mmp') && (isAdmin || isICT || perms.mmp || isCoordinator || isSupervisor || isDataCollector || isFOM || isCountryDirector)) {
+    const mmpTitle = (isDataCollector || isCoordinator || isSupervisor) ? 'My Sites Management' : 'MMP Management';
     planningItems.push({ id: 'mmp-management', title: mmpTitle, url: '/mmp', icon: Database, priority: 2, isPinned: isPinned('/mmp') });
   }
   if (!isHidden('/hub-operations') && (isAdmin || isSuperAdmin || isCountryDirector)) {
@@ -116,14 +116,14 @@ export const getWorkflowMenuGroups = (
   if (!isHidden('/field-team') && ((isAdmin || perms.fieldTeam) && !isICT)) {
     fieldOpsItems.push({ id: 'field-team', title: 'Field Team', url: '/field-team', icon: Activity, priority: 2, isPinned: isPinned('/field-team') });
   }
-  if (!isHidden('/field-operation-manager') && (isAdmin || isFOM || perms.fieldOpManager) && !isCoordinator) {
-    fieldOpsItems.push({ id: 'field-op-manager', title: 'Field Operation Manager', url: '/field-operation-manager', icon: MapPin, priority: 3, isPinned: isPinned('/field-operation-manager') });
-  }
   if (fieldOpsItems.length) groups.push({ id: 'field-ops', label: 'Field Operations', order: 3, items: fieldOpsItems });
 
   const verificationItems: MenuGroup['items'] = [];
-  if (!isHidden('/coordinator/sites') && isCoordinator) {
+  if (!isHidden('/coordinator/sites') && (isCoordinator || isSupervisor)) {
     verificationItems.push({ id: 'site-verification', title: 'Site Verification', url: '/coordinator/sites', icon: CheckCircle, priority: 1, isPinned: isPinned('/coordinator/sites') });
+  }
+  if (!isHidden('/coordinator/sites-for-verification') && (isCoordinator || isSupervisor)) {
+    verificationItems.push({ id: 'sites-for-verification', title: 'Sites for Verification', url: '/coordinator/sites-for-verification', icon: CheckCircle, priority: 1.1, isPinned: isPinned('/coordinator/sites-for-verification') });
   }
   if (!isHidden('/archive') && (isAdmin || perms.archive)) {
     verificationItems.push({ id: 'archive', title: 'Archive', url: '/archive', icon: Archive, priority: 2, isPinned: isPinned('/archive') });

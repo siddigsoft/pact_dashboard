@@ -189,7 +189,6 @@ const SYSTEM_SCREENS: SystemScreen[] = [
   { screenId: 'site-visits', screenName: 'Site Visits', screenNameAr: 'الزيارات الميدانية', path: '/site-visits', icon: ClipboardList, category: 'Field Operations' },
   { screenId: 'site-visits-create', screenName: 'Create Site Visit', screenNameAr: 'إنشاء زيارة ميدانية', path: '/site-visits/create', icon: ClipboardList, category: 'Field Operations' },
   { screenId: 'field-team', screenName: 'Field Team', screenNameAr: 'الفريق الميداني', path: '/field-team', icon: Activity, category: 'Field Operations' },
-  { screenId: 'field-operation-manager', screenName: 'Field Operation Manager', screenNameAr: 'مدير العمليات الميدانية', path: '/field-operation-manager', icon: MapPin, category: 'Field Operations' },
   { screenId: 'monitoring-plan', screenName: 'Monitoring Plan', screenNameAr: 'خطة الرصد', path: '/monitoring-plan', icon: ListChecks, category: 'Field Operations' },
   { screenId: 'coordinator-sites', screenName: 'Coordinator Sites', screenNameAr: 'مواقع المنسق', path: '/coordinator/sites', icon: CheckCircle, category: 'Field Operations' },
   { screenId: 'coordinator-dashboard', screenName: 'Coordinator Dashboard', screenNameAr: 'لوحة المنسق', path: '/coordinator-dashboard', icon: LayoutDashboard, category: 'Field Operations' },

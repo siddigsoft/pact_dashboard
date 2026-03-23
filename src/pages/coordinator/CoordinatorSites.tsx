@@ -477,10 +477,7 @@ const CoordinatorSites: React.FC = () => {
   const [isStartingVisit, setIsStartingVisit] = useState(false);
   const { permits, loading: permitsLoading, uploadPermit, fetchPermits } = useCoordinatorLocalityPermits();
   const { hubs, states, localities, hubStates, loading: loadingLocations } = useLocation();
-  const isSupervisorViewing = ['supervisor', 'hubsupervisor', 'hub_supervisor'].includes(
-    (currentUser?.role || '').toLowerCase()
-  );
-  const { coordinatorSites, loading: contextLoading, refetch: refreshSites, siteCounts } = useCoordinatorSites(isSupervisorViewing);
+  const { coordinatorSites, loading: contextLoading, refetch: refreshSites, siteCounts } = useCoordinatorSites();
   
   // Parallel refresh helper for speed optimization
   const refreshAll = useCallback(async () => {
@@ -566,7 +563,7 @@ const CoordinatorSites: React.FC = () => {
   const [permitQuestionDialogOpen, setPermitQuestionDialogOpen] = useState(false);
   const [workWithoutPermitDialogOpen, setWorkWithoutPermitDialogOpen] = useState(false);
   const [selectedLocalityForWorkflow, setSelectedLocalityForWorkflow] = useState<any>(null);
-  const [readOnlyMode, setReadOnlyMode] = useState(isSupervisorViewing);
+  const [readOnlyMode, setReadOnlyMode] = useState(false);
   const [expandedStates, setExpandedStates] = useState<Set<string>>(new Set());
   const [expandedLocalities, setExpandedLocalities] = useState<Set<string>>(new Set());
   const [expandedPermitsAttachedLocalities, setExpandedPermitsAttachedLocalities] = useState<Set<string>>(new Set());

@@ -18,7 +18,7 @@ interface DashboardCommandBarProps {
 }
 
 export const DashboardCommandBar: React.FC<DashboardCommandBarProps> = ({ onQuickAction }) => {
-  const { isConnected, channels, totalEvents, lastUpdate, forceRefresh } = useLiveDashboard();
+  const { isConnected, channels, totalEvents, lastUpdate } = useLiveDashboard();
   const { onlineUserIds } = useGlobalPresence();
   const [showOnlinePanel, setShowOnlinePanel] = useState(false);
   const [showSOS, setShowSOS] = useState(false);
@@ -27,91 +27,49 @@ export const DashboardCommandBar: React.FC<DashboardCommandBarProps> = ({ onQuic
 
   return (
     <>
-      <div className="bg-card border-b border-border/50">
-        <div className="px-4 py-2">
-          <div className="flex items-center justify-between gap-2">
-            {/* Left side - Online users counter */}
-            <div className="flex items-center gap-2">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setShowOnlinePanel(true)}
-                className="gap-2"
-                data-testid="button-online-users"
-              >
-                <div className="relative">
-                  <Users className="h-4 w-4" />
-                  {onlineCount > 0 && (
-                    <span className="absolute -top-1 -right-1 w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-                  )}
-                </div>
-                <span className="text-sm font-medium">{onlineCount}</span>
-                <Badge variant="secondary" className="text-xs px-1.5 py-0">
-                  Online
-                </Badge>
-              </Button>
+      <div className="bg-white dark:bg-gray-950 border-b border-gray-100 dark:border-gray-800">
+        <div className="px-5 py-2.5 flex items-center justify-between gap-3">
+          {/* Online count */}
+          <button
+            onClick={() => setShowOnlinePanel(true)}
+            className="flex items-center gap-2 px-2.5 py-1 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+            data-testid="button-online-users"
+          >
+            <div className="relative">
+              <Users className="h-3.5 w-3.5 text-gray-500" />
+              {onlineCount > 0 && (
+                <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 bg-green-500 rounded-full" />
+              )}
             </div>
+            <span className="text-sm font-medium text-gray-700 dark:text-gray-300">{onlineCount}</span>
+            <span className="text-xs text-gray-400">online</span>
+          </button>
 
-            {/* Right side - Quick actions */}
-            <div className="flex items-center gap-1">
-              {/* SOS Button */}
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => setShowSOS(true)}
-                className="text-destructive"
-                data-testid="button-quick-sos"
-                title="Emergency SOS"
-              >
-                <AlertTriangle className="h-4 w-4" />
-              </Button>
-
-              {/* Quick Message Button */}
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => setShowOnlinePanel(true)}
-                data-testid="button-quick-message"
-                title="Send Message"
-              >
-                <MessageCircle className="h-4 w-4" />
-              </Button>
-
-              {/* Quick Call Button */}
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => setShowOnlinePanel(true)}
-                data-testid="button-quick-call"
-                title="Make a Call"
-              >
-                <Phone className="h-4 w-4" />
-              </Button>
-
-              {/* Connection Status with integrated refresh */}
-              <ConnectionStatus 
-                isConnected={isConnected}
-                channelCount={channels}
-                lastUpdate={lastUpdate}
-                totalEvents={totalEvents}
-                onRefresh={forceRefresh}
-              />
-            </div>
+          {/* Right: SOS + connection status */}
+          <div className="flex items-center gap-1">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setShowSOS(true)}
+              className="h-7 px-2 text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 gap-1 text-xs"
+              data-testid="button-quick-sos"
+              title="Emergency SOS"
+            >
+              <AlertTriangle className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">SOS</span>
+            </Button>
+            <ConnectionStatus
+              isConnected={isConnected}
+              channelCount={channels}
+              lastUpdate={lastUpdate}
+              totalEvents={totalEvents}
+            />
           </div>
         </div>
       </div>
 
-      {/* Online Users Panel */}
-      <OnlineUsersPanel 
-        isOpen={showOnlinePanel} 
-        onClose={() => setShowOnlinePanel(false)} 
-      />
-
-      {/* Emergency SOS */}
-      <EmergencySOS 
-        isVisible={showSOS} 
-        onClose={() => setShowSOS(false)} 
-      />
+      <OnlineUsersPanel isOpen={showOnlinePanel} onClose={() => setShowOnlinePanel(false)} />
+      <EmergencySOS isVisible={showSOS} onClose={() => setShowSOS(false)} />
     </>
   );
 };

@@ -202,14 +202,15 @@ const MobileAppHeader = ({
                               currentUser?.role?.toLowerCase() === 'datacollector' ||
                               currentUser?.role?.toLowerCase() === 'data collector';
       
-      // Check if user is a coordinator
+      // Check if user is a coordinator or supervisor (supervisor mirrors coordinator workflow access)
       const isCoordinator = hasAnyRole(['Coordinator']);
+      const isSupervisor = hasAnyRole(['Supervisor', 'supervisor', 'hubsupervisor']);
       
       // Add additional menu items from the "More" section
       // Note: These will be filtered to remove duplicates that already exist in workflowGroups
       const additionalMenuGroups: MenuGroup[] = [
-        // Exclude Quick Access for datacollectors and coordinators
-        ...(isDataCollector || isCoordinator ? [] : [{
+        // Exclude Quick Access for datacollectors, coordinators, and supervisors
+        ...(isDataCollector || isCoordinator || isSupervisor ? [] : [{
           id: 'quick-access',
           label: 'Quick Access',
           order: 1.25,
@@ -291,7 +292,7 @@ const MobileAppHeader = ({
             ] : []),
           ]
         }] : []),
-        ...(!isDataCollector && !isCoordinator ? [{
+        ...(!isDataCollector && !isCoordinator && !isSupervisor ? [{
           id: 'tools',
           label: 'Tools',
           order: 6.5,
