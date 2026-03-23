@@ -118,9 +118,29 @@ export const OperationsZone: React.FC = () => {
     const isAdminUser = hasAnyRole(['admin', 'Admin', 'super_admin', 'Super Admin', 'ict']);
     if (!isAdminUser) return;
     const fetchCycleData = async () => {
-      const { data: allMmps } = await supabase
+      let allMmps: any[] | null = null;
+      const { data: withDeadline, error: withDeadlineError } = await supabase
         .from('mmp_files')
         .select('id, name, cycle_status, cycle_close_deadline');
+
+      if (withDeadlineError) {
+        const missingDeadlineColumn =
+          withDeadlineError.code === '42703' ||
+          withDeadlineError.message?.toLowerCase().includes('cycle_close_deadline');
+
+        if (!missingDeadlineColumn) {
+          setClosingCycles([]);
+          return;
+        }
+
+        const { data: withoutDeadline } = await supabase
+          .from('mmp_files')
+          .select('id, name, cycle_status');
+        allMmps = withoutDeadline || [];
+      } else {
+        allMmps = withDeadline || [];
+      }
+
       if (!allMmps) { setClosingCycles([]); return; }
 
       const counts = { active: 0, closing: 0, pending_approval: 0, closed: 0 };
