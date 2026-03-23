@@ -1408,7 +1408,7 @@ export async function uploadMMPFile(
       try {
         const { data: finalRecord, error: fetchError } = await supabase
           .from('mmp_files')
-          .select('*')
+          .select(`*, mmp_site_entries (*)`)
           .eq('id', targetMmpId)
           .single();
 
@@ -1569,7 +1569,7 @@ export async function uploadMMPFile(
       try {
         const { data: finalRecord, error: fetchError } = await supabase
           .from('mmp_files')
-          .select('*')
+          .select(`*, mmp_site_entries (*)`)
           .eq('id', newMmpId)
           .single();
 

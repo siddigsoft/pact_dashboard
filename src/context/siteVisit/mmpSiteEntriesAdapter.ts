@@ -245,7 +245,22 @@ export const fetchSiteVisitsFromMMPEntries = async (): Promise<SiteVisit[]> => {
   while (hasMore) {
     const { data, error } = await supabase
       .from('mmp_site_entries')
-      .select('*')
+      .select(`
+        *,
+        mmp_files (
+          id,
+          mmp_id,
+          name,
+          uploaded_by,
+          uploaded_at,
+          approved_by,
+          approved_at,
+          hub,
+          month,
+          project_id,
+          workflow
+        )
+      `)
       .order('created_at', { ascending: false })
       .range(from, from + PAGE_SIZE - 1);
 
@@ -263,29 +278,8 @@ export const fetchSiteVisitsFromMMPEntries = async (): Promise<SiteVisit[]> => {
     }
   }
 
-  const mmpFileIds = [...new Set(allData.map((row) => row.mmp_file_id).filter(Boolean))] as string[];
-  let mmpFileMap = new Map<string, any>();
-  if (mmpFileIds.length > 0) {
-    const { data: mmpFiles, error: mmpFilesError } = await supabase
-      .from('mmp_files')
-      .select('id, mmp_id, name, uploaded_by, uploaded_at, approved_by, approved_at, hub, month, project_id, workflow')
-      .in('id', mmpFileIds);
-
-    if (mmpFilesError) {
-      console.error('Error fetching parent mmp_files:', mmpFilesError);
-      throw mmpFilesError;
-    }
-
-    mmpFileMap = new Map((mmpFiles || []).map((file: any) => [file.id, file]));
-  }
-
   console.log(`[SiteVisits] Fetched ${allData.length} total site entries (paginated)`);
-  return allData.map((entry) =>
-    mapMMPSiteEntryToSiteVisit({
-      ...entry,
-      mmp_files: mmpFileMap.get(entry.mmp_file_id),
-    })
-  );
+  return allData.map(mapMMPSiteEntryToSiteVisit);
 };
 
 /**
@@ -379,7 +373,22 @@ export const createMMPSiteEntry = async (
   const { data, error } = await supabase
     .from('mmp_site_entries')
     .insert(dbEntry)
-    .select('*')
+    .select(`
+      *,
+      mmp_files (
+        id,
+        mmp_id,
+        name,
+        uploaded_by,
+        uploaded_at,
+        approved_by,
+        approved_at,
+        hub,
+        month,
+        project_id,
+        workflow
+      )
+    `)
     .single();
   
   if (error) {
@@ -387,13 +396,7 @@ export const createMMPSiteEntry = async (
     throw error;
   }
   
-  const { data: mmpFile } = await supabase
-    .from('mmp_files')
-    .select('id, mmp_id, name, uploaded_by, uploaded_at, approved_by, approved_at, hub, month, project_id, workflow')
-    .eq('id', data.mmp_file_id)
-    .maybeSingle();
-
-  return mapMMPSiteEntryToSiteVisit({ ...data, mmp_files: mmpFile || undefined });
+  return mapMMPSiteEntryToSiteVisit(data);
 };
 
 /**
@@ -486,7 +489,22 @@ export const updateMMPSiteEntry = async (
   // Fetch the updated record
   const { data, error } = await supabase
     .from('mmp_site_entries')
-    .select('*')
+    .select(`
+      *,
+      mmp_files (
+        id,
+        mmp_id,
+        name,
+        uploaded_by,
+        uploaded_at,
+        approved_by,
+        approved_at,
+        hub,
+        month,
+        project_id,
+        workflow
+      )
+    `)
     .eq('id', id)
     .single();
   
@@ -495,13 +513,7 @@ export const updateMMPSiteEntry = async (
     throw error;
   }
   
-  const { data: mmpFile } = await supabase
-    .from('mmp_files')
-    .select('id, mmp_id, name, uploaded_by, uploaded_at, approved_by, approved_at, hub, month, project_id, workflow')
-    .eq('id', data.mmp_file_id)
-    .maybeSingle();
-
-  return mapMMPSiteEntryToSiteVisit({ ...data, mmp_files: mmpFile || undefined });
+  return mapMMPSiteEntryToSiteVisit(data);
 };
 
 /**

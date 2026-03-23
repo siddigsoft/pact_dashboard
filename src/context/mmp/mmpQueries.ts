@@ -42,7 +42,8 @@ async function fetchMMPFiles(): Promise<MMPFile[]> {
         id,
         name,
         project_code
-      )
+      ),
+      mmp_site_entries (*)
     `)
     .order('created_at', { ascending: false });
 
@@ -57,13 +58,7 @@ async function fetchMMPFiles(): Promise<MMPFile[]> {
     rows = fallbackData;
   }
 
-  // Keep list fetch lightweight; site entries are loaded on-demand.
-  return (rows || []).map((row: any) =>
-    transformDBToMMPFile({
-      ...row,
-      mmp_site_entries: [],
-    })
-  );
+  return (rows || []).map(transformDBToMMPFile);
 }
 
 async function fetchSiteEntryCounts(): Promise<SiteEntryCounts> {

@@ -91,7 +91,13 @@ async function fetchDownPaymentRequests(user: UserForDownPayment): Promise<DownP
       locality,
       cp_name,
       activity_type,
-      mmp_file_id
+      mmp_files (
+        name,
+        project_name,
+        projects (
+          name
+        )
+      )
     )
   `);
 
