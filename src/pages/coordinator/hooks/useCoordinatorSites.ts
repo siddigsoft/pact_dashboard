@@ -132,48 +132,76 @@ export const useCoordinatorSites = () => {
   const isSupervisor = role === 'supervisor' || role === 'hubsupervisor' || role === 'hub_supervisor';
   const hubAccessInfo = isSupervisor ? getHubAccessInfo(currentUser) : null;
 
-  // Supervisors mirror coordinator capabilities, but we cannot rely on the coordinator-only RPC.
-  // For supervisors we disable the RPC and filter relevant site entries from MMP context by hub/state.
+  // For supervisors: pass isAdmin=true so the query is enabled with userId=null (returns all entries).
+  // The RPC already supports this — it returns all entries when p_user_id is null.
+  // Hub/status filtering is applied client-side below.
   const rpcUserId = isSupervisor ? null : currentUser?.id ?? null;
   const {
     data: coordinatorRows,
     isLoading: coordinatorQueryLoading,
     refetch: refetchCoordinatorQuery,
-  } = useCoordinatorSiteEntriesQuery(rpcUserId, isAdminOrSuperUser ?? false);
+  } = useCoordinatorSiteEntriesQuery(rpcUserId, isSupervisor || (isAdminOrSuperUser ?? false));
+
+  const allowedSupervisorStatuses = useMemo(() => new Set([
+    // Pre-pipeline
+    'pending',
+    'inprogress',
+    'in_progress',
+    'forwarded',
+    'forwarded_to_coordinator',
+    'forwarded_to_coordinators',
+    'new',
+    'dispatched',
+    'assigned',
+    'accepted',
+    // Permit/cp verification + post verification
+    'permits_attached',
+    'cp_verified',
+    'cp_verification',
+    'locality_permit_verified',
+    'verified',
+    'approved',
+    'approved_and_costed',
+    'costed',
+    'completed',
+    'rejected',
+    'returned_to_fom',
+  ]), []);
 
   const coordinatorSites = useMemo(() => {
     const rpcSites = (coordinatorRows ?? []).map(mapCoordinatorRowToSiteVisit);
+
+    // Supervisors: filter all-entries RPC result by hub access + allowed statuses.
+    if (isSupervisor && rpcSites.length > 0) {
+      const supervisorHubIds = hubAccessInfo?.hubIds ?? [];
+      const canApplyHubFilter =
+        hubAccessInfo?.isHubSupervisor &&
+        supervisorHubIds.length > 0 &&
+        (hubAccessInfo.hubStates.length > 0 || hubAccessInfo.hubStateNames.length > 0);
+
+      return rpcSites.filter(site => {
+        const normalizedStatus = (site.status || '').toLowerCase().trim().replace(/\s+/g, '_');
+        if (!allowedSupervisorStatuses.has(normalizedStatus)) return false;
+        if (!canApplyHubFilter) return true; // no hub filter available — show all statuses
+        const stateMatch = site.state ? isStateInAnyHub(site.state, supervisorHubIds) : false;
+        const hubOfficeMatch = (site.hub_office || '')
+          ? supervisorHubIds.some(hid =>
+              (site.hub_office || '').toLowerCase().includes(hid.toLowerCase()) ||
+              hid.toLowerCase().includes((site.hub_office || '').toLowerCase()))
+          : false;
+        return stateMatch || hubOfficeMatch;
+      });
+    }
+
+    // Coordinator / non-supervisor path: fall back to context-based approach
     if (!currentUser?.id || !contextMmpFiles || contextLoading) {
       return rpcSites;
     }
 
     const allSites: SiteVisit[] = [];
-    const supervisorHubIds = hubAccessInfo?.hubIds ?? [];
-    const allowedSupervisorStatuses = new Set([
-      // Pre-pipeline
-      'pending',
-      'inprogress',
-      'in_progress',
-      'forwarded',
-      'forwarded_to_coordinator',
-      'forwarded_to_coordinators',
-      'new',
-      'dispatched',
-      'assigned',
-      'accepted',
-      // Permit/cp verification + post verification
-      'permits_attached',
-      'cp_verified',
-      'cp_verification',
-      'locality_permit_verified',
-      'verified',
-      'approved',
-      'approved_and_costed',
-      'costed',
-      'completed',
-      'rejected',
-      'returned_to_fom',
-    ]);
+    // supervisorHubIds is empty here: supervisors reach this path only when the RPC
+    // returned 0 rows, so we fall back to context with no hub filter applied.
+    const supervisorHubIds: string[] = [];
 
     contextMmpFiles.forEach((mmp: any) => {
       if (!mmp.siteEntries || !Array.isArray(mmp.siteEntries)) return;
