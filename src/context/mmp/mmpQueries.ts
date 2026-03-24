@@ -202,18 +202,19 @@ async function fetchSupervisorSiteEntries(): Promise<CoordinatorSiteEntryRow[]> 
   if (!session) return [];
   if (!navigator.onLine) return [];
 
+  // No join — avoids FK registration issues with PostgREST.
+  // mmp_name is resolved client-side from the MMP context.
   const { data, error } = await supabase
     .from('mmp_site_entries')
-    .select(`
-      id, mmp_file_id, site_code, hub_office, state, locality, site_name,
-      cp_name, visit_type, visit_date, main_activity, activity_at_site,
-      monitoring_by, survey_tool, use_market_diversion, use_warehouse_monitoring,
-      comments, additional_data, status,
-      verified_at, verified_by, verification_notes,
-      cost, enumerator_fee, transport_fee,
-      accepted_by, accepted_at, forwarded_to_user_id, created_at,
-      mmp_files(name)
-    `)
+    .select(
+      'id, mmp_file_id, site_code, hub_office, state, locality, site_name,' +
+      'cp_name, visit_type, visit_date, main_activity, activity_at_site,' +
+      'monitoring_by, survey_tool, use_market_diversion, use_warehouse_monitoring,' +
+      'comments, additional_data, status,' +
+      'verified_at, verified_by, verification_notes,' +
+      'cost, enumerator_fee, transport_fee,' +
+      'accepted_by, accepted_at, forwarded_to_user_id, created_at'
+    )
     .order('created_at', { ascending: false });
 
   if (error) {
@@ -224,7 +225,7 @@ async function fetchSupervisorSiteEntries(): Promise<CoordinatorSiteEntryRow[]> 
   return (data || []).map((row: any) => ({
     id: row.id,
     mmp_file_id: row.mmp_file_id,
-    mmp_name: row.mmp_files?.name || 'Unknown MMP',
+    mmp_name: 'Unknown MMP', // filled in by the hook from contextMmpFiles
     site_code: row.site_code,
     hub_office: row.hub_office,
     state: row.state,

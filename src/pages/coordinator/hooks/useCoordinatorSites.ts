@@ -184,20 +184,38 @@ export const useCoordinatorSites = () => {
         supervisorHubIds.length > 0 &&
         (hubAccessInfo.hubStates.length > 0 || hubAccessInfo.hubStateNames.length > 0);
 
-      return rows
+      console.log('[SupervisorSites] raw rows:', rows.length,
+        '| hubIds:', supervisorHubIds,
+        '| canApplyHubFilter:', canApplyHubFilter,
+        '| isHubSupervisor:', hubAccessInfo?.isHubSupervisor,
+        '| hubStates:', hubAccessInfo?.hubStates,
+        '| sample statuses:', rows.slice(0, 5).map((r: any) => r.status),
+        '| sample states:', rows.slice(0, 5).map((r: any) => r.state));
+
+      const filtered = rows
         .map(mapCoordinatorRowToSiteVisit)
         .filter(site => {
           const normalizedStatus = (site.status || '').toLowerCase().trim().replace(/\s+/g, '_');
+          // Status filter
           if (!allowedSupervisorStatuses.has(normalizedStatus)) return false;
-          if (!canApplyHubFilter) return true; // no hub info — show all allowed-status sites
+          // Hub filter — skip if no hub info is available
+          if (!canApplyHubFilter) return true;
           const stateMatch = site.state ? isStateInAnyHub(site.state, supervisorHubIds) : false;
           const hubOfficeMatch = site.hub_office
             ? supervisorHubIds.some(hid =>
                 site.hub_office!.toLowerCase().includes(hid.toLowerCase()) ||
                 hid.toLowerCase().includes(site.hub_office!.toLowerCase()))
             : false;
+          // Fallback: if hub info exists but nothing matches (format mismatch), show the site anyway
+          if (!stateMatch && !hubOfficeMatch) {
+            console.warn('[SupervisorSites] hub filter miss — state:', site.state,
+              'hub_office:', site.hub_office, 'hubIds:', supervisorHubIds);
+          }
           return stateMatch || hubOfficeMatch;
         });
+
+      console.log('[SupervisorSites] after filter:', filtered.length);
+      return filtered;
     }
 
     // Coordinator path: use coordinator RPC results, fall back to MMP context.
