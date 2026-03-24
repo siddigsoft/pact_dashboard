@@ -184,14 +184,6 @@ export const useCoordinatorSites = () => {
         supervisorHubIds.length > 0 &&
         (hubAccessInfo.hubStates.length > 0 || hubAccessInfo.hubStateNames.length > 0);
 
-      console.log('[SupervisorSites] raw rows:', rows.length,
-        '| hubIds:', supervisorHubIds,
-        '| canApplyHubFilter:', canApplyHubFilter,
-        '| isHubSupervisor:', hubAccessInfo?.isHubSupervisor,
-        '| hubStates:', hubAccessInfo?.hubStates,
-        '| sample statuses:', rows.slice(0, 5).map((r: any) => r.status),
-        '| sample states:', rows.slice(0, 5).map((r: any) => r.state));
-
       // Build hub state names for fuzzy matching (handles "Khartoum" matching "Khartoum State")
       const hubStateNamesNorm = (hubAccessInfo?.hubStateNames ?? []).map(n =>
         n.toLowerCase().trim().replace(/\s+state$/i, '').replace(/\s+/g, ' '));
@@ -224,7 +216,6 @@ export const useCoordinatorSites = () => {
           return hubOfficeMatch;
         });
 
-      console.log('[SupervisorSites] after filter:', filtered.length);
       return filtered;
     }
 

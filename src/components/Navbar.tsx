@@ -9,13 +9,12 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { MoonIcon, SunIcon, Bell, Settings, LogOut, UserIcon, MessageSquare, Search } from 'lucide-react';
-import { Link, useNavigate } from 'react-router-dom';
+import { MoonIcon, SunIcon, Settings, LogOut, UserIcon } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { useTheme } from 'next-themes';
 import { useUser } from '@/context/user/UserContext';
-import NotificationDropdown from '@/components/NotificationDropdown';
-import { useNotifications } from '@/context/notifications/NotificationContext';
 import ChatNotificationIndicator from '@/components/chat/ChatNotificationIndicator';
+import { NavbarNotificationBell } from '@/components/navbar/NavbarNotificationBell';
 import NavBrand from './navbar/NavBrand';
 import { GlobalSearch } from './navbar/GlobalSearch';
 import { RealtimeActivityIndicator } from '@/components/realtime';
@@ -53,7 +52,6 @@ const Navbar = () => {
         const { setTheme, theme } = useTheme();
         const navigate = useNavigate();
         const { currentUser, logout } = useUser();
-        const { getUnreadNotificationsCount } = useNotifications();
         const [globalSearch, setGlobalSearch] = useState('');
         const [showDropdown, setShowDropdown] = useState(false);
 
@@ -124,20 +122,7 @@ const Navbar = () => {
                                         <ChatNotificationIndicator />
 
                                         {/* Notifications */}
-                                        <DropdownMenu>
-                                                <DropdownMenuTrigger asChild>
-                                                        <Button variant="ghost" size="icon" className="relative h-8 w-8 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200">
-                                                                <Bell className="h-4 w-4" />
-                                                                {getUnreadNotificationsCount() > 0 && (
-                                                                        <span className="absolute -top-0.5 -right-0.5 bg-red-500 text-white rounded-full h-4 w-4 flex items-center justify-center text-[10px] font-bold">
-                                                                                {getUnreadNotificationsCount() > 9 ? '9+' : getUnreadNotificationsCount()}
-                                                                        </span>
-                                                                )}
-                                                                <span className="sr-only">Notifications</span>
-                                                        </Button>
-                                                </DropdownMenuTrigger>
-                                                <NotificationDropdown onClose={() => {}} />
-                                        </DropdownMenu>
+                                        <NavbarNotificationBell />
 
                                         <div className="w-px h-5 bg-gray-200 dark:bg-gray-700 mx-1" />
 
