@@ -2681,10 +2681,14 @@ const MMP = () => {
     let filteredMMPs = mmpFiles;
 
     // HUB-BASED ACCESS FILTER FOR SUPERVISORS
-    // Hub supervisors should only see MMPs with sites in their hub's states
+    // Hub supervisors should only see MMPs with sites in their hub's states.
+    // IMPORTANT: site entries are lazy-loaded (always empty [] at first render).
+    // Only exclude an MMP when its entries are loaded AND none are in the hub.
     if (applyHubFilter && hubAccessInfo.isHubSupervisor && hubAccessInfo.hubStates.length > 0) {
       filteredMMPs = filteredMMPs.map(mmp => {
         const siteEntries = mmp.siteEntries || [];
+        // Entries not yet loaded — include the MMP so the supervisor can see it
+        if (siteEntries.length === 0) return mmp;
         const filteredSiteEntries = filterByHubAccess(siteEntries, hubAccessInfo);
         if (filteredSiteEntries.length === 0) {
           return null;
