@@ -5,6 +5,7 @@ import { useUserProjects } from '@/hooks/useUserProjects';
 import { getHubAccessInfo, isStateInAnyHub } from '@/utils/hubAccessControl';
 import {
   useCoordinatorSiteEntriesQuery,
+  useSupervisorSiteEntriesQuery,
   type CoordinatorSiteEntryRow,
 } from '@/context/mmp/mmpQueries';
 
@@ -132,15 +133,20 @@ export const useCoordinatorSites = () => {
   const isSupervisor = role === 'supervisor' || role === 'hubsupervisor' || role === 'hub_supervisor';
   const hubAccessInfo = isSupervisor ? getHubAccessInfo(currentUser) : null;
 
-  // For supervisors: pass isAdmin=true so the query is enabled with userId=null (returns all entries).
-  // The RPC already supports this — it returns all entries when p_user_id is null.
-  // Hub/status filtering is applied client-side below.
+  // Supervisors use a dedicated direct query (not the coordinator RPC which filters by user_id).
+  const {
+    data: supervisorRows,
+    isLoading: supervisorQueryLoading,
+    refetch: refetchSupervisorQuery,
+  } = useSupervisorSiteEntriesQuery(isSupervisor && !!currentUser?.id);
+
+  // Coordinators use the coordinator-specific RPC.
   const rpcUserId = isSupervisor ? null : currentUser?.id ?? null;
   const {
     data: coordinatorRows,
     isLoading: coordinatorQueryLoading,
     refetch: refetchCoordinatorQuery,
-  } = useCoordinatorSiteEntriesQuery(rpcUserId, isSupervisor || (isAdminOrSuperUser ?? false));
+  } = useCoordinatorSiteEntriesQuery(rpcUserId, isAdminOrSuperUser ?? false);
 
   const allowedSupervisorStatuses = useMemo(() => new Set([
     // Pre-pipeline
@@ -169,31 +175,33 @@ export const useCoordinatorSites = () => {
   ]), []);
 
   const coordinatorSites = useMemo(() => {
-    const rpcSites = (coordinatorRows ?? []).map(mapCoordinatorRowToSiteVisit);
-
-    // Supervisors: filter all-entries RPC result by hub access + allowed statuses.
-    if (isSupervisor && rpcSites.length > 0) {
+    // Supervisors: use dedicated direct query results and filter by hub + status.
+    if (isSupervisor) {
+      const rows = supervisorRows ?? [];
       const supervisorHubIds = hubAccessInfo?.hubIds ?? [];
       const canApplyHubFilter =
         hubAccessInfo?.isHubSupervisor &&
         supervisorHubIds.length > 0 &&
         (hubAccessInfo.hubStates.length > 0 || hubAccessInfo.hubStateNames.length > 0);
 
-      return rpcSites.filter(site => {
-        const normalizedStatus = (site.status || '').toLowerCase().trim().replace(/\s+/g, '_');
-        if (!allowedSupervisorStatuses.has(normalizedStatus)) return false;
-        if (!canApplyHubFilter) return true; // no hub filter available — show all statuses
-        const stateMatch = site.state ? isStateInAnyHub(site.state, supervisorHubIds) : false;
-        const hubOfficeMatch = (site.hub_office || '')
-          ? supervisorHubIds.some(hid =>
-              (site.hub_office || '').toLowerCase().includes(hid.toLowerCase()) ||
-              hid.toLowerCase().includes((site.hub_office || '').toLowerCase()))
-          : false;
-        return stateMatch || hubOfficeMatch;
-      });
+      return rows
+        .map(mapCoordinatorRowToSiteVisit)
+        .filter(site => {
+          const normalizedStatus = (site.status || '').toLowerCase().trim().replace(/\s+/g, '_');
+          if (!allowedSupervisorStatuses.has(normalizedStatus)) return false;
+          if (!canApplyHubFilter) return true; // no hub info — show all allowed-status sites
+          const stateMatch = site.state ? isStateInAnyHub(site.state, supervisorHubIds) : false;
+          const hubOfficeMatch = site.hub_office
+            ? supervisorHubIds.some(hid =>
+                site.hub_office!.toLowerCase().includes(hid.toLowerCase()) ||
+                hid.toLowerCase().includes(site.hub_office!.toLowerCase()))
+            : false;
+          return stateMatch || hubOfficeMatch;
+        });
     }
 
-    // Coordinator / non-supervisor path: fall back to context-based approach
+    // Coordinator path: use coordinator RPC results, fall back to MMP context.
+    const rpcSites = (coordinatorRows ?? []).map(mapCoordinatorRowToSiteVisit);
     if (!currentUser?.id || !contextMmpFiles || contextLoading) {
       return rpcSites;
     }
@@ -290,6 +298,7 @@ export const useCoordinatorSites = () => {
     rpcSites.forEach((site) => merged.set(site.id, site));
     return Array.from(merged.values());
   }, [
+    supervisorRows,
     coordinatorRows,
     contextMmpFiles,
     contextLoading,
@@ -300,12 +309,15 @@ export const useCoordinatorSites = () => {
     isAdminOrSuperUser,
     isSupervisor,
     hubAccessInfo?.hubIds.join('|'),
+    allowedSupervisorStatuses,
   ]);
 
   const siteCounts = useMemo(() => computeCounts(coordinatorSites), [coordinatorSites]);
 
-  const loading = coordinatorRows !== undefined ? coordinatorQueryLoading : contextLoading;
-  const refetch = refetchCoordinatorQuery;
+  const loading = isSupervisor
+    ? supervisorQueryLoading
+    : coordinatorRows !== undefined ? coordinatorQueryLoading : contextLoading;
+  const refetch = isSupervisor ? refetchSupervisorQuery : refetchCoordinatorQuery;
 
   return {
     coordinatorSites,

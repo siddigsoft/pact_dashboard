@@ -13,6 +13,7 @@ export const mmpQueryKeys = {
   files: () => [...mmpQueryKeys.all, 'files'] as const,
   siteEntryCounts: () => [...mmpQueryKeys.all, 'siteEntryCounts'] as const,
   coordinatorSiteEntries: (userId: string | null) => [...mmpQueryKeys.all, 'coordinatorSiteEntries', userId] as const,
+  supervisorSiteEntries: () => [...mmpQueryKeys.all, 'supervisorSiteEntries'] as const,
 };
 
 export const defaultSiteEntryCounts: SiteEntryCounts = {
@@ -187,6 +188,81 @@ export function useCoordinatorSiteEntriesQuery(userId: string | null, isAdmin: b
     queryFn: () => fetchCoordinatorSiteEntries(effectiveUserId),
     enabled: isAdmin || !!userId,
     staleTime: COORDINATOR_SITES_STALE_MS,
+    placeholderData: (previousData) => previousData,
+  });
+}
+
+/**
+ * Fetches all site entries for supervisor view — direct table query bypassing the coordinator RPC.
+ * Returns all pipeline-relevant entries joined with their MMP name.
+ * Hub/status filtering is applied client-side in useCoordinatorSites.
+ */
+async function fetchSupervisorSiteEntries(): Promise<CoordinatorSiteEntryRow[]> {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) return [];
+  if (!navigator.onLine) return [];
+
+  const { data, error } = await supabase
+    .from('mmp_site_entries')
+    .select(`
+      id, mmp_file_id, site_code, hub_office, state, locality, site_name,
+      cp_name, visit_type, visit_date, main_activity, activity_at_site,
+      monitoring_by, survey_tool, use_market_diversion, use_warehouse_monitoring,
+      comments, additional_data, status,
+      verified_at, verified_by, verification_notes,
+      cost, enumerator_fee, transport_fee,
+      accepted_by, accepted_at, forwarded_to_user_id, created_at,
+      mmp_files(name)
+    `)
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    console.warn('[fetchSupervisorSiteEntries] query error:', error.message);
+    return [];
+  }
+
+  return (data || []).map((row: any) => ({
+    id: row.id,
+    mmp_file_id: row.mmp_file_id,
+    mmp_name: row.mmp_files?.name || 'Unknown MMP',
+    site_code: row.site_code,
+    hub_office: row.hub_office,
+    state: row.state,
+    locality: row.locality,
+    site_name: row.site_name,
+    cp_name: row.cp_name ?? null,
+    visit_type: row.visit_type ?? null,
+    visit_date: row.visit_date ?? null,
+    main_activity: row.main_activity ?? null,
+    activity_at_site: row.activity_at_site ?? null,
+    monitoring_by: row.monitoring_by ?? null,
+    survey_tool: row.survey_tool ?? null,
+    use_market_diversion: row.use_market_diversion ?? null,
+    use_warehouse_monitoring: row.use_warehouse_monitoring ?? null,
+    comments: row.comments ?? null,
+    additional_data: row.additional_data ?? null,
+    status: row.status,
+    verified_at: row.verified_at ?? null,
+    verified_by: row.verified_by ?? null,
+    verification_notes: row.verification_notes ?? null,
+    cost: row.cost ?? null,
+    enumerator_fee: row.enumerator_fee ?? null,
+    transport_fee: row.transport_fee ?? null,
+    accepted_by: row.accepted_by ?? null,
+    accepted_at: row.accepted_at ?? null,
+    forwarded_to_user_id: row.forwarded_to_user_id ?? null,
+    created_at: row.created_at,
+  })) as CoordinatorSiteEntryRow[];
+}
+
+const SUPERVISOR_SITES_STALE_MS = 60 * 1000;
+
+export function useSupervisorSiteEntriesQuery(enabled: boolean) {
+  return useQuery({
+    queryKey: mmpQueryKeys.supervisorSiteEntries(),
+    queryFn: fetchSupervisorSiteEntries,
+    enabled,
+    staleTime: SUPERVISOR_SITES_STALE_MS,
     placeholderData: (previousData) => previousData,
   });
 }
