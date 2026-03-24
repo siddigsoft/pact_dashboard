@@ -329,6 +329,8 @@ const AppRoutes = () => {
   {/* Coordinator: Sites for Verification */}
   <Route path="/coordinator/sites-for-verification" element={<SitesForVerification />} />
   <Route path="/coordinator/sites" element={<CoordinatorSites />} />
+  {/* Supervisor: dedicated My Site Management page — same component as CoordinatorSites */}
+  <Route path="/supervisor/sites" element={<CoordinatorSites />} />
   <Route path="/coordinator-dashboard" element={<CoordinatorDashboard />} />
   <Route path="/hub-operations" element={<HubOperations />} />
   <Route path="/hub-management" element={<HubManagement />} />

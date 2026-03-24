@@ -317,6 +317,9 @@
     if (!isHidden('/monitoring-form') && (isSuperAdmin || isAdmin || isDataCollector || isCoordinator || isSupervisor || isFOM)) {
       fieldOpsItems.push({ id: 'monitoring-form', title: "Monitoring Form", url: "/monitoring-form", icon: ClipboardCheck, priority: 7, isPinned: isPinned('/monitoring-form') });
     }
+    if (!isHidden('/supervisor/sites') && isSupervisor && !isCoordinator) {
+      fieldOpsItems.push({ id: 'supervisor-site-management', title: "My Site Management", url: "/supervisor/sites", icon: Map, priority: 8, isPinned: isPinned('/supervisor/sites') });
+    }
     if (fieldOpsItems.length) groups.push({ id: 'field-ops', label: "Field Operations", order: 3, items: fieldOpsItems });
 
     const cycleItems: MenuGroup['items'] = [];

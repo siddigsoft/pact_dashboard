@@ -7,7 +7,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation as useRouterLocation } from 'react-router-dom';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useAppContext } from '@/context/AppContext';
@@ -469,6 +469,8 @@ const SiteEditForm: React.FC<SiteEditFormProps> = ({ site, onSave, onCancel, hub
 
 const CoordinatorSites: React.FC = () => {
   const navigate = useNavigate();
+  const routerLocation = useRouterLocation();
+  const isSupervisorRoute = routerLocation.pathname === '/supervisor/sites';
   const { toast } = useToast();
   const { currentUser } = useAppContext();
   const { updateMMP, refreshMMPFiles, mmpFiles: contextMmpFiles } = useMMP();
@@ -3628,9 +3630,13 @@ const CoordinatorSites: React.FC = () => {
               <Shield className="h-8 w-8" />
             </div>
             <div>
-              <h1 className="text-2xl font-bold tracking-tight">Site Verification</h1>
+              <h1 className="text-2xl font-bold tracking-tight">
+                {isSupervisorRoute ? 'My Site Management' : 'Site Verification'}
+              </h1>
               <p className="text-blue-100 mt-1">
-                Review and verify sites assigned to you
+                {isSupervisorRoute
+                  ? 'Manage, verify and review sites across your hub as coordinator'
+                  : 'Review and verify sites assigned to you'}
               </p>
             </div>
           </div>
