@@ -290,6 +290,9 @@
       const mmpTitle = (!isSuperAdmin && (isDataCollector || isCoordinator)) ? "My Sites Management" : "MMP Management";
       planningItems.push({ id: 'mmp-management', title: mmpTitle, url: "/mmp", icon: Database, priority: 2, isPinned: isPinned('/mmp') });
     }
+    if (!isHidden('/supervisor/sites') && isSupervisor && !isCoordinator) {
+      planningItems.push({ id: 'supervisor-site-management', title: "My Site Management", url: "/supervisor/sites", icon: Map, priority: 3, isPinned: isPinned('/supervisor/sites') });
+    }
     if (!isHidden('/hub-operations') && (isSuperAdmin || isAdmin)) {
       planningItems.push({ id: 'hub-operations', title: "Hub Operations", url: "/hub-operations", icon: Building2, priority: 3, isPinned: isPinned('/hub-operations') });
     }
@@ -316,9 +319,6 @@
     }
     if (!isHidden('/monitoring-form') && (isSuperAdmin || isAdmin || isDataCollector || isCoordinator || isSupervisor || isFOM)) {
       fieldOpsItems.push({ id: 'monitoring-form', title: "Monitoring Form", url: "/monitoring-form", icon: ClipboardCheck, priority: 7, isPinned: isPinned('/monitoring-form') });
-    }
-    if (!isHidden('/supervisor/sites') && isSupervisor && !isCoordinator) {
-      fieldOpsItems.push({ id: 'supervisor-site-management', title: "My Site Management", url: "/supervisor/sites", icon: Map, priority: 8, isPinned: isPinned('/supervisor/sites') });
     }
     if (fieldOpsItems.length) groups.push({ id: 'field-ops', label: "Field Operations", order: 3, items: fieldOpsItems });
 
@@ -545,6 +545,7 @@
     const [isFavoritesCollapsed, setIsFavoritesCollapsed] = useState(false);
     const [pendingReclaimCount, setPendingReclaimCount] = useState(0);
     const [pendingCostApprovalCount, setPendingCostApprovalCount] = useState(0);
+    const [pendingDownPaymentCount, setPendingDownPaymentCount] = useState(0);
 
     // Fetch count of Tier-1 pending cost submissions that the supervisor needs to approve
     useEffect(() => {
@@ -579,6 +580,20 @@
           setPendingReclaimCount(count);
         });
     }, [currentUser?.id, hasAnyRole]);
+
+    // Fetch count of pending down-payment requests awaiting supervisor approval
+    useEffect(() => {
+      const isSupervisorRole = hasAnyRole(['supervisor', 'Supervisor', 'hubSupervisor', 'hub_supervisor']);
+      if (!isSupervisorRole || !currentUser?.id || !currentUser?.hubId) return;
+      supabase
+        .from('down_payment_requests')
+        .select('id', { count: 'exact', head: true })
+        .eq('hub_id', currentUser.hubId)
+        .eq('status', 'pending_supervisor')
+        .then(({ count }) => {
+          setPendingDownPaymentCount(count || 0);
+        });
+    }, [currentUser?.id, currentUser?.hubId, hasAnyRole]);
 
     const menuPrefs: MenuPreferences = useMemo(() => {
       const savedPrefs = userSettings?.settings?.menuPreferences;
@@ -805,6 +820,16 @@
                             {item.id === 'cost-submission' && pendingCostApprovalCount > 0 && (
                               <span className="ml-auto shrink-0 inline-flex items-center justify-center h-4 min-w-[16px] px-1 rounded-full bg-red-500 text-white text-[9px] font-bold leading-none" data-testid="badge-cost-approval-count">
                                 {pendingCostApprovalCount > 99 ? '99+' : pendingCostApprovalCount}
+                              </span>
+                            )}
+                            {item.id === 'supervisor-approvals' && pendingCostApprovalCount > 0 && (
+                              <span className="ml-auto shrink-0 inline-flex items-center justify-center h-4 min-w-[16px] px-1 rounded-full bg-red-500 text-white text-[9px] font-bold leading-none" data-testid="badge-tier1-approval-count">
+                                {pendingCostApprovalCount > 99 ? '99+' : pendingCostApprovalCount}
+                              </span>
+                            )}
+                            {item.id === 'down-payment-approval' && pendingDownPaymentCount > 0 && (
+                              <span className="ml-auto shrink-0 inline-flex items-center justify-center h-4 min-w-[16px] px-1 rounded-full bg-amber-500 text-white text-[9px] font-bold leading-none" data-testid="badge-down-payment-count">
+                                {pendingDownPaymentCount > 99 ? '99+' : pendingDownPaymentCount}
                               </span>
                             )}
                           </Link>

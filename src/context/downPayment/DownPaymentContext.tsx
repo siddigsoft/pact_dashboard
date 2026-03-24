@@ -249,6 +249,29 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
 
       if (error) throw error;
 
+      // Notify hub supervisors that a new down-payment request needs their approval
+      try {
+        if (hubId) {
+          const { data: supervisors } = await supabase
+            .from('profiles')
+            .select('id')
+            .eq('hub_id', hubId)
+            .in('role', ['supervisor', 'Supervisor', 'hubSupervisor', 'hub_supervisor']);
+          const supervisorIds = (supervisors || []).map((s: any) => s.id).filter(Boolean);
+          if (supervisorIds.length > 0) {
+            await NotificationTriggerService.downPaymentRequested(
+              supervisorIds,
+              currentUser?.fullName || currentUser?.email || 'A team member',
+              request.requestedAmount,
+              'SDG',
+              request.justification || request.siteName || 'site visit'
+            );
+          }
+        }
+      } catch (notifErr) {
+        console.warn('[DownPayment] Supervisor notification failed (non-fatal):', notifErr);
+      }
+
       toastRef.current({
         title: 'Request Submitted',
         description: 'Your down-payment request has been submitted for approval',
