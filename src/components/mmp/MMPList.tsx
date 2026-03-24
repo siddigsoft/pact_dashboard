@@ -86,12 +86,13 @@ export const MMPList = ({ mmpFiles, showActions = true }: MMPListProps) => {
     'Field Ops Manager',
     'field ops manager'
   ]);
+  const isSupervisor = hasAnyRole(['Supervisor', 'supervisor', 'hubsupervisor', 'hub_supervisor']);
   const userRole = isSuperAdmin ? 'super_admin' : isAdmin ? 'admin' : isICT ? 'ict' : isFOM ? 'fom' : 'user';
   const userCanForceRecall = canForceRecall(userRole);
-  const canDeleteMMP = checkPermission('mmp', 'delete') || isAdmin || isICT;
-  const canEditMMP = checkPermission('mmp', 'update') || isAdmin || isICT;
-  // Allow forwarding if user can update OR has admin/ict role
-  const canForwardMMP = checkPermission('mmp', 'update') || isAdmin || isICT;
+  // Supervisors are VIEW-ONLY on the MMP management page — they cannot create, edit, delete or forward MMPs.
+  const canDeleteMMP = !isSupervisor && (checkPermission('mmp', 'delete') || isAdmin || isICT);
+  const canEditMMP = !isSupervisor && (checkPermission('mmp', 'update') || isAdmin || isICT);
+  const canForwardMMP = !isSupervisor && (checkPermission('mmp', 'update') || isAdmin || isICT);
 
   // Initialize forwarded status from MMP workflow
   React.useEffect(() => {
@@ -345,9 +346,11 @@ export const MMPList = ({ mmpFiles, showActions = true }: MMPListProps) => {
                         </DropdownMenuItem>
                       )}
 
-                      <DropdownMenuItem onClick={() => navigate(`/mmp/${mmp.id}/edit?tab=partial-update`)}>
-                        MMP Update (Upload File)
-                      </DropdownMenuItem>
+                      {!isSupervisor && (
+                        <DropdownMenuItem onClick={() => navigate(`/mmp/${mmp.id}/edit?tab=partial-update`)}>
+                          MMP Update (Upload File)
+                        </DropdownMenuItem>
+                      )}
                       
                       {canForwardMMP && !isForwarded && (
                         <DropdownMenuItem onClick={() => handleForward(mmp)}>

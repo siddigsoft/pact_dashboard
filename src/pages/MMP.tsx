@@ -2698,7 +2698,10 @@ const MMP = () => {
     // For FOMs and Supervisors, still honor project membership but also allow MMPs explicitly forwarded to them.
     if (!isAdminOrSuperUser && !isDataTeam) {
       if (userProjectIds.length > 0) {
-        filteredMMPs = mmpFiles.filter(mmp => {
+        // For supervisors, apply the project filter ON TOP of the already hub-filtered list
+        // so the hub filter is not overridden by starting from the full mmpFiles array.
+        const filterBase = isSupervisor ? filteredMMPs : mmpFiles;
+        filteredMMPs = filterBase.filter(mmp => {
           const inProject = mmp.projectId ? userProjectIds.includes(mmp.projectId) : false;
           if (isFOM) {
             const workflow = mmp.workflow as any;
@@ -2720,8 +2723,8 @@ const MMP = () => {
             return forwardedToFomIds.includes(currentUser?.id || '');
           });
         } else if (isSupervisor) {
-          // Supervisors see all MMPs (hub filter applied later for oversight)
-          filteredMMPs = mmpFiles;
+          // Keep filteredMMPs as-is (already hub-filtered above).
+          // Do NOT reset to mmpFiles here — that would undo the hub filter.
         } else if (!canClaimSites) {
           filteredMMPs = [];
         }
@@ -2863,6 +2866,20 @@ const MMP = () => {
       verified: verifiedMMPs
     };
   }, [mmpFiles, isFOM, isSupervisor, isCoordinator, isDataTeam, currentUser, isAdminOrSuperUser, userProjectIds, canClaimSites, mmpIdsWithVerifiedSites, applyHubFilter, hubAccessInfo]);
+
+  // Hub-scoped MMP list for the MMP Tracker tab.
+  // Supervisors should only see their hub's MMPs in the tracker; for all other roles pass mmpFiles as-is.
+  const trackerMMPs = useMemo(() => {
+    if (!isSupervisor || !applyHubFilter) return mmpFiles;
+    const seen = new Set<string>();
+    const combined: typeof mmpFiles = [];
+    for (const arr of [categorizedMMPs.new, categorizedMMPs.forwarded, categorizedMMPs.verified]) {
+      for (const mmp of arr) {
+        if (!seen.has(mmp.id)) { seen.add(mmp.id); combined.push(mmp); }
+      }
+    }
+    return combined;
+  }, [isSupervisor, applyHubFilter, mmpFiles, categorizedMMPs]);
 
   // Load site entries for MMPs when tabs become active (ensures site data is synchronized)
   useEffect(() => {
@@ -6361,7 +6378,7 @@ const MMP = () => {
                   </Card>
                 ) : (
                   <WorkflowTrackerTab 
-                    mmpFiles={mmpFiles} 
+                    mmpFiles={trackerMMPs} 
                     coordinators={coordinatorsList.map(c => ({ id: c.id, name: c.fullName || c.email || 'Unknown' }))}
                   />
                 )}
