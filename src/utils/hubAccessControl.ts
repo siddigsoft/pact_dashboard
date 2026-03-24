@@ -123,7 +123,25 @@ export function isStateInAnyHub(stateName: string | null | undefined, hubIds: st
   return hubIds.some(hubId => isStateNameInHub(stateName, hubId));
 }
 
-export function filterByHubAccess<T extends { state?: string; stateName?: string; state_name?: string; stateId?: string; state_id?: string; hub_id?: string }>(
+/**
+ * Derive a "base" name by stripping the common " State" / "-state" suffix.
+ * Allows matching "Khartoum" ↔ "Khartoum State" ↔ "khartoum-state".
+ */
+function toBaseName(s: string): string {
+  return s.toLowerCase().trim()
+    .replace(/\s+state$/i, '')
+    .replace(/-state$/, '')
+    .replace(/-/g, ' ')
+    .trim();
+}
+
+export function filterByHubAccess<T extends {
+  state?: string; stateName?: string; state_name?: string;
+  stateId?: string; state_id?: string;
+  hub_id?: string;
+  // camelCase variants used by MMP context site entries
+  hubOffice?: string;
+}>(
   items: T[],
   hubAccessInfo: HubAccessInfo
 ): T[] {
@@ -133,32 +151,46 @@ export function filterByHubAccess<T extends { state?: string; stateName?: string
 
   const normalizedHubStates = hubAccessInfo.hubStates.map(s => normalizeStateId(s));
   const normalizedHubStateNames = hubAccessInfo.hubStateNames.map(s => normalizeStateName(s));
+  // Base names for fuzzy matching: "Khartoum State" → "khartoum", "khartoum-state" → "khartoum"
+  const hubBaseNames = [
+    ...hubAccessInfo.hubStates.map(toBaseName),
+    ...hubAccessInfo.hubStateNames.map(toBaseName),
+  ];
+  const uniqueHubBases = Array.from(new Set(hubBaseNames.filter(Boolean)));
 
   return items.filter(item => {
-    if ((item as any).hub_id) {
-      const itemHubNormalized = normalizeHubId((item as any).hub_id);
+    // 1. Direct hub_id match (snake_case)
+    const hubId = (item as any).hub_id || (item as any).hubOffice || '';
+    if (hubId) {
+      const itemHubNormalized = normalizeHubId(hubId);
       if (itemHubNormalized && hubAccessInfo.hubIds.includes(itemHubNormalized)) {
         return true;
       }
+      // Partial hub office name match
+      const hubLower = hubId.toLowerCase();
+      if (hubAccessInfo.hubIds.some(h =>
+        hubLower.includes(h.toLowerCase()) || h.toLowerCase().includes(hubLower)
+      )) return true;
     }
-    
-    const stateId = item.state_id || item.stateId || item.state;
-    const stateName = item.state_name || item.stateName;
-    
-    if (stateId) {
-      const normalizedId = normalizeStateId(stateId);
-      if (normalizedHubStates.includes(normalizedId)) {
-        return true;
-      }
-    }
-    
-    if (stateName) {
-      const normalizedName = normalizeStateName(stateName);
-      if (normalizedHubStateNames.includes(normalizedName)) {
-        return true;
-      }
-      const stateIdFromName = normalizeStateId(stateName);
-      if (normalizedHubStates.includes(stateIdFromName)) {
+
+    // 2. State field matching (handles both snake_case and camelCase property names)
+    const stateValue = item.state_id || item.stateId || item.state || item.state_name || item.stateName || '';
+
+    if (stateValue) {
+      // Exact normalised ID match
+      const normId = normalizeStateId(stateValue);
+      if (normalizedHubStates.includes(normId)) return true;
+
+      // Exact normalised name match
+      const normName = normalizeStateName(stateValue);
+      if (normalizedHubStateNames.includes(normName)) return true;
+
+      // ID-derived name match
+      if (normalizedHubStates.includes(normId.replace(/\s+/g, '-'))) return true;
+
+      // Fuzzy base-name match — handles "Khartoum" ↔ "Khartoum State"
+      const base = toBaseName(stateValue);
+      if (uniqueHubBases.some(h => h === base || h.includes(base) || base.includes(h))) {
         return true;
       }
     }

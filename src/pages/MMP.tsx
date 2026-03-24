@@ -2728,11 +2728,23 @@ const MMP = () => {
   const categorizedMMPs = useMemo(() => {
     let filteredMMPs = mmpFiles;
 
-    // HUB-BASED ACCESS FILTER FOR SUPERVISORS
-    // Uses supervisorHubMmpIds (pre-fetched set) so filtering is not tied to lazy-loaded siteEntries.
-    // While supervisorHubMmpIds is loading (null), show all MMPs to avoid blank screen.
-    if (applyHubFilter && hubAccessInfo.isHubSupervisor && supervisorHubMmpIds !== null) {
-      filteredMMPs = filteredMMPs.filter(mmp => supervisorHubMmpIds.has(mmp.id));
+    // HUB-BASED ACCESS FILTER FOR SUPERVISORS — two passes:
+    // Pass 1 (list): Only show MMPs that have at least one entry in the supervisor's hub.
+    //   Uses pre-fetched supervisorHubMmpIds to avoid dependency on lazy-loaded siteEntries.
+    //   While the pre-fetch is in progress (null), show all MMPs (brief loading state).
+    // Pass 2 (detail): Within each MMP, filter site entries to hub-relevant ones only,
+    //   so coordinator assignments / state breakdowns are scoped to the hub.
+    if (applyHubFilter && hubAccessInfo.isHubSupervisor) {
+      if (supervisorHubMmpIds !== null) {
+        filteredMMPs = filteredMMPs.filter(mmp => supervisorHubMmpIds.has(mmp.id));
+      }
+      // Filter loaded site entries within each remaining MMP to hub-only
+      filteredMMPs = filteredMMPs.map(mmp => {
+        const siteEntries = mmp.siteEntries || [];
+        if (siteEntries.length === 0) return mmp; // not loaded yet — show MMP as-is
+        const hubEntries = filterByHubAccess(siteEntries, hubAccessInfo);
+        return { ...mmp, siteEntries: hubEntries };
+      });
     }
 
     // PROJECT TEAM MEMBERSHIP FILTER
