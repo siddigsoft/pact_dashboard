@@ -2135,6 +2135,54 @@ const MMP = () => {
   const hubAccessInfo = useMemo(() => getHubAccessInfo(currentUser), [currentUser]);
   const applyHubFilter = shouldApplyHubFilter(currentUser);
 
+  // Pre-load the set of MMP IDs that have at least one site entry in the supervisor's hub.
+  // This avoids relying on lazy-loaded siteEntries for the hub filter.
+  const [supervisorHubMmpIds, setSupervisorHubMmpIds] = useState<Set<string> | null>(null);
+  useEffect(() => {
+    if (!applyHubFilter || !hubAccessInfo.isHubSupervisor) {
+      setSupervisorHubMmpIds(null);
+      return;
+    }
+    const stateNames = hubAccessInfo.hubStateNames;
+    const stateIds = hubAccessInfo.hubStates;
+    if (stateNames.length === 0 && stateIds.length === 0) {
+      setSupervisorHubMmpIds(null);
+      return;
+    }
+    // Derive base names by stripping " State" / "-state" suffix so "Khartoum" matches "Khartoum State"
+    const baseNames = [
+      ...stateNames.map(n => n.replace(/\s+state$/i, '').trim()),
+      ...stateIds.map(s => s.replace(/-state$/, '').replace(/-/g, ' ').trim()),
+    ].filter(Boolean);
+    const uniqueBases = Array.from(new Set(baseNames.map(b => b.toLowerCase())));
+
+    const fetchHubMmpIds = async () => {
+      // Fetch all distinct mmp_file_id + state values — lightweight, no site details needed
+      const { data, error } = await supabase
+        .from('mmp_site_entries')
+        .select('mmp_file_id, state, hub_office');
+      if (error) {
+        console.warn('[MMP] supervisorHubMmpIds fetch error:', error.message);
+        setSupervisorHubMmpIds(null);
+        return;
+      }
+      const ids = new Set<string>();
+      for (const row of (data || [])) {
+        const rowState = (row.state || '').toLowerCase().replace(/\s+state$/i, '').trim();
+        const rowHub = (row.hub_office || '').toLowerCase();
+        const stateMatch = uniqueBases.some(b => rowState === b || rowState.includes(b) || b.includes(rowState));
+        const hubMatch = hubAccessInfo.hubIds.some(h =>
+          rowHub.includes(h.toLowerCase()) || h.toLowerCase().includes(rowHub));
+        if ((stateMatch || hubMatch) && row.mmp_file_id) ids.add(row.mmp_file_id);
+      }
+      setSupervisorHubMmpIds(ids);
+    };
+
+    fetchHubMmpIds();
+  }, [applyHubFilter, hubAccessInfo.isHubSupervisor,
+      hubAccessInfo.hubStateNames.join('|'), hubAccessInfo.hubStates.join('|'),
+      hubAccessInfo.hubIds.join('|')]);
+
   // Load viewer's enumerator fee once on mount (used for calculating total cost display)
   useEffect(() => {
     const loadViewerFee = async () => {
@@ -2681,20 +2729,10 @@ const MMP = () => {
     let filteredMMPs = mmpFiles;
 
     // HUB-BASED ACCESS FILTER FOR SUPERVISORS
-    // Hub supervisors should only see MMPs with sites in their hub's states.
-    // IMPORTANT: site entries are lazy-loaded (always empty [] at first render).
-    // Only exclude an MMP when its entries are loaded AND none are in the hub.
-    if (applyHubFilter && hubAccessInfo.isHubSupervisor && hubAccessInfo.hubStates.length > 0) {
-      filteredMMPs = filteredMMPs.map(mmp => {
-        const siteEntries = mmp.siteEntries || [];
-        // Entries not yet loaded — include the MMP so the supervisor can see it
-        if (siteEntries.length === 0) return mmp;
-        const filteredSiteEntries = filterByHubAccess(siteEntries, hubAccessInfo);
-        if (filteredSiteEntries.length === 0) {
-          return null;
-        }
-        return { ...mmp, siteEntries: filteredSiteEntries };
-      }).filter((mmp): mmp is NonNullable<typeof mmp> => mmp !== null);
+    // Uses supervisorHubMmpIds (pre-fetched set) so filtering is not tied to lazy-loaded siteEntries.
+    // While supervisorHubMmpIds is loading (null), show all MMPs to avoid blank screen.
+    if (applyHubFilter && hubAccessInfo.isHubSupervisor && supervisorHubMmpIds !== null) {
+      filteredMMPs = filteredMMPs.filter(mmp => supervisorHubMmpIds.has(mmp.id));
     }
 
     // PROJECT TEAM MEMBERSHIP FILTER
@@ -2869,7 +2907,7 @@ const MMP = () => {
       forwarded: forwardedMMPs,
       verified: verifiedMMPs
     };
-  }, [mmpFiles, isFOM, isSupervisor, isCoordinator, isDataTeam, currentUser, isAdminOrSuperUser, userProjectIds, canClaimSites, mmpIdsWithVerifiedSites, applyHubFilter, hubAccessInfo]);
+  }, [mmpFiles, isFOM, isSupervisor, isCoordinator, isDataTeam, currentUser, isAdminOrSuperUser, userProjectIds, canClaimSites, mmpIdsWithVerifiedSites, applyHubFilter, hubAccessInfo, supervisorHubMmpIds]);
 
   // Hub-scoped MMP list for the MMP Tracker tab.
   // Supervisors should only see their hub's MMPs in the tracker; for all other roles pass mmpFiles as-is.
