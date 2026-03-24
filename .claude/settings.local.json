@@ -1,7 +1,17 @@
 {
   "permissions": {
     "allow": [
-      "Bash(npx tsc --noEmit --skipLibCheck)"
+      "Bash(npx tsc --noEmit --skipLibCheck)",
+      "Bash(wc -l /c/Users/user/Desktop/tpm-workflow/src/components/*.tsx)",
+      "Bash(wc -l /c/Users/user/Desktop/tpm-workflow/src/services/*.ts)",
+      "Bash(find /c/Users/user/Desktop/tpm-workflow/src/pages -name \"*.tsx\" -exec wc -l {})",
+      "Bash(wc -l /c/Users/user/Desktop/tpm-workflow/src/hooks/*.ts /c/Users/user/Desktop/tpm-workflow/src/hooks/*.tsx)",
+      "Bash(xargs wc:*)",
+      "Bash(wc -l /c/Users/user/Desktop/tpm-workflow/src/lib/*.ts /c/Users/user/Desktop/tpm-workflow/src/lib/*.tsx)",
+      "Bash(find /c/Users/user/Desktop/tpm-workflow/src/components -name \"*.tsx\" -exec wc -l {})",
+      "mcp__vexp__get_skeleton",
+      "Bash(npm run:*)",
+      "Bash(echo \"Exit code: $?\")"
     ]
   }
 }
