@@ -192,6 +192,12 @@ export const useCoordinatorSites = () => {
         '| sample statuses:', rows.slice(0, 5).map((r: any) => r.status),
         '| sample states:', rows.slice(0, 5).map((r: any) => r.state));
 
+      // Build hub state names for fuzzy matching (handles "Khartoum" matching "Khartoum State")
+      const hubStateNamesNorm = (hubAccessInfo?.hubStateNames ?? []).map(n =>
+        n.toLowerCase().trim().replace(/\s+state$/i, '').replace(/\s+/g, ' '));
+      const hubStateIdsNorm = (hubAccessInfo?.hubStates ?? []).map(s =>
+        s.toLowerCase().replace(/-state$/, '').replace(/-/g, ' ').trim());
+
       const filtered = rows
         .map(mapCoordinatorRowToSiteVisit)
         .filter(site => {
@@ -200,18 +206,22 @@ export const useCoordinatorSites = () => {
           if (!allowedSupervisorStatuses.has(normalizedStatus)) return false;
           // Hub filter — skip if no hub info is available
           if (!canApplyHubFilter) return true;
+          // Exact match via utility
           const stateMatch = site.state ? isStateInAnyHub(site.state, supervisorHubIds) : false;
+          if (stateMatch) return true;
+          // Fuzzy partial match — handles "Khartoum" ↔ "Khartoum State" / "khartoum-state"
+          if (site.state) {
+            const sn = site.state.toLowerCase().trim().replace(/\s+state$/i, '').replace(/\s+/g, ' ');
+            if (hubStateNamesNorm.some(h => h === sn || h.includes(sn) || sn.includes(h))) return true;
+            if (hubStateIdsNorm.some(h => h === sn || h.includes(sn) || sn.includes(h))) return true;
+          }
+          // hub_office field match
           const hubOfficeMatch = site.hub_office
             ? supervisorHubIds.some(hid =>
                 site.hub_office!.toLowerCase().includes(hid.toLowerCase()) ||
                 hid.toLowerCase().includes(site.hub_office!.toLowerCase()))
             : false;
-          // Fallback: if hub info exists but nothing matches (format mismatch), show the site anyway
-          if (!stateMatch && !hubOfficeMatch) {
-            console.warn('[SupervisorSites] hub filter miss — state:', site.state,
-              'hub_office:', site.hub_office, 'hubIds:', supervisorHubIds);
-          }
-          return stateMatch || hubOfficeMatch;
+          return hubOfficeMatch;
         });
 
       console.log('[SupervisorSites] after filter:', filtered.length);
