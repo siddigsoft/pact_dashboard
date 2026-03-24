@@ -187,10 +187,25 @@ export const useCoordinatorSites = () => {
               .replace(/\s+/g, '_');
             if (!allowedSupervisorStatuses.has(normalizedStatus)) return;
 
-            if (!hubAccessInfo?.isHubSupervisor || supervisorHubIds.length === 0) return;
-            const entryStateName = (entry.state || entry.state_name || entry.stateName || '').toString();
-            if (!entryStateName) return;
-            if (!isStateInAnyHub(entryStateName, supervisorHubIds)) return;
+            // Apply hub filter only when the supervisor has a valid hub assignment.
+            // If hub info is missing/incomplete, fall through and show all-status entries
+            // (mirrors MMP management page behaviour which also skips hub filter when unavailable).
+            const canApplyHubFilter =
+              hubAccessInfo?.isHubSupervisor &&
+              supervisorHubIds.length > 0 &&
+              (hubAccessInfo.hubStates.length > 0 || hubAccessInfo.hubStateNames.length > 0);
+
+            if (canApplyHubFilter) {
+              const entryStateName = (entry.state || entry.state_name || entry.stateName || '').toString();
+              const entryHubOffice = (entry.hubOffice || entry.hub_office || '').toString();
+              const stateMatch = entryStateName ? isStateInAnyHub(entryStateName, supervisorHubIds) : false;
+              // Also allow matching via hub_office name (e.g. "Khartoum Hub")
+              const hubOfficeMatch = entryHubOffice
+                ? supervisorHubIds.some(hid => entryHubOffice.toLowerCase().includes(hid.toLowerCase()) || hid.toLowerCase().includes(entryHubOffice.toLowerCase()))
+                : false;
+              if (!stateMatch && !hubOfficeMatch) return;
+            }
+            // If canApplyHubFilter is false, include the entry (no hub filter available)
           } else {
             // Coordinators: keep strict "assigned/forwarded/accepted" ownership filter.
             const forwardedToMe = entry.forwardedToUserId === currentUser.id;
