@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/table";
 import { format } from 'date-fns';
 import { Clock, CheckCircle, UserCheck, DollarSign, Loader2 } from "lucide-react";
-import { useSiteVisitContext } from '@/context/siteVisit/SiteVisitContext';
+import { useSiteVisitContext } from '@/features/siteVisit/context/SiteVisitContext';
 import { SiteVisit } from '@/types/siteVisit';
 
 interface SiteVisitsOverviewProps {

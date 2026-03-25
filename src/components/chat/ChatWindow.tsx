@@ -1,14 +1,14 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useChat } from '@/context/chat/ChatContextSupabase';
-import { useCommunication } from '@/context/communications/CommunicationContext';
+import { useChat } from '@/features/chat/context/ChatContextSupabase';
+import { useCommunication } from '@/features/calls/context/CommunicationContext';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { formatDistanceToNow, format, isToday, isYesterday, parseISO } from 'date-fns';
-import { useUser } from '@/context/user/UserContext';
+import { useUser } from '@/features/user/context/UserContext';
 import { getUserStatus } from '@/utils/userStatusUtils';
 import { User } from '@/types/user';
 import { 
@@ -27,7 +27,7 @@ import {
   MessageSquare,
   RotateCcw
 } from 'lucide-react';
-import { useToast } from '@/hooks/use-toast';
+import { useToast } from '@/shared/hooks/use-toast';
 import { uploadChatAttachment, getContentTypeFromFile, formatFileSize, ChatAttachment } from '@/utils/chatUpload';
 
 interface ChatWindowProps {

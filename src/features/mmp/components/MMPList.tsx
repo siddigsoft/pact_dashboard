@@ -1,0 +1,535 @@
+import React, { useState } from 'react';
+import { MMPFile } from '@/types';
+import { Card, CardContent } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { format } from 'date-fns';
+import { MoreVertical } from 'lucide-react';
+import { MMPStatusBadge } from './MMPStatusBadge';
+import { useNavigate } from 'react-router-dom';
+import { useMMP } from '@/features/mmp/context/MMPContext';
+import { useAuthorization } from '@/features/auth/hooks/use-authorization';
+import { useAppContext } from '@/shared/context/AppContext';
+import { useBudget } from '@/features/budget/context/BudgetContext';
+import { BudgetStatusBadge } from '@/features/budget/components/BudgetStatusBadge';
+import ForwardToFOMDialog from './ForwardToFOMDialog';
+import {
+  AlertDialog,
+  AlertDialogTrigger,
+  AlertDialogContent,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogCancel,
+  AlertDialogAction,
+} from '@/components/ui/alert-dialog';
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+} from '@/components/ui/dropdown-menu';
+import { Badge } from '@/components/ui/badge';
+import { updateMmpFileDisplayName } from '@/features/mmp/repository/mmpRepository';
+import { useToast } from '@/shared/hooks/use-toast';
+import { checkRecallAllowed, performRecall, canForceRecall, getRecallTierForRole } from '@/utils/recallUtils';
+import { RotateCcw, AlertTriangle, CheckCircle, Pencil } from 'lucide-react';
+import { RecallDialog } from './RecallDialog';
+import MMPProgressDialog from './MMPProgressDialog';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+
+interface MMPListProps {
+  mmpFiles: MMPFile[];
+  showActions?: boolean;
+}
+
+export const MMPList = ({ mmpFiles, showActions = true }: MMPListProps) => {
+  const navigate = useNavigate();
+  const { deleteMMPFile, verifyMMP, refreshMMPFiles } = useMMP();
+  const { currentUser } = useAppContext();
+  const { checkPermission, hasAnyRole, currentUser: authUser } = useAuthorization();
+  const { mmpBudgets } = useBudget();
+  const [deletingId, setDeletingId] = React.useState<string | null>(null);
+  const [confirmId, setConfirmId] = React.useState<string | null>(null);
+  const [forwardDialogOpen, setForwardDialogOpen] = useState(false);
+  const [selectedMMPForForward, setSelectedMMPForForward] = useState<MMPFile | null>(null);
+  const [forwardedMMPs, setForwardedMMPs] = useState<Set<string>>(new Set());
+  const { toast } = useToast();
+  const [recallingId, setRecallingId] = useState<string | null>(null);
+  const [recallDialogOpen, setRecallDialogOpen] = useState(false);
+  const [selectedMMPForRecall, setSelectedMMPForRecall] = useState<MMPFile | null>(null);
+  const [showProgressDialog, setShowProgressDialog] = useState(false);
+  const [selectedMMPForProgress, setSelectedMMPForProgress] = useState<MMPFile | null>(null);
+  const [verifyingId, setVerifyingId] = useState<string | null>(null);
+  const [renameMMPTarget, setRenameMMPTarget] = useState<MMPFile | null>(null);
+  const [renameValue, setRenameValue] = useState('');
+  const [isSavingRename, setIsSavingRename] = useState(false);
+
+  // Check permissions (case-insensitive fallback for possible lowercase stored roles)
+  const isAdmin = hasAnyRole(['Admin', 'admin']);
+  const isICT = hasAnyRole(['ICT', 'ict']);
+  const isSuperAdmin = hasAnyRole(['Super Admin', 'super_admin']);
+  const isFOM = hasAnyRole([
+    'Field Operation Manager (FOM)',
+    'FOM',
+    'fom',
+    'field operation manager',
+    'Field Ops Manager',
+    'field ops manager'
+  ]);
+  const isSupervisor = hasAnyRole(['Supervisor', 'supervisor', 'hubsupervisor', 'hub_supervisor']);
+  const userRole = isSuperAdmin ? 'super_admin' : isAdmin ? 'admin' : isICT ? 'ict' : isFOM ? 'fom' : 'user';
+  const userCanForceRecall = canForceRecall(userRole);
+  // Supervisors are VIEW-ONLY on the MMP management page — they cannot create, edit, delete or forward MMPs.
+  const canDeleteMMP = !isSupervisor && (checkPermission('mmp', 'delete') || isAdmin || isICT);
+  const canEditMMP = !isSupervisor && (checkPermission('mmp', 'update') || isAdmin || isICT);
+  const canForwardMMP = !isSupervisor && (checkPermission('mmp', 'update') || isAdmin || isICT);
+
+  // Initialize forwarded status from MMP workflow
+  React.useEffect(() => {
+    const forwarded = new Set<string>();
+    mmpFiles.forEach(mmp => {
+      const workflow = mmp.workflow as any;
+      if (workflow?.forwardedToFomIds && workflow.forwardedToFomIds.length > 0) {
+        forwarded.add(mmp.id);
+      }
+    });
+    setForwardedMMPs(forwarded);
+  }, [mmpFiles]);
+
+  const handleForward = (mmp: MMPFile) => {
+    setSelectedMMPForForward(mmp);
+    setForwardDialogOpen(true);
+  };
+
+  const handleForwardComplete = (userIds: string[]) => {
+    if (selectedMMPForForward) {
+      setForwardedMMPs(prev => new Set(prev).add(selectedMMPForForward.id));
+    }
+  };
+
+  // Open recall dialog
+  const handleRecall = (mmp: MMPFile) => {
+    setSelectedMMPForRecall(mmp);
+    setRecallDialogOpen(true);
+  };
+  
+  // Handle recall completion
+  const handleRecallComplete = async () => {
+    await refreshMMPFiles();
+    if (selectedMMPForRecall) {
+      setForwardedMMPs(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(selectedMMPForRecall.id);
+        return newSet;
+      });
+    }
+    setRecallDialogOpen(false);
+    setSelectedMMPForRecall(null);
+  };
+
+  // Check if MMP can be recalled (or if user can force recall)
+  const canRecallMMP = (mmp: MMPFile) => {
+    const recallCheck = checkRecallAllowed(mmp);
+    return recallCheck.canRecall || userCanForceRecall;
+  };
+  
+  // Check if recall is blocked (for showing indicator)
+  const isRecallBlocked = (mmp: MMPFile) => {
+    return !checkRecallAllowed(mmp).canRecall;
+  };
+
+  const handleViewProgress = (mmp: MMPFile) => {
+    setSelectedMMPForProgress(mmp);
+    setShowProgressDialog(true);
+  };
+
+  // Handle verify MMP action
+  const handleVerifyMMP = async (mmp: MMPFile) => {
+    if (verifyingId) return;
+    setVerifyingId(mmp.id);
+    try {
+      const userId = currentUser?.id || authUser?.id || '';
+      const userName = currentUser?.fullName || currentUser?.email || 'Unknown';
+      await verifyMMP(mmp.id, userId, userName);
+      await refreshMMPFiles();
+    } catch (error) {
+      console.error('Failed to verify MMP:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to verify MMP. Please try again.',
+        variant: 'destructive',
+      });
+    } finally {
+      setVerifyingId(null);
+    }
+  };
+
+  const handleRenameOpen = (mmp: MMPFile) => {
+    setRenameMMPTarget(mmp);
+    setRenameValue(mmp.name);
+  };
+
+  const handleRenameSubmit = async () => {
+    if (!renameMMPTarget || !renameValue.trim()) return;
+    setIsSavingRename(true);
+    try {
+      const { error } = await updateMmpFileDisplayName(renameMMPTarget.id, renameValue.trim());
+      if (error) throw error;
+      await refreshMMPFiles();
+      toast({ title: 'MMP renamed successfully' });
+      setRenameMMPTarget(null);
+      setRenameValue('');
+    } catch (err) {
+      console.error('Rename MMP error:', err);
+      toast({ title: 'Error', description: 'Failed to rename MMP. Please try again.', variant: 'destructive' });
+    } finally {
+      setIsSavingRename(false);
+    }
+  };
+
+  // Check if MMP can be verified (forwarded to FOMs/coordinators and not yet verified)
+  // FOMs can verify MMPs they are assigned to, admins can verify any forwarded MMP
+  const canVerifyMMP = (mmp: MMPFile) => {
+    const workflow = mmp.workflow as any;
+    const hasForwardedToFomIds = workflow?.forwardedToFomIds?.length > 0;
+    const hasForwardedToCoordinators = workflow?.forwardedToCoordinators === true || 
+                                       workflow?.forwardedToCoordinatorAt ||
+                                       workflow?.currentStage === 'forwarded_to_coordinator';
+    const isForwarded = hasForwardedToFomIds || hasForwardedToCoordinators;
+    
+    // Normalize status to lowercase for case-insensitive comparison
+    // Production data may have mixed casing like "Pending", "pending", "PENDING"
+    const normalizedStatus = (mmp.status || '').toLowerCase();
+    
+    // MMP is verifiable if it's in a pre-verified state
+    // Accept pending, forwarded_to_fom, forwarded_to_coordinator, cp_verified statuses
+    const verifiableStatuses = ['pending', 'forwarded_to_fom', 'forwarded_to_coordinator', 'cp_verified'];
+    const isVerifiable = verifiableStatuses.includes(normalizedStatus);
+    
+    // Already verified or approved - can't verify again
+    const alreadyVerified = normalizedStatus === 'verified' || normalizedStatus === 'approved';
+    
+    // FOMs can verify if they are in the forwarded list
+    const isFomAssigned = isFOM && workflow?.forwardedToFomIds?.includes(currentUser?.id);
+    
+    // Admins/Super Admins/ICT can verify any forwarded MMP
+    const isAdminRole = isSuperAdmin || isAdmin || isICT;
+    
+    return isVerifiable && !alreadyVerified && isForwarded && (isAdminRole || isFomAssigned);
+  };
+
+  if (!mmpFiles.length) {
+    return (
+      <Card>
+        <CardContent className="p-6 text-center text-muted-foreground">
+          No MMP files uploaded yet.
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <>
+      <div className="grid gap-4">
+        {mmpFiles.map((mmp) => {
+          const isForwarded = forwardedMMPs.has(mmp.id);
+          const workflow = mmp.workflow as any;
+          const forwardedCount = workflow?.forwardedToFomIds?.length || 0;
+          const wasRecalled = Boolean(workflow?.recalledAt);
+          const recallHistory = (workflow?.recallHistory as any[]) || [];
+          const recallCount = recallHistory.filter((log: any) => log.action === 'recall' || log.action?.startsWith('recall_')).length;
+          
+          return (
+            <Card
+              key={mmp.id}
+              className="hover:shadow-md transition-all"
+            >
+              <CardContent className="p-4">
+                <div className="flex items-start justify-between gap-4">
+                  <div 
+                    className="flex items-start gap-3 flex-1 cursor-pointer"
+                    onClick={() => {
+                      // If FOM and federal permit not attached, go to permit verification
+                      if (isFOM && !(mmp.permits && (mmp.permits as any).federal)) {
+                        navigate(`/mmp/${mmp.id}/verification`);
+                      } else {
+                        navigate(`/mmp/${mmp.id}/view`);
+                      }
+                    }}
+                  >
+                    <div className="flex-1">
+                      <div className="flex items-start justify-between">
+                        <h3 className="font-semibold text-lg">{mmp.name}</h3>
+                      </div>
+                      <p className="text-sm text-muted-foreground mt-1">
+                        <span className="font-mono text-blue-700">{mmp.mmpId}</span>
+                        {mmp.projectName && <span> • Project: {mmp.projectName}</span>}
+                        {mmp.hub && <span> • Hub: {mmp.hub}</span>}
+                        {mmp.month && <span> • {mmp.month.includes('-') ? format(new Date(mmp.month + '-01'), 'MMMM yyyy') : new Date(2024, parseInt(mmp.month, 10) - 1).toLocaleDateString('en-US', { month: 'long' })}</span>}
+                      </p>
+                      <div className="mt-2 flex items-center gap-4 text-xs text-muted-foreground">
+                        <span>
+                          Uploaded {format(new Date(mmp.uploadedAt), 'MMM d, yyyy \'at\' h:mm a')}
+                        </span>
+                        <span>•</span>
+                        <span>by {(mmp.uploadedBy || 'Unknown').replace(/\s*\([^)]*\)\s*$/, '')}</span>
+                        <span>•</span>
+                        <span className="font-semibold">{mmp.entries} sites</span>
+                      </div>
+                      <div className="mt-2 flex items-center gap-2 flex-wrap">
+                        <MMPStatusBadge status={mmp.status} />
+                        <BudgetStatusBadge 
+                          budget={mmpBudgets.find(b => b.mmpFileId === mmp.id) || null}
+                          variant="compact"
+                        />
+                        {isForwarded && (
+                          <Badge variant="secondary" className="bg-green-100 text-green-800">
+                            Forwarded to {forwardedCount} FOM(s)
+                          </Badge>
+                        )}
+                        {wasRecalled && (
+                          <Badge variant="secondary" className="bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300">
+                            <RotateCcw className="h-3 w-3 mr-1" />
+                            Recalled{recallCount > 1 ? ` (${recallCount}x)` : ''}
+                          </Badge>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                  
+                  {/* Quick Links Dropdown Menu */}
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <button
+                        className="p-2 rounded-full hover:bg-accent/30 focus:outline-none"
+                        onClick={e => e.stopPropagation()}
+                        aria-label="More options"
+                      >
+                        <MoreVertical className="h-5 w-5 text-muted-foreground" />
+                      </button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" onClick={e => e.stopPropagation()}>
+                      <DropdownMenuItem onClick={() => navigate(`/mmp/${mmp.id}/view`)}>
+                        View Details
+                      </DropdownMenuItem>
+
+                      {(isSuperAdmin || isAdmin || isICT) && (
+                        <DropdownMenuItem
+                          onClick={() => handleRenameOpen(mmp)}
+                          data-testid={`button-rename-mmp-${mmp.id}`}
+                        >
+                          <Pencil className="h-4 w-4 mr-2" />
+                          Rename MMP
+                        </DropdownMenuItem>
+                      )}
+                      
+                      <DropdownMenuItem onClick={() => handleViewProgress(mmp)}>
+                        MMP Progress
+                      </DropdownMenuItem>
+                      
+                      {((canEditMMP && !isForwarded) || (isFOM && isForwarded)) && (
+                        <DropdownMenuItem onClick={() => navigate(`/mmp/${mmp.id}/edit?tab=sites`)}>
+                          Edit Site Entries
+                        </DropdownMenuItem>
+                      )}
+
+                      {!isSupervisor && (
+                        <DropdownMenuItem onClick={() => navigate(`/mmp/${mmp.id}/edit?tab=partial-update`)}>
+                          MMP Update (Upload File)
+                        </DropdownMenuItem>
+                      )}
+                      
+                      {canForwardMMP && !isForwarded && (
+                        <DropdownMenuItem onClick={() => handleForward(mmp)}>
+                          Forward to FOM
+                        </DropdownMenuItem>
+                      )}
+                      
+                      {isFOM && !isAdmin && !isICT && !(mmp.permits && (mmp.permits as any).federal) && (
+                        <DropdownMenuItem onClick={() => navigate(`/mmp/${mmp.id}/verification`)}>
+                          Upload Permits
+                        </DropdownMenuItem>
+                      )}
+                      
+                      {/* Admin/ICT Pending Forwarded: Permit upload & forward to coordinators (show before delete) */}
+                      {(isAdmin || isICT) && isForwarded && !(mmp.permits && (mmp.permits as any).federal) && (
+                        <>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem
+                            onClick={() => navigate(`/mmp/${mmp.id}/verification`)}
+                          >
+                            Upload Permits & Forward to Coordinators
+                          </DropdownMenuItem>
+                        </>
+                      )}
+
+                      {/* Verify MMP option - marks MMP as verified and ready for approval/costing */}
+                      {canVerifyMMP(mmp) && (
+                        <>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem
+                            onClick={() => handleVerifyMMP(mmp)}
+                            disabled={verifyingId === mmp.id}
+                            className="text-green-600"
+                            data-testid={`button-verify-mmp-${mmp.id}`}
+                          >
+                            <CheckCircle className="h-4 w-4 mr-2" />
+                            {verifyingId === mmp.id ? 'Verifying...' : 'Verify MMP'}
+                          </DropdownMenuItem>
+                        </>
+                      )}
+
+                      {/* Recall MMP option - restricted to Super Admin/Admin/ICT only */}
+                      {(isSuperAdmin || isAdmin || isICT) && isForwarded && (
+                        <>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem
+                            onClick={() => handleRecall(mmp)}
+                            disabled={recallingId === mmp.id || !canRecallMMP(mmp)}
+                            className="text-destructive"
+                            data-testid={`button-recall-mmp-${mmp.id}`}
+                          >
+                            <RotateCcw className="h-4 w-4 mr-2" />
+                            {recallingId === mmp.id ? 'Recalling...' : 'Recall MMP'}
+                            {isRecallBlocked(mmp) && userCanForceRecall && (
+                              <span className="ml-1 text-xs">(force available)</span>
+                            )}
+                            {isRecallBlocked(mmp) && !userCanForceRecall && (
+                              <span className="ml-1 text-xs">(blocked)</span>
+                            )}
+                          </DropdownMenuItem>
+                        </>
+                      )}
+
+                      {canDeleteMMP && (
+                        <>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem
+                            disabled={deletingId === mmp.id}
+                            onClick={e => {
+                              e.stopPropagation();
+                              setConfirmId(mmp.id);
+                            }}
+                            className="text-destructive"
+                          >
+                            Delete MMP
+                          </DropdownMenuItem>
+                        </>
+                      )}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
+              </CardContent>
+            </Card>
+          );
+        })}
+      </div>
+
+      {/* Forward Dialog */}
+      {selectedMMPForForward && (
+        <ForwardToFOMDialog
+          open={forwardDialogOpen}
+          onOpenChange={setForwardDialogOpen}
+          mmpId={selectedMMPForForward.id}
+          mmpName={selectedMMPForForward.name}
+          onForwarded={handleForwardComplete}
+        />
+      )}
+
+      {/* Recall Dialog */}
+      {selectedMMPForRecall && (
+        <RecallDialog
+          open={recallDialogOpen}
+          onOpenChange={(open) => {
+            setRecallDialogOpen(open);
+            if (!open) setSelectedMMPForRecall(null);
+          }}
+          mmpFile={selectedMMPForRecall}
+          onRecallComplete={handleRecallComplete}
+        />
+      )}
+
+      {/* MMP Progress Dialog */}
+      <MMPProgressDialog
+        open={showProgressDialog}
+        onOpenChange={setShowProgressDialog}
+        mmpFile={selectedMMPForProgress}
+      />
+
+      {/* Rename MMP Dialog */}
+      <Dialog open={!!renameMMPTarget} onOpenChange={(open) => { if (!open) { setRenameMMPTarget(null); setRenameValue(''); } }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Pencil className="h-4 w-4" />
+              Rename MMP
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-2 py-2">
+            <Label htmlFor="mmp-rename-input">MMP Name</Label>
+            <Input
+              id="mmp-rename-input"
+              value={renameValue}
+              onChange={(e) => setRenameValue(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') handleRenameSubmit(); }}
+              placeholder="Enter new MMP name"
+              data-testid="input-rename-mmp"
+              autoFocus
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setRenameMMPTarget(null); setRenameValue(''); }} disabled={isSavingRename}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleRenameSubmit}
+              disabled={isSavingRename || !renameValue.trim() || renameValue.trim() === renameMMPTarget?.name}
+              className="bg-[#0F2041] hover:bg-[#1D3461] text-white"
+              data-testid="button-rename-mmp-save"
+            >
+              {isSavingRename ? 'Saving...' : 'Save'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={confirmId !== null} onOpenChange={open => { if (!open) setConfirmId(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete MMP File?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to permanently delete this MMP file and all its data? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setConfirmId(null)}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={deletingId === confirmId}
+              onClick={async () => {
+                if (confirmId) {
+                  setDeletingId(confirmId);
+                  await deleteMMPFile(confirmId);
+                  setDeletingId(null);
+                  setConfirmId(null);
+                }
+              }}
+            >
+              {deletingId === confirmId ? 'Deleting...' : 'Delete'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
+  );
+};

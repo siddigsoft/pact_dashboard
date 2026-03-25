@@ -10,7 +10,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { RefreshCw, Clock, AlertTriangle, Check, Wifi, WifiOff } from 'lucide-react';
 import { formatDistanceToNow, differenceInMinutes } from 'date-fns';
 import { cn } from '@/lib/utils';
-import { useRealtimeHealth } from '@/hooks/useRealtimeHealth';
+import { useRealtimeHealth } from '@/shared/hooks/useRealtimeHealth';
 
 interface DataFreshnessBadgeProps {
   lastUpdated?: Date | null;

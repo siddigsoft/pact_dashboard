@@ -10,9 +10,9 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Mail, Lock, Eye, EyeOff, User, Phone, Badge, AlertTriangle } from "lucide-react";
-import { useToast } from "@/hooks/use-toast";
+import { useToast } from "@/shared/hooks/use-toast";
 import { useTranslation } from 'react-i18next';
-import { useAppContext } from '@/context/AppContext';
+import { useAppContext } from '@/shared/context/AppContext';
 import AvatarUpload from '@/components/registration/AvatarUpload';
 import { hubs, sudanStates, getLocalitiesByState } from '@/data/sudanStates';
 import { supabase } from '@/integrations/supabase/client';

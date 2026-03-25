@@ -4,10 +4,10 @@ import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Card } from '@/components/ui/card';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { useSyncStatus, useSyncStatusSafe, useNetworkStatus, usePendingSync } from '@/context/sync/SyncStatusContext';
+import { useSyncStatus, useSyncStatusSafe, useNetworkStatus, usePendingSync } from '@/shared/context/sync/SyncStatusContext';
 import { cn } from '@/lib/utils';
 import { useState, useCallback, useEffect } from 'react';
-import type { SyncResult } from '@/context/sync/SyncStatusContext';
+import type { SyncResult } from '@/shared/context/sync/SyncStatusContext';
 
 interface UnifiedSyncStatusBarProps {
   className?: string;

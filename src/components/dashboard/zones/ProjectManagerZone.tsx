@@ -56,13 +56,13 @@ import {
 } from 'lucide-react';
 import { format, differenceInDays, isAfter, isBefore, addDays } from 'date-fns';
 import { supabase } from '@/integrations/supabase/client';
-import { useAppContext } from '@/context/AppContext';
-import { useSiteVisitContext } from '@/context/siteVisit/SiteVisitContext';
-import { useUserProjects } from '@/hooks/useUserProjects';
-import { useMMP } from '@/context/mmp/MMPContext';
-import { useBudget } from '@/context/budget/BudgetContext';
+import { useAppContext } from '@/shared/context/AppContext';
+import { useSiteVisitContext } from '@/features/siteVisit/context/SiteVisitContext';
+import { useUserProjects } from '@/features/project/hooks/useUserProjects';
+import { useMMP } from '@/features/mmp/context/MMPContext';
+import { useBudget } from '@/features/budget/context/BudgetContext';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { useDashboardMmpFilter } from '@/context/dashboard/DashboardMmpFilterContext';
+import { useDashboardMmpFilter } from '@/features/dashboard/context/DashboardMmpFilterContext';
 
 interface ProjectData {
   id: string;

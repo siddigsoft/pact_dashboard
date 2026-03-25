@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react';
-import { saveAppState, getAppState } from '@/lib/offline-db';
+import { saveAppState, getAppState } from '@/platform/mobile/offline-db';
 
 interface LowBandwidthContextType {
   isLowBandwidthMode: boolean;

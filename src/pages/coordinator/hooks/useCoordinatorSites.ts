@@ -1,13 +1,13 @@
 import { useMemo } from 'react';
-import { useMMP } from '@/context/mmp/MMPContext';
-import { useAppContext } from '@/context/AppContext';
-import { useUserProjects } from '@/hooks/useUserProjects';
+import { useMMP } from '@/features/mmp/context/MMPContext';
+import { useAppContext } from '@/shared/context/AppContext';
+import { useUserProjects } from '@/features/project/hooks/useUserProjects';
 import { getHubAccessInfo, isStateInAnyHub } from '@/utils/hubAccessControl';
 import {
   useCoordinatorSiteEntriesQuery,
   useSupervisorSiteEntriesQuery,
   type CoordinatorSiteEntryRow,
-} from '@/context/mmp/mmpQueries';
+} from '@/features/mmp/context/mmpQueries';
 
 export interface SiteEntryCounts {
   new: number;

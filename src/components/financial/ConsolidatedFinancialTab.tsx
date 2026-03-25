@@ -5,7 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { GradientStatCard, GRADIENT_PRESETS } from '@/components/dashboard/GradientStatCard';
+import { GradientStatCard, GRADIENT_PRESETS } from '@/features/dashboard/components/GradientStatCard';
 import {
   DollarSign,
   Truck,
@@ -27,9 +27,9 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, Legend, PieChart as RechartsPieChart, Pie, Cell,
 } from 'recharts';
-import { useDownPayment } from '@/context/downPayment/DownPaymentContext';
-import { useProjectContext } from '@/context/project/ProjectContext';
-import { useToast } from '@/hooks/use-toast';
+import { useDownPayment } from '@/features/downPayment/context/DownPaymentContext';
+import { useProjectContext } from '@/features/project/context/ProjectContext';
+import { useToast } from '@/shared/hooks/use-toast';
 import { format, parseISO, isValid, startOfMonth, subMonths } from 'date-fns';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';

@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useCallback, ReactNode } from 'react';
 import { AnimatePresence } from 'framer-motion';
-import { PageTransitionLoader, UberDotsLoader, InlineDotsLoader } from '@/components/mobile/MobileLoadingOverlay';
+import { PageTransitionLoader, UberDotsLoader, InlineDotsLoader } from '@/platform/mobile/components/MobileLoadingOverlay';
 
 interface LoadingState {
   isLoading: boolean;

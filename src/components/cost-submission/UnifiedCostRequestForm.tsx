@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { useToast } from "@/hooks/use-toast";
+import { useToast } from "@/shared/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { 
   DollarSign, 
@@ -40,7 +40,7 @@ import {
 import { SupportingDocument } from "@/types/cost-submission";
 import CostDocumentUpload from "./CostDocumentUpload";
 import ExcelUploadParser from "./ExcelUploadParser";
-import { useAppContext } from "@/context/AppContext";
+import { useAppContext } from "@/shared/context/AppContext";
 import { supabase } from "@/integrations/supabase/client";
 import { v4 as uuidv4 } from "uuid";
 import { EmailNotificationService } from "@/services/email-notification.service";

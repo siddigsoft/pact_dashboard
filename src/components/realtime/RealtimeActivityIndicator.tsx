@@ -4,7 +4,7 @@
  * Perfect for headers, sidebars, and status bars
  */
 
-import { useRealtimeHealth } from '@/hooks/useRealtimeHealth';
+import { useRealtimeHealth } from '@/shared/hooks/useRealtimeHealth';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { Activity, Wifi, WifiOff, AlertTriangle, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';

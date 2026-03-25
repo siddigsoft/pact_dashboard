@@ -29,7 +29,7 @@ import {
   User,
   Calendar
 } from 'lucide-react';
-import { useToast } from '@/hooks/use-toast';
+import { useToast } from '@/shared/hooks/use-toast';
 import { SignatureService } from '@/services/signature.service';
 import type { SignatureMethod, SignableDocumentType } from '@/types/signature';
 import { cn } from '@/lib/utils';

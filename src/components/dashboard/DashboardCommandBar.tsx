@@ -5,13 +5,13 @@
 
 import { useState } from 'react';
 import { ConnectionStatus } from './ConnectionStatus';
-import { useLiveDashboard } from '@/hooks/useLiveDashboard';
-import { useGlobalPresence } from '@/context/presence/GlobalPresenceContext';
+import { useLiveDashboard } from '@/features/dashboard/hooks/useLiveDashboard';
+import { useGlobalPresence } from '@/features/notifications/context/GlobalPresenceContext';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Users, MessageCircle, Phone, AlertTriangle } from 'lucide-react';
 import { OnlineUsersPanel } from './OnlineUsersPanel';
-import { EmergencySOS } from '@/components/mobile/EmergencySOS';
+import { EmergencySOS } from '@/platform/mobile/components/EmergencySOS';
 
 interface DashboardCommandBarProps {
   onQuickAction?: (action: string) => void;

@@ -13,7 +13,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Search, MapPin, Calendar, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { User } from '@/types/user';
 import { SiteVisit } from '@/types/siteVisit';
-import { useSiteVisitContext } from '@/context/siteVisit/SiteVisitContext';
+import { useSiteVisitContext } from '@/features/siteVisit/context/SiteVisitContext';
 import { calculateDistance } from '@/utils/collectorUtils';
 import { format, parseISO } from 'date-fns';
 

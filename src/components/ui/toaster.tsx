@@ -1,6 +1,6 @@
 
-import { useToast } from "@/hooks/use-toast"
-import { ToastActionConfig } from "@/hooks/toast/types"
+import { useToast } from "@/shared/hooks/use-toast"
+import { ToastActionConfig } from "@/shared/hooks/toast/types"
 import {
   Toast,
   ToastClose,

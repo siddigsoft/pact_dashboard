@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { CostPredictionService } from '@/services/costPrediction.service';
-import { useAppContext } from '@/context/AppContext';
+import { useAppContext } from '@/shared/context/AppContext';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';

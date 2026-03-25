@@ -6,7 +6,7 @@ import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { useNavigate } from 'react-router-dom';
-import { useAppContext } from '@/context/AppContext';
+import { useAppContext } from '@/shared/context/AppContext';
 import {
   Mail,
   Phone,

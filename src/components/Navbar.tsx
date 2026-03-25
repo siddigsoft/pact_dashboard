@@ -12,13 +12,13 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { MoonIcon, SunIcon, Settings, LogOut, UserIcon } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useTheme } from 'next-themes';
-import { useUser } from '@/context/user/UserContext';
-import ChatNotificationIndicator from '@/components/chat/ChatNotificationIndicator';
+import { useUser } from '@/features/user/context/UserContext';
+import ChatNotificationIndicator from '@/features/chat/components/ChatNotificationIndicator';
 import { NavbarNotificationBell } from '@/components/navbar/NavbarNotificationBell';
 import NavBrand from './navbar/NavBrand';
 import { GlobalSearch } from './navbar/GlobalSearch';
 import { RealtimeActivityIndicator } from '@/components/realtime';
-import { useFocusReconnect } from '@/hooks/useFocusReconnect';
+import { useFocusReconnect } from '@/shared/hooks/useFocusReconnect';
 import { CommandPalette } from '@/components/CommandPalette';
 
 const featureList = [

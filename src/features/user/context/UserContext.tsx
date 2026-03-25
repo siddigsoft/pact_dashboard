@@ -1,0 +1,1504 @@
+
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
+import { User } from '@/types';
+import { useToast } from '@/shared/hooks/use-toast';
+import { useRoles } from '@/shared/hooks/use-roles';
+import { AppRole } from '@/types';
+import { supabase } from '@/integrations/supabase/client';
+import * as userRepo from '@/features/user/repository/userRepository';
+import { EmailNotificationService } from '@/services/email-notification.service';
+import i18n from '@/lib/i18n';
+import { queryClient } from '@/lib/queryClient';
+
+interface UserContextType {
+  currentUser: User | null;
+  authReady: boolean;
+  users: User[];
+  login: (email: string, password: string) => Promise<boolean>;
+  logout: () => Promise<void>;
+  registerUser: (user: Partial<User>) => Promise<boolean>;
+  approveUser: (userId: string) => Promise<boolean>;
+  rejectUser: (userId: string) => Promise<boolean>;
+  updateUser: (user: User) => Promise<boolean>;
+  updateUserLocation: (latitude: number, longitude: number, accuracy?: number) => Promise<boolean>;
+  updateUserAvailability: (status: 'online' | 'offline' | 'busy') => Promise<boolean>;
+  toggleLocationSharing: (isSharing: boolean) => Promise<boolean>;
+  refreshUsers: () => Promise<void>;
+  hydrateCurrentUser: () => Promise<boolean>;
+  roles: AppRole[];
+  hasRole: (role: AppRole) => boolean;
+  addRole: (userId: string, role: AppRole) => Promise<boolean>;
+  removeRole: (userId: string, role: AppRole) => Promise<boolean>;
+  emailVerificationPending: boolean;
+  verificationEmail?: string;
+  resendVerificationEmail: (email?: string) => Promise<boolean>;
+  clearEmailVerificationNotice: () => void;
+  sendPasswordRecoveryEmail: (email: string) => Promise<boolean>;
+  adminSetUserPassword: (email: string, newPassword: string) => Promise<boolean>;
+  adminConfirmUserEmail: (userId: string) => Promise<boolean>;
+  adminUpdateUserEmail: (userId: string, newEmail: string) => Promise<boolean>;
+}
+
+const UserContext = createContext<UserContextType | undefined>(undefined);
+
+export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const [currentUser, setCurrentUser] = useState<User | null>(() => {
+    const storedUser = localStorage.getItem('PACTCurrentUser');
+    if (storedUser) {
+      try {
+        const parsedUser = JSON.parse(storedUser) as User;
+        return {
+          ...parsedUser,
+          availability: parsedUser.availability || 'online',
+          lastActive: parsedUser.lastActive || new Date().toISOString()
+        };
+      } catch (error) {
+        console.error("Error parsing stored user:", error);
+        return null;
+      }
+    }
+    return null;
+  });
+
+  const loadUsersFromStorage = (): User[] => {
+    const users: User[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (!key?.startsWith('user-')) continue;
+      try {
+        const raw = localStorage.getItem(key);
+        if (!raw) continue;
+        const storedUser: Partial<User> = JSON.parse(raw);
+        if (!storedUser.id) continue;
+        users.push({
+          id: storedUser.id,
+          name: storedUser.name || 'Unknown',
+          email: storedUser.email || '',
+          role: storedUser.role || 'dataCollector',
+          lastActive: storedUser.lastActive || new Date().toISOString(),
+          availability: storedUser.availability || 'offline',
+          ...storedUser,
+        });
+      } catch (err) {
+        console.error('Error parsing stored user:', err);
+      }
+    }
+    return users;
+  };
+
+  const [appUsers, setAppUsers] = useState<User[]>(loadUsersFromStorage);
+  const [authReady, setAuthReady] = useState(false);
+  
+  // Debug: Track authReady changes
+  useEffect(() => {
+    console.log('[Auth] authReady state changed:', authReady);
+  }, [authReady]);
+  
+  const { toast } = useToast();
+  const { roles, hasRole, addRole, removeRole } = useRoles(currentUser?.id);
+
+  const [emailVerification, setEmailVerification] = useState<{ pending: boolean; email?: string }>({ pending: false });
+
+  const resendVerificationEmail = async (emailParam?: string): Promise<boolean> => {
+    try {
+      const target = emailParam || emailVerification.email;
+      if (!target) return false;
+      const { error } = await supabase.auth.resend({ type: 'signup', email: target });
+      if (error) {
+        toast({
+          title: 'Resend failed',
+          description: error.message || 'Failed to send verification link.',
+          variant: 'destructive',
+        });
+        return false;
+      }
+      toast({
+        title: 'Verification email sent',
+        description: `We sent a verification link to ${target}.`,
+      });
+      return true;
+    } catch (err: any) {
+      toast({
+        title: 'Resend failed',
+        description: err?.message || 'Unexpected error while resending.',
+        variant: 'destructive',
+      });
+      return false;
+    }
+  };
+
+  const clearEmailVerificationNotice = () => setEmailVerification({ pending: false, email: undefined });
+
+  const refreshUsers = async () => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        // Not authenticated: avoid RLS errors and empty responses
+        setAppUsers([]);
+        return;
+      }
+      const { data: profilesData, error: profilesError } = await userRepo.fetchProfilesList();
+      
+      if (profilesError) {
+        console.error("Error fetching profiles:", profilesError);
+        return;
+      }
+
+      console.log("Profiles fetched:", profilesData?.length || 0);
+      
+      const allUserRoles: Record<string, AppRole[]> = {};
+      
+      if (profilesData && profilesData.length > 0) {
+        const { data: userRoles, error: rolesError } = await userRepo.fetchAllUserRolesRows();
+          
+        if (rolesError) {
+          console.error("Error fetching user roles:", rolesError);
+        } else if (userRoles) {
+          userRoles.forEach((r) => {
+            if (!allUserRoles[r.user_id]) {
+              allUserRoles[r.user_id] = [];
+            }
+            // Only include system (text) roles here; custom roles use role_id and are managed in Role Management
+            if (r.role) {
+              allUserRoles[r.user_id].push(r.role as AppRole);
+            }
+          });
+        }
+        
+        const supabaseUsers = profilesData.map(profile => {
+          const localStorageKey = `user-${profile.id}`;
+          let existingUser: Partial<User> = {};
+          
+          try {
+            const storedUser = localStorage.getItem(localStorageKey);
+            if (storedUser) {
+              existingUser = JSON.parse(storedUser);
+            }
+          } catch (error) {
+            console.error("Error parsing stored user:", error);
+          }
+          
+          // Parse location data from database if it's a string
+          let locationData = existingUser.location;
+          if (profile.location) {
+            try {
+              if (typeof profile.location === 'string') {
+                locationData = JSON.parse(profile.location);
+              } else {
+                locationData = profile.location;
+              }
+            } catch (error) {
+              console.error("Error parsing location data:", error);
+              locationData = existingUser.location;
+            }
+          }
+          
+          return {
+            id: profile.id,
+            name: profile.full_name || profile.username || 'Unknown',
+            email: profile.email || existingUser.email || '',
+            role: profile.role || 'dataCollector',
+            roles: allUserRoles[profile.id] || [],
+            stateId: profile.state_id || existingUser.stateId,
+            hubId: profile.hub_id || existingUser.hubId,
+            secondaryHubId: profile.secondary_hub_id || profile.location?.secondary_hub_id || existingUser.secondaryHubId,
+            localityId: profile.locality_id || existingUser.localityId,
+            avatar: profile.avatar_url || existingUser.avatar,
+            username: profile.username || existingUser.username,
+            fullName: profile.full_name || existingUser.fullName,
+            phone: profile.phone || existingUser.phone,
+            employeeId: profile.employee_id || existingUser.employeeId,
+            lastActive: existingUser.lastActive || new Date().toISOString(),
+            isApproved: profile.status === 'approved' || false,
+            availability: profile.availability || existingUser.availability || 'offline',
+            createdAt: profile.created_at || existingUser.createdAt || new Date().toISOString(),
+            location: locationData,
+            performance: existingUser.performance || {
+              rating: 0,
+              totalCompletedTasks: 0,
+              onTimeCompletion: 0,
+            },
+          } as User;
+        });
+        
+        supabaseUsers.forEach(user => {
+          localStorage.setItem(`user-${user.id}`, JSON.stringify(user));
+        });
+        setAppUsers(supabaseUsers);
+      }
+    } catch (error) {
+      console.error("Error in fetchUsers:", error);
+    }
+  };
+
+  useEffect(() => {
+    refreshUsers();
+
+    // Set up real-time subscriptions for users and roles
+    // Listen only to INSERT/DELETE on profiles — UPDATE is handled optimistically
+    // by the 'profiles-updates' channel below to avoid a redundant full re-fetch.
+    const usersChannel = supabase
+      .channel('users-changes')
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'profiles' },
+        () => { refreshUsers(); }
+      )
+      .on(
+        'postgres_changes',
+        { event: 'DELETE', schema: 'public', table: 'profiles' },
+        () => { refreshUsers(); }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'user_roles' },
+        () => { refreshUsers(); }
+      )
+      .subscribe((status) => {
+        if (status === 'CHANNEL_ERROR') {
+          console.error('[UserContext] Real-time subscription error — check Supabase replication settings');
+        } else if (status === 'TIMED_OUT') {
+          console.warn('[UserContext] Real-time subscription timed out');
+        }
+      });
+
+    // Cleanup subscription on unmount
+    return () => {
+      supabase.removeChannel(usersChannel);
+    };
+  }, []);
+
+  useEffect(() => {
+    const channel = supabase
+      .channel('profiles-updates')
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'profiles' },
+        (payload) => {
+          const updated: any = (payload as any).new;
+          if (!updated || !updated.id) return;
+
+          let locationData: any | undefined = undefined;
+          if (updated.location !== undefined) {
+            try {
+              locationData = typeof updated.location === 'string'
+                ? JSON.parse(updated.location)
+                : updated.location;
+            } catch (e) {
+              console.warn('Failed to parse profile.location from realtime payload');
+            }
+          }
+
+          setAppUsers(prev => prev.map(u => {
+            if (u.id !== updated.id) return u;
+            return {
+              ...u,
+              availability: updated.availability ?? u.availability,
+              location: locationData !== undefined ? { ...(u.location || {}), ...locationData } : u.location,
+            };
+          }));
+
+          setCurrentUser(prev => {
+            if (!prev || prev.id !== updated.id) return prev;
+            const next = {
+              ...prev,
+              availability: updated.availability ?? prev.availability,
+              location: locationData !== undefined ? { ...(prev.location || {}), ...locationData } : prev.location,
+            } as User;
+            try {
+              localStorage.setItem('PACTCurrentUser', JSON.stringify(next));
+              localStorage.setItem(`user-${next.id}`, JSON.stringify(next));
+            } catch {}
+            return next;
+          });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      try { supabase.removeChannel(channel); } catch {}
+    };
+  }, []);
+
+  // Use a ref so the interval callback always reads the latest user ID
+  // without the effect needing to restart every time currentUser changes.
+  const currentUserRef = useRef(currentUser);
+  currentUserRef.current = currentUser;
+
+  useEffect(() => {
+    const activityInterval = setInterval(() => {
+      const user = currentUserRef.current;
+      if (!user) return;
+
+      setCurrentUser(prev => {
+        if (!prev) return prev;
+        const updated = { ...prev, lastActive: new Date().toISOString() };
+        localStorage.setItem('PACTCurrentUser', JSON.stringify(updated));
+        return updated;
+      });
+
+      setAppUsers(prev =>
+        prev.map(u =>
+          u.id === user.id ? { ...u, lastActive: new Date().toISOString() } : u
+        )
+      );
+    }, 60000);
+
+    return () => clearInterval(activityInterval);
+  // Empty deps — interval is created once; currentUserRef.current is always fresh.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Hydrate current user from existing Supabase session (OAuth/email) and listen for auth state changes
+  const setUserFromAuthUser = async (authUser: any): Promise<boolean> => {
+    try {
+      // If offline, try to restore from localStorage first
+      if (!navigator.onLine) {
+        const storedUser = localStorage.getItem('PACTCurrentUser');
+        if (storedUser) {
+          try {
+            const parsedUser = JSON.parse(storedUser) as User;
+            // Only restore if it's the same user
+            if (parsedUser.id === authUser.id) {
+              setCurrentUser(parsedUser);
+              console.log('[UserContext] Restored user from localStorage (offline, setUserFromAuthUser)');
+              return true;
+            }
+          } catch (error) {
+            console.error('[UserContext] Error parsing stored user:', error);
+          }
+        }
+        // If no stored user or different user, we can't fetch profile offline
+        // Return false but don't clear the existing user
+        console.log('[UserContext] Cannot fetch profile offline - preserving existing session');
+        return false;
+      }
+      
+      let { data: profileData } = await userRepo.fetchProfileById(authUser.id);
+
+      // Fallback: If not found by ID, try to find by email and sync the profile ID
+      if (!profileData && authUser.email) {
+        const { data: profileByEmail } = await userRepo.fetchProfileByEmail(authUser.email);
+
+        if (profileByEmail) {
+          const { data: updatedProfile } = await userRepo.updateProfileIdByEmail(authUser.email, authUser.id);
+          
+          profileData = updatedProfile || profileByEmail;
+          
+          if (profileByEmail.role === 'superAdmin') {
+            await userRepo.updateSuperAdminsUserId(profileByEmail.id, authUser.id);
+          }
+        }
+      }
+
+      const { data: userRoles } = await userRepo.fetchUserRolesByUserId(authUser.id);
+
+      const userRolesList = userRoles
+        ? userRoles
+            .map(r => r.role)
+            .filter((rr): rr is AppRole => !!rr)
+        : [];
+
+      const { data: classificationData } = await userRepo.fetchActiveUserClassification(authUser.id);
+
+      const userProfile = profileData || {
+        id: authUser.id,
+        full_name: authUser.email?.split('@')[0] || '',
+        username: authUser.email,
+        role: 'dataCollector',
+        status: 'pending',
+      } as any;
+
+      const userData = authUser.user_metadata || {};
+      const userRole = typeof userData === 'object' && userData
+        ? (userData as { role?: string }).role || 'dataCollector'
+        : 'dataCollector';
+
+      const isApproved = (profileData?.status === 'approved');
+      if (!isApproved) {
+        toast({
+          title: i18n.t('notifications.auth.pendingApproval'),
+          description: i18n.t('notifications.auth.pendingApprovalDesc'),
+        });
+        await supabase.auth.signOut({ scope: 'local' });
+        return false;
+      }
+
+      // Parse location data if it's a string
+      let locationData;
+      if (profileData?.location) {
+        try {
+          if (typeof profileData.location === 'string') {
+            locationData = JSON.parse(profileData.location);
+          } else {
+            locationData = profileData.location;
+          }
+        } catch (error) {
+          console.error("Error parsing location data:", error);
+          locationData = undefined;
+        }
+      }
+
+      const supabaseUser: User = {
+        id: authUser.id,
+        name: (userProfile as any).full_name || (userProfile as any).username || authUser.email?.split('@')[0] || 'User',
+        email: authUser.email || '',
+        role: (userProfile as any).role || userRole,
+        roles: userRolesList.length > 0 ? userRolesList : undefined,
+        stateId: (userProfile as any).state_id,
+        hubId: (userProfile as any).hub_id,
+        secondaryHubId: (userProfile as any).secondary_hub_id || (userProfile as any).location?.secondary_hub_id,
+        localityId: (userProfile as any).locality_id,
+        avatar: (userProfile as any).avatar_url,
+        username: (userProfile as any).username,
+        fullName: (userProfile as any).full_name,
+        phone: (userProfile as any).phone,
+        employeeId: (userProfile as any).employee_id,
+        lastActive: new Date().toISOString(),
+        isApproved: true,
+        availability: profileData?.availability || 'online',
+        location: locationData,
+        performance: {
+          rating: 0,
+          totalCompletedTasks: 0,
+          onTimeCompletion: 0,
+        },
+        classification: classificationData ? {
+          level: classificationData.classification_level,
+          roleScope: classificationData.role_scope,
+          hasRetainer: classificationData.has_retainer || false,
+          retainerAmountCents: classificationData.retainer_amount_cents || 0,
+          retainerCurrency: classificationData.retainer_currency || 'SDG',
+          effectiveFrom: classificationData.effective_from,
+          effectiveUntil: classificationData.effective_until,
+        } : undefined
+      };
+
+      setCurrentUser(supabaseUser);
+      localStorage.setItem('PACTCurrentUser', JSON.stringify(supabaseUser));
+      localStorage.setItem(`user-${supabaseUser.id}`, JSON.stringify(supabaseUser));
+
+      const userExists = appUsers.some(u => u.id === supabaseUser.id);
+      if (!userExists) {
+        setAppUsers(prev => [...prev, supabaseUser]);
+      }
+
+      return true;
+    } catch (e) {
+      console.error('Bootstrap sign-in error:', e);
+      return false;
+    }
+  };
+
+  const hydrateCurrentUser = async (): Promise<boolean> => {
+    const maxRetries = 10;
+    const baseDelay = 300;
+    
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      try {
+        if (attempt > 0) {
+          const delay = Math.min(baseDelay * Math.pow(1.5, attempt - 1), 2000);
+          console.log(`Hydration retry attempt ${attempt + 1}/${maxRetries}, delay ${delay}ms...`);
+          await new Promise(resolve => setTimeout(resolve, delay));
+        }
+        
+        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+        if (sessionError) {
+          console.error('Error getting session for hydration:', sessionError);
+          continue;
+        }
+        if (!session?.user) {
+          console.log('No session found for hydration');
+          continue;
+        }
+        
+        const { data: aalData } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+        console.log('Hydration AAL level:', aalData?.currentLevel, 'Next level:', aalData?.nextLevel);
+        
+        if (aalData?.nextLevel === 'aal2' && aalData?.currentLevel === 'aal1') {
+          console.log('Session still at AAL1, MFA not yet complete, retrying...');
+          continue;
+        }
+        
+        const { data: { user }, error: userError } = await supabase.auth.getUser();
+        if (userError) {
+          console.error('Error getting user for hydration:', userError);
+          continue;
+        }
+        if (!user) {
+          console.log('No user found for hydration');
+          continue;
+        }
+        
+        const result = await setUserFromAuthUser(user);
+        if (result) {
+          console.log('Successfully hydrated current user');
+          return true;
+        }
+        console.log('setUserFromAuthUser returned false, retrying...');
+      } catch (error) {
+        console.error(`Error hydrating current user (attempt ${attempt + 1}):`, error);
+      }
+    }
+    
+    console.error('Failed to hydrate current user after all retries');
+    return false;
+  };
+
+  useEffect(() => {
+    let unsub: { unsubscribe: () => void } | undefined;
+    let readyTimeout: any | undefined;
+
+    const isOAuthCallback = typeof window !== 'undefined' && (
+      (window.location && typeof window.location.hash === 'string' && window.location.hash.includes('access_token')) ||
+      (window.location && typeof window.location.search === 'string' && new URLSearchParams(window.location.search).has('code'))
+    );
+
+    (async () => {
+      try {
+        // Check if we're offline - if so, restore from localStorage
+        if (!navigator.onLine) {
+          const storedUser = localStorage.getItem('PACTCurrentUser');
+          if (storedUser) {
+            try {
+              const parsedUser = JSON.parse(storedUser) as User;
+              setCurrentUser(parsedUser);
+              console.log('[UserContext] Restored user from localStorage (offline mode)');
+              return;
+            } catch (error) {
+              console.error('[UserContext] Error parsing stored user:', error);
+            }
+          }
+        }
+        
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.user) {
+          const { data: { user } } = await supabase.auth.getUser();
+          if (user) await setUserFromAuthUser(user);
+        } else {
+          // Only clear user if we're online - preserve session when offline
+          if (navigator.onLine) {
+            setCurrentUser(null);
+            localStorage.removeItem('PACTCurrentUser');
+          } else {
+            // Offline: try to restore from localStorage
+            const storedUser = localStorage.getItem('PACTCurrentUser');
+            if (storedUser) {
+              try {
+                const parsedUser = JSON.parse(storedUser) as User;
+                setCurrentUser(parsedUser);
+                console.log('[UserContext] Restored user from localStorage (offline, no session)');
+              } catch (error) {
+                console.error('[UserContext] Error parsing stored user:', error);
+              }
+            }
+          }
+        }
+      } catch (error) {
+        // Network error or other issue - preserve session if offline
+        if (!navigator.onLine) {
+          const storedUser = localStorage.getItem('PACTCurrentUser');
+          if (storedUser) {
+            try {
+              const parsedUser = JSON.parse(storedUser) as User;
+              setCurrentUser(parsedUser);
+              console.log('[UserContext] Restored user from localStorage (offline, error)');
+            } catch (parseError) {
+              console.error('[UserContext] Error parsing stored user:', parseError);
+            }
+          }
+        } else {
+          console.error('[UserContext] Error getting session:', error);
+        }
+      }
+
+      const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event) => {
+        try {
+          if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (user) await setUserFromAuthUser(user);
+          } else if (event === 'SIGNED_OUT') {
+            // Only clear user if we're online - preserve session when offline
+            // This prevents accidental logout when network is temporarily unavailable
+            if (navigator.onLine) {
+              setCurrentUser(null);
+              localStorage.removeItem('PACTCurrentUser');
+            } else {
+              console.log('[UserContext] SIGNED_OUT event received offline - preserving session');
+              // Keep the user in localStorage for offline use
+            }
+          }
+        } catch (err) {
+          console.error('Auth state handler error:', err);
+          // If error occurs offline, preserve session
+          if (!navigator.onLine) {
+            const storedUser = localStorage.getItem('PACTCurrentUser');
+            if (storedUser && !currentUser) {
+              try {
+                const parsedUser = JSON.parse(storedUser) as User;
+                setCurrentUser(parsedUser);
+                console.log('[UserContext] Restored user from localStorage after auth error (offline)');
+              } catch (parseError) {
+                console.error('[UserContext] Error parsing stored user:', parseError);
+              }
+            }
+          }
+        } finally {
+          // Once we receive the first auth event post-mount, we can consider auth ready
+          if (!authReady) setAuthReady(true);
+          if (readyTimeout) clearTimeout(readyTimeout);
+        }
+      });
+      unsub = subscription;
+
+      // If we're not in an OAuth callback context, auth is ready now.
+      // If we are, allow a short window for Supabase to process URL and emit SIGNED_IN.
+      // Always set auth ready quickly - OAuth will trigger state change event anyway
+      console.log('[Auth] Setting authReady=true immediately');
+      setAuthReady(true);
+    })();
+
+    return () => {
+      try { unsub?.unsubscribe(); } catch {}
+      if (readyTimeout) clearTimeout(readyTimeout);
+    };
+  }, []);
+
+  const login = async (email: string, password: string): Promise<boolean> => {
+    try {
+      const { data: authData, error: authError } = await supabase.auth
+        .signInWithPassword({ email, password });
+      
+      if (authError) {
+        console.log("Supabase auth failed:", authError);
+
+        const msg = (authError as any)?.message?.toString().toLowerCase() || "";
+        const isEmailNotConfirmed = /email\s*not\s*confirm|email\s*not\s*verified/.test(msg);
+
+        if (isEmailNotConfirmed) {
+          setEmailVerification({ pending: true, email });
+          try {
+            const { error: resendError } = await supabase.auth.resend({ type: 'signup', email });
+            if (resendError) {
+              console.warn('Resend verification failed:', resendError);
+              toast({
+                title: "Email not verified",
+                description: "Please check your inbox for the verification link. If you don't see it, try again later.",
+                variant: "destructive",
+              });
+            } else {
+              toast({
+                title: "Verify your email",
+                description: `We just sent a new verification link to ${email}. Check your inbox and spam folder.`,
+              });
+            }
+          } catch (e) {
+            console.warn('Resend verification threw:', e);
+            toast({
+              title: "Email not verified",
+              description: "Please check your inbox for the verification link. If you don't see it, try again later.",
+              variant: "destructive",
+            });
+          }
+          return false;
+        }
+
+        toast({
+          title: "Login failed",
+          description: "Invalid email or password. Please try again.",
+          variant: "destructive",
+        });
+        
+        return false;
+      } else if (authData?.user) {
+        const { data: profileData } = await userRepo.fetchProfileFullById(authData.user.id);
+        
+        const { data: userRoles } = await userRepo.fetchUserRolesByUserId(authData.user.id);
+          
+        const userRolesList = userRoles
+          ? userRoles
+              .map(r => r.role)
+              .filter((rr): rr is AppRole => !!rr)
+          : [];
+        
+        const userProfile = profileData || {
+          id: authData.user.id,
+          full_name: authData.user.email?.split('@')[0] || '',
+          username: authData.user.email,
+          role: 'dataCollector',
+        };
+        
+        const userData = authData.user.user_metadata || {};
+        const userRole = typeof userData === 'object' && userData ? 
+          (userData as {role?: string}).role || 'dataCollector' : 
+          'dataCollector';
+
+        const isApproved = (profileData?.status === 'approved');
+        if (!isApproved) {
+          toast({
+            title: i18n.t('notifications.auth.pendingApproval'),
+            description: i18n.t('notifications.auth.pendingApprovalDesc'),
+          });
+          await supabase.auth.signOut({ scope: 'local' });
+          return false;
+        }
+        
+        // Parse location data if it's a string
+        let locationData;
+        if (profileData?.location) {
+          try {
+            if (typeof profileData.location === 'string') {
+              locationData = JSON.parse(profileData.location);
+            } else {
+              locationData = profileData.location;
+            }
+          } catch (error) {
+            console.error("Error parsing location data:", error);
+          }
+        }
+        
+        const supabaseUser: User = {
+          id: authData.user.id,
+          name: userProfile.full_name || userProfile.username || authData.user.email?.split('@')[0] || 'User',
+          email: authData.user.email || '',
+          role: userProfile.role || userRole,
+          roles: userRolesList.length > 0 ? userRolesList : undefined,
+          stateId: userProfile.state_id,
+          hubId: userProfile.hub_id,
+          secondaryHubId: (userProfile as any).secondary_hub_id || (userProfile as any).location?.secondary_hub_id,
+          localityId: userProfile.locality_id,
+          avatar: userProfile.avatar_url,
+          username: userProfile.username,
+          fullName: userProfile.full_name,
+          phone: userProfile.phone,
+          employeeId: userProfile.employee_id,
+          lastActive: new Date().toISOString(),
+          isApproved,
+          availability: profileData?.availability || 'online',
+          location: locationData,
+          performance: {
+            rating: 0,
+            totalCompletedTasks: 0,
+            onTimeCompletion: 0,
+          }
+        };
+        
+        if (supabaseUser.role === 'admin' && (!supabaseUser.roles || !supabaseUser.roles.includes('admin' as AppRole))) {
+          supabaseUser.roles = [...(supabaseUser.roles || []) as AppRole[], 'admin' as AppRole];
+        }
+        
+        setCurrentUser(supabaseUser);
+        localStorage.setItem('PACTCurrentUser', JSON.stringify(supabaseUser));
+        
+        localStorage.setItem(`user-${supabaseUser.id}`, JSON.stringify(supabaseUser));
+
+        // Invalidate cached queries so dashboard data loads fresh after login
+        queryClient.invalidateQueries();
+        
+        const userExists = appUsers.some(u => u.id === supabaseUser.id);
+        
+        if (!userExists) {
+          setAppUsers(prev => [...prev, supabaseUser]);
+        }
+        
+        return true;
+      }
+      
+      toast({
+        title: "Login failed",
+        description: "Invalid email or password. Please try again.",
+        variant: "destructive",
+      });
+      return false;
+    } catch (error) {
+      console.error("Login error:", error);
+      toast({
+        title: "Login failed",
+        description: "An unexpected error occurred. Please try again.",
+        variant: "destructive",
+      });
+      return false;
+    }
+  };
+
+  const logout = async (): Promise<void> => {
+    try {
+      // Clear local state immediately so route guards react without delay
+      setCurrentUser(null);
+      localStorage.removeItem('PACTCurrentUser');
+
+      // Then sign out from Supabase (network async)
+      // Use scope: 'local' to only end this session, not all sessions for the user
+      await supabase.auth.signOut({ scope: 'local' });
+      
+      toast({
+        title: "Logout successful",
+        description: "You have been logged out of the system.",
+      });
+    } catch (error) {
+      console.error("Logout error:", error);
+      toast({
+        title: "Logout error",
+        description: "An error occurred during logout.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const registerUser = async (userData: Partial<User>): Promise<boolean> => {
+    try {
+      const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
+        email: userData.email || '',
+        password: userData.password || '',
+        options: {
+          data: {
+            name: userData.name,
+            phone: userData.phone,
+            employeeId: userData.employeeId,
+            role: userData.role,
+            hubId: userData.hubId,
+            stateId: userData.stateId,
+            localityId: userData.localityId,
+            avatar: userData.avatar,
+          }
+        }
+      });
+      
+      if (signUpError) {
+        console.error("Supabase signup error:", signUpError);
+        let errorDesc = "There was a problem creating your account. Please try again.";
+        const msg = (signUpError.message || '').toLowerCase();
+        if (msg.includes('already registered') || msg.includes('already been registered')) {
+          errorDesc = "This email is already registered. Please sign in or reset your password.";
+        } else if (msg.includes('password')) {
+          errorDesc = "Password must be at least 6 characters long.";
+        } else if (msg.includes('rate limit') || msg.includes('too many')) {
+          errorDesc = "Too many attempts. Please wait a moment and try again.";
+        } else if (msg.includes('network') || msg.includes('fetch')) {
+          errorDesc = "Network error. Please check your internet connection and try again.";
+        }
+        toast({
+          title: "Registration failed",
+          description: errorDesc,
+          variant: "destructive",
+        });
+        return false;
+      }
+
+      if (signUpData?.user?.identities && signUpData.user.identities.length === 0) {
+        toast({
+          title: "Email already registered",
+          description: "An account with this email already exists. Please sign in or reset your password.",
+          variant: "destructive",
+        });
+        return false;
+      }
+      
+      toast({
+        title: "Registration successful",
+        description: "Your account is pending approval by an administrator.",
+      });
+      
+      await refreshUsers();
+      return true;
+    } catch (error) {
+      console.error("Registration error:", error);
+      toast({
+        title: "Registration error",
+        description: "An unexpected error occurred. Please try again.",
+        variant: "destructive",
+      });
+      return false;
+    }
+  };
+
+  const approveUser = async (userId: string): Promise<boolean> => {
+    try {
+      const { data, error } = await userRepo.approveProfile(userId);
+      
+      if (error) {
+        console.error("Supabase approval error:", error);
+        toast({
+          title: "Approval error",
+          description: "There was an error approving the user in Supabase.",
+          variant: "destructive",
+        });
+        return false;
+      }
+      if (!data || data.length === 0) {
+        toast({
+          title: "Approval blocked",
+          description: "No user was updated. Check Row Level Security policies for profiles.",
+          variant: "destructive",
+        });
+        return false;
+      }
+      
+      setAppUsers(prev => 
+        prev.map(user => 
+          user.id === userId ? { ...user, isApproved: true } : user
+        )
+      );
+
+      const storedUser = localStorage.getItem(`user-${userId}`);
+      if (storedUser) {
+        try {
+          const parsedUser = JSON.parse(storedUser);
+          localStorage.setItem(`user-${userId}`, JSON.stringify({
+            ...parsedUser,
+            isApproved: true
+          }));
+        } catch (error) {
+          console.error("Error updating stored user:", error);
+        }
+      }
+
+      toast({
+        title: "User approved",
+        description: "The user can now log in to the system.",
+      });
+
+      // Send welcome email to the newly approved user
+      try {
+        const { data: userProfile } = await userRepo.fetchProfileEmailNameRole(userId);
+
+        if (userProfile?.email) {
+          EmailNotificationService.sendWelcomeEmail(
+            userProfile.email,
+            userProfile.full_name || 'User',
+            userProfile.role || 'Data Collector'
+          );
+        }
+      } catch (emailError) {
+        console.error('Failed to send welcome email:', emailError);
+      }
+
+      return true;
+    } catch (error) {
+      console.error("User approval error:", error);
+      toast({
+        title: "Approval error",
+        description: "An unexpected error occurred.",
+        variant: "destructive",
+      });
+      return false;
+    }
+  };
+
+  const rejectUser = async (userId: string): Promise<boolean> => {
+    try {
+      // Delete related notifications first to avoid foreign key constraint violations
+      await userRepo.deleteNotificationsForUser(userId);
+      
+      const { data, error } = await userRepo.deleteProfile(userId);
+      
+      if (error) {
+        console.error("Supabase rejection error:", error);
+      }
+      if (error || !data || data.length === 0) {
+        toast({
+          title: "Rejection blocked",
+          description: "No user was deleted. Check Row Level Security policies for profiles.",
+          variant: "destructive",
+        });
+        return false;
+      }
+      
+      setAppUsers(prev => prev.filter(user => user.id !== userId));
+
+      localStorage.removeItem(`user-${userId}`);
+
+      toast({
+        title: "User rejected",
+        description: "The user has been removed from the system.",
+      });
+      return true;
+    } catch (error) {
+      console.error("User rejection error:", error);
+      toast({
+        title: "Rejection error",
+        description: "An unexpected error occurred.",
+        variant: "destructive",
+      });
+      return false;
+    }
+  };
+
+  const updateUserLocation = async (latitude: number, longitude: number, accuracy?: number): Promise<boolean> => {
+    try {
+      if (!currentUser) return false;
+
+      const now = new Date().toISOString();
+      const mergedLocation = {
+        ...(currentUser.location || {}),
+        latitude,
+        longitude,
+        accuracy: accuracy !== undefined ? accuracy : (currentUser.location?.accuracy || undefined),
+        lastUpdated: now,
+        isSharing: true,
+      } as NonNullable<User['location']>;
+
+      const { data, error } = await userRepo.updateUserLocationDb(currentUser.id, mergedLocation);
+
+      if (error || !data || data.length === 0) {
+        console.error('Update location error:', error || 'No row updated (RLS?)');
+        return false;
+      }
+
+      const updatedUsers = appUsers.map(u =>
+        u.id === currentUser.id
+          ? {
+              ...u,
+              location: {
+                ...(u.location || {}),
+                ...mergedLocation,
+              },
+            }
+          : u
+      );
+      setAppUsers(updatedUsers);
+
+      const updatedCurrentUser = {
+        ...currentUser,
+        location: {
+          ...(currentUser.location || {}),
+          ...mergedLocation,
+        },
+      };
+      setCurrentUser(updatedCurrentUser);
+      localStorage.setItem(`user-${currentUser.id}`, JSON.stringify(updatedCurrentUser));
+      localStorage.setItem('PACTCurrentUser', JSON.stringify(updatedCurrentUser));
+      return true;
+    } catch (error) {
+      console.error('Update location error:', error);
+      return false;
+    }
+  };
+
+  const updateUserAvailability = async (status: 'online' | 'offline' | 'busy'): Promise<boolean> => {
+    try {
+      if (!currentUser) return false;
+
+      const { error } = await userRepo.updateUserAvailabilityDb(currentUser.id, status);
+
+      if (error) {
+        console.error('Update availability error:', error);
+      }
+
+      const updatedUsers = appUsers.map(u =>
+        u.id === currentUser.id
+          ? {
+              ...u,
+              availability: status,
+              lastActive:
+                status !== 'offline' ? new Date().toISOString() : u.lastActive,
+            }
+          : u
+      );
+      setAppUsers(updatedUsers);
+
+      const updatedCurrentUser = {
+        ...currentUser,
+        availability: status,
+        lastActive:
+          status !== 'offline' ? new Date().toISOString() : currentUser.lastActive,
+      };
+      setCurrentUser(updatedCurrentUser);
+      localStorage.setItem(`user-${currentUser.id}`, JSON.stringify(updatedCurrentUser));
+      localStorage.setItem('PACTCurrentUser', JSON.stringify(updatedCurrentUser));
+      return true;
+    } catch (error) {
+      console.error('Update availability error:', error);
+      return false;
+    }
+  };
+
+  const toggleLocationSharing = async (isSharing: boolean): Promise<boolean> => {
+    try {
+      if (!currentUser) return false;
+
+      const { error } = await userRepo.updateLocationSharingDb(currentUser.id, isSharing);
+      
+      if (error) {
+        console.error("Toggle location sharing error:", error);
+      }
+      
+      const updatedUsers = appUsers.map(u => 
+        u.id === currentUser.id ? {
+          ...u,
+          location: {
+            ...u.location,
+            isSharing,
+          },
+        } : u
+      );
+      
+      setAppUsers(updatedUsers);
+
+      const updatedCurrentUser = {
+        ...currentUser,
+        location: {
+          ...currentUser.location,
+          isSharing,
+        },
+      };
+      
+      setCurrentUser(updatedCurrentUser);
+      
+      localStorage.setItem(`user-${currentUser.id}`, JSON.stringify(updatedCurrentUser));
+      localStorage.setItem('PACTCurrentUser', JSON.stringify(updatedCurrentUser));
+
+      if (isSharing) {
+        toast({
+          title: "Location sharing enabled",
+          description: "Your location will be used for site visit assignments.",
+        });
+      } else {
+        toast({
+          title: "Location sharing disabled",
+          description: "Your location will not be shared with the system.",
+        });
+      }
+
+      return true;
+    } catch (error) {
+      console.error("Toggle location sharing error:", error);
+      return false;
+    }
+  };
+
+  const updateUser = async (user: User): Promise<boolean> => {
+    try {
+      console.log("Updating user:", user);
+      
+      const updatedUser = {
+        ...user,
+        availability: user.availability || 'offline'
+      };
+      
+      // Build the update payload used for both direct update and as fallback
+      const updatePayload: Record<string, any> = {
+        full_name: updatedUser.fullName || updatedUser.name,
+        username: updatedUser.username,
+        email: updatedUser.email,
+        role: updatedUser.role,
+        avatar_url: updatedUser.avatar,
+        hub_id: updatedUser.hubId,
+        state_id: updatedUser.stateId,
+        locality_id: updatedUser.localityId,
+        employee_id: updatedUser.employeeId,
+        phone: updatedUser.phone,
+        bank_account: (updatedUser as any).bankAccount || null,
+        updated_at: new Date().toISOString(),
+      };
+
+      // Try direct update first — no row-count check (RLS may block RETURNING without blocking UPDATE)
+      const { error: directError } = await userRepo.updateProfilePayload(updatedUser.id, updatePayload);
+
+      if (directError) {
+        console.warn("Direct update failed, trying RPC:", directError.message);
+        // Fallback: RPC bypasses RLS but may have the COALESCE jsonb bug on location column
+        try {
+          const { data: rpcData, error: rpcError } = await userRepo.rpcAdminUpdateProfile({
+            target_id: updatedUser.id,
+            new_full_name: updatedUser.fullName || updatedUser.name || null,
+            new_username: updatedUser.username || null,
+            new_email: updatedUser.email || null,
+            new_role: updatedUser.role || null,
+            new_avatar_url: updatedUser.avatar || null,
+            new_hub_id: updatedUser.hubId || null,
+            new_state_id: updatedUser.stateId || null,
+            new_locality_id: updatedUser.localityId || null,
+            new_employee_id: updatedUser.employeeId || null,
+            new_phone: updatedUser.phone || null,
+            new_bank_account: (updatedUser as any).bankAccount || null,
+          });
+          if (rpcError) {
+            console.error("RPC also failed:", rpcError.message);
+            toast({
+              title: "Update failed",
+              description: "Could not save profile changes. Please try again or contact support.",
+              variant: "destructive",
+            });
+            return false;
+          }
+        } catch (rpcErr) {
+          console.error("RPC threw exception:", rpcErr);
+          toast({
+            title: "Update failed",
+            description: "Could not save profile changes. Please try again.",
+            variant: "destructive",
+          });
+          return false;
+        }
+      }
+
+      // Save secondary_hub_id: try direct column first, fall back to location JSONB
+      const secHubValue = updatedUser.secondaryHubId !== undefined ? (updatedUser.secondaryHubId || null) : undefined;
+      if (secHubValue !== undefined) {
+        try {
+          const { error: secErr } = await userRepo.updateSecondaryHubColumn(updatedUser.id, secHubValue);
+          if (secErr) {
+            // Column likely doesn't exist yet — store in location JSONB as fallback
+            console.info("secondary_hub_id column not available, storing in location JSONB:", secErr.message);
+            const { data: profRow } = await userRepo.fetchProfileLocationOnly(updatedUser.id);
+            const currentLocation = (profRow as any)?.location || {};
+            const newLocation = { ...currentLocation, secondary_hub_id: secHubValue };
+            const { error: locErr } = await userRepo.updateProfileLocationJson(updatedUser.id, newLocation);
+            if (locErr) {
+              console.warn("Location JSONB fallback also failed:", locErr.message);
+            } else {
+              console.log("Secondary hub stored in location JSONB:", secHubValue);
+            }
+          } else {
+            console.log("Secondary hub updated via column:", secHubValue);
+          }
+        } catch (secHubErr) {
+          console.warn("Secondary hub update error:", secHubErr);
+        }
+      }
+
+      // Update local caches only after confirmed DB success
+      setAppUsers(prev => prev.map(u => u.id === updatedUser.id ? updatedUser : u));
+      localStorage.setItem(`user-${updatedUser.id}`, JSON.stringify(updatedUser));
+      
+      if (currentUser && updatedUser.id === currentUser.id) {
+        setCurrentUser(updatedUser);
+        localStorage.setItem('PACTCurrentUser', JSON.stringify(updatedUser));
+      }
+      
+      toast({
+        title: "User updated",
+        description: `User ${updatedUser.name} has been updated successfully and will persist between sessions.`,
+      });
+      
+      return true;
+    } catch (error) {
+      console.error("Update user error:", error);
+      toast({
+        title: "Update user error",
+        description: "An unexpected error occurred. Please try again.",
+        variant: "destructive",
+      });
+      return false;
+    }
+  };
+
+  const sendPasswordRecoveryEmail = async (email: string): Promise<boolean> => {
+    try {
+      // Use custom OTP flow instead of Supabase's built-in resetPasswordForEmail
+      const { data, error } = await userRepo.invokeVerifyResetOtp({
+        email: email.toLowerCase(),
+        action: 'generate',
+      });
+
+      if (error || !data?.success) {
+        console.error('Password recovery error:', error || data?.error);
+        toast({
+          title: 'Failed to send recovery email',
+          description: error?.message || data?.error || 'An error occurred while sending the password recovery email.',
+          variant: 'destructive',
+        });
+        return false;
+      }
+
+      toast({
+        title: 'Recovery code sent',
+        description: `A 6-digit verification code has been sent to ${email}. The user should check their inbox.`,
+      });
+      return true;
+    } catch (error: any) {
+      console.error('Password recovery error:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to send password recovery email.',
+        variant: 'destructive',
+      });
+      return false;
+    }
+  };
+
+  const adminSetUserPassword = async (email: string, newPassword: string): Promise<boolean> => {
+    try {
+      const { data: userData, error: lookupError } = await userRepo.fetchProfileIdByEmail(email);
+
+      if (lookupError || !userData) {
+        toast({
+          title: 'User not found',
+          description: `No user found with email ${email}.`,
+          variant: 'destructive',
+        });
+        return false;
+      }
+
+      toast({
+        title: 'Password update requires Supabase Admin',
+        description: 'Direct password setting requires Supabase service role. Please use "Send Recovery Email" instead, or update via Supabase Dashboard.',
+        variant: 'destructive',
+      });
+      return false;
+    } catch (error: any) {
+      console.error('Admin set password error:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to set user password.',
+        variant: 'destructive',
+      });
+      return false;
+    }
+  };
+
+  const adminConfirmUserEmail = async (userId: string): Promise<boolean> => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) {
+        toast({
+          title: 'Authentication required',
+          description: 'Please log in to perform this action.',
+          variant: 'destructive',
+        });
+        return false;
+      }
+
+      const { data, error } = await userRepo.invokeAdminConfirmEmail(userId, session.access_token);
+
+      if (error || !data?.success) {
+        console.error('Email confirmation error:', error || data?.error);
+        toast({
+          title: 'Email confirmation failed',
+          description: error?.message || data?.error || 'An error occurred while confirming the email.',
+          variant: 'destructive',
+        });
+        return false;
+      }
+
+      toast({
+        title: 'Email confirmed',
+        description: 'The user\'s email has been manually confirmed. They can now log in.',
+      });
+      return true;
+    } catch (error: any) {
+      console.error('Admin confirm email error:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to confirm user email.',
+        variant: 'destructive',
+      });
+      return false;
+    }
+  };
+
+  const adminUpdateUserEmail = async (userId: string, newEmail: string): Promise<boolean> => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) {
+        toast({
+          title: 'Authentication required',
+          description: 'Please log in to perform this action.',
+          variant: 'destructive',
+        });
+        return false;
+      }
+
+      const { data, error } = await userRepo.invokeAdminUpdateEmail(userId, newEmail, session.access_token);
+
+      if (error || !data?.success) {
+        console.error('Email update error:', error || data?.error);
+        toast({
+          title: 'Email update failed',
+          description: error?.message || data?.error || 'An error occurred while updating the email.',
+          variant: 'destructive',
+        });
+        return false;
+      }
+
+      toast({
+        title: 'Email updated',
+        description: 'The user\'s email has been updated successfully. They should use the new email to log in.',
+      });
+
+      await refreshUsers();
+      return true;
+    } catch (error: any) {
+      console.error('Admin update email error:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to update user email.',
+        variant: 'destructive',
+      });
+      return false;
+    }
+  };
+
+  const contextValue: UserContextType = {
+    currentUser,
+    authReady,
+    users: appUsers,
+    login,
+    logout,
+    registerUser,
+    approveUser,
+    rejectUser,
+    updateUser,
+    updateUserLocation,
+    updateUserAvailability,
+    toggleLocationSharing,
+    refreshUsers,
+    hydrateCurrentUser,
+    roles,
+    hasRole,
+    addRole,
+    removeRole,
+    emailVerificationPending: emailVerification.pending,
+    verificationEmail: emailVerification.email,
+    resendVerificationEmail,
+    clearEmailVerificationNotice,
+    sendPasswordRecoveryEmail,
+    adminSetUserPassword,
+    adminConfirmUserEmail,
+    adminUpdateUserEmail,
+  };
+
+  return (
+    <UserContext.Provider
+      value={{
+        currentUser,
+        authReady,
+        users: appUsers,
+        login,
+        logout,
+        registerUser,
+        approveUser,
+        rejectUser,
+        updateUser,
+        updateUserLocation,
+        updateUserAvailability,
+        toggleLocationSharing,
+        refreshUsers,
+        hydrateCurrentUser,
+        roles,
+        hasRole,
+        addRole,
+        removeRole,
+        emailVerificationPending: emailVerification.pending,
+        verificationEmail: emailVerification.email,
+        resendVerificationEmail,
+        clearEmailVerificationNotice,
+        sendPasswordRecoveryEmail,
+        adminSetUserPassword,
+        adminConfirmUserEmail,
+        adminUpdateUserEmail,
+      }}
+    >
+      {children}
+    </UserContext.Provider>
+  );
+};
+
+export const useUser = (): UserContextType => {
+  const context = useContext(UserContext);
+  if (context === undefined) {
+    throw new Error('useUser must be used within a UserProvider');
+  }
+  return context;
+};

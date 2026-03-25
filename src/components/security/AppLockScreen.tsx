@@ -13,7 +13,7 @@ import {
   isPinEnabled,
   setAppLocked,
   type BiometricConfig
-} from '@/lib/biometric-auth';
+} from '@/platform/mobile/biometric-auth';
 import { formatDistanceToNow } from 'date-fns';
 
 interface AppLockScreenProps {

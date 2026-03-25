@@ -11,7 +11,7 @@ import {
   FileCheck, UserCog, PenTool, HelpCircle, Phone, Eye,
   Globe, Lock, Database, Activity
 } from 'lucide-react';
-import { useUser } from '@/context/user/UserContext';
+import { useUser } from '@/features/user/context/UserContext';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from '@/components/ui/badge';
@@ -25,18 +25,18 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { useAppContext } from '@/context/AppContext';
-import { useAuthorization } from '@/hooks/use-authorization';
-import { useSuperAdmin } from '@/context/superAdmin/SuperAdminContext';
-import { useSettings } from '@/context/settings/SettingsContext';
-import { useMMP } from '@/context/mmp/MMPContext';
-import { useSiteVisitContext } from '@/context/siteVisit/SiteVisitContext';
-import { useWallet } from '@/context/wallet/WalletContext';
+import { useAppContext } from '@/shared/context/AppContext';
+import { useAuthorization } from '@/features/auth/hooks/use-authorization';
+import { useSuperAdmin } from '@/features/admin/context/SuperAdminContext';
+import { useSettings } from '@/features/settings/context/SettingsContext';
+import { useMMP } from '@/features/mmp/context/MMPContext';
+import { useSiteVisitContext } from '@/features/siteVisit/context/SiteVisitContext';
+import { useWallet } from '@/features/wallet/context/WalletContext';
 import { MenuPreferences, DEFAULT_MENU_PREFERENCES } from '@/types/user-preferences';
 import { getWorkflowMenuGroups, MenuGroup } from '@/navigation/menu';
 import { syncManager } from '@/lib/sync-manager';
-import { getOfflineStats } from '@/lib/offline-db';
-import { hapticPresets } from '@/lib/haptics';
+import { getOfflineStats } from '@/platform/mobile/offline-db';
+import { hapticPresets } from '@/platform/mobile/haptics';
 import { PresenceIndicator } from '@/components/shared/PresenceIndicator';
 import { RealtimeStatusDot } from '@/components/realtime/RealtimeBanner';
 

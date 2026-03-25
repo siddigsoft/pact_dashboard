@@ -2,12 +2,12 @@ import React, { useEffect, useState, useMemo } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
-import { useToast } from '@/hooks/use-toast';
+import { useToast } from '@/shared/hooks/use-toast';
 import { ensureValidSession } from '@/lib/session-health';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
-import { useMMP } from '@/context/mmp/MMPContext';
+import { useMMP } from '@/features/mmp/context/MMPContext';
 import { clearForwardedWorkflow } from '@/services/mmpActions';
 import { NotificationTriggerService } from '@/services/NotificationTriggerService';
 

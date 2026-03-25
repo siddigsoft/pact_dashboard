@@ -27,9 +27,9 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover';
-import { useDownPayment } from '@/context/downPayment/DownPaymentContext';
-import { useUser } from '@/context/user/UserContext';
-import { useSuperAdmin } from '@/context/superAdmin/SuperAdminContext';
+import { useDownPayment } from '@/features/downPayment/context/DownPaymentContext';
+import { useUser } from '@/features/user/context/UserContext';
+import { useSuperAdmin } from '@/features/admin/context/SuperAdminContext';
 import { DownPaymentRequest, DownPaymentFilter, ApprovalType, DownPaymentStatus } from '@/types/down-payment';
 import {
   CheckCircle2,
@@ -79,11 +79,22 @@ import { buildEnhancedPaymentEmailHTML } from '@/services/email-notification.ser
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { SignatureConfirmationModal } from '@/components/signatures/SignatureConfirmationModal';
-import { supabase } from '@/integrations/supabase/client';
+import {
+  deleteDownPaymentRequestRow,
+  fetchActiveHandwritingSignatureImageDataByUser,
+  fetchDocumentSignatureImageData,
+  fetchDownPaymentRequestMetadata,
+  fetchFinanceRecipientProfiles,
+  createMmpFilesSignedUrl,
+  softCancelDownPaymentRequestWithDeletedMetadata,
+  markDownPaymentRequestFullyPaidWithReceipt,
+  uploadMmpFilesObject,
+  uploadMmpFilesObjectAndGetPublicUrl,
+} from '@/features/downPayment/repository/downPaymentRepository';
 import { generateTransportAdvanceCertificatePdf, generateTransportAdvanceCertificateBase64, generateBulkPaymentPdf, generateBulkPaymentPdfBase64 } from '@/utils/transportAdvanceCertificatePdf';
 import { EmailNotificationService } from '@/services/email-notification.service';
-import { EmailCCInput } from '@/components/EmailCCInput';
-import { useToast } from '@/hooks/use-toast';
+import { EmailCCInput } from '@/features/admin/components/EmailCCInput';
+import { useToast } from '@/shared/hooks/use-toast';
 import { Mail, Wallet, Upload, ImageIcon } from 'lucide-react';
 
 interface DownPaymentApprovalPanelProps {
@@ -461,11 +472,10 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
         const random = Math.random().toString(36).substring(2, 8);
         const extension = payProofFile.name.split('.').pop()?.toLowerCase() || 'file';
         const filePath = `payment-proofs/process_${timestamp}_${random}.${extension}`;
-        const { error: uploadErr } = await supabase.storage
-          .from('mmp-files')
-          .upload(filePath, payProofFile, { cacheControl: '3600', upsert: false });
-        if (uploadErr) throw new Error(uploadErr.message);
-        receiptUrl = supabase.storage.from('mmp-files').getPublicUrl(filePath).data.publicUrl;
+        receiptUrl = await uploadMmpFilesObjectAndGetPublicUrl(filePath, payProofFile, {
+          cacheControl: '3600',
+          upsert: false,
+        });
       }
 
       const success = await processPayment({
@@ -589,33 +599,11 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
       const ids = Array.from(selectedIds);
       for (const id of ids) {
         try {
-          const { data: existingMeta } = await supabase
-            .from('down_payment_requests')
-            .select('metadata')
-            .eq('id', id)
-            .maybeSingle();
-          const meta = (existingMeta?.metadata as Record<string, any>) || {};
+          const meta = await fetchDownPaymentRequestMetadata(id);
+          await softCancelDownPaymentRequestWithDeletedMetadata({ requestId: id, meta, nowIso: now });
 
-          const { error: softErr } = await supabase
-            .from('down_payment_requests')
-            .update({
-              status: 'cancelled',
-              site_visit_id: null,
-              mmp_site_entry_id: null,
-              updated_at: now,
-              metadata: { ...meta, deleted: true, deleted_at: now },
-            } as any)
-            .eq('id', id);
-
-          if (softErr) { failCount++; continue; }
-
-          const { error: deleteError } = await supabase
-            .from('down_payment_requests')
-            .delete()
-            .eq('id', id)
-            .eq('status', 'cancelled');
-
-          if (deleteError) {
+          const hardDeleted = await deleteDownPaymentRequestRow(id);
+          if (!hardDeleted.deleted) {
             console.log('Hard delete blocked for', id, '(RLS), record stays as cancelled+deleted');
           }
           successCount++;
@@ -806,45 +794,23 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
       const sigMatch = req.adminNotes.match(/ID:\s*(\S+?)(?:\s*\||$)/);
       if (sigMatch?.[1]) {
         try {
-          const { data: sigRow } = await supabase
-            .from('document_signatures')
-            .select('signature_data, signature_method, signer_id')
-            .eq('id', sigMatch[1])
-            .single();
-          if (sigRow?.signature_data && typeof sigRow.signature_data === 'string' && sigRow.signature_data.startsWith('data:')) {
+          const sigRow = await fetchDocumentSignatureImageData(sigMatch[1]);
+          if (
+            sigRow?.signature_data &&
+            typeof sigRow.signature_data === 'string' &&
+            sigRow.signature_data.startsWith('data:')
+          ) {
             signatureImageData = sigRow.signature_data;
           }
           if (!signatureImageData && sigRow?.signer_id) {
-            try {
-              const { data: savedSigs } = await supabase
-                .from('handwriting_signatures')
-                .select('signature_image')
-                .eq('user_id', sigRow.signer_id)
-                .eq('is_active', true)
-                .order('is_default', { ascending: false })
-                .order('created_at', { ascending: false })
-                .limit(1);
-              if (savedSigs?.[0]?.signature_image && typeof savedSigs[0].signature_image === 'string' && savedSigs[0].signature_image.startsWith('data:')) {
-                signatureImageData = savedSigs[0].signature_image;
-              }
-            } catch { /* continue */ }
+            signatureImageData = await fetchActiveHandwritingSignatureImageDataByUser(sigRow.signer_id);
           }
         } catch { /* signature fetch failed */ }
       }
     }
     if (!signatureImageData && req.adminProcessedBy) {
       try {
-        const { data: savedSigs } = await supabase
-          .from('handwriting_signatures')
-          .select('signature_image')
-          .eq('user_id', req.adminProcessedBy)
-          .eq('is_active', true)
-          .order('is_default', { ascending: false })
-          .order('created_at', { ascending: false })
-          .limit(1);
-        if (savedSigs?.[0]?.signature_image && typeof savedSigs[0].signature_image === 'string' && savedSigs[0].signature_image.startsWith('data:')) {
-          signatureImageData = savedSigs[0].signature_image;
-        }
+        signatureImageData = await fetchActiveHandwritingSignatureImageDataByUser(req.adminProcessedBy);
       } catch { /* no saved signature */ }
     }
     return signatureImageData;
@@ -993,31 +959,19 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
   const [ccContacts, setCcContacts] = useState<Array<{ id: string; email: string; name: string; role: string }>>([]);
 
   useEffect(() => {
-    loadFinanceRecipients().catch(() => {});
-    supabase
-      .from('profiles')
-      .select('id, email, full_name, role')
-      .eq('status', 'approved')
-      .not('email', 'is', null)
-      .then(({ data }) => {
-        if (data) {
-          setCcContacts(data
-            .filter((u: any) => u.email)
-            .map((u: any) => ({ id: u.id, email: u.email, name: u.full_name || u.email, role: u.role || '' })));
-        }
-      });
+    loadFinanceRecipients()
+      .then(setCcContacts)
+      .catch(() => {});
   }, []);
 
   const loadFinanceRecipients = async (forceRefresh = false): Promise<Array<{ id: string; email: string; name: string; role: string }>> => {
     if (!forceRefresh && cachedRecipientsRef.current) {
       return cachedRecipientsRef.current;
     }
-    const { data: financeUsers } = await supabase
-      .from('profiles')
-      .select('id, email, full_name, role')
-      .in('role', ['finance_admin', 'Finance Admin', 'superAdmin', 'SuperAdmin', 'super_admin', 'admin', 'Admin', 'Administrator'])
-      .eq('status', 'approved');
-    const recipients = (financeUsers || []).filter((u: any) => u.email).map((u: any) => ({ id: u.id, email: u.email, name: u.full_name || u.email, role: u.role }));
+    const financeUsers = await fetchFinanceRecipientProfiles();
+    const recipients = financeUsers
+      .filter((u) => u.email)
+      .map((u) => ({ id: u.id, email: u.email as string, name: u.full_name || (u.email as string), role: u.role || '' }));
     cachedRecipientsRef.current = recipients;
     return recipients;
   };
@@ -1267,18 +1221,9 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
               { type: 'application/pdf' }
             );
             const uploadPath = `bulk-payment-pdfs/${batchFileName}`;
-            const { error: uploadError } = await supabase.storage
-              .from('mmp-files')
-              .upload(uploadPath, pdfBlob, { contentType: 'application/pdf', upsert: true });
-
-            if (!uploadError) {
-              const { data: signedData } = await supabase.storage
-                .from('mmp-files')
-                .createSignedUrl(uploadPath, 60 * 60 * 24 * 7); // 7 days
-              if (signedData?.signedUrl) {
-                pdfDownloadUrl = signedData.signedUrl;
-              }
-            }
+            await uploadMmpFilesObject(uploadPath, pdfBlob, { contentType: 'application/pdf', upsert: true });
+            const signedUrl = await createMmpFilesSignedUrl(uploadPath, 60 * 60 * 24 * 7); // 7 days
+            if (signedUrl) pdfDownloadUrl = signedUrl;
           }
         } catch { /* continue without PDF */ }
 
@@ -1401,41 +1346,30 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
     setMarkAsPaidDialog(prev => ({ ...prev, uploading: true }));
     setMarkPaidProcessing(true);
     try {
-      let proofUrl: string | null = null;
       const timestamp = Date.now();
       const random = Math.random().toString(36).substring(2, 8);
       const extension = proofFile.name.split('.').pop()?.toLowerCase() || 'file';
       const filePath = `payment-proofs/advance_${timestamp}_${random}.${extension}`;
-      const { error: uploadErr } = await supabase.storage
-        .from('mmp-files')
-        .upload(filePath, proofFile, { cacheControl: '3600', upsert: false });
-      if (uploadErr) throw new Error(uploadErr.message);
-      proofUrl = supabase.storage.from('mmp-files').getPublicUrl(filePath).data.publicUrl;
+      const proofUrl = await uploadMmpFilesObjectAndGetPublicUrl(filePath, proofFile, {
+        cacheControl: '3600',
+        upsert: false,
+      });
 
       const now = new Date().toISOString();
-      const { error } = await supabase
-        .from('down_payment_requests')
-        .update({
-          status: 'fully_paid',
-          total_paid_amount: req.approvedAmount || req.requestedAmount,
-          remaining_amount: 0,
-          updated_at: now,
-          payment_proof_url: proofUrl,
-          ...(notes.trim() ? { payment_proof_notes: notes.trim() } : {}),
-          payment_proof_uploaded_at: now,
-        } as any)
-        .eq('id', req.id);
+      await markDownPaymentRequestFullyPaidWithReceipt({
+        requestId: req.id,
+        totalPaidAmount: req.approvedAmount || req.requestedAmount,
+        proofUrl,
+        proofNotes: notes,
+        nowIso: now,
+      });
 
-      if (error) {
-        toast({ title: "Failed / فشل", description: error.message, variant: "destructive" });
-      } else {
-        toast({
-          title: "Marked as Paid / تم التحديد كمدفوع",
-          description: "The advance has been marked as fully paid with receipt. / تم تحديد السلفة كمدفوعة بالكامل مع الإيصال.",
-        });
-        setMarkAsPaidDialog({ open: false, request: null, proofFile: null, proofPreviewUrl: null, notes: '', uploading: false });
-        refreshRequests();
-      }
+      toast({
+        title: "Marked as Paid / تم التحديد كمدفوع",
+        description: "The advance has been marked as fully paid with receipt. / تم تحديد السلفة كمدفوعة بالكامل مع الإيصال.",
+      });
+      setMarkAsPaidDialog({ open: false, request: null, proofFile: null, proofPreviewUrl: null, notes: '', uploading: false });
+      refreshRequests();
     } catch (err: any) {
       toast({ title: "Error / خطأ", description: err.message || "Failed to mark as paid.", variant: "destructive" });
     } finally {
@@ -1474,24 +1408,24 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
       const random = Math.random().toString(36).substring(2, 8);
       const extension = proofFile.name.split('.').pop()?.toLowerCase() || 'file';
       const filePath = `payment-proofs/batch_${timestamp}_${random}.${extension}`;
-      const { error: uploadErr } = await supabase.storage.from('mmp-files').upload(filePath, proofFile, { cacheControl: '3600', upsert: false });
-      if (uploadErr) throw new Error(uploadErr.message);
-      const proofUrl = supabase.storage.from('mmp-files').getPublicUrl(filePath).data.publicUrl;
+      const proofUrl = await uploadMmpFilesObjectAndGetPublicUrl(filePath, proofFile, { cacheControl: '3600', upsert: false });
       const now = new Date().toISOString();
 
       let successCount = 0;
       let failCount = 0;
       for (const req of reqs) {
-        const { error } = await supabase.from('down_payment_requests').update({
-          status: 'fully_paid',
-          total_paid_amount: req.approvedAmount || req.requestedAmount,
-          remaining_amount: 0,
-          updated_at: now,
-          payment_proof_url: proofUrl,
-          payment_proof_uploaded_at: now,
-          ...(notes.trim() ? { payment_proof_notes: notes.trim() } : {}),
-        } as any).eq('id', req.id);
-        if (error) { failCount++; } else { successCount++; }
+        try {
+          await markDownPaymentRequestFullyPaidWithReceipt({
+            requestId: req.id,
+            totalPaidAmount: req.approvedAmount || req.requestedAmount,
+            proofUrl,
+            proofNotes: notes,
+            nowIso: now,
+          });
+          successCount++;
+        } catch {
+          failCount++;
+        }
       }
 
       // Consolidated notifications — one per requester

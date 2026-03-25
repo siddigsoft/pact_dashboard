@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { useArchive } from '@/context/archive/ArchiveContext';
-import { useToast } from '@/hooks/use-toast';
+import { useArchive } from '@/features/archive/context/ArchiveContext';
+import { useToast } from '@/shared/hooks/use-toast';
 import { ToastAction } from '@/components/ui/toast';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';

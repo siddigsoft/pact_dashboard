@@ -1,5 +1,5 @@
 import { Users } from 'lucide-react';
-import { useGlobalPresence } from '@/context/presence/GlobalPresenceContext';
+import { useGlobalPresence } from '@/features/notifications/context/GlobalPresenceContext';
 import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 

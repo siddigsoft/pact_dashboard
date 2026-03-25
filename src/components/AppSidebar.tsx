@@ -53,10 +53,10 @@
     HeartPulse
   } from "lucide-react";
   import { RealtimeStatusDot } from '@/components/realtime';
-  import { useSiteVisitReminders } from "@/hooks/use-site-visit-reminders";
+  import { useSiteVisitReminders } from "@/features/siteVisit/hooks/use-site-visit-reminders";
   import Logo from "../assets/logo.png";
   import { Avatar, AvatarFallback, AvatarImage } from "./ui/avatar";
-  import { useAppContext } from "@/context/AppContext";
+  import { useAppContext } from "@/shared/context/AppContext";
   import { 
     Sidebar, 
     SidebarContent, 
@@ -73,9 +73,9 @@
     SidebarResizeHandle
   } from "@/components/ui/sidebar";
   import { AppRole } from "@/types";
-  import { useAuthorization } from "@/hooks/use-authorization";
-  import { useSuperAdmin } from "@/context/superAdmin/SuperAdminContext";
-  import { useSettings } from "@/context/settings/SettingsContext";
+  import { useAuthorization } from "@/features/auth/hooks/use-authorization";
+  import { useSuperAdmin } from "@/features/admin/context/SuperAdminContext";
+  import { useSettings } from "@/features/settings/context/SettingsContext";
   import {
     DropdownMenu,
     DropdownMenuContent,

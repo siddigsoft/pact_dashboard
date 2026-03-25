@@ -3,8 +3,8 @@ import React from 'react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ArrowLeft, FileText, Clock, CheckCircle } from 'lucide-react';
-import { MMPStageIndicator } from '@/components/MMPStageIndicator';
-import { MMPStatusBadge } from '@/components/mmp/MMPStatusBadge';
+import { MMPStageIndicator } from '@/features/mmp/components/MMPStageIndicator';
+import { MMPStatusBadge } from '@/features/mmp/components/MMPStatusBadge';
 import { MMPFile } from '@/types';
 import { format } from 'date-fns';
 

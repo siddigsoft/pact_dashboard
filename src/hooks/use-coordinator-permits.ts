@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { safeUploadFile } from '@/lib/safeUpload';
 import { CoordinatorLocalityPermit, LocalityPermitStatus } from '@/types/coordinator-permits';
-import { useAppContext } from '@/context/AppContext';
+import { useAppContext } from '@/shared/context/AppContext';
 
 export const useCoordinatorLocalityPermits = () => {
   const { currentUser } = useAppContext();

@@ -1,0 +1,213 @@
+import React, { useMemo, useCallback } from 'react';
+import { createContext, useContext, useContextSelector } from 'use-context-selector';
+import { calculateDistanceFee as _calculateDistanceFee } from '@/utils/distanceFee';
+import { UserProvider, useUser } from './user/UserContext';
+import { MMPProvider, useMMP } from './mmp/MMPContext';
+import { NotificationProvider, useNotifications } from './notifications/NotificationContext';
+import { SiteVisitProvider, useSiteVisitContext } from './siteVisit/SiteVisitContext';
+import { AppRole, ResourceType, ActionType } from '@/types/roles';
+import { ProjectProvider } from './project/ProjectContext';
+import { ChatProvider } from './chat/ChatContextSupabase';
+import { CommunicationProvider } from './communications/CommunicationContext';
+import { CallProvider } from './communications/CallContext';
+import { ViewModeProvider } from './ViewModeContext';
+import { ArchiveProvider } from './archive/ArchiveContext';
+import { SettingsProvider } from './settings/SettingsContext';
+import { RoleManagementProvider, useRoleManagement } from './role-management/RoleManagementContext';
+import { WalletProvider } from './wallet/WalletContext';
+import { BudgetProvider } from './budget/BudgetContext';
+import { ClassificationProvider } from './classification/ClassificationContext';
+import { CostSubmissionProvider } from './costApproval/CostSubmissionContext';
+import { DownPaymentProvider } from './downPayment/DownPaymentContext';
+import { SuperAdminProvider } from './superAdmin/SuperAdminContext';
+import { ActiveVisitProvider } from './ActiveVisitContext';
+import { ApprovalProvider } from './approval/ApprovalContext';
+import { AuditProvider } from './audit/AuditContext';
+import BrowserNotificationListener from '@/features/notifications/components/BrowserNotificationListener';
+import GlobalCallOverlay from '@/features/calls/components/GlobalCallOverlay';
+import { GlobalPresenceProvider } from '@/features/notifications/context/GlobalPresenceContext';
+import { MobilePushNotificationOverlay } from '@/platform/mobile/components/MobilePushNotificationOverlay';
+import { SyncStatusProvider } from './sync/SyncStatusContext';
+import { LocationProvider } from './location/LocationContext';
+
+interface CompositeContextType {
+  currentUser: ReturnType<typeof useUser>['currentUser'];
+  authReady: boolean;
+  users: ReturnType<typeof useUser>['users'];
+  refreshUsers: ReturnType<typeof useUser>['refreshUsers'];
+  hydrateCurrentUser: ReturnType<typeof useUser>['hydrateCurrentUser'];
+  login: ReturnType<typeof useUser>['login'];
+  logout: ReturnType<typeof useUser>['logout'];
+  registerUser: ReturnType<typeof useUser>['registerUser'];
+  approveUser: ReturnType<typeof useUser>['approveUser'];
+  rejectUser: ReturnType<typeof useUser>['rejectUser'];
+  updateUser: ReturnType<typeof useUser>['updateUser'];
+  updateUserLocation: ReturnType<typeof useUser>['updateUserLocation'];
+  emailVerificationPending: ReturnType<typeof useUser>['emailVerificationPending'];
+  verificationEmail: ReturnType<typeof useUser>['verificationEmail'];
+  resendVerificationEmail: ReturnType<typeof useUser>['resendVerificationEmail'];
+  clearEmailVerificationNotice: ReturnType<typeof useUser>['clearEmailVerificationNotice'];
+  
+  mmpFiles: ReturnType<typeof useMMP>['mmpFiles'];
+  uploadMMP: ReturnType<typeof useMMP>['uploadMMP'];
+  approveMMP: ReturnType<typeof useMMP>['approveMMP'];
+  rejectMMP: ReturnType<typeof useMMP>['rejectMMP'];
+  updateMMPVersion: ReturnType<typeof useMMP>['updateMMPVersion'];
+  archiveMMP: ReturnType<typeof useMMP>['archiveMMP'];
+  deleteMMP: ReturnType<typeof useMMP>['deleteMMP'];
+  deleteMMPFile: ReturnType<typeof useMMP>['deleteMMPFile'];
+  restoreMMP: ReturnType<typeof useMMP>['restoreMMP'];
+  resetMMP: ReturnType<typeof useMMP>['resetMMP'];
+  getMmpById: ReturnType<typeof useMMP>['getMmpById'];
+  updateMMP: ReturnType<typeof useMMP>['updateMMP'];
+  
+  siteVisits: ReturnType<typeof useSiteVisitContext>['siteVisits'];
+  verifySitePermit: ReturnType<typeof useSiteVisitContext>['verifySitePermit'];
+  assignSiteVisit: ReturnType<typeof useSiteVisitContext>['assignSiteVisit'];
+  startSiteVisit: ReturnType<typeof useSiteVisitContext>['startSiteVisit'];
+  completeSiteVisit: ReturnType<typeof useSiteVisitContext>['completeSiteVisit'];
+  rateSiteVisit: ReturnType<typeof useSiteVisitContext>['rateSiteVisit'];
+  
+  
+  notifications: ReturnType<typeof useNotifications>['notifications'];
+  addNotification: ReturnType<typeof useNotifications>['addNotification'];
+  markNotificationAsRead: ReturnType<typeof useNotifications>['markNotificationAsRead'];
+  getUnreadNotificationsCount: ReturnType<typeof useNotifications>['getUnreadNotificationsCount'];
+  
+  hasGranularPermission: (resource: ResourceType, action: ActionType) => boolean;
+  calculateDistanceFee: (latitude: number, longitude: number) => number;
+  roles: AppRole[];
+  hasRole: (role: AppRole) => boolean;
+  addRole: (userId: string, role: AppRole) => Promise<boolean>;
+  removeRole: (userId: string, role: AppRole) => Promise<boolean>;
+}
+
+const AppContext = createContext<CompositeContextType | undefined>(undefined);
+
+const CompositeContextProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const userContext = useUser();
+  const mmpContext = useMMP();
+  const siteVisitContext = useSiteVisitContext();
+  const notificationContext = useNotifications();
+  const roleManagement = useRoleManagement();
+  
+  // Memoized utility functions to prevent recreation on each render
+  const hasGranularPermission = useCallback((resource: ResourceType, action: ActionType): boolean => {
+    if (!userContext.currentUser) return false;
+    return roleManagement.hasPermission(userContext.currentUser.id, resource, action);
+  }, [userContext.currentUser, roleManagement]);
+  
+  const calculateDistanceFee = useCallback(
+    (latitude: number, longitude: number) => _calculateDistanceFee(latitude, longitude),
+    [],
+  );
+  
+  // Memoized context value to prevent unnecessary re-renders
+  const contextValue = useMemo<CompositeContextType>(() => ({
+    ...userContext,
+    ...mmpContext,
+    ...siteVisitContext,
+    ...notificationContext,
+    hasGranularPermission,
+    calculateDistanceFee,
+    roles: userContext.roles,
+    hasRole: userContext.hasRole,
+    addRole: userContext.addRole,
+    removeRole: userContext.removeRole,
+    updateMMP: mmpContext.updateMMP,
+    deleteMMPFile: mmpContext.deleteMMPFile,
+    emailVerificationPending: userContext.emailVerificationPending,
+    verificationEmail: userContext.verificationEmail,
+    resendVerificationEmail: userContext.resendVerificationEmail,
+    clearEmailVerificationNotice: userContext.clearEmailVerificationNotice,
+  }), [
+    userContext,
+    mmpContext,
+    siteVisitContext,
+    notificationContext,
+    hasGranularPermission,
+    calculateDistanceFee,
+  ]);
+  
+  return (
+    <AppContext.Provider value={contextValue}>
+      {children}
+    </AppContext.Provider>
+  );
+};
+
+
+export const AppProviders: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  return (
+    <ViewModeProvider>
+      <SyncStatusProvider>
+        <NotificationProvider>
+          <UserProvider>
+            <ClassificationProvider>
+              <WalletProvider>
+                <SiteVisitProvider>
+                  <MMPProvider>
+                    <LocationProvider>
+                      <ProjectProvider>
+                        <SettingsProvider>
+                        <ArchiveProvider>
+                          <RoleManagementProvider>
+                            <CompositeContextProvider>
+                              <BudgetProvider>
+                                <CostSubmissionProvider>
+                                  <DownPaymentProvider>
+                                    <SuperAdminProvider>
+                                      <AuditProvider>
+                                        <ApprovalProvider>
+                                          <ActiveVisitProvider>
+                                            <ChatProvider>
+                                              <CallProvider>
+                                                <CommunicationProvider>
+                                                  <GlobalPresenceProvider>
+                                                    <BrowserNotificationListener />
+                                                    <GlobalCallOverlay />
+                                                    <MobilePushNotificationOverlay />
+                                                    {children}
+                                                  </GlobalPresenceProvider>
+                                                </CommunicationProvider>
+                                              </CallProvider>
+                                            </ChatProvider>
+                                          </ActiveVisitProvider>
+                                        </ApprovalProvider>
+                                      </AuditProvider>
+                                    </SuperAdminProvider>
+                                  </DownPaymentProvider>
+                                </CostSubmissionProvider>
+                              </BudgetProvider>
+                            </CompositeContextProvider>
+                          </RoleManagementProvider>
+                        </ArchiveProvider>
+                      </SettingsProvider>
+                      </ProjectProvider>
+                    </LocationProvider>
+                  </MMPProvider>
+                </SiteVisitProvider>
+              </WalletProvider>
+            </ClassificationProvider>
+          </UserProvider>
+        </NotificationProvider>
+      </SyncStatusProvider>
+    </ViewModeProvider>
+  );
+};
+
+export const useAppContext = () => {
+  const context = useContext(AppContext);
+  if (!context) {
+    throw new Error('useAppContext must be used within AppProviders');
+  }
+  return context;
+};
+
+/**
+ * Select only the context fields you need to avoid re-renders when unrelated context changes.
+ * Use instead of useAppContext() when you need a subset of values.
+ */
+export const useAppContextSelector = <T,>(selector: (ctx: CompositeContextType) => T): T => {
+  return useContextSelector(AppContext, selector) as T;
+};

@@ -4,7 +4,7 @@ import { FileCheck, InfoIcon, Edit } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { MMPFile } from '@/types';
 import { useNavigate } from 'react-router-dom';
-import { useToast } from '@/hooks/use-toast';
+import { useToast } from '@/shared/hooks/use-toast';
 import { 
   Select,
   SelectContent,

@@ -17,7 +17,7 @@ interface SignatureResult {
   method: SignatureMethod;
   signedAt: string;
 }
-import { useToast } from '@/hooks/use-toast';
+import { useToast } from '@/shared/hooks/use-toast';
 
 interface WalletTransaction {
   id: string;

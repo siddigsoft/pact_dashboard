@@ -35,8 +35,8 @@ export type { NotificationData, NotificationType, NotificationPriority, Notifica
 export { lightTheme, darkTheme, getTheme, getPlatform, getPriorityColor, getTypeIcon } from '@/theme/notifications-theme';
 
 // Re-export hooks
-export { useNotificationSound } from '@/hooks/notifications/useNotificationSound';
-export { useNotificationAnimation } from '@/hooks/notifications/useNotificationAnimation';
+export { useNotificationSound } from '@/features/notifications/hooks/useNotificationSound';
+export { useNotificationAnimation } from '@/features/notifications/hooks/useNotificationAnimation';
 
 // Re-export utilities
 export { formatTimestamp, formatNotificationTime, formatPopupTime, getDirectionClass } from '@/utils/notifications/formatTimestamp';

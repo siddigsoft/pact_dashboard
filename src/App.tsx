@@ -4,13 +4,13 @@ import { ThemeProvider } from 'next-themes';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { queryClient } from './lib/queryClient';
 import { isSupabaseConfigured } from './integrations/supabase/client';
-import { ConfigurationError } from './components/ConfigurationError';
+import { ConfigurationError } from './shared/components/common/ConfigurationError';
 import { isMobileApp } from './utils/platformDetection';
 import { SessionGuard } from './components/SessionGuard';
 
 // Import AppProviders
-import { AppProviders } from './context/AppContext';
-import { NavigationProvider } from './context/NavigationContext';
+import { AppProviders } from './shared/context/AppContext';
+import { NavigationProvider } from './shared/context/NavigationContext';
 
 // Lazy-loaded pages for better code splitting
 const Index = lazy(() => import('./pages/Index'));
@@ -91,7 +91,7 @@ const NotificationsPage = lazy(() => import('./pages/Notifications'));
 const Documentation = lazy(() => import('./pages/Documentation'));
 const MobileDocumentation = lazy(() => import('./pages/MobileDocumentation'));
 const PublicDocumentation = lazy(() => import('./pages/PublicDocumentation'));
-const SignaturesPage = lazy(() => import('./pages/Signatures'));
+const SignaturesPage = lazy(() => import('./features/documents/Signatures'));
 const DocumentsPage = lazy(() => import('./pages/Documents'));
 const ApprovalDashboard = lazy(() => import('./pages/ApprovalDashboard'));
 const AuditLogs = lazy(() => import('./pages/AuditLogs'));
@@ -128,19 +128,19 @@ import MainLayout from './components/MainLayout';
 import { Toaster } from './components/ui/toaster';
 import { Toaster as SonnerToaster } from './components/ui/sonner';
 import { Toaster as HotToaster } from 'react-hot-toast';
-import { useAppContext } from './context/AppContext';
+import { useAppContext } from './shared/context/AppContext';
 import { NotificationTriggerService } from './services/NotificationTriggerService';
-import { NotificationProvider } from './context/NotificationContext';
-import { NotificationStack } from './components/NotificationStack';
-import { GlobalBroadcastAlert } from './components/GlobalBroadcastAlert';
-import { useNotifications } from './context/NotificationContext';
-import ErrorBoundary from './components/ErrorBoundary';
-import { useFCM } from './hooks/useFCM';
-import { MobilePermissionGuard } from './components/mobile/MobilePermissionGuard';
-import { LiveDashboardProvider } from './context/realtime/LiveDashboardContext';
-import SessionManager from './components/layout/SessionManager';
-import { ActivityTrackingProvider } from './context/activity/ActivityTrackingContext';
-import EmailPreviewPage from './pages/EmailPreviewPage';
+import { NotificationProvider } from './features/notifications/context/NotificationContext';
+import { NotificationStack } from './features/notifications/components/NotificationStack';
+import { GlobalBroadcastAlert } from './shared/components/common/GlobalBroadcastAlert';
+import { useNotifications } from './features/notifications/context/NotificationContext';
+import ErrorBoundary from './shared/components/common/ErrorBoundary';
+import { useFCM } from './platform/mobile/hooks/useFCM';
+import { MobilePermissionGuard } from './platform/mobile/components/MobilePermissionGuard';
+import { LiveDashboardProvider } from './features/dashboard/context/LiveDashboardContext';
+import SessionManager from './shared/components/layout/SessionManager';
+import { ActivityTrackingProvider } from './features/admin/context/ActivityTrackingContext';
+import EmailPreviewPage from './features/admin/EmailPreviewPage';
 
 
 // Loading component for Suspense fallback

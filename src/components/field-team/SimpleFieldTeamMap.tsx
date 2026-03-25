@@ -8,9 +8,9 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useNavigate } from 'react-router-dom';
 import TeamMemberLocation from '../field-team/TeamMemberLocation';
-import CollectorCard from '@/components/site-visit/CollectorCard';
+import CollectorCard from '@/features/siteVisit/components/CollectorCard';
 import { CollectorMatch } from '@/utils/gpsMatchingUtils';
-import LeafletMapContainer from '@/components/map/LeafletMapContainer';
+import LeafletMapContainer from '@/features/location/components/LeafletMapContainer';
 import 'leaflet/dist/leaflet.css';
 
 

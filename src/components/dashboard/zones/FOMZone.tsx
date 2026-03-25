@@ -45,17 +45,17 @@ import {
 import { format } from 'date-fns';
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
-import { useAppContext } from '@/context/AppContext';
-import { useSiteVisitContext } from '@/context/siteVisit/SiteVisitContext';
+import { useAppContext } from '@/shared/context/AppContext';
+import { useSiteVisitContext } from '@/features/siteVisit/context/SiteVisitContext';
 import { useNavigate } from 'react-router-dom';
 import SiteVisitsOverview from '../SiteVisitsOverview';
 import UpcomingSiteVisitsCard from '../UpcomingSiteVisitsCard';
 import { SiteVisitCostSummary } from '../SiteVisitCostSummary';
 import { DashboardCalendar } from '../DashboardCalendar';
 import { ZoneMmpAnalyticsTab } from '../shared/ZoneMmpAnalyticsTab';
-import { useUserProjects } from '@/hooks/useUserProjects';
-import { useZoneMmpAnalytics } from '@/hooks/use-zone-mmp-analytics';
-import { useDashboardMmpFilter } from '@/context/dashboard/DashboardMmpFilterContext';
+import { useUserProjects } from '@/features/project/hooks/useUserProjects';
+import { useZoneMmpAnalytics } from '@/features/mmp/hooks/use-zone-mmp-analytics';
+import { useDashboardMmpFilter } from '@/features/dashboard/context/DashboardMmpFilterContext';
 
 interface MMPFile {
   id: string;

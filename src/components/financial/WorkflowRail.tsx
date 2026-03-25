@@ -26,8 +26,8 @@ import {
   AlertCircle
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { useToast } from '@/hooks/use-toast';
-import { useCostSubmissions, usePendingCostApprovals, useCostSubmissionContext } from '@/context/costApproval/CostSubmissionContext';
+import { useToast } from '@/shared/hooks/use-toast';
+import { useCostSubmissions, usePendingCostApprovals, useCostSubmissionContext } from '@/features/costApproval/context/CostSubmissionContext';
 import { SiteVisitCostSubmission, PendingCostApproval } from '@/types/cost-submission';
 import { format } from 'date-fns';
 

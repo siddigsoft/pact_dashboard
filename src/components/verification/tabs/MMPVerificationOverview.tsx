@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { MMPFile } from '@/types';
-import { useMMP } from '@/context/mmp/MMPContext';
+import { useMMP } from '@/features/mmp/context/MMPContext';
 import PermitPreviewDialog from '@/components/permits/PermitPreviewDialog';
 import MMPBasicInfo from '@/components/verification/overview/MMPBasicInfo';
 import MMPProcessingStatus from '@/components/verification/overview/MMPProcessingStatus';

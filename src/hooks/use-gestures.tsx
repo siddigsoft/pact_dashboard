@@ -2,7 +2,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useDevice } from './use-device';
-import { hapticPresets } from '@/lib/haptics';
+import { hapticPresets } from '@/platform/mobile/haptics';
 
 interface SwipeHandlers {
   onSwipeLeft?: () => void;

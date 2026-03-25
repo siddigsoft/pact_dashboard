@@ -10,7 +10,7 @@ import {
   PopoverTrigger,
 } from '@/components/ui/popover';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { useNotifications } from '@/context/NotificationContext';
+import { useNotifications } from '@/features/notifications/context/NotificationContextLegacy';
 import { cn } from '@/lib/utils';
 import { formatDistanceToNow } from 'date-fns';
 

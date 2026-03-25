@@ -4,7 +4,7 @@
  * Displays stale data warnings and provides manual refresh option
  */
 
-import { useRealtimeHealth } from '@/hooks/useRealtimeHealth';
+import { useRealtimeHealth } from '@/shared/hooks/useRealtimeHealth';
 import { Button } from '@/components/ui/button';
 import { WifiOff, X } from 'lucide-react';
 import { cn } from '@/lib/utils';

@@ -5,9 +5,9 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import { useDownPayment } from '@/context/downPayment/DownPaymentContext';
-import { useUser } from '@/context/user/UserContext';
-import { useToast } from '@/hooks/use-toast';
+import { useDownPayment } from '@/features/downPayment/context/DownPaymentContext';
+import { useUser } from '@/features/user/context/UserContext';
+import { useToast } from '@/shared/hooks/use-toast';
 import { Plus, Trash2, DollarSign, AlertTriangle, Banknote } from 'lucide-react';
 import { PaymentType, InstallmentPlan } from '@/types/down-payment';
 

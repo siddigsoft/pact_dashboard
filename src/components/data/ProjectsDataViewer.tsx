@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { useMMP } from '@/context/mmp/MMPContext';
+import { useMMP } from '@/features/mmp/context/MMPContext';
 import { format } from 'date-fns';
 import {
   Table,

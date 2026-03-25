@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import { useWallet } from '@/context/wallet/WalletContext';
+import { useWallet } from '@/features/wallet/context/WalletContext';
 import { Plus, Minus, Loader2 } from 'lucide-react';
 
 interface BalanceAdjustmentDialogProps {

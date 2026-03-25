@@ -32,17 +32,17 @@ import UpcomingSiteVisitsCard from '../UpcomingSiteVisitsCard';
 import { SiteVisitCostSummary } from '../SiteVisitCostSummary';
 import { DashboardCalendar } from '../DashboardCalendar';
 import { ZoneMmpAnalyticsTab } from '../shared/ZoneMmpAnalyticsTab';
-import { useSiteVisitContext } from '@/context/siteVisit/SiteVisitContext';
-import { useUser } from '@/context/user/UserContext';
-import { useAuthorization } from '@/hooks/use-authorization';
+import { useSiteVisitContext } from '@/features/siteVisit/context/SiteVisitContext';
+import { useUser } from '@/features/user/context/UserContext';
+import { useAuthorization } from '@/features/auth/hooks/use-authorization';
 import { fetchHubs } from '@/services/mmpActions';
 import { isAfter, addDays } from 'date-fns';
 import { getStateName, sudanStates } from '@/data/sudanStates';
-import { useMMP } from '@/context/mmp/MMPContext';
-import { useUserProjects } from '@/hooks/useUserProjects';
+import { useMMP } from '@/features/mmp/context/MMPContext';
+import { useUserProjects } from '@/features/project/hooks/useUserProjects';
 import { supabase } from '@/integrations/supabase/client';
-import { useZoneMmpAnalytics } from '@/hooks/use-zone-mmp-analytics';
-import { useDashboardMmpFilter } from '@/context/dashboard/DashboardMmpFilterContext';
+import { useZoneMmpAnalytics } from '@/features/mmp/hooks/use-zone-mmp-analytics';
+import { useDashboardMmpFilter } from '@/features/dashboard/context/DashboardMmpFilterContext';
 
 type MetricCardType = 'total' | 'completed' | 'assigned' | 'pending' | 'overdue' | 'performance' | null;
 

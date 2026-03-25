@@ -1,7 +1,7 @@
 import { useEffect, useRef, useCallback } from 'react';
 import { ensureValidSessionForMutation } from '@/lib/session-health';
 import { queryClient } from '@/lib/queryClient';
-import { useToast } from '@/hooks/use-toast';
+import { useToast } from '@/shared/hooks/use-toast';
 import { realtimeManager } from '@/lib/realtime-manager';
 import { replaceSupabaseClient } from '@/integrations/supabase/client';
 

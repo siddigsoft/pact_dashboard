@@ -33,8 +33,8 @@ import {
   CheckCircle,
   Search
 } from 'lucide-react';
-import { useUser } from '@/context/user/UserContext';
-import { useToast } from '@/hooks/use-toast';
+import { useUser } from '@/features/user/context/UserContext';
+import { useToast } from '@/shared/hooks/use-toast';
 import { NotificationTriggerService } from '@/services/NotificationTriggerService';
 import { supabase } from '@/integrations/supabase/client';
 

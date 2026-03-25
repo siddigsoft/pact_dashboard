@@ -7,10 +7,10 @@ import ForwardedMMPsCard from '../ForwardedMMPsCard';
 import PlanningSiteVisitsMap from '../PlanningSiteVisitsMap';
 import PlanningSiteVisitsList from '../PlanningSiteVisitsList';
 import { Button } from '@/components/ui/button';
-import { useSiteVisitContext } from '@/context/siteVisit/SiteVisitContext';
-import { useAppContext } from '@/context/AppContext';
-import { useMMP } from '@/context/mmp/MMPContext';
-import { useDashboardMmpFilter } from '@/context/dashboard/DashboardMmpFilterContext';
+import { useSiteVisitContext } from '@/features/siteVisit/context/SiteVisitContext';
+import { useAppContext } from '@/shared/context/AppContext';
+import { useMMP } from '@/features/mmp/context/MMPContext';
+import { useDashboardMmpFilter } from '@/features/dashboard/context/DashboardMmpFilterContext';
 import { 
   DashboardFilters, 
   defaultFilterState,
@@ -18,7 +18,7 @@ import {
   type DashboardFilterState 
 } from '../filters';
 import { MonthlyComparisonCard, MMPPerformanceCard } from '../analytics';
-import { MMPVersionHistoryCard } from '@/components/mmp/MMPVersionHistoryCard';
+import { MMPVersionHistoryCard } from '@/features/mmp/components/MMPVersionHistoryCard';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';

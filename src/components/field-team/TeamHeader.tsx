@@ -4,8 +4,8 @@ import { ChevronLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useNavigate } from 'react-router-dom';
 import { User } from '@/types';
-import GpsLocationCapture from '@/components/GpsLocationCapture';
-import { useUser } from '@/context/user/UserContext';
+import GpsLocationCapture from '@/features/location/components/GpsLocationCapture';
+import { useUser } from '@/features/user/context/UserContext';
 
 interface TeamHeaderProps {
   currentUser: User | null;

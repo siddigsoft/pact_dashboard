@@ -6,8 +6,14 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { CreditCard, Building2, Smartphone, Plus, Trash2, CheckCircle2, Edit, Loader2 } from 'lucide-react';
-import { supabase } from '@/integrations/supabase/client';
-import { useAppContext } from '@/context/AppContext';
+import {
+  deletePaymentMethodRow,
+  fetchPaymentMethodsForUser,
+  insertPaymentMethodRow,
+  setDefaultPaymentMethodForUser,
+  updatePaymentMethodRow,
+} from '@/features/wallet/repository/paymentMethodsRepository';
+import { useAppContext } from '@/shared/context/AppContext';
 import { toast } from 'sonner';
 
 interface PaymentMethod {
@@ -103,11 +109,7 @@ export default function PaymentMethodsCard() {
     if (!currentUser?.id) return;
 
     try {
-      const { data, error } = await supabase
-        .from('payment_methods')
-        .select('*')
-        .eq('user_id', currentUser.id)
-        .order('created_at', { ascending: false });
+      const { data, error } = await fetchPaymentMethodsForUser(currentUser.id);
 
       if (error) throw error;
 
@@ -194,11 +196,7 @@ export default function PaymentMethodsCard() {
         card_number: newMethod.cardNumber || null,
       };
 
-      const { data, error } = await supabase
-        .from('payment_methods')
-        .insert(methodData)
-        .select()
-        .single();
+      const { error } = await insertPaymentMethodRow(methodData);
 
       if (error) throw error;
 
@@ -249,12 +247,7 @@ export default function PaymentMethodsCard() {
         updated_at: new Date().toISOString(),
       };
 
-      const { data, error } = await supabase
-        .from('payment_methods')
-        .update(updateData)
-        .eq('id', editingMethod.id)
-        .select()
-        .single();
+      const { error } = await updatePaymentMethodRow(editingMethod.id, updateData);
 
       if (error) throw error;
 
@@ -297,10 +290,7 @@ export default function PaymentMethodsCard() {
     setOperationTarget(id);
 
     try {
-      const { error } = await supabase
-        .from('payment_methods')
-        .delete()
-        .eq('id', id);
+      const { error } = await deletePaymentMethodRow(id);
 
       if (error) throw error;
 
@@ -321,24 +311,14 @@ export default function PaymentMethodsCard() {
   };
 
   const handleSetDefault = async (id: string) => {
-    if (operationInProgress.current) return;
+    if (operationInProgress.current || !currentUser?.id) return;
 
     operationInProgress.current = true;
     setOperationLoading(prev => ({ ...prev, setDefault: true }));
     setOperationTarget(id);
 
     try {
-      // First, unset all defaults for this user
-      await supabase
-        .from('payment_methods')
-        .update({ is_default: false, updated_at: new Date().toISOString() })
-        .eq('user_id', currentUser?.id);
-
-      // Then set the new default
-      const { error } = await supabase
-        .from('payment_methods')
-        .update({ is_default: true, updated_at: new Date().toISOString() })
-        .eq('id', id);
+      const { error } = await setDefaultPaymentMethodForUser(currentUser.id, id);
 
       if (error) throw error;
 

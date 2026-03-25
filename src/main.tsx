@@ -4,9 +4,9 @@ import ReactDOM from 'react-dom/client'
 import App from './App.tsx'
 import './index.css'
 import './styles/mobile.css' // Import mobile-specific styles
-import { initCapacitor } from './lib/capacitor-init'
+import { initCapacitor } from './platform/mobile/capacitor-init'
 import './lib/i18n' // Initialize i18n for multilingual support
-import { initializeCrashlytics, setupGlobalErrorHandler } from './lib/crashlytics'
+import { initializeCrashlytics, setupGlobalErrorHandler } from './platform/mobile/crashlytics'
 
 initCapacitor().then(async () => {
   console.log('[PACT] Capacitor initialized');

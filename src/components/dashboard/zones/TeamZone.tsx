@@ -7,19 +7,19 @@ import { ZoneMmpAnalyticsTab } from '../shared/ZoneMmpAnalyticsTab';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useNavigate } from 'react-router-dom';
-import { useUser } from '@/context/user/UserContext';
+import { useUser } from '@/features/user/context/UserContext';
 import { Badge } from '@/components/ui/badge';
-import { useSiteVisitContext } from '@/context/siteVisit/SiteVisitContext';
+import { useSiteVisitContext } from '@/features/siteVisit/context/SiteVisitContext';
 import { TeamMemberCard } from '../TeamMemberCard';
 import { TeamMemberTable } from '../TeamMemberTable';
 import { User } from '@/types/user';
-import { useAppContext } from '@/context/AppContext';
+import { useAppContext } from '@/shared/context/AppContext';
 import { fetchHubs } from '@/services/mmpActions';
 import { normalizeHubId } from '@/data/sudanStates';
-import { useCall } from '@/context/communications/CallContext';
-import { useCommunication } from '@/context/communications/CommunicationContext';
-import { useZoneMmpAnalytics } from '@/hooks/use-zone-mmp-analytics';
-import { useDashboardMmpFilter } from '@/context/dashboard/DashboardMmpFilterContext';
+import { useCall } from '@/features/calls/context/CallContext';
+import { useCommunication } from '@/features/calls/context/CommunicationContext';
+import { useZoneMmpAnalytics } from '@/features/mmp/hooks/use-zone-mmp-analytics';
+import { useDashboardMmpFilter } from '@/features/dashboard/context/DashboardMmpFilterContext';
 
 export const TeamZone: React.FC = () => {
   const [activeTab, setActiveTab] = useState('overview');

@@ -6,8 +6,8 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Form, FormField, FormItem, FormLabel, FormControl, FormMessage } from '@/components/ui/form';
 import { useForm } from 'react-hook-form';
-import { useToast } from '@/hooks/use-toast';
-import MMPOverallInformation from '@/components/MMPOverallInformation';
+import { useToast } from '@/shared/hooks/use-toast';
+import MMPOverallInformation from '@/features/mmp/components/MMPOverallInformation';
 import { MMPFile } from '@/types';
 
 interface MMPBasicInfoProps {

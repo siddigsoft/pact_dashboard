@@ -19,12 +19,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { useSuperAdmin } from '@/context/superAdmin/SuperAdminContext';
-import { useUser } from '@/context/user/UserContext';
+import { useSuperAdmin } from '@/features/admin/context/SuperAdminContext';
+import { useUser } from '@/features/user/context/UserContext';
 import { ShieldCheck, UserPlus, UserX, Shield, AlertTriangle, CheckCircle2, XCircle, Mail, KeyRound, Loader2, Trash2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { format } from 'date-fns';
-import { useToast } from '@/hooks/use-toast';
+import { useToast } from '@/shared/hooks/use-toast';
 
 export function SuperAdminManagementPage() {
   const { toast } = useToast();

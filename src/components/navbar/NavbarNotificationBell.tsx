@@ -11,9 +11,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
-import { useNotifications } from '@/context/notifications/NotificationContext';
-import { useAppContext } from '@/context/AppContext';
-import { useAuthorization } from '@/hooks/use-authorization';
+import { useNotifications } from '@/features/notifications/context/NotificationContext';
+import { useAppContext } from '@/shared/context/AppContext';
+import { useAuthorization } from '@/features/auth/hooks/use-authorization';
 import { formatDistanceToNow } from 'date-fns';
 
 interface PendingAction {

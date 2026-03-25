@@ -6,7 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { MMPStatePermitDocument } from '@/types/mmp/permits';
 import { FileCheck, XCircle, CheckCircle, Eye, Calendar, FileText, Trash } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
-import { useToast } from '@/hooks/use-toast';
+import { useToast } from '@/shared/hooks/use-toast';
 import { Textarea } from '@/components/ui/textarea';
 import { getStateName } from '@/data/sudanStates';
 import { Progress } from '@/components/ui/progress';

@@ -8,7 +8,7 @@ import {
   MapPin,
   FolderKanban
 } from 'lucide-react';
-import { useAppContext } from '@/context/AppContext';
+import { useAppContext } from '@/shared/context/AppContext';
 import { DashboardCommandBar } from './DashboardCommandBar';
 import { MmpGlobalFilter } from './filters/MmpGlobalFilter';
 

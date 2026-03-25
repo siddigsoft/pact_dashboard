@@ -29,9 +29,25 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { useSuperAdmin } from '@/context/superAdmin/SuperAdminContext';
-import { useUser } from '@/context/user/UserContext';
-import { supabase } from '@/integrations/supabase/client';
+import { useSuperAdmin } from '@/features/admin/context/SuperAdminContext';
+import { useUser } from '@/features/user/context/UserContext';
+import {
+  archiveMmpFileById,
+  fetchClaimedSitesForSuperAdmin,
+  fetchDispatchedSitesForSuperAdmin,
+  fetchDownPaymentRequestsByMmpSiteEntryId,
+  fetchMmpFilesForSuperAdmin,
+  fetchMmpFilesForTransactionEnrichment,
+  fetchMmpSiteEntryMmpIdAndStatusForSuperAdmin,
+  fetchMmpSiteEntriesForSuperAdminSiteVisits,
+  fetchMmpSiteEntriesForTransactionEnrichment,
+  fetchWalletTransactionWalletIdsForSuperAdmin,
+  fetchWalletsForSuperAdmin,
+  fetchWalletTransactionsForSuperAdmin,
+  returnToFomAndInsertAudit,
+  returnToNewSitesAndInsertAudit,
+  reverseEarningAdjustmentAndUpdateWallet,
+} from '@/features/admin/repository/superAdminRepository';
 import { ensureValidSession } from '@/lib/session-health';
 import { 
   Shield, 
@@ -310,14 +326,7 @@ export function SuperAdminDataManagement() {
   const loadSiteVisits = async () => {
     setLoading(true);
     try {
-      const { data, error } = await supabase
-        .from('mmp_site_entries')
-        .select('id, site_name, site_code, status, accepted_by, visit_completed_at, visit_completed_by, enumerator_fee, state, locality')
-        .in('status', ['completed', 'verified'])
-        .order('visit_completed_at', { ascending: false })
-        .limit(200);
-
-      if (error) throw error;
+      const data = await fetchMmpSiteEntriesForSuperAdminSiteVisits();
 
       const enriched = (data || []).map(sv => ({
         ...sv,
@@ -337,16 +346,8 @@ export function SuperAdminDataManagement() {
   const loadWallets = async () => {
     setLoading(true);
     try {
-      const { data: walletsData, error: walletsError } = await supabase
-        .from('wallets')
-        .select('*')
-        .order('updated_at', { ascending: false });
-
-      if (walletsError) throw walletsError;
-
-      const { data: txnCounts } = await supabase
-        .from('wallet_transactions')
-        .select('wallet_id');
+      const walletsData = await fetchWalletsForSuperAdmin();
+      const txnCounts = await fetchWalletTransactionWalletIdsForSuperAdmin();
 
       const countMap: Record<string, number> = {};
       (txnCounts || []).forEach((t: any) => {
@@ -376,15 +377,7 @@ export function SuperAdminDataManagement() {
     setTxLoading(true);
     setTxError(null);
     try {
-      const { data, error } = await supabase
-        .from('wallet_transactions')
-        .select('*')
-        .order('created_at', { ascending: false })
-        .limit(300);
-
-      if (error) throw error;
-
-      const rawData = data || [];
+      const rawData = await fetchWalletTransactionsForSuperAdmin(300);
 
       const base: TransactionData[] = rawData.map((t: any) => ({
         id: t.id,
@@ -414,10 +407,7 @@ export function SuperAdminDataManagement() {
 
       if (siteVisitIds.length > 0) {
         try {
-          const { data: entries } = await supabase
-            .from('mmp_site_entries')
-            .select('id, state, locality, hub_office, mmp_id')
-            .in('id', siteVisitIds);
+          const entries = await fetchMmpSiteEntriesForTransactionEnrichment(siteVisitIds);
 
           const entryMap: Record<string, any> = {};
           (entries || []).forEach((e: any) => { entryMap[e.id] = e; });
@@ -425,8 +415,7 @@ export function SuperAdminDataManagement() {
           const mmpIds = [...new Set((entries || []).map((e: any) => e.mmp_id).filter(Boolean))] as string[];
           const mmpNameMap: Record<string, string> = {};
           if (mmpIds.length > 0) {
-            const { data: mmpFiles } = await supabase
-              .from('mmp_files').select('id, name').in('id', mmpIds);
+            const mmpFiles = await fetchMmpFilesForTransactionEnrichment(mmpIds);
             (mmpFiles || []).forEach((m: any) => { mmpNameMap[m.id] = m.name; });
           }
 
@@ -451,14 +440,7 @@ export function SuperAdminDataManagement() {
   const loadClaimedSites = async () => {
     setLoading(true);
     try {
-      const { data, error } = await supabase
-        .from('mmp_site_entries')
-        .select('id, site_name, site_code, state, locality, status, accepted_by, accepted_at, enumerator_fee, transport_fee, main_activity, activity_at_site')
-        .not('accepted_by', 'is', null)
-        .order('accepted_at', { ascending: false })
-        .limit(500);
-
-      if (error) throw error;
+      const data = await fetchClaimedSitesForSuperAdmin();
 
       const enriched = (data || []).map(site => ({
         ...site,
@@ -478,15 +460,7 @@ export function SuperAdminDataManagement() {
   const loadDispatchedSites = async () => {
     setLoading(true);
     try {
-      const { data, error } = await supabase
-        .from('mmp_site_entries')
-        .select('id, site_name, site_code, state, locality, status, dispatched_by, dispatched_at, main_activity, activity_at_site, hub_office')
-        .in('status', ['Dispatched', 'dispatched'])
-        .is('accepted_by', null)
-        .order('dispatched_at', { ascending: false })
-        .limit(500);
-
-      if (error) throw error;
+      const data = await fetchDispatchedSitesForSuperAdmin();
 
       const enriched = (data || []).map(site => ({
         ...site,
@@ -506,26 +480,8 @@ export function SuperAdminDataManagement() {
   const loadMMPs = async () => {
     setLoading(true);
     try {
-      const { data, error } = await supabase
-        .from('mmp_files')
-        .select(`
-          id,
-          name,
-          month,
-          year,
-          status,
-          project_id,
-          created_at,
-          projects(name)
-        `)
-        .order('created_at', { ascending: false })
-        .limit(100);
-
-      if (error) throw error;
-
-      const { data: siteCounts } = await supabase
-        .from('mmp_site_entries')
-        .select('mmp_id, status');
+      const data = await fetchMmpFilesForSuperAdmin();
+      const siteCounts = await fetchMmpSiteEntryMmpIdAndStatusForSuperAdmin();
 
       const mmpStats: Record<string, { total: number; dispatched: number; completed: number }> = {};
       (siteCounts || []).forEach((s: any) => {
@@ -680,39 +636,14 @@ export function SuperAdminDataManagement() {
       const session = await ensureValidSession();
       if (!session.success) { setProcessing(false); return; }
 
-      const { error } = await supabase
-        .from('mmp_site_entries')
-        .update({
-          status: 'verified',
-          // Clear dispatch fields
-          dispatched_by: null,
-          dispatched_at: null,
-          // Clear cost fields - must go through costing approval again
-          cost: null,
-          enumerator_fee: null,
-          transport_fee: null,
-          accepted_by: null,
-          accepted_at: null,
-          additional_data: null,
-        })
-        .eq('id', selectedDispatchedSite.id);
-
-      if (error) throw error;
-
-      await supabase.from('super_admin_audit_logs').insert({
-        action_type: 'return_to_new_sites',
-        entity_type: 'mmp_site_entry',
-        entity_id: selectedDispatchedSite.id,
-        performed_by: currentUser.id,
-        performed_by_name: currentUser.name || currentUser.email || 'Super Admin',
-        performed_by_role: currentUser.role || 'superadmin',
+      await returnToNewSitesAndInsertAudit({
+        siteEntryId: selectedDispatchedSite.id,
+        performedBy: currentUser.id,
+        performedByName: currentUser.name || currentUser.email || 'Super Admin',
+        performedByRole: currentUser.role || 'superadmin',
         reason: reason.trim(),
-        details: {
-          site_name: selectedDispatchedSite.site_name,
-          site_code: selectedDispatchedSite.site_code,
-          previous_status: 'dispatched',
-          new_status: 'verified',
-        },
+        siteName: selectedDispatchedSite.site_name,
+        siteCode: selectedDispatchedSite.site_code,
       });
 
       setShowReturnToApprovedDialog(false);
@@ -734,36 +665,14 @@ export function SuperAdminDataManagement() {
       const session = await ensureValidSession();
       if (!session.success) { setProcessing(false); return; }
 
-      const { error } = await supabase
-        .from('mmp_site_entries')
-        .update({
-          status: 'returned_to_fom',
-          dispatched_by: null,
-          dispatched_at: null,
-          cost: null,
-          enumerator_fee: null,
-          transport_fee: null,
-          accepted_by: null,
-          accepted_at: null,
-        })
-        .eq('id', selectedDispatchedSite.id);
-
-      if (error) throw error;
-
-      await supabase.from('super_admin_audit_logs').insert({
-        action_type: 'return_to_fom',
-        entity_type: 'mmp_site_entry',
-        entity_id: selectedDispatchedSite.id,
-        performed_by: currentUser.id,
-        performed_by_name: currentUser.name || currentUser.email || 'Super Admin',
-        performed_by_role: currentUser.role || 'superadmin',
+      await returnToFomAndInsertAudit({
+        siteEntryId: selectedDispatchedSite.id,
+        performedBy: currentUser.id,
+        performedByName: currentUser.name || currentUser.email || 'Super Admin',
+        performedByRole: currentUser.role || 'superadmin',
         reason: reason.trim(),
-        details: {
-          site_name: selectedDispatchedSite.site_name,
-          site_code: selectedDispatchedSite.site_code,
-          previous_status: 'dispatched',
-          new_status: 'returned_to_fom',
-        },
+        siteName: selectedDispatchedSite.site_name,
+        siteCode: selectedDispatchedSite.site_code,
       });
 
       setShowReturnToFOMDialog(false);
@@ -782,12 +691,7 @@ export function SuperAdminDataManagement() {
 
     setProcessing(true);
     try {
-      const { error } = await supabase
-        .from('mmp_files')
-        .update({ status: 'archived' })
-        .eq('id', selectedMMP.id);
-
-      if (error) throw error;
+      await archiveMmpFileById(selectedMMP.id);
 
       setShowArchiveMMPDialog(false);
       setSelectedMMP(null);
@@ -829,42 +733,19 @@ export function SuperAdminDataManagement() {
     setReverseProcessing(true);
     try {
       const reversalAmount = -Math.abs(selectedEarningTx.amount);
+      const earningAmountAbs = Math.abs(selectedEarningTx.amount);
       const now = new Date().toISOString();
 
-      // Insert counterpart negative adjustment transaction
-      const { error: insertError } = await supabase
-        .from('wallet_transactions')
-        .insert({
-          wallet_id: selectedEarningTx.wallet_id,
-          user_id: selectedEarningTx.user_id,
-          type: 'adjustment',
-          amount: reversalAmount,
-          currency: selectedEarningTx.currency,
-          description: `Reversal of earning: ${reverseReason.trim()} (original tx: ${selectedEarningTx.id.slice(0, 8)})`,
-          created_at: now,
-        });
-
-      if (insertError) throw new Error(`Failed to insert reversal: ${insertError.message}`);
-
-      // Update wallet balance
-      const { data: wallet } = await supabase
-        .from('wallets')
-        .select('balances, total_earned')
-        .eq('id', selectedEarningTx.wallet_id)
-        .single();
-
-      if (wallet) {
-        const cur = selectedEarningTx.currency;
-        const newBal = Math.max(0, (wallet.balances?.[cur] || 0) + reversalAmount);
-        await supabase
-          .from('wallets')
-          .update({
-            balances: { ...wallet.balances, [cur]: newBal },
-            total_earned: Math.max(0, (parseFloat(wallet.total_earned) || 0) - Math.abs(selectedEarningTx.amount)),
-            updated_at: now,
-          })
-          .eq('id', selectedEarningTx.wallet_id);
-      }
+      await reverseEarningAdjustmentAndUpdateWallet({
+        walletId: selectedEarningTx.wallet_id,
+        userId: selectedEarningTx.user_id,
+        currency: selectedEarningTx.currency,
+        earningAmountAbs,
+        reversalAmount,
+        originalTxId: selectedEarningTx.id,
+        reason: reverseReason.trim(),
+        nowIso: now,
+      });
 
       toast({ title: 'Earning Reversed', description: `A reversal adjustment of ${reversalAmount.toLocaleString()} ${selectedEarningTx.currency} has been applied to ${selectedEarningTx.user_name}'s wallet.` });
       setShowReverseEarningDialog(false);
@@ -887,10 +768,7 @@ export function SuperAdminDataManagement() {
     // Fetch linked advance requests to warn admin
     setReclaimAdvanceLoading(true);
     try {
-      const { data } = await supabase
-        .from('down_payment_requests')
-        .select('id, requested_amount, currency, status, created_at')
-        .eq('mmp_site_entry_id', site.id);
+      const data = await fetchDownPaymentRequestsByMmpSiteEntryId({ mmpSiteEntryId: site.id });
 
       if (data) {
         const pending = data.filter(r => r.status === 'pending_supervisor' || r.status === 'pending_admin');

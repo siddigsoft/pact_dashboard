@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import ClassificationBadge from './ClassificationBadge';
-import { useClassification } from '@/context/classification/ClassificationContext';
+import { useClassification } from '@/features/classification/context/ClassificationContext';
 import { Badge } from '@/components/ui/badge';
 
 interface UserClassificationBadgeProps {

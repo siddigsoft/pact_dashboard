@@ -10,9 +10,9 @@ import {
 import { MessageSquare, MapPin, MoreVertical } from 'lucide-react';
 import { User } from '@/types/user';
 import { useNavigate } from 'react-router-dom';
-import { useChat } from '@/context/chat/ChatContextSupabase';
+import { useChat } from '@/features/chat/context/ChatContextSupabase';
 import { SmartSiteAssignmentDialog } from './SmartSiteAssignmentDialog';
-import { useToast } from '@/hooks/use-toast';
+import { useToast } from '@/shared/hooks/use-toast';
 
 interface TeamMemberActionsProps {
   user: User;

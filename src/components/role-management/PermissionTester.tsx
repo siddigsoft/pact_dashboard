@@ -5,9 +5,9 @@ import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Separator } from '@/components/ui/separator';
 import { Shield, CheckCircle, XCircle, AlertTriangle, Users, Eye } from 'lucide-react';
-import { useAppContext } from '@/context/AppContext';
-import { useRoleManagement } from '@/context/role-management/RoleManagementContext';
-import { useAuthorization } from '@/hooks/use-authorization';
+import { useAppContext } from '@/shared/context/AppContext';
+import { useRoleManagement } from '@/features/roleManagement/context/RoleManagementContext';
+import { useAuthorization } from '@/features/auth/hooks/use-authorization';
 import { ResourceType, ActionType, RESOURCES, ACTIONS } from '@/types/roles';
 
 interface PermissionTesterProps {
