@@ -11,11 +11,15 @@
       "Bash(find /c/Users/user/Desktop/tpm-workflow/src/components -name \"*.tsx\" -exec wc -l {})",
       "mcp__vexp__get_skeleton",
       "Bash(npm run:*)",
+<<<<<<< HEAD
       "Bash(echo \"Exit code: $?\")",
       "Bash(sed 's|from ''''./adapter''''|from ''''./adapter''''|g' \"C:/Users/user/Desktop/tpm-workflow/src/context/costApproval/supabase.ts\")",
       "Bash(\"C:/Users/user/Desktop/tpm-workflow/src/repositories/costApproval/costApprovalRepository.ts\")",
       "Bash(grep -n \"from ''./supabase''\" C:/Users/user/Desktop/tpm-workflow/src/context/siteVisit/SiteVisitContext.tsx)",
       "Bash(node:*)"
+=======
+      "Bash(echo \"Exit code: $?\")"
+>>>>>>> 47a76416aa2230b58358b8bcac191e6888ee9025
     ]
   }
 }
