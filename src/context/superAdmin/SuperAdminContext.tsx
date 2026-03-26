@@ -181,9 +181,20 @@ export function SuperAdminProvider({ children }: { children: React.ReactNode }) 
         .order('created_at', { ascending: false });
 
       if (error) {
-        // Suppress RLS permission errors - just log them
-        if (error.code === '42501' || error.message?.includes('permission') || error.message?.includes('RLS')) {
-          console.log('[SuperAdmin] No permission to fetch super-admins (expected for non-admins)');
+        // Silently handle all known non-critical DB errors:
+        // 42501 = insufficient_privilege (RLS)
+        // 42P01 = undefined_table (table not yet created in this env)
+        // PGRST* = PostgREST-level errors
+        const isSilentError =
+          error.code === '42501' ||
+          error.code === '42P01' ||
+          error.code?.startsWith('PGRST') ||
+          error.message?.includes('permission') ||
+          error.message?.includes('RLS') ||
+          error.message?.includes('policy') ||
+          error.message?.includes('does not exist');
+        if (isSilentError) {
+          console.log('[SuperAdmin] Could not fetch super-admins:', error.code, error.message);
           setSuperAdmins([]);
           setStats(null);
           setLoading(false);
@@ -204,26 +215,13 @@ export function SuperAdminProvider({ children }: { children: React.ReactNode }) 
         recentActivity: [],
       });
     } catch (error: any) {
-      // Only log and show error for unexpected errors, not permission issues
-      const isPermissionError = error.code === '42501' || 
-        error.message?.includes('permission') || 
-        error.message?.includes('RLS') ||
-        error.message?.includes('policy');
-      
-      if (!isPermissionError) {
-        console.error('Failed to fetch super-admins:', error);
-        toast({
-          title: 'Error',
-          description: 'Failed to load super-admin data',
-          variant: 'destructive',
-        });
-      } else {
-        console.log('[SuperAdmin] Permission denied (expected for non-admin roles)');
-      }
+      // Never show a toast for super-admin data loading failures —
+      // silently log instead to avoid noisy errors on the dashboard.
+      console.warn('[SuperAdmin] refreshSuperAdmins error (suppressed):', error?.code, error?.message);
     } finally {
       setLoading(false);
     }
-  }, [currentUser, isLikelyAdminRole, isLikelySuperAdminRole, toast]);
+  }, [currentUser, isLikelyAdminRole, isLikelySuperAdminRole]);
 
   const refreshDeletionLogs = useCallback(async () => {
     try {
@@ -234,20 +232,22 @@ export function SuperAdminProvider({ children }: { children: React.ReactNode }) 
         .limit(100);
 
       if (error) {
-        // Suppress RLS permission errors - just log them
-        if (error.code === '42501' || error.message?.includes('permission') || error.message?.includes('RLS')) {
-          console.log('[SuperAdmin] No permission to fetch deletion logs (expected for some roles)');
-          setDeletionLogs([]);
-          return;
-        }
-        throw error;
+        const isSilentError =
+          error.code === '42501' ||
+          error.code === '42P01' ||
+          error.code?.startsWith('PGRST') ||
+          error.message?.includes('permission') ||
+          error.message?.includes('RLS') ||
+          error.message?.includes('policy') ||
+          error.message?.includes('does not exist');
+        console.log('[SuperAdmin] Could not fetch deletion logs:', error.code, error.message);
+        setDeletionLogs([]);
+        if (!isSilentError) throw error;
+        return;
       }
       setDeletionLogs((data || []).map(transformDeletionLogFromDB));
     } catch (error: any) {
-      // Suppress permission-related errors silently
-      if (!error.message?.includes('permission') && !error.message?.includes('RLS') && error.code !== '42501') {
-        console.error('Failed to fetch deletion logs:', error);
-      }
+      console.warn('[SuperAdmin] refreshDeletionLogs error (suppressed):', error?.code, error?.message);
     }
   }, []);
 
@@ -298,11 +298,11 @@ export function SuperAdminProvider({ children }: { children: React.ReactNode }) 
   }, [currentUser, checkSuperAdminStatus, refreshSuperAdmins, refreshDeletionLogs]);
 
   useRealtimeTable('super_admins', refreshSuperAdmins, {
-    enabled: !!currentUser,
+    enabled: !!currentUser && (isLikelyAdminRole || isLikelySuperAdminRole),
   });
 
   useRealtimeTable('deletion_audit_log', refreshDeletionLogs, {
-    enabled: !!currentUser,
+    enabled: !!currentUser && (isLikelyAdminRole || isLikelySuperAdminRole),
   });
 
   const createSuperAdmin = async (data: CreateSuperAdmin): Promise<boolean> => {
