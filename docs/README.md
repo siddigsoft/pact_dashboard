@@ -4,6 +4,15 @@
 
 Welcome to the PACT documentation hub! This directory contains comprehensive guides for developers, administrators, and end users.
 
+## Core Shareable Documentation
+
+Use these files for onboarding developers and briefing stakeholders:
+
+- `../README.md` - top-level platform overview, setup, and contribution workflow
+- `ARCHITECTURE.md` - feature-first architecture and technical boundaries
+- `DEVELOPER_HANDBOOK.md` - developer workflows, standards, and release checks
+- `STAKEHOLDER_OVERVIEW.md` - business capability map and governance view
+
 ---
 
 ## 🎯 Quick Navigation

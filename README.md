@@ -1,73 +1,144 @@
-# Welcome to your Lovable project
+# PACT Workflow Platform
 
-## Project info
+Production web and mobile operations platform for monitoring plans, approvals, finance, field coordination, and reporting.
 
-**URL**: https://lovable.dev/projects/91773677-c07f-4ef0-aac3-32c7b3821cde
+## Why This Exists
 
-## How can I edit this code?
+PACT centralizes operational workflows that are typically scattered across spreadsheets, chat tools, and manual approvals:
+- Monthly Monitoring Plan (MMP) lifecycle
+- Field visit planning and execution
+- Cost submission and finance approvals
+- Wallet, down payment, and reconciliation flows
+- Notifications, auditability, and role-based governance
 
-There are several ways of editing your application.
+## Audience
 
-**Use Lovable**
+- **Developers:** build, test, and ship feature-first modules quickly
+- **Product and operations stakeholders:** understand workflows, scope, and release behavior
+- **Admins and support teams:** run day-to-day operations safely
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/91773677-c07f-4ef0-aac3-32c7b3821cde) and start prompting.
+## Tech Stack
 
-Changes made via Lovable will be committed automatically to this repo.
+- React 18 + TypeScript + Vite
+- Tailwind CSS + Radix UI + shadcn/ui
+- React Router + TanStack Query
+- Supabase (Auth, Postgres, Functions)
+- Capacitor + Firebase Crashlytics (mobile runtime and diagnostics)
+- Vitest + Testing Library
 
-**Use your preferred IDE**
+## Project Status
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
+- Architecture uses **feature-first vertical slicing** under `src/features/*`
+- Shared cross-domain code lives in `src/shared/*`
+- App-level bootstrapping/routing is in `src/app/*` and `src/App.tsx`
+- Path aliases use `@/* -> src/*` from `tsconfig.json`
 
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
+## Quick Start
 
-Follow these steps:
+### Prerequisites
 
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
+- Node.js 20+
+- npm 10+
 
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
+### Install and Run
 
-# Step 3: Install the necessary dependencies.
-npm i
-
-# Step 4: Start the development server with auto-reloading and an instant preview.
+```bash
+npm install
 npm run dev
 ```
 
-**Edit a file directly in GitHub**
+App runs locally via Vite (default: `http://localhost:5173` unless overridden).
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+## Environment Configuration
 
-**Use GitHub Codespaces**
+Create `.env` (or `.env.local`) with required Supabase and mobile-related keys.
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+At minimum, ensure:
+- Supabase URL and anon key are defined
+- Any runtime config expected by `src/integrations/supabase/*` is available
 
-## What technologies are used for this project?
+If Supabase is not configured, the app intentionally shows a configuration guard screen instead of crashing.
 
-This project is built with:
+## Core Commands
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+```bash
+# Development
+npm run dev
+npm run build
+npm run preview
 
-## How can I deploy this project?
+# Quality
+npm run lint
+npx tsc --noEmit
+npm run test
+npm run test:watch
+npm run test:coverage
 
-Simply open [Lovable](https://lovable.dev/projects/91773677-c07f-4ef0-aac3-32c7b3821cde) and click on Share -> Publish.
+# Mobile (Capacitor / Android)
+npm run cap:sync
+npm run cap:copy
+npm run cap:open:android
+npm run cap:build:apk
+```
 
-## Can I connect a custom domain to my Lovable project?
+## Repository Structure
 
-Yes, you can!
+```text
+src/
+  app/                 # App-level routes, boundaries, global shells
+  features/            # Domain modules (vertical slices)
+  shared/              # Shared context, components, hooks, pages
+  platform/            # Mobile/runtime platform integrations
+  services/            # Cross-cutting services
+  integrations/        # External API and client integrations
+  components/          # Legacy/shared UI kept during transition
+  utils/, lib/, types/ # Utilities, helpers, and shared types
+```
 
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
+Feature domains currently include:
+`admin`, `analytics`, `approval`, `archive`, `audit`, `auth`, `budget`, `calendar`, `calls`, `chat`, `classification`, `coordinator`, `costApproval`, `dashboard`, `documents`, `downPayment`, `finance`, `location`, `mmp`, `notifications`, `project`, `reports`, `roleManagement`, `settings`, `siteVisit`, `user`, `wallet`.
 
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/tips-tricks/custom-domain#step-by-step-guide)
+## Routing and App Composition
+
+- Main route definitions are in `src/App.tsx`
+- Most pages are lazy-loaded for bundle splitting
+- Global providers include:
+  - Theme
+  - Query client
+  - Navigation and app contexts
+  - Notification context
+  - Activity tracking and live dashboard contexts
+- Authentication guard wraps protected routes
+
+## Documentation Index
+
+Start here for role-specific deep dives:
+
+- `docs/ARCHITECTURE.md` - system architecture and module boundaries
+- `docs/DEVELOPER_HANDBOOK.md` - onboarding, standards, workflows, testing
+- `docs/STAKEHOLDER_OVERVIEW.md` - business capabilities, KPIs, release view
+- `docs/README.md` - legacy and specialized guides archive/index
+
+## Deployment
+
+- CI/CD workflow exists in `.github/workflows/deploy.yml`
+- Build output is generated into `dist/`
+- Deployment strategy should align with your environment (VPS/static hosting/mobile release)
+
+## Security Notes
+
+- Never commit secrets in code or workflow files
+- Keep deployment credentials in secure secret stores (e.g., GitHub Actions Secrets)
+- Review Supabase RLS, access policies, and role boundaries before production changes
+
+## Contributing
+
+1. Create feature branch
+2. Keep changes scoped by feature module
+3. Run lint, typecheck, tests, and build before PR
+4. Prefer `@/` imports and feature-local ownership
+5. Update docs for behavior or workflow changes
+
+## Maintainers
+
+PACT engineering and operations teams.
