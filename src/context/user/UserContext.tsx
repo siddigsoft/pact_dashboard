@@ -448,12 +448,13 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
         ? (userData as { role?: string }).role || 'dataCollector'
         : 'dataCollector';
 
-      // Privileged roles always bypass the approval gate regardless of profile status.
-      // Everyone else (DataCollector, coordinator, etc.) must have an explicit 'approved' status.
+      // Gate: only block users who are explicitly 'pending' or 'rejected'.
+      // Privileged roles always bypass regardless of status.
+      // null/undefined status = legacy account created before the status field existed → allow.
       const profileRoleNorm = (profileData?.role || '').toLowerCase().replace(/[\s_-]/g, '');
       const isPrivilegedRole = ['superadmin', 'admin', 'ict', 'fom', 'supervisor', 'hubsupervisor', 'datateam'].includes(profileRoleNorm);
-      const isApproved = isPrivilegedRole || profileData?.status === 'approved';
-      if (!isApproved) {
+      const explicitlyBlocked = profileData?.status === 'pending' || profileData?.status === 'rejected';
+      if (!isPrivilegedRole && explicitlyBlocked) {
         toast({
           title: i18n.t('notifications.auth.pendingApproval'),
           description: i18n.t('notifications.auth.pendingApprovalDesc'),
@@ -778,12 +779,13 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
           (userData as {role?: string}).role || 'dataCollector' : 
           'dataCollector';
 
-        // Privileged roles always bypass the approval gate regardless of profile status.
-        // Everyone else must have an explicit 'approved' status.
+        // Gate: only block users who are explicitly 'pending' or 'rejected'.
+        // Privileged roles always bypass regardless of status.
+        // null/undefined status = legacy account → allow.
         const profileRoleNorm2 = (profileData?.role || '').toLowerCase().replace(/[\s_-]/g, '');
         const isPrivilegedRole2 = ['superadmin', 'admin', 'ict', 'fom', 'supervisor', 'hubsupervisor', 'datateam'].includes(profileRoleNorm2);
-        const isApproved = isPrivilegedRole2 || profileData?.status === 'approved';
-        if (!isApproved) {
+        const explicitlyBlocked2 = profileData?.status === 'pending' || profileData?.status === 'rejected';
+        if (!isPrivilegedRole2 && explicitlyBlocked2) {
           toast({
             title: i18n.t('notifications.auth.pendingApproval'),
             description: i18n.t('notifications.auth.pendingApprovalDesc'),
