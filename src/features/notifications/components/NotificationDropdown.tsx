@@ -10,8 +10,8 @@ import { useNotifications } from '@/features/notifications/context/NotificationC
 import { useCommunication } from '@/features/calls/context/CommunicationContext';
 import { useChat } from '@/features/chat/context/ChatContextSupabase';
 import { isToday, isYesterday, isThisWeek, format } from 'date-fns';
-import { NotificationGroup } from './notification-center/NotificationGroup';
-import { NotificationFilter } from './notification-center/NotificationFilter';
+import { NotificationGroup } from '@/components/notification-center/NotificationGroup';
+import { NotificationFilter } from '@/components/notification-center/NotificationFilter';
 import { Notification } from '@/types';
 import { useUser } from '@/features/user/context/UserContext';
 import { useSiteVisitContext } from '@/features/siteVisit/context/SiteVisitContext';

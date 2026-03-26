@@ -39,8 +39,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 
-// Using relative import fallback in case path alias resolution misses new file
-import BulkClearForwardedDialog from '../components/mmp/BulkClearForwardedDialog';
+import BulkClearForwardedDialog from '@/components/mmp/BulkClearForwardedDialog';
 import { DispatchSitesDialog } from '@/features/mmp/components/DispatchSitesDialog';
 import { sudanStates } from '@/data/sudanStates';
 import { VisitReportDialog, VisitReportData } from '@/features/siteVisit/components/VisitReportDialog';

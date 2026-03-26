@@ -14,7 +14,7 @@ import {
   getOfflineStats,
   cleanExpiredCache,
   type PendingSyncAction,
-} from './offline-db';
+} from '@/platform/mobile/offline-db';
 import { createSiteVisitWalletTransaction } from '@/utils/wallet-transactions';
 import { saveGPSToRegistryFromSiteEntry } from '@/utils/sitesRegistryMatcher';
 

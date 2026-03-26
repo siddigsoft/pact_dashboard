@@ -743,6 +743,6 @@ export function updateMmpSiteEntryFields(entryId: string, patch: Record<string, 
   return supabase.from('mmp_site_entries').update(patch).eq('id', entryId);
 }
 
-export function insertMmpSiteEntryRows(rows: Record[string, unknown][]) {
+export function insertMmpSiteEntryRows(rows: Record<string, unknown>[]) {
   return supabase.from('mmp_site_entries').insert(rows);
 }

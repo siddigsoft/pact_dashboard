@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { useDevice } from './use-device';
+import { useDevice } from '@/shared/hooks/use-device';
 
 export type BiometricType = 'fingerprint' | 'face' | 'iris' | 'none';
 

@@ -10,7 +10,7 @@ import {
 } from 'lucide-react';
 import { useAppContext } from '@/shared/context/AppContext';
 import { DashboardCommandBar } from './DashboardCommandBar';
-import { MmpGlobalFilter } from './filters/MmpGlobalFilter';
+import { MmpGlobalFilter } from '@/features/dashboard/components/filters/MmpGlobalFilter';
 
 export type DashboardZone = 'operations' | 'team' | 'planning' | 'fom' | 'data-collector' | 'project-manager';
 

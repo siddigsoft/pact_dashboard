@@ -1,11 +1,11 @@
 import React, { useState, useMemo } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Calendar, FileText, Share2, MapPin, GitBranch, BarChart3 } from 'lucide-react';
-import { DashboardCalendar } from '../DashboardCalendar';
-import { MMPOverviewCard } from '../MMPOverviewCard';
-import ForwardedMMPsCard from '../ForwardedMMPsCard';
-import PlanningSiteVisitsMap from '../PlanningSiteVisitsMap';
-import PlanningSiteVisitsList from '../PlanningSiteVisitsList';
+import { DashboardCalendar } from '@/features/dashboard/components/DashboardCalendar';
+import { MMPOverviewCard } from '@/features/dashboard/components/MMPOverviewCard';
+import ForwardedMMPsCard from '@/features/dashboard/components/ForwardedMMPsCard';
+import PlanningSiteVisitsMap from '@/features/dashboard/components/PlanningSiteVisitsMap';
+import PlanningSiteVisitsList from '@/features/dashboard/components/PlanningSiteVisitsList';
 import { Button } from '@/components/ui/button';
 import { useSiteVisitContext } from '@/features/siteVisit/context/SiteVisitContext';
 import { useAppContext } from '@/shared/context/AppContext';
@@ -14,10 +14,11 @@ import { useDashboardMmpFilter } from '@/features/dashboard/context/DashboardMmp
 import { 
   DashboardFilters, 
   defaultFilterState,
-  MMPVersionSelector,
   type DashboardFilterState 
-} from '../filters';
-import { MonthlyComparisonCard, MMPPerformanceCard } from '../analytics';
+} from '@/features/dashboard/components/filters/DashboardFilters';
+import { MMPVersionSelector } from '@/features/dashboard/components/filters/MMPVersionSelector';
+import { MonthlyComparisonCard } from '@/features/dashboard/components/analytics/MonthlyComparisonCard';
+import { MMPPerformanceCard } from '@/features/dashboard/components/analytics/MMPPerformanceCard';
 import { MMPVersionHistoryCard } from '@/features/mmp/components/MMPVersionHistoryCard';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';

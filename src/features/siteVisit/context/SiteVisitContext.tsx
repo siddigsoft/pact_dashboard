@@ -2,7 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback } fr
 import { SiteVisit, User } from '@/types';
 import { useQueryClient } from '@tanstack/react-query';
 import { useToast } from '@/shared/hooks/use-toast';
-import { useUser } from '../user/UserContext';
+import { useUser } from '@/features/user/context/UserContext';
 import { SiteVisitContextType } from './types';
 import { calculateOnTimeRate, calculateUserRating } from './utils';
 import { isUserNearSite, calculateUserWorkload, calculateDistance } from '@/utils/collectorUtils';
@@ -14,8 +14,8 @@ import {
   fetchMmpSiteEntryWorkloads as dbFetchMmpSiteEntryWorkloads,
   fetchMmpSiteEntryIdsForActivity as dbFetchMmpSiteEntryIdsForActivity,
 } from '@/features/siteVisit/repository/siteVisitRepository';
-import { useNotifications } from '../notifications/NotificationContext';
-import { useWallet } from '../wallet/WalletContext';
+import { useNotifications } from '@/features/notifications/context/NotificationContext';
+import { useWallet } from '@/features/wallet/context/WalletContext';
 import { supabase } from '@/integrations/supabase/client';
 import { NotificationTriggerService } from '@/services/NotificationTriggerService';
 import { useSiteVisitsQuery, siteVisitQueryKeys } from './siteVisitQueries';

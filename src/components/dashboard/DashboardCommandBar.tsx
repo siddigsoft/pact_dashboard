@@ -4,13 +4,13 @@
  */
 
 import { useState } from 'react';
-import { ConnectionStatus } from './ConnectionStatus';
+import { ConnectionStatus } from '@/features/dashboard/components/ConnectionStatus';
 import { useLiveDashboard } from '@/features/dashboard/hooks/useLiveDashboard';
 import { useGlobalPresence } from '@/features/notifications/context/GlobalPresenceContext';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Users, MessageCircle, Phone, AlertTriangle } from 'lucide-react';
-import { OnlineUsersPanel } from './OnlineUsersPanel';
+import { OnlineUsersPanel } from '@/features/dashboard/components/OnlineUsersPanel';
 import { EmergencySOS } from '@/platform/mobile/components/EmergencySOS';
 
 interface DashboardCommandBarProps {

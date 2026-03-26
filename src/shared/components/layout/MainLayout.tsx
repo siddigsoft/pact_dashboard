@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { useNavigate, useLocation, Outlet } from "react-router-dom";
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
-import AppSidebar from "@/components/AppSidebar";
-import Navbar from "@/components/Navbar";
-import MobileAppHeader from "@/components/MobileAppHeader";
+import AppSidebar from "@/shared/components/layout/AppSidebar";
+import Navbar from "@/shared/components/layout/Navbar";
+import MobileAppHeader from "@/shared/components/layout/MobileAppHeader";
 import TabletNavigation from '@/shared/components/layout/TabletNavigation';
 import { useAppContext } from "@/shared/context/AppContext";
 import { useViewMode } from "@/shared/context/ViewModeContext";

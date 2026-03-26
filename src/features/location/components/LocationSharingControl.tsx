@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useUser } from '@/features/user/context/UserContext';
 import { useToast } from '@/shared/hooks/use-toast';
-import FloatingToggle from './common/FloatingToggle';
+import FloatingToggle from '@/shared/components/common/FloatingToggle';
 import { supabase } from '@/integrations/supabase/client';
 import { Capacitor } from '@capacitor/core';
 import { Geolocation, Position } from '@capacitor/geolocation';

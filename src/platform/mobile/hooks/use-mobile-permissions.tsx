@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { useDevice } from './use-device';
+import { useDevice } from '@/shared/hooks/use-device';
 
 export type PermissionType = 'location' | 'camera' | 'notifications' | 'storage' | 'microphone';
 export type PermissionStatus = 'granted' | 'denied' | 'prompt' | 'unknown';

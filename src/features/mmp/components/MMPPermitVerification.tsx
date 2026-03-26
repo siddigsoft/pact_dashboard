@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { useToast } from '@/shared/hooks/use-toast';
 import { MMPPermitsData, MMPStatePermitDocument } from '@/types/mmp/permits';
 import { MMPPermitFileUpload } from './MMPPermitFileUpload';
-import { PermitVerificationCard } from './permits/PermitVerificationCard';
+import { PermitVerificationCard } from '@/components/permits/PermitVerificationCard';
 import { Progress } from '@/components/ui/progress';
 import { Upload, FileCheck, Send, Eye, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import { useMMP } from '@/features/mmp/context/MMPContext';

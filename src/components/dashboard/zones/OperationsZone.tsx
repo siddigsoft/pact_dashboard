@@ -28,10 +28,10 @@ import {
 import { format } from 'date-fns';
 import { Button } from '@/components/ui/button';
 import SiteVisitsOverview from '../SiteVisitsOverview';
-import UpcomingSiteVisitsCard from '../UpcomingSiteVisitsCard';
-import { SiteVisitCostSummary } from '../SiteVisitCostSummary';
-import { DashboardCalendar } from '../DashboardCalendar';
-import { ZoneMmpAnalyticsTab } from '../shared/ZoneMmpAnalyticsTab';
+import UpcomingSiteVisitsCard from '@/features/dashboard/components/UpcomingSiteVisitsCard';
+import { SiteVisitCostSummary } from '@/features/dashboard/components/SiteVisitCostSummary';
+import { DashboardCalendar } from '@/features/dashboard/components/DashboardCalendar';
+import { ZoneMmpAnalyticsTab } from '@/features/dashboard/components/shared/ZoneMmpAnalyticsTab';
 import { useSiteVisitContext } from '@/features/siteVisit/context/SiteVisitContext';
 import { useUser } from '@/features/user/context/UserContext';
 import { useAuthorization } from '@/features/auth/hooks/use-authorization';

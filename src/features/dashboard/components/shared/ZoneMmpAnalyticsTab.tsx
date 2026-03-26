@@ -6,9 +6,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { FileText, BarChart3, GitBranch } from 'lucide-react';
 import { format } from 'date-fns';
 import { ZoneMmpStatsCards } from './ZoneMmpStatsCards';
-import { DashboardFilters, type DashboardFilterState } from '../filters';
-import { MMPVersionSelector } from '../filters/MMPVersionSelector';
-import { MonthlyComparisonCard, MMPPerformanceCard } from '../analytics';
+import { DashboardFilters, type DashboardFilterState } from '@/features/dashboard/components/filters/DashboardFilters';
+import { MMPVersionSelector } from '@/features/dashboard/components/filters/MMPVersionSelector';
+import { MonthlyComparisonCard } from '@/features/dashboard/components/analytics/MonthlyComparisonCard';
+import { MMPPerformanceCard } from '@/features/dashboard/components/analytics/MMPPerformanceCard';
 import { MMPVersionHistoryCard } from '@/features/mmp/components/MMPVersionHistoryCard';
 import type { MMPFile, MMPClassification, SiteVisit } from '@/types';
 import type { MMPStats } from '@/features/mmp/hooks/use-zone-mmp-analytics';

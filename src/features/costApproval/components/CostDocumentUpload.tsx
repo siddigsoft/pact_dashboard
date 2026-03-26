@@ -8,7 +8,7 @@ import { SupportingDocument } from "@/types/cost-submission";
 import { TransferReceiptDetails } from "@/types/receipt-details";
 import { supabase } from "@/integrations/supabase/client";
 import { useUser } from "@/features/user/context/UserContext";
-import { ReceiptDetailsDialog } from "./ReceiptDetailsDialog";
+import { ReceiptDetailsDialog } from "@/components/cost-submission/ReceiptDetailsDialog";
 import { 
   Upload, 
   File, 

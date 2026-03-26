@@ -38,8 +38,8 @@ import {
   Copy
 } from "lucide-react";
 import { SupportingDocument } from "@/types/cost-submission";
-import CostDocumentUpload from "./CostDocumentUpload";
-import ExcelUploadParser from "./ExcelUploadParser";
+import CostDocumentUpload from "@/features/costApproval/components/CostDocumentUpload";
+import ExcelUploadParser from "@/features/costApproval/components/ExcelUploadParser";
 import { useAppContext } from "@/shared/context/AppContext";
 import { supabase } from "@/integrations/supabase/client";
 import { v4 as uuidv4 } from "uuid";

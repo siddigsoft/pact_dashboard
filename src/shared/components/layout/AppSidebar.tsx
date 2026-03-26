@@ -54,8 +54,8 @@
   } from "lucide-react";
   import { RealtimeStatusDot } from '@/components/realtime';
   import { useSiteVisitReminders } from "@/features/siteVisit/hooks/use-site-visit-reminders";
-  import Logo from "../assets/logo.png";
-  import { Avatar, AvatarFallback, AvatarImage } from "./ui/avatar";
+  import Logo from "@/assets/logo.png";
+  import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
   import { useAppContext } from "@/shared/context/AppContext";
   import { 
     Sidebar, 

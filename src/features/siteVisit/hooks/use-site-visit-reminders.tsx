@@ -1,9 +1,9 @@
 import { useMemo, useState, useEffect, useRef } from "react";
 import { useAppContext } from "@/shared/context/AppContext";
 import { SiteVisit } from "@/types";
-import { useToast } from "./toast";
+import { useToast } from "@/shared/hooks/use-toast";
 import { addDays, format, isPast, isWithinInterval, parseISO, isValid } from "date-fns";
-import { useNotificationManager } from "./use-notification-manager";
+import { useNotificationManager } from "@/features/notifications/hooks/use-notification-manager";
 
 export const useSiteVisitReminders = () => {
   const { siteVisits, currentUser } = useAppContext();

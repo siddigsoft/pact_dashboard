@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import * as saRepo from '@/features/admin/repository/superAdminRepository';
-import { useUser } from '../user/UserContext';
+import { useUser } from '@/features/user/context/UserContext';
 import { useToast } from '@/shared/hooks/use-toast';
 import { ensureValidSession } from '@/lib/session-health';
 import { withTimeout } from '@/utils/promise-with-timeout';

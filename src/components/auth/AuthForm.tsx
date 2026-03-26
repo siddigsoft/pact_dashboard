@@ -17,7 +17,7 @@ import AvatarUpload from '@/components/registration/AvatarUpload';
 import { hubs, sudanStates, getLocalitiesByState } from '@/data/sudanStates';
 import { supabase } from '@/integrations/supabase/client';
 import { User as UserType } from '@/types/user';
-import { TwoFactorChallenge } from './TwoFactorChallenge';
+import { TwoFactorChallenge } from '@/features/auth/components/TwoFactorChallenge';
 
 interface AuthFormProps {
   mode: 'login' | 'signup';

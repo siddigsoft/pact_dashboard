@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useMemo, ReactNode, useCallback } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useToast } from '@/shared/hooks/use-toast';
-import { useUser } from '../user/UserContext';
+import { useUser } from '@/features/user/context/UserContext';
 import {
   upsertUserSettings,
   upsertDataVisibilitySettings,

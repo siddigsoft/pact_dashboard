@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useQueryClient } from '@tanstack/react-query';
-import { useUser } from '../user/UserContext';
+import { useUser } from '@/features/user/context/UserContext';
 import { useToast } from '@/shared/hooks/use-toast';
 import { useRealtimeTable } from '@/shared/hooks/useRealtimeResource';
 import { ensureValidSession } from '@/lib/session-health';

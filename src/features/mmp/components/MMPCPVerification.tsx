@@ -6,7 +6,7 @@ import { AlertCircle } from 'lucide-react';
 import { useToast } from '@/shared/hooks/use-toast';
 import { MMPCooperatingPartnerVerification as MMPCooperatingPartnerVerificationType } from '@/types/mmp/verification';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import SiteCooperatingPartnerVerificationCard from './verification/SiteCooperatingPartnerVerificationCard';
+import SiteCooperatingPartnerVerificationCard from '@/components/verification/SiteCooperatingPartnerVerificationCard';
 import { useAppContext } from '@/shared/context/AppContext';
 import { useMMP } from '@/features/mmp/context/MMPContext';
 import { MMPFile } from '@/types';

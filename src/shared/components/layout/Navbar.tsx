@@ -15,11 +15,11 @@ import { useTheme } from 'next-themes';
 import { useUser } from '@/features/user/context/UserContext';
 import ChatNotificationIndicator from '@/features/chat/components/ChatNotificationIndicator';
 import { NavbarNotificationBell } from '@/components/navbar/NavbarNotificationBell';
-import NavBrand from './navbar/NavBrand';
-import { GlobalSearch } from './navbar/GlobalSearch';
+import NavBrand from '@/components/navbar/NavBrand';
+import { GlobalSearch } from '@/components/navbar/GlobalSearch';
 import { RealtimeActivityIndicator } from '@/components/realtime';
 import { useFocusReconnect } from '@/shared/hooks/useFocusReconnect';
-import { CommandPalette } from '@/components/CommandPalette';
+import { CommandPalette } from '@/shared/components/common/CommandPalette';
 
 const featureList = [
         { name: 'Dashboard', path: '/dashboard' },
