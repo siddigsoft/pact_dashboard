@@ -53,7 +53,10 @@ const Dashboard = () => {
       }
     }
 
-    const isAdmin = roles?.some(r => normalizeRole(r) === 'admin');
+    const isAdmin = roles?.some(r => {
+      const n = normalizeRole(r);
+      return n === 'admin' || n === 'superadmin';
+    }) || (!!normalizedCurrentRole && (normalizedCurrentRole === 'admin' || normalizedCurrentRole === 'superadmin'));
     if (isAdmin) return 'operations';
 
     const isSupervisor = roles?.some(r => normalizeRole(r).includes('supervisor'));
