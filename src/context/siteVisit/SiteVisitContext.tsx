@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { SiteVisit, User } from '@/types';
 import { useQueryClient } from '@tanstack/react-query';
 import { useToast } from '@/hooks/use-toast';
@@ -24,9 +24,24 @@ export const SiteVisitProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const { currentUser, users, updateUser } = useUser();
   const { addSiteVisitFeeToWallet } = useWallet();
 
-  const siteVisitsQuery = useSiteVisitsQuery();
+  // Only run the query after the user is authenticated so RLS doesn't block it.
+  const isAuthenticated = !!currentUser?.id;
+  const siteVisitsQuery = useSiteVisitsQuery(isAuthenticated);
   const appSiteVisits = siteVisitsQuery.data ?? [];
   const loading = siteVisitsQuery.isLoading;
+
+  // Track the previous user id so we can detect the auth-restore moment
+  // (null → user id) and force a fresh fetch with the valid session token.
+  const prevUserIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (currentUser?.id && prevUserIdRef.current !== currentUser.id) {
+      prevUserIdRef.current = currentUser.id;
+      queryClient.invalidateQueries({ queryKey: siteVisitQueryKeys.all });
+    }
+    if (!currentUser?.id) {
+      prevUserIdRef.current = null;
+    }
+  }, [currentUser?.id, queryClient]);
 
   const refreshSiteVisits = useCallback(async () => {
     await queryClient.invalidateQueries({ queryKey: siteVisitQueryKeys.all });

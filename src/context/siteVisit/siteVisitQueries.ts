@@ -13,12 +13,13 @@ export const siteVisitQueryKeys = {
 
 const STALE_MS = 60 * 1000;
 
-export function useSiteVisitsQuery() {
+export function useSiteVisitsQuery(enabled = true) {
   return useQuery({
     queryKey: siteVisitQueryKeys.list(),
     queryFn: fetchSiteVisits,
     staleTime: STALE_MS,
     placeholderData: (prev) => prev,
+    enabled,
   });
 }
 
