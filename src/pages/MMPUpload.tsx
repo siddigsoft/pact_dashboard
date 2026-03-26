@@ -107,7 +107,7 @@ const MMPUpload = () => {
   const [validationErrors, setValidationErrors] = useState<any[] | null>(null);
   const [validationWarnings, setValidationWarnings] = useState<any[] | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const isAdmin = hasAnyRole(['admin', 'Admin', 'Super Admin', 'superadmin', 'super admin']);
+  const isAdmin = hasAnyRole(['admin', 'Admin', 'super_admin', 'Super Admin', 'superadmin', 'super admin']);
   const isICT = hasAnyRole(['ict', 'ICT']);
   const canCreate = checkPermission('mmp', 'create') || isAdmin || isICT;
   const { getMMPById, archiveMMP, approveMMP, deleteMMP, resetMMP } = useMMP();
@@ -653,7 +653,7 @@ const MMPUpload = () => {
   const canApproveAction = checkPermission('mmp', 'approve') || isAdmin;
   const canArchiveAction = checkPermission('mmp', 'archive') || isAdmin;
   const canDeleteAction = checkPermission('mmp', 'delete') || isAdmin;
-  const canForwardAction = hasAnyRole(['admin', 'ict']);
+  const canForwardAction = hasAnyRole(['admin', 'super_admin', 'Super Admin', 'ict']);
 
   const handleApproveAction = async () => {
     if (uploadedMmpId && currentUser?.id) {

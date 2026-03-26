@@ -2905,15 +2905,6 @@ const MMP = () => {
       }
     });
 
-    console.log('[MMP Page] categorizedMMPs:', {
-      new: newMMPs.length,
-      forwarded: forwardedMMPs.length,
-      verified: verifiedMMPs.length,
-      totalMmpFiles: mmpFiles.length,
-      mmpIdsWithVerifiedSites: mmpIdsWithVerifiedSites.size,
-      verifiedSample: (verifiedMMPs || []).slice(0,10).map(m => ({ id: m.id, name: m.name, projectId: m.projectId, states: (m.siteEntries||[]).map((s:any)=>s.state).filter(Boolean).slice(0,5) }))
-    });
-    
     return {
       new: newMMPs,
       forwarded: forwardedMMPs,
@@ -2956,7 +2947,6 @@ const MMP = () => {
       .map(mmp => mmp.id);
     
     if (mmpsNeedingEntries.length > 0) {
-      console.log('[MMP Page] Loading site entries for', mmpsNeedingEntries.length, 'MMPs in', activeTab, 'tab');
       loadSiteEntriesForMMPs(mmpsNeedingEntries);
     }
   }, [activeTab, categorizedMMPs.verified, categorizedMMPs.forwarded, categorizedMMPs.new, mmpFiles, loadSiteEntriesForMMPs]);
