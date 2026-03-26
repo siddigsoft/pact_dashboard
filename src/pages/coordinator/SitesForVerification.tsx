@@ -325,7 +325,7 @@ const SitesForVerification: React.FC = () => {
                                     <Button
                                       size="sm"
                                       onClick={() => navigate(`/mmp/${site.mmpDetails?.mmpId}/verification`)}
-                                      className="w-full sm:w-auto min-h-[40px] py-2 px-3 sm:px-4 active:scale-95 transition-all shadow-sm hover:shadow-md"
+                                      className="w-full sm:w-auto min-h-[40px] py-2 px-3 sm:px-4 active:scale-95 transition-all shadow-sm hover:shadow-md" // Touch-friendly button
                                     >
                                       Review & Verify
                                     </Button>
