@@ -35,16 +35,26 @@ const Dashboard = () => {
 
   const defaultZone = useMemo((): DashboardZone => {
     const normalizedCurrentRole = currentUser?.role ? normalizeRole(currentUser.role) : undefined;
-    const isDataCollector = (roles?.some(r => normalizeRole(r).includes('datacollector')))
-      || (!!normalizedCurrentRole && normalizedCurrentRole.includes('datacollector'));
-    if (isDataCollector) return 'data-collector';
 
-    const isFOM = (roles?.some(r => {
-      const normalized = normalizeRole(r);
-      return normalized.includes('fom') || normalized.includes('fieldoperationmanager');
-    })) || (!!normalizedCurrentRole && (normalizedCurrentRole.includes('fom') || normalizedCurrentRole.includes('fieldoperationmanager')));
+    // Admin and SuperAdmin always take highest priority — checked first so that
+    // a user who has admin as their primary role is never overridden by a
+    // secondary DataCollector entry in the user_roles table.
+    const isAdmin = (!!normalizedCurrentRole && (normalizedCurrentRole === 'admin' || normalizedCurrentRole === 'superadmin'))
+      || roles?.some(r => {
+        const n = normalizeRole(r);
+        return n === 'admin' || n === 'superadmin';
+      });
+    if (isAdmin) return 'operations';
+
+    // FOM is second-highest priority.
+    const isFOM = (!!normalizedCurrentRole && (normalizedCurrentRole.includes('fom') || normalizedCurrentRole.includes('fieldoperationmanager')))
+      || roles?.some(r => {
+        const normalized = normalizeRole(r);
+        return normalized.includes('fom') || normalized.includes('fieldoperationmanager');
+      });
     if (isFOM) return 'fom';
 
+    // Honor saved dashboard preference (only after privilege roles are resolved).
     if (dashboardPreferences?.defaultZone) {
       const rawPref = dashboardPreferences.defaultZone as unknown as DashboardZoneType;
       const normalizedPref = (rawPref === 'dataCollector' ? 'data-collector' : rawPref === 'projectManager' ? 'project-manager' : rawPref) as DashboardZone;
@@ -53,21 +63,23 @@ const Dashboard = () => {
       }
     }
 
-    const isAdmin = roles?.some(r => {
-      const n = normalizeRole(r);
-      return n === 'admin' || n === 'superadmin';
-    }) || (!!normalizedCurrentRole && (normalizedCurrentRole === 'admin' || normalizedCurrentRole === 'superadmin'));
-    if (isAdmin) return 'operations';
-
-    const isSupervisor = roles?.some(r => normalizeRole(r).includes('supervisor'));
+    const isSupervisor = (!!normalizedCurrentRole && normalizedCurrentRole.includes('supervisor'))
+      || roles?.some(r => normalizeRole(r).includes('supervisor'));
     if (isSupervisor) return 'team';
 
-    const isCoordinator = roles?.some(r => normalizeRole(r).includes('coordinator'));
+    const isCoordinator = (!!normalizedCurrentRole && normalizedCurrentRole.includes('coordinator'))
+      || roles?.some(r => normalizeRole(r).includes('coordinator'));
     if (isCoordinator) return 'planning';
 
-    const isProjectManager = roles?.some(r => normalizeRole(r).includes('projectmanager'));
+    const isProjectManager = (!!normalizedCurrentRole && normalizedCurrentRole.includes('projectmanager'))
+      || roles?.some(r => normalizeRole(r).includes('projectmanager'));
     if (isProjectManager) return 'project-manager';
-    
+
+    // DataCollector is lowest priority — only applies when no higher role matched.
+    const isDataCollector = (!!normalizedCurrentRole && normalizedCurrentRole.includes('datacollector'))
+      || roles?.some(r => normalizeRole(r).includes('datacollector'));
+    if (isDataCollector) return 'data-collector';
+
     return 'operations';
   }, [roles, dashboardPreferences?.defaultZone, currentUser?.role]);
 
