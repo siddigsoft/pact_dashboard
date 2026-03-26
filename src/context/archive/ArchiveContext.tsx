@@ -12,6 +12,7 @@ import { User } from '@/types/user';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useRealtimeTables } from '@/hooks/useRealtimeResource';
+import { useUser } from '@/context/user/UserContext';
 
 // Create the context
 const ArchiveContext = createContext<ArchiveContextType | undefined>(undefined);
@@ -21,8 +22,10 @@ interface ArchiveProviderProps {
   currentUser?: User;
 }
 
-export const ArchiveProvider: React.FC<ArchiveProviderProps> = ({ children, currentUser }) => {
+export const ArchiveProvider: React.FC<ArchiveProviderProps> = ({ children, currentUser: _currentUserProp }) => {
   const { toast } = useToast();
+  const { currentUser: contextUser } = useUser();
+  const currentUser = _currentUserProp ?? contextUser;
   const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState<ArchiveFilter>({});
   const [currentArchive, setCurrentArchive] = useState<ArchiveMonth>();
@@ -46,6 +49,12 @@ export const ArchiveProvider: React.FC<ArchiveProviderProps> = ({ children, curr
 
   // Load function extracted for reuse
   const load = useCallback(async () => {
+    // Do not load archive data until a user is logged in.
+    if (!currentUser) {
+      setLoading(false);
+      return;
+    }
+
     try {
       setLoading(true);
 
@@ -273,22 +282,22 @@ export const ArchiveProvider: React.FC<ArchiveProviderProps> = ({ children, curr
         monthlyTrends,
       });
     } catch (e) {
-      console.error('Archive load error:', e);
-      toast({
-        title: 'Failed to load archive',
-        description: 'Please check your internet connection and try again.',
-        variant: 'destructive',
-      });
+      // Silently log — archive load failures are background operations.
+      // Errors are surfaced inline on the Archive page, not as global toasts.
+      console.error('[Archive] load error:', e);
     } finally {
       setLoading(false);
     }
-  }, [toast]);
+  }, [currentUser]);
 
   useEffect(() => {
     load();
   }, [load]);
 
-  useRealtimeTables(['mmp_files', 'mmp_site_entries', 'report_photos'], load);
+  // Only subscribe to realtime updates when a user is logged in.
+  useRealtimeTables(['mmp_files', 'mmp_site_entries', 'report_photos'], load, {
+    enabled: !!currentUser,
+  });
 
   // Select a specific month's archive
   const selectMonth = (year: number, month: number) => {
