@@ -448,7 +448,12 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
         ? (userData as { role?: string }).role || 'dataCollector'
         : 'dataCollector';
 
-      const isApproved = (profileData?.status === 'approved');
+      // Privileged roles always bypass the approval gate regardless of profile status.
+      // Only explicitly block users whose status is 'pending' or 'rejected'.
+      // Users with null/undefined status (legacy accounts) are allowed through.
+      const profileRoleNorm = (profileData?.role || '').toLowerCase().replace(/[\s_-]/g, '');
+      const isPrivilegedRole = ['superadmin', 'admin', 'ict', 'fom', 'supervisor', 'hubsupervisor', 'datateam'].includes(profileRoleNorm);
+      const isApproved = isPrivilegedRole || profileData?.status === 'approved' || !profileData?.status;
       if (!isApproved) {
         toast({
           title: i18n.t('notifications.auth.pendingApproval'),
@@ -774,7 +779,11 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
           (userData as {role?: string}).role || 'dataCollector' : 
           'dataCollector';
 
-        const isApproved = (profileData?.status === 'approved');
+        // Privileged roles always bypass the approval gate regardless of profile status.
+        // Only explicitly block users whose status is 'pending' or 'rejected'.
+        const profileRoleNorm2 = (profileData?.role || '').toLowerCase().replace(/[\s_-]/g, '');
+        const isPrivilegedRole2 = ['superadmin', 'admin', 'ict', 'fom', 'supervisor', 'hubsupervisor', 'datateam'].includes(profileRoleNorm2);
+        const isApproved = isPrivilegedRole2 || profileData?.status === 'approved' || !profileData?.status;
         if (!isApproved) {
           toast({
             title: i18n.t('notifications.auth.pendingApproval'),

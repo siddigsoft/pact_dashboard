@@ -34,11 +34,6 @@ export const useRoles = (userId?: string) => {
       }
     } catch (error: any) {
       console.error('Error fetching roles:', error);
-      toast({
-        title: 'Error fetching roles',
-        description: error.message,
-        variant: 'destructive',
-      });
     } finally {
       setIsLoading(false);
     }

@@ -121,16 +121,13 @@ export const RoleManagementProvider: React.FC<{ children: React.ReactNode }> = (
         }
       }
     } catch (error: any) {
+      // Log the full error for debugging but never expose raw network/DB error
+      // messages to users — they're not actionable and cause unnecessary alarm.
       console.error('Error fetching roles:', error);
-      toast({
-        title: 'Error fetching roles',
-        description: error.message,
-        variant: 'destructive',
-      });
     } finally {
       setIsLoading(false);
     }
-  }, [toast]);
+  }, []);
 
   const refreshUserPermissions = useCallback(async (userId: string): Promise<Permission[]> => {
     try {
