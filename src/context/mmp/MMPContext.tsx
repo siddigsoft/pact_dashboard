@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useEffect, useCallback, useRef } from 'react';
 import { MMPFile } from '@/types';
 import { supabase } from '@/integrations/supabase/client';
 import { useQueryClient } from '@tanstack/react-query';
@@ -16,6 +16,7 @@ import {
   mmpQueryKeys,
   defaultSiteEntryCounts,
 } from './mmpQueries';
+import { useUser } from '@/context/user/UserContext';
 
 const MMPContext = createContext<MMPContextType>({
   mmpFiles: [],
@@ -49,8 +50,27 @@ const MMPContext = createContext<MMPContextType>({
 
 export const useMMPProvider = () => {
   const queryClient = useQueryClient();
-  const filesQuery = useMMPFilesQuery();
-  const countsQuery = useMMPSiteEntryCountsQuery();
+  const { currentUser } = useUser();
+
+  // Gate queries on authentication so they never run unauthenticated.
+  // RLS would silently return 0 rows for unauthenticated requests and
+  // that empty result would be cached, showing stale zeros after login.
+  const isAuthenticated = !!currentUser?.id;
+  const filesQuery = useMMPFilesQuery(isAuthenticated);
+  const countsQuery = useMMPSiteEntryCountsQuery(isAuthenticated);
+
+  // When the user's session is first restored (null → id), invalidate
+  // MMP caches so they re-fetch with valid credentials.
+  const prevUserIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (currentUser?.id && prevUserIdRef.current !== currentUser.id) {
+      prevUserIdRef.current = currentUser.id;
+      queryClient.invalidateQueries({ queryKey: mmpQueryKeys.all });
+    }
+    if (!currentUser?.id) {
+      prevUserIdRef.current = null;
+    }
+  }, [currentUser?.id, queryClient]);
 
   const mmpFiles = filesQuery.data ?? [];
   const loading = filesQuery.isLoading;

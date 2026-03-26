@@ -69,6 +69,8 @@ async function fetchMMPFiles(): Promise<MMPFile[]> {
 
 async function fetchSiteEntryCounts(): Promise<SiteEntryCounts> {
   if (!navigator.onLine) return defaultSiteEntryCounts;
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) return defaultSiteEntryCounts;
 
   const { data: rows, error } = await supabase
     .from('mmp_site_entries')
@@ -154,24 +156,26 @@ const COUNTS_STALE_MS = 30 * 1000;      // 30 seconds
 /**
  * Fetches MMP files with site entries. Cached and deduplicated by React Query.
  */
-export function useMMPFilesQuery() {
+export function useMMPFilesQuery(enabled = true) {
   return useQuery({
     queryKey: mmpQueryKeys.files(),
     queryFn: fetchMMPFiles,
     staleTime: MMP_FILES_STALE_MS,
     placeholderData: (previousData) => previousData,
+    enabled,
   });
 }
 
 /**
  * Fetches site entry counts (dispatched, accepted, etc.). Cached and deduplicated.
  */
-export function useMMPSiteEntryCountsQuery() {
+export function useMMPSiteEntryCountsQuery(enabled = true) {
   return useQuery({
     queryKey: mmpQueryKeys.siteEntryCounts(),
     queryFn: fetchSiteEntryCounts,
     staleTime: COUNTS_STALE_MS,
     placeholderData: (previousData) => previousData ?? defaultSiteEntryCounts,
+    enabled,
   });
 }
 
