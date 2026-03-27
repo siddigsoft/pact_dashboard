@@ -470,6 +470,7 @@ const MMP = () => {
   // Prevents re-fetching the same data every time the user switches tabs and comes back.
   const dispatchedLoadedKeyRef = useRef<string>('');
   const acceptedLoadedKeyRef = useRef<string>('');
+  const approvedCostedLoadedKeyRef = useRef<string>('');
   const [dispatchedStateFilter, setDispatchedStateFilter] = useState<string>('all');
   const [dispatchedLocalityFilter, setDispatchedLocalityFilter] = useState<string>('all');
   const [acceptedSiteEntries, setAcceptedSiteEntries] = useState<any[]>([]);
@@ -3630,7 +3631,15 @@ const MMP = () => {
   // Load approved and costed site entries directly from database for fresh data
   useEffect(() => {
       if (verifiedSubTab !== 'approvedCosted') {
-        setApprovedCostedSiteEntries([]);
+        // Keep cached data — don't clear it so switching back is instant.
+        setLoadingApprovedCosted(false);
+        return;
+      }
+
+      const verifiedMmpIdsSorted = (categorizedMMPs.verified || []).map(m => m.id).sort().join(',');
+      const fetchKey = `${adminRefreshTrigger}::${verifiedMmpIdsSorted}`;
+      // Skip fetch if same data already loaded — avoids refetch on every tab switch.
+      if (approvedCostedLoadedKeyRef.current === fetchKey) {
         setLoadingApprovedCosted(false);
         return;
       }
@@ -3694,6 +3703,7 @@ const MMP = () => {
           if (!cancelled) {
             setApprovedCostedSiteEntries(formattedEntries);
             setApprovedCostedCount(formattedEntries.length);
+            approvedCostedLoadedKeyRef.current = fetchKey;
           }
         } catch (err) {
           console.error('[ApprovedCosted] Failed to load:', err);
@@ -3704,7 +3714,7 @@ const MMP = () => {
 
       loadApprovedCostedFromDB();
       return () => { cancelled = true; };
-  }, [verifiedSubTab, categorizedMMPs.verified, formatSiteEntry]);
+  }, [verifiedSubTab, categorizedMMPs.verified, adminRefreshTrigger, formatSiteEntry]);
 
   
   // Load dispatched site entries directly from database for fresh data
