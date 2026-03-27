@@ -323,36 +323,29 @@ export const RoleManagementProvider: React.FC<{ children: React.ReactNode }> = (
       const assignedBy = auth?.user?.id ?? null;
       const now = new Date().toISOString();
 
+      // Single-role enforcement: clear all existing roles for this user first,
+      // then insert exactly one new role. This prevents multiple roles accumulating.
+      const { error: delErr } = await supabase
+        .from('user_roles')
+        .delete()
+        .eq('user_id', assignData.user_id);
+      if (delErr) throw delErr;
+
       if (assignData.role) {
-        const { data: exists, error: checkErr } = await supabase
+        const { error: insErr } = await supabase
           .from('user_roles')
-          .select('id')
-          .eq('user_id', assignData.user_id)
-          .eq('role', assignData.role)
-          .limit(1);
-        if (checkErr) throw checkErr;
-
-        if (!exists || exists.length === 0) {
-          const { error: insErr } = await supabase
-            .from('user_roles')
-            .insert({ user_id: assignData.user_id, role: assignData.role, assigned_by: assignedBy, assigned_at: now });
-          if (insErr) throw insErr;
-        }
+          .insert({ user_id: assignData.user_id, role: assignData.role, assigned_by: assignedBy, assigned_at: now });
+        if (insErr) throw insErr;
+        // Keep profiles.role in sync so both sources agree on the single role.
+        await supabase
+          .from('profiles')
+          .update({ role: assignData.role })
+          .eq('id', assignData.user_id);
       } else if (assignData.role_id) {
-        const { data: exists, error: checkErr } = await supabase
+        const { error: insErr } = await supabase
           .from('user_roles')
-          .select('id')
-          .eq('user_id', assignData.user_id)
-          .eq('role_id', assignData.role_id)
-          .limit(1);
-        if (checkErr) throw checkErr;
-
-        if (!exists || exists.length === 0) {
-          const { error: insErr } = await supabase
-            .from('user_roles')
-            .insert({ user_id: assignData.user_id, role_id: assignData.role_id, assigned_by: assignedBy, assigned_at: now });
-          if (insErr) throw insErr;
-        }
+          .insert({ user_id: assignData.user_id, role_id: assignData.role_id, assigned_by: assignedBy, assigned_at: now });
+        if (insErr) throw insErr;
       } else {
         throw new Error('Either role or role_id must be provided');
       }
