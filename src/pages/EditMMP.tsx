@@ -1,10 +1,20 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from '@/components/ui/button';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, Trash2, AlertTriangle } from 'lucide-react';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { useMMP } from '@/context/mmp/MMPContext';
 import { useAuthorization } from '@/hooks/use-authorization';
 import MMPOverallInformation from '@/components/MMPOverallInformation';
@@ -23,18 +33,23 @@ const EditMMP: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { getMmpById, updateMMP, refreshMMPFiles } = useMMP();
-  const { checkPermission, hasAnyRole } = useAuthorization();
+  const { getMmpById, updateMMP, refreshMMPFiles, loading: mmpContextLoading, deleteMMP, fetchSiteEntriesForMMP } = useMMP();
+  const { checkPermission, hasAnyRole, isSuperAdmin } = useAuthorization();
   const { toast } = useToast();
   const [loading, setLoading] = useState(true);
   const [mmpFile, setMmpFile] = useState<any>(null);
   const [activeTab, setActiveTab] = useState<string>('upload');
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [siteEntriesLoaded, setSiteEntriesLoaded] = useState(false);
+  const notFoundRef = useRef(false);
 
   const isAdmin = hasAnyRole(['admin']);
   const isFOM = hasAnyRole(['fom', 'Field Operation Manager (FOM)']);
   const isCoordinator = hasAnyRole(['coordinator']);
   const isSupervisor = hasAnyRole(['supervisor', 'hubsupervisor']);
-  const canEdit = checkPermission('mmp', 'update') || isAdmin || isCoordinator || isSupervisor || isFOM;
+  const canDelete = isSuperAdmin() || isAdmin;
+  const canEdit = checkPermission('mmp', 'update') || isAdmin || isCoordinator || isSupervisor || isFOM || isSuperAdmin();
 
   if (!canEdit) {
     return (
@@ -62,28 +77,46 @@ const EditMMP: React.FC = () => {
 
   useEffect(() => {
     const initialTab = searchParams.get('tab');
-    // Keep 'upload' as the default active tab on load. Only honor the URL tab param
-    // if it explicitly requests 'upload'. This prevents 'partial-update' from
-    // becoming active by default when arriving at the page.
     if (initialTab === 'upload') setActiveTab('upload');
   }, [searchParams]);
 
+  // Wait for context to finish loading before declaring "not found"
   useEffect(() => {
-    if (id) {
-      const mmp = getMmpById(id);
-      if (mmp) {
-        setMmpFile(mmp);
-        setLoading(false);
-      } else {
-        toast({
-          title: "MMP Not Found",
-          description: "The MMP you're trying to edit does not exist.",
-          variant: "destructive"
-        });
-        navigate("/mmp");
-      }
+    if (!id) return;
+    if (mmpContextLoading) return; // still loading — do not navigate away yet
+
+    const mmp = getMmpById(id);
+    if (mmp) {
+      setMmpFile(mmp);
+      setLoading(false);
+      notFoundRef.current = false;
+    } else if (!notFoundRef.current) {
+      notFoundRef.current = true;
+      toast({
+        title: "MMP Not Found",
+        description: "The MMP you're trying to edit does not exist.",
+        variant: "destructive"
+      });
+      navigate("/mmp");
     }
-  }, [id, getMmpById, navigate, toast]);
+  }, [id, getMmpById, mmpContextLoading, navigate, toast]);
+
+  // Load site entries from Supabase when the Sites tab is opened (lazy)
+  const loadSiteEntries = useCallback(async () => {
+    if (!id || siteEntriesLoaded) return;
+    setSiteEntriesLoaded(true);
+    try {
+      const entries = await fetchSiteEntriesForMMP(id);
+      setMmpFile((prev: any) => prev ? { ...prev, siteEntries: entries } : prev);
+    } catch (e) {
+      console.warn('EditMMP: could not load site entries', e);
+    }
+  }, [id, siteEntriesLoaded, fetchSiteEntriesForMMP]);
+
+  const handleTabChange = (tab: string) => {
+    setActiveTab(tab);
+    if (tab === 'sites') loadSiteEntries();
+  };
 
   const handleUpdate = (updatedMMP: any) => {
     if (updateMMP && id) {
@@ -118,7 +151,6 @@ const EditMMP: React.FC = () => {
       if (!session.success) return false;
 
       for (const site of sites) {
-        // Migrate data from additional_data to columns if needed
         const ad = site.additionalData || site.additional_data || {};
         const updateData: any = {
           site_name: site.site_name || site.siteName || ad['Site Name'] || ad['Site Name:'] || null,
@@ -146,7 +178,6 @@ const EditMMP: React.FC = () => {
           additional_data: site.additionalData || site.additional_data || {},
         };
 
-        // Remove undefined to avoid overwriting with nulls
         Object.keys(updateData).forEach((k) => {
           if (typeof updateData[k] === 'undefined') delete updateData[k];
         });
@@ -160,10 +191,8 @@ const EditMMP: React.FC = () => {
         }
       }
 
-      // Refresh context to ensure real-time updates propagate
       await refreshMMPFiles();
 
-      // Update local state with edited sites (optimistic) and notify
       const updatedMMP = { ...mmpFile, siteEntries: sites };
       setMmpFile(updatedMMP);
       toast({
@@ -182,7 +211,29 @@ const EditMMP: React.FC = () => {
     }
   };
 
-  if (loading) {
+  const handleDeleteMMP = async () => {
+    if (!id || !canDelete) return;
+    setIsDeleting(true);
+    try {
+      await deleteMMP(id);
+      toast({
+        title: 'MMP Deleted',
+        description: `${mmpFile?.name || 'This MMP'} has been permanently deleted.`,
+      });
+      navigate('/mmp');
+    } catch (e: any) {
+      toast({
+        title: 'Delete Failed',
+        description: e?.message || 'Could not delete this MMP. Please try again.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsDeleting(false);
+      setShowDeleteDialog(false);
+    }
+  };
+
+  if (loading || mmpContextLoading) {
     return (
       <div className="container mx-auto p-4">
         <Card>
@@ -196,22 +247,36 @@ const EditMMP: React.FC = () => {
     );
   }
 
+  const actualSiteCount = mmpFile?.siteEntries?.length ?? 0;
+  const declaredSiteCount = mmpFile?.entries ?? mmpFile?.totalSites ?? 0;
+
   return (
     <FieldTeamMapPermissions resource="mmp" action="update">
       <div className="container mx-auto p-4 space-y-6">
         <div className="flex items-center gap-4 mb-4">
-          <Button 
-            variant="ghost" 
-            size="icon" 
+          <Button
+            variant="ghost"
+            size="icon"
             onClick={handleGoBack}
             className="mr-2"
           >
             <ArrowLeft className="h-5 w-5" />
           </Button>
-          <div>
+          <div className="flex-1">
             <h1 className="text-2xl font-bold">{mmpFile?.name}</h1>
             <p className="text-muted-foreground">{mmpFile?.mmpId}</p>
           </div>
+          {canDelete && (
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={() => setShowDeleteDialog(true)}
+              className="flex items-center gap-2"
+            >
+              <Trash2 className="h-4 w-4" />
+              Delete MMP
+            </Button>
+          )}
         </div>
 
         <Card>
@@ -220,31 +285,43 @@ const EditMMP: React.FC = () => {
             <CardDescription>Update details for MMP: {mmpFile?.mmpId}</CardDescription>
           </CardHeader>
           <CardContent>
-            <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
+            <Tabs value={activeTab} onValueChange={handleTabChange} className="space-y-4">
               <TabsList>
                 <TabsTrigger value="upload">Upload Update</TabsTrigger>
                 <TabsTrigger value="details">MMP Details</TabsTrigger>
-                <TabsTrigger value="sites">Sites</TabsTrigger>
+                <TabsTrigger value="sites">
+                  Sites
+                  {actualSiteCount > 0 && (
+                    <span className="ml-1.5 text-xs bg-primary/10 text-primary px-1.5 py-0.5 rounded-full">
+                      {actualSiteCount}
+                    </span>
+                  )}
+                  {actualSiteCount === 0 && declaredSiteCount > 0 && (
+                    <span className="ml-1.5 text-xs bg-muted text-muted-foreground px-1.5 py-0.5 rounded-full">
+                      {declaredSiteCount}
+                    </span>
+                  )}
+                </TabsTrigger>
                 <TabsTrigger value="partial-update">Partial Update</TabsTrigger>
                 <TabsTrigger value="activities">Activities</TabsTrigger>
                 <TabsTrigger value="history">Version History</TabsTrigger>
               </TabsList>
 
               <TabsContent value="details" className="space-y-4">
-                <MMPOverallInformation 
-                  mmpFile={mmpFile} 
+                <MMPOverallInformation
+                  mmpFile={mmpFile}
                   onUpdate={handleUpdate}
                   editable={true}
                 />
               </TabsContent>
 
               <TabsContent value="sites" className="space-y-4">
-                <MMPSiteInformation 
+                <MMPSiteInformation
                   mmpFile={mmpFile}
                   showVerificationButton={false}
                   onUpdateMMP={handleUpdate}
                 />
-                <MMPSiteEntriesTable 
+                <MMPSiteEntriesTable
                   siteEntries={mmpFile?.siteEntries || []}
                   editable={true}
                   onUpdateSites={handleUpdateSites}
@@ -258,6 +335,8 @@ const EditMMP: React.FC = () => {
                     await refreshMMPFiles();
                     const updated = getMmpById(id!);
                     if (updated) setMmpFile(updated);
+                    setSiteEntriesLoaded(false);
+                    setTimeout(() => loadSiteEntries(), 500);
                   }}
                 />
               </TabsContent>
@@ -281,6 +360,35 @@ const EditMMP: React.FC = () => {
           </CardContent>
         </Card>
       </div>
+
+      <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2 text-destructive">
+              <AlertTriangle className="h-5 w-5" />
+              Delete MMP
+            </AlertDialogTitle>
+            <AlertDialogDescription className="space-y-2">
+              <p>
+                You are about to permanently delete <strong>{mmpFile?.name}</strong> ({mmpFile?.mmpId}).
+              </p>
+              <p className="text-destructive font-medium">
+                This will also reverse any wallet transactions linked to accepted sites in this MMP. This action cannot be undone.
+              </p>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeleteMMP}
+              disabled={isDeleting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {isDeleting ? 'Deleting...' : 'Yes, Delete MMP'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </FieldTeamMapPermissions>
   );
 };

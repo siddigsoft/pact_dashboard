@@ -16,6 +16,7 @@ import { MobileBottomNav } from "@/components/mobile/MobileBottomNav";
 import { useLiveDashboard } from "@/hooks/useLiveDashboard";
 import { RealtimeBanner } from "@/components/realtime";
 import { queryClient } from "@/lib/queryClient";
+import { useDailyCoordinatorDigest } from "@/hooks/use-daily-coordinator-digest";
 
 interface MainLayoutContentProps {
   children?: React.ReactNode;
@@ -25,6 +26,7 @@ const MainLayoutContent: React.FC<MainLayoutContentProps> = ({ children }) => {
   // Get app context - now this will be available since we've fixed the provider order
   const { currentUser, authReady } = useAppContext();
   useLiveDashboard();
+  useDailyCoordinatorDigest();
   const navigate = useNavigate();
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
