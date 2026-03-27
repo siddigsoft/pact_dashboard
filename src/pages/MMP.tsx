@@ -2131,8 +2131,10 @@ const MMP = () => {
   const isCoordinator = hasRole(['Coordinator', 'coordinator']);
   const isDataCollector = hasRole(['DataCollector', 'datacollector', 'Data Collector', 'data collector', 'enumerator', 'Enumerator']);
   const isDataTeam = hasRole(['DataTeam', 'dataTeam', 'data_team', 'Data Team']);
-  // Data collectors and coordinators can claim/accept sites; supervisors are oversight-only and do NOT claim sites
-  const canClaimSites = isDataCollector || isCoordinator;
+  // Data collectors and coordinators can claim/accept sites; supervisors, FOM, ICT and admins are oversight-only.
+  // PRIORITY RULE: admin/ICT/FOM always override DataCollector, even when DataCollector appears
+  // as a secondary entry in the user_roles table (same priority logic used in Dashboard routing).
+  const canClaimSites = !isAdmin && !isICT && !isFOM && (isDataCollector || isCoordinator);
   
   // Hub-based access control for supervisors
   // Supervisors should only see operations within their assigned hub
