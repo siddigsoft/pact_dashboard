@@ -154,12 +154,40 @@ const MMP_FILES_STALE_MS = 60 * 1000;   // 1 minute
 const COUNTS_STALE_MS = 30 * 1000;      // 30 seconds
 
 /**
- * Fetches MMP files with site entries. Cached and deduplicated by React Query.
+ * `fetchMMPFiles` intentionally returns each MMP with empty `siteEntries` (loaded on-demand).
+ * When React Query refetches, replacing cached data would wipe lazily loaded entries and cause
+ * rows to vanish until background loads finish again. Re-attach prior entries per MMP id.
+ */
+export function mergeMMPFilesPreserveLazySiteEntries(
+  fresh: MMPFile[],
+  prev: MMPFile[] | undefined
+): MMPFile[] {
+  if (!prev?.length) return fresh;
+  const prevById = new Map(prev.map((m) => [m.id, m]));
+  return fresh.map((m) => {
+    const prior = prevById.get(m.id);
+    const priorLen = prior?.siteEntries?.length ?? 0;
+    const freshLen = m.siteEntries?.length ?? 0;
+    if (priorLen > 0 && freshLen === 0) {
+      return { ...m, siteEntries: prior!.siteEntries };
+    }
+    return m;
+  });
+}
+
+/**
+ * Fetches MMP files (metadata + empty siteEntries). Cached and deduplicated by React Query.
+ * Refetch merges previously loaded site entries so the Verified / Forwarded tabs do not flash empty.
  */
 export function useMMPFilesQuery(enabled = true) {
+  const queryClient = useQueryClient();
   return useQuery({
     queryKey: mmpQueryKeys.files(),
-    queryFn: fetchMMPFiles,
+    queryFn: async () => {
+      const fresh = await fetchMMPFiles();
+      const prev = queryClient.getQueryData<MMPFile[]>(mmpQueryKeys.files());
+      return mergeMMPFilesPreserveLazySiteEntries(fresh, prev);
+    },
     staleTime: MMP_FILES_STALE_MS,
     placeholderData: (previousData) => previousData,
     enabled,
