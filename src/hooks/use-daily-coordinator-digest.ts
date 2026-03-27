@@ -2,39 +2,79 @@ import { useEffect, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useUser } from '@/context/user/UserContext';
 import { useAuthorization } from '@/hooks/use-authorization';
+import { hubs } from '@/data/sudanStates';
 
 const DIGEST_KEY = (userId: string) => `pact_digest_sent_${userId}`;
-const today = () => new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+const today = () => new Date().toISOString().slice(0, 10);
 
 // Days without a verification action before we flag a coordinator as "delayed"
 const DELAY_THRESHOLD_DAYS = 3;
 
+// ─── Types ──────────────────────────────────────────────────────────────────
+
 interface CoordinatorSummary {
   coordinatorId: string;
   coordinatorName: string;
-  mmpName: string;
-  mmpId: string;
+  hubOffice: string;
   totalAssigned: number;
   totalVerified: number;
   totalReturned: number;
   pendingVerification: number;
-  // Newest verified_at across all this coordinator's entries (null = never verified)
   lastVerifiedAt: string | null;
-  // Oldest dispatched_at across pending entries (null = no dispatch timestamp)
   oldestPendingDispatchedAt: string | null;
-  // Computed
   daysSinceLastVerification: number | null;
   daysOldestPendingWaiting: number | null;
   isDelayed: boolean;
 }
 
+interface RecipientProfile {
+  id: string;
+  full_name: string | null;
+  email: string | null;
+  role: string | null;
+  hub_id: string | null;
+}
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
 function daysBetween(dateStr: string | null): number | null {
   if (!dateStr) return null;
   const d = new Date(dateStr);
   if (isNaN(d.getTime())) return null;
-  const diffMs = Date.now() - d.getTime();
-  return Math.floor(diffMs / (1000 * 60 * 60 * 24));
+  return Math.max(0, Math.floor((Date.now() - d.getTime()) / (1000 * 60 * 60 * 24)));
 }
+
+/** Resolve a hub UUID to a display name using the static hubs data file */
+function resolveHubName(hubId: string | null): string | null {
+  if (!hubId) return null;
+  const found = hubs.find(h => h.id === hubId || h.name === hubId);
+  return found ? found.name : null;
+}
+
+/** True if the site's hub_office string belongs to the given hub name */
+function hubMatches(siteHubOffice: string, hubName: string): boolean {
+  const a = siteHubOffice.trim().toLowerCase();
+  const b = hubName.trim().toLowerCase();
+  return a === b || a.includes(b) || b.includes(a);
+}
+
+function normalizeRole(role: string | null): string {
+  return (role || '').toLowerCase().replace(/[\s_-]/g, '');
+}
+
+function isCoordinatorRole(role: string | null): boolean {
+  return normalizeRole(role) === 'coordinator';
+}
+
+function isSupervisorRole(role: string | null): boolean {
+  return ['supervisor', 'hubsupervisor'].includes(normalizeRole(role));
+}
+
+function isFomOrAbove(role: string | null): boolean {
+  return ['fom', 'fieldoperationmanagerfom', 'admin', 'superadmin'].includes(normalizeRole(role));
+}
+
+// ─── Arabic helpers ───────────────────────────────────────────────────────────
 
 function arabicDays(n: number): string {
   if (n === 0) return 'اليوم';
@@ -50,42 +90,26 @@ function englishDays(n: number): string {
   return `${n} days ago`;
 }
 
-async function fetchCoordinatorDigest(): Promise<CoordinatorSummary[]> {
+// ─── Data fetch ───────────────────────────────────────────────────────────────
+
+async function fetchAllCoordinatorSummaries(): Promise<CoordinatorSummary[]> {
   const { data, error } = await supabase
     .from('mmp_site_entries')
-    .select(`
-      id,
-      accepted_by,
-      status,
-      mmp_file_id,
-      verified_at,
-      dispatched_at,
-      mmp_files:mmp_file_id (
-        id,
-        name,
-        mmp_id
-      )
-    `)
+    .select('id, accepted_by, status, hub_office, verified_at, dispatched_at')
     .not('accepted_by', 'is', null)
-    .limit(5000);
+    .limit(8000);
 
   if (error || !data) return [];
 
-  // Group by coordinator
   const map = new Map<string, CoordinatorSummary>();
 
   for (const entry of data) {
-    const mmpInfo = Array.isArray(entry.mmp_files) ? entry.mmp_files[0] : entry.mmp_files;
-    if (!mmpInfo) continue;
-
-    // Key by coordinator only (aggregate across all MMPs)
     const key = entry.accepted_by as string;
     if (!map.has(key)) {
       map.set(key, {
         coordinatorId: key,
         coordinatorName: '',
-        mmpName: (mmpInfo as any)?.name || 'Unknown MMP',
-        mmpId: (mmpInfo as any)?.mmp_id || '',
+        hubOffice: entry.hub_office || '',
         totalAssigned: 0,
         totalVerified: 0,
         totalReturned: 0,
@@ -99,52 +123,31 @@ async function fetchCoordinatorDigest(): Promise<CoordinatorSummary[]> {
     }
 
     const row = map.get(key)!;
+    // Use the most common hub_office value as the coordinator's hub
+    if (entry.hub_office && !row.hubOffice) row.hubOffice = entry.hub_office;
     row.totalAssigned++;
 
     const st = (entry.status || '').toLowerCase();
     const isVerified = ['verified', 'completed', 'accepted'].includes(st);
-    const isPending = !['verified', 'completed', 'accepted', 'returned'].includes(st);
+    const isReturned = st === 'returned';
+    const isPending = !isVerified && !isReturned;
 
     if (isVerified) {
       row.totalVerified++;
-      // Track the most recent verified_at
-      if (entry.verified_at) {
-        if (!row.lastVerifiedAt || entry.verified_at > row.lastVerifiedAt) {
-          row.lastVerifiedAt = entry.verified_at;
-        }
+      if (entry.verified_at && (!row.lastVerifiedAt || entry.verified_at > row.lastVerifiedAt)) {
+        row.lastVerifiedAt = entry.verified_at;
       }
     }
-
-    if ((entry.status || '').toLowerCase() === 'returned') {
-      row.totalReturned++;
-    }
-
+    if (isReturned) row.totalReturned++;
     if (isPending) {
       row.pendingVerification++;
-      // Track the oldest pending dispatched_at (longest waiting)
-      if (entry.dispatched_at) {
-        if (!row.oldestPendingDispatchedAt || entry.dispatched_at < row.oldestPendingDispatchedAt) {
-          row.oldestPendingDispatchedAt = entry.dispatched_at;
-        }
+      if (entry.dispatched_at && (!row.oldestPendingDispatchedAt || entry.dispatched_at < row.oldestPendingDispatchedAt)) {
+        row.oldestPendingDispatchedAt = entry.dispatched_at;
       }
     }
   }
 
-  // Compute derived fields
-  for (const row of map.values()) {
-    row.daysSinceLastVerification = daysBetween(row.lastVerifiedAt);
-    row.daysOldestPendingWaiting = daysBetween(row.oldestPendingDispatchedAt);
-
-    // "Delayed" = has pending sites AND either:
-    //   a) has never verified anything, or
-    //   b) last verification was >= DELAY_THRESHOLD_DAYS ago
-    if (row.pendingVerification > 0) {
-      const daysSince = row.daysSinceLastVerification;
-      row.isDelayed = daysSince === null || daysSince >= DELAY_THRESHOLD_DAYS;
-    }
-  }
-
-  // Fetch coordinator names from user_profiles
+  // Resolve coordinator names
   const coordinatorIds = [...map.keys()];
   if (coordinatorIds.length > 0) {
     const { data: profiles } = await supabase
@@ -155,12 +158,21 @@ async function fetchCoordinatorDigest(): Promise<CoordinatorSummary[]> {
     if (profiles) {
       for (const p of profiles) {
         const row = map.get(p.id);
-        if (row) row.coordinatorName = p.full_name || p.email || p.id;
+        if (row) row.coordinatorName = p.full_name || p.email || p.id.slice(0, 8);
       }
     }
   }
 
-  // Sort: delayed first (longest delay first), then most pending
+  // Compute derived fields
+  for (const row of map.values()) {
+    row.daysSinceLastVerification = daysBetween(row.lastVerifiedAt);
+    row.daysOldestPendingWaiting = daysBetween(row.oldestPendingDispatchedAt);
+    if (row.pendingVerification > 0) {
+      const d = row.daysSinceLastVerification;
+      row.isDelayed = d === null || d >= DELAY_THRESHOLD_DAYS;
+    }
+  }
+
   return [...map.values()].sort((a, b) => {
     if (a.isDelayed !== b.isDelayed) return a.isDelayed ? -1 : 1;
     const da = a.daysSinceLastVerification ?? 9999;
@@ -170,133 +182,139 @@ async function fetchCoordinatorDigest(): Promise<CoordinatorSummary[]> {
   });
 }
 
-async function fetchAdminAndSupervisorIds(): Promise<string[]> {
-  const { data } = await supabase
-    .from('user_roles')
-    .select('user_id, role')
-    .in('role', ['admin', 'super_admin', 'superAdmin', 'fom', 'supervisor', 'hubSupervisor']);
-  return (data || []).map(r => r.user_id);
+// ─── Message builders ────────────────────────────────────────────────────────
+
+function buildCoordinatorSelfMessage(s: CoordinatorSummary): { en: string; ar: string; title_en: string; title_ar: string } {
+  const progress = `${s.totalVerified}/${s.totalAssigned}`;
+  const delayEn = s.isDelayed
+    ? s.daysSinceLastVerification === null
+      ? '🔴 You have not verified any sites yet.'
+      : `🔴 No verification action for ${s.daysSinceLastVerification} day${s.daysSinceLastVerification !== 1 ? 's' : ''}.`
+    : s.daysSinceLastVerification !== null
+      ? `✅ Last verified ${englishDays(s.daysSinceLastVerification)}.`
+      : '✅ All sites up to date.';
+
+  const delayAr = s.isDelayed
+    ? s.daysSinceLastVerification === null
+      ? '🔴 لم تقم بالتحقق من أي موقع بعد.'
+      : `🔴 لا يوجد إجراء تحقق ${arabicDays(s.daysSinceLastVerification)}.`
+    : s.daysSinceLastVerification !== null
+      ? `✅ آخر تحقق ${arabicDays(s.daysSinceLastVerification)}.`
+      : '✅ جميع المواقع محدّثة.';
+
+  const waitEn = s.pendingVerification > 0 && s.daysOldestPendingWaiting !== null
+    ? `Longest waiting site: ${s.daysOldestPendingWaiting} day${s.daysOldestPendingWaiting !== 1 ? 's' : ''}.`
+    : '';
+  const waitAr = s.pendingVerification > 0 && s.daysOldestPendingWaiting !== null
+    ? `أقدم موقع معلّق: ${arabicDays(s.daysOldestPendingWaiting)}.`
+    : '';
+
+  const urgency = s.isDelayed ? '⚠️' : '📋';
+
+  return {
+    title_en: `${urgency} Your Daily Verification Summary`,
+    title_ar: `${urgency} ملخص التحقق اليومي الخاص بك`,
+    en: [
+      `📊 Progress: ${progress} verified | ${s.pendingVerification} pending | ${s.totalReturned} returned`,
+      delayEn,
+      waitEn,
+    ].filter(Boolean).join('\n'),
+    ar: [
+      `📊 التقدم: ${progress} محقَّق | ${s.pendingVerification} معلّق | ${s.totalReturned} مُعاد`,
+      delayAr,
+      waitAr,
+    ].filter(Boolean).join('\n'),
+  };
 }
 
-function buildEnglishMessage(summaries: CoordinatorSummary[]): string {
+function buildGroupMessage(
+  summaries: CoordinatorSummary[],
+  scopeLabel: string,
+  scopeLabelAr: string,
+): { en: string; ar: string; title_en: string; title_ar: string } {
   const totalAssigned = summaries.reduce((s, r) => s + r.totalAssigned, 0);
   const totalVerified = summaries.reduce((s, r) => s + r.totalVerified, 0);
   const totalPending = summaries.reduce((s, r) => s + r.pendingVerification, 0);
   const totalReturned = summaries.reduce((s, r) => s + r.totalReturned, 0);
-  const uniqueCoordinators = summaries.length;
   const delayedCount = summaries.filter(s => s.isDelayed).length;
+  const urgency = delayedCount > 0 ? '⚠️' : '📋';
 
-  const lines: string[] = [
-    `📊 Overall: ${totalVerified}/${totalAssigned} verified | ${totalPending} pending | ${totalReturned} returned | ${uniqueCoordinators} coordinators`,
+  const dateStrEn = new Date().toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
+  const dateStrAr = new Date().toLocaleDateString('ar-SA', { weekday: 'short', day: 'numeric', month: 'short' });
+
+  const title_en = `${urgency} Daily Verification Report — ${scopeLabel} (${dateStrEn})`;
+  const title_ar = `${urgency} تقرير التحقق اليومي — ${scopeLabelAr} (${dateStrAr})`;
+
+  // English body
+  const linesEn: string[] = [
+    `📊 ${totalVerified}/${totalAssigned} verified | ${totalPending} pending | ${totalReturned} returned | ${summaries.length} coordinator${summaries.length !== 1 ? 's' : ''}`,
     delayedCount > 0
-      ? `⚠️ ${delayedCount} coordinator${delayedCount > 1 ? 's' : ''} delayed (no action ≥${DELAY_THRESHOLD_DAYS} days)`
+      ? `⚠️ ${delayedCount} coordinator${delayedCount > 1 ? 's' : ''} delayed (≥${DELAY_THRESHOLD_DAYS} days inactive)`
       : '✅ No coordinators delayed',
     '',
-    '── Coordinator Status ──',
+    '── Coordinator Breakdown ──',
   ];
 
-  const top = summaries.slice(0, 8);
-  for (const s of top) {
-    const nameLabel = s.coordinatorName || s.coordinatorId.slice(0, 8);
-    const verifiedLabel = `${s.totalVerified}/${s.totalAssigned} verified`;
-    const pendingLabel = s.pendingVerification > 0 ? `, ${s.pendingVerification} pending` : '';
-    const returnedLabel = s.totalReturned > 0 ? `, ${s.totalReturned} returned` : '';
-
-    let activityLabel = '';
+  for (const s of summaries.slice(0, 10)) {
+    const name = s.coordinatorName || s.coordinatorId.slice(0, 8);
+    let line = `• ${name}: ${s.totalVerified}/${s.totalAssigned} verified`;
+    if (s.pendingVerification > 0) line += `, ${s.pendingVerification} pending`;
+    if (s.totalReturned > 0) line += `, ${s.totalReturned} returned`;
     if (s.isDelayed) {
-      const days = s.daysSinceLastVerification;
-      activityLabel = days === null
-        ? ' 🔴 Never verified — inactive!'
-        : ` 🔴 No action for ${days} day${days !== 1 ? 's' : ''}`;
+      line += s.daysSinceLastVerification === null
+        ? ' 🔴 Never verified'
+        : ` 🔴 ${s.daysSinceLastVerification}d inactive`;
     } else if (s.daysSinceLastVerification !== null) {
-      activityLabel = ` ✅ Last verified ${englishDays(s.daysSinceLastVerification)}`;
+      line += ` ✅ last ${englishDays(s.daysSinceLastVerification)}`;
     }
-
-    let waitLabel = '';
     if (s.pendingVerification > 0 && s.daysOldestPendingWaiting !== null) {
-      waitLabel = ` | Oldest pending: ${s.daysOldestPendingWaiting}d waiting`;
+      line += ` | oldest pending: ${s.daysOldestPendingWaiting}d`;
     }
-
-    lines.push(`• ${nameLabel}: ${verifiedLabel}${pendingLabel}${returnedLabel}${activityLabel}${waitLabel}`);
+    linesEn.push(line);
   }
+  if (summaries.length > 10) linesEn.push(`  … and ${summaries.length - 10} more`);
 
-  if (summaries.length > 8) {
-    lines.push(`  … and ${summaries.length - 8} more coordinators`);
-  }
-
-  return lines.join('\n');
-}
-
-function buildArabicMessage(summaries: CoordinatorSummary[]): string {
-  const totalAssigned = summaries.reduce((s, r) => s + r.totalAssigned, 0);
-  const totalVerified = summaries.reduce((s, r) => s + r.totalVerified, 0);
-  const totalPending = summaries.reduce((s, r) => s + r.pendingVerification, 0);
-  const totalReturned = summaries.reduce((s, r) => s + r.totalReturned, 0);
-  const uniqueCoordinators = summaries.length;
-  const delayedCount = summaries.filter(s => s.isDelayed).length;
-
-  const lines: string[] = [
-    `📊 الإجمالي: ${totalVerified}/${totalAssigned} تم التحقق | ${totalPending} معلّق | ${totalReturned} مُعاد | ${uniqueCoordinators} منسق`,
+  // Arabic body
+  const linesAr: string[] = [
+    `📊 ${totalVerified}/${totalAssigned} محقَّق | ${totalPending} معلّق | ${totalReturned} مُعاد | ${summaries.length} منسق`,
     delayedCount > 0
-      ? `⚠️ ${delayedCount} منسق${delayedCount > 1 ? 'ون' : ''} متأخر${delayedCount > 1 ? 'ون' : ''} (بدون إجراء منذ ${DELAY_THRESHOLD_DAYS} أيام أو أكثر)`
+      ? `⚠️ ${delayedCount} منسق${delayedCount > 1 ? 'ون' : ''} متأخر${delayedCount > 1 ? 'ون' : ''} (${DELAY_THRESHOLD_DAYS} أيام أو أكثر بدون إجراء)`
       : '✅ لا يوجد منسقون متأخرون',
     '',
-    '── حالة المنسقين ──',
+    '── تفاصيل المنسقين ──',
   ];
 
-  const top = summaries.slice(0, 8);
-  for (const s of top) {
-    const nameLabel = s.coordinatorName || s.coordinatorId.slice(0, 8);
-    const verifiedLabel = `${s.totalVerified}/${s.totalAssigned} محقَّق`;
-    const pendingLabel = s.pendingVerification > 0 ? `، ${s.pendingVerification} معلّق` : '';
-    const returnedLabel = s.totalReturned > 0 ? `، ${s.totalReturned} مُعاد` : '';
-
-    let activityLabel = '';
+  for (const s of summaries.slice(0, 10)) {
+    const name = s.coordinatorName || s.coordinatorId.slice(0, 8);
+    let line = `• ${name}: ${s.totalVerified}/${s.totalAssigned} محقَّق`;
+    if (s.pendingVerification > 0) line += `، ${s.pendingVerification} معلّق`;
+    if (s.totalReturned > 0) line += `، ${s.totalReturned} مُعاد`;
     if (s.isDelayed) {
-      const days = s.daysSinceLastVerification;
-      activityLabel = days === null
-        ? ' 🔴 لم يتحقق أبداً — غير نشط!'
-        : ` 🔴 لا يوجد إجراء ${arabicDays(days)}`;
+      line += s.daysSinceLastVerification === null
+        ? ' 🔴 لم يتحقق أبداً'
+        : ` 🔴 ${arabicDays(s.daysSinceLastVerification)} بدون نشاط`;
     } else if (s.daysSinceLastVerification !== null) {
-      activityLabel = ` ✅ آخر تحقق ${arabicDays(s.daysSinceLastVerification)}`;
+      line += ` ✅ ${arabicDays(s.daysSinceLastVerification)}`;
     }
-
-    let waitLabel = '';
     if (s.pendingVerification > 0 && s.daysOldestPendingWaiting !== null) {
-      waitLabel = ` | أقدم معلّق: ${arabicDays(s.daysOldestPendingWaiting)}`;
+      line += ` | أقدم معلّق: ${arabicDays(s.daysOldestPendingWaiting)}`;
     }
-
-    lines.push(`• ${nameLabel}: ${verifiedLabel}${pendingLabel}${returnedLabel}${activityLabel}${waitLabel}`);
+    linesAr.push(line);
   }
+  if (summaries.length > 10) linesAr.push(`  … و${summaries.length - 10} آخرين`);
 
-  if (summaries.length > 8) {
-    lines.push(`  … و${summaries.length - 8} منسقين آخرين`);
-  }
-
-  return lines.join('\n');
+  return { title_en, title_ar, en: linesEn.join('\n'), ar: linesAr.join('\n') };
 }
 
-async function sendDigestNotification(
+// ─── Send (de-duplicated) ─────────────────────────────────────────────────────
+
+async function upsertDigestNotification(
   recipientId: string,
-  summaries: CoordinatorSummary[]
+  title_en: string,
+  title_ar: string,
+  message_en: string,
+  message_ar: string,
 ) {
-  const dateStrEn = new Date().toLocaleDateString('en-GB', {
-    weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
-  });
-  const dateStrAr = new Date().toLocaleDateString('ar-SA', {
-    weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
-  });
-
-  const delayedCount = summaries.filter(s => s.isDelayed).length;
-  const urgencyPrefix = delayedCount > 0 ? '⚠️ ' : '📋 ';
-
-  const titleEn = `${urgencyPrefix}Daily MMP Verification Digest — ${dateStrEn}`;
-  const titleAr = `${urgencyPrefix}ملخص التحقق اليومي من خطة الرصد الشهري — ${dateStrAr}`;
-
-  const messageEn = buildEnglishMessage(summaries);
-  const messageAr = buildArabicMessage(summaries);
-
-  // De-duplicate: skip if a digest was already inserted today
   const startOfDay = new Date();
   startOfDay.setHours(0, 0, 0, 0);
 
@@ -304,19 +322,19 @@ async function sendDigestNotification(
     .from('notifications')
     .select('id')
     .eq('recipient_id', recipientId)
-    .ilike('title_en', '%Daily MMP Verification Digest%')
+    .ilike('title_en', '%Verification%Digest%')
     .gte('created_at', startOfDay.toISOString())
     .limit(1);
 
-  if (existing && existing.length > 0) return;
+  if (existing && existing.length > 0) return; // already sent today
 
   await supabase.from('notifications').insert({
     recipient_id: recipientId,
     user_id: recipientId,
-    title_en: titleEn,
-    title_ar: titleAr,
-    message_en: messageEn,
-    message_ar: messageAr,
+    title_en,
+    title_ar,
+    message_en,
+    message_ar,
     type: 'daily_digest',
     entity_type: 'mmp',
     is_read: false,
@@ -324,52 +342,114 @@ async function sendDigestNotification(
   });
 }
 
+// ─── Fan-out ──────────────────────────────────────────────────────────────────
+
+async function dispatchDigests(
+  currentUserId: string,
+  allSummaries: CoordinatorSummary[],
+) {
+  // Fetch all eligible recipients: coordinators, supervisors, fom, admins
+  const { data: allProfiles } = await supabase
+    .from('user_profiles')
+    .select('id, full_name, email, role, hub_id')
+    .not('role', 'is', null)
+    .in('role', [
+      'coordinator', 'Coordinator',
+      'supervisor', 'Supervisor', 'hubSupervisor', 'hubsupervisor',
+      'fom', 'FOM', 'Field Operation Manager (FOM)',
+      'admin', 'Admin', 'super_admin', 'superAdmin', 'SuperAdmin',
+    ]);
+
+  if (!allProfiles) return;
+
+  for (const profile of allProfiles) {
+    const role = profile.role;
+
+    // ── Coordinator: sees only their own row ─────────────────────────────
+    if (isCoordinatorRole(role)) {
+      const selfRow = allSummaries.find(s => s.coordinatorId === profile.id);
+      if (!selfRow || selfRow.totalAssigned === 0) continue;
+      const msg = buildCoordinatorSelfMessage(selfRow);
+      await upsertDigestNotification(profile.id, msg.title_en, msg.title_ar, msg.en, msg.ar);
+      continue;
+    }
+
+    // ── Supervisor: sees only coordinators in their hub ──────────────────
+    if (isSupervisorRole(role)) {
+      const hubName = resolveHubName(profile.hub_id);
+      if (!hubName) {
+        // No hub assigned — skip
+        continue;
+      }
+      const hubSummaries = allSummaries.filter(s =>
+        s.hubOffice && hubMatches(s.hubOffice, hubName)
+      );
+      if (hubSummaries.length === 0) continue;
+      const msg = buildGroupMessage(hubSummaries, hubName, hubName);
+      await upsertDigestNotification(profile.id, msg.title_en, msg.title_ar, msg.en, msg.ar);
+      continue;
+    }
+
+    // ── FOM / Admin / Super Admin: sees everything ───────────────────────
+    if (isFomOrAbove(role)) {
+      if (allSummaries.length === 0) continue;
+      const msg = buildGroupMessage(allSummaries, 'All Hubs', 'جميع المراكز');
+      await upsertDigestNotification(profile.id, msg.title_en, msg.title_ar, msg.en, msg.ar);
+    }
+  }
+}
+
+// ─── Hook ─────────────────────────────────────────────────────────────────────
+
 export function useDailyCoordinatorDigest() {
   const { currentUser } = useUser();
   const { hasAnyRole, isSuperAdmin } = useAuthorization();
   const ranRef = useRef(false);
 
-  const isEligible =
+  // Only privileged roles trigger the fan-out (coordinators get their own
+  // notification when an admin/supervisor logs in and runs the fan-out)
+  const canTrigger =
     !!currentUser?.id &&
     (
       isSuperAdmin() ||
-      hasAnyRole(['admin', 'fom', 'supervisor', 'hubSupervisor', 'hubsupervisor',
-        'Field Operation Manager (FOM)'])
+      hasAnyRole([
+        'admin', 'fom', 'supervisor', 'hubSupervisor', 'hubsupervisor',
+        'Field Operation Manager (FOM)', 'coordinator',
+      ])
     );
 
   useEffect(() => {
-    if (!isEligible || !currentUser?.id || ranRef.current) return;
+    if (!canTrigger || !currentUser?.id || ranRef.current) return;
 
     const userId = currentUser.id;
     const key = DIGEST_KEY(userId);
     const lastSent = localStorage.getItem(key);
-
-    if (lastSent === today()) return; // already ran today
+    if (lastSent === today()) return;
 
     ranRef.current = true;
 
     (async () => {
       try {
-        const summaries = await fetchCoordinatorDigest();
+        const summaries = await fetchAllCoordinatorSummaries();
         if (summaries.length === 0) return;
 
-        // Send to this user first
-        await sendDigestNotification(userId, summaries);
-
-        // Admins / super admins fan out to all other eligible recipients
-        if (isSuperAdmin() || hasAnyRole(['admin'])) {
-          const allRecipients = await fetchAdminAndSupervisorIds();
-          for (const rid of allRecipients) {
-            if (rid === userId) continue;
-            await sendDigestNotification(rid, summaries);
+        // If coordinator — only send to themselves
+        if (isCoordinatorRole(currentUser.role)) {
+          const selfRow = summaries.find(s => s.coordinatorId === userId);
+          if (selfRow && selfRow.totalAssigned > 0) {
+            const msg = buildCoordinatorSelfMessage(selfRow);
+            await upsertDigestNotification(userId, msg.title_en, msg.title_ar, msg.en, msg.ar);
           }
+        } else {
+          // Admins / FOM / Supervisors trigger the full fan-out for everyone
+          await dispatchDigests(userId, summaries);
         }
 
         localStorage.setItem(key, today());
       } catch (e) {
         console.warn('[DailyDigest] Failed to send digest:', e);
-        ranRef.current = false; // allow retry on next render
+        ranRef.current = false;
       }
     })();
-  }, [isEligible, currentUser?.id]);
+  }, [canTrigger, currentUser?.id]);
 }
