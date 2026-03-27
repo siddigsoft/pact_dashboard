@@ -1823,6 +1823,35 @@ const MMP = () => {
         console.warn('[MMP] Failed to send site visit completed notification:', notifErr);
       }
 
+      // Check coverage milestones for the MMP (25 / 50 / 75 / 100%)
+      try {
+        const mmpFileId = (site as any).mmp_file_id || (site as any).mmpFileId;
+        const hubId = (site as any).hub_office || (site as any).hubOffice;
+        const activityName = (site as any).main_activity || (site as any).mainActivity || 'Activity';
+        if (mmpFileId && hubId) {
+          const { data: allEntries } = await supabase
+            .from('mmp_site_entries')
+            .select('status')
+            .eq('mmp_file_id', mmpFileId);
+          if (allEntries && allEntries.length > 0) {
+            const total = allEntries.length;
+            const terminalStatuses = ['verified', 'approved', 'completed', 'costed', 'approved_and_costed', 'cp_verified', 'cp_verification'];
+            const completed = allEntries.filter(e => terminalStatuses.includes(e.status)).length;
+            const prevCompleted = Math.max(0, completed - 1);
+            const oldPct = Math.floor((prevCompleted / total) * 100);
+            const newPct = Math.floor((completed / total) * 100);
+            for (const milestone of [25, 50, 75, 100]) {
+              if (oldPct < milestone && newPct >= milestone) {
+                NotificationTriggerService.activityCoverageUpdate(hubId, activityName, milestone, total, completed).catch(console.warn);
+                break;
+              }
+            }
+          }
+        }
+      } catch (covErr) {
+        console.warn('[MMP] Coverage milestone check failed:', covErr);
+      }
+
       toast({
         title: isOnline ? 'Visit Report Submitted' : 'Visit Report Saved (Offline)',
         description: isOnline 

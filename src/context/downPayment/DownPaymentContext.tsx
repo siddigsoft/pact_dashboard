@@ -1506,6 +1506,35 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
         notes: `Funds receipt confirmed via ${data.signatureMethod} signature`,
       });
 
+      // Notify the admin/supervisor who processed the payment
+      const adminId = (request.metadata as any)?.admin_processed_by || request.adminProcessedBy;
+      const supervisorId = request.supervisorApprovedBy;
+      const amount = (request.approvedAmount || request.requestedAmount).toLocaleString();
+      if (adminId) {
+        NotificationTriggerService.send({
+          userId: adminId,
+          title: 'Fund Receipt Confirmed / تأكيد استلام الأموال',
+          message: `${data.userName} has confirmed receiving the advance of ${amount} SDG for "${request.siteName}".`,
+          type: 'success',
+          category: 'financial',
+          priority: 'normal',
+          link: '/down-payment-approval',
+          sendEmail: false,
+        }).catch(console.warn);
+      }
+      if (supervisorId && supervisorId !== adminId) {
+        NotificationTriggerService.send({
+          userId: supervisorId,
+          title: 'Fund Receipt Confirmed / تأكيد استلام الأموال',
+          message: `${data.userName} has confirmed receiving the advance of ${amount} SDG for "${request.siteName}".`,
+          type: 'success',
+          category: 'financial',
+          priority: 'normal',
+          link: '/down-payment-approval',
+          sendEmail: false,
+        }).catch(console.warn);
+      }
+
       toast({
         title: 'Receipt Confirmed / تم تأكيد الاستلام',
         description: 'You have confirmed receiving the advance funds. / لقد أكدت استلام أموال السلفة.',
@@ -1552,6 +1581,38 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
         performedByName: userName,
         notes: 'Requester reported funds not yet received',
       });
+
+      // Alert the admin/supervisor who processed — urgent follow-up needed
+      const adminUserId = (request.metadata as any)?.admin_processed_by || request.adminProcessedBy;
+      const supervisorUserId = request.supervisorApprovedBy;
+      const amountNotReceived = (request.approvedAmount || request.requestedAmount).toLocaleString();
+      const alertMsg = `${userName} has reported NOT receiving the advance of ${amountNotReceived} SDG for "${request.siteName}". Immediate follow-up required.`;
+      if (adminUserId) {
+        NotificationTriggerService.send({
+          userId: adminUserId,
+          title: 'Funds Not Received — Action Required / الأموال لم تُستلم',
+          message: alertMsg,
+          type: 'warning',
+          category: 'financial',
+          priority: 'high',
+          link: '/down-payment-approval',
+          sendEmail: true,
+          emailActionLabel: 'View Request',
+        }).catch(console.warn);
+      }
+      if (supervisorUserId && supervisorUserId !== adminUserId) {
+        NotificationTriggerService.send({
+          userId: supervisorUserId,
+          title: 'Funds Not Received — Action Required / الأموال لم تُستلم',
+          message: alertMsg,
+          type: 'warning',
+          category: 'financial',
+          priority: 'high',
+          link: '/down-payment-approval',
+          sendEmail: false,
+        }).catch(console.warn);
+      }
+
       toast({
         title: 'Reported: Not Yet Received / تم الإبلاغ: لم يُستلم بعد',
         description: 'Recorded that the requester has not received the funds. / تم تسجيل عدم استلام الأموال.',

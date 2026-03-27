@@ -614,6 +614,25 @@ const CostSubmission = () => {
           description: `Submission approved directly to Finance level by ${currentUser?.name || 'FOM'}. Normal approval flow was bypassed. / تمت الموافقة على الطلب مباشرة إلى مستوى المالية من قِبل ${currentUser?.name || 'مدير العمليات الميدانية'}.`,
           duration: 6000,
         });
+
+        // Notify the submitter that their submission was fully approved
+        if (submission.submitted_by) {
+          const bypassRefNum = submission.reference_number || submission.id.substring(0, 8).toUpperCase();
+          const bypassAmountStr = `${submission.currency} ${(submission.amount_cents / 100).toLocaleString()}`;
+          const bypassApproverName = (currentUser as any)?.name || (currentUser as any)?.fullName || 'FOM';
+          NotificationTriggerService.send({
+            userId: submission.submitted_by,
+            title: 'Cost Submission Fully Approved / تمت الموافقة الكاملة على المطالبة',
+            message: `Your cost submission "${bypassRefNum}" (${bypassAmountStr}) has been fully approved by ${bypassApproverName} and cleared for payment.`,
+            type: 'success',
+            category: 'financial',
+            priority: 'high',
+            link: '/cost-submission',
+            sendEmail: true,
+            emailActionLabel: 'View Submission',
+          }).catch(console.warn);
+        }
+
         await fetchOperationalCosts();
       }
     } catch (err) {
@@ -786,6 +805,31 @@ const CostSubmission = () => {
             duration: 8000,
           });
         }
+
+        // Notify the submitter of the outcome
+        if (submission.submitted_by) {
+          const approverName = (currentUser as any)?.name || (currentUser as any)?.fullName || 'Reviewer';
+          NotificationTriggerService.send({
+            userId: submission.submitted_by,
+            title: action === 'approve'
+              ? isFinal
+                ? 'Cost Submission Fully Approved / تمت الموافقة الكاملة على المطالبة'
+                : `Cost Submission: Tier ${tier} Approved / تمت الموافقة على المرحلة ${tier}`
+              : 'Cost Submission Rejected / تم رفض المطالبة',
+            message: action === 'approve'
+              ? isFinal
+                ? `Your cost submission "${refNum}" (${amountStr}) has been fully approved by ${approverName} and cleared for payment.`
+                : `Your cost submission "${refNum}" (${amountStr}) has been approved at Tier ${tier} by ${approverName} and moved to the next review stage.`
+              : `Your cost submission "${refNum}" (${amountStr}) was rejected at Tier ${tier} by ${approverName}. Reason: ${notes || 'Not specified'}. You may edit and resubmit.`,
+            type: action === 'approve' ? 'success' : 'error',
+            category: 'financial',
+            priority: action === 'approve' ? (isFinal ? 'high' : 'normal') : 'high',
+            link: '/cost-submission',
+            sendEmail: isFinal || action === 'reject',
+            emailActionLabel: 'View Submission',
+          }).catch(console.warn);
+        }
+
         fetchOperationalCosts();
       }
     } catch (err) {
