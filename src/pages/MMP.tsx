@@ -1,5 +1,5 @@
 
-import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
@@ -466,6 +466,10 @@ const MMP = () => {
   const [loadingDispatched, setLoadingDispatched] = useState(false);
   const [dispatchedCount, setDispatchedCount] = useState(0);
   const [adminRefreshTrigger, setAdminRefreshTrigger] = useState(0);
+  // Loaded keys: set only after a successful DB fetch completes.
+  // Prevents re-fetching the same data every time the user switches tabs and comes back.
+  const dispatchedLoadedKeyRef = useRef<string>('');
+  const acceptedLoadedKeyRef = useRef<string>('');
   const [dispatchedStateFilter, setDispatchedStateFilter] = useState<string>('all');
   const [dispatchedLocalityFilter, setDispatchedLocalityFilter] = useState<string>('all');
   const [acceptedSiteEntries, setAcceptedSiteEntries] = useState<any[]>([]);
@@ -3705,7 +3709,15 @@ const MMP = () => {
   // This ensures sites claimed by data collectors are immediately excluded
   useEffect(() => {
     if (verifiedSubTab !== 'dispatched') {
-      setDispatchedSiteEntries([]);
+      // Keep cached data — don't clear it so switching back is instant.
+      setLoadingDispatched(false);
+      return;
+    }
+
+    const verifiedMmpIdsSorted = (categorizedMMPs.verified || []).map(m => m.id).sort().join(',');
+    const fetchKey = `${adminRefreshTrigger}::${verifiedMmpIdsSorted}`;
+    // Skip fetch if same data already loaded — avoids refetch on every tab switch.
+    if (dispatchedLoadedKeyRef.current === fetchKey) {
       setLoadingDispatched(false);
       return;
     }
@@ -3767,6 +3779,7 @@ const MMP = () => {
         if (!cancelled) {
           setDispatchedSiteEntries(formattedEntries);
           setDispatchedCount(formattedEntries.length);
+          dispatchedLoadedKeyRef.current = fetchKey;
         }
       } catch (err) {
         console.error('[Dispatched] Failed to load:', err);
@@ -3782,7 +3795,15 @@ const MMP = () => {
   // Load accepted site entries directly from database for fresh data
   useEffect(() => {
       if (verifiedSubTab !== 'accepted') {
-        setAcceptedSiteEntries([]);
+        // Keep cached data — don't clear it so switching back is instant.
+        setLoadingAccepted(false);
+        return;
+      }
+
+      const verifiedMmpIdsSorted = (categorizedMMPs.verified || []).map(m => m.id).sort().join(',');
+      const fetchKey = `${adminRefreshTrigger}::${verifiedMmpIdsSorted}`;
+      // Skip fetch if same data already loaded — avoids refetch on every tab switch.
+      if (acceptedLoadedKeyRef.current === fetchKey) {
         setLoadingAccepted(false);
         return;
       }
@@ -3967,6 +3988,7 @@ const MMP = () => {
           if (!cancelled) {
             setAcceptedSiteEntries(formattedEntries);
             setAcceptedCount(formattedEntries.length);
+            acceptedLoadedKeyRef.current = fetchKey;
           }
         } catch (err) {
           console.error('[Accepted] Failed to load:', err);
