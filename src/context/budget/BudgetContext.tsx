@@ -2,6 +2,7 @@ import { createContext, useContext, useRef, useEffect, ReactNode, useMemo } from
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useUser } from '@/context/user/UserContext';
+import { NotificationTriggerService } from '@/services/NotificationTriggerService';
 import { ensureValidSession } from '@/lib/session-health';
 import { withTimeout } from '@/utils/promise-with-timeout';
 import {
@@ -607,8 +608,20 @@ export function BudgetProvider({ children }: { children: ReactNode }) {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'budget_transactions' }, () => {
         invalidateRef.current.invalidateTransactions();
       })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'budget_alerts' }, () => {
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'budget_alerts' }, (payload: any) => {
         invalidateRef.current.invalidateAlerts();
+        if (payload.eventType === 'INSERT' && currentUser?.id && payload.new) {
+          const alert = payload.new;
+          const alertType: string = alert.alert_type || '';
+          const notifiableTypes = ['low_budget', 'budget_exceeded', 'threshold_reached', 'overspending'];
+          if (notifiableTypes.includes(alertType)) {
+            const projectName = alert.metadata?.projectName || alert.metadata?.mmpName || 'Budget';
+            const pct: number = typeof alert.threshold_percentage === 'number' ? alert.threshold_percentage : 80;
+            NotificationTriggerService.budgetThresholdAlert(currentUser.id, projectName, pct).catch((err: unknown) => {
+              console.warn('[Budget] Failed to send budget threshold notification:', err);
+            });
+          }
+        }
       });
 
     channel.subscribe((status) => {

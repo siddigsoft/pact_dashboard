@@ -79,6 +79,7 @@ import { buildEnhancedPaymentEmailHTML } from '@/services/email-notification.ser
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { SignatureConfirmationModal } from '@/components/signatures/SignatureConfirmationModal';
+import { NotificationTriggerService } from '@/services/NotificationTriggerService';
 import { supabase } from '@/integrations/supabase/client';
 import { generateTransportAdvanceCertificatePdf, generateTransportAdvanceCertificateBase64, generateBulkPaymentPdf, generateBulkPaymentPdfBase64 } from '@/utils/transportAdvanceCertificatePdf';
 import { EmailNotificationService } from '@/services/email-notification.service';
@@ -3637,6 +3638,17 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
               signatureMethod: signature.method,
               signedAt: signature.signedAt,
             });
+            try {
+              const dpAmt = signatureRequest.approvedAmount ?? signatureRequest.requestedAmount ?? 0;
+              await NotificationTriggerService.transactionSigned(
+                currentUser.id,
+                signatureRequest.id,
+                dpAmt,
+                'SDG'
+              );
+            } catch (notifErr) {
+              console.warn('[DP] Failed to send down payment signed notification:', notifErr);
+            }
             setSignatureRequest(null);
           }}
           onCancel={() => setSignatureRequest(null)}

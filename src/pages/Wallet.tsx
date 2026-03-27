@@ -57,6 +57,7 @@ import { DEFAULT_CURRENCY } from '@/types/wallet';
 import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
 import { WalletSignatureIntegration } from '@/components/wallet/WalletSignatureIntegration';
 import { SignatureConfirmationModal } from '@/components/signatures/SignatureConfirmationModal';
+import { NotificationTriggerService } from '@/services/NotificationTriggerService';
 
 const formatCurrency = (amount: number, currency: string = DEFAULT_CURRENCY) => {
   return new Intl.NumberFormat('en-SD', {
@@ -2513,6 +2514,16 @@ const WalletPage = () => {
               signatureMethod: signature.method,
               signedAt: signature.signedAt,
             });
+            try {
+              await NotificationTriggerService.transactionSigned(
+                currentUser.id,
+                signatureWithdrawalRequest.id,
+                signatureWithdrawalRequest.amount,
+                signatureWithdrawalRequest.currency || DEFAULT_CURRENCY
+              );
+            } catch (notifErr) {
+              console.warn('[Wallet] Failed to send fund receipt signed notification:', notifErr);
+            }
             setSignatureWithdrawalRequest(null);
           }}
           onCancel={() => setSignatureWithdrawalRequest(null)}
@@ -2549,6 +2560,17 @@ const WalletPage = () => {
               signatureMethod: signature.method,
               signedAt: signature.signedAt,
             });
+            try {
+              const advanceAmt = signatureAdvanceRequest.approvedAmount ?? signatureAdvanceRequest.requestedAmount ?? 0;
+              await NotificationTriggerService.transactionSigned(
+                currentUser.id,
+                signatureAdvanceRequest.id,
+                advanceAmt,
+                DEFAULT_CURRENCY
+              );
+            } catch (notifErr) {
+              console.warn('[Wallet] Failed to send advance receipt signed notification:', notifErr);
+            }
             setSignatureAdvanceRequest(null);
           }}
           onCancel={() => setSignatureAdvanceRequest(null)}
@@ -2582,6 +2604,17 @@ const WalletPage = () => {
               method: signature.method,
               signedAt: signature.signedAt,
             });
+            try {
+              const costAmt = (signatureCostPayment.amount_cents || 0) / 100;
+              await NotificationTriggerService.transactionSigned(
+                currentUser.id,
+                signatureCostPayment.id,
+                costAmt,
+                DEFAULT_CURRENCY
+              );
+            } catch (notifErr) {
+              console.warn('[Wallet] Failed to send cost payment signed notification:', notifErr);
+            }
             setSignatureCostPayment(null);
           }}
           onCancel={() => setSignatureCostPayment(null)}

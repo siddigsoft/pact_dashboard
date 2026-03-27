@@ -1179,7 +1179,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
           if (createError) throw createError;
 
-          await supabase.from('wallet_transactions').insert({
+          const { data: newTxData } = await supabase.from('wallet_transactions').insert({
             wallet_id: newWallet.id,
             user_id: userId,
             type: 'adjustment',
@@ -1191,7 +1191,17 @@ export function WalletProvider({ children }: { children: ReactNode }) {
             balance_after: amount,
             created_by: currentUser?.id,
             metadata: { type: 'retainer', period },
-          });
+          }).select('id').single();
+
+          try {
+            await NotificationTriggerService.walletCredited(
+              userId, amount, currency,
+              `Monthly retainer for ${period} / مكافأة شهرية لـ ${period}`,
+              newTxData?.id
+            );
+          } catch (notifErr) {
+            console.warn('[Wallet] Failed to send retainer wallet credited notification:', notifErr);
+          }
 
           return;
         }
@@ -1214,7 +1224,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
       if (updateError) throw updateError;
 
-      const { error: transactionError } = await supabase.from('wallet_transactions').insert({
+      const { data: txData, error: transactionError } = await supabase.from('wallet_transactions').insert({
         wallet_id: targetWallet.id,
         user_id: userId,
         type: 'adjustment',
@@ -1226,9 +1236,19 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         balance_after: newBalance,
         created_by: currentUser?.id,
         metadata: { type: 'retainer', period },
-      });
+      }).select('id').single();
 
       if (transactionError) throw transactionError;
+
+      try {
+        await NotificationTriggerService.walletCredited(
+          userId, amount, currency,
+          `Monthly retainer for ${period} / مكافأة شهرية لـ ${period}`,
+          txData?.id
+        );
+      } catch (notifErr) {
+        console.warn('[Wallet] Failed to send retainer wallet credited notification:', notifErr);
+      }
 
       if (userId === currentUser?.id) {
         await invalidate.invalidateWallet(userId);

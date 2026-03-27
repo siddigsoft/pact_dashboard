@@ -465,6 +465,72 @@ async function sendWeeklySummary(sb: ReturnType<typeof createClient>, recipientI
   })
 }
 
+// ─── visit reminders ──────────────────────────────────────────────────────────
+async function sendVisitReminders(sb: ReturnType<typeof createClient>): Promise<number> {
+  try {
+    const today = new Date(); today.setHours(0, 0, 0, 0)
+    const in3Days = new Date(today); in3Days.setDate(in3Days.getDate() + 3); in3Days.setHours(23, 59, 59, 999)
+
+    const { data: sites } = await sb.from('mmp_site_entries')
+      .select('id, site_name, site_code, visit_date, visit_date_from, accepted_by, hub_office')
+      .in('status', ['dispatched', 'accepted', 'assigned'])
+      .not('accepted_by', 'is', null)
+      .gte('visit_date', today.toISOString())
+      .lte('visit_date', in3Days.toISOString())
+      .order('visit_date', { ascending: true })
+      .limit(500)
+
+    if (!sites?.length) return 0
+
+    let sent = 0
+    const startOfDay = new Date(); startOfDay.setHours(0, 0, 0, 0)
+
+    for (const site of (sites as any[])) {
+      if (!site.accepted_by) continue
+      const visitDate = site.visit_date || site.visit_date_from
+      if (!visitDate) continue
+
+      const daysUntil = Math.floor((new Date(visitDate).getTime() - today.getTime()) / 86_400_000)
+      if (daysUntil < 0 || daysUntil > 3) continue
+
+      const siteName: string = site.site_name || site.site_code || 'Unknown Site'
+      const dateFormatted = new Date(visitDate).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' })
+
+      const urgencyEn = daysUntil === 0 ? '🚨 Today' : daysUntil === 1 ? '⚠️ Tomorrow' : `📅 In ${daysUntil} days`
+      const urgencyAr = daysUntil === 0 ? '🚨 اليوم' : daysUntil === 1 ? '⚠️ غداً' : `📅 خلال ${daysUntil} أيام`
+
+      // De-dup: skip if a reminder was already sent today for this site+recipient
+      const { data: existing } = await sb.from('notifications').select('id')
+        .eq('recipient_id', site.accepted_by)
+        .eq('entity_id', site.id)
+        .ilike('title_en', '%Visit Reminder%')
+        .gte('created_at', startOfDay.toISOString()).limit(1)
+      if (existing && existing.length > 0) continue
+
+      await sb.from('notifications').insert({
+        recipient_id: site.accepted_by,
+        user_id: site.accepted_by,
+        title_en: `${urgencyEn} — Visit Reminder`,
+        title_ar: `${urgencyAr} — تذكير بزيارة`,
+        message_en: `${urgencyEn}: Your site visit to "${siteName}" is scheduled for ${dateFormatted}. Please confirm you are prepared.`,
+        message_ar: `${urgencyAr}: زيارتك لموقع "${siteName}" مقررة في ${dateFormatted}. يرجى التأكد من جاهزيتك.`,
+        type: 'reminder',
+        entity_id: site.id,
+        entity_type: 'siteVisit',
+        action_url: '/mmp',
+        priority: daysUntil === 0 ? 'urgent' : daysUntil === 1 ? 'high' : 'normal',
+        is_read: false,
+        created_at: new Date().toISOString(),
+      })
+      sent++
+    }
+    return sent
+  } catch (err) {
+    console.error('[daily-digest-cron] Visit reminders error:', err)
+    return 0
+  }
+}
+
 // ─── main ─────────────────────────────────────────────────────────────────────
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
@@ -474,12 +540,15 @@ serve(async (req) => {
     const serviceKey  = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     const sb = createClient(supabaseUrl, serviceKey)
 
-    // Fetch all data in parallel
-    const [coordinators, allDPs, opCostsPending, staleMmps, returnedSites, fundReceipts, weeklyStats, hubNameCache] =
+    // Fetch all data in parallel (visit reminders run independently)
+    const [
+      coordinators, allDPs, opCostsPending, staleMmps, returnedSites, fundReceipts, weeklyStats, hubNameCache, visitRemindersSent,
+    ] =
       await Promise.all([
         fetchCoordinators(sb), fetchDownPayments(sb), fetchOpCosts(sb),
         fetchStaleMmps(sb), fetchReturnedSites(sb), fetchFundReceipts(sb),
         fetchWeeklyStats(sb), fetchHubNames(sb),
+        sendVisitReminders(sb),
       ])
 
     const data: DigestData = {
@@ -529,6 +598,7 @@ serve(async (req) => {
         staleMmps: data.staleMmps.length,
         returnedSites: data.returnedSites.length,
         fundReceipts: data.fundReceipts.length,
+        visitReminders: visitRemindersSent,
         isWeekly: isWeekly(),
       },
     }

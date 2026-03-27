@@ -14,6 +14,7 @@ import { PostponementReason, POSTPONEMENT_REASONS, PostponementFormData } from '
 import { PostponementHistoryEntry } from '@/types/mmp/site';
 import { useToast } from '@/hooks/use-toast';
 import { v4 as uuidv4 } from 'uuid';
+import { NotificationTriggerService } from '@/services/NotificationTriggerService';
 
 const SUPERVISOR_ROLES = ['supervisor', 'hub_supervisor', 'fom', 'admin', 'super_admin', 'ict'];
 
@@ -116,6 +117,29 @@ export function PostponementDialog({
         };
 
         await onSubmit(siteEntry.id, postponement);
+
+        try {
+          const siteName = siteEntry.siteName || siteEntry.siteCode || 'Unknown Site';
+          const origDateFmt = postponement.originalDate ? format(new Date(postponement.originalDate), 'dd/MM/yyyy') : '';
+          const newDateFmt = format(selectedDate!, 'dd/MM/yyyy');
+          await NotificationTriggerService.sendToRoles(
+            ['fom', 'supervisor', 'hubSupervisor', 'admin'],
+            {
+              title: 'Postponement Request',
+              titleAr: 'طلب تأجيل زيارة',
+              message: `${currentUser.full_name || currentUser.name || 'A user'} has requested to postpone "${siteName}" from ${origDateFmt} to ${newDateFmt}. Reason: ${reason}`,
+              messageAr: `طلب ${currentUser.full_name || currentUser.name || 'مستخدم'} تأجيل "${siteName}" من ${origDateFmt} إلى ${newDateFmt}. السبب: ${reason}`,
+              type: 'info',
+              category: 'approvals',
+              priority: 'high',
+              link: '/mmp',
+              relatedEntityId: siteEntry.id,
+              relatedEntityType: 'siteVisit'
+            }
+          );
+        } catch (notifErr) {
+          console.warn('[Postponement] Failed to notify supervisors:', notifErr);
+        }
         
         toast({
           title: 'Postponement Requested',

@@ -11,6 +11,8 @@ import { format, parseISO, differenceInDays } from 'date-fns';
 import { PostponementHistoryEntry } from '@/types/mmp/site';
 import { POSTPONEMENT_REASONS, PostponementReason } from '@/types/postponement';
 import { useToast } from '@/hooks/use-toast';
+import { useUser } from '@/context/user/UserContext';
+import { NotificationTriggerService } from '@/services/NotificationTriggerService';
 
 interface PendingPostponement {
   siteEntryId: string;
@@ -36,6 +38,7 @@ export function PendingPostponementApprovals({
   isLoading
 }: PendingPostponementApprovalsProps) {
   const { toast } = useToast();
+  const { currentUser } = useUser();
   const [selectedItem, setSelectedItem] = useState<PendingPostponement | null>(null);
   const [reviewAction, setReviewAction] = useState<'approve' | 'reject' | null>(null);
   const [reviewNotes, setReviewNotes] = useState('');
@@ -61,8 +64,23 @@ export function PendingPostponementApprovals({
 
     setIsSubmitting(true);
     try {
+      const reviewerName = currentUser?.fullName || currentUser?.email || 'Supervisor';
       if (reviewAction === 'approve') {
         await onApprove(selectedItem.siteEntryId, selectedItem.postponement.id, reviewNotes || undefined);
+        try {
+          if (selectedItem.postponement.requestedBy) {
+            await NotificationTriggerService.postponementApproved(
+              selectedItem.postponement.requestedBy,
+              selectedItem.siteName,
+              selectedItem.siteEntryId,
+              format(parseISO(selectedItem.postponement.newDate), 'dd/MM/yyyy'),
+              reviewerName,
+              reviewNotes || undefined
+            );
+          }
+        } catch (notifErr) {
+          console.warn('[Postponement] Failed to notify requester of approval:', notifErr);
+        }
         toast({
           title: 'Postponement Approved',
           description: `Visit date updated for ${selectedItem.siteName}`,
@@ -70,6 +88,19 @@ export function PendingPostponementApprovals({
         });
       } else {
         await onReject(selectedItem.siteEntryId, selectedItem.postponement.id, reviewNotes);
+        try {
+          if (selectedItem.postponement.requestedBy) {
+            await NotificationTriggerService.postponementRejected(
+              selectedItem.postponement.requestedBy,
+              selectedItem.siteName,
+              selectedItem.siteEntryId,
+              reviewerName,
+              reviewNotes
+            );
+          }
+        } catch (notifErr) {
+          console.warn('[Postponement] Failed to notify requester of rejection:', notifErr);
+        }
         toast({
           title: 'Postponement Rejected',
           description: `Request rejected for ${selectedItem.siteName}`,
