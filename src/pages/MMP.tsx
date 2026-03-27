@@ -402,7 +402,7 @@ const MMP = () => {
   // Subcategory state for Forwarded MMPs (Admin/ICT only)
   const [forwardedSubTab, setForwardedSubTab] = useState<'pending' | 'verified'>('pending');
   // Subcategory state for Verified Sites (Admin/ICT only)
-  const [verifiedSubTab, setVerifiedSubTab] = useState<'newSites' | 'approvedCosted' | 'dispatched' | 'smartAssigned' | 'accepted' | 'ongoing' | 'completed' | 'rejected'>('newSites');
+  const [verifiedSubTab, setVerifiedSubTab] = useState<'all' | 'newSites' | 'approvedCosted' | 'dispatched' | 'smartAssigned' | 'accepted' | 'ongoing' | 'completed' | 'rejected'>('all');
   const [isBulkApproving, setIsBulkApproving] = useState(false);
   const [pendingBulkApproveCount, setPendingBulkApproveCount] = useState(0);
   const [tableFilteredSiteIds, setTableFilteredSiteIds] = useState<Set<string>>(new Set());
@@ -4479,22 +4479,22 @@ const MMP = () => {
 
   // Group verified site rows by MMP for display
   const verifiedVisibleMMPs = useMemo(() => {
-    // For "newSites" subcategory, show all MMPs that have verified sites
+    const allVerified = categorizedMMPs.verified || [];
+
+    // "all" (default) – show every verified MMP as a directory overview
+    if (verifiedSubTab === 'all') {
+      return allVerified;
+    }
+
+    // For "newSites" subcategory, show MMPs that have new-site entries
     if (verifiedSubTab === 'newSites') {
-      // Use the filteredVerifiedCategorySiteRows which has global filters applied
-      const verifiedSites = filteredVerifiedCategorySiteRows;
-      
-      // Get unique MMP IDs from verified sites
-      const mmpIdsWithVerifiedSites = new Set(verifiedSites.map(s => s.mmpId));
-      
-      // Return only MMPs that have verified sites
-      const allVerifiedMMPs = categorizedMMPs.verified || [];
-      return allVerifiedMMPs.filter(mmp => mmpIdsWithVerifiedSites.has(mmp.id));
+      const mmpIdsWithVerifiedSites = new Set(filteredVerifiedCategorySiteRows.map(s => s.mmpId));
+      return allVerified.filter(mmp => mmpIdsWithVerifiedSites.has(mmp.id));
     }
     
     return (isAdmin || isICT || isFOM || isSupervisor || isCoordinator || isDataTeam)
       ? (verifiedSubcategories[verifiedSubTab] || [])
-      : (categorizedMMPs.verified || []);
+      : allVerified;
   }, [isAdmin, isICT, isFOM, isSupervisor, isCoordinator, isDataTeam, verifiedSubTab, verifiedSubcategories, categorizedMMPs.verified, filteredVerifiedCategorySiteRows]);
 
   const verifiedGroupedRows = useMemo(() => {
@@ -5150,6 +5150,19 @@ const MMP = () => {
                 <div className="mb-3">
                   <div className="text-xs font-medium text-muted-foreground mb-2">{t('mmpPage.subcategory')}:</div>
                   <div className="flex gap-1.5 overflow-x-auto pb-1 flex-wrap">
+                    {/* "All" — shows the full MMP directory of verified MMPs */}
+                    <Button
+                      variant={verifiedSubTab === 'all' ? 'default' : 'outline'}
+                      size="sm"
+                      onClick={() => setVerifiedSubTab('all')}
+                      className={`${verifiedSubTab === 'all' ? 'bg-gradient-to-r from-slate-600 to-slate-700 hover:from-slate-700 hover:to-slate-800 text-white border-0 shadow-md' : 'hover:bg-slate-50 dark:hover:bg-slate-900'} text-xs whitespace-nowrap flex-shrink-0 rounded-lg transition-all`}
+                    >
+                      <BarChart3 className="h-3.5 w-3.5 mr-1.5" />
+                      All
+                      <Badge className={`ml-1.5 text-xs ${verifiedSubTab === 'all' ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-200'}`}>
+                        {totalVerifiedSitesCount}
+                      </Badge>
+                    </Button>
                     <Button 
                       variant={verifiedSubTab === 'newSites' ? 'default' : 'outline'} 
                       size="sm" 

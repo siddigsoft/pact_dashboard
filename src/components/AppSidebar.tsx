@@ -265,7 +265,7 @@
     if (!isHidden('/dashboard') && (isSuperAdmin || isAdmin || isICT || perms.dashboard)) {
       overviewItems.push({ id: 'dashboard', title: "Dashboard", url: "/dashboard", icon: LayoutDashboard, priority: 1, isPinned: isPinned('/dashboard') });
     }
-    if (!isHidden('/signatures')) {
+    if (!isHidden('/signatures') && (isSuperAdmin || isAdmin || isICT || isFOM || isCoordinator || isSupervisor || isFinancialAdmin || isAuditor)) {
       overviewItems.push({ id: 'signatures', title: "Signatures", url: "/signatures", icon: FileSignature, priority: 2, isPinned: isPinned('/signatures') });
     }
     if (overviewItems.length) groups.push({ id: 'overview', label: "Overview", order: 1, items: overviewItems });
@@ -308,10 +308,10 @@
     if (!isHidden('/field-team') && (isSuperAdmin || ((isAdmin || perms.fieldTeam) && !isICT))) {
       fieldOpsItems.push({ id: 'field-team', title: "Field Team", url: "/field-team", icon: Activity, priority: 2, isPinned: isPinned('/field-team') });
     }
-    if (!isHidden('/safety-hub')) {
+    if (!isHidden('/safety-hub') && (isSuperAdmin || isAdmin || isICT || isFOM || isCoordinator || isSupervisor || isDataCollector || isDataTeam)) {
       fieldOpsItems.push({ id: 'safety-hub', title: "Safety Hub", url: "/safety-hub", icon: Siren, priority: 4, isPinned: isPinned('/safety-hub') });
     }
-    if (!isHidden('/incident-reports')) {
+    if (!isHidden('/incident-reports') && (isSuperAdmin || isAdmin || isICT || isFOM || isCoordinator || isSupervisor || isDataTeam)) {
       fieldOpsItems.push({ id: 'incident-reports', title: "Incident Reports", url: "/incident-reports", icon: AlertTriangle, priority: 5, isPinned: isPinned('/incident-reports') });
     }
     if (!isHidden('/equipment') && (isSuperAdmin || isAdmin || isFOM)) {

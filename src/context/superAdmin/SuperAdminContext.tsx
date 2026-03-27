@@ -253,6 +253,11 @@ export function SuperAdminProvider({ children }: { children: React.ReactNode }) 
 
   useEffect(() => {
     if (currentUser) {
+      // Optimistically set isSuperAdmin from profile.role so the sidebar
+      // never flickers from non-admin → admin during the async DB check.
+      if (isLikelySuperAdminRole) {
+        setIsSuperAdmin(true);
+      }
       // Check super admin status from super_admins table first
       checkSuperAdminStatus(currentUser.id).then(async (isSuper) => {
         if (isSuper) {
