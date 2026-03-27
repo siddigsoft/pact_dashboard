@@ -52,7 +52,7 @@ const MMPDetailView = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const { currentUser, archiveMMP, deleteMMPFile, approveMMP } = useAppContext();
-  const { resetMMP, getMmpById, updateMMP } = useMMP();
+  const { resetMMP, getMmpById, updateMMP, loading: mmpContextLoading } = useMMP();
   const { checkPermission, hasAnyRole } = useAuthorization();
   const [showAuditTrail, setShowAuditTrail] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
@@ -76,9 +76,16 @@ const MMPDetailView = () => {
       setNotFound(false);
       return;
     }
+
+    // If the MMP context is still fetching data from the server, wait — don't
+    // declare "not found" while the list hasn't arrived yet (auth-timing lag).
+    if (mmpContextLoading) {
+      setLoading(true);
+      return;
+    }
     
-    // Only wait for context to load if no mmpFile yet
-    // Give the context 3 seconds to load before showing not found
+    // Context is done loading and we still have no MMP — give a short grace
+    // period for any in-flight state updates, then show the error.
     const timer = setTimeout(() => {
       if (!mmpFile && id) {
         setNotFound(true);
@@ -94,12 +101,12 @@ const MMPDetailView = () => {
         });
       }
       setLoading(false);
-    }, 3000);
+    }, 1500);
     
     return () => clearTimeout(timer);
-  }, [id, mmpFile, toast]);
+  }, [id, mmpFile, mmpContextLoading, toast]);
 
-  const isAdmin = hasAnyRole(['admin']);
+  const isAdmin = hasAnyRole(['admin', 'superAdmin', 'superadmin', 'super_admin']);
   const isFOM = hasAnyRole(['fom']);
   const isCoordinator = hasAnyRole(['coordinator']);
   const isSupervisor = hasAnyRole(['supervisor', 'hubsupervisor']);
@@ -109,7 +116,7 @@ const MMPDetailView = () => {
   const canDelete = (checkPermission('mmp', 'delete') || isAdmin) ? true : false;
   const canArchive = (checkPermission('mmp', 'archive') || isAdmin) ? true : false;
   const canApprove = (checkPermission('mmp', 'approve') || isAdmin) && mmpFile?.status === 'pending';
-  const canForward = hasAnyRole(['admin','ict']);
+  const canForward = hasAnyRole(['admin', 'ict', 'superAdmin', 'superadmin', 'super_admin']);
 
   // ALL HOOKS MUST BE CALLED BEFORE ANY EARLY RETURNS
   // Move useMemo hooks here to ensure consistent hook order

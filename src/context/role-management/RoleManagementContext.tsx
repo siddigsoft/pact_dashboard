@@ -323,19 +323,21 @@ export const RoleManagementProvider: React.FC<{ children: React.ReactNode }> = (
       const assignedBy = auth?.user?.id ?? null;
       const now = new Date().toISOString();
 
-      // Single-role enforcement: clear all existing roles for this user first,
-      // then insert exactly one new role. This prevents multiple roles accumulating.
-      const { error: delErr } = await supabase
-        .from('user_roles')
-        .delete()
-        .eq('user_id', assignData.user_id);
-      if (delErr) throw delErr;
-
+      // Single-role enforcement (safe order):
+      // 1. Upsert the new role first so the user is never left with zero roles.
+      // 2. Delete all OTHER conflicting roles.
       if (assignData.role) {
-        const { error: insErr } = await supabase
+        const { error: upsertErr } = await supabase
           .from('user_roles')
-          .insert({ user_id: assignData.user_id, role: assignData.role, assigned_by: assignedBy, assigned_at: now });
-        if (insErr) throw insErr;
+          .upsert({ user_id: assignData.user_id, role: assignData.role, assigned_by: assignedBy, assigned_at: now }, { onConflict: 'user_id,role', ignoreDuplicates: true });
+        if (upsertErr) throw upsertErr;
+        // Remove any other role entries (role column) that differ from the new role
+        await supabase
+          .from('user_roles')
+          .delete()
+          .eq('user_id', assignData.user_id)
+          .neq('role', assignData.role)
+          .not('role', 'is', null);
         // Keep profiles.role in sync so both sources agree on the single role.
         await supabase
           .from('profiles')
@@ -344,7 +346,7 @@ export const RoleManagementProvider: React.FC<{ children: React.ReactNode }> = (
       } else if (assignData.role_id) {
         const { error: insErr } = await supabase
           .from('user_roles')
-          .insert({ user_id: assignData.user_id, role_id: assignData.role_id, assigned_by: assignedBy, assigned_at: now });
+          .upsert({ user_id: assignData.user_id, role_id: assignData.role_id, assigned_by: assignedBy, assigned_at: now }, { onConflict: 'user_id,role_id', ignoreDuplicates: true });
         if (insErr) throw insErr;
       } else {
         throw new Error('Either role or role_id must be provided');

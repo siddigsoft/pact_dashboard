@@ -1360,13 +1360,21 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       }
 
-      // Enforce single-role: when a user's role changes, remove all secondary
-      // user_roles entries and replace with exactly one matching the new role.
-      // This prevents the "dual role" problem where an old DataCollector entry
-      // in user_roles bleeds through after the user is promoted to admin/etc.
+      // Enforce single-role: remove any roles that DIFFER from the new primary role,
+      // then ensure exactly one matching entry exists.  We do this in a safe order:
+      // 1. Insert/upsert the correct role first (so the user is never left with zero roles)
+      // 2. Delete all OTHER roles (conflicting secondary entries)
       if (updatedUser.role) {
-        await supabase.from('user_roles').delete().eq('user_id', updatedUser.id);
-        await supabase.from('user_roles').insert({ user_id: updatedUser.id, role: updatedUser.role });
+        // Step 1 – ensure correct role exists (ignore conflict if already there)
+        await supabase
+          .from('user_roles')
+          .upsert({ user_id: updatedUser.id, role: updatedUser.role }, { onConflict: 'user_id,role', ignoreDuplicates: true });
+        // Step 2 – remove any roles that no longer apply
+        await supabase
+          .from('user_roles')
+          .delete()
+          .eq('user_id', updatedUser.id)
+          .neq('role', updatedUser.role);
       }
 
       // Update local caches only after confirmed DB success
