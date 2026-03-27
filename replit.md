@@ -42,6 +42,7 @@ The frontend is built with React 18, TypeScript, Tailwind CSS v3, and Shadcn UI,
 *   **Payments & Finance Organization:** Unified section with collapsible sub-categories.
 *   **Financial System Enhancements:** Period Close management, budget page project selector, shared exchange rate service, Consolidated Statement, Approval Audit Summary, Wallet Reports pagination, financial trend indicators, reconciliation auto-matching, and Unified Financial Alerts center.
 *   **Notification System:** Robust system with in-app, WhatsApp-style, and persistent notifications. Email notifications via IONOS SMTP. Includes Broadcast Center for admin announcements.
+*   **Daily Coordinator Digest (Enhanced):** Fully rewritten `use-daily-coordinator-digest` hook and `daily-digest-cron` Supabase Edge Function. DB de-duplication only (no localStorage). Covers: site verification backlog, down payments pending supervisor/admin, operational cost approvals, stale MMPs not accepted by coordinator, returned site entries older than 3 days, fund receipt confirmations pending, coordinator's own submitted DP status, escalation tier for 7+ day inactive coordinators (FCM push to FOM/admin), hub names resolved from DB, action_url deep-links on every notification, weekly summary every Sunday for FOM/Admin, fully bilingual EN+AR throughout.
 
 ### System Design Choices
 The project uses a unified Supabase client. It integrates the complete Sudan administrative structure. Multiple concurrent sessions are supported for the same user across devices/browsers.
