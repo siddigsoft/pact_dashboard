@@ -165,11 +165,14 @@ export function NavbarNotificationBell() {
     }
   }, [currentUser?.id, currentUser?.hubId, isSupervisor, isAdmin, isFOM]);
 
-  // Refresh pending actions when popover opens, and on a 60-second interval
+  // Refresh pending actions on a 5-minute interval.
+  // Stagger the initial fetch by 3s so multiple tabs don't burst simultaneously.
+  // Each open tab was firing 2-4 HEAD queries every 60s, exhausting the MICRO
+  // connection pool and causing 503s. 5 min is sufficient for badge counts.
   useEffect(() => {
-    fetchPendingActions();
-    const interval = setInterval(fetchPendingActions, 60_000);
-    return () => clearInterval(interval);
+    const initialDelay = setTimeout(fetchPendingActions, 3_000);
+    const interval = setInterval(fetchPendingActions, 5 * 60_000);
+    return () => { clearTimeout(initialDelay); clearInterval(interval); };
   }, [fetchPendingActions]);
 
   const unreadCount: number = typeof getUnreadNotificationsCount === 'function'

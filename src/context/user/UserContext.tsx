@@ -254,7 +254,15 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
       )
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'user_roles' },
+        // Scope to INSERT/DELETE only — UPDATE is rare and INSERT/DELETE covers assignment changes.
+        // Avoid event:'*' on the entire table; that triggers a full refreshUsers() for every
+        // role change by any admin, exhausting the connection pool at scale.
+        { event: 'INSERT', schema: 'public', table: 'user_roles' },
+        () => { refreshUsers(); }
+      )
+      .on(
+        'postgres_changes',
+        { event: 'DELETE', schema: 'public', table: 'user_roles' },
         () => { refreshUsers(); }
       )
       .subscribe((status) => {
@@ -530,13 +538,13 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const hydrateCurrentUser = async (): Promise<boolean> => {
-    const maxRetries = 10;
-    const baseDelay = 300;
-    
+    const maxRetries = 3;
+    const baseDelay = 2000;
+
     for (let attempt = 0; attempt < maxRetries; attempt++) {
       try {
         if (attempt > 0) {
-          const delay = Math.min(baseDelay * Math.pow(1.5, attempt - 1), 2000);
+          const delay = Math.min(baseDelay * Math.pow(2, attempt - 1), 8000);
           console.log(`Hydration retry attempt ${attempt + 1}/${maxRetries}, delay ${delay}ms...`);
           await new Promise(resolve => setTimeout(resolve, delay));
         }
@@ -653,7 +661,7 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event) => {
         try {
-          if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+          if (event === 'SIGNED_IN') {
             const { data: { user } } = await supabase.auth.getUser();
             if (user) await setUserFromAuthUser(user);
           } else if (event === 'SIGNED_OUT') {

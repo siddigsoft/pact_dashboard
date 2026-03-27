@@ -112,9 +112,11 @@ export function AuditProvider({ children }: { children: ReactNode }) {
   // Save log to Supabase with localStorage fallback
   const saveLogToDatabase = useCallback(async (log: AuditLogEntry): Promise<boolean> => {
     try {
+      // Use upsert with ignoreDuplicates so retries after a 503 (where the insert
+      // may have already succeeded server-side) don't throw duplicate key errors.
       const { error } = await supabase
         .from('audit_logs')
-        .insert({
+        .upsert({
           id: log.id,
           module: log.module,
           action: log.action,
@@ -139,7 +141,7 @@ export function AuditProvider({ children }: { children: ReactNode }) {
           success: log.success,
           error_message: log.errorMessage,
           session_id: log.sessionId,
-        });
+        }, { onConflict: 'id', ignoreDuplicates: true });
 
       if (error) {
         console.error('[Audit] Error saving to Supabase:', error);
@@ -209,9 +211,9 @@ export function AuditProvider({ children }: { children: ReactNode }) {
     syncToDatabase();
   }, [loadLogs, syncToDatabase]);
 
-  useRealtimeTable('audit_logs', loadLogs, {
-    enabled: !!currentUser,
-  });
+  // Do NOT use a realtime subscription here — loadLogs fetches up to 10,000 rows
+  // and firing it on every insert would hammer the DB. The local state is updated
+  // immediately in logAuditEvent, which is sufficient for the current user's session.
 
   // Periodic sync of pending logs (every 5 minutes)
   useEffect(() => {
