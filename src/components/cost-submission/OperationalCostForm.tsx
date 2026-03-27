@@ -179,11 +179,16 @@ const OperationalCostForm = ({ hubs = [], projects = [], onSuccess }: Operationa
       const hubId = currentUser.hubId;
       if (hubId) {
         supabase
-          .from('user_profiles')
+          .from('profiles')
           .select('id')
           .eq('hub_id', hubId)
           .in('role', ['supervisor', 'hubSupervisor', 'hub_supervisor'])
-          .then(({ data: supervisors }) => {
+          .eq('status', 'approved')
+          .then(({ data: supervisors, error: supervisorLookupError }) => {
+            if (supervisorLookupError) {
+              console.error('[COST] Failed to resolve approvers for notification:', supervisorLookupError);
+              return;
+            }
             if (supervisors && supervisors.length > 0) {
               const totalSdg = lineItems.reduce((s, i) => s + i.amountCents / 100, 0);
               const categories = [...new Set(lineItems.map(i => i.expenseCategory))].join(', ');
@@ -194,6 +199,8 @@ const OperationalCostForm = ({ hubs = [], projects = [], onSuccess }: Operationa
                 'SDG',
                 categories
               ).catch(console.error);
+            } else {
+              console.warn(`[COST] No supervisor recipients found for hub ${hubId}`);
             }
           }).catch(console.error);
       }

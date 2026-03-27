@@ -144,6 +144,12 @@ export function AuditProvider({ children }: { children: ReactNode }) {
         }, { onConflict: 'id', ignoreDuplicates: true });
 
       if (error) {
+        // If a retry attempts to write a log row that already exists, treat it as
+        // success to avoid endless replays and duplicate-key noise in Postgres logs.
+        if ((error as any)?.code === '23505') {
+          console.warn('[Audit] Duplicate audit log id detected, skipping replay:', log.id);
+          return true;
+        }
         console.error('[Audit] Error saving to Supabase:', error);
         return false;
       }

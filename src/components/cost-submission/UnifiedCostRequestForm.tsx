@@ -519,11 +519,16 @@ export default function UnifiedCostRequestForm({
         // Notify supervisor(s) in the hub that a new submission needs Tier 1 approval
         if (resolvedHubId) {
           supabase
-            .from('user_profiles')
+            .from('profiles')
             .select('id')
             .eq('hub_id', resolvedHubId)
             .in('role', ['supervisor', 'hubSupervisor', 'hub_supervisor'])
-            .then(({ data: supervisors }) => {
+            .eq('status', 'approved')
+            .then(({ data: supervisors, error: supervisorLookupError }) => {
+              if (supervisorLookupError) {
+                console.error('[COST] Failed to resolve approvers for notification:', supervisorLookupError);
+                return;
+              }
               if (supervisors && supervisors.length > 0) {
                 NotificationTriggerService.costSubmissionCreated(
                   supervisors.map(s => s.id),
@@ -532,6 +537,8 @@ export default function UnifiedCostRequestForm({
                   totalCurrency,
                   categoryLabels
                 ).catch(console.error);
+              } else {
+                console.warn(`[COST] No supervisor recipients found for hub ${resolvedHubId}`);
               }
             }).catch(console.error);
         }
