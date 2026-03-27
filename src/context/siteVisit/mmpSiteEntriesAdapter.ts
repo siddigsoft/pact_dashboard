@@ -251,7 +251,9 @@ export const fetchSiteVisitsFromMMPEntries = async (): Promise<SiteVisit[]> => {
 
     if (error) {
       console.error('Error fetching mmp_site_entries:', error);
-      throw error;
+      // Return whatever we have so far rather than crashing the whole context
+      if (allData.length === 0) throw error;
+      break;
     }
 
     if (data && data.length > 0) {
@@ -266,15 +268,23 @@ export const fetchSiteVisitsFromMMPEntries = async (): Promise<SiteVisit[]> => {
   const mmpFileIds = [...new Set(allData.map((row) => row.mmp_file_id).filter(Boolean))] as string[];
   let mmpFileMap = new Map<string, any>();
   if (mmpFileIds.length > 0) {
-    const { data: mmpFiles, error: mmpFilesError } = await supabase
-      .from('mmp_files')
-      .select('id, mmp_id, name, uploaded_by, uploaded_at, approved_by, approved_at, hub, month, project_id, workflow')
-      .in('id', mmpFileIds);
-    if (mmpFilesError) {
-      console.error('Error fetching parent mmp_files:', mmpFilesError);
-      throw mmpFilesError;
+    // Batch the lookup to avoid URL-length limits on large .in() queries
+    const BATCH = 100;
+    const allMmpFiles: any[] = [];
+    for (let i = 0; i < mmpFileIds.length; i += BATCH) {
+      const batch = mmpFileIds.slice(i, i + BATCH);
+      const { data: mmpFiles, error: mmpFilesError } = await supabase
+        .from('mmp_files')
+        .select('id, mmp_id, name, uploaded_by, uploaded_at, approved_by, approved_at, hub, month, project_id, workflow')
+        .in('id', batch);
+      if (mmpFilesError) {
+        console.warn('Error fetching mmp_files batch (non-fatal):', mmpFilesError);
+        // Continue without metadata for this batch rather than throwing
+        continue;
+      }
+      allMmpFiles.push(...(mmpFiles || []));
     }
-    mmpFileMap = new Map((mmpFiles || []).map((file: any) => [file.id, file]));
+    mmpFileMap = new Map(allMmpFiles.map((file: any) => [file.id, file]));
   }
 
   console.log(`[SiteVisits] Fetched ${allData.length} total site entries (paginated)`);
