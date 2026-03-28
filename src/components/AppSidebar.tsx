@@ -164,50 +164,50 @@
 
     return (
       <SidebarMenuItem ref={setNodeRef} style={style} className="py-0 group/fav">
-        <div className="flex items-center w-full">
-          <Button
-            variant="ghost"
-            size="icon"
+        <div className="flex items-center w-full gap-0.5">
+          {/* Drag handle — zero width when not hovered so it doesn't push text right */}
+          <button
             {...attributes}
             {...listeners}
-            className="cursor-grab active:cursor-grabbing opacity-0 group-hover/fav:opacity-100 transition-opacity shrink-0"
+            className="cursor-grab active:cursor-grabbing shrink-0 w-0 overflow-hidden opacity-0 group-hover/fav:w-4 group-hover/fav:opacity-100 transition-all duration-150 flex items-center justify-center"
             aria-label="Drag to reorder"
             data-testid={`drag-handle-${item.id}`}
           >
             <GripVertical className="h-3 w-3 text-muted-foreground" />
-          </Button>
+          </button>
+
           <SidebarMenuButton
             asChild
             isActive={isActive}
             tooltip={item.title}
-            className={`flex-1 rounded text-[13px] font-medium transition-all duration-200 
+            className={`flex-1 min-w-0 rounded text-[13px] font-medium transition-all duration-200
               ${isActive
                 ? "bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300 font-semibold"
                 : ""
               }`}
           >
-            <Link to={item.url} className="flex items-center gap-1" data-testid={`nav-favorite-${item.id}`}>
+            <Link to={item.url} className="flex items-center gap-1.5 w-full" data-testid={`nav-favorite-${item.id}`}>
               <item.icon
-                className={`h-4 w-4 ${isActive
+                className={`h-4 w-4 shrink-0 ${isActive
                   ? "text-amber-700 dark:text-amber-300"
                   : "text-amber-600 dark:text-amber-400"
                 }`}
               />
-              <span className="truncate flex-1">{item.title}</span>
+              <span className="truncate flex-1 min-w-0">{item.title}</span>
             </Link>
           </SidebarMenuButton>
+
+          {/* Remove button — zero width when not hovered */}
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
+              <button
                 onClick={(e) => { e.stopPropagation(); onRemove(item.url); }}
-                className="opacity-0 group-hover/fav:opacity-100 transition-opacity shrink-0"
+                className="shrink-0 w-0 overflow-hidden opacity-0 group-hover/fav:w-5 group-hover/fav:opacity-100 transition-all duration-150 flex items-center justify-center rounded hover:bg-amber-50 dark:hover:bg-amber-900/20"
                 aria-label="Remove from favorites"
                 data-testid={`button-unfavorite-${item.id}`}
               >
                 <Star className="h-3 w-3 text-amber-500 fill-amber-500" />
-              </Button>
+              </button>
             </TooltipTrigger>
             <TooltipContent side="right">
               <p>Remove from favorites</p>
