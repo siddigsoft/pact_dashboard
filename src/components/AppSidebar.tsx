@@ -831,7 +831,7 @@
           </div>
         </SidebarHeader>
 
-        <SidebarContent className="px-0 py-0">
+        <SidebarContent className="px-0 pt-2 pb-0">
           {favoriteItems.length > 0 && (
             <Collapsible open={!isFavoritesCollapsed} className="">
               <SidebarGroup className="py-0 px-0">
