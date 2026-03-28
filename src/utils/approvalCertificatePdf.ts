@@ -59,6 +59,9 @@ const C = {
   greenLight: [228, 245, 235] as [number, number, number],
   greenBadge: [34, 155, 80] as [number, number, number],
   white: [255, 255, 255] as [number, number, number],
+  amber: [146, 90, 10] as [number, number, number],
+  amberLight: [255, 247, 224] as [number, number, number],
+  amberBorder: [217, 158, 60] as [number, number, number],
 };
 
 function fmtCurrency(cents: number, cur: string = 'SDG'): string {
@@ -402,9 +405,20 @@ async function buildApprovalCertificateDoc(data: ApprovalCertificateData): Promi
     const cleanNotes = getCleanNotes(tierData.notes);
     const hasNotes = cleanNotes.length > 0;
 
+    // Pre-compute wrapped note lines for accurate card height
+    const notesFontSize = 9;
+    const notesMaxW = cw - 14;
+    let notesLines: string[] = [];
+    if (hasNotes) {
+      doc.setFontSize(notesFontSize);
+      doc.setFont('helvetica', 'bold');
+      notesLines = doc.splitTextToSize(cleanNotes, notesMaxW);
+    }
+    const notesBlockH = hasNotes ? notesLines.length * 5.2 + 14 : 0;
+
     let ch = 22;
-    if (hasNotes) ch += 6;
-    if (hasSigBlock) ch += 12;
+    if (hasNotes) ch += notesBlockH;
+    if (hasSigBlock) ch += 14;
 
     const tierColor = tierNum === 1 ? C.green : C.blue;
     const tierBg = tierNum === 1 ? C.greenLight : C.blueLight;
@@ -452,7 +466,7 @@ async function buildApprovalCertificateDoc(data: ApprovalCertificateData): Promi
     doc.setTextColor(...C.label);
     doc.setFont('helvetica', 'bold');
     doc.text('APPROVER', ml + 6, iy);
-    doc.setFontSize(9);
+    doc.setFontSize(9.5);
     doc.setTextColor(...C.dark);
     doc.setFont('helvetica', 'bold');
     doc.text(tierData.approverName, ml + 6, iy + 4.5);
@@ -470,33 +484,47 @@ async function buildApprovalCertificateDoc(data: ApprovalCertificateData): Promi
     iy += 9;
 
     if (hasNotes) {
+      // Amber highlighted "Approval Conditions" block — bold and fully visible
+      const blockX = ml + 4;
+      const blockW = cw - 8;
+      const blockH = notesBlockH - 2;
+
+      rr(doc, blockX, iy, blockW, blockH, 1.5, C.amberLight, C.amberBorder);
+
+      // Left accent bar
+      doc.setFillColor(...C.amberBorder);
+      doc.rect(blockX + 0.3, iy + 0.3, 2.5, blockH - 0.6, 'F');
+
+      // Label: APPROVAL CONDITIONS
       doc.setFontSize(7);
-      doc.setTextColor(...C.label);
+      doc.setTextColor(...C.amber);
       doc.setFont('helvetica', 'bold');
-      doc.text('NOTES', ml + 6, iy);
-      doc.setFontSize(8);
-      doc.setTextColor(...C.body);
-      doc.setFont('helvetica', 'italic');
-      const notesTrunc = cleanNotes.length > 85 ? cleanNotes.substring(0, 85) + '...' : cleanNotes;
-      doc.text(`"${notesTrunc}"`, ml + 6, iy + 4);
-      iy += 6;
+      doc.text('APPROVAL CONDITIONS / شروط الموافقة', blockX + 6, iy + 5);
+
+      // Notes text — bold, full, unwrapped
+      doc.setFontSize(notesFontSize);
+      doc.setTextColor(...C.dark);
+      doc.setFont('helvetica', 'bold');
+      doc.text(notesLines, blockX + 6, iy + 10.5, { lineHeightFactor: 1.4 });
+
+      iy += blockH + 2;
     }
 
     if (hasSigBlock) {
       doc.setDrawColor(...C.border);
       doc.setLineWidth(0.2);
       doc.line(ml + 4, iy, pw - mr - 4, iy);
-      iy += 2.5;
+      iy += 3;
 
       if (sig) {
         doc.setFontSize(6.5);
         doc.setTextColor(...C.blue);
         doc.setFont('helvetica', 'bold');
-        doc.text('DIGITAL SIGNATURE', ml + 6, iy + 2.5);
+        doc.text('DIGITAL SIGNATURE', ml + 6, iy + 3);
         doc.setFont('helvetica', 'normal');
         doc.setTextColor(...C.label);
         doc.setFontSize(6);
-        doc.text(`${sig.method}  |  Hash: ${sig.hash}...  |  ID: ${sig.id}`, ml + 36, iy + 2.5);
+        doc.text(`${sig.method}  |  Hash: ${sig.hash}...  |  ID: ${sig.id}`, ml + 36, iy + 3);
       }
 
       const sbW = 34;
