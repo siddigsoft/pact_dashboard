@@ -546,6 +546,13 @@
     const [pendingReclaimCount, setPendingReclaimCount] = useState(0);
     const [pendingCostApprovalCount, setPendingCostApprovalCount] = useState(0);
     const [pendingDownPaymentCount, setPendingDownPaymentCount] = useState(0);
+    const [pendingMmpCount, setPendingMmpCount] = useState(0);
+    const [pendingTier2CostCount, setPendingTier2CostCount] = useState(0);
+    const [pendingFinanceCount, setPendingFinanceCount] = useState(0);
+    const [unreadNotifCount, setUnreadNotifCount] = useState(0);
+    const [openIncidentCount, setOpenIncidentCount] = useState(0);
+    const [pendingVerificationCount, setPendingVerificationCount] = useState(0);
+    const [pendingWalletCount, setPendingWalletCount] = useState(0);
 
     // Fetch count of Tier-1 pending cost submissions that the supervisor needs to approve
     useEffect(() => {
@@ -594,6 +601,97 @@
           setPendingDownPaymentCount(count || 0);
         });
     }, [currentUser?.id, currentUser?.hubId, hasAnyRole]);
+
+    // MMP count — coordinator sees MMPs forwarded/assigned to them; FOM/admin see all pending acceptance
+    useEffect(() => {
+      if (!currentUser?.id) return;
+      const isCoordinator = hasAnyRole(['coordinator', 'Coordinator']);
+      const isFomOrAdmin = isSuperAdmin || hasAnyRole(['fom', 'FOM', 'admin', 'Admin']);
+      if (isCoordinator) {
+        supabase
+          .from('mmp_files')
+          .select('id', { count: 'exact', head: true })
+          .eq('coordinator_id', currentUser.id)
+          .in('status', ['forwarded_to_coordinator', 'pending_acceptance'])
+          .then(({ count }) => setPendingMmpCount(count || 0));
+      } else if (isFomOrAdmin) {
+        supabase
+          .from('mmp_files')
+          .select('id', { count: 'exact', head: true })
+          .in('status', ['pending_acceptance', 'pending'])
+          .then(({ count }) => setPendingMmpCount(count || 0));
+      }
+    }, [currentUser?.id, hasAnyRole, isSuperAdmin]);
+
+    // Tier 2 cost approval count — admin/FOM see submissions awaiting tier-2 review
+    useEffect(() => {
+      const isFomOrAdmin = isSuperAdmin || hasAnyRole(['fom', 'FOM', 'admin', 'Admin']);
+      if (!isFomOrAdmin || !currentUser?.id) return;
+      supabase
+        .from('operational_cost_submissions')
+        .select('id', { count: 'exact', head: true })
+        .eq('tier1_status', 'approved')
+        .eq('tier2_status', 'pending')
+        .then(({ count }) => setPendingTier2CostCount(count || 0));
+    }, [currentUser?.id, hasAnyRole, isSuperAdmin]);
+
+    // Finance processing count — down payments approved by supervisor, waiting for finance team
+    useEffect(() => {
+      const isFomOrAdmin = isSuperAdmin || hasAnyRole(['fom', 'FOM', 'admin', 'Admin', 'financial_auditor', 'financialAdmin', 'financialadmin']);
+      if (!isFomOrAdmin || !currentUser?.id) return;
+      supabase
+        .from('down_payment_requests')
+        .select('id', { count: 'exact', head: true })
+        .eq('status', 'supervisor_approved')
+        .then(({ count }) => setPendingFinanceCount(count || 0));
+    }, [currentUser?.id, hasAnyRole, isSuperAdmin]);
+
+    // Unread notification count — every user sees their own unread count
+    useEffect(() => {
+      if (!currentUser?.id) return;
+      supabase
+        .from('notifications')
+        .select('id', { count: 'exact', head: true })
+        .eq('recipient_id', currentUser.id)
+        .eq('is_read', false)
+        .then(({ count }) => setUnreadNotifCount(count || 0));
+    }, [currentUser?.id]);
+
+    // Open incident count — supervisors and above see open/investigating incidents
+    useEffect(() => {
+      const canSeeIncidents = isSuperAdmin || hasAnyRole(['admin', 'Admin', 'fom', 'FOM', 'supervisor', 'Supervisor', 'hubSupervisor', 'hub_supervisor']);
+      if (!canSeeIncidents || !currentUser?.id) return;
+      supabase
+        .from('incident_reports')
+        .select('id', { count: 'exact', head: true })
+        .in('status', ['open', 'investigating'])
+        .then(({ count }) => setOpenIncidentCount(count || 0));
+    }, [currentUser?.id, hasAnyRole, isSuperAdmin]);
+
+    // Pending site verification count — dispatched sites the coordinator is assigned to
+    useEffect(() => {
+      const isCoordinator = hasAnyRole(['coordinator', 'Coordinator']);
+      if (!isCoordinator || !currentUser?.id) return;
+      supabase
+        .from('mmp_site_entries')
+        .select('id', { count: 'exact', head: true })
+        .eq('accepted_by', currentUser.id)
+        .eq('status', 'dispatched')
+        .then(({ count }) => setPendingVerificationCount(count || 0));
+    }, [currentUser?.id, hasAnyRole]);
+
+    // Pending wallet count — DPs the current user requested that are approved but not yet paid
+    useEffect(() => {
+      if (!currentUser?.id) return;
+      const isCoordinator = hasAnyRole(['coordinator', 'Coordinator']);
+      if (!isCoordinator && !isDataCollector) return;
+      supabase
+        .from('down_payment_requests')
+        .select('id', { count: 'exact', head: true })
+        .eq('requested_by', currentUser.id)
+        .eq('status', 'supervisor_approved')
+        .then(({ count }) => setPendingWalletCount(count || 0));
+    }, [currentUser?.id, hasAnyRole, isDataCollector]);
 
     const menuPrefs: MenuPreferences = useMemo(() => {
       const savedPrefs = userSettings?.settings?.menuPreferences;
@@ -830,6 +928,46 @@
                             {item.id === 'down-payment-approval' && pendingDownPaymentCount > 0 && (
                               <span className="ml-auto shrink-0 inline-flex items-center justify-center h-4 min-w-[16px] px-1 rounded-full bg-amber-500 text-white text-[9px] font-bold leading-none" data-testid="badge-down-payment-count">
                                 {pendingDownPaymentCount > 99 ? '99+' : pendingDownPaymentCount}
+                              </span>
+                            )}
+                            {item.id === 'mmp-management' && pendingMmpCount > 0 && (
+                              <span className="ml-auto shrink-0 inline-flex items-center justify-center h-4 min-w-[16px] px-1 rounded-full bg-blue-600 text-white text-[9px] font-bold leading-none" data-testid="badge-mmp-count">
+                                {pendingMmpCount > 99 ? '99+' : pendingMmpCount}
+                              </span>
+                            )}
+                            {(item.id === 'site-verification' || item.id === 'sites-for-verification') && pendingVerificationCount > 0 && (
+                              <span className="ml-auto shrink-0 inline-flex items-center justify-center h-4 min-w-[16px] px-1 rounded-full bg-red-500 text-white text-[9px] font-bold leading-none" data-testid="badge-site-verification-count">
+                                {pendingVerificationCount > 99 ? '99+' : pendingVerificationCount}
+                              </span>
+                            )}
+                            {item.id === 'withdrawal-approval' && pendingTier2CostCount > 0 && (
+                              <span className="ml-auto shrink-0 inline-flex items-center justify-center h-4 min-w-[16px] px-1 rounded-full bg-amber-600 text-white text-[9px] font-bold leading-none" data-testid="badge-tier2-approval-count">
+                                {pendingTier2CostCount > 99 ? '99+' : pendingTier2CostCount}
+                              </span>
+                            )}
+                            {item.id === 'finance-approval' && pendingFinanceCount > 0 && (
+                              <span className="ml-auto shrink-0 inline-flex items-center justify-center h-4 min-w-[16px] px-1 rounded-full bg-indigo-500 text-white text-[9px] font-bold leading-none" data-testid="badge-finance-approval-count">
+                                {pendingFinanceCount > 99 ? '99+' : pendingFinanceCount}
+                              </span>
+                            )}
+                            {item.id === 'notifications' && unreadNotifCount > 0 && (
+                              <span className="ml-auto shrink-0 inline-flex items-center justify-center h-4 min-w-[16px] px-1 rounded-full bg-blue-500 text-white text-[9px] font-bold leading-none" data-testid="badge-notifications-unread-count">
+                                {unreadNotifCount > 99 ? '99+' : unreadNotifCount}
+                              </span>
+                            )}
+                            {(item.id === 'incident-reports' || item.id === 'safety-hub') && openIncidentCount > 0 && (
+                              <span className="ml-auto shrink-0 inline-flex items-center justify-center h-4 min-w-[16px] px-1 rounded-full bg-red-600 text-white text-[9px] font-bold leading-none" data-testid="badge-incident-count">
+                                {openIncidentCount > 99 ? '99+' : openIncidentCount}
+                              </span>
+                            )}
+                            {item.id === 'reconciliation-dashboard' && pendingReclaimCount > 0 && (
+                              <span className="ml-auto shrink-0 inline-flex items-center justify-center h-4 min-w-[16px] px-1 rounded-full bg-orange-500 text-white text-[9px] font-bold leading-none" data-testid="badge-reconciliation-dashboard-count">
+                                {pendingReclaimCount > 99 ? '99+' : pendingReclaimCount}
+                              </span>
+                            )}
+                            {item.id === 'my-wallet' && pendingWalletCount > 0 && (
+                              <span className="ml-auto shrink-0 inline-flex items-center justify-center h-4 min-w-[16px] px-1 rounded-full bg-green-600 text-white text-[9px] font-bold leading-none" data-testid="badge-wallet-pending-count">
+                                {pendingWalletCount > 99 ? '99+' : pendingWalletCount}
                               </span>
                             )}
                           </Link>
