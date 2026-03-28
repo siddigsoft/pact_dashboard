@@ -15,6 +15,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useNotifications } from '@/context/notifications/NotificationContext';
 import { useAppContext } from '@/context/AppContext';
 import { useAuthorization } from '@/hooks/use-authorization';
+import { useSuperAdmin } from '@/context/superAdmin/SuperAdminContext';
 import { formatDistanceToNow } from 'date-fns';
 
 interface PendingAction {
@@ -54,8 +55,10 @@ export function NavbarNotificationBell() {
   }, [notifications, markNotificationAsRead, markAllNotificationsAsRead]);
 
   const { currentUser } = useAppContext();
-  const { hasAnyRole, isSuperAdmin } = useAuthorization();
+  const { hasAnyRole } = useAuthorization();
+  const { isSuperAdmin } = useSuperAdmin(); // boolean — stable across renders
 
+  // All role checks return boolean primitives — safe to use in useCallback deps
   const isSupervisor = hasAnyRole(['supervisor', 'Supervisor', 'hubSupervisor', 'hub_supervisor']);
   const isAdmin = isSuperAdmin || hasAnyRole(['admin', 'Admin', 'super_admin']);
   const isFOM = hasAnyRole(['fom', 'FOM', 'Field Operation Manager (FOM)']);
