@@ -15,6 +15,7 @@ import { useTheme } from 'next-themes';
 import { useUser } from '@/context/user/UserContext';
 import ChatNotificationIndicator from '@/components/chat/ChatNotificationIndicator';
 import { NavbarNotificationBell } from '@/components/navbar/NavbarNotificationBell';
+import ErrorBoundary from '@/components/ErrorBoundary';
 import NavBrand from './navbar/NavBrand';
 import { GlobalSearch } from './navbar/GlobalSearch';
 import { RealtimeActivityIndicator } from '@/components/realtime';
@@ -122,7 +123,9 @@ const Navbar = () => {
                                         <ChatNotificationIndicator />
 
                                         {/* Notifications */}
-                                        <NavbarNotificationBell />
+                                        <ErrorBoundary fallback={null}>
+                                          <NavbarNotificationBell />
+                                        </ErrorBoundary>
 
                                         <div className="w-px h-5 bg-gray-200 dark:bg-gray-700 mx-1" />
 

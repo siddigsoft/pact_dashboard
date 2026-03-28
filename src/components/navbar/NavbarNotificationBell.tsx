@@ -187,9 +187,12 @@ export function NavbarNotificationBell() {
       .then(({ count }) => setDirectUnreadCount(count || 0));
   }, [currentUser?.id, open]);
 
-  const contextUnreadCount: number = typeof getUnreadNotificationsCount === 'function'
-    ? getUnreadNotificationsCount()
-    : (notifications || []).filter((n: any) => !n.isRead).length;
+  let contextUnreadCount = 0;
+  try {
+    contextUnreadCount = typeof getUnreadNotificationsCount === 'function'
+      ? (getUnreadNotificationsCount() || 0)
+      : (notifications || []).filter((n: any) => !n.isRead).length;
+  } catch { contextUnreadCount = 0; }
   const unreadCount = Math.max(contextUnreadCount, directUnreadCount);
 
   const pendingActionsCount = pendingActions.reduce((sum, a) => sum + a.count, 0);
