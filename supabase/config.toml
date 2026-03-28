@@ -9,3 +9,9 @@ jwt_expiry = 120
 # Remove bucket definitions here — define buckets via Supabase dashboard or CLI
 
 # Note: reclaim-digest schedule (0 8 * * 1) is configured via Supabase Dashboard → Edge Functions
+
+[functions.monitoring-flag-no-response]
+verify_jwt = false
+
+[[functions.monitoring-flag-no-response.schedule]]
+cron = "0 * * * *"

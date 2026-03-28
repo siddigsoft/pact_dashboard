@@ -94,6 +94,7 @@ const PublicDocumentation = lazy(() => import('./pages/PublicDocumentation'));
 const SignaturesPage = lazy(() => import('./pages/Signatures'));
 const DocumentsPage = lazy(() => import('./pages/Documents'));
 const ApprovalDashboard = lazy(() => import('./pages/ApprovalDashboard'));
+const MonitoringDashboard = lazy(() => import('./pages/MonitoringDashboard'));
 const AuditLogs = lazy(() => import('./pages/AuditLogs'));
 const EmailTracking = lazy(() => import('./pages/EmailTracking'));
 const EmailManagement = lazy(() => import('./pages/EmailManagement'));
@@ -337,6 +338,7 @@ const AppRoutes = () => {
         <Route path="/tracker-preparation-plan" element={<TrackerPreparationPlan />} />
         <Route path="/signatures" element={<SignaturesPage />} />
         <Route path="/approval-dashboard" element={<ApprovalDashboard />} />
+        <Route path="/admin/monitoring" element={<MonitoringDashboard />} />
         <Route path="/audit-logs" element={<AuditLogs />} />
         <Route path="/email-tracking" element={<EmailTracking />} />
         <Route path="/email-management" element={<EmailManagement />} />

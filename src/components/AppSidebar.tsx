@@ -473,6 +473,9 @@
       if (!isHidden('/super-admin-management')) {
         superAdminItems.push({ id: 'super-admin', title: "Super Admin Management", url: "/super-admin-management", icon: ShieldCheck, priority: 1, isPinned: isPinned('/super-admin-management') });
       }
+      if (!isHidden('/admin/monitoring')) {
+        superAdminItems.push({ id: 'monitoring-dashboard', title: "System Monitoring", url: "/admin/monitoring", icon: Activity, priority: 1.5, isPinned: isPinned('/admin/monitoring') });
+      }
       if (!isHidden('/approval-dashboard')) {
         superAdminItems.push({ id: 'approval-dashboard', title: "Approval Dashboard", url: "/approval-dashboard", icon: ClipboardCheck, priority: 2, isPinned: isPinned('/approval-dashboard') });
       }
