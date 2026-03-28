@@ -10,12 +10,14 @@ import { ocrPostProcess } from './src/utils/ocrPostProcess';
 config();
 
 // Models tried in order — each has its own daily quota
-// Server rotates through them internally, so the client never has to retry for model switching
+// Note: Gemini 1.5 series was discontinued May 2025 — only 2.0+ models are valid
 const GEMINI_MODELS = [
-  'gemini-2.0-flash-lite',   // 1500 RPD free — primary
-  'gemini-2.0-flash',        // 1500 RPD free — secondary
-  'gemini-2.5-pro-exp-03-25',// experimental pro, separate quota
-  'gemini-2.0-pro-exp',      // experimental pro fallback
+  'gemini-2.0-flash-lite',              // 1500 RPD free — primary
+  'gemini-2.0-flash',                   // 1500 RPD free — secondary
+  'gemini-2.5-flash-preview-04-17',     // preview flash, separate quota
+  'gemini-2.5-pro-preview-03-25',       // preview pro, separate quota
+  'gemini-2.0-flash-exp',               // experimental, separate quota
+  'gemini-2.0-flash-thinking-exp-01-21',// thinking experimental
 ];
 // Track which models are unavailable and when they were marked so.
 // Daily-quota exhaustions reset at midnight Pacific; we use a 23-hour TTL so
@@ -127,12 +129,66 @@ async function callGeminiWithRotation(
   throw new Error('All Gemini models unavailable — daily quotas exhausted. Quotas reset at midnight Pacific time.');
 }
 
-// ─── Groq fallback (free, Llama 3.2 Vision) ───────────────────────────────
-// Models: llama-3.2-11b-vision-preview (7000 RPD), llama-3.2-90b-vision-preview (3500 RPD)
+// ─── Groq fallback — llama-4-scout is the only current Groq vision model ────
+// It ONLY supports one image per request — we process images individually then combine
 const GROQ_MODELS = [
-  'meta-llama/llama-4-scout-17b-16e-instruct',   // Llama 4 Scout — vision capable, primary
-  'meta-llama/llama-4-maverick-17b-128e-instruct', // Llama 4 Maverick — vision capable, fallback
+  'meta-llama/llama-4-scout-17b-16e-instruct', // only Groq vision model (one image at a time)
 ];
+
+async function callGroqSingleImage(
+  apiKey: string,
+  model: string,
+  img: { base64: string; mimeType: string },
+  imageIndex: number,
+  totalImages: number,
+  sleep: (ms: number) => Promise<void>,
+): Promise<string> {
+  const singlePrompt = buildBatchPrompt(1);
+  const content: any[] = [
+    { type: 'text', text: singlePrompt },
+    { type: 'image_url', image_url: { url: `data:${img.mimeType || 'image/jpeg'};base64,${img.base64}` } },
+  ];
+
+  for (let attempt = 0; attempt < 3; attempt++) {
+    console.log(`[Groq OCR] Model: ${model}, image ${imageIndex + 1}/${totalImages}, attempt: ${attempt + 1}`);
+    const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+      body: JSON.stringify({ model, messages: [{ role: 'user', content }], temperature: 0, max_tokens: 512 }),
+    });
+
+    if (!res.ok) {
+      const errBody = await res.json().catch(() => ({})) as { error?: { message?: string } };
+      const errMsg = errBody?.error?.message || `HTTP ${res.status}`;
+      console.warn(`[Groq OCR] HTTP ${res.status} for image ${imageIndex + 1}: ${errMsg.slice(0, 200)}`);
+      const isDecommissioned = errMsg.includes('decommissioned') || errMsg.includes('not supported');
+      const isNotFound = res.status === 404 || errMsg.includes('not found') || errMsg.includes('does not exist');
+      const isDailyLimit = res.status === 429 && errMsg.toLowerCase().includes('day');
+      const isMinuteLimit = res.status === 429 && !isDailyLimit;
+      const isInvalidImage = errMsg.toLowerCase().includes('invalid image') || errMsg.toLowerCase().includes('unsupported image');
+
+      if (isDecommissioned || isNotFound || isDailyLimit) {
+        markModelUnavailable(unavailableGroqModels, model);
+        throw new Error(`Groq model unavailable: ${errMsg}`);
+      }
+      if (isMinuteLimit) {
+        const retryAfter = parseInt(res.headers.get('retry-after') || '10', 10);
+        console.log(`[Groq OCR] Minute rate limit — waiting ${retryAfter}s`);
+        await sleep(retryAfter * 1000);
+        continue;
+      }
+      if (isInvalidImage) {
+        // Image was rejected by model but model itself is fine — signal per-image failure
+        throw new Error(`Groq image rejected (${res.status}): ${errMsg}`);
+      }
+      throw new Error(`Groq API error: ${errMsg}`);
+    }
+
+    const data = await res.json() as { choices?: Array<{ message?: { content?: string } }> };
+    return (data.choices?.[0]?.message?.content || '').replace(/```json\n?|```\n?/g, '').trim();
+  }
+  throw new Error('Groq: max retries reached for image');
+}
 
 async function callGroqOCR(
   images: Array<{ base64: string; mimeType: string }>,
@@ -140,8 +196,7 @@ async function callGroqOCR(
   const apiKey = process.env.GROQ_API_KEY || '';
   if (!apiKey) throw new Error('GROQ_API_KEY not configured');
 
-  const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
-  const prompt = buildBatchPrompt(images.length);
+  const sleep = (ms: number) => new Promise<void>(r => setTimeout(r, ms));
 
   for (const model of GROQ_MODELS) {
     if (isModelUnavailable(unavailableGroqModels, model)) {
@@ -149,66 +204,46 @@ async function callGroqOCR(
       continue;
     }
 
-    // Build message content — text prompt + all images
-    const content: any[] = [{ type: 'text', text: prompt }];
-    images.forEach((img, i) => {
-      if (images.length > 1) content.push({ type: 'text', text: `Image ${i + 1}:` });
-      content.push({
-        type: 'image_url',
-        image_url: { url: `data:${img.mimeType || 'image/jpeg'};base64,${img.base64}` },
-      });
-    });
-
-    for (let attempt = 0; attempt < 3; attempt++) {
-      try {
-        console.log(`[Groq OCR] Trying model: ${model}, batch: ${images.length}, attempt: ${attempt + 1}`);
-        const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${apiKey}`,
-          },
-          body: JSON.stringify({
-            model,
-            messages: [{ role: 'user', content }],
-            temperature: 0,
-            max_tokens: 2048,
-          }),
-        });
-
-        if (!res.ok) {
-          const errBody = await res.json().catch(() => ({})) as { error?: { message?: string } };
-          const errMsg = errBody?.error?.message || `HTTP ${res.status}`;
-          const isNotFound = res.status === 404 || errMsg.includes('not found') || errMsg.includes('does not exist');
-          const isDailyLimit = res.status === 429 && errMsg.toLowerCase().includes('day');
-          const isMinuteLimit = res.status === 429 && !isDailyLimit;
-
-          if (isNotFound || isDailyLimit) {
-            console.log(`[Groq OCR] Model ${model} unavailable (${isNotFound ? '404' : 'daily limit'}) — rotating`);
-            markModelUnavailable(unavailableGroqModels, model);
-            break;
-          }
-          if (isMinuteLimit) {
-            const retryAfter = parseInt(res.headers.get('retry-after') || '10', 10);
-            console.log(`[Groq OCR] Minute rate limit — waiting ${retryAfter}s`);
-            await sleep(retryAfter * 1000);
-            continue;
-          }
-          throw new Error(`Groq API error: ${errMsg}`);
+    try {
+      // Llama-4-Scout only supports 1 image per request — process individually then merge
+      const results: any[] = [];
+      let successCount = 0;
+      for (let i = 0; i < images.length; i++) {
+        try {
+          const singleText = await callGroqSingleImage(apiKey, model, images[i], i, images.length, sleep);
+          let parsed: any;
+          try { parsed = JSON.parse(singleText.replace(/```json\n?|```\n?/g, '').trim()); } catch { parsed = null; }
+          // Groq returns a single object per image — collect them
+          results.push(Array.isArray(parsed) ? parsed[0] : (parsed || null));
+          if (parsed) successCount++;
+        } catch (imgErr: any) {
+          const imgErrMsg = imgErr.message?.slice(0, 150) || 'unknown';
+          console.warn(`[Groq OCR] Image ${i + 1} failed: ${imgErrMsg}`);
+          if (imgErr.message?.startsWith('Groq model unavailable')) throw imgErr; // propagate model failure
+          // Image-level error (invalid image, network, etc.) — push empty obj, continue
+          results.push(null);
         }
-
-        const data = await res.json() as { choices?: Array<{ message?: { content?: string } }> };
-        const text = (data.choices?.[0]?.message?.content || '')
-          .replace(/```json\n?|```\n?/g, '').trim();
-        console.log(`[Groq OCR] Success with ${model}`);
-        return { text, model: `groq/${model}` };
-
-      } catch (err: any) {
-        if (err.message?.startsWith('Groq API error') || err.message?.startsWith('GROQ_API_KEY')) throw err;
-        // Network error — retry
-        console.warn(`[Groq OCR] Network error attempt ${attempt + 1}:`, err.message?.slice(0, 100));
-        await sleep(3000);
+        // Small delay between calls to avoid minute rate limiting
+        if (i < images.length - 1) await sleep(400);
       }
+
+      if (successCount === 0) throw new Error('Groq: all images failed to process');
+
+      // Combine all individual results into a JSON array string
+      const combinedText = JSON.stringify(results.map(r => r ?? {}));
+      console.log(`[Groq OCR] ${successCount}/${images.length} images processed with ${model}`);
+      return { text: combinedText, model: `groq/${model}` };
+
+    } catch (err: any) {
+      if (err.message?.startsWith('GROQ_API_KEY')) throw err;
+      if (err.message?.startsWith('Groq model unavailable')) continue; // try next model
+      if (err.message?.startsWith('Groq: all images failed')) {
+        // Mark model as unreliable for this session
+        markModelUnavailable(unavailableGroqModels, model);
+        continue;
+      }
+      // Network or other error — re-throw
+      throw err;
     }
   }
 
