@@ -618,7 +618,8 @@
         supabase
           .from('mmp_files')
           .select('id', { count: 'exact', head: true })
-          .in('status', ['pending_acceptance', 'pending'])
+          .is('coordinator_id', null)
+          .not('status', 'in', '("completed","archived","deleted","rejected","cancelled")')
           .then(({ count }) => setPendingMmpCount(count || 0));
       }
     }, [currentUser?.id, hasAnyRole, isSuperAdmin]);
@@ -635,14 +636,14 @@
         .then(({ count }) => setPendingTier2CostCount(count || 0));
     }, [currentUser?.id, hasAnyRole, isSuperAdmin]);
 
-    // Finance processing count — down payments approved by supervisor, waiting for finance team
+    // Finance processing count — DPs awaiting payment (supervisor-approved or admin-pending)
     useEffect(() => {
       const isFomOrAdmin = isSuperAdmin || hasAnyRole(['fom', 'FOM', 'admin', 'Admin', 'financial_auditor', 'financialAdmin', 'financialadmin']);
       if (!isFomOrAdmin || !currentUser?.id) return;
       supabase
         .from('down_payment_requests')
         .select('id', { count: 'exact', head: true })
-        .eq('status', 'supervisor_approved')
+        .in('status', ['supervisor_approved', 'pending_admin'])
         .then(({ count }) => setPendingFinanceCount(count || 0));
     }, [currentUser?.id, hasAnyRole, isSuperAdmin]);
 
@@ -676,7 +677,7 @@
         .from('mmp_site_entries')
         .select('id', { count: 'exact', head: true })
         .eq('accepted_by', currentUser.id)
-        .eq('status', 'dispatched')
+        .or('status.eq.dispatched,status.eq.Dispatched')
         .then(({ count }) => setPendingVerificationCount(count || 0));
     }, [currentUser?.id, hasAnyRole]);
 

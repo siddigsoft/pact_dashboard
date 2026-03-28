@@ -30,6 +30,7 @@ export function NavbarNotificationBell() {
   const [open, setOpen] = useState(false);
   const [pendingActions, setPendingActions] = useState<PendingAction[]>([]);
   const [loadingActions, setLoadingActions] = useState(false);
+  const [directUnreadCount, setDirectUnreadCount] = useState(0);
 
   const { notifications, markNotificationAsRead, clearAllNotifications, getUnreadNotificationsCount } =
     useNotifications() as any;
@@ -175,9 +176,21 @@ export function NavbarNotificationBell() {
     return () => { clearTimeout(initialDelay); clearInterval(interval); };
   }, [fetchPendingActions]);
 
-  const unreadCount: number = typeof getUnreadNotificationsCount === 'function'
+  // Direct DB count for unread notifications — reliable fallback independent of context state
+  useEffect(() => {
+    if (!currentUser?.id) return;
+    supabase
+      .from('notifications')
+      .select('id', { count: 'exact', head: true })
+      .eq('recipient_id', currentUser.id)
+      .eq('is_read', false)
+      .then(({ count }) => setDirectUnreadCount(count || 0));
+  }, [currentUser?.id, open]);
+
+  const contextUnreadCount: number = typeof getUnreadNotificationsCount === 'function'
     ? getUnreadNotificationsCount()
     : (notifications || []).filter((n: any) => !n.isRead).length;
+  const unreadCount = Math.max(contextUnreadCount, directUnreadCount);
 
   const pendingActionsCount = pendingActions.reduce((sum, a) => sum + a.count, 0);
   const totalBadge = unreadCount + pendingActionsCount;
