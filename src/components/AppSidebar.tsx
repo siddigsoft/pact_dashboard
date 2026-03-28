@@ -831,10 +831,10 @@
           </div>
         </SidebarHeader>
 
-        <SidebarContent className="px-0 pt-2 pb-0">
+        <SidebarContent className="px-0 pt-0 pb-0">
           {favoriteItems.length > 0 && (
             <Collapsible open={!isFavoritesCollapsed} className="">
-              <SidebarGroup className="py-0 px-0">
+              <SidebarGroup className="pt-3 pb-1 px-0">
                 <CollapsibleTrigger asChild>
                   <SidebarGroupLabel 
                     className="px-1 py-0.5 h-6 text-[13px] uppercase tracking-wide font-semibold text-amber-600 dark:text-amber-400 cursor-pointer flex items-center justify-between hover:bg-amber-50 dark:hover:bg-amber-900/30 rounded transition-colors"
