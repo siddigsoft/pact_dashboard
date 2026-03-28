@@ -211,7 +211,12 @@ async function callGroqSingleImage(
       console.warn(`[Groq OCR] HTTP ${res.status} for image ${imageIndex + 1}: ${errMsg.slice(0, 200)}`);
       const isDecommissioned = errMsg.includes('decommissioned') || errMsg.includes('not supported');
       const isNotFound = res.status === 404 || errMsg.includes('not found') || errMsg.includes('does not exist');
-      const isDailyLimit = res.status === 429 && errMsg.toLowerCase().includes('day');
+      // Precise daily (RPD) vs per-minute (TPM) detection — avoids false positives from
+      // "on_demand" (service tier name) which contains no "day" but could confuse naive checks.
+      const isTPM = errMsg.includes('per minute') || errMsg.includes('TPM') || errMsg.includes('tokens per minute');
+      const isRPD = (errMsg.includes('per day') || errMsg.includes('RPD') || errMsg.includes('requests per day')) && !isTPM;
+      const isDailyLimit = res.status === 429 && isRPD;
+      // TPM = temporary, wait and retry. Do NOT mark model permanently unavailable.
       const isMinuteLimit = res.status === 429 && !isDailyLimit;
       const isInvalidImage = errMsg.toLowerCase().includes('invalid image') || errMsg.toLowerCase().includes('unsupported image');
 
@@ -220,9 +225,13 @@ async function callGroqSingleImage(
         throw new Error(`Groq model unavailable: ${errMsg}`);
       }
       if (isMinuteLimit) {
-        const retryAfter = parseInt(res.headers.get('retry-after') || '10', 10);
-        console.log(`[Groq OCR] Minute rate limit — waiting ${retryAfter}s`);
-        await sleep(retryAfter * 1000);
+        // Parse retry-after header; Groq sometimes embeds it in the message ("try again in Xs")
+        const headerRetry = parseInt(res.headers.get('retry-after') || '0', 10);
+        const msgMatch = errMsg.match(/try again in (\d+(?:\.\d+)?)s/i);
+        const msgRetry = msgMatch ? Math.ceil(parseFloat(msgMatch[1])) : 0;
+        const waitSec = Math.max(headerRetry, msgRetry, 15); // minimum 15s
+        console.log(`[Groq OCR] TPM rate limit for image ${imageIndex + 1} — waiting ${waitSec}s then retrying`);
+        await sleep(waitSec * 1000);
         continue;
       }
       if (isInvalidImage) {
@@ -271,8 +280,9 @@ async function callGroqOCR(
           // Image-level error (invalid image, network, etc.) — push empty obj, continue
           results.push(null);
         }
-        // Small delay between calls to avoid minute rate limiting
-        if (i < images.length - 1) await sleep(400);
+        // Delay between calls to stay within Groq's 30K tokens-per-minute limit.
+        // At ~1200 tokens per image, 25 images/min is the safe ceiling → 2400ms gap.
+        if (i < images.length - 1) await sleep(2400);
       }
 
       if (successCount === 0) throw new Error('Groq: all images failed to process');
