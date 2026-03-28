@@ -1,6 +1,7 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react-swc";
 import path from "path";
+import fs from "fs";
 import { componentTagger } from "lovable-tagger";
 import { config } from 'dotenv';
 import type { IncomingMessage, ServerResponse } from 'http';
@@ -8,6 +9,36 @@ import { ocrPostProcess } from './src/utils/ocrPostProcess';
 
 // Load environment variables from .env file
 config();
+
+// ── Persistent quota cache ────────────────────────────────────────────────────
+// Model unavailability marks are written to disk so they survive server restarts.
+// Without this, a restart would immediately re-try an exhausted model, waste a
+// retry, then re-mark it — burning quota needlessly.
+//
+// Format: { gemini: { "<model>": <timestamp_ms> }, groq: { "<model>": <timestamp_ms> } }
+const QUOTA_CACHE_FILE = path.resolve(__dirname, '.ocr-quota-cache.json');
+
+function loadQuotaCache(): { gemini: Record<string, number>; groq: Record<string, number> } {
+  try {
+    if (fs.existsSync(QUOTA_CACHE_FILE)) {
+      const raw = fs.readFileSync(QUOTA_CACHE_FILE, 'utf-8');
+      const parsed = JSON.parse(raw);
+      return { gemini: parsed.gemini || {}, groq: parsed.groq || {} };
+    }
+  } catch { /* ignore corrupt cache */ }
+  return { gemini: {}, groq: {} };
+}
+
+function saveQuotaCache(): void {
+  try {
+    const data = {
+      gemini: Object.fromEntries(unavailableModels),
+      groq: Object.fromEntries(unavailableGroqModels),
+      savedAt: new Date().toISOString(),
+    };
+    fs.writeFileSync(QUOTA_CACHE_FILE, JSON.stringify(data, null, 2), 'utf-8');
+  } catch { /* non-fatal */ }
+}
 
 // Models tried in order — each has its own daily quota
 // Note: Gemini 1.5 series was discontinued May 2025 — only 2.0+ models are valid
@@ -19,18 +50,34 @@ const GEMINI_MODELS = [
   'gemini-2.0-flash-exp',               // experimental, separate quota
   'gemini-2.0-flash-thinking-exp-01-21',// thinking experimental
 ];
-// Track which models are unavailable and when they were marked so.
-// Daily-quota exhaustions reset at midnight Pacific; we use a 23-hour TTL so
-// the dev server automatically retries without needing a restart.
+
+// Daily-quota exhaustions reset at midnight Pacific; 23-hour TTL auto-expires marks.
 const MODEL_UNAVAILABLE_TTL_MS = 23 * 60 * 60 * 1000;
-const unavailableModels = new Map<string, number>(); // model → timestamp marked unavailable
-const unavailableGroqModels = new Map<string, number>();
+
+// Load persisted quota marks on startup — pre-populate the maps from disk
+const _cache = loadQuotaCache();
+const unavailableModels = new Map<string, number>(
+  Object.entries(_cache.gemini).filter(([, ts]) => Date.now() - ts < MODEL_UNAVAILABLE_TTL_MS)
+);
+const unavailableGroqModels = new Map<string, number>(
+  Object.entries(_cache.groq).filter(([, ts]) => Date.now() - ts < MODEL_UNAVAILABLE_TTL_MS)
+);
+
+if (unavailableModels.size > 0 || unavailableGroqModels.size > 0) {
+  const geminiList = [...unavailableModels.keys()];
+  const groqList   = [...unavailableGroqModels.keys()];
+  console.log('[OCR quota] Loaded persisted marks from disk:',
+    geminiList.length ? `Gemini: ${geminiList.join(', ')}` : '',
+    groqList.length   ? `Groq: ${groqList.join(', ')}`   : '',
+  );
+}
 
 function isModelUnavailable(map: Map<string, number>, model: string): boolean {
   const markedAt = map.get(model);
   if (markedAt === undefined) return false;
   if (Date.now() - markedAt > MODEL_UNAVAILABLE_TTL_MS) {
     map.delete(model); // TTL expired — give it another chance
+    saveQuotaCache();  // persist the removal
     return false;
   }
   return true;
@@ -38,6 +85,7 @@ function isModelUnavailable(map: Map<string, number>, model: string): boolean {
 
 function markModelUnavailable(map: Map<string, number>, model: string): void {
   map.set(model, Date.now());
+  saveQuotaCache(); // persist immediately so a restart doesn't lose the mark
 }
 
 function buildBatchPrompt(count: number): string {

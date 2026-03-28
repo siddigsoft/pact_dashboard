@@ -32,3 +32,4 @@ attached_assets/
 *.njsproj
 *.sln
 *.sw?
+.ocr-quota-cache.json
