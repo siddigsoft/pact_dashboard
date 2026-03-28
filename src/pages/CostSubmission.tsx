@@ -473,6 +473,12 @@ const CostSubmission = () => {
     return role.includes('supervisor') || role.includes('hubsupervisor');
   };
 
+  // FOM/Country Director submissions only need ONE approval (admin/super admin), then go straight to Finance.
+  const isFomSubmission = (oc: OperationalCostSubmission): boolean => {
+    const role = (oc.submitter_role || '').toLowerCase().replace(/[\s_-]/g, '');
+    return role === 'fom' || role === 'fieldoperationmanager' || role === 'countrydirector';
+  };
+
   const hasThreeTiers = (oc: OperationalCostSubmission): boolean => {
     return isCoordinatorSubmission(oc) || oc.tier3_status !== null;
   };
@@ -481,10 +487,12 @@ const CostSubmission = () => {
     if (oc.status === 'reconciled') return 'reconciled';
     if (oc.status === 'paid') return 'paid';
     if (oc.tier1_status === 'rejected' || oc.tier2_status === 'rejected' || oc.tier3_status === 'rejected' || oc.status === 'rejected') return 'rejected';
-    // Authoritative: the approval handler only sets status='approved' once all required tiers pass.
-    // Catch coordinator submissions (3-tier flow) that completed tier1+tier2 but have tier3_status=null,
-    // and any other case where the DB status is already 'approved'.
     if (oc.status === 'approved') return 'approved';
+    // FOM/Country Director submissions: single-tier — T1 approval is sufficient
+    if (isFomSubmission(oc)) {
+      if (oc.tier1_status === 'approved') return 'approved';
+      return 'pending';
+    }
     if (hasThreeTiers(oc)) {
       if (oc.tier1_status === 'approved' && oc.tier2_status === 'approved' && oc.tier3_status === 'approved') return 'approved';
       if (oc.tier1_status === 'approved' && (oc.tier2_status === 'pending' || oc.tier3_status === 'pending')) return 'under_review';
@@ -510,6 +518,8 @@ const CostSubmission = () => {
   };
 
   const canTier2Approve = (oc: OperationalCostSubmission): boolean => {
+    // FOM submissions only need single-tier approval — T2 is never required
+    if (isFomSubmission(oc)) return false;
     if (oc.tier1_status !== 'approved' || oc.tier2_status !== 'pending') return false;
     if (isSuperAdmin || isAdmin) return true;
     if (oc.submitted_by === currentUser?.id) return false;
@@ -648,6 +658,8 @@ const CostSubmission = () => {
   };
 
   const isFinalTier = (oc: OperationalCostSubmission, tier: 1 | 2 | 3): boolean => {
+    // FOM/Country Director submissions are single-tier — T1 is always final
+    if (isFomSubmission(oc)) return tier === 1;
     if (hasThreeTiers(oc)) return tier === 3;
     return tier === 2;
   };
@@ -700,7 +712,16 @@ const CostSubmission = () => {
         updates.tier1_approved_at = new Date().toISOString();
         updates.tier1_notes = (notes || '') + sigSuffix || null;
         if (action === 'approve') {
-          updates.status = 'under_review';
+          // FOM/Country Director submissions: single-tier — T1 approval finalises the record
+          if (isFomSubmission(submission)) {
+            updates.tier2_status = 'approved';
+            updates.tier2_approved_by = currentUser.id;
+            updates.tier2_approved_at = new Date().toISOString();
+            updates.tier2_notes = `[Auto-approved: single-tier FOM flow — T2 not required]`;
+            updates.status = 'approved';
+          } else {
+            updates.status = 'under_review';
+          }
         } else {
           updates.status = 'rejected';
           updates.rejection_reason = notes || 'Rejected at Tier 1 / تم الرفض في المرحلة الأولى';
