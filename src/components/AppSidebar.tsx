@@ -541,6 +541,14 @@
                             currentUser?.role?.toLowerCase() === 'datacollector' ||
                             currentUser?.role?.toLowerCase() === 'data collector';
 
+    // Pre-compute stable role booleans so they can be used as useEffect deps
+    // (the hasAnyRole function reference changes every render — never put it in deps)
+    const roleIsCoordinator = hasAnyRole(['coordinator', 'Coordinator']);
+    const roleIsSupervisor   = hasAnyRole(['supervisor', 'Supervisor', 'hubSupervisor', 'hub_supervisor']);
+    const roleIsFomOrAdmin   = isSuperAdmin || hasAnyRole(['fom', 'FOM', 'admin', 'Admin']);
+    const roleIsFinance      = isSuperAdmin || hasAnyRole(['fom', 'FOM', 'admin', 'Admin', 'financial_auditor', 'financialAdmin', 'financialadmin']);
+    const roleCanSeeIncident = isSuperAdmin || hasAnyRole(['admin', 'Admin', 'fom', 'FOM', 'supervisor', 'Supervisor', 'hubSupervisor', 'hub_supervisor']);
+
     const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
     const [isFavoritesCollapsed, setIsFavoritesCollapsed] = useState(false);
     const [pendingReclaimCount, setPendingReclaimCount] = useState(0);
@@ -556,8 +564,7 @@
 
     // Fetch count of Tier-1 pending cost submissions that the supervisor needs to approve
     useEffect(() => {
-      const isSupervisorRole = hasAnyRole(['supervisor', 'Supervisor', 'hubSupervisor', 'hub_supervisor']);
-      if (!isSupervisorRole || !currentUser?.id || !currentUser?.hubId) return;
+      if (!roleIsSupervisor || !currentUser?.id || !currentUser?.hubId) return;
       supabase
         .from('operational_cost_submissions')
         .select('id', { count: 'exact', head: true })
@@ -567,11 +574,10 @@
         .then(({ count }) => {
           setPendingCostApprovalCount(count || 0);
         });
-    }, [currentUser?.id, currentUser?.hubId, hasAnyRole]);
+    }, [currentUser?.id, currentUser?.hubId, roleIsSupervisor]);
 
     useEffect(() => {
-      const isFinancialRole = isSuperAdmin || hasAnyRole(['admin', 'Admin', 'superadmin', 'super_admin', 'financial_auditor', 'financialadmin', 'fom', 'FOM']);
-      if (!isFinancialRole || !currentUser?.id) return;
+      if (!roleIsFinance || !currentUser?.id) return;
       supabase
         .from('down_payment_requests')
         .select('id, metadata')
@@ -586,12 +592,11 @@
           }).length;
           setPendingReclaimCount(count);
         });
-    }, [currentUser?.id, hasAnyRole]);
+    }, [currentUser?.id, roleIsFinance]);
 
     // Fetch count of pending down-payment requests awaiting supervisor approval
     useEffect(() => {
-      const isSupervisorRole = hasAnyRole(['supervisor', 'Supervisor', 'hubSupervisor', 'hub_supervisor']);
-      if (!isSupervisorRole || !currentUser?.id || !currentUser?.hubId) return;
+      if (!roleIsSupervisor || !currentUser?.id || !currentUser?.hubId) return;
       supabase
         .from('down_payment_requests')
         .select('id', { count: 'exact', head: true })
@@ -600,21 +605,19 @@
         .then(({ count }) => {
           setPendingDownPaymentCount(count || 0);
         });
-    }, [currentUser?.id, currentUser?.hubId, hasAnyRole]);
+    }, [currentUser?.id, currentUser?.hubId, roleIsSupervisor]);
 
     // MMP count — coordinator sees MMPs forwarded/assigned to them; FOM/admin see all pending acceptance
     useEffect(() => {
       if (!currentUser?.id) return;
-      const isCoordinator = hasAnyRole(['coordinator', 'Coordinator']);
-      const isFomOrAdmin = isSuperAdmin || hasAnyRole(['fom', 'FOM', 'admin', 'Admin']);
-      if (isCoordinator) {
+      if (roleIsCoordinator) {
         supabase
           .from('mmp_files')
           .select('id', { count: 'exact', head: true })
           .eq('coordinator_id', currentUser.id)
           .in('status', ['forwarded_to_coordinator', 'pending_acceptance'])
           .then(({ count }) => setPendingMmpCount(count || 0));
-      } else if (isFomOrAdmin) {
+      } else if (roleIsFomOrAdmin) {
         supabase
           .from('mmp_files')
           .select('id', { count: 'exact', head: true })
@@ -622,30 +625,28 @@
           .not('status', 'in', '("completed","archived","deleted","rejected","cancelled")')
           .then(({ count }) => setPendingMmpCount(count || 0));
       }
-    }, [currentUser?.id, hasAnyRole, isSuperAdmin]);
+    }, [currentUser?.id, roleIsCoordinator, roleIsFomOrAdmin]);
 
     // Tier 2 cost approval count — admin/FOM see submissions awaiting tier-2 review
     useEffect(() => {
-      const isFomOrAdmin = isSuperAdmin || hasAnyRole(['fom', 'FOM', 'admin', 'Admin']);
-      if (!isFomOrAdmin || !currentUser?.id) return;
+      if (!roleIsFomOrAdmin || !currentUser?.id) return;
       supabase
         .from('operational_cost_submissions')
         .select('id', { count: 'exact', head: true })
         .eq('tier1_status', 'approved')
         .eq('tier2_status', 'pending')
         .then(({ count }) => setPendingTier2CostCount(count || 0));
-    }, [currentUser?.id, hasAnyRole, isSuperAdmin]);
+    }, [currentUser?.id, roleIsFomOrAdmin]);
 
     // Finance processing count — DPs awaiting payment (supervisor-approved or admin-pending)
     useEffect(() => {
-      const isFomOrAdmin = isSuperAdmin || hasAnyRole(['fom', 'FOM', 'admin', 'Admin', 'financial_auditor', 'financialAdmin', 'financialadmin']);
-      if (!isFomOrAdmin || !currentUser?.id) return;
+      if (!roleIsFinance || !currentUser?.id) return;
       supabase
         .from('down_payment_requests')
         .select('id', { count: 'exact', head: true })
         .in('status', ['supervisor_approved', 'pending_admin'])
         .then(({ count }) => setPendingFinanceCount(count || 0));
-    }, [currentUser?.id, hasAnyRole, isSuperAdmin]);
+    }, [currentUser?.id, roleIsFinance]);
 
     // Unread notification count — every user sees their own unread count
     useEffect(() => {
@@ -660,39 +661,36 @@
 
     // Open incident count — supervisors and above see open/investigating incidents
     useEffect(() => {
-      const canSeeIncidents = isSuperAdmin || hasAnyRole(['admin', 'Admin', 'fom', 'FOM', 'supervisor', 'Supervisor', 'hubSupervisor', 'hub_supervisor']);
-      if (!canSeeIncidents || !currentUser?.id) return;
+      if (!roleCanSeeIncident || !currentUser?.id) return;
       supabase
         .from('incident_reports')
         .select('id', { count: 'exact', head: true })
         .in('status', ['open', 'investigating'])
         .then(({ count }) => setOpenIncidentCount(count || 0));
-    }, [currentUser?.id, hasAnyRole, isSuperAdmin]);
+    }, [currentUser?.id, roleCanSeeIncident]);
 
     // Pending site verification count — dispatched sites the coordinator is assigned to
     useEffect(() => {
-      const isCoordinator = hasAnyRole(['coordinator', 'Coordinator']);
-      if (!isCoordinator || !currentUser?.id) return;
+      if (!roleIsCoordinator || !currentUser?.id) return;
       supabase
         .from('mmp_site_entries')
         .select('id', { count: 'exact', head: true })
         .eq('accepted_by', currentUser.id)
         .or('status.eq.dispatched,status.eq.Dispatched')
         .then(({ count }) => setPendingVerificationCount(count || 0));
-    }, [currentUser?.id, hasAnyRole]);
+    }, [currentUser?.id, roleIsCoordinator]);
 
     // Pending wallet count — DPs the current user requested that are approved but not yet paid
     useEffect(() => {
       if (!currentUser?.id) return;
-      const isCoordinator = hasAnyRole(['coordinator', 'Coordinator']);
-      if (!isCoordinator && !isDataCollector) return;
+      if (!roleIsCoordinator && !isDataCollector) return;
       supabase
         .from('down_payment_requests')
         .select('id', { count: 'exact', head: true })
         .eq('requested_by', currentUser.id)
         .eq('status', 'supervisor_approved')
         .then(({ count }) => setPendingWalletCount(count || 0));
-    }, [currentUser?.id, hasAnyRole, isDataCollector]);
+    }, [currentUser?.id, roleIsCoordinator, isDataCollector]);
 
     const menuPrefs: MenuPreferences = useMemo(() => {
       const savedPrefs = userSettings?.settings?.menuPreferences;
