@@ -1744,7 +1744,7 @@ const CostSubmission = () => {
               </p>
             </div>
             </div>
-            {canViewTeamSubmissions && (
+            {canViewTeamSubmissions && !isFOM && (
               <Button
                 size="default"
                 onClick={openBulkCostEmailDialog}
@@ -2772,7 +2772,7 @@ const CostSubmission = () => {
         {/* Submissions History Tab */}
         <TabsContent value="history" className="space-y-4">
           {/* ── Finance Email Action Bar — only in All Submissions tab ── */}
-          {canViewTeamSubmissions && (() => {
+          {canViewTeamSubmissions && !isFOM && (() => {
             const approvedCount = operationalCosts.filter(o => getOperationalDerivedStatus(o) === 'approved').length;
             const approvedTotal = operationalCosts.filter(o => getOperationalDerivedStatus(o) === 'approved').reduce((sum, o) => sum + (o.amount_cents || 0) / 100, 0);
             return (
