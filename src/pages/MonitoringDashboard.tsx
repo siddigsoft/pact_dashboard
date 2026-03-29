@@ -1508,87 +1508,112 @@ function StatusHubTree({
   onWorkflow: (action: DashboardAction, wa: string, wl: string) => void;
   workflowPending: boolean;
 }) {
-  const [openStatuses, setOpenStatuses]   = useState<Set<string>>(() => new Set());
-  const [openHubs,     setOpenHubs]       = useState<Set<string>>(() => new Set());
+  const [openStatuses, setOpenStatuses] = useState<Set<string>>(() => new Set());
+  const [openHubs,     setOpenHubs]     = useState<Set<string>>(() => new Set());
+  const [openStates,   setOpenStates]   = useState<Set<string>>(() => new Set());
 
-  const getHub = (a: DashboardAction) =>
-    String((a.details as Record<string, unknown>)?.hub_office ?? '—');
+  const getHub   = (a: DashboardAction) => String((a.details as Record<string, unknown>)?.hub_office ?? '—');
+  const getState = (a: DashboardAction) => String((a.details as Record<string, unknown>)?.state ?? '—');
 
-  // Build Status → Hub → items map
+  // Build Status → Hub → State → items map
   const statusMap = useMemo(() => {
-    const map = new Map<string, Map<string, DashboardAction[]>>();
+    const map = new Map<string, Map<string, Map<string, DashboardAction[]>>>();
     for (const a of items) {
       const s = a.native_status || 'unknown';
       const h = getHub(a);
+      const st = getState(a);
       if (!map.has(s)) map.set(s, new Map());
       const hm = map.get(s)!;
-      if (!hm.has(h)) hm.set(h, []);
-      hm.get(h)!.push(a);
+      if (!hm.has(h)) hm.set(h, new Map());
+      const sm = hm.get(h)!;
+      if (!sm.has(st)) sm.set(st, []);
+      sm.get(st)!.push(a);
     }
-    // Sort statuses by count desc, hubs alphabetically
     return new Map(
-      [...map.entries()]
-        .sort(([, am], [, bm]) =>
-          [...bm.values()].flat().length - [...am.values()].flat().length)
+      [...map.entries()].sort(([, am], [, bm]) =>
+        [...bm.values()].flatMap(m => [...m.values()]).flat().length -
+        [...am.values()].flatMap(m => [...m.values()]).flat().length)
     );
   }, [items]);
 
-  // When status opens → auto-open all its hub keys; when it closes → remove them
-  const toggleStatus = (statusName: string, hubs: Map<string, DashboardAction[]>) => {
+  // Helpers to collect all hub/state keys under a status or hub
+  const hubKeys   = (sName: string, hMap: Map<string, Map<string, DashboardAction[]>>) =>
+    [...hMap.keys()].map(h => `${sName}::${h}`);
+  const stateKeys = (sName: string, hName: string, sMap: Map<string, DashboardAction[]>) =>
+    [...sMap.keys()].map(st => `${sName}::${hName}::${st}`);
+
+  // Status toggle: open → auto-open all hubs + states; close → remove all
+  const toggleStatus = (sName: string, hMap: Map<string, Map<string, DashboardAction[]>>) => {
     setOpenStatuses(prev => {
       const n = new Set(prev);
-      if (n.has(statusName)) {
-        n.delete(statusName);
-        // collapse all hub keys for this status
-        setOpenHubs(ph => {
-          const nh = new Set(ph);
-          for (const hubName of hubs.keys()) nh.delete(`${statusName}::${hubName}`);
-          return nh;
-        });
-      } else {
-        n.add(statusName);
-        // auto-open all hubs within this status so records are immediately visible
-        setOpenHubs(ph => {
-          const nh = new Set(ph);
-          for (const hubName of hubs.keys()) nh.add(`${statusName}::${hubName}`);
-          return nh;
-        });
-      }
+      const opening = !n.has(sName);
+      opening ? n.add(sName) : n.delete(sName);
+      setOpenHubs(ph => {
+        const nh = new Set(ph);
+        for (const hk of hubKeys(sName, hMap)) opening ? nh.add(hk) : nh.delete(hk);
+        return nh;
+      });
+      setOpenStates(ps => {
+        const ns = new Set(ps);
+        for (const [hName, sMap] of hMap)
+          for (const sk of stateKeys(sName, hName, sMap)) opening ? ns.add(sk) : ns.delete(sk);
+        return ns;
+      });
       return n;
     });
   };
 
-  const toggleHub = (hubKey: string) =>
-    setOpenHubs(prev => { const n = new Set(prev); n.has(hubKey) ? n.delete(hubKey) : n.add(hubKey); return n; });
+  // Hub toggle: open → auto-open all its states; close → remove all
+  const toggleHub = (sName: string, hName: string, sMap: Map<string, DashboardAction[]>) => {
+    const hKey = `${sName}::${hName}`;
+    setOpenHubs(prev => {
+      const n = new Set(prev);
+      const opening = !n.has(hKey);
+      opening ? n.add(hKey) : n.delete(hKey);
+      setOpenStates(ps => {
+        const ns = new Set(ps);
+        for (const sk of stateKeys(sName, hName, sMap)) opening ? ns.add(sk) : ns.delete(sk);
+        return ns;
+      });
+      return n;
+    });
+  };
 
-  // Auto-expand first (largest) status + its hubs on load
+  const toggleState = (sk: string) =>
+    setOpenStates(prev => { const n = new Set(prev); n.has(sk) ? n.delete(sk) : n.add(sk); return n; });
+
+  // Auto-expand first (largest) status + all its hubs + all states on load
   useEffect(() => {
     const [[first, firstHubs] = []] = statusMap.entries();
     if (!first || !firstHubs) return;
     setOpenStatuses(new Set([first]));
-    setOpenHubs(new Set([...firstHubs.keys()].map(h => `${first}::${h}`)));
-  }, [statusMap]);
+    setOpenHubs(new Set(hubKeys(first, firstHubs)));
+    const allStates = new Set<string>();
+    for (const [hName, sMap] of firstHubs)
+      for (const sk of stateKeys(first, hName, sMap)) allStates.add(sk);
+    setOpenStates(allStates);
+  }, [statusMap]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div className="flex flex-col gap-1">
-      {[...statusMap.entries()].map(([statusName, hubMap]) => {
-        const statusTotal = [...hubMap.values()].flat().length;
-        const statusOpen  = openStatuses.has(statusName);
-        const chipCls     = statusChipClass(statusName);
+      {[...statusMap.entries()].map(([sName, hMap]) => {
+        const statusTotal = [...hMap.values()].flatMap(sm => [...sm.values()]).flat().length;
+        const statusOpen  = openStatuses.has(sName);
+        const chipCls     = statusChipClass(sName);
 
         return (
-          <div key={statusName} className="rounded-lg border border-border overflow-hidden">
-            {/* Status header */}
+          <div key={sName} className="rounded-lg border border-border overflow-hidden">
+            {/* ── Status row ── */}
             <button
               className="w-full flex items-center gap-2 px-3 py-2 bg-slate-50 hover:bg-slate-100 text-left transition-colors"
-              onClick={() => toggleStatus(statusName, hubMap)}
-              data-testid={`status-group-${statusName}`}
+              onClick={() => toggleStatus(sName, hMap)}
+              data-testid={`status-group-${sName}`}
             >
               {statusOpen
                 ? <ChevronDown  className="h-3.5 w-3.5 text-violet-500 shrink-0" />
                 : <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />}
               <span className={`text-[10px] font-semibold px-2 py-0.5 rounded border capitalize ${chipCls}`}>
-                {statusName.replace(/_/g, ' ')}
+                {sName.replace(/_/g, ' ')}
               </span>
               <span className="text-xs font-bold flex-1 text-slate-700 text-right">
                 {statusTotal} record{statusTotal !== 1 ? 's' : ''}
@@ -1597,50 +1622,76 @@ function StatusHubTree({
 
             {statusOpen && (
               <div className="flex flex-col divide-y divide-border/40">
-                {[...hubMap.entries()]
-                  .sort(([, ia], [, ib]) => ib.length - ia.length)
-                  .map(([hubName, actions]) => {
-                    const hubKey  = `${statusName}::${hubName}`;
-                    const hubOpen = openHubs.has(hubKey);
+                {[...hMap.entries()].sort(([, am], [, bm]) =>
+                  [...bm.values()].flat().length - [...am.values()].flat().length
+                ).map(([hName, sMap]) => {
+                  const hKey     = `${sName}::${hName}`;
+                  const hubTotal = [...sMap.values()].flat().length;
+                  const hubOpen  = openHubs.has(hKey);
 
-                    return (
-                      <div key={hubKey}>
-                        {/* Hub sub-header */}
-                        <button
-                          className="w-full flex items-center gap-2 px-4 py-1.5 bg-white hover:bg-blue-50/40 text-left transition-colors"
-                          onClick={() => toggleHub(hubKey)}
-                          data-testid={`hub-group-${hubKey}`}
-                        >
-                          {hubOpen
-                            ? <ChevronDown  className="h-3 w-3 text-blue-400 shrink-0" />
-                            : <ChevronRight className="h-3 w-3 text-muted-foreground shrink-0" />}
-                          <Database className="h-3 w-3 text-primary/60 shrink-0" />
-                          <span className="text-xs font-semibold flex-1 text-slate-700">{hubName}</span>
-                          <span className="text-[9px] font-mono bg-primary/10 text-primary px-2 py-0.5 rounded-full">
-                            {actions.length}
-                          </span>
-                        </button>
+                  return (
+                    <div key={hKey}>
+                      {/* ── Hub row ── */}
+                      <button
+                        className="w-full flex items-center gap-2 px-4 py-1.5 bg-white hover:bg-blue-50/40 text-left transition-colors"
+                        onClick={() => toggleHub(sName, hName, sMap)}
+                        data-testid={`hub-group-${hKey}`}
+                      >
+                        {hubOpen
+                          ? <ChevronDown  className="h-3 w-3 text-blue-400 shrink-0" />
+                          : <ChevronRight className="h-3 w-3 text-muted-foreground shrink-0" />}
+                        <Database className="h-3 w-3 text-primary/60 shrink-0" />
+                        <span className="text-xs font-semibold flex-1 text-slate-700">{hName}</span>
+                        <span className="text-[9px] font-mono bg-primary/10 text-primary px-2 py-0.5 rounded-full">{hubTotal}</span>
+                      </button>
 
-                        {hubOpen && (
-                          <div className="flex flex-col gap-0.5 px-1 py-1 bg-slate-50/40">
-                            {actions.map(action => (
-                              <ActionRow
-                                key={action.action_id}
-                                action={action}
-                                selected={selectedIds.has(action.action_id)}
-                                expanded={expandedId === action.action_id}
-                                onToggleSelect={() => onToggleSelect(action.action_id)}
-                                onToggleExpand={() => onToggleExpand(action.action_id)}
-                                onStatusChange={(status, label) => onStatusChange(action, status, label)}
-                                onWorkflow={(wa, wl) => onWorkflow(action, wa, wl)}
-                                workflowPending={workflowPending}
-                              />
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
+                      {hubOpen && (
+                        <div className="flex flex-col divide-y divide-border/30">
+                          {[...sMap.entries()].sort(([, ia], [, ib]) => ib.length - ia.length).map(([stName, actions]) => {
+                            const sk        = `${sName}::${hName}::${stName}`;
+                            const stateOpen = openStates.has(sk);
+
+                            return (
+                              <div key={sk}>
+                                {/* ── State row ── */}
+                                <button
+                                  className="w-full flex items-center gap-2 px-6 py-1.5 bg-slate-50/60 hover:bg-emerald-50/40 text-left transition-colors"
+                                  onClick={() => toggleState(sk)}
+                                  data-testid={`state-group-${sk}`}
+                                >
+                                  {stateOpen
+                                    ? <ChevronDown  className="h-3 w-3 text-emerald-500 shrink-0" />
+                                    : <ChevronRight className="h-3 w-3 text-muted-foreground shrink-0" />}
+                                  <MapPin className="h-3 w-3 text-emerald-500 shrink-0" />
+                                  <span className="text-xs font-medium flex-1 text-slate-700">{stName}</span>
+                                  <span className="text-[9px] font-mono bg-emerald-50 text-emerald-700 border border-emerald-200 px-1.5 py-0.5 rounded">{actions.length}</span>
+                                </button>
+
+                                {stateOpen && (
+                                  <div className="flex flex-col gap-0.5 px-1 py-1 bg-white">
+                                    {actions.map(action => (
+                                      <ActionRow
+                                        key={action.action_id}
+                                        action={action}
+                                        selected={selectedIds.has(action.action_id)}
+                                        expanded={expandedId === action.action_id}
+                                        onToggleSelect={() => onToggleSelect(action.action_id)}
+                                        onToggleExpand={() => onToggleExpand(action.action_id)}
+                                        onStatusChange={(status, label) => onStatusChange(action, status, label)}
+                                        onWorkflow={(wa, wl) => onWorkflow(action, wa, wl)}
+                                        workflowPending={workflowPending}
+                                      />
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>
