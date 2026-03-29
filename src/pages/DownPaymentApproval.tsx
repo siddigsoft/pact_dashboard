@@ -225,6 +225,7 @@ function GroupedSummaryTable({
                               <TableHead className="text-xs py-2">Team Member</TableHead>
                               <TableHead className="text-xs py-2">Site</TableHead>
                               <TableHead className="text-xs py-2">Hub</TableHead>
+                              <TableHead className="text-xs py-2">Activity</TableHead>
                               <TableHead className="text-xs py-2 text-right">Requested</TableHead>
                               <TableHead className="text-xs py-2 text-right">Paid</TableHead>
                               <TableHead className="text-xs py-2 text-right">Remaining</TableHead>
@@ -241,6 +242,7 @@ function GroupedSummaryTable({
                                   <TableCell className="text-xs py-2 max-w-[130px] truncate">{req.requestedByName || getProfileName(req.requestedBy)}</TableCell>
                                   <TableCell className="text-xs py-2 max-w-[160px] truncate">{req.siteName}</TableCell>
                                   <TableCell className="text-xs py-2 whitespace-nowrap">{req.hubName || '—'}</TableCell>
+                                  <TableCell className="text-xs py-2 max-w-[110px] truncate text-muted-foreground">{req.activityType || '—'}</TableCell>
                                   <TableCell className="text-xs py-2 text-right font-mono">{req.requestedAmount.toLocaleString()}</TableCell>
                                   <TableCell className="text-xs py-2 text-right font-mono text-green-600">{(req.totalPaidAmount || 0).toLocaleString()}</TableCell>
                                   <TableCell className="text-xs py-2 text-right font-mono">{rem > 0 ? <span className="text-amber-600">{rem.toLocaleString()}</span> : '0'}</TableCell>
@@ -323,6 +325,7 @@ function AllRequestsTable({
               <TableHead>Site</TableHead>
               <TableHead>Hub</TableHead>
               <TableHead>MMP</TableHead>
+              <TableHead>Activity</TableHead>
               <TableHead className="text-right">Amount (SDG)</TableHead>
               <TableHead>Status</TableHead>
               <TableHead className="text-right">Paid</TableHead>
@@ -341,6 +344,7 @@ function AllRequestsTable({
                   <TableCell className="max-w-[160px] truncate">{req.siteName}</TableCell>
                   <TableCell className="whitespace-nowrap">{req.hubName || '—'}</TableCell>
                   <TableCell className="max-w-[120px] truncate text-sm">{req.mmpName || '—'}</TableCell>
+                  <TableCell className="max-w-[110px] truncate text-sm text-muted-foreground">{req.activityType || '—'}</TableCell>
                   <TableCell className="text-right font-mono">{req.requestedAmount.toLocaleString()}</TableCell>
                   <TableCell>{getStatusBadge(req.status, req.metadata)}</TableCell>
                   <TableCell className="text-right font-mono text-green-600">{(req.totalPaidAmount || 0).toLocaleString()}</TableCell>
@@ -751,6 +755,7 @@ export default function DownPaymentApproval() {
                   <TableCell className="text-xs text-muted-foreground">{req.hubName || '—'}</TableCell>
                   <TableCell className="text-xs text-muted-foreground max-w-[90px] truncate" title={req.localityName}>{req.localityName || '—'}</TableCell>
                   <TableCell className="text-xs text-muted-foreground max-w-[90px] truncate" title={req.mmpName}>{req.mmpName || '—'}</TableCell>
+                  <TableCell className="text-xs text-muted-foreground max-w-[90px] truncate" title={req.activityType}>{req.activityType || '—'}</TableCell>
                   <TableCell className="text-right font-mono text-sm">{(req.approvedAmount ?? req.requestedAmount).toLocaleString()}</TableCell>
                   <TableCell className="text-right">
                     <div className="flex flex-col items-end gap-0.5">
@@ -961,6 +966,7 @@ export default function DownPaymentApproval() {
                                       <TableHead>Hub</TableHead>
                                       <TableHead>Locality</TableHead>
                                       <TableHead>MMP</TableHead>
+                                      <TableHead>Activity</TableHead>
                                       <TableHead className="text-right">Approved</TableHead>
                                       <TableHead className="text-right">Paid</TableHead>
                                       <TableHead className="text-right">Remaining</TableHead>
@@ -987,6 +993,7 @@ export default function DownPaymentApproval() {
                               <TableHead>Hub</TableHead>
                               <TableHead>Locality</TableHead>
                               <TableHead>MMP</TableHead>
+                              <TableHead>Activity</TableHead>
                               <TableHead className="text-right">Approved</TableHead>
                               <TableHead className="text-right">Paid</TableHead>
                               <TableHead className="text-right">Remaining</TableHead>

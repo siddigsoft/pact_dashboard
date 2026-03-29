@@ -1674,6 +1674,7 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
                         <TableHead className="py-2 text-xs">Date</TableHead>
                         <TableHead className="py-2 text-xs">Role</TableHead>
                         <TableHead className="py-2 text-xs">MMP</TableHead>
+                        <TableHead className="py-2 text-xs">Activity</TableHead>
                         <TableHead className="py-2 text-xs text-right">Amount (SDG)</TableHead>
                         <TableHead className="py-2 text-xs">Status</TableHead>
                         <TableHead className="py-2 text-xs">Justification</TableHead>
@@ -1692,6 +1693,7 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
                         <TableCell className="py-2">{format(new Date(request.requestedAt), 'MMM d, yyyy')}</TableCell>
                         <TableCell className="py-2 capitalize">{request.requesterRole}</TableCell>
                         <TableCell className="py-2 max-w-[130px] truncate">{request.mmpName || '—'}</TableCell>
+                        <TableCell className="py-2 max-w-[120px] truncate text-muted-foreground">{request.activityType || '—'}</TableCell>
                         <TableCell className="py-2 text-right font-mono">{(request.approvedAmount || request.requestedAmount).toLocaleString()}</TableCell>
                         <TableCell className="py-2">{getStatusBadge(request.status)}</TableCell>
                         <TableCell className="py-2 max-w-[160px] truncate text-muted-foreground">{request.justification || '—'}</TableCell>
@@ -1714,6 +1716,7 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
                           <TableCell className="py-2">{format(new Date(s.requestedAt), 'MMM d, yyyy')}</TableCell>
                           <TableCell className="py-2 capitalize">{s.requesterRole}</TableCell>
                           <TableCell className="py-2 max-w-[130px] truncate">{s.mmpName || '—'}</TableCell>
+                          <TableCell className="py-2 max-w-[120px] truncate text-muted-foreground">{s.activityType || '—'}</TableCell>
                           <TableCell className="py-2 text-right font-mono">{(s.approvedAmount || s.requestedAmount).toLocaleString()}</TableCell>
                           <TableCell className="py-2">{getStatusBadge(s.status)}</TableCell>
                           <TableCell className="py-2 max-w-[160px] truncate text-muted-foreground">{s.justification || '—'}</TableCell>
@@ -1789,6 +1792,12 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
                     <span className="flex items-center gap-1">
                       <FileText className="h-3 w-3" />
                       {request.mmpName}
+                    </span>
+                  )}
+                  {request.activityType && (
+                    <span className="flex items-center gap-1">
+                      <Activity className="h-3 w-3" />
+                      {request.activityType}
                     </span>
                   )}
                 </div>
