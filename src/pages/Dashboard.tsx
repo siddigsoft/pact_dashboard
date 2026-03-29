@@ -1,4 +1,5 @@
 import { useEffect, useState, useMemo, lazy, Suspense } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useSiteVisitRemindersUI } from '@/hooks/use-site-visit-reminders-ui';
 import { useAppContext } from '@/context/AppContext';
 import { useSettings } from '@/context/settings/SettingsContext';
@@ -29,9 +30,21 @@ const normalizeRole = (role: string): string => {
 };
 
 const Dashboard = () => {
+  const navigate = useNavigate();
   const { SiteVisitRemindersDialog, showDueReminders } = useSiteVisitRemindersUI();
   const { roles, currentUser } = useAppContext();
   const { dashboardPreferences, getDefaultZoneForRole } = useSettings();
+
+  // Super admins land directly on System Monitoring
+  useEffect(() => {
+    if (!currentUser) return;
+    const normalized = currentUser.role ? normalizeRole(currentUser.role) : '';
+    const isSuperAdmin = normalized === 'superadmin'
+      || roles?.some(r => normalizeRole(r) === 'superadmin');
+    if (isSuperAdmin) {
+      navigate('/admin/monitoring', { replace: true });
+    }
+  }, [currentUser, roles, navigate]);
 
   const defaultZone = useMemo((): DashboardZone => {
     const normalizedCurrentRole = currentUser?.role ? normalizeRole(currentUser.role) : undefined;
