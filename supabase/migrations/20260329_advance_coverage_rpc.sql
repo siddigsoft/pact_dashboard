@@ -21,7 +21,7 @@ AS $$
   SELECT
     e.id                                                     AS entry_id,
     COALESCE(e.site_name, '—')                               AS site_name,
-    COALESCE(e.cp_name, '—')                                 AS hub_name,
+    COALESCE(e.hub_office, '—')                              AS hub_name,
     COALESCE(e.state, '—')                                   AS state_name,
     COALESCE(e.locality, '—')                                AS locality_name,
     e.mmp_file_id,
