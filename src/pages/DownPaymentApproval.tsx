@@ -22,7 +22,7 @@ import {
   TrendingUp, Receipt, Wallet, MapPin, FolderKanban, ClipboardList,
   ClipboardCheck, FileText, Search, ChevronDown, ChevronRight,
   Calendar, Building2, User, CheckCircle2, XCircle, BarChart3,
-  Filter, X,
+  Filter, X, Database, Globe,
 } from 'lucide-react';
 import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
 import { format, parseISO } from 'date-fns';
@@ -470,7 +470,10 @@ export default function DownPaymentApproval() {
       }));
     },
   });
+  const [covMmpFilter,    setCovMmpFilter]    = useState('all');
   const [covHubFilter,    setCovHubFilter]    = useState('all');
+  const [covStateFilter,  setCovStateFilter]  = useState('all');
+  const [covDcFilter,     setCovDcFilter]     = useState('all');
   const [covStatusFilter, setCovStatusFilter] = useState('all');
 
   const covSummary = useMemo(() => {
@@ -494,34 +497,35 @@ export default function DownPaymentApproval() {
     };
   }, [siteCoverageData]);
 
-  const covHubs = useMemo(() => [...new Set(siteCoverageData.map(e => e.hub_name).filter(h => h && h !== '—'))].sort(), [siteCoverageData]);
+  const covMmps  = useMemo(() => [...new Set(siteCoverageData.map(e => e.mmp_name).filter(m => m && m !== '—'))].sort(), [siteCoverageData]);
+  const covHubs  = useMemo(() => [...new Set(siteCoverageData.map(e => e.hub_name).filter(h => h && h !== '—'))].sort(), [siteCoverageData]);
+  const covStates = useMemo(() => [...new Set(siteCoverageData.map(e => e.state_name).filter(s => s && s !== '—'))].sort(), [siteCoverageData]);
+  const covDcs   = useMemo(() => [...new Set(siteCoverageData.map(e => e.data_collector_name).filter(d => d && d !== '—'))].sort(), [siteCoverageData]);
 
   const covRows = useMemo(() => {
-    return siteCoverageData
-      .filter(e => {
-        // ── Page-level filters (same as Approval tab) ─────────────────────
-        if (filters.hubId && e.hub_name.toLowerCase() !== filters.hubId.toLowerCase()) return false;
-        if (filters.stateName && e.state_name.toLowerCase() !== filters.stateName.toLowerCase()) return false;
-        if (filters.localityName && e.locality_name.toLowerCase() !== filters.localityName.toLowerCase()) return false;
-        if (filters.mmpName && e.mmp_name.toLowerCase() !== filters.mmpName.toLowerCase()) return false;
-        if (filters.siteName && !e.site_name.toLowerCase().includes(filters.siteName.toLowerCase())) return false;
-        if (filters.searchTerm) {
-          const term = filters.searchTerm.toLowerCase();
-          if (!e.site_name.toLowerCase().includes(term) && !e.hub_name.toLowerCase().includes(term) && !e.state_name.toLowerCase().includes(term)) return false;
-        }
-        // ── Coverage-specific filters ─────────────────────────────────────
-        if (covHubFilter !== 'all' && e.hub_name !== covHubFilter) return false;
-        if (covStatusFilter !== 'all') {
-          if (covStatusFilter === 'no_request') { if (e.advance_status) return false; }
-          else { if ((e.advance_status ?? '') !== covStatusFilter) return false; }
-        }
-        return true;
-      })
-      .sort((a, b) => {
-        const order = (s: string | null) => !s ? 0 : ['pending_supervisor','pending_admin'].includes(s) ? 1 : ['approved','fully_paid','partially_paid'].includes(s) ? 2 : 3;
-        return order(a.advance_status) - order(b.advance_status);
-      });
-  }, [siteCoverageData, filters, covHubFilter, covStatusFilter]);
+    return siteCoverageData.filter(e => {
+      // ── Page-level filters (same as Approval tab) ──────────────────────
+      if (filters.hubId && e.hub_name.toLowerCase() !== filters.hubId.toLowerCase()) return false;
+      if (filters.stateName && e.state_name.toLowerCase() !== filters.stateName.toLowerCase()) return false;
+      if (filters.localityName && e.locality_name.toLowerCase() !== filters.localityName.toLowerCase()) return false;
+      if (filters.mmpName && e.mmp_name.toLowerCase() !== filters.mmpName.toLowerCase()) return false;
+      if (filters.siteName && !e.site_name.toLowerCase().includes(filters.siteName.toLowerCase())) return false;
+      if (filters.searchTerm) {
+        const term = filters.searchTerm.toLowerCase();
+        if (!e.site_name.toLowerCase().includes(term) && !e.hub_name.toLowerCase().includes(term) && !e.state_name.toLowerCase().includes(term)) return false;
+      }
+      // ── Coverage tree filters ──────────────────────────────────────────
+      if (covMmpFilter   !== 'all' && e.mmp_name            !== covMmpFilter)   return false;
+      if (covHubFilter   !== 'all' && e.hub_name            !== covHubFilter)   return false;
+      if (covStateFilter !== 'all' && e.state_name          !== covStateFilter) return false;
+      if (covDcFilter    !== 'all' && e.data_collector_name !== covDcFilter)    return false;
+      if (covStatusFilter !== 'all') {
+        if (covStatusFilter === 'no_request') { if (e.advance_status) return false; }
+        else { if ((e.advance_status ?? '') !== covStatusFilter) return false; }
+      }
+      return true;
+    });
+  }, [siteCoverageData, filters, covMmpFilter, covHubFilter, covStateFilter, covDcFilter, covStatusFilter]);
 
   if (!isSupervisor && !isAdmin && !isFOM) {
     return (
@@ -1218,17 +1222,17 @@ export default function DownPaymentApproval() {
             </Card>
           )}
 
-          {/* Site table */}
+          {/* Site tree */}
           <Card>
             <CardHeader className="py-3 px-4 border-b space-y-3">
               <div className="flex items-center justify-between flex-wrap gap-2">
                 <CardTitle className="text-sm font-semibold">All Active Sites — Advance Status</CardTitle>
                 <div className="flex items-center gap-2 flex-wrap">
                   <Badge variant="secondary" className="text-xs">{covRows.length} of {covSummary.total} sites</Badge>
-                  {(covHubFilter !== 'all' || covStatusFilter !== 'all') && (
+                  {(covMmpFilter !== 'all' || covHubFilter !== 'all' || covStateFilter !== 'all' || covDcFilter !== 'all') && (
                     <Button variant="ghost" size="sm" className="h-7 text-xs text-muted-foreground gap-1"
-                      onClick={() => { setCovHubFilter('all'); setCovStatusFilter('all'); }}>
-                      <X className="h-3 w-3" />Clear local
+                      onClick={() => { setCovMmpFilter('all'); setCovHubFilter('all'); setCovStateFilter('all'); setCovDcFilter('all'); }}>
+                      <X className="h-3 w-3" />Clear filters
                     </Button>
                   )}
                 </div>
@@ -1242,82 +1246,247 @@ export default function DownPaymentApproval() {
                 </div>
               )}
 
-              {/* Coverage-specific filters */}
+              {/* Coverage tree filters — MMP → Hub → State → Data Collector */}
               <div className="flex flex-wrap gap-2">
+                <Select value={covMmpFilter} onValueChange={setCovMmpFilter}>
+                  <SelectTrigger className="h-8 text-xs w-[170px]" data-testid="select-cov-mmp"><SelectValue placeholder="All MMPs" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All MMPs</SelectItem>
+                    {covMmps.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}
+                  </SelectContent>
+                </Select>
                 <Select value={covHubFilter} onValueChange={setCovHubFilter}>
-                  <SelectTrigger className="h-8 text-xs w-[180px]" data-testid="select-cov-hub"><SelectValue placeholder="All Hubs" /></SelectTrigger>
+                  <SelectTrigger className="h-8 text-xs w-[160px]" data-testid="select-cov-hub"><SelectValue placeholder="All Hubs" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">All Hubs</SelectItem>
                     {covHubs.map(h => <SelectItem key={h} value={h}>{h}</SelectItem>)}
                   </SelectContent>
                 </Select>
-                <Select value={covStatusFilter} onValueChange={setCovStatusFilter}>
-                  <SelectTrigger className="h-8 text-xs w-[200px]" data-testid="select-cov-status"><SelectValue placeholder="All Advance Statuses" /></SelectTrigger>
+                <Select value={covStateFilter} onValueChange={setCovStateFilter}>
+                  <SelectTrigger className="h-8 text-xs w-[155px]" data-testid="select-cov-state"><SelectValue placeholder="All States" /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">All Advance Statuses</SelectItem>
-                    <SelectItem value="no_request">No Request Yet</SelectItem>
-                    <SelectItem value="pending_supervisor">Pending Supervisor</SelectItem>
-                    <SelectItem value="pending_admin">Pending Admin</SelectItem>
-                    <SelectItem value="approved">Approved</SelectItem>
-                    <SelectItem value="fully_paid">Fully Paid</SelectItem>
-                    <SelectItem value="partially_paid">Partially Paid</SelectItem>
-                    <SelectItem value="confirmed">Confirmed</SelectItem>
-                    <SelectItem value="acknowledged">Acknowledged</SelectItem>
-                    <SelectItem value="rejected">Rejected</SelectItem>
-                    <SelectItem value="cancelled">Cancelled</SelectItem>
+                    <SelectItem value="all">All States</SelectItem>
+                    {covStates.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+                <Select value={covDcFilter} onValueChange={setCovDcFilter}>
+                  <SelectTrigger className="h-8 text-xs w-[190px]" data-testid="select-cov-dc"><SelectValue placeholder="All Data Collectors" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Data Collectors</SelectItem>
+                    {covDcs.map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
             </CardHeader>
             <CardContent className="p-0">
-              {coverageLoading ? (
-                <div className="p-4 flex flex-col gap-2">{Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-8 w-full" />)}</div>
-              ) : covRows.length === 0 ? (
-                <div className="py-8 text-center text-sm text-muted-foreground">No sites found</div>
-              ) : (
-                <div className="overflow-x-auto">
-                  <Table>
-                    <TableHeader>
-                      <TableRow className="text-xs">
-                        <TableHead>Site Name</TableHead>
-                        <TableHead>Hub</TableHead>
-                        <TableHead>State</TableHead>
-                        <TableHead>MMP</TableHead>
-                        <TableHead>Advance Status</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {covRows.map(s => {
-                        const st = s.advance_status;
-                        const { label, cls } = !st
-                          ? { label: 'No Request', cls: 'bg-slate-100 text-slate-600' }
-                          : st === 'approved' || st === 'fully_paid' || st === 'partially_paid'
-                            ? { label: st === 'fully_paid' ? 'Fully Paid' : st === 'partially_paid' ? 'Partially Paid' : 'Approved', cls: 'bg-emerald-100 text-emerald-700' }
-                          : st === 'pending_supervisor' ? { label: 'Pending Supervisor', cls: 'bg-amber-100 text-amber-700' }
-                          : st === 'pending_admin' ? { label: 'Pending Admin', cls: 'bg-orange-100 text-orange-700' }
-                          : st === 'rejected' ? { label: 'Rejected', cls: 'bg-red-100 text-red-700' }
-                          : st === 'cancelled' ? { label: 'Cancelled', cls: 'bg-slate-100 text-slate-500' }
-                          : { label: st, cls: 'bg-slate-100 text-slate-600' };
-                        return (
-                          <TableRow key={s.id} className="text-xs" data-testid={`row-coverage-${s.id}`}>
-                            <TableCell className="font-medium">{s.site_name}</TableCell>
-                            <TableCell>{s.hub_name}</TableCell>
-                            <TableCell>{s.state_name}</TableCell>
-                            <TableCell className="text-muted-foreground max-w-[140px] truncate">{s.mmp_name}</TableCell>
-                            <TableCell>
-                              <Badge className={`text-[10px] px-2 py-0.5 ${cls}`}>{label}</Badge>
-                            </TableCell>
-                          </TableRow>
-                        );
-                      })}
-                    </TableBody>
-                  </Table>
-                </div>
-              )}
+              {coverageLoading
+                ? <div className="p-4 flex flex-col gap-2">{Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-8 w-full" />)}</div>
+                : <DPCoverageTree entries={covRows} />
+              }
             </CardContent>
           </Card>
         </TabsContent>
       </Tabs>
+    </div>
+  );
+}
+
+// ── DP Coverage Tree ──────────────────────────────────────────────────────────
+// Collapsible MMP → Status → Hub → State → Data Collector → Sites.
+// Identical layout, colours and badge style to the MonitoringDashboard tree.
+
+const DP_STATUS_CHIP: Record<string, string> = {
+  pending_supervisor: 'bg-amber-100 text-amber-800 border-amber-200',
+  pending_admin:      'bg-orange-100 text-orange-800 border-orange-200',
+  approved:           'bg-green-100 text-green-800 border-green-200',
+  fully_paid:         'bg-teal-100 text-teal-800 border-teal-200',
+  partially_paid:     'bg-cyan-100 text-cyan-800 border-cyan-200',
+  confirmed:          'bg-blue-100 text-blue-800 border-blue-200',
+  acknowledged:       'bg-violet-100 text-violet-800 border-violet-200',
+  rejected:           'bg-red-100 text-red-800 border-red-200',
+  cancelled:          'bg-slate-100 text-slate-600 border-slate-200',
+  no_request:         'bg-slate-100 text-slate-500 border-slate-200',
+};
+const DP_STATUS_LABEL: Record<string, string> = {
+  pending_supervisor: 'Pending Supervisor',
+  pending_admin:      'Pending Admin',
+  approved:           'Approved',
+  fully_paid:         'Fully Paid',
+  partially_paid:     'Partially Paid',
+  confirmed:          'Confirmed',
+  acknowledged:       'Acknowledged',
+  rejected:           'Rejected',
+  cancelled:          'Cancelled',
+  no_request:         'No Request',
+};
+
+type DPCovEntry = { id: string; site_name: string; hub_name: string; state_name: string; mmp_name: string; advance_status: string | null; data_collector_name: string };
+
+function DPCoverageTree({ entries }: { entries: DPCovEntry[] }) {
+  type DCMap  = Map<string, DPCovEntry[]>;
+  type StMap  = Map<string, DCMap>;
+  type HubMap = Map<string, StMap>;
+  type StsMap = Map<string, HubMap>;
+  type MMPMap = Map<string, StsMap>;
+
+  const tree = useMemo<MMPMap>(() => {
+    const map: MMPMap = new Map();
+    for (const e of entries) {
+      const mmp = e.mmp_name || '—';
+      const sts = e.advance_status || 'no_request';
+      const hub = e.hub_name || '—';
+      const st  = e.state_name || '—';
+      const dc  = e.data_collector_name || '—';
+      if (!map.has(mmp))                                        map.set(mmp, new Map());
+      if (!map.get(mmp)!.has(sts))                              map.get(mmp)!.set(sts, new Map());
+      if (!map.get(mmp)!.get(sts)!.has(hub))                   map.get(mmp)!.get(sts)!.set(hub, new Map());
+      if (!map.get(mmp)!.get(sts)!.get(hub)!.has(st))          map.get(mmp)!.get(sts)!.get(hub)!.set(st, new Map());
+      if (!map.get(mmp)!.get(sts)!.get(hub)!.get(st)!.has(dc)) map.get(mmp)!.get(sts)!.get(hub)!.get(st)!.set(dc, []);
+      map.get(mmp)!.get(sts)!.get(hub)!.get(st)!.get(dc)!.push(e);
+    }
+    const mmpCount = (sm: StsMap) =>
+      [...sm.values()].flatMap(hm => [...hm.values()]).flatMap(stm => [...stm.values()]).flatMap(dm => [...dm.values()]).flat().length;
+    return new Map([...map.entries()].sort(([, a], [, b]) => mmpCount(b) - mmpCount(a)));
+  }, [entries]);
+
+  const [openMMPs, setOpenMMPs] = useState<Set<string>>(() => new Set());
+  const [openStss, setOpenStss] = useState<Set<string>>(() => new Set());
+  const [openHubs, setOpenHubs] = useState<Set<string>>(() => new Set());
+  const [openSts,  setOpenSts]  = useState<Set<string>>(() => new Set());
+  const [openDCs,  setOpenDCs]  = useState<Set<string>>(() => new Set());
+
+  const tog = (setter: React.Dispatch<React.SetStateAction<Set<string>>>, key: string) =>
+    setter(prev => { const n = new Set(prev); n.has(key) ? n.delete(key) : n.add(key); return n; });
+
+  const hubCount = (hm: HubMap) => [...hm.values()].flatMap(sm => [...sm.values()]).flatMap(dm => [...dm.values()]).flat().length;
+  const stCount  = (sm: StMap)  => [...sm.values()].flatMap(dm => [...dm.values()]).flat().length;
+  const dcCount  = (dm: DCMap)  => [...dm.values()].flat().length;
+  const stsCount = (sm: StsMap) => [...sm.values()].flatMap(hm => [...hm.values()]).flatMap(stm => [...stm.values()]).flatMap(dm => [...dm.values()]).flat().length;
+
+  if (entries.length === 0) {
+    return <div className="py-8 text-center text-sm text-muted-foreground">No sites match this filter</div>;
+  }
+
+  return (
+    <div className="flex flex-col gap-1 p-3 max-h-[560px] overflow-y-auto" data-testid="dp-coverage-tree">
+      {[...tree.entries()].map(([mmp, stsMap]) => {
+        const mmpTot  = stsCount(stsMap);
+        const mmpOpen = openMMPs.has(mmp);
+        return (
+          <div key={mmp} className="rounded-lg border border-border overflow-hidden">
+
+            {/* MMP — indigo */}
+            <button className="w-full flex items-center gap-2 px-3 py-2.5 bg-indigo-50 hover:bg-indigo-100 border-l-4 border-l-indigo-500 text-left transition-colors"
+              onClick={() => tog(setOpenMMPs, mmp)} data-testid={`dp-cov-mmp-${mmp}`}>
+              {mmpOpen ? <ChevronDown className="h-3.5 w-3.5 text-indigo-500 shrink-0" /> : <ChevronRight className="h-3.5 w-3.5 text-indigo-400 shrink-0" />}
+              <FileText className="h-3.5 w-3.5 text-indigo-500 shrink-0" />
+              <span className="text-xs font-bold flex-1 text-indigo-900 truncate">{mmp}</span>
+              <span className="text-[9px] font-mono bg-indigo-100 text-indigo-700 border border-indigo-200 px-2 py-0.5 rounded-full">{mmpTot}</span>
+            </button>
+
+            {mmpOpen && (
+              <div className="flex flex-col divide-y divide-violet-100">
+                {[...stsMap.entries()].sort(([, a], [, b]) => hubCount(b) - hubCount(a)).map(([advSts, hubMap]) => {
+                  const stsTot  = hubCount(hubMap);
+                  const stsKey  = `${mmp}::${advSts}`;
+                  const stsOpen = openStss.has(stsKey);
+                  const label   = DP_STATUS_LABEL[advSts] ?? advSts.replace(/_/g, ' ');
+                  const chip    = DP_STATUS_CHIP[advSts] ?? 'bg-slate-100 text-slate-700 border-slate-200';
+                  return (
+                    <div key={stsKey}>
+                      {/* Status — violet */}
+                      <button className="w-full flex items-center gap-2 px-4 py-2 bg-violet-50 hover:bg-violet-100 border-l-4 border-l-violet-400 text-left transition-colors"
+                        onClick={() => tog(setOpenStss, stsKey)} data-testid={`dp-cov-sts-${stsKey}`}>
+                        {stsOpen ? <ChevronDown className="h-3 w-3 text-violet-500 shrink-0" /> : <ChevronRight className="h-3 w-3 text-violet-400 shrink-0" />}
+                        <span className={`text-[10px] font-semibold px-2 py-0.5 rounded border capitalize ${chip}`}>{label}</span>
+                        <span className="text-xs font-bold flex-1 text-violet-800 text-right">{stsTot} site{stsTot !== 1 ? 's' : ''}</span>
+                      </button>
+
+                      {stsOpen && (
+                        <div className="flex flex-col divide-y divide-blue-100">
+                          {[...hubMap.entries()].sort(([, a], [, b]) => stCount(b) - stCount(a)).map(([hub, stMap]) => {
+                            const hubTot  = stCount(stMap);
+                            const hKey    = `${mmp}::${advSts}::${hub}`;
+                            const hubOpen = openHubs.has(hKey);
+                            return (
+                              <div key={hKey}>
+                                {/* Hub — blue */}
+                                <button className="w-full flex items-center gap-2 px-6 py-2 bg-blue-50 hover:bg-blue-100 border-l-4 border-l-blue-400 text-left transition-colors"
+                                  onClick={() => tog(setOpenHubs, hKey)} data-testid={`dp-cov-hub-${hKey}`}>
+                                  {hubOpen ? <ChevronDown className="h-3 w-3 text-blue-500 shrink-0" /> : <ChevronRight className="h-3 w-3 text-blue-400 shrink-0" />}
+                                  <Database className="h-3 w-3 text-blue-500 shrink-0" />
+                                  <span className="text-xs font-semibold flex-1 text-blue-900 truncate">{hub}</span>
+                                  <span className="text-[9px] font-mono bg-blue-100 text-blue-700 border border-blue-200 px-2 py-0.5 rounded-full">{hubTot}</span>
+                                </button>
+
+                                {hubOpen && (
+                                  <div className="flex flex-col divide-y divide-emerald-100">
+                                    {[...stMap.entries()].sort(([, a], [, b]) => dcCount(b) - dcCount(a)).map(([state, dcMap]) => {
+                                      const stTot  = dcCount(dcMap);
+                                      const stKey  = `${mmp}::${advSts}::${hub}::${state}`;
+                                      const stOpen = openSts.has(stKey);
+                                      return (
+                                        <div key={stKey}>
+                                          {/* State — emerald */}
+                                          <button className="w-full flex items-center gap-2 px-8 py-1.5 bg-emerald-50 hover:bg-emerald-100 border-l-4 border-l-emerald-400 text-left transition-colors"
+                                            onClick={() => tog(setOpenSts, stKey)} data-testid={`dp-cov-state-${stKey}`}>
+                                            {stOpen ? <ChevronDown className="h-3 w-3 text-emerald-500 shrink-0" /> : <ChevronRight className="h-3 w-3 text-emerald-400 shrink-0" />}
+                                            <Globe className="h-3 w-3 text-emerald-500 shrink-0" />
+                                            <span className="text-xs font-semibold flex-1 text-emerald-900 truncate">{state}</span>
+                                            <span className="text-[9px] font-mono bg-emerald-100 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded-full">{stTot}</span>
+                                          </button>
+
+                                          {stOpen && (
+                                            <div className="flex flex-col divide-y divide-amber-100">
+                                              {[...dcMap.entries()].sort(([, a], [, b]) => b.length - a.length).map(([dc, sites]) => {
+                                                const dKey   = `${mmp}::${advSts}::${hub}::${state}::${dc}`;
+                                                const dcOpen = openDCs.has(dKey);
+                                                return (
+                                                  <div key={dKey}>
+                                                    {/* Data Collector — amber */}
+                                                    <button className="w-full flex items-center gap-2 px-10 py-1.5 bg-amber-50 hover:bg-amber-100 border-l-4 border-l-amber-400 text-left transition-colors"
+                                                      onClick={() => tog(setOpenDCs, dKey)} data-testid={`dp-cov-dc-${dKey}`}>
+                                                      {dcOpen ? <ChevronDown className="h-3 w-3 text-amber-500 shrink-0" /> : <ChevronRight className="h-3 w-3 text-amber-400 shrink-0" />}
+                                                      <User className="h-3 w-3 text-amber-500 shrink-0" />
+                                                      <span className="text-xs font-semibold flex-1 text-amber-900 truncate">{dc}</span>
+                                                      <span className="text-[9px] font-mono bg-amber-100 text-amber-700 border border-amber-200 px-2 py-0.5 rounded-full">{sites.length}</span>
+                                                    </button>
+
+                                                    {/* Sites */}
+                                                    {dcOpen && (
+                                                      <div className="flex flex-col">
+                                                        {sites.map(s => (
+                                                          <div key={s.id} className="flex items-center gap-2 px-12 py-1.5 bg-white hover:bg-slate-50 border-l-4 border-l-slate-200 text-xs"
+                                                            data-testid={`dp-cov-site-${s.id}`}>
+                                                            <span className="w-1.5 h-1.5 rounded-full bg-slate-300 shrink-0" />
+                                                            <span className="font-medium text-slate-700 flex-1 truncate">{s.site_name || '—'}</span>
+                                                          </div>
+                                                        ))}
+                                                      </div>
+                                                    )}
+                                                  </div>
+                                                );
+                                              })}
+                                            </div>
+                                          )}
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }
