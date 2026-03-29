@@ -6,6 +6,7 @@ import { useSuperAdmin } from '@/context/superAdmin/SuperAdminContext';
 import { useToast } from '@/hooks/use-toast';
 import { format, formatDistanceToNow, parseISO, isToday, differenceInHours } from 'date-fns';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -1325,7 +1326,69 @@ function MonitoringContent() {
                 </Select>
               </div>
             </div>
-            <CoverageTree entries={coverageFiltered} />
+            {/* Flat table — same style as Down Payment Approval page */}
+            {coverageFiltered.length === 0 ? (
+              <div className="px-4 py-6 text-center text-sm text-muted-foreground">
+                {coverageStatusFilter !== 'all' || coverageMmpFilter !== 'all' || coverageHubFilter !== 'all' || coverageStateFilter !== 'all' || coverageDcFilter !== 'all'
+                  ? 'No sites match this filter'
+                  : 'No sites found'}
+              </div>
+            ) : (
+              <div className="overflow-x-auto max-h-[420px] overflow-y-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="text-xs">
+                      <TableHead>Site Name</TableHead>
+                      <TableHead>Hub</TableHead>
+                      <TableHead>State</TableHead>
+                      <TableHead>Data Collector</TableHead>
+                      <TableHead>MMP</TableHead>
+                      <TableHead>Advance Status</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {coverageFiltered.map(s => {
+                      const st = s.advance_status;
+                      const chip = !st
+                        ? 'bg-slate-100 text-slate-500'
+                        : st === 'pending_supervisor' ? 'bg-amber-100 text-amber-800'
+                        : st === 'pending_admin'      ? 'bg-orange-100 text-orange-800'
+                        : st === 'approved'           ? 'bg-green-100 text-green-800'
+                        : st === 'fully_paid'         ? 'bg-teal-100 text-teal-800'
+                        : st === 'partially_paid'     ? 'bg-cyan-100 text-cyan-800'
+                        : st === 'confirmed'          ? 'bg-blue-100 text-blue-800'
+                        : st === 'acknowledged'       ? 'bg-violet-100 text-violet-800'
+                        : st === 'rejected'           ? 'bg-red-100 text-red-800'
+                        : st === 'cancelled'          ? 'bg-slate-100 text-slate-600'
+                        : 'bg-slate-100 text-slate-600';
+                      const label = !st ? 'No Request'
+                        : st === 'pending_supervisor' ? 'Pending Supervisor'
+                        : st === 'pending_admin'      ? 'Pending Admin'
+                        : st === 'approved'           ? 'Approved'
+                        : st === 'fully_paid'         ? 'Fully Paid'
+                        : st === 'partially_paid'     ? 'Partially Paid'
+                        : st === 'confirmed'          ? 'Confirmed'
+                        : st === 'acknowledged'       ? 'Acknowledged'
+                        : st === 'rejected'           ? 'Rejected'
+                        : st === 'cancelled'          ? 'Cancelled'
+                        : st;
+                      return (
+                        <TableRow key={s.id} className="text-xs" data-testid={`row-cov-${s.id}`}>
+                          <TableCell className="font-medium">{s.site_name}</TableCell>
+                          <TableCell>{s.hub_name}</TableCell>
+                          <TableCell>{s.state_name}</TableCell>
+                          <TableCell className="text-muted-foreground">{s.data_collector_name}</TableCell>
+                          <TableCell className="text-muted-foreground max-w-[130px] truncate">{s.mmp_name}</TableCell>
+                          <TableCell>
+                            <Badge className={`text-[10px] px-2 py-0.5 ${chip}`}>{label}</Badge>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
           </div>
         )}
 
