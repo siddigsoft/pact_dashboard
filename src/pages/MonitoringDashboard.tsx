@@ -1515,7 +1515,16 @@ function StatusHubTree({
 
   const getHub       = (a: DashboardAction) => String((a.details as Record<string, unknown>)?.hub_office ?? '—');
   const getState     = (a: DashboardAction) => String((a.details as Record<string, unknown>)?.state ?? '—');
-  const getCollector = (a: DashboardAction) => a.sender_name || 'Unknown';
+  const getCollector = (a: DashboardAction) => {
+    const d = a.details as Record<string, unknown>;
+    // For MMP site entries the data collector is stored in monitoring_by (text: email or name)
+    // or accepted_by; fall back to sender_name if neither is available
+    if (a.action_type === 'mmp_site_entry') {
+      const name = String(d?.monitoring_by ?? d?.accepted_by ?? '').trim();
+      return name || a.sender_name || 'Unknown';
+    }
+    return a.sender_name || 'Unknown';
+  };
 
   // Build Status → Hub → State → DataCollector → items
   type DCMap  = Map<string, DashboardAction[]>;
@@ -1791,15 +1800,24 @@ function ActionRow({ action, selected, expanded, onToggleSelect, onToggleExpand,
           {/* Sender + timeline cards */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {/* Sender */}
-            <div className="bg-background border rounded-lg px-3 py-3 flex flex-col gap-2">
-              <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Sender</p>
+            {(() => {
+              const det = action.details as Record<string, unknown>;
+              const isMSE = action.action_type === 'mmp_site_entry';
+              const enumeratorRaw = isMSE ? String(det?.monitoring_by ?? det?.accepted_by ?? '').trim() : '';
+              const displayName = enumeratorRaw || action.sender_name || 'Unknown';
+              return (
+              <div className="bg-background border rounded-lg px-3 py-3 flex flex-col gap-2">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">{isMSE ? 'Enumerator / Data Collector' : 'Sender'}</p>
               <div className="flex items-center gap-2">
                 <div className="h-9 w-9 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
                   <User className="h-4 w-4 text-primary" />
                 </div>
                 <div>
-                  <p className="text-sm font-semibold leading-tight">{action.sender_name}</p>
+                  <p className="text-sm font-semibold leading-tight">{displayName}</p>
                   <p className="text-[10px] text-muted-foreground capitalize">{action.sender_role} → {action.recipient_role}</p>
+                  {isMSE && enumeratorRaw && action.sender_name && enumeratorRaw !== action.sender_name && (
+                    <p className="text-[10px] text-muted-foreground">Account: {action.sender_name}</p>
+                  )}
                 </div>
               </div>
               <div className="flex flex-wrap gap-2 mt-1">
@@ -1818,6 +1836,8 @@ function ActionRow({ action, selected, expanded, onToggleSelect, onToggleExpand,
                 )}
               </div>
             </div>
+              );
+            })()}
 
             {/* Timeline */}
             <div className="bg-background border rounded-lg px-3 py-3 flex flex-col gap-1.5">

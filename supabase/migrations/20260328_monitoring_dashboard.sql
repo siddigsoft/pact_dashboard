@@ -168,20 +168,22 @@ WHERE mf.status IS DISTINCT FROM 'draft'
 UNION ALL
 
 SELECT
-  mse.id::text                                                   AS action_id,
-  'mmp_site_entry'                                               AS action_type,
-  'mmp_site_entries'                                             AS source_table,
-  COALESCE(mf2.uploaded_by::text, '')                            AS sender_id,
-  COALESCE(p_mse.full_name, mse.site_name, 'Unknown')           AS sender_name,
-  'dataCollector'                                                AS sender_role,
-  'coordinator'                                                  AS recipient_role,
-  mse.status                                                     AS native_status,
+  mse.id::text                                                              AS action_id,
+  'mmp_site_entry'                                                          AS action_type,
+  'mmp_site_entries'                                                        AS source_table,
+  COALESCE(p_dc.id::text, p_mse.id::text, mf2.uploaded_by::text, '')       AS sender_id,
+  COALESCE(p_dc.full_name, mse.monitoring_by, mse.accepted_by,
+           p_mse.full_name, mse.site_name, 'Unknown')                      AS sender_name,
+  'dataCollector'                                                           AS sender_role,
+  'coordinator'                                                             AS recipient_role,
+  mse.status                                                                AS native_status,
   mse.created_at,
-  COALESCE(mse.updated_at, mse.created_at)                       AS updated_at,
-  to_jsonb(mse.*)                                                AS details
+  COALESCE(mse.updated_at, mse.created_at)                                  AS updated_at,
+  to_jsonb(mse.*)                                                           AS details
 FROM public.mmp_site_entries mse
-LEFT JOIN public.mmp_files mf2 ON mf2.id = mse.mmp_file_id
+LEFT JOIN public.mmp_files mf2  ON mf2.id = mse.mmp_file_id
 LEFT JOIN public.profiles p_mse ON p_mse.id::text = mf2.uploaded_by
+LEFT JOIN public.profiles p_dc  ON p_dc.email = mse.monitoring_by
 
 UNION ALL
 
