@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useEffect } from 'react';
+import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { Navigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -166,6 +166,14 @@ function MonitoringContent() {
   const [statusNotes, setStatusNotes] = useState('');
   // Pipeline click-to-filter: clicking a stage box narrows the action feed
   const [pipelineFilter, setPipelineFilter] = useState<{ type: ActionTypeKey; status: string; label: string } | null>(null);
+  const actionFeedRef = useRef<HTMLDivElement>(null);
+
+  const applyPipelineFilter = (next: { type: ActionTypeKey; status: string; label: string } | null) => {
+    setPipelineFilter(next);
+    if (next) {
+      setTimeout(() => actionFeedRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 80);
+    }
+  };
 
   // ── Fetch via SECURITY DEFINER RPC (bypasses all RLS) ─────────────────────
   const { data: allActions = [], isLoading, isFetching, refetch, dataUpdatedAt, error } = useQuery<DashboardAction[]>({
@@ -267,49 +275,74 @@ function MonitoringContent() {
     { name: 'No Response', value: stats.noResponse,   fill: '#f59e0b' },
   ].filter(d => d.value > 0), [stats]);
 
-  // ── Site Status Pipeline ───────────────────────────────────────────────────
-  // Derived from already-loaded allActions — no extra query needed.
-  const sitePipeline = useMemo(() => {
-    // MMP Site Entries pipeline stages (in workflow order)
-    const ENTRY_STAGES: Array<{ key: string; label: string; color: string; dot: string }> = [
-      { key: 'pending',    label: 'Pending',    color: 'bg-slate-100 text-slate-700 border-slate-200',   dot: 'bg-slate-400' },
-      { key: 'dispatched', label: 'Dispatched', color: 'bg-blue-50 text-blue-700 border-blue-200',        dot: 'bg-blue-500' },
-      { key: 'accepted',   label: 'Accepted',   color: 'bg-violet-50 text-violet-700 border-violet-200',  dot: 'bg-violet-500' },
-      { key: 'completed',  label: 'Completed',  color: 'bg-emerald-50 text-emerald-700 border-emerald-200',dot: 'bg-emerald-500' },
-      { key: 'returned',   label: 'Returned',   color: 'bg-amber-50 text-amber-700 border-amber-200',     dot: 'bg-amber-500' },
-      { key: 'cancelled',  label: 'Cancelled',  color: 'bg-red-50 text-red-700 border-red-200',           dot: 'bg-red-400' },
-    ];
+  // ── Site Status Pipeline — direct DB query (no 2000-row RPC cap) ──────────
+  const ENTRY_STAGES: Array<{ key: string; label: string; color: string; dot: string }> = [
+    { key: 'pending',    label: 'Pending',    color: 'bg-slate-100 text-slate-700 border-slate-200',    dot: 'bg-slate-400' },
+    { key: 'dispatched', label: 'Dispatched', color: 'bg-blue-50 text-blue-700 border-blue-200',         dot: 'bg-blue-500'  },
+    { key: 'accepted',   label: 'Accepted',   color: 'bg-violet-50 text-violet-700 border-violet-200',   dot: 'bg-violet-500'},
+    { key: 'completed',  label: 'Completed',  color: 'bg-emerald-50 text-emerald-700 border-emerald-200',dot: 'bg-emerald-500'},
+    { key: 'returned',   label: 'Returned',   color: 'bg-amber-50 text-amber-700 border-amber-200',      dot: 'bg-amber-500' },
+    { key: 'cancelled',  label: 'Cancelled',  color: 'bg-red-50 text-red-700 border-red-200',            dot: 'bg-red-400'   },
+  ];
 
-    // Site Visits pipeline stages (in workflow order)
-    const VISIT_STAGES: Array<{ key: string; label: string; color: string; dot: string }> = [
-      { key: 'pending',       label: 'Pending',        color: 'bg-slate-100 text-slate-700 border-slate-200',   dot: 'bg-slate-400' },
-      { key: 'assigned',      label: 'Assigned',       color: 'bg-blue-50 text-blue-700 border-blue-200',        dot: 'bg-blue-500' },
-      { key: 'accepted',      label: 'Accepted',       color: 'bg-indigo-50 text-indigo-700 border-indigo-200',  dot: 'bg-indigo-500' },
-      { key: 'dispatched',    label: 'Dispatched',     color: 'bg-cyan-50 text-cyan-700 border-cyan-200',        dot: 'bg-cyan-500' },
-      { key: 'inprogress',    label: 'In Progress',    color: 'bg-purple-50 text-purple-700 border-purple-200',  dot: 'bg-purple-500' },
-      { key: 'permitverified',label: 'Permit Verified',color: 'bg-teal-50 text-teal-700 border-teal-200',        dot: 'bg-teal-500' },
-      { key: 'completed',     label: 'Completed',      color: 'bg-emerald-50 text-emerald-700 border-emerald-200',dot: 'bg-emerald-500' },
-      { key: 'cancelled',     label: 'Cancelled',      color: 'bg-red-50 text-red-700 border-red-200',           dot: 'bg-red-400' },
-    ];
+  const VISIT_STAGES: Array<{ key: string; label: string; color: string; dot: string }> = [
+    { key: 'pending',        label: 'Pending',         color: 'bg-slate-100 text-slate-700 border-slate-200',    dot: 'bg-slate-400'  },
+    { key: 'assigned',       label: 'Assigned',        color: 'bg-blue-50 text-blue-700 border-blue-200',         dot: 'bg-blue-500'   },
+    { key: 'claimed',        label: 'Claimed',         color: 'bg-sky-50 text-sky-700 border-sky-200',            dot: 'bg-sky-500'    },
+    { key: 'accepted',       label: 'Accepted',        color: 'bg-indigo-50 text-indigo-700 border-indigo-200',   dot: 'bg-indigo-500' },
+    { key: 'dispatched',     label: 'Dispatched',      color: 'bg-cyan-50 text-cyan-700 border-cyan-200',         dot: 'bg-cyan-500'   },
+    { key: 'inprogress',     label: 'In Progress',     color: 'bg-purple-50 text-purple-700 border-purple-200',   dot: 'bg-purple-500' },
+    { key: 'permitverified', label: 'Permit Verified', color: 'bg-teal-50 text-teal-700 border-teal-200',         dot: 'bg-teal-500'   },
+    { key: 'verified',       label: 'Verified',        color: 'bg-green-50 text-green-700 border-green-200',      dot: 'bg-green-500'  },
+    { key: 'completed',      label: 'Completed',       color: 'bg-emerald-50 text-emerald-700 border-emerald-200',dot: 'bg-emerald-500'},
+    { key: 'cancelled',      label: 'Cancelled',       color: 'bg-red-50 text-red-700 border-red-200',            dot: 'bg-red-400'    },
+  ];
 
-    const entryActions  = allActions.filter(a => a.action_type === 'mmp_site_entry');
-    const visitActions  = allActions.filter(a => a.action_type === 'site_visit');
+  // Normalise any status string for comparison (camelCase, snake_case, spaces → lowercase no-separator)
+  const normStatus = (s: string) => (s ?? '').toLowerCase().replace(/[_\s-]/g, '');
 
-    // Normalize status to lowercase key for matching
-    const countByStatus = (items: DashboardAction[], key: string) =>
-      items.filter(a => (a.native_status ?? '').toLowerCase().replace(/[_\s]/g,'') === key.replace(/[_\s]/g,'')).length;
+  const { data: sitePipeline, isLoading: pipelineLoading } = useQuery({
+    queryKey: ['/admin/monitoring/site-pipeline'],
+    queryFn: async () => {
+      // Query mmp_site_entries directly — no row limit
+      const { data: entryRows } = await supabase
+        .from('mmp_site_entries')
+        .select('status')
+        .not('status', 'is', null);
 
-    const entryStages = ENTRY_STAGES.map(s => ({ ...s, count: countByStatus(entryActions, s.key) }));
-    const visitStages = VISIT_STAGES.map(s => ({ ...s, count: countByStatus(visitActions, s.key) }));
+      // Query site_visits directly — handles both old and current table state
+      const { data: visitRows } = await supabase
+        .from('site_visits')
+        .select('status')
+        .not('status', 'is', null);
 
-    // Also capture any statuses not in the known list (unknown statuses)
-    const knownEntryKeys = new Set(ENTRY_STAGES.map(s => s.key));
-    const knownVisitKeys = new Set(VISIT_STAGES.map(s => s.key));
-    const unknownEntries = entryActions.filter(a => !knownEntryKeys.has((a.native_status ?? '').toLowerCase())).length;
-    const unknownVisits  = visitActions.filter(a => !knownVisitKeys.has((a.native_status ?? '').toLowerCase().replace(/[_\s]/g,''))).length;
+      // Count entries by stage
+      const entryCounts = new Map<string, number>();
+      for (const row of entryRows ?? []) {
+        const k = normStatus(row.status ?? '');
+        entryCounts.set(k, (entryCounts.get(k) ?? 0) + 1);
+      }
 
-    return { entryStages, visitStages, entryTotal: entryActions.length, visitTotal: visitActions.length, unknownEntries, unknownVisits };
-  }, [allActions]);
+      // Count visits by stage
+      const visitCounts = new Map<string, number>();
+      for (const row of visitRows ?? []) {
+        const k = normStatus(row.status ?? '');
+        visitCounts.set(k, (visitCounts.get(k) ?? 0) + 1);
+      }
+
+      const entryStages = ENTRY_STAGES.map(s => ({ ...s, count: entryCounts.get(normStatus(s.key)) ?? 0 }));
+      const visitStages = VISIT_STAGES.map(s => ({ ...s, count: visitCounts.get(normStatus(s.key)) ?? 0 }));
+
+      return {
+        entryStages,
+        visitStages,
+        entryTotal: entryRows?.length ?? 0,
+        visitTotal: visitRows?.length ?? 0,
+      };
+    },
+    refetchInterval: 120_000,
+    staleTime: 60_000,
+  });
 
   // ── Mutations ──────────────────────────────────────────────────────────────
   const statusMutation = useMutation({
@@ -504,7 +537,13 @@ function MonitoringContent() {
       )}
 
       {/* ── Site Status Pipeline ─────────────────────────────────────────── */}
-      {!isLoading && !error && (sitePipeline.entryTotal > 0 || sitePipeline.visitTotal > 0) && (
+      {pipelineLoading && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <Skeleton className="h-36 w-full rounded-xl" />
+          <Skeleton className="h-36 w-full rounded-xl" />
+        </div>
+      )}
+      {!pipelineLoading && ((sitePipeline?.entryTotal ?? 0) > 0 || (sitePipeline?.visitTotal ?? 0) > 0) && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 
           {/* MMP Site Entries */}
@@ -514,7 +553,7 @@ function MonitoringContent() {
                 <Layers className="h-3.5 w-3.5" />
                 MMP Site Entries Flow
                 <span className="ml-auto text-[10px] font-mono bg-slate-100 px-1.5 py-0.5 rounded text-slate-500">
-                  {sitePipeline.entryTotal} total
+                  {sitePipeline?.entryTotal ?? 0} total
                 </span>
               </CardTitle>
             </CardHeader>
@@ -523,12 +562,13 @@ function MonitoringContent() {
                 <Filter className="h-3 w-3" />Click a stage to filter the list below
               </p>
               <div className="flex flex-wrap gap-2 items-center">
-                {sitePipeline.entryStages.map((stage, i) => {
+                {(sitePipeline?.entryStages ?? []).map((stage, i, arr) => {
                   const isActive = pipelineFilter?.type === 'mmp_site_entry' && pipelineFilter?.status === stage.key;
+                  const total = sitePipeline?.entryTotal ?? 0;
                   return (
                     <div key={stage.key} className="flex items-center gap-1.5">
                       <button
-                        onClick={() => setPipelineFilter(isActive ? null : { type: 'mmp_site_entry', status: stage.key, label: `Site Entries — ${stage.label}` })}
+                        onClick={() => applyPipelineFilter(isActive ? null : { type: 'mmp_site_entry', status: stage.key, label: `Site Entries — ${stage.label}` })}
                         disabled={stage.count === 0}
                         className={`flex flex-col items-center gap-1 rounded-lg border px-3 py-2 min-w-[72px] text-center transition-all
                           ${stage.count === 0 ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer hover:scale-105 hover:shadow-sm active:scale-95'}
@@ -538,22 +578,22 @@ function MonitoringContent() {
                       >
                         <span className="text-[10px] font-medium leading-tight">{stage.label}</span>
                         <span className="text-xl font-bold leading-none">{stage.count}</span>
-                        {sitePipeline.entryTotal > 0 && (
-                          <span className="text-[9px] opacity-60">{Math.round((stage.count / sitePipeline.entryTotal) * 100)}%</span>
+                        {total > 0 && (
+                          <span className="text-[9px] opacity-60">{Math.round((stage.count / total) * 100)}%</span>
                         )}
                       </button>
-                      {i < sitePipeline.entryStages.length - 1 && (
+                      {i < arr.length - 1 && (
                         <ArrowRight className="h-3.5 w-3.5 text-muted-foreground/40 shrink-0" />
                       )}
                     </div>
                   );
                 })}
               </div>
-              {sitePipeline.entryTotal > 0 && (
+              {(sitePipeline?.entryTotal ?? 0) > 0 && (
                 <div className="mt-3 flex h-2 rounded-full overflow-hidden gap-px">
-                  {sitePipeline.entryStages.filter(s => s.count > 0).map(stage => (
+                  {(sitePipeline?.entryStages ?? []).filter(s => s.count > 0).map(stage => (
                     <div key={stage.key} className={`${stage.dot} h-full transition-all`}
-                      style={{ width: `${(stage.count / sitePipeline.entryTotal) * 100}%` }}
+                      style={{ width: `${(stage.count / (sitePipeline?.entryTotal ?? 1)) * 100}%` }}
                       title={`${stage.label}: ${stage.count}`} />
                   ))}
                 </div>
@@ -568,7 +608,7 @@ function MonitoringContent() {
                 <MapPin className="h-3.5 w-3.5" />
                 Site Visits Flow
                 <span className="ml-auto text-[10px] font-mono bg-slate-100 px-1.5 py-0.5 rounded text-slate-500">
-                  {sitePipeline.visitTotal} total
+                  {sitePipeline?.visitTotal ?? 0} total
                 </span>
               </CardTitle>
             </CardHeader>
@@ -577,12 +617,13 @@ function MonitoringContent() {
                 <Filter className="h-3 w-3" />Click a stage to filter the list below
               </p>
               <div className="flex flex-wrap gap-2 items-center">
-                {sitePipeline.visitStages.map((stage, i) => {
+                {(sitePipeline?.visitStages ?? []).map((stage, i, arr) => {
                   const isActive = pipelineFilter?.type === 'site_visit' && pipelineFilter?.status === stage.key;
+                  const total = sitePipeline?.visitTotal ?? 0;
                   return (
                     <div key={stage.key} className="flex items-center gap-1.5">
                       <button
-                        onClick={() => setPipelineFilter(isActive ? null : { type: 'site_visit', status: stage.key, label: `Site Visits — ${stage.label}` })}
+                        onClick={() => applyPipelineFilter(isActive ? null : { type: 'site_visit', status: stage.key, label: `Site Visits — ${stage.label}` })}
                         disabled={stage.count === 0}
                         className={`flex flex-col items-center gap-1 rounded-lg border px-3 py-2 min-w-[72px] text-center transition-all
                           ${stage.count === 0 ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer hover:scale-105 hover:shadow-sm active:scale-95'}
@@ -592,22 +633,22 @@ function MonitoringContent() {
                       >
                         <span className="text-[10px] font-medium leading-tight">{stage.label}</span>
                         <span className="text-xl font-bold leading-none">{stage.count}</span>
-                        {sitePipeline.visitTotal > 0 && (
-                          <span className="text-[9px] opacity-60">{Math.round((stage.count / sitePipeline.visitTotal) * 100)}%</span>
+                        {total > 0 && (
+                          <span className="text-[9px] opacity-60">{Math.round((stage.count / total) * 100)}%</span>
                         )}
                       </button>
-                      {i < sitePipeline.visitStages.length - 1 && (
+                      {i < arr.length - 1 && (
                         <ArrowRight className="h-3.5 w-3.5 text-muted-foreground/40 shrink-0" />
                       )}
                     </div>
                   );
                 })}
               </div>
-              {sitePipeline.visitTotal > 0 && (
+              {(sitePipeline?.visitTotal ?? 0) > 0 && (
                 <div className="mt-3 flex h-2 rounded-full overflow-hidden gap-px">
-                  {sitePipeline.visitStages.filter(s => s.count > 0).map(stage => (
+                  {(sitePipeline?.visitStages ?? []).filter(s => s.count > 0).map(stage => (
                     <div key={stage.key} className={`${stage.dot} h-full transition-all`}
-                      style={{ width: `${(stage.count / sitePipeline.visitTotal) * 100}%` }}
+                      style={{ width: `${(stage.count / (sitePipeline?.visitTotal ?? 1)) * 100}%` }}
                       title={`${stage.label}: ${stage.count}`} />
                   ))}
                 </div>
@@ -724,7 +765,7 @@ function MonitoringContent() {
 
       {/* Action Feed — grouped by module */}
       {!isLoading && !error && allActions.length > 0 && (
-        <div className="flex flex-col gap-3">
+        <div ref={actionFeedRef} className="flex flex-col gap-3" data-testid="action-feed">
           {ACTION_TYPES.map(at => {
             const items = displayedActions.filter(a => a.action_type === at.key);
             if (items.length === 0) return null;
