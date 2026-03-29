@@ -356,6 +356,10 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
     return filteredRequests.filter(req => req.status === 'fully_paid');
   }, [filteredRequests]);
 
+  const closedRequests = useMemo(() => {
+    return filteredRequests.filter(req => req.status === 'rejected' || req.status === 'cancelled');
+  }, [filteredRequests]);
+
   const paidWaitingRequests = useMemo(() => {
     return completedRequests.filter(req => !(req.metadata as any)?.receipt_confirmation?.confirmed);
   }, [completedRequests]);
@@ -2656,7 +2660,7 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
       {!hideFiltersBar && showFilters && <FilterPanel />}
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-4 mb-4">
+        <TabsList className="grid w-full grid-cols-5 mb-4">
           <TabsTrigger value="pending" data-testid="tab-pending">
             Pending
             <Badge variant="secondary" className="ml-2">{pendingRequests.length}</Badge>
@@ -2668,6 +2672,11 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
           <TabsTrigger value="completed" data-testid="tab-completed">
             Completed
             <Badge variant="secondary" className="ml-2">{completedRequests.length}</Badge>
+          </TabsTrigger>
+          <TabsTrigger value="closed" data-testid="tab-closed">
+            Closed
+            {closedRequests.length > 0 && <Badge variant="destructive" className="ml-2">{closedRequests.length}</Badge>}
+            {closedRequests.length === 0 && <Badge variant="secondary" className="ml-2">0</Badge>}
           </TabsTrigger>
           <TabsTrigger value="all" data-testid="tab-all">
             All
@@ -3077,6 +3086,28 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
               )
             )}
           </div>
+        </TabsContent>
+
+        <TabsContent value="closed">
+          {closedRequests.length === 0 ? (
+            <Card>
+              <CardContent className="py-8 text-center text-muted-foreground">
+                No rejected or cancelled requests
+              </CardContent>
+            </Card>
+          ) : (
+            <>
+              <div className="flex items-center gap-2 mb-3 px-1">
+                <Badge variant="destructive" className="text-sm px-3 py-1">
+                  {closedRequests.filter(r => r.status === 'rejected').length} Rejected
+                </Badge>
+                <Badge variant="outline" className="text-sm px-3 py-1 text-muted-foreground">
+                  {closedRequests.filter(r => r.status === 'cancelled').length} Cancelled
+                </Badge>
+              </div>
+              <VirtualizedRequestList requests={closedRequests} renderCard={(r) => <RequestCard request={r} />} />
+            </>
+          )}
         </TabsContent>
 
         <TabsContent value="all">
