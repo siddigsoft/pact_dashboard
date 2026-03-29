@@ -25,8 +25,9 @@ import {
   AlertCircle, CheckSquare, X, Loader2, Calendar, Mail, Phone,
   Zap, Database, BarChart2, ChevronDown, ChevronUp,
   Circle, ArrowUpRight, Timer, Filter, Info, MapPin, ArrowRight,
-  FileText, CheckCircle2, CalendarDays,
+  FileText, CheckCircle2, CalendarDays, Bell, Send, Users,
 } from 'lucide-react';
+import { insertNotifications } from '@/services/mmpActions';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -165,6 +166,7 @@ function MonitoringContent() {
   const [workflowDialog, setWorkflowDialog] = useState<{ action: DashboardAction; workflowAction: string; workflowLabel: string } | null>(null);
   const [workflowNotes, setWorkflowNotes] = useState('');
   const [statusDialog, setStatusDialog] = useState<{ actions: DashboardAction[]; targetStatus: DashboardStatus; label: string } | null>(null);
+  const [notifyOpen, setNotifyOpen] = useState(false);
   const [statusNotes, setStatusNotes] = useState('');
   // Pipeline click-to-filter: clicking a stage box narrows the action feed
   const [pipelineFilter, setPipelineFilter] = useState<{ type: ActionTypeKey; status: string; label: string } | null>(null);
@@ -556,6 +558,15 @@ function MonitoringContent() {
           </Button>
           <Button variant="outline" size="sm" onClick={handleExportCSV} disabled={allActions.length === 0} data-testid="button-export-csv">
             <Download className="h-4 w-4 mr-1" />Export CSV
+          </Button>
+          <Button
+            size="sm"
+            className="bg-violet-600 hover:bg-violet-700 text-white"
+            onClick={() => setNotifyOpen(true)}
+            disabled={allActions.length === 0}
+            data-testid="button-notify-users"
+          >
+            <Bell className="h-4 w-4 mr-1" />Notify Users
           </Button>
         </div>
       </div>
@@ -1051,6 +1062,9 @@ function MonitoringContent() {
         </div>
       )}
 
+      {/* Notify Users Dialog */}
+      <NotifyUsersDialog open={notifyOpen} onClose={() => setNotifyOpen(false)} allActions={allActions} />
+
       {/* Workflow Dialog */}
       <Dialog open={!!workflowDialog} onOpenChange={open => { if (!open) setWorkflowDialog(null); }}>
         <DialogContent>
@@ -1109,6 +1123,170 @@ function MonitoringContent() {
         </DialogContent>
       </Dialog>
     </div>
+  );
+}
+
+// ── Notify Users Dialog ────────────────────────────────────────────────────────
+
+function NotifyUsersDialog({ open, onClose, allActions }: {
+  open: boolean; onClose: () => void; allActions: DashboardAction[];
+}) {
+  const { toast } = useToast();
+  const [sending, setSending] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [filterMode, setFilterMode] = useState<'pending' | 'no_response' | 'all'>('pending');
+  const [priority, setPriority] = useState<'normal' | 'high' | 'urgent'>('normal');
+  const [msgEn, setMsgEn] = useState('You have pending actions in the PACT system that require your attention. Please log in and complete your assigned tasks.');
+  const [msgAr, setMsgAr] = useState('لديك إجراءات معلقة في نظام PACT تحتاج إلى اهتمامك. يرجى تسجيل الدخول وإكمال المهام المُسنَدة إليك.');
+
+  // Build unique user list from allActions
+  const userList = useMemo(() => {
+    const map = new Map<string, {
+      id: string; name: string; email: string | null;
+      pending: number; noResponse: number; modules: Set<string>;
+    }>();
+    for (const a of allActions) {
+      if (!a.sender_id) continue;
+      if (!map.has(a.sender_id)) {
+        map.set(a.sender_id, { id: a.sender_id, name: a.sender_name || 'Unknown', email: a.sender_email || null, pending: 0, noResponse: 0, modules: new Set() });
+      }
+      const u = map.get(a.sender_id)!;
+      if (a.dashboard_status === 'received') u.pending++;
+      if (a.dashboard_status === 'no_response') u.noResponse++;
+      const at = ACTION_TYPES.find(t => t.key === a.action_type);
+      if (at) u.modules.add(at.label);
+    }
+    return [...map.values()].sort((a, b) => (b.noResponse + b.pending) - (a.noResponse + a.pending));
+  }, [allActions]);
+
+  // Filter visible users by mode
+  const filteredUsers = useMemo(() => {
+    if (filterMode === 'pending')     return userList.filter(u => u.pending > 0);
+    if (filterMode === 'no_response') return userList.filter(u => u.noResponse > 0);
+    return userList;
+  }, [userList, filterMode]);
+
+  // Auto-select all filtered users when filter changes
+  useEffect(() => {
+    setSelectedIds(new Set(filteredUsers.map(u => u.id)));
+  }, [filteredUsers]);
+
+  const toggleUser = (id: string) =>
+    setSelectedIds(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
+
+  const selectedUsers = filteredUsers.filter(u => selectedIds.has(u.id));
+
+  const send = async () => {
+    if (selectedUsers.length === 0) { toast({ title: 'No recipients selected', variant: 'destructive' }); return; }
+    setSending(true);
+    try {
+      const rows = selectedUsers.map(u => ({
+        recipient_id: u.id,
+        title_en: priority === 'urgent' ? '🚨 URGENT: Action Required' : priority === 'high' ? '⚠️ Action Required' : '📋 Action Required',
+        title_ar: priority === 'urgent' ? '🚨 عاجل: إجراء مطلوب' : priority === 'high' ? '⚠️ إجراء مطلوب' : '📋 إجراء مطلوب',
+        message_en: msgEn,
+        message_ar: msgAr,
+        event_type: 'monitoring_reminder',
+        action_url: '/dashboard',
+        priority,
+        status: 'unread',
+      }));
+      await insertNotifications(rows);
+      toast({ title: `Notification sent to ${selectedUsers.length} user${selectedUsers.length !== 1 ? 's' : ''}` });
+      onClose();
+    } catch (err) {
+      toast({ title: 'Failed to send notifications', description: String(err), variant: 'destructive' });
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const priorityColors = { normal: 'bg-slate-100 text-slate-700', high: 'bg-amber-100 text-amber-700', urgent: 'bg-red-100 text-red-700' };
+
+  return (
+    <Dialog open={open} onOpenChange={v => { if (!v) onClose(); }}>
+      <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col gap-0 p-0" data-testid="notify-users-dialog">
+        <DialogHeader className="px-5 pt-5 pb-3 border-b shrink-0">
+          <DialogTitle className="flex items-center gap-2 text-base">
+            <Bell className="h-4 w-4 text-violet-600" />Send Action Reminder
+          </DialogTitle>
+          <DialogDescription className="text-xs">
+            Send an in-app notification to users who have pending actions in the system.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="flex-1 overflow-y-auto px-5 py-4 flex flex-col gap-4">
+          {/* Recipient filter tabs */}
+          <div>
+            <p className="text-xs font-semibold text-muted-foreground mb-2 flex items-center gap-1"><Users className="h-3.5 w-3.5" />Recipients</p>
+            <div className="flex gap-2 flex-wrap mb-3">
+              {([['pending', 'Pending Actions', userList.filter(u=>u.pending>0).length], ['no_response', 'No Response', userList.filter(u=>u.noResponse>0).length], ['all', 'All Users', userList.length]] as const).map(([mode, label, n]) => (
+                <button key={mode} onClick={() => setFilterMode(mode)}
+                  className={`text-xs px-3 py-1.5 rounded-full border font-medium transition-colors ${filterMode === mode ? 'bg-violet-600 text-white border-violet-600' : 'bg-white text-slate-600 border-slate-200 hover:border-violet-300'}`}
+                  data-testid={`notify-filter-${mode}`}>
+                  {label} <span className="font-mono ml-1 opacity-70">{n}</span>
+                </button>
+              ))}
+              <button onClick={() => setSelectedIds(new Set(filteredUsers.map(u => u.id)))} className="text-xs text-violet-600 hover:underline ml-auto" data-testid="notify-select-all">Select all</button>
+              <button onClick={() => setSelectedIds(new Set())} className="text-xs text-slate-500 hover:underline" data-testid="notify-clear-all">Clear</button>
+            </div>
+
+            {/* User list */}
+            <div className="border rounded-lg divide-y max-h-44 overflow-y-auto" data-testid="notify-user-list">
+              {filteredUsers.length === 0 && (
+                <div className="px-4 py-3 text-xs text-muted-foreground text-center">No users match this filter</div>
+              )}
+              {filteredUsers.map(u => (
+                <label key={u.id} className={`flex items-start gap-3 px-3 py-2 cursor-pointer hover:bg-slate-50 transition-colors ${selectedIds.has(u.id) ? 'bg-violet-50/40' : ''}`} data-testid={`notify-user-${u.id}`}>
+                  <Checkbox checked={selectedIds.has(u.id)} onCheckedChange={() => toggleUser(u.id)} className="mt-0.5 shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-xs font-semibold text-slate-800 truncate">{u.name}</span>
+                      {u.noResponse > 0 && <span className="text-[9px] bg-amber-100 text-amber-700 border border-amber-200 px-1 rounded-full font-bold">{u.noResponse} no-response</span>}
+                      {u.pending > 0    && <span className="text-[9px] bg-blue-50 text-blue-700 border border-blue-200 px-1 rounded-full font-bold">{u.pending} pending</span>}
+                    </div>
+                    {u.email && <p className="text-[10px] text-muted-foreground mt-0.5 truncate">{u.email}</p>}
+                    <p className="text-[10px] text-slate-500 mt-0.5 truncate">{[...u.modules].join(' · ')}</p>
+                  </div>
+                </label>
+              ))}
+            </div>
+            <p className="text-[10px] text-muted-foreground mt-1">{selectedIds.size} of {filteredUsers.length} selected</p>
+          </div>
+
+          {/* Priority */}
+          <div>
+            <p className="text-xs font-semibold text-muted-foreground mb-2">Priority</p>
+            <div className="flex gap-2">
+              {(['normal', 'high', 'urgent'] as const).map(p => (
+                <button key={p} onClick={() => setPriority(p)}
+                  className={`text-xs px-3 py-1.5 rounded-full border font-medium capitalize transition-colors ${priority === p ? priorityColors[p] + ' border-current font-bold' : 'bg-white text-slate-500 border-slate-200 hover:border-slate-300'}`}
+                  data-testid={`notify-priority-${p}`}>{p}</button>
+              ))}
+            </div>
+          </div>
+
+          {/* Message */}
+          <div className="flex flex-col gap-2">
+            <p className="text-xs font-semibold text-muted-foreground">Message (English)</p>
+            <Textarea rows={3} value={msgEn} onChange={e => setMsgEn(e.target.value)} className="text-xs resize-none" data-testid="notify-message-en" />
+            <p className="text-xs font-semibold text-muted-foreground">Message (Arabic)</p>
+            <Textarea rows={3} value={msgAr} onChange={e => setMsgAr(e.target.value)} className="text-xs resize-none text-right" dir="rtl" data-testid="notify-message-ar" />
+          </div>
+        </div>
+
+        <DialogFooter className="px-5 py-3 border-t shrink-0 flex items-center justify-between gap-3">
+          <p className="text-xs text-muted-foreground flex-1">
+            Will send in-app notification to <span className="font-bold text-foreground">{selectedIds.size}</span> user{selectedIds.size !== 1 ? 's' : ''}
+          </p>
+          <Button variant="outline" size="sm" onClick={onClose} disabled={sending}>Cancel</Button>
+          <Button size="sm" className="bg-violet-600 hover:bg-violet-700 text-white" onClick={send} disabled={sending || selectedIds.size === 0} data-testid="notify-send-btn">
+            {sending ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Send className="h-4 w-4 mr-1" />}
+            Send {selectedIds.size > 0 ? `to ${selectedIds.size}` : ''}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
