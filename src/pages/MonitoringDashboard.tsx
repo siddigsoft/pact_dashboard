@@ -333,11 +333,23 @@ function MonitoringContent() {
         .select('status')
         .not('status', 'is', null);
 
-      // Query site_visits directly
-      const { data: visitRows } = await supabase
-        .from('site_visits')
-        .select('status')
-        .not('status', 'is', null);
+      // Query site_visits via SECURITY DEFINER RPC (direct table query is blocked by RLS)
+      const visitRows: Array<{ status: string | null }> = [];
+      let vPage = 0;
+      while (true) {
+        const { data: vChunk } = await (supabase.rpc('get_monitoring_actions', {
+          p_type: 'site_visit',
+          p_from: null,
+          p_to: null,
+          p_sender: null,
+        }) as ReturnType<typeof supabase.rpc>).select('native_status').range(vPage * 1000, vPage * 1000 + 999);
+        if (!vChunk || vChunk.length === 0) break;
+        for (const r of vChunk as Array<Record<string,unknown>>) {
+          visitRows.push({ status: r['native_status'] as string | null });
+        }
+        if (vChunk.length < 1000) break;
+        vPage++;
+      }
 
       // Count by normalised status key
       const tally = (rows: Array<{ status: string | null }>) => {
