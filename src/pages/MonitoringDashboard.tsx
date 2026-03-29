@@ -1291,6 +1291,7 @@ function MonitoringContent() {
                 )}
               </div>
               <div className="flex flex-wrap gap-2">
+                {/* Order: MMP → Hub → State → Locality (mirrors MMP Site Entries tree) */}
                 <Select value={coverageMmpFilter} onValueChange={setCoverageMmpFilter}>
                   <SelectTrigger className="h-7 text-xs w-[160px]" data-testid="select-coverage-mmp-filter">
                     <SelectValue placeholder="All MMPs" />
@@ -1298,6 +1299,15 @@ function MonitoringContent() {
                   <SelectContent>
                     <SelectItem value="all">All MMPs</SelectItem>
                     {coverageMmps.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+                <Select value={coverageHubFilter} onValueChange={setCoverageHubFilter}>
+                  <SelectTrigger className="h-7 text-xs w-[150px]" data-testid="select-coverage-hub-filter">
+                    <SelectValue placeholder="All Hubs" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Hubs</SelectItem>
+                    {coverageHubs.map(h => <SelectItem key={h} value={h}>{h}</SelectItem>)}
                   </SelectContent>
                 </Select>
                 <Select value={coverageStateFilter} onValueChange={setCoverageStateFilter}>
@@ -1316,15 +1326,6 @@ function MonitoringContent() {
                   <SelectContent>
                     <SelectItem value="all">All Localities</SelectItem>
                     {coverageLocalities.map(l => <SelectItem key={l} value={l}>{l}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-                <Select value={coverageHubFilter} onValueChange={setCoverageHubFilter}>
-                  <SelectTrigger className="h-7 text-xs w-[150px]" data-testid="select-coverage-hub-filter">
-                    <SelectValue placeholder="All Hubs" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Hubs</SelectItem>
-                    {coverageHubs.map(h => <SelectItem key={h} value={h}>{h}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
