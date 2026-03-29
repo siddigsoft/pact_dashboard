@@ -164,6 +164,8 @@ function MonitoringContent() {
   const [workflowNotes, setWorkflowNotes] = useState('');
   const [statusDialog, setStatusDialog] = useState<{ actions: DashboardAction[]; targetStatus: DashboardStatus; label: string } | null>(null);
   const [statusNotes, setStatusNotes] = useState('');
+  // Pipeline click-to-filter: clicking a stage box narrows the action feed
+  const [pipelineFilter, setPipelineFilter] = useState<{ type: ActionTypeKey; status: string; label: string } | null>(null);
 
   // ── Fetch via SECURITY DEFINER RPC (bypasses all RLS) ─────────────────────
   const { data: allActions = [], isLoading, isFetching, refetch, dataUpdatedAt, error } = useQuery<DashboardAction[]>({
@@ -371,9 +373,20 @@ function MonitoringContent() {
     URL.revokeObjectURL(url);
   }, [allActions]);
 
+  // ── Pipeline filter application ────────────────────────────────────────────
+  // When a stage box is clicked, displayedActions narrows to just that type+status.
+  const displayedActions = useMemo(() => {
+    if (!pipelineFilter) return allActions;
+    return allActions.filter(a => {
+      if (a.action_type !== pipelineFilter.type) return false;
+      const norm = (s: string) => (s ?? '').toLowerCase().replace(/[_\s]/g, '');
+      return norm(a.native_status) === norm(pipelineFilter.status);
+    });
+  }, [allActions, pipelineFilter]);
+
   // ── Selection ──────────────────────────────────────────────────────────────
   const toggleSelect = (id: string) => setSelectedIds(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
-  const selectedActions = allActions.filter(a => selectedIds.has(a.action_id));
+  const selectedActions = displayedActions.filter(a => selectedIds.has(a.action_id));
 
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
@@ -506,32 +519,42 @@ function MonitoringContent() {
               </CardTitle>
             </CardHeader>
             <CardContent className="px-4 py-3">
+              <p className="text-[10px] text-muted-foreground mb-2 flex items-center gap-1">
+                <Filter className="h-3 w-3" />Click a stage to filter the list below
+              </p>
               <div className="flex flex-wrap gap-2 items-center">
-                {sitePipeline.entryStages.map((stage, i) => (
-                  <div key={stage.key} className="flex items-center gap-1.5">
-                    <div className={`flex flex-col items-center gap-1 rounded-lg border px-3 py-2 min-w-[72px] text-center ${stage.color}`}>
-                      <span className="text-[10px] font-medium leading-tight">{stage.label}</span>
-                      <span className="text-xl font-bold leading-none">{stage.count}</span>
-                      {sitePipeline.entryTotal > 0 && (
-                        <span className="text-[9px] opacity-60">{Math.round((stage.count / sitePipeline.entryTotal) * 100)}%</span>
+                {sitePipeline.entryStages.map((stage, i) => {
+                  const isActive = pipelineFilter?.type === 'mmp_site_entry' && pipelineFilter?.status === stage.key;
+                  return (
+                    <div key={stage.key} className="flex items-center gap-1.5">
+                      <button
+                        onClick={() => setPipelineFilter(isActive ? null : { type: 'mmp_site_entry', status: stage.key, label: `Site Entries — ${stage.label}` })}
+                        disabled={stage.count === 0}
+                        className={`flex flex-col items-center gap-1 rounded-lg border px-3 py-2 min-w-[72px] text-center transition-all
+                          ${stage.count === 0 ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer hover:scale-105 hover:shadow-sm active:scale-95'}
+                          ${isActive ? 'ring-2 ring-primary shadow-md scale-105' : ''}
+                          ${stage.color}`}
+                        data-testid={`pipeline-entry-${stage.key}`}
+                      >
+                        <span className="text-[10px] font-medium leading-tight">{stage.label}</span>
+                        <span className="text-xl font-bold leading-none">{stage.count}</span>
+                        {sitePipeline.entryTotal > 0 && (
+                          <span className="text-[9px] opacity-60">{Math.round((stage.count / sitePipeline.entryTotal) * 100)}%</span>
+                        )}
+                      </button>
+                      {i < sitePipeline.entryStages.length - 1 && (
+                        <ArrowRight className="h-3.5 w-3.5 text-muted-foreground/40 shrink-0" />
                       )}
                     </div>
-                    {i < sitePipeline.entryStages.length - 1 && (
-                      <ArrowRight className="h-3.5 w-3.5 text-muted-foreground/40 shrink-0" />
-                    )}
-                  </div>
-                ))}
+                  );
+                })}
               </div>
-              {/* Progress bar */}
               {sitePipeline.entryTotal > 0 && (
                 <div className="mt-3 flex h-2 rounded-full overflow-hidden gap-px">
                   {sitePipeline.entryStages.filter(s => s.count > 0).map(stage => (
-                    <div
-                      key={stage.key}
-                      className={`${stage.dot} h-full transition-all`}
+                    <div key={stage.key} className={`${stage.dot} h-full transition-all`}
                       style={{ width: `${(stage.count / sitePipeline.entryTotal) * 100}%` }}
-                      title={`${stage.label}: ${stage.count}`}
-                    />
+                      title={`${stage.label}: ${stage.count}`} />
                   ))}
                 </div>
               )}
@@ -550,32 +573,42 @@ function MonitoringContent() {
               </CardTitle>
             </CardHeader>
             <CardContent className="px-4 py-3">
+              <p className="text-[10px] text-muted-foreground mb-2 flex items-center gap-1">
+                <Filter className="h-3 w-3" />Click a stage to filter the list below
+              </p>
               <div className="flex flex-wrap gap-2 items-center">
-                {sitePipeline.visitStages.map((stage, i) => (
-                  <div key={stage.key} className="flex items-center gap-1.5">
-                    <div className={`flex flex-col items-center gap-1 rounded-lg border px-3 py-2 min-w-[72px] text-center ${stage.color}`}>
-                      <span className="text-[10px] font-medium leading-tight">{stage.label}</span>
-                      <span className="text-xl font-bold leading-none">{stage.count}</span>
-                      {sitePipeline.visitTotal > 0 && (
-                        <span className="text-[9px] opacity-60">{Math.round((stage.count / sitePipeline.visitTotal) * 100)}%</span>
+                {sitePipeline.visitStages.map((stage, i) => {
+                  const isActive = pipelineFilter?.type === 'site_visit' && pipelineFilter?.status === stage.key;
+                  return (
+                    <div key={stage.key} className="flex items-center gap-1.5">
+                      <button
+                        onClick={() => setPipelineFilter(isActive ? null : { type: 'site_visit', status: stage.key, label: `Site Visits — ${stage.label}` })}
+                        disabled={stage.count === 0}
+                        className={`flex flex-col items-center gap-1 rounded-lg border px-3 py-2 min-w-[72px] text-center transition-all
+                          ${stage.count === 0 ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer hover:scale-105 hover:shadow-sm active:scale-95'}
+                          ${isActive ? 'ring-2 ring-primary shadow-md scale-105' : ''}
+                          ${stage.color}`}
+                        data-testid={`pipeline-visit-${stage.key}`}
+                      >
+                        <span className="text-[10px] font-medium leading-tight">{stage.label}</span>
+                        <span className="text-xl font-bold leading-none">{stage.count}</span>
+                        {sitePipeline.visitTotal > 0 && (
+                          <span className="text-[9px] opacity-60">{Math.round((stage.count / sitePipeline.visitTotal) * 100)}%</span>
+                        )}
+                      </button>
+                      {i < sitePipeline.visitStages.length - 1 && (
+                        <ArrowRight className="h-3.5 w-3.5 text-muted-foreground/40 shrink-0" />
                       )}
                     </div>
-                    {i < sitePipeline.visitStages.length - 1 && (
-                      <ArrowRight className="h-3.5 w-3.5 text-muted-foreground/40 shrink-0" />
-                    )}
-                  </div>
-                ))}
+                  );
+                })}
               </div>
-              {/* Progress bar */}
               {sitePipeline.visitTotal > 0 && (
                 <div className="mt-3 flex h-2 rounded-full overflow-hidden gap-px">
                   {sitePipeline.visitStages.filter(s => s.count > 0).map(stage => (
-                    <div
-                      key={stage.key}
-                      className={`${stage.dot} h-full transition-all`}
+                    <div key={stage.key} className={`${stage.dot} h-full transition-all`}
                       style={{ width: `${(stage.count / sitePipeline.visitTotal) * 100}%` }}
-                      title={`${stage.label}: ${stage.count}`}
-                    />
+                      title={`${stage.label}: ${stage.count}`} />
                   ))}
                 </div>
               )}
@@ -675,11 +708,25 @@ function MonitoringContent() {
         </div>
       )}
 
+      {/* Pipeline filter active banner */}
+      {pipelineFilter && (
+        <div className="flex items-center gap-3 bg-primary/5 border border-primary/20 rounded-lg px-4 py-2.5" data-testid="pipeline-filter-banner">
+          <MapPin className="h-4 w-4 text-primary shrink-0" />
+          <span className="text-sm font-medium text-primary flex-1">
+            Showing: <span className="font-bold">{pipelineFilter.label}</span>
+            <span className="ml-2 font-mono text-xs bg-primary/10 px-1.5 py-0.5 rounded">{displayedActions.length} records</span>
+          </span>
+          <Button size="sm" variant="ghost" className="text-primary text-xs h-7" onClick={() => setPipelineFilter(null)} data-testid="button-clear-pipeline-filter">
+            <X className="h-3 w-3 mr-1" />Clear filter
+          </Button>
+        </div>
+      )}
+
       {/* Action Feed — grouped by module */}
       {!isLoading && !error && allActions.length > 0 && (
         <div className="flex flex-col gap-3">
           {ACTION_TYPES.map(at => {
-            const items = allActions.filter(a => a.action_type === at.key);
+            const items = displayedActions.filter(a => a.action_type === at.key);
             if (items.length === 0) return null;
             const Icon = at.icon;
             return (
