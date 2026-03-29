@@ -1641,7 +1641,25 @@ function NotifyUsersDialog({ open, onClose, allActions, categoryLabel }: {
         );
       }
 
-      toast({ title: `Notification sent to ${selectedUsers.length} user${selectedUsers.length !== 1 ? 's' : ''}`, description: usersWithEmail.length > 0 ? `In-app + email sent to ${usersWithEmail.length} user${usersWithEmail.length !== 1 ? 's' : ''} with email addresses.` : 'In-app notification only (no email addresses on file).' });
+      // ── FCM push (fire-and-forget, mirrors Broadcast Center) ──────────
+      const userIds = selectedUsers.map(u => u.id);
+      if (userIds.length > 0) {
+        const fcmTitle = `${titleEn} | ${titleAr}`;
+        const fcmBody = `${msgEn}\n${msgAr}`;
+        supabase.functions.invoke('send-fcm-push', {
+          body: {
+            user_ids: userIds,
+            title: fcmTitle,
+            body: fcmBody,
+            priority,
+            notification_type: 'monitoring_reminder',
+            data: { type: 'monitoring_reminder', action_url: '/dashboard', priority },
+            action_url: '/dashboard',
+          },
+        }).catch(() => {});
+      }
+
+      toast({ title: `Notification sent to ${selectedUsers.length} user${selectedUsers.length !== 1 ? 's' : ''}`, description: usersWithEmail.length > 0 ? `In-app + FCM push + email sent to ${usersWithEmail.length} user${usersWithEmail.length !== 1 ? 's' : ''} with email addresses.` : 'In-app + FCM push sent (no email addresses on file).' });
       onClose();
     } catch (err) {
       toast({ title: 'Failed to send notifications', description: String(err), variant: 'destructive' });
@@ -1662,8 +1680,8 @@ function NotifyUsersDialog({ open, onClose, allActions, categoryLabel }: {
           </DialogTitle>
           <DialogDescription className="text-xs">
             {categoryLabel
-              ? `Send an in-app notification + email to users who have pending actions in the ${categoryLabel} module.`
-              : 'Send an in-app notification + email to users who have pending actions in the system.'}
+              ? `Send an in-app notification + FCM push + email to users who have pending actions in the ${categoryLabel} module.`
+              : 'Send an in-app notification + FCM push + email to users who have pending actions in the system.'}
           </DialogDescription>
         </DialogHeader>
 
@@ -1729,7 +1747,7 @@ function NotifyUsersDialog({ open, onClose, allActions, categoryLabel }: {
 
         <DialogFooter className="px-5 py-3 border-t shrink-0 flex items-center justify-between gap-3">
           <p className="text-xs text-muted-foreground flex-1">
-            Will send <span className="font-semibold text-foreground">in-app + email</span> to <span className="font-bold text-foreground">{selectedIds.size}</span> user{selectedIds.size !== 1 ? 's' : ''}
+            Will send <span className="font-semibold text-foreground">in-app + FCM push + email</span> to <span className="font-bold text-foreground">{selectedIds.size}</span> user{selectedIds.size !== 1 ? 's' : ''}
           </p>
           <Button variant="outline" size="sm" onClick={onClose} disabled={sending}>Cancel</Button>
           <Button size="sm" className="bg-violet-600 hover:bg-violet-700 text-white" onClick={send} disabled={sending || selectedIds.size === 0} data-testid="notify-send-btn">
@@ -1876,9 +1894,27 @@ function CoverageNotifyDialog({
         ));
       }
 
+      // ── FCM push (fire-and-forget, mirrors Broadcast Center) ──────────
+      const chosenIds = chosen.map(p => p.id);
+      if (chosenIds.length > 0) {
+        const fcmTitle = `${titleEn} | ${titleAr}`;
+        const fcmBody = `${msgEn}\n${msgAr}`;
+        supabase.functions.invoke('send-fcm-push', {
+          body: {
+            user_ids: chosenIds,
+            title: fcmTitle,
+            body: fcmBody,
+            priority,
+            notification_type: 'coverage_reminder',
+            data: { type: 'coverage_reminder', action_url: '/admin/monitoring', priority },
+            action_url: '/admin/monitoring',
+          },
+        }).catch(() => {});
+      }
+
       toast({
         title: `Coverage reminder sent to ${chosen.length} user${chosen.length !== 1 ? 's' : ''}`,
-        description: withEmail.length > 0 ? `In-app + email sent to ${withEmail.length} user${withEmail.length !== 1 ? 's' : ''} with email on file.` : 'In-app only (no email addresses on file).',
+        description: withEmail.length > 0 ? `In-app + FCM push + email sent to ${withEmail.length} user${withEmail.length !== 1 ? 's' : ''} with email on file.` : 'In-app + FCM push sent (no email addresses on file).',
       });
       onClose();
     } catch (err) {
@@ -1904,7 +1940,7 @@ function CoverageNotifyDialog({
             <Bell className="h-4 w-4 text-violet-600" />Notify — Transportation Advance Coverage
           </DialogTitle>
           <DialogDescription className="text-xs">
-            Send an in-app notification + email to supervisors, FOMs, admins and coordinators about the current advance coverage status.
+            Send an in-app notification + FCM push + email to supervisors, FOMs, admins and coordinators about the current advance coverage status.
           </DialogDescription>
         </DialogHeader>
 
@@ -1986,7 +2022,7 @@ function CoverageNotifyDialog({
 
         <DialogFooter className="px-5 py-3 border-t shrink-0 flex items-center justify-between gap-3">
           <p className="text-xs text-muted-foreground flex-1">
-            Will send <span className="font-semibold text-foreground">in-app + email</span> to <span className="font-bold text-foreground">{selectedIds.size}</span> user{selectedIds.size !== 1 ? 's' : ''}
+            Will send <span className="font-semibold text-foreground">in-app + FCM push + email</span> to <span className="font-bold text-foreground">{selectedIds.size}</span> user{selectedIds.size !== 1 ? 's' : ''}
             {withEmail.length > 0 && <span className="ml-1 text-emerald-600">({withEmail.length} with email)</span>}
           </p>
           <Button variant="outline" size="sm" onClick={onClose} disabled={sending}>Cancel</Button>
