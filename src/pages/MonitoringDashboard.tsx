@@ -1542,39 +1542,43 @@ function StatusHubTree({
   const stateKeys = (sName: string, hName: string, sMap: Map<string, DashboardAction[]>) =>
     [...sMap.keys()].map(st => `${sName}::${hName}::${st}`);
 
-  // Status toggle: open → auto-open all hubs + states; close → remove all
+  // Status toggle: open → show hubs collapsed; close → remove hubs + states
   const toggleStatus = (sName: string, hMap: Map<string, Map<string, DashboardAction[]>>) => {
     setOpenStatuses(prev => {
       const n = new Set(prev);
       const opening = !n.has(sName);
       opening ? n.add(sName) : n.delete(sName);
-      setOpenHubs(ph => {
-        const nh = new Set(ph);
-        for (const hk of hubKeys(sName, hMap)) opening ? nh.add(hk) : nh.delete(hk);
-        return nh;
-      });
-      setOpenStates(ps => {
-        const ns = new Set(ps);
-        for (const [hName, sMap] of hMap)
-          for (const sk of stateKeys(sName, hName, sMap)) opening ? ns.add(sk) : ns.delete(sk);
-        return ns;
-      });
+      if (!opening) {
+        setOpenHubs(ph => {
+          const nh = new Set(ph);
+          for (const hk of hubKeys(sName, hMap)) nh.delete(hk);
+          return nh;
+        });
+        setOpenStates(ps => {
+          const ns = new Set(ps);
+          for (const [hName, sMap] of hMap)
+            for (const sk of stateKeys(sName, hName, sMap)) ns.delete(sk);
+          return ns;
+        });
+      }
       return n;
     });
   };
 
-  // Hub toggle: open → auto-open all its states; close → remove all
+  // Hub toggle: open → show states collapsed; close → remove states
   const toggleHub = (sName: string, hName: string, sMap: Map<string, DashboardAction[]>) => {
     const hKey = `${sName}::${hName}`;
     setOpenHubs(prev => {
       const n = new Set(prev);
       const opening = !n.has(hKey);
       opening ? n.add(hKey) : n.delete(hKey);
-      setOpenStates(ps => {
-        const ns = new Set(ps);
-        for (const sk of stateKeys(sName, hName, sMap)) opening ? ns.add(sk) : ns.delete(sk);
-        return ns;
-      });
+      if (!opening) {
+        setOpenStates(ps => {
+          const ns = new Set(ps);
+          for (const sk of stateKeys(sName, hName, sMap)) ns.delete(sk);
+          return ns;
+        });
+      }
       return n;
     });
   };
