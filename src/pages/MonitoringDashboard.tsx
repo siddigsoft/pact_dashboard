@@ -197,9 +197,18 @@ function MonitoringContent() {
     queryKey: ['advance-site-coverage'],
     staleTime: 0,
     queryFn: async () => {
-      const { data, error } = await (supabase.rpc('get_advance_coverage_data') as ReturnType<typeof supabase.rpc>).range(0, 49999);
-      if (error) console.error('[MonCoverage] RPC error:', error);
-      return (data ?? []).map((r: Record<string, unknown>) => ({
+      const BATCH = 1000;
+      let all: Record<string, unknown>[] = [];
+      let offset = 0;
+      while (true) {
+        const { data, error } = await (supabase.rpc('get_advance_coverage_data') as ReturnType<typeof supabase.rpc>).range(offset, offset + BATCH - 1);
+        if (error) { console.error('[MonCoverage] RPC error:', error); break; }
+        if (!data || (data as unknown[]).length === 0) break;
+        all = all.concat(data as Record<string, unknown>[]);
+        if ((data as unknown[]).length < BATCH) break;
+        offset += BATCH;
+      }
+      return all.map((r) => ({
         id:            String(r.entry_id ?? ''),
         site_name:     String(r.site_name ?? '—'),
         hub_name:      String(r.hub_name ?? '—'),
@@ -213,18 +222,30 @@ function MonitoringContent() {
   });
   const [showCoverage, setShowCoverage] = useState(false);
   const [coverageHubFilter, setCoverageHubFilter] = useState<string>('all');
+  const [coverageStatusFilter, setCoverageStatusFilter] = useState<string>('all');
   const coverageSummary = useMemo(() => {
-    const total   = coverageData.length;
-    const approved = coverageData.filter(e => ['approved','fully_paid','partially_paid'].includes(e.advance_status ?? '')).length;
-    const pending  = coverageData.filter(e => ['pending_supervisor','pending_admin'].includes(e.advance_status ?? '')).length;
-    const rejected = coverageData.filter(e => ['rejected','cancelled'].includes(e.advance_status ?? '')).length;
-    const noRequest = coverageData.filter(e => !e.advance_status).length;
-    const pct = total > 0 ? Math.round(((approved + pending) / total) * 100) : 0;
-    return { total, approved, pending, rejected, noRequest, pct };
+    const cnt = (statuses: (string | null)[]) => coverageData.filter(e => statuses.includes(e.advance_status)).length;
+    const total            = coverageData.length;
+    const pendingSupervisor = cnt(['pending_supervisor']);
+    const pendingAdmin     = cnt(['pending_admin']);
+    const approved         = cnt(['approved']);
+    const fullyPaid        = cnt(['fully_paid']);
+    const partiallyPaid    = cnt(['partially_paid']);
+    const confirmed        = cnt(['confirmed']);
+    const acknowledged     = cnt(['acknowledged']);
+    const rejected         = cnt(['rejected']);
+    const cancelled        = cnt(['cancelled']);
+    const noRequest        = cnt([null]);
+    const totalWithReq     = total - noRequest;
+    const pct = total > 0 ? Math.round((totalWithReq / total) * 100) : 0;
+    return { total, pendingSupervisor, pendingAdmin, approved, fullyPaid, partiallyPaid, confirmed, acknowledged, rejected, cancelled, noRequest, totalWithReq, pct };
   }, [coverageData]);
-  const coverageUncovered = useMemo(() => {
-    const uncovered = coverageData.filter(e => !e.advance_status);
-    const filtered = coverageHubFilter === 'all' ? uncovered : uncovered.filter(e => e.hub_name === coverageHubFilter);
+  const coverageFiltered = useMemo(() => {
+    let subset: CoverageEntry[];
+    if (coverageStatusFilter === 'all')        subset = coverageData;
+    else if (coverageStatusFilter === 'no_request') subset = coverageData.filter(e => !e.advance_status);
+    else subset = coverageData.filter(e => e.advance_status === coverageStatusFilter);
+    const filtered = coverageHubFilter === 'all' ? subset : subset.filter(e => e.hub_name === coverageHubFilter);
     const byHub = new Map<string, CoverageEntry[]>();
     for (const e of filtered) {
       const h = e.hub_name || '—';
@@ -232,7 +253,7 @@ function MonitoringContent() {
       byHub.get(h)!.push(e);
     }
     return byHub;
-  }, [coverageData, coverageHubFilter]);
+  }, [coverageData, coverageHubFilter, coverageStatusFilter]);
   const coverageHubs = useMemo(() => [...new Set(coverageData.map(e => e.hub_name).filter(Boolean))].sort() as string[], [coverageData]);
 
   // ── Fetch via SECURITY DEFINER RPC (bypasses all RLS) ─────────────────────
@@ -1161,68 +1182,104 @@ function MonitoringContent() {
           {showCoverage ? <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" /> : <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />}
         </button>
 
-        {/* Summary stat row — always visible */}
+        {/* Summary stat cards — always visible, click to filter */}
         {!coverageLoading && coverageSummary.total > 0 && (
-          <div className="px-4 pb-3 border-t">
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-3">
-              <div className="text-center">
-                <div className="text-lg font-bold text-emerald-600">{coverageSummary.approved}</div>
-                <div className="text-[10px] text-muted-foreground">Advance Approved</div>
-              </div>
-              <div className="text-center">
-                <div className="text-lg font-bold text-amber-500">{coverageSummary.pending}</div>
-                <div className="text-[10px] text-muted-foreground">Pending Approval</div>
-              </div>
-              <div className="text-center">
-                <div className="text-lg font-bold text-rose-500">{coverageSummary.rejected}</div>
-                <div className="text-[10px] text-muted-foreground">Rejected / Cancelled</div>
-              </div>
-              <div className="text-center">
-                <div className={`text-lg font-bold ${coverageSummary.noRequest > 0 ? 'text-slate-800' : 'text-emerald-600'}`}>
-                  {coverageSummary.noRequest}
+          <div className="px-4 pb-3 border-t pt-3 space-y-3">
+            {(() => {
+              const cards = [
+                { label: 'Total Sites',        value: coverageSummary.total,             cls: 'text-foreground',   status: 'all',               ring: 'ring-gray-400' },
+                { label: 'Pending Supervisor', value: coverageSummary.pendingSupervisor, cls: 'text-orange-500',   status: 'pending_supervisor', ring: 'ring-orange-400' },
+                { label: 'Pending Admin',      value: coverageSummary.pendingAdmin,      cls: 'text-amber-500',    status: 'pending_admin',      ring: 'ring-amber-400' },
+                { label: 'Approved',           value: coverageSummary.approved,          cls: 'text-emerald-600',  status: 'approved',           ring: 'ring-emerald-500' },
+                { label: 'Fully Paid',         value: coverageSummary.fullyPaid,         cls: 'text-emerald-700',  status: 'fully_paid',         ring: 'ring-emerald-600' },
+                { label: 'Partially Paid',     value: coverageSummary.partiallyPaid,     cls: 'text-teal-600',     status: 'partially_paid',     ring: 'ring-teal-500' },
+                { label: 'Confirmed',          value: coverageSummary.confirmed,         cls: 'text-blue-600',     status: 'confirmed',          ring: 'ring-blue-500' },
+                { label: 'Acknowledged',       value: coverageSummary.acknowledged,      cls: 'text-indigo-600',   status: 'acknowledged',       ring: 'ring-indigo-500' },
+                { label: 'Rejected',           value: coverageSummary.rejected,          cls: 'text-rose-600',     status: 'rejected',           ring: 'ring-rose-500' },
+                { label: 'Cancelled',          value: coverageSummary.cancelled,         cls: 'text-red-400',      status: 'cancelled',          ring: 'ring-red-300' },
+                { label: 'No Request Yet',     value: coverageSummary.noRequest,         cls: coverageSummary.noRequest > 0 ? 'text-red-600' : 'text-emerald-600', status: 'no_request', ring: 'ring-red-400' },
+              ];
+              return (
+                <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 gap-1.5">
+                  {cards.map(c => {
+                    const active = coverageStatusFilter === c.status;
+                    return (
+                      <button
+                        key={c.label}
+                        onClick={() => { setCoverageStatusFilter(active ? 'all' : c.status); setShowCoverage(true); }}
+                        className={`rounded-lg border p-2 text-center cursor-pointer transition-all hover:shadow-sm select-none bg-card ${active ? `ring-2 ${c.ring} shadow-sm` : 'hover:ring-1 hover:ring-muted-foreground/30'}`}
+                        data-testid={`card-mon-cov-${c.status}`}
+                      >
+                        <div className={`text-base font-bold ${c.cls}`}>{c.value.toLocaleString()}</div>
+                        <div className="text-[9px] text-muted-foreground mt-0.5 leading-tight">{c.label}</div>
+                        {active && <div className="text-[8px] text-muted-foreground mt-0.5 font-medium">● ON</div>}
+                      </button>
+                    );
+                  })}
                 </div>
-                <div className="text-[10px] text-muted-foreground">No Request Yet</div>
-              </div>
-            </div>
+              );
+            })()}
             {/* Coverage bar */}
-            <div className="mt-3">
+            <div>
               <div className="flex justify-between text-[10px] text-muted-foreground mb-1">
                 <span>Coverage: {coverageSummary.pct}%</span>
-                <span>{coverageSummary.approved + coverageSummary.pending} of {coverageSummary.total} sites</span>
+                <span>{coverageSummary.totalWithReq.toLocaleString()} of {coverageSummary.total.toLocaleString()} sites have requests</span>
               </div>
               <div className="h-2 rounded-full bg-muted overflow-hidden flex">
+                <div className="bg-orange-400 h-full transition-all" style={{ width: `${coverageSummary.total > 0 ? (coverageSummary.pendingSupervisor / coverageSummary.total) * 100 : 0}%` }} />
+                <div className="bg-amber-400  h-full transition-all" style={{ width: `${coverageSummary.total > 0 ? (coverageSummary.pendingAdmin / coverageSummary.total) * 100 : 0}%` }} />
                 <div className="bg-emerald-500 h-full transition-all" style={{ width: `${coverageSummary.total > 0 ? (coverageSummary.approved / coverageSummary.total) * 100 : 0}%` }} />
-                <div className="bg-amber-400 h-full transition-all" style={{ width: `${coverageSummary.total > 0 ? (coverageSummary.pending / coverageSummary.total) * 100 : 0}%` }} />
-                <div className="bg-rose-400 h-full transition-all" style={{ width: `${coverageSummary.total > 0 ? (coverageSummary.rejected / coverageSummary.total) * 100 : 0}%` }} />
+                <div className="bg-emerald-700 h-full transition-all" style={{ width: `${coverageSummary.total > 0 ? (coverageSummary.fullyPaid / coverageSummary.total) * 100 : 0}%` }} />
+                <div className="bg-teal-500   h-full transition-all" style={{ width: `${coverageSummary.total > 0 ? (coverageSummary.partiallyPaid / coverageSummary.total) * 100 : 0}%` }} />
+                <div className="bg-blue-500   h-full transition-all" style={{ width: `${coverageSummary.total > 0 ? (coverageSummary.confirmed / coverageSummary.total) * 100 : 0}%` }} />
+                <div className="bg-indigo-500 h-full transition-all" style={{ width: `${coverageSummary.total > 0 ? (coverageSummary.acknowledged / coverageSummary.total) * 100 : 0}%` }} />
+                <div className="bg-rose-500   h-full transition-all" style={{ width: `${coverageSummary.total > 0 ? (coverageSummary.rejected / coverageSummary.total) * 100 : 0}%` }} />
               </div>
-              <div className="flex gap-4 mt-1.5 text-[9px] text-muted-foreground">
-                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-emerald-500 inline-block" />Approved</span>
-                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-amber-400 inline-block" />Pending</span>
-                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-rose-400 inline-block" />Rejected</span>
-                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-muted-foreground/30 inline-block" />No Request</span>
+              <div className="flex flex-wrap gap-x-3 gap-y-1 mt-1.5 text-[9px] text-muted-foreground">
+                <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-orange-400 inline-block" />Pending Sup. ({coverageSummary.pendingSupervisor})</span>
+                <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-amber-400 inline-block" />Pending Admin ({coverageSummary.pendingAdmin})</span>
+                <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block" />Approved ({coverageSummary.approved})</span>
+                <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-emerald-700 inline-block" />Fully Paid ({coverageSummary.fullyPaid})</span>
+                <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-teal-500 inline-block" />Partially Paid ({coverageSummary.partiallyPaid})</span>
+                <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-blue-500 inline-block" />Confirmed ({coverageSummary.confirmed})</span>
+                <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-indigo-500 inline-block" />Acknowledged ({coverageSummary.acknowledged})</span>
+                <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-rose-500 inline-block" />Rejected ({coverageSummary.rejected})</span>
+                <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-red-300 inline-block" />Cancelled ({coverageSummary.cancelled})</span>
+                <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/30 inline-block" />No Request ({coverageSummary.noRequest})</span>
               </div>
             </div>
           </div>
         )}
 
-        {/* Expanded: sites with NO request, grouped by hub */}
-        {showCoverage && coverageSummary.noRequest > 0 && (
+        {/* Expanded: sites grouped by hub for selected status */}
+        {showCoverage && (
           <div className="border-t">
-            <div className="flex items-center gap-3 px-4 py-2.5 bg-slate-50">
-              <AlertCircle className="h-4 w-4 text-slate-500 shrink-0" />
-              <span className="text-xs font-semibold text-slate-700 flex-1">Sites with No Advance Request</span>
-              <Select value={coverageHubFilter} onValueChange={setCoverageHubFilter}>
-                <SelectTrigger className="h-7 text-xs w-[160px]" data-testid="select-coverage-hub-filter">
-                  <SelectValue placeholder="All Hubs" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Hubs</SelectItem>
-                  {coverageHubs.map(h => <SelectItem key={h} value={h}>{h}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
+            {(() => {
+              const labelMap: Record<string, string> = {
+                all: 'All Sites', no_request: 'Sites with No Advance Request',
+                pending_supervisor: 'Pending Supervisor', pending_admin: 'Pending Admin',
+                approved: 'Approved', fully_paid: 'Fully Paid', partially_paid: 'Partially Paid',
+                confirmed: 'Confirmed', acknowledged: 'Acknowledged',
+                rejected: 'Rejected', cancelled: 'Cancelled',
+              };
+              return (
+                <div className="flex items-center gap-3 px-4 py-2.5 bg-slate-50">
+                  <AlertCircle className="h-4 w-4 text-slate-500 shrink-0" />
+                  <span className="text-xs font-semibold text-slate-700 flex-1">{labelMap[coverageStatusFilter] ?? 'Sites'}</span>
+                  <Select value={coverageHubFilter} onValueChange={setCoverageHubFilter}>
+                    <SelectTrigger className="h-7 text-xs w-[160px]" data-testid="select-coverage-hub-filter">
+                      <SelectValue placeholder="All Hubs" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Hubs</SelectItem>
+                      {coverageHubs.map(h => <SelectItem key={h} value={h}>{h}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+              );
+            })()}
             <div className="divide-y max-h-[400px] overflow-y-auto">
-              {[...coverageUncovered.entries()].sort(([, a], [, b]) => b.length - a.length).map(([hub, sites]) => (
+              {[...coverageFiltered.entries()].sort(([, a], [, b]) => b.length - a.length).map(([hub, sites]) => (
                 <div key={hub} className="px-4 py-2">
                   <div className="flex items-center gap-2 mb-1.5">
                     <MapPin className="h-3 w-3 text-muted-foreground" />
@@ -1241,9 +1298,9 @@ function MonitoringContent() {
                   </div>
                 </div>
               ))}
-              {coverageUncovered.size === 0 && (
+              {coverageFiltered.size === 0 && (
                 <div className="px-4 py-6 text-center text-sm text-muted-foreground">
-                  {coverageHubFilter !== 'all' ? `No uncovered sites for ${coverageHubFilter}` : 'All sites have advance requests'}
+                  {coverageHubFilter !== 'all' ? `No sites for ${coverageHubFilter}` : 'No sites match this filter'}
                 </div>
               )}
             </div>
