@@ -447,12 +447,20 @@ export default function DownPaymentApproval() {
     queryKey: ['dp-site-coverage'],
     staleTime: 5 * 60 * 1000,
     queryFn: async () => {
-      const [{ data: entries }, { data: mmps }] = await Promise.all([
-        supabase.from('mmp_site_entries').select('id, site_name, hub_name, state_name, mmp_file_id')
+      const [{ data: entries }, { data: advances }, { data: mmps }] = await Promise.all([
+        supabase.from('mmp_site_entries')
+          .select('id, site_name, hub_name, state_name, mmp_file_id')
           .not('status', 'in', '("cancelled","removed","reclaimed")'),
+        supabase.from('down_payment_requests')
+          .select('mmp_site_entry_id, status')
+          .not('mmp_site_entry_id', 'is', null),
         supabase.from('mmp_files').select('id, name').eq('is_active', true),
       ]);
-      const advMap = new Map<string, string>(requests.map(r => [r.mmpSiteEntryId ?? (r as any).mmp_site_entry_id, r.status]).filter(([k]) => !!k) as [string, string][]);
+      const advMap = new Map<string, string>();
+      for (const a of (advances ?? [])) {
+        if (a.mmp_site_entry_id && !advMap.has(a.mmp_site_entry_id))
+          advMap.set(a.mmp_site_entry_id, a.status);
+      }
       const mmpNameMap = new Map((mmps ?? []).map(m => [m.id, m.name ?? '—']));
       return (entries ?? []).map(e => ({
         id: e.id, site_name: e.site_name || '—', hub_name: e.hub_name || '—',
@@ -461,7 +469,6 @@ export default function DownPaymentApproval() {
         advance_status: advMap.get(e.id) ?? null,
       }));
     },
-    enabled: !!requests.length,
   });
   const [covHubFilter, setCovHubFilter] = useState('all');
   const covSummary = useMemo(() => {
