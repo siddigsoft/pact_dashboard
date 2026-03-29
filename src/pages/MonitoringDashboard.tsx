@@ -1819,6 +1819,15 @@ const STATUS_CHIP_COLORS: Record<string, string> = {
   verified:             'bg-teal-100 text-teal-800 border-teal-200',
   costed:               'bg-cyan-100 text-cyan-800 border-cyan-200',
   permitsattached:      'bg-sky-100 text-sky-800 border-sky-200',
+  // advance-coverage statuses
+  pendingsupervisor:    'bg-amber-100 text-amber-800 border-amber-200',
+  pendingadmin:         'bg-orange-100 text-orange-800 border-orange-200',
+  fullypaid:            'bg-teal-100 text-teal-800 border-teal-200',
+  partiallypaid:        'bg-cyan-100 text-cyan-800 border-cyan-200',
+  confirmed:            'bg-blue-100 text-blue-800 border-blue-200',
+  acknowledged:         'bg-violet-100 text-violet-800 border-violet-200',
+  cancelled:            'bg-slate-100 text-slate-600 border-slate-200',
+  norequest:            'bg-slate-100 text-slate-500 border-slate-200',
 };
 function statusChipClass(raw: string) {
   const k = raw.toLowerCase().replace(/[\s_-]/g, '');
@@ -2624,19 +2633,9 @@ function StatusHistoryTimeline({ actionId, actionType }: { actionId: string; act
 }
 
 // ── Coverage Tree ─────────────────────────────────────────────────────────────
-// Collapsible MMP → Hub → State → Data Collector → Sites tree (mirrors MMP Site
-// Entries StatusHubTree but for advance-coverage data).
-const ADV_STATUS_BADGE: Record<string, string> = {
-  pending_supervisor: 'bg-amber-100 text-amber-800 border-amber-300',
-  pending_admin:      'bg-orange-100 text-orange-800 border-orange-300',
-  approved:           'bg-emerald-100 text-emerald-800 border-emerald-300',
-  fully_paid:         'bg-teal-100 text-teal-800 border-teal-300',
-  partially_paid:     'bg-cyan-100 text-cyan-800 border-cyan-300',
-  confirmed:          'bg-blue-100 text-blue-800 border-blue-300',
-  acknowledged:       'bg-violet-100 text-violet-800 border-violet-300',
-  rejected:           'bg-red-100 text-red-800 border-red-300',
-  cancelled:          'bg-slate-100 text-slate-600 border-slate-300',
-};
+// Collapsible MMP → Status → Hub → State → Data Collector → Sites tree.
+// Mirrors StatusHubTree layout, colours, and badge style exactly.
+
 const ADV_STATUS_LABEL: Record<string, string> = {
   pending_supervisor: 'Pending Supervisor',
   pending_admin:      'Pending Admin',
@@ -2647,36 +2646,39 @@ const ADV_STATUS_LABEL: Record<string, string> = {
   acknowledged:       'Acknowledged',
   rejected:           'Rejected',
   cancelled:          'Cancelled',
+  no_request:         'No Request',
 };
 
 function CoverageTree({ entries }: { entries: CoverageEntry[] }) {
-  // Build MMP → Hub → State → DC → sites
+  // Build MMP → Status → Hub → State → DC → sites
   type DCMap  = Map<string, CoverageEntry[]>;
   type StMap  = Map<string, DCMap>;
   type HubMap = Map<string, StMap>;
-  type MMPMap = Map<string, HubMap>;
+  type StsMap = Map<string, HubMap>;
+  type MMPMap = Map<string, StsMap>;
 
   const tree = useMemo<MMPMap>(() => {
     const map: MMPMap = new Map();
     for (const e of entries) {
       const mmp = e.mmp_name || '—';
+      const sts = e.advance_status || 'no_request';
       const hub = e.hub_name || '—';
       const st  = e.state_name || '—';
       const dc  = e.data_collector_name || '—';
-      if (!map.has(mmp))                            map.set(mmp, new Map());
-      if (!map.get(mmp)!.has(hub))                  map.get(mmp)!.set(hub, new Map());
-      if (!map.get(mmp)!.get(hub)!.has(st))         map.get(mmp)!.get(hub)!.set(st, new Map());
-      if (!map.get(mmp)!.get(hub)!.get(st)!.has(dc)) map.get(mmp)!.get(hub)!.get(st)!.set(dc, []);
-      map.get(mmp)!.get(hub)!.get(st)!.get(dc)!.push(e);
+      if (!map.has(mmp))                                      map.set(mmp, new Map());
+      if (!map.get(mmp)!.has(sts))                            map.get(mmp)!.set(sts, new Map());
+      if (!map.get(mmp)!.get(sts)!.has(hub))                  map.get(mmp)!.get(sts)!.set(hub, new Map());
+      if (!map.get(mmp)!.get(sts)!.get(hub)!.has(st))         map.get(mmp)!.get(sts)!.get(hub)!.set(st, new Map());
+      if (!map.get(mmp)!.get(sts)!.get(hub)!.get(st)!.has(dc)) map.get(mmp)!.get(sts)!.get(hub)!.get(st)!.set(dc, []);
+      map.get(mmp)!.get(sts)!.get(hub)!.get(st)!.get(dc)!.push(e);
     }
-    // sort mmps by site count desc
-    return new Map([...map.entries()].sort(([, a], [, b]) => {
-      const count = (hm: HubMap) => [...hm.values()].flatMap(sm => [...sm.values()]).flatMap(dm => [...dm.values()]).flat().length;
-      return count(b) - count(a);
-    }));
+    const mmpCount = (sm: StsMap) =>
+      [...sm.values()].flatMap(hm => [...hm.values()]).flatMap(stm => [...stm.values()]).flatMap(dm => [...dm.values()]).flat().length;
+    return new Map([...map.entries()].sort(([, a], [, b]) => mmpCount(b) - mmpCount(a)));
   }, [entries]);
 
   const [openMMPs, setOpenMMPs] = useState<Set<string>>(() => new Set());
+  const [openStss, setOpenStss] = useState<Set<string>>(() => new Set());
   const [openHubs, setOpenHubs] = useState<Set<string>>(() => new Set());
   const [openSts,  setOpenSts]  = useState<Set<string>>(() => new Set());
   const [openDCs,  setOpenDCs]  = useState<Set<string>>(() => new Set());
@@ -2684,11 +2686,13 @@ function CoverageTree({ entries }: { entries: CoverageEntry[] }) {
   const toggle = (setter: React.Dispatch<React.SetStateAction<Set<string>>>, key: string) =>
     setter(prev => { const n = new Set(prev); n.has(key) ? n.delete(key) : n.add(key); return n; });
 
+  const stsCount = (sm: StsMap) =>
+    [...sm.values()].flatMap(hm => [...hm.values()]).flatMap(stm => [...stm.values()]).flatMap(dm => [...dm.values()]).flat().length;
   const hubCount = (hm: HubMap) =>
-    [...hm.values()].flatMap(sm => [...sm.values()]).flatMap(dm => [...dm.values()]).flat().length;
-  const stCount = (sm: StMap) =>
-    [...sm.values()].flatMap(dm => [...dm.values()]).flat().length;
-  const dcCount = (dm: DCMap) =>
+    [...hm.values()].flatMap(stm => [...stm.values()]).flatMap(dm => [...dm.values()]).flat().length;
+  const stCount  = (stm: StMap) =>
+    [...stm.values()].flatMap(dm => [...dm.values()]).flat().length;
+  const dcCount  = (dm: DCMap) =>
     [...dm.values()].flat().length;
 
   if (entries.length === 0) {
@@ -2700,107 +2704,143 @@ function CoverageTree({ entries }: { entries: CoverageEntry[] }) {
   }
 
   return (
-    <div className="divide-y max-h-[520px] overflow-y-auto" data-testid="coverage-tree">
-      {[...tree.entries()].map(([mmp, hubMap]) => {
+    <div className="flex flex-col gap-1 p-3 max-h-[560px] overflow-y-auto" data-testid="coverage-tree">
+      {[...tree.entries()].map(([mmp, stsMap]) => {
+        const mmpTot  = stsCount(stsMap);
         const mmpOpen = openMMPs.has(mmp);
-        const mmpTotal = hubCount(hubMap);
         return (
-          <div key={mmp}>
-            {/* MMP row — indigo */}
+          <div key={mmp} className="rounded-lg border border-border overflow-hidden">
+
+            {/* ── MMP — indigo ── */}
             <button
+              className="w-full flex items-center gap-2 px-3 py-2.5 bg-indigo-50 hover:bg-indigo-100 border-l-4 border-l-indigo-500 text-left transition-colors"
               onClick={() => toggle(setOpenMMPs, mmp)}
-              className="w-full flex items-center gap-2 px-4 py-2 hover:bg-indigo-50 transition-colors text-left"
               data-testid={`coverage-mmp-${mmp}`}
             >
-              <ChevronRight className={`h-3.5 w-3.5 text-indigo-500 shrink-0 transition-transform ${mmpOpen ? 'rotate-90' : ''}`} />
-              <FileText className="h-3.5 w-3.5 text-indigo-400 shrink-0" />
-              <span className="text-xs font-semibold text-indigo-800 flex-1 truncate">{mmp}</span>
-              <Badge className="text-[9px] h-4 px-1.5 bg-indigo-100 text-indigo-700 border-indigo-200 border">{mmpTotal}</Badge>
+              {mmpOpen ? <ChevronDown className="h-3.5 w-3.5 text-indigo-500 shrink-0" /> : <ChevronRight className="h-3.5 w-3.5 text-indigo-400 shrink-0" />}
+              <FileText className="h-3.5 w-3.5 text-indigo-500 shrink-0" />
+              <span className="text-xs font-bold flex-1 text-indigo-900 truncate">{mmp}</span>
+              <span className="text-[9px] font-mono bg-indigo-100 text-indigo-700 border border-indigo-200 px-2 py-0.5 rounded-full">{mmpTot}</span>
             </button>
 
-            {mmpOpen && [...hubMap.entries()].sort(([, a], [, b]) => stCount(b) - stCount(a)).map(([hub, stMap]) => {
-              const hKey = `${mmp}::${hub}`;
-              const hubOpen = openHubs.has(hKey);
-              const hubTotal = stCount(stMap);
-              return (
-                <div key={hub} className="border-l-2 border-indigo-100 ml-5">
-                  {/* Hub row — blue */}
-                  <button
-                    onClick={() => toggle(setOpenHubs, hKey)}
-                    className="w-full flex items-center gap-2 px-4 py-1.5 hover:bg-blue-50 transition-colors text-left"
-                    data-testid={`coverage-hub-${hKey}`}
-                  >
-                    <ChevronRight className={`h-3 w-3 text-blue-400 shrink-0 transition-transform ${hubOpen ? 'rotate-90' : ''}`} />
-                    <MapPin className="h-3 w-3 text-blue-400 shrink-0" />
-                    <span className="text-xs font-medium text-blue-800 flex-1 truncate">{hub}</span>
-                    <Badge className="text-[9px] h-4 px-1.5 bg-blue-100 text-blue-700 border-blue-200 border">{hubTotal}</Badge>
-                  </button>
+            {mmpOpen && (
+              <div className="flex flex-col divide-y divide-violet-100">
+                {[...stsMap.entries()].sort(([, a], [, b]) => hubCount(b) - hubCount(a)).map(([advSts, hubMap]) => {
+                  const stsTot  = hubCount(hubMap);
+                  const stsKey  = `${mmp}::${advSts}`;
+                  const stsOpen = openStss.has(stsKey);
+                  const label   = ADV_STATUS_LABEL[advSts] ?? advSts.replace(/_/g, ' ');
+                  return (
+                    <div key={stsKey}>
 
-                  {hubOpen && [...stMap.entries()].sort(([, a], [, b]) => dcCount(b) - dcCount(a)).map(([state, dcMap]) => {
-                    const sKey = `${mmp}::${hub}::${state}`;
-                    const stOpen = openSts.has(sKey);
-                    const stTotal = dcCount(dcMap);
-                    return (
-                      <div key={state} className="border-l-2 border-blue-100 ml-5">
-                        {/* State row — emerald */}
-                        <button
-                          onClick={() => toggle(setOpenSts, sKey)}
-                          className="w-full flex items-center gap-2 px-4 py-1.5 hover:bg-emerald-50 transition-colors text-left"
-                          data-testid={`coverage-state-${sKey}`}
-                        >
-                          <ChevronRight className={`h-3 w-3 text-emerald-400 shrink-0 transition-transform ${stOpen ? 'rotate-90' : ''}`} />
-                          <Globe className="h-3 w-3 text-emerald-400 shrink-0" />
-                          <span className="text-xs font-medium text-emerald-800 flex-1 truncate">{state}</span>
-                          <Badge className="text-[9px] h-4 px-1.5 bg-emerald-100 text-emerald-700 border-emerald-200 border">{stTotal}</Badge>
-                        </button>
+                      {/* ── Status — violet ── */}
+                      <button
+                        className="w-full flex items-center gap-2 px-4 py-2 bg-violet-50 hover:bg-violet-100 border-l-4 border-l-violet-400 text-left transition-colors"
+                        onClick={() => toggle(setOpenStss, stsKey)}
+                        data-testid={`coverage-status-${stsKey}`}
+                      >
+                        {stsOpen ? <ChevronDown className="h-3 w-3 text-violet-500 shrink-0" /> : <ChevronRight className="h-3 w-3 text-violet-400 shrink-0" />}
+                        <span className={`text-[10px] font-semibold px-2 py-0.5 rounded border capitalize ${statusChipClass(advSts)}`}>{label}</span>
+                        <span className="text-xs font-bold flex-1 text-violet-800 text-right">{stsTot} site{stsTot !== 1 ? 's' : ''}</span>
+                      </button>
 
-                        {stOpen && [...dcMap.entries()].sort(([, a], [, b]) => b.length - a.length).map(([dc, sites]) => {
-                          const dKey = `${mmp}::${hub}::${state}::${dc}`;
-                          const dcOpen = openDCs.has(dKey);
-                          return (
-                            <div key={dc} className="border-l-2 border-emerald-100 ml-5">
-                              {/* Data Collector row — amber */}
-                              <button
-                                onClick={() => toggle(setOpenDCs, dKey)}
-                                className="w-full flex items-center gap-2 px-4 py-1.5 hover:bg-amber-50 transition-colors text-left"
-                                data-testid={`coverage-dc-${dKey}`}
-                              >
-                                <ChevronRight className={`h-3 w-3 text-amber-400 shrink-0 transition-transform ${dcOpen ? 'rotate-90' : ''}`} />
-                                <User className="h-3 w-3 text-amber-400 shrink-0" />
-                                <span className="text-xs font-medium text-amber-900 flex-1 truncate">{dc}</span>
-                                <Badge className="text-[9px] h-4 px-1.5 bg-amber-100 text-amber-700 border-amber-200 border">{sites.length}</Badge>
-                              </button>
+                      {stsOpen && (
+                        <div className="flex flex-col divide-y divide-blue-100">
+                          {[...hubMap.entries()].sort(([, a], [, b]) => stCount(b) - stCount(a)).map(([hub, stMap]) => {
+                            const hubTot  = stCount(stMap);
+                            const hKey    = `${mmp}::${advSts}::${hub}`;
+                            const hubOpen = openHubs.has(hKey);
+                            return (
+                              <div key={hKey}>
 
-                              {dcOpen && (
-                                <div className="border-l-2 border-amber-100 ml-5 py-1">
-                                  {sites.map(s => (
-                                    <div
-                                      key={s.id}
-                                      className="flex items-center gap-2 px-4 py-1 hover:bg-slate-50 text-xs"
-                                      data-testid={`coverage-site-${s.id}`}
-                                    >
-                                      <span className="w-1.5 h-1.5 rounded-full bg-slate-300 shrink-0" />
-                                      <span className="font-medium text-slate-700 flex-1 truncate">{s.site_name || '—'}</span>
-                                      {s.advance_status ? (
-                                        <span className={`text-[9px] px-1.5 py-0.5 rounded border font-medium shrink-0 ${ADV_STATUS_BADGE[s.advance_status] ?? 'bg-slate-100 text-slate-600 border-slate-300'}`}>
-                                          {ADV_STATUS_LABEL[s.advance_status] ?? s.advance_status}
-                                        </span>
-                                      ) : (
-                                        <span className="text-[9px] px-1.5 py-0.5 rounded border bg-slate-100 text-slate-400 border-slate-200 shrink-0">No Request</span>
-                                      )}
-                                    </div>
-                                  ))}
-                                </div>
-                              )}
-                            </div>
-                          );
-                        })}
-                      </div>
-                    );
-                  })}
-                </div>
-              );
-            })}
+                                {/* ── Hub — blue ── */}
+                                <button
+                                  className="w-full flex items-center gap-2 px-6 py-2 bg-blue-50 hover:bg-blue-100 border-l-4 border-l-blue-400 text-left transition-colors"
+                                  onClick={() => toggle(setOpenHubs, hKey)}
+                                  data-testid={`coverage-hub-${hKey}`}
+                                >
+                                  {hubOpen ? <ChevronDown className="h-3 w-3 text-blue-500 shrink-0" /> : <ChevronRight className="h-3 w-3 text-blue-400 shrink-0" />}
+                                  <Database className="h-3 w-3 text-blue-500 shrink-0" />
+                                  <span className="text-xs font-semibold flex-1 text-blue-900 truncate">{hub}</span>
+                                  <span className="text-[9px] font-mono bg-blue-100 text-blue-700 border border-blue-200 px-2 py-0.5 rounded-full">{hubTot}</span>
+                                </button>
+
+                                {hubOpen && (
+                                  <div className="flex flex-col divide-y divide-emerald-100">
+                                    {[...stMap.entries()].sort(([, a], [, b]) => dcCount(b) - dcCount(a)).map(([state, dcMap]) => {
+                                      const stTot  = dcCount(dcMap);
+                                      const stKey  = `${mmp}::${advSts}::${hub}::${state}`;
+                                      const stOpen = openSts.has(stKey);
+                                      return (
+                                        <div key={stKey}>
+
+                                          {/* ── State — emerald ── */}
+                                          <button
+                                            className="w-full flex items-center gap-2 px-8 py-1.5 bg-emerald-50 hover:bg-emerald-100 border-l-4 border-l-emerald-400 text-left transition-colors"
+                                            onClick={() => toggle(setOpenSts, stKey)}
+                                            data-testid={`coverage-state-${stKey}`}
+                                          >
+                                            {stOpen ? <ChevronDown className="h-3 w-3 text-emerald-500 shrink-0" /> : <ChevronRight className="h-3 w-3 text-emerald-400 shrink-0" />}
+                                            <Globe className="h-3 w-3 text-emerald-500 shrink-0" />
+                                            <span className="text-xs font-semibold flex-1 text-emerald-900 truncate">{state}</span>
+                                            <span className="text-[9px] font-mono bg-emerald-100 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded-full">{stTot}</span>
+                                          </button>
+
+                                          {stOpen && (
+                                            <div className="flex flex-col divide-y divide-amber-100">
+                                              {[...dcMap.entries()].sort(([, a], [, b]) => b.length - a.length).map(([dc, sites]) => {
+                                                const dKey   = `${mmp}::${advSts}::${hub}::${state}::${dc}`;
+                                                const dcOpen = openDCs.has(dKey);
+                                                return (
+                                                  <div key={dKey}>
+
+                                                    {/* ── Data Collector — amber ── */}
+                                                    <button
+                                                      className="w-full flex items-center gap-2 px-10 py-1.5 bg-amber-50 hover:bg-amber-100 border-l-4 border-l-amber-400 text-left transition-colors"
+                                                      onClick={() => toggle(setOpenDCs, dKey)}
+                                                      data-testid={`coverage-dc-${dKey}`}
+                                                    >
+                                                      {dcOpen ? <ChevronDown className="h-3 w-3 text-amber-500 shrink-0" /> : <ChevronRight className="h-3 w-3 text-amber-400 shrink-0" />}
+                                                      <User className="h-3 w-3 text-amber-500 shrink-0" />
+                                                      <span className="text-xs font-semibold flex-1 text-amber-900 truncate">{dc}</span>
+                                                      <span className="text-[9px] font-mono bg-amber-100 text-amber-700 border border-amber-200 px-2 py-0.5 rounded-full">{sites.length}</span>
+                                                    </button>
+
+                                                    {/* ── Sites ── */}
+                                                    {dcOpen && (
+                                                      <div className="flex flex-col">
+                                                        {sites.map(s => (
+                                                          <div
+                                                            key={s.id}
+                                                            className="flex items-center gap-2 px-12 py-1.5 bg-white hover:bg-slate-50 border-l-4 border-l-slate-200 text-xs"
+                                                            data-testid={`coverage-site-${s.id}`}
+                                                          >
+                                                            <span className="w-1.5 h-1.5 rounded-full bg-slate-300 shrink-0" />
+                                                            <span className="font-medium text-slate-700 flex-1 truncate">{s.site_name || '—'}</span>
+                                                          </div>
+                                                        ))}
+                                                      </div>
+                                                    )}
+                                                  </div>
+                                                );
+                                              })}
+                                            </div>
+                                          )}
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         );
       })}
