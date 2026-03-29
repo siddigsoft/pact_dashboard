@@ -171,9 +171,10 @@ SELECT
   mse.id::text                                                              AS action_id,
   'mmp_site_entry'                                                          AS action_type,
   'mmp_site_entries'                                                        AS source_table,
-  COALESCE(p_dc.id::text, p_mse.id::text, mf2.uploaded_by::text, '')       AS sender_id,
-  COALESCE(p_dc.full_name, mse.monitoring_by, mse.accepted_by,
-           p_mse.full_name, mse.site_name, 'Unknown')                      AS sender_name,
+  COALESCE(p_dc.id::text, p_ab.id::text, p_mse.id::text, mf2.uploaded_by::text, '') AS sender_id,
+  COALESCE(p_dc.full_name, mse.monitoring_by,
+           p_ab.full_name,
+           p_mse.full_name, mse.site_name, 'Unknown')                            AS sender_name,
   'dataCollector'                                                           AS sender_role,
   'coordinator'                                                             AS recipient_role,
   mse.status                                                                AS native_status,
@@ -184,6 +185,7 @@ FROM public.mmp_site_entries mse
 LEFT JOIN public.mmp_files mf2  ON mf2.id = mse.mmp_file_id
 LEFT JOIN public.profiles p_mse ON p_mse.id::text = mf2.uploaded_by
 LEFT JOIN public.profiles p_dc  ON p_dc.email = mse.monitoring_by
+LEFT JOIN public.profiles p_ab  ON p_ab.id::text = mse.accepted_by
 
 UNION ALL
 

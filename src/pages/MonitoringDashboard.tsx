@@ -1534,8 +1534,14 @@ function StatusHubTree({
     // For MMP site entries the data collector is stored in monitoring_by (text: email or name)
     // or accepted_by; fall back to sender_name if neither is available
     if (a.action_type === 'mmp_site_entry') {
-      const name = String(d?.monitoring_by ?? d?.accepted_by ?? '').trim();
-      return name || a.sender_name || 'Unknown';
+      // monitoring_by is a text email/name field — safe to use directly
+      // accepted_by is a UUID column — never use it as a display name
+      const monBy = String(d?.monitoring_by ?? '').trim();
+      const isUUID = (s: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-/i.test(s);
+      if (monBy && !isUUID(monBy)) return monBy;
+      // sender_name is resolved via profile joins in the SQL (p_dc or p_ab)
+      const senderOk = a.sender_name && !isUUID(a.sender_name) && a.sender_name !== a.details?.['site_name'];
+      return senderOk ? a.sender_name : 'Unknown';
     }
     return a.sender_name || 'Unknown';
   };
