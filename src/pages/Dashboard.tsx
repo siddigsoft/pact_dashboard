@@ -33,18 +33,21 @@ const Dashboard = () => {
   const navigate = useNavigate();
   const { SiteVisitRemindersDialog, showDueReminders } = useSiteVisitRemindersUI();
   const { roles, currentUser } = useAppContext();
-  const { dashboardPreferences, getDefaultZoneForRole } = useSettings();
+  const { dashboardPreferences, getDefaultZoneForRole, userSettings } = useSettings();
 
-  // Super admins land directly on System Monitoring
+  // Super admins land on System Monitoring unless they explicitly chose a different page in Settings
   useEffect(() => {
     if (!currentUser) return;
     const normalized = currentUser.role ? normalizeRole(currentUser.role) : '';
-    const isSuperAdmin = normalized === 'superadmin'
-      || roles?.some(r => normalizeRole(r) === 'superadmin');
-    if (isSuperAdmin) {
+    const isSuperAdmin = normalized === 'superadmin' || normalized === 'super_admin'
+      || roles?.some(r => { const n = normalizeRole(r); return n === 'superadmin' || n === 'super_admin'; });
+    if (!isSuperAdmin) return;
+    const savedPage = userSettings?.settings?.defaultPage;
+    // Redirect to monitoring if: no preference saved, or preference is explicitly "monitoring"
+    if (!savedPage || savedPage === 'monitoring') {
       navigate('/admin/monitoring', { replace: true });
     }
-  }, [currentUser, roles, navigate]);
+  }, [currentUser, roles, userSettings, navigate]);
 
   const defaultZone = useMemo((): DashboardZone => {
     const normalizedCurrentRole = currentUser?.role ? normalizeRole(currentUser.role) : undefined;

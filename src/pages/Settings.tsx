@@ -1202,6 +1202,9 @@ const Settings = () => {
                     <SelectItem value="mmp">MMP Management</SelectItem>
                     <SelectItem value="site-visits">Site Visits</SelectItem>
                     <SelectItem value="reports">Reports</SelectItem>
+                    {(currentUser?.role || '').toLowerCase().replace(/\s+/g, '') === 'superadmin' || (currentUser?.role || '') === 'super_admin' ? (
+                      <SelectItem value="monitoring">System Monitoring</SelectItem>
+                    ) : null}
                   </SelectContent>
                 </Select>
               </div>
