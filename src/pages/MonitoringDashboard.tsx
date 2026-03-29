@@ -25,6 +25,7 @@ import {
   AlertCircle, CheckSquare, X, Loader2, Calendar, Mail, Phone,
   Zap, Database, BarChart2, ChevronDown, ChevronUp,
   Circle, ArrowUpRight, Timer, Filter, Info, MapPin, ArrowRight,
+  FileText, CheckCircle2, CalendarDays,
 } from 'lucide-react';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -276,15 +277,24 @@ function MonitoringContent() {
   ].filter(d => d.value > 0), [stats]);
 
   // ── Site Status Pipeline — direct DB query (no 2000-row RPC cap) ──────────
+  // Normalise any status string (camelCase, snake_case, spaces → lowercase, no separator)
+  const normStatus = (s: string) => (s ?? '').toLowerCase().replace(/[_\s-]/g, '');
+
+  // Full mmp_site_entries workflow stages (all real DB values covered)
   const ENTRY_STAGES: Array<{ key: string; label: string; color: string; dot: string }> = [
-    { key: 'pending',    label: 'Pending',    color: 'bg-slate-100 text-slate-700 border-slate-200',    dot: 'bg-slate-400' },
-    { key: 'dispatched', label: 'Dispatched', color: 'bg-blue-50 text-blue-700 border-blue-200',         dot: 'bg-blue-500'  },
-    { key: 'accepted',   label: 'Accepted',   color: 'bg-violet-50 text-violet-700 border-violet-200',   dot: 'bg-violet-500'},
-    { key: 'completed',  label: 'Completed',  color: 'bg-emerald-50 text-emerald-700 border-emerald-200',dot: 'bg-emerald-500'},
-    { key: 'returned',   label: 'Returned',   color: 'bg-amber-50 text-amber-700 border-amber-200',      dot: 'bg-amber-500' },
-    { key: 'cancelled',  label: 'Cancelled',  color: 'bg-red-50 text-red-700 border-red-200',            dot: 'bg-red-400'   },
+    { key: 'pending',           label: 'Pending',            color: 'bg-slate-100 text-slate-700 border-slate-200',    dot: 'bg-slate-400'   },
+    { key: 'assigned',          label: 'Assigned',           color: 'bg-sky-50 text-sky-700 border-sky-200',            dot: 'bg-sky-500'     },
+    { key: 'dispatched',        label: 'Dispatched',         color: 'bg-blue-50 text-blue-700 border-blue-200',         dot: 'bg-blue-500'    },
+    { key: 'approvedandcosted', label: 'Approved & Costed',  color: 'bg-indigo-50 text-indigo-700 border-indigo-200',   dot: 'bg-indigo-500'  },
+    { key: 'accepted',          label: 'Accepted',           color: 'bg-violet-50 text-violet-700 border-violet-200',   dot: 'bg-violet-500'  },
+    { key: 'inprogress',        label: 'In Progress',        color: 'bg-purple-50 text-purple-700 border-purple-200',   dot: 'bg-purple-500'  },
+    { key: 'completed',         label: 'Completed',          color: 'bg-emerald-50 text-emerald-700 border-emerald-200',dot: 'bg-emerald-500' },
+    { key: 'returned',          label: 'Returned',           color: 'bg-amber-50 text-amber-700 border-amber-200',      dot: 'bg-amber-500'   },
+    { key: 'rejected',          label: 'Rejected',           color: 'bg-rose-50 text-rose-700 border-rose-200',         dot: 'bg-rose-500'    },
+    { key: 'cancelled',         label: 'Cancelled',          color: 'bg-red-50 text-red-700 border-red-200',            dot: 'bg-red-400'     },
   ];
 
+  // site_visits stages (full set used in the field visit lifecycle)
   const VISIT_STAGES: Array<{ key: string; label: string; color: string; dot: string }> = [
     { key: 'pending',        label: 'Pending',         color: 'bg-slate-100 text-slate-700 border-slate-200',    dot: 'bg-slate-400'  },
     { key: 'assigned',       label: 'Assigned',        color: 'bg-blue-50 text-blue-700 border-blue-200',         dot: 'bg-blue-500'   },
@@ -295,50 +305,87 @@ function MonitoringContent() {
     { key: 'permitverified', label: 'Permit Verified', color: 'bg-teal-50 text-teal-700 border-teal-200',         dot: 'bg-teal-500'   },
     { key: 'verified',       label: 'Verified',        color: 'bg-green-50 text-green-700 border-green-200',      dot: 'bg-green-500'  },
     { key: 'completed',      label: 'Completed',       color: 'bg-emerald-50 text-emerald-700 border-emerald-200',dot: 'bg-emerald-500'},
+    { key: 'returned',       label: 'Returned',        color: 'bg-amber-50 text-amber-700 border-amber-200',      dot: 'bg-amber-500'  },
+    { key: 'rejected',       label: 'Rejected',        color: 'bg-rose-50 text-rose-700 border-rose-200',         dot: 'bg-rose-500'   },
     { key: 'cancelled',      label: 'Cancelled',       color: 'bg-red-50 text-red-700 border-red-200',            dot: 'bg-red-400'    },
   ];
-
-  // Normalise any status string for comparison (camelCase, snake_case, spaces → lowercase no-separator)
-  const normStatus = (s: string) => (s ?? '').toLowerCase().replace(/[_\s-]/g, '');
 
   const { data: sitePipeline, isLoading: pipelineLoading } = useQuery({
     queryKey: ['/admin/monitoring/site-pipeline'],
     queryFn: async () => {
-      // Query mmp_site_entries directly — no row limit
+      // Query mmp_site_entries directly — no row limit, catches all statuses
       const { data: entryRows } = await supabase
         .from('mmp_site_entries')
         .select('status')
         .not('status', 'is', null);
 
-      // Query site_visits directly — handles both old and current table state
+      // Query site_visits directly
       const { data: visitRows } = await supabase
         .from('site_visits')
         .select('status')
         .not('status', 'is', null);
 
-      // Count entries by stage
-      const entryCounts = new Map<string, number>();
-      for (const row of entryRows ?? []) {
-        const k = normStatus(row.status ?? '');
-        entryCounts.set(k, (entryCounts.get(k) ?? 0) + 1);
-      }
+      // Count by normalised status key
+      const tally = (rows: Array<{ status: string | null }>) => {
+        const m = new Map<string, number>();
+        for (const row of rows) {
+          const k = normStatus(row.status ?? '');
+          m.set(k, (m.get(k) ?? 0) + 1);
+        }
+        return m;
+      };
 
-      // Count visits by stage
-      const visitCounts = new Map<string, number>();
-      for (const row of visitRows ?? []) {
-        const k = normStatus(row.status ?? '');
-        visitCounts.set(k, (visitCounts.get(k) ?? 0) + 1);
-      }
+      const entryCounts = tally(entryRows ?? []);
+      const visitCounts = tally(visitRows ?? []);
 
+      // Map stages — also collect counts for unknown statuses so nothing is silently lost
       const entryStages = ENTRY_STAGES.map(s => ({ ...s, count: entryCounts.get(normStatus(s.key)) ?? 0 }));
       const visitStages = VISIT_STAGES.map(s => ({ ...s, count: visitCounts.get(normStatus(s.key)) ?? 0 }));
+
+      const knownEntryKeys = new Set(ENTRY_STAGES.map(s => normStatus(s.key)));
+      const knownVisitKeys = new Set(VISIT_STAGES.map(s => normStatus(s.key)));
+      const otherEntries = (entryRows ?? []).filter(r => !knownEntryKeys.has(normStatus(r.status ?? '')));
+      const otherVisits  = (visitRows ?? []).filter(r => !knownVisitKeys.has(normStatus(r.status ?? '')));
 
       return {
         entryStages,
         visitStages,
         entryTotal: entryRows?.length ?? 0,
         visitTotal: visitRows?.length ?? 0,
+        otherEntryStatuses: Array.from(new Set(otherEntries.map(r => r.status))),
+        otherVisitStatuses:  Array.from(new Set(otherVisits.map(r => r.status))),
       };
+    },
+    refetchInterval: 120_000,
+    staleTime: 60_000,
+  });
+
+  // ── MMP Files — status + cycle close overview ──────────────────────────────
+  const { data: mmpOverview, isLoading: mmpOverviewLoading } = useQuery({
+    queryKey: ['/admin/monitoring/mmp-overview'],
+    queryFn: async () => {
+      const { data: rows } = await supabase
+        .from('mmp_files')
+        .select('id, name, month, hub, status, cycle_status, cycle_closed_at')
+        .order('cycle_closed_at', { ascending: false });
+
+      if (!rows) return { mmpStatusCounts: {}, cycleStatusCounts: {}, recentlyClosed: [] };
+
+      const mmpStatusCounts: Record<string, number> = {};
+      const cycleStatusCounts: Record<string, number> = {};
+      for (const r of rows) {
+        const s = (r.status ?? 'pending').toLowerCase();
+        const cs = (r.cycle_status ?? 'active').toLowerCase();
+        mmpStatusCounts[s]  = (mmpStatusCounts[s]  ?? 0) + 1;
+        cycleStatusCounts[cs] = (cycleStatusCounts[cs] ?? 0) + 1;
+      }
+
+      const recentlyClosed = rows
+        .filter(r => r.cycle_status === 'closed' && r.cycle_closed_at)
+        .slice(0, 8)
+        .map(r => ({ id: r.id as string, name: r.name as string, month: r.month as string, hub: r.hub as string, cycle_closed_at: r.cycle_closed_at as string }));
+
+      return { mmpStatusCounts, cycleStatusCounts, recentlyClosed, total: rows.length };
     },
     refetchInterval: 120_000,
     staleTime: 60_000,
@@ -657,6 +704,94 @@ function MonitoringContent() {
           </Card>
 
         </div>
+      )}
+
+      {/* ── MMP Status + Cycle Close Overview ─────────────────────────────── */}
+      {mmpOverviewLoading && <Skeleton className="h-44 w-full rounded-xl" />}
+      {!mmpOverviewLoading && mmpOverview && (
+        <Card>
+          <CardHeader className="py-3 px-4 border-b">
+            <CardTitle className="text-xs font-semibold uppercase tracking-wider flex items-center gap-2 text-muted-foreground">
+              <FileText className="h-3.5 w-3.5" />
+              MMP Status &amp; Cycle Close
+              <span className="ml-auto text-[10px] font-mono bg-slate-100 px-1.5 py-0.5 rounded text-slate-500">
+                {mmpOverview.total ?? 0} MMPs total
+              </span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="px-4 py-4 flex flex-col gap-4">
+            {/* Top row: MMP approval status + Cycle status */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {/* MMP Approval Status */}
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">MMP Approval Status</p>
+                <div className="flex flex-wrap gap-2">
+                  {[
+                    { key: 'pending',              label: 'Pending',              color: 'bg-amber-50 text-amber-700 border-amber-200' },
+                    { key: 'forwarded',            label: 'Forwarded',            color: 'bg-blue-50 text-blue-700 border-blue-200' },
+                    { key: 'coordinator_accepted', label: 'Coord. Accepted',      color: 'bg-indigo-50 text-indigo-700 border-indigo-200' },
+                    { key: 'approved',             label: 'Approved',             color: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
+                    { key: 'rejected',             label: 'Rejected',             color: 'bg-rose-50 text-rose-700 border-rose-200' },
+                    { key: 'recalled',             label: 'Recalled',             color: 'bg-orange-50 text-orange-700 border-orange-200' },
+                  ].map(({ key, label, color }) => {
+                    const count = mmpOverview.mmpStatusCounts[key] ?? 0;
+                    if (count === 0) return null;
+                    return (
+                      <div key={key} className={`flex flex-col items-center rounded-lg border px-3 py-1.5 min-w-[64px] text-center ${color}`} data-testid={`mmp-status-${key}`}>
+                        <span className="text-[10px] font-medium leading-tight">{label}</span>
+                        <span className="text-lg font-bold leading-none mt-0.5">{count}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Cycle Status */}
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">Cycle Status</p>
+                <div className="flex flex-wrap gap-2">
+                  {[
+                    { key: 'active',            label: 'Active',            color: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
+                    { key: 'closing',           label: 'Closing',           color: 'bg-amber-50 text-amber-700 border-amber-200' },
+                    { key: 'pending_approval',  label: 'Pending Approval',  color: 'bg-blue-50 text-blue-700 border-blue-200' },
+                    { key: 'closed',            label: 'Closed',            color: 'bg-slate-100 text-slate-600 border-slate-200' },
+                  ].map(({ key, label, color }) => {
+                    const count = mmpOverview.cycleStatusCounts[key] ?? 0;
+                    if (count === 0) return null;
+                    return (
+                      <div key={key} className={`flex flex-col items-center rounded-lg border px-3 py-1.5 min-w-[64px] text-center ${color}`} data-testid={`cycle-status-${key}`}>
+                        <span className="text-[10px] font-medium leading-tight">{label}</span>
+                        <span className="text-lg font-bold leading-none mt-0.5">{count}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+
+            {/* Recently closed MMPs */}
+            {mmpOverview.recentlyClosed.length > 0 && (
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-2 flex items-center gap-1">
+                  <CheckCircle2 className="h-3 w-3 text-slate-500" />Recently Closed Cycles
+                </p>
+                <div className="flex flex-col gap-1">
+                  {mmpOverview.recentlyClosed.map(mmp => (
+                    <div key={mmp.id} className="flex items-center gap-3 text-xs bg-slate-50 border border-slate-200 rounded-md px-3 py-1.5" data-testid={`closed-mmp-${mmp.id}`}>
+                      <span className="font-medium truncate flex-1">{mmp.name}</span>
+                      {mmp.hub && <span className="text-muted-foreground shrink-0">{mmp.hub}</span>}
+                      {mmp.month && <span className="text-muted-foreground shrink-0 font-mono">{mmp.month}</span>}
+                      <span className="shrink-0 text-slate-500 font-mono flex items-center gap-1">
+                        <CalendarDays className="h-3 w-3" />
+                        {format(new Date(mmp.cycle_closed_at), 'MMM d, yyyy')}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
       )}
 
       {/* Filter panel */}
