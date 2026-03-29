@@ -392,6 +392,48 @@ const normalizeForMatch = (str: string): string => {
 };
 
 /**
+ * Resolve a raw hub name from an uploaded file to the nearest canonical hub name.
+ * Priority: exact → hub-contains-raw → raw-contains-hub → word-overlap (≥40%) → fallback
+ */
+function resolveHubName(
+  rawName: string,
+  hubs: Array<{ id: string; name: string }>,
+  fallbackHubName?: string
+): string {
+  if (!rawName?.trim()) return fallbackHubName || rawName || '';
+  const norm = (s: string) =>
+    (s || '').toLowerCase().replace(/[^a-z0-9\s]/g, '').replace(/\s+/g, ' ').trim();
+  const normRaw = norm(rawName);
+
+  // 1. Exact match (case-insensitive, punctuation-agnostic)
+  const exact = hubs.find(h => norm(h.name) === normRaw);
+  if (exact) return exact.name;
+
+  // 2. Hub name contains the raw value (e.g. raw="Khartoum", hub="Khartoum Hub Office")
+  const hubContainsRaw = hubs.find(h => norm(h.name).includes(normRaw));
+  if (hubContainsRaw) return hubContainsRaw.name;
+
+  // 3. Raw value contains the hub name (e.g. raw="Khartoum Field Office", hub="Khartoum")
+  const rawContainsHub = hubs.find(h => normRaw.includes(norm(h.name)));
+  if (rawContainsHub) return rawContainsHub.name;
+
+  // 4. Word-overlap scoring — pick best if ≥40% words match
+  const rawWords = normRaw.split(' ').filter(Boolean);
+  let bestScore = 0;
+  let bestHub: (typeof hubs)[number] | null = null;
+  for (const h of hubs) {
+    const hubWords = norm(h.name).split(' ').filter(Boolean);
+    const shared = rawWords.filter(w => hubWords.includes(w)).length;
+    const score = shared / Math.max(rawWords.length, hubWords.length);
+    if (score > bestScore) { bestScore = score; bestHub = h; }
+  }
+  if (bestScore >= 0.4 && bestHub) return bestHub.name;
+
+  // 5. Fallback: use the hub selected in the upload form, or keep original
+  return fallbackHubName || rawName;
+}
+
+/**
  * Generate a unique site code if not provided
  */
 const generateSiteCode = (siteName: string, state: string, locality: string): string => {
@@ -1038,6 +1080,17 @@ export async function uploadMMPFile(
       if (user?.id) currentUserId = user.id;
     } catch {}
 
+    // Fetch canonical hub list for hub_office normalisation
+    let canonicalHubs: Array<{ id: string; name: string }> = [];
+    try {
+      const { data: hubRows } = await supabase.from('hubs').select('id, name').eq('is_active', true);
+      canonicalHubs = hubRows || [];
+    } catch {}
+    // Determine fallback hub name from the hub id selected in the upload form
+    const selectedHubName = metadata?.hub
+      ? canonicalHubs.find(h => h.id === metadata.hub)?.name
+      : undefined;
+
     // NEW: Check for duplicate sites in the same month
     // This prevents the same site from being monitored multiple times per month
     onProgress?.({ current: 38, total: 100, stage: 'Checking for duplicate sites in this month' });
@@ -1339,7 +1392,7 @@ export async function uploadMMPFile(
           mmp_file_id: targetMmpId,
           registry_site_id: registrySiteId, // Link to Sites Registry
           site_code: entry.siteCode,
-          hub_office: entry.hubOffice,
+          hub_office: resolveHubName(entry.hubOffice || '', canonicalHubs, selectedHubName),
           state: entry.state,
           locality: entry.locality,
           site_name: entry.siteName,
@@ -1499,7 +1552,7 @@ export async function uploadMMPFile(
             mmp_file_id: newMmpId,
             registry_site_id: registrySiteId,
             site_code: entry.siteCode,
-            hub_office: entry.hubOffice,
+            hub_office: resolveHubName(entry.hubOffice || '', canonicalHubs, selectedHubName),
             state: entry.state,
             locality: entry.locality,
             site_name: entry.siteName,

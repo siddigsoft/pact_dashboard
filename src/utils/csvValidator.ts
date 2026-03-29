@@ -651,8 +651,8 @@ export const validateHubMatch = (
     
     if (!matchFound) {
       errors.push({
-        type: 'error',
-        message: `Hub Office '${office}' does not belong to selected hub '${selectedHub.name}'`,
+        type: 'warning',
+        message: `Hub Office '${office}' will be auto-matched to nearest hub during upload`,
         category: 'hub_mismatch'
       });
     }
