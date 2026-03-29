@@ -3,6 +3,7 @@ import { Navigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useSuperAdmin } from '@/context/superAdmin/SuperAdminContext';
+import { useUser } from '@/context/user/UserContext';
 import { useToast } from '@/hooks/use-toast';
 import { format, formatDistanceToNow, parseISO, isToday, differenceInHours } from 'date-fns';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -27,6 +28,7 @@ import {
   Zap, Database, BarChart2, ChevronDown, ChevronUp, ChevronRight,
   Circle, ArrowUpRight, Timer, Filter, Info, MapPin, ArrowRight,
   FileText, CheckCircle2, CalendarDays, Bell, Send, Users, Globe, Wrench,
+  UserPlus, UserMinus, Lock,
 } from 'lucide-react';
 import { insertNotifications } from '@/services/mmpActions';
 import EmailNotificationService from '@/services/email-notification.service';
@@ -125,13 +127,42 @@ const URGENCY = {
   normal:   { dot: 'bg-emerald-400',           label: 'OK',       text: 'text-emerald-600',bg: '' },
 };
 
+// ── Access hook ───────────────────────────────────────────────────────────────
+
+function useMonitoringAccess() {
+  const { isSuperAdmin, loading: adminLoading } = useSuperAdmin();
+  const { currentUser } = useUser();
+  const [granted, setGranted] = useState<boolean | null>(null);
+  const [grantLoading, setGrantLoading] = useState(false);
+
+  useEffect(() => {
+    if (adminLoading) return;
+    if (isSuperAdmin) { setGranted(true); return; }
+    if (!currentUser?.id) { setGranted(false); return; }
+    setGrantLoading(true);
+    supabase
+      .from('monitoring_page_access')
+      .select('id')
+      .eq('user_id', currentUser.id)
+      .maybeSingle()
+      .then(({ data }) => {
+        setGranted(!!data);
+        setGrantLoading(false);
+      });
+  }, [isSuperAdmin, adminLoading, currentUser?.id]);
+
+  const loading = adminLoading || (!isSuperAdmin && grantLoading);
+  const hasAccess = isSuperAdmin || granted === true;
+  return { hasAccess, isSuperAdmin, loading };
+}
+
 // ── Root guard ────────────────────────────────────────────────────────────────
 
 export default function MonitoringDashboard() {
-  const { isSuperAdmin, loading } = useSuperAdmin();
+  const { hasAccess, isSuperAdmin, loading } = useMonitoringAccess();
   if (loading) return <DashboardSkeleton />;
-  if (!isSuperAdmin) return <Navigate to="/dashboard" replace />;
-  return <MonitoringContent />;
+  if (!hasAccess) return <Navigate to="/dashboard" replace />;
+  return <MonitoringContent isSuperAdmin={isSuperAdmin} />;
 }
 
 function DashboardSkeleton() {
@@ -153,7 +184,7 @@ function DashboardSkeleton() {
 
 // ── Main content ──────────────────────────────────────────────────────────────
 
-function MonitoringContent() {
+function MonitoringContent({ isSuperAdmin }: { isSuperAdmin: boolean }) {
   const { toast } = useToast();
   const qc = useQueryClient();
 
@@ -174,6 +205,7 @@ function MonitoringContent() {
   const [coverageNotifyOpen, setCoverageNotifyOpen] = useState(false);
   const [notifyCategory, setNotifyCategory] = useState<{ label: string; items: DashboardAction[] } | null>(null);
   const [statusNotes, setStatusNotes] = useState('');
+  const [manageAccessOpen, setManageAccessOpen] = useState(false);
   // Pipeline click-to-filter: clicking a stage box narrows the action feed
   const [pipelineFilter, setPipelineFilter] = useState<{ type: ActionTypeKey; status: string; label: string } | null>(null);
   const actionFeedRef = useRef<HTMLDivElement>(null);
@@ -725,6 +757,11 @@ function MonitoringContent() {
           <Button variant="ghost" size="sm" onClick={() => setShowFilters(f => !f)} data-testid="button-toggle-filters">
             <Filter className="h-4 w-4 mr-1" />{showFilters ? 'Hide Filters' : 'Filters'}
           </Button>
+          {isSuperAdmin && (
+            <Button variant="outline" size="sm" onClick={() => setManageAccessOpen(true)} data-testid="button-manage-access">
+              <Lock className="h-4 w-4 mr-1" />Manage Access
+            </Button>
+          )}
           <Button
             variant="outline"
             size="sm"
@@ -1464,6 +1501,11 @@ function MonitoringContent() {
         summary={coverageSummary}
         coverageData={coverageData}
       />
+
+      {/* Manage Access Dialog — super_admin only */}
+      {isSuperAdmin && (
+        <ManageAccessDialog open={manageAccessOpen} onClose={() => setManageAccessOpen(false)} />
+      )}
 
       {/* Workflow Dialog */}
       <Dialog open={!!workflowDialog} onOpenChange={open => { if (!open) setWorkflowDialog(null); }}>
@@ -3277,5 +3319,218 @@ function CoverageTree({ entries }: { entries: CoverageEntry[] }) {
         );
       })}
     </div>
+  );
+}
+
+// ── Manage Access Dialog ───────────────────────────────────────────────────────
+
+type AccessProfile = { id: string; full_name: string | null; email: string | null; role: string | null; granted_at?: string };
+
+function ManageAccessDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const { currentUser } = useUser();
+  const { toast } = useToast();
+  const [grantedUsers, setGrantedUsers] = useState<AccessProfile[]>([]);
+  const [loadingGranted, setLoadingGranted] = useState(false);
+  const [search, setSearch] = useState('');
+  const [searchResults, setSearchResults] = useState<AccessProfile[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [revoking, setRevoking] = useState<string | null>(null);
+  const [granting, setGranting] = useState<string | null>(null);
+
+  const loadGranted = useCallback(async () => {
+    setLoadingGranted(true);
+    const { data: accessRows } = await supabase
+      .from('monitoring_page_access')
+      .select('user_id, granted_at')
+      .order('granted_at', { ascending: false });
+    if (!accessRows || accessRows.length === 0) { setGrantedUsers([]); setLoadingGranted(false); return; }
+    const ids = accessRows.map((r: { user_id: string; granted_at: string | null }) => r.user_id);
+    const { data: profiles } = await supabase
+      .from('profiles')
+      .select('id, full_name, email, role')
+      .in('id', ids);
+    const byId = new Map((profiles || []).map((p: { id: string; full_name: string | null; email: string | null; role: string | null }) => [p.id, p]));
+    setGrantedUsers(accessRows.map((r: { user_id: string; granted_at: string | null }) => ({
+      id: r.user_id,
+      full_name: byId.get(r.user_id)?.full_name ?? null,
+      email: byId.get(r.user_id)?.email ?? null,
+      role: byId.get(r.user_id)?.role ?? null,
+      granted_at: r.granted_at ?? undefined,
+    })));
+    setLoadingGranted(false);
+  }, []);
+
+  useEffect(() => {
+    if (!open) { setSearch(''); setSearchResults([]); return; }
+    loadGranted();
+  }, [open, loadGranted]);
+
+  const handleSearch = useCallback(async (q: string) => {
+    setSearch(q);
+    if (q.trim().length < 2) { setSearchResults([]); return; }
+    setSearching(true);
+    const grantedIds = new Set(grantedUsers.map(u => u.id));
+    const { data } = await supabase
+      .from('profiles')
+      .select('id, full_name, email, role')
+      .or(`full_name.ilike.%${q.trim()}%,email.ilike.%${q.trim()}%`)
+      .eq('is_active', true)
+      .not('role', 'eq', 'super_admin')
+      .limit(12);
+    setSearchResults((data || []).filter((u: { id: string }) => !grantedIds.has(u.id)));
+    setSearching(false);
+  }, [grantedUsers]);
+
+  const grantAccess = async (user: AccessProfile) => {
+    setGranting(user.id);
+    const { error } = await supabase
+      .from('monitoring_page_access')
+      .insert({ user_id: user.id, granted_by: currentUser?.id });
+    setGranting(null);
+    if (error) { toast({ title: 'Failed to grant access', description: error.message, variant: 'destructive' }); return; }
+    toast({ title: 'Access granted', description: `${user.full_name || user.email} can now view System Monitoring.` });
+    setGrantedUsers(prev => [{ ...user, granted_at: new Date().toISOString() }, ...prev]);
+    setSearchResults(prev => prev.filter(u => u.id !== user.id));
+  };
+
+  const revokeAccess = async (user: AccessProfile) => {
+    setRevoking(user.id);
+    const { error } = await supabase
+      .from('monitoring_page_access')
+      .delete()
+      .eq('user_id', user.id);
+    setRevoking(null);
+    if (error) { toast({ title: 'Failed to revoke access', description: error.message, variant: 'destructive' }); return; }
+    toast({ title: 'Access revoked', description: `${user.full_name || user.email} no longer has access.` });
+    setGrantedUsers(prev => prev.filter(u => u.id !== user.id));
+  };
+
+  const roleColor = (role: string | null) => {
+    if (!role) return 'bg-slate-100 text-slate-600';
+    const r = role.toLowerCase();
+    if (r.includes('admin')) return 'bg-red-100 text-red-700';
+    if (r.includes('fom')) return 'bg-purple-100 text-purple-700';
+    if (r.includes('supervisor')) return 'bg-blue-100 text-blue-700';
+    if (r.includes('coordinator')) return 'bg-emerald-100 text-emerald-700';
+    return 'bg-slate-100 text-slate-600';
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={v => { if (!v) onClose(); }}>
+      <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col gap-0 p-0" data-testid="manage-access-dialog">
+        <DialogHeader className="px-5 pt-5 pb-3 border-b shrink-0">
+          <DialogTitle className="flex items-center gap-2 text-base">
+            <Lock className="h-4 w-4 text-primary" />
+            Manage Monitoring Access
+          </DialogTitle>
+          <DialogDescription className="text-xs">
+            Grant or revoke access to the System Monitoring page for specific users. Only super admins can manage this.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="flex-1 overflow-y-auto px-5 py-4 flex flex-col gap-5">
+
+          {/* Currently granted */}
+          <div>
+            <p className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground mb-2 flex items-center gap-1">
+              <Shield className="h-3 w-3" /> Users with access
+              {grantedUsers.length > 0 && <span className="ml-1 font-mono text-foreground">{grantedUsers.length}</span>}
+            </p>
+            {loadingGranted ? (
+              <div className="flex flex-col gap-2">{[1, 2].map(i => <Skeleton key={i} className="h-10 w-full rounded-lg" />)}</div>
+            ) : grantedUsers.length === 0 ? (
+              <p className="text-xs text-muted-foreground bg-slate-50 rounded-lg px-3 py-3 border border-dashed">
+                No users have been granted access yet. Use the search below to add users.
+              </p>
+            ) : (
+              <div className="flex flex-col gap-1.5">
+                {grantedUsers.map(u => (
+                  <div key={u.id} className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2" data-testid={`access-granted-${u.id}`}>
+                    <div className="h-7 w-7 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                      <User className="h-3.5 w-3.5 text-primary" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-medium truncate">{u.full_name || 'Unknown User'}</p>
+                      <p className="text-[10px] text-muted-foreground truncate">{u.email || '—'}</p>
+                    </div>
+                    <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${roleColor(u.role)}`}>{u.role || 'unknown'}</span>
+                    {u.granted_at && (
+                      <span className="text-[10px] text-muted-foreground hidden sm:block">
+                        {format(new Date(u.granted_at), 'MMM d')}
+                      </span>
+                    )}
+                    <Button
+                      variant="ghost" size="sm"
+                      className="h-7 px-2 text-red-600 hover:bg-red-50 hover:text-red-700 shrink-0"
+                      onClick={() => revokeAccess(u)}
+                      disabled={revoking === u.id}
+                      data-testid={`button-revoke-${u.id}`}
+                    >
+                      {revoking === u.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <UserMinus className="h-3.5 w-3.5" />}
+                      <span className="ml-1 hidden sm:inline">Revoke</span>
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Search to add */}
+          <div>
+            <p className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground mb-2 flex items-center gap-1">
+              <UserPlus className="h-3 w-3" /> Grant access to a user
+            </p>
+            <div className="relative">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+              <input
+                type="text"
+                value={search}
+                onChange={e => handleSearch(e.target.value)}
+                placeholder="Search by name or email..."
+                className="w-full pl-8 pr-3 py-2 text-sm border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 bg-white"
+                data-testid="input-access-search"
+              />
+              {searching && <Loader2 className="absolute right-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 animate-spin text-muted-foreground" />}
+            </div>
+
+            {searchResults.length > 0 && (
+              <div className="flex flex-col gap-1.5 mt-2">
+                {searchResults.map(u => (
+                  <div key={u.id} className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2" data-testid={`access-result-${u.id}`}>
+                    <div className="h-7 w-7 rounded-full bg-slate-200 flex items-center justify-center shrink-0">
+                      <User className="h-3.5 w-3.5 text-slate-500" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-medium truncate">{u.full_name || 'Unknown User'}</p>
+                      <p className="text-[10px] text-muted-foreground truncate">{u.email || '—'}</p>
+                    </div>
+                    <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${roleColor(u.role)}`}>{u.role || 'unknown'}</span>
+                    <Button
+                      variant="outline" size="sm"
+                      className="h-7 px-2 text-emerald-700 border-emerald-200 hover:bg-emerald-50 shrink-0"
+                      onClick={() => grantAccess(u)}
+                      disabled={granting === u.id}
+                      data-testid={`button-grant-${u.id}`}
+                    >
+                      {granting === u.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <UserPlus className="h-3.5 w-3.5" />}
+                      <span className="ml-1 hidden sm:inline">Grant</span>
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {search.trim().length >= 2 && !searching && searchResults.length === 0 && (
+              <p className="text-xs text-muted-foreground mt-2 px-1">No matching users found, or all matching users already have access.</p>
+            )}
+          </div>
+        </div>
+
+        <DialogFooter className="px-5 py-3 border-t shrink-0 flex items-center justify-between gap-3">
+          <p className="text-xs text-muted-foreground flex-1">Granted users can view all monitoring data but cannot manage access themselves.</p>
+          <Button variant="outline" size="sm" onClick={onClose} data-testid="button-close-access-dialog">Close</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

@@ -537,6 +537,21 @@ const Settings = () => {
     (currentUser?.role || '').toLowerCase()
   );
 
+  const isSuperAdminUser = (currentUser?.role || '').toLowerCase().replace(/\s+/g, '') === 'superadmin'
+    || (currentUser?.role || '') === 'super_admin';
+
+  const [hasMonitoringAccess, setHasMonitoringAccess] = useState(false);
+  useEffect(() => {
+    if (isSuperAdminUser) { setHasMonitoringAccess(true); return; }
+    if (!currentUser?.id) return;
+    supabase
+      .from('monitoring_page_access')
+      .select('id')
+      .eq('user_id', currentUser.id)
+      .maybeSingle()
+      .then(({ data }) => setHasMonitoringAccess(!!data));
+  }, [currentUser?.id, isSuperAdminUser]);
+
   const handleBroadcastBankAccountReminder = async () => {
     setBroadcastSending(true);
     setBroadcastResult(null);
@@ -1202,7 +1217,7 @@ const Settings = () => {
                     <SelectItem value="mmp">MMP Management</SelectItem>
                     <SelectItem value="site-visits">Site Visits</SelectItem>
                     <SelectItem value="reports">Reports</SelectItem>
-                    {(currentUser?.role || '').toLowerCase().replace(/\s+/g, '') === 'superadmin' || (currentUser?.role || '') === 'super_admin' ? (
+                    {hasMonitoringAccess ? (
                       <SelectItem value="monitoring">System Monitoring</SelectItem>
                     ) : null}
                   </SelectContent>
