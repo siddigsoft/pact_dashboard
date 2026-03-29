@@ -170,6 +170,7 @@ function MonitoringContent() {
   const [workflowNotes, setWorkflowNotes] = useState('');
   const [statusDialog, setStatusDialog] = useState<{ actions: DashboardAction[]; targetStatus: DashboardStatus; label: string } | null>(null);
   const [notifyOpen, setNotifyOpen] = useState(false);
+  const [notifyCategory, setNotifyCategory] = useState<{ label: string; items: DashboardAction[] } | null>(null);
   const [statusNotes, setStatusNotes] = useState('');
   // Pipeline click-to-filter: clicking a stage box narrows the action feed
   const [pipelineFilter, setPipelineFilter] = useState<{ type: ActionTypeKey; status: string; label: string } | null>(null);
@@ -744,7 +745,7 @@ function MonitoringContent() {
           <Button
             size="sm"
             className="bg-violet-600 hover:bg-violet-700 text-white"
-            onClick={() => setNotifyOpen(true)}
+            onClick={() => { setNotifyCategory(null); setNotifyOpen(true); }}
             disabled={allActions.length === 0}
             data-testid="button-notify-users"
           >
@@ -1453,10 +1454,11 @@ function MonitoringContent() {
               workflowPending: workflowMutation.isPending,
             };
             const Icon = at.icon;
+            const openCategoryNotify = () => { setNotifyCategory({ label: at.label, items }); setNotifyOpen(true); };
 
             // 4 target modules → collapsible summary card with stats
             if (CARD_MODULES.has(at.key)) {
-              return <ModuleSummaryCard key={at.key} at={at} items={items} {...sharedProps} />;
+              return <ModuleSummaryCard key={at.key} at={at} items={items} onNotify={openCategoryNotify} {...sharedProps} />;
             }
 
             // Other modules → flat list with simple header
@@ -1467,6 +1469,14 @@ function MonitoringContent() {
                   <span className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground">{at.label}</span>
                   <Badge variant="secondary" className="text-[9px] h-4 px-1.5 rounded font-mono">{items.length}</Badge>
                   <div className="flex-1 h-px bg-border" />
+                  <button
+                    onClick={openCategoryNotify}
+                    className="flex items-center gap-1 text-[10px] text-violet-600 hover:text-violet-700 hover:bg-violet-50 border border-violet-200 rounded px-1.5 py-0.5 transition-colors"
+                    title={`Send notification to users in ${at.label}`}
+                    data-testid={`button-notify-category-${at.key}`}
+                  >
+                    <Bell className="h-3 w-3" />Notify
+                  </button>
                 </div>
                 <div className="flex flex-col gap-1">
                   {items.map(action => (
@@ -1489,8 +1499,13 @@ function MonitoringContent() {
         </div>
       )}
 
-      {/* Notify Users Dialog */}
-      <NotifyUsersDialog open={notifyOpen} onClose={() => setNotifyOpen(false)} allActions={allActions} />
+      {/* Notify Users Dialog — scoped to a category when opened from a category button */}
+      <NotifyUsersDialog
+        open={notifyOpen}
+        onClose={() => { setNotifyOpen(false); setNotifyCategory(null); }}
+        allActions={notifyCategory ? notifyCategory.items : allActions}
+        categoryLabel={notifyCategory?.label}
+      />
 
       {/* Workflow Dialog */}
       <Dialog open={!!workflowDialog} onOpenChange={open => { if (!open) setWorkflowDialog(null); }}>
@@ -1555,8 +1570,8 @@ function MonitoringContent() {
 
 // ── Notify Users Dialog ────────────────────────────────────────────────────────
 
-function NotifyUsersDialog({ open, onClose, allActions }: {
-  open: boolean; onClose: () => void; allActions: DashboardAction[];
+function NotifyUsersDialog({ open, onClose, allActions, categoryLabel }: {
+  open: boolean; onClose: () => void; allActions: DashboardAction[]; categoryLabel?: string;
 }) {
   const { toast } = useToast();
   const [sending, setSending] = useState(false);
@@ -1635,10 +1650,13 @@ function NotifyUsersDialog({ open, onClose, allActions }: {
       <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col gap-0 p-0" data-testid="notify-users-dialog">
         <DialogHeader className="px-5 pt-5 pb-3 border-b shrink-0">
           <DialogTitle className="flex items-center gap-2 text-base">
-            <Bell className="h-4 w-4 text-violet-600" />Send Action Reminder
+            <Bell className="h-4 w-4 text-violet-600" />
+            {categoryLabel ? `Notify — ${categoryLabel}` : 'Send Action Reminder'}
           </DialogTitle>
           <DialogDescription className="text-xs">
-            Send an in-app notification to users who have pending actions in the system.
+            {categoryLabel
+              ? `Send an in-app notification to users who have pending actions in the ${categoryLabel} module.`
+              : 'Send an in-app notification to users who have pending actions in the system.'}
           </DialogDescription>
         </DialogHeader>
 
@@ -1762,7 +1780,7 @@ const CARD_MODULES = new Set(['mmp_lifecycle', 'mmp_site_entry', 'operational_co
 
 function ModuleSummaryCard({
   at, items, selectedIds, expandedId,
-  onToggleSelect, onToggleExpand, onStatusChange, onWorkflow, workflowPending,
+  onToggleSelect, onToggleExpand, onStatusChange, onWorkflow, workflowPending, onNotify,
 }: {
   at: { key: ActionTypeKey; label: string; icon: React.ComponentType<{ className?: string }> };
   items: DashboardAction[];
@@ -1773,6 +1791,7 @@ function ModuleSummaryCard({
   onStatusChange: (action: DashboardAction, status: DashboardStatus, label: string) => void;
   onWorkflow: (action: DashboardAction, wa: string, wl: string) => void;
   workflowPending: boolean;
+  onNotify: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const Icon = at.icon;
@@ -1825,10 +1844,13 @@ function ModuleSummaryCard({
   return (
     <div className="rounded-xl border border-border overflow-hidden shadow-sm" data-testid={`module-card-${at.key}`}>
       {/* ── Card header — always visible, click to toggle rows ── */}
-      <button
-        className="w-full flex items-center gap-3 px-4 py-3 bg-card hover:bg-muted/40 transition-colors text-left"
+      <div
+        className="w-full flex items-center gap-3 px-4 py-3 bg-card hover:bg-muted/40 transition-colors cursor-pointer text-left"
         onClick={() => setOpen(v => !v)}
         data-testid={`module-card-toggle-${at.key}`}
+        role="button"
+        tabIndex={0}
+        onKeyDown={e => e.key === 'Enter' && setOpen(v => !v)}
       >
         <span className="p-1.5 rounded-md bg-primary/10 text-primary shrink-0"><Icon className="h-3.5 w-3.5" /></span>
         <span className="text-sm font-bold text-foreground flex-1">{at.label}</span>
@@ -1836,8 +1858,16 @@ function ModuleSummaryCard({
         {criticalCount > 0 && <span className="text-[10px] font-bold bg-red-100 text-red-700 border border-red-200 px-1.5 py-0.5 rounded-full">{criticalCount} CRITICAL</span>}
         {actedCount > 0    && <span className="text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 px-1.5 py-0.5 rounded-full">{actedCount} acted</span>}
         {noRespCount > 0   && <span className="text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200 px-1.5 py-0.5 rounded-full">{noRespCount} no response</span>}
+        <button
+          onClick={e => { e.stopPropagation(); onNotify(); }}
+          className="flex items-center gap-1 text-[10px] font-semibold text-violet-600 hover:text-violet-700 hover:bg-violet-50 border border-violet-200 rounded px-2 py-1 transition-colors shrink-0"
+          title={`Send notification to users in ${at.label}`}
+          data-testid={`button-notify-category-${at.key}`}
+        >
+          <Bell className="h-3 w-3" />Notify
+        </button>
         {open ? <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" /> : <ChevronUp className="h-4 w-4 text-muted-foreground shrink-0 rotate-180" />}
-      </button>
+      </div>
 
       {/* ── Stats panel — always visible ── */}
       <div className="px-4 py-3 border-t border-border/60 bg-slate-50/60 grid grid-cols-1 sm:grid-cols-3 gap-4">
