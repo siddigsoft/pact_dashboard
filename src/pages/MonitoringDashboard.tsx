@@ -25,7 +25,7 @@ import {
   AlertCircle, CheckSquare, X, Loader2, Calendar, Mail, Phone,
   Zap, Database, BarChart2, ChevronDown, ChevronUp, ChevronRight,
   Circle, ArrowUpRight, Timer, Filter, Info, MapPin, ArrowRight,
-  FileText, CheckCircle2, CalendarDays, Bell, Send, Users,
+  FileText, CheckCircle2, CalendarDays, Bell, Send, Users, Globe,
 } from 'lucide-react';
 import { insertNotifications } from '@/services/mmpActions';
 
@@ -249,17 +249,11 @@ function MonitoringContent() {
     if (coverageStatusFilter === 'all')             subset = coverageData;
     else if (coverageStatusFilter === 'no_request') subset = coverageData.filter(e => !e.advance_status);
     else                                             subset = coverageData.filter(e => e.advance_status === coverageStatusFilter);
-    if (coverageMmpFilter   !== 'all') subset = subset.filter(e => e.mmp_name             === coverageMmpFilter);
-    if (coverageHubFilter   !== 'all') subset = subset.filter(e => e.hub_name             === coverageHubFilter);
-    if (coverageStateFilter !== 'all') subset = subset.filter(e => e.state_name           === coverageStateFilter);
-    if (coverageDcFilter    !== 'all') subset = subset.filter(e => e.data_collector_name  === coverageDcFilter);
-    const byHub = new Map<string, CoverageEntry[]>();
-    for (const e of subset) {
-      const h = e.hub_name || '—';
-      if (!byHub.has(h)) byHub.set(h, []);
-      byHub.get(h)!.push(e);
-    }
-    return byHub;
+    if (coverageMmpFilter   !== 'all') subset = subset.filter(e => e.mmp_name            === coverageMmpFilter);
+    if (coverageHubFilter   !== 'all') subset = subset.filter(e => e.hub_name            === coverageHubFilter);
+    if (coverageStateFilter !== 'all') subset = subset.filter(e => e.state_name          === coverageStateFilter);
+    if (coverageDcFilter    !== 'all') subset = subset.filter(e => e.data_collector_name === coverageDcFilter);
+    return subset;
   }, [coverageData, coverageHubFilter, coverageStatusFilter, coverageMmpFilter, coverageStateFilter, coverageDcFilter]);
   const coverageHubs           = useMemo(() => [...new Set(coverageData.map(e => e.hub_name).filter(Boolean))].sort() as string[], [coverageData]);
   const coverageMmps           = useMemo(() => [...new Set(coverageData.map(e => e.mmp_name).filter(m => m && m !== '—'))].sort() as string[], [coverageData]);
@@ -1280,7 +1274,7 @@ function MonitoringContent() {
                     return m[coverageStatusFilter] ?? 'Sites';
                   })()}
                 </span>
-                <span className="text-[10px] text-muted-foreground">{[...coverageFiltered.values()].reduce((s, a) => s + a.length, 0).toLocaleString()} sites</span>
+                <span className="text-[10px] text-muted-foreground">{coverageFiltered.length.toLocaleString()} sites</span>
                 {(coverageMmpFilter !== 'all' || coverageHubFilter !== 'all' || coverageStateFilter !== 'all' || coverageDcFilter !== 'all') && (
                   <button
                     onClick={() => { setCoverageMmpFilter('all'); setCoverageHubFilter('all'); setCoverageStateFilter('all'); setCoverageDcFilter('all'); }}
@@ -1331,32 +1325,7 @@ function MonitoringContent() {
                 </Select>
               </div>
             </div>
-            <div className="divide-y max-h-[400px] overflow-y-auto">
-              {[...coverageFiltered.entries()].sort(([, a], [, b]) => b.length - a.length).map(([hub, sites]) => (
-                <div key={hub} className="px-4 py-2">
-                  <div className="flex items-center gap-2 mb-1.5">
-                    <MapPin className="h-3 w-3 text-muted-foreground" />
-                    <span className="text-xs font-semibold text-slate-700">{hub}</span>
-                    <Badge variant="secondary" className="text-[9px] h-4 px-1.5">{sites.length}</Badge>
-                  </div>
-                  <div className="flex flex-col gap-1 pl-5">
-                    {sites.map(s => (
-                      <div key={s.id} className="flex items-center gap-2 text-xs text-slate-600">
-                        <span className="w-1.5 h-1.5 rounded-full bg-slate-400 shrink-0" />
-                        <span className="font-medium flex-1">{s.site_name || '—'}</span>
-                        <span className="text-[10px] text-muted-foreground truncate max-w-[140px]">{s.mmp_name}</span>
-                        {s.state_name && <span className="text-[10px] text-slate-400">{s.state_name}</span>}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ))}
-              {coverageFiltered.size === 0 && (
-                <div className="px-4 py-6 text-center text-sm text-muted-foreground">
-                  {coverageHubFilter !== 'all' ? `No sites for ${coverageHubFilter}` : 'No sites match this filter'}
-                </div>
-              )}
-            </div>
+            <CoverageTree entries={coverageFiltered} />
           </div>
         )}
 
@@ -2650,6 +2619,191 @@ function StatusHistoryTimeline({ actionId, actionType }: { actionId: string; act
           );
         })}
       </ol>
+    </div>
+  );
+}
+
+// ── Coverage Tree ─────────────────────────────────────────────────────────────
+// Collapsible MMP → Hub → State → Data Collector → Sites tree (mirrors MMP Site
+// Entries StatusHubTree but for advance-coverage data).
+const ADV_STATUS_BADGE: Record<string, string> = {
+  pending_supervisor: 'bg-amber-100 text-amber-800 border-amber-300',
+  pending_admin:      'bg-orange-100 text-orange-800 border-orange-300',
+  approved:           'bg-emerald-100 text-emerald-800 border-emerald-300',
+  fully_paid:         'bg-teal-100 text-teal-800 border-teal-300',
+  partially_paid:     'bg-cyan-100 text-cyan-800 border-cyan-300',
+  confirmed:          'bg-blue-100 text-blue-800 border-blue-300',
+  acknowledged:       'bg-violet-100 text-violet-800 border-violet-300',
+  rejected:           'bg-red-100 text-red-800 border-red-300',
+  cancelled:          'bg-slate-100 text-slate-600 border-slate-300',
+};
+const ADV_STATUS_LABEL: Record<string, string> = {
+  pending_supervisor: 'Pending Supervisor',
+  pending_admin:      'Pending Admin',
+  approved:           'Approved',
+  fully_paid:         'Fully Paid',
+  partially_paid:     'Partially Paid',
+  confirmed:          'Confirmed',
+  acknowledged:       'Acknowledged',
+  rejected:           'Rejected',
+  cancelled:          'Cancelled',
+};
+
+function CoverageTree({ entries }: { entries: CoverageEntry[] }) {
+  // Build MMP → Hub → State → DC → sites
+  type DCMap  = Map<string, CoverageEntry[]>;
+  type StMap  = Map<string, DCMap>;
+  type HubMap = Map<string, StMap>;
+  type MMPMap = Map<string, HubMap>;
+
+  const tree = useMemo<MMPMap>(() => {
+    const map: MMPMap = new Map();
+    for (const e of entries) {
+      const mmp = e.mmp_name || '—';
+      const hub = e.hub_name || '—';
+      const st  = e.state_name || '—';
+      const dc  = e.data_collector_name || '—';
+      if (!map.has(mmp))                            map.set(mmp, new Map());
+      if (!map.get(mmp)!.has(hub))                  map.get(mmp)!.set(hub, new Map());
+      if (!map.get(mmp)!.get(hub)!.has(st))         map.get(mmp)!.get(hub)!.set(st, new Map());
+      if (!map.get(mmp)!.get(hub)!.get(st)!.has(dc)) map.get(mmp)!.get(hub)!.get(st)!.set(dc, []);
+      map.get(mmp)!.get(hub)!.get(st)!.get(dc)!.push(e);
+    }
+    // sort mmps by site count desc
+    return new Map([...map.entries()].sort(([, a], [, b]) => {
+      const count = (hm: HubMap) => [...hm.values()].flatMap(sm => [...sm.values()]).flatMap(dm => [...dm.values()]).flat().length;
+      return count(b) - count(a);
+    }));
+  }, [entries]);
+
+  const [openMMPs, setOpenMMPs] = useState<Set<string>>(() => new Set());
+  const [openHubs, setOpenHubs] = useState<Set<string>>(() => new Set());
+  const [openSts,  setOpenSts]  = useState<Set<string>>(() => new Set());
+  const [openDCs,  setOpenDCs]  = useState<Set<string>>(() => new Set());
+
+  const toggle = (setter: React.Dispatch<React.SetStateAction<Set<string>>>, key: string) =>
+    setter(prev => { const n = new Set(prev); n.has(key) ? n.delete(key) : n.add(key); return n; });
+
+  const hubCount = (hm: HubMap) =>
+    [...hm.values()].flatMap(sm => [...sm.values()]).flatMap(dm => [...dm.values()]).flat().length;
+  const stCount = (sm: StMap) =>
+    [...sm.values()].flatMap(dm => [...dm.values()]).flat().length;
+  const dcCount = (dm: DCMap) =>
+    [...dm.values()].flat().length;
+
+  if (entries.length === 0) {
+    return (
+      <div className="px-4 py-6 text-center text-sm text-muted-foreground">
+        No sites match this filter
+      </div>
+    );
+  }
+
+  return (
+    <div className="divide-y max-h-[520px] overflow-y-auto" data-testid="coverage-tree">
+      {[...tree.entries()].map(([mmp, hubMap]) => {
+        const mmpOpen = openMMPs.has(mmp);
+        const mmpTotal = hubCount(hubMap);
+        return (
+          <div key={mmp}>
+            {/* MMP row — indigo */}
+            <button
+              onClick={() => toggle(setOpenMMPs, mmp)}
+              className="w-full flex items-center gap-2 px-4 py-2 hover:bg-indigo-50 transition-colors text-left"
+              data-testid={`coverage-mmp-${mmp}`}
+            >
+              <ChevronRight className={`h-3.5 w-3.5 text-indigo-500 shrink-0 transition-transform ${mmpOpen ? 'rotate-90' : ''}`} />
+              <FileText className="h-3.5 w-3.5 text-indigo-400 shrink-0" />
+              <span className="text-xs font-semibold text-indigo-800 flex-1 truncate">{mmp}</span>
+              <Badge className="text-[9px] h-4 px-1.5 bg-indigo-100 text-indigo-700 border-indigo-200 border">{mmpTotal}</Badge>
+            </button>
+
+            {mmpOpen && [...hubMap.entries()].sort(([, a], [, b]) => stCount(b) - stCount(a)).map(([hub, stMap]) => {
+              const hKey = `${mmp}::${hub}`;
+              const hubOpen = openHubs.has(hKey);
+              const hubTotal = stCount(stMap);
+              return (
+                <div key={hub} className="border-l-2 border-indigo-100 ml-5">
+                  {/* Hub row — blue */}
+                  <button
+                    onClick={() => toggle(setOpenHubs, hKey)}
+                    className="w-full flex items-center gap-2 px-4 py-1.5 hover:bg-blue-50 transition-colors text-left"
+                    data-testid={`coverage-hub-${hKey}`}
+                  >
+                    <ChevronRight className={`h-3 w-3 text-blue-400 shrink-0 transition-transform ${hubOpen ? 'rotate-90' : ''}`} />
+                    <MapPin className="h-3 w-3 text-blue-400 shrink-0" />
+                    <span className="text-xs font-medium text-blue-800 flex-1 truncate">{hub}</span>
+                    <Badge className="text-[9px] h-4 px-1.5 bg-blue-100 text-blue-700 border-blue-200 border">{hubTotal}</Badge>
+                  </button>
+
+                  {hubOpen && [...stMap.entries()].sort(([, a], [, b]) => dcCount(b) - dcCount(a)).map(([state, dcMap]) => {
+                    const sKey = `${mmp}::${hub}::${state}`;
+                    const stOpen = openSts.has(sKey);
+                    const stTotal = dcCount(dcMap);
+                    return (
+                      <div key={state} className="border-l-2 border-blue-100 ml-5">
+                        {/* State row — emerald */}
+                        <button
+                          onClick={() => toggle(setOpenSts, sKey)}
+                          className="w-full flex items-center gap-2 px-4 py-1.5 hover:bg-emerald-50 transition-colors text-left"
+                          data-testid={`coverage-state-${sKey}`}
+                        >
+                          <ChevronRight className={`h-3 w-3 text-emerald-400 shrink-0 transition-transform ${stOpen ? 'rotate-90' : ''}`} />
+                          <Globe className="h-3 w-3 text-emerald-400 shrink-0" />
+                          <span className="text-xs font-medium text-emerald-800 flex-1 truncate">{state}</span>
+                          <Badge className="text-[9px] h-4 px-1.5 bg-emerald-100 text-emerald-700 border-emerald-200 border">{stTotal}</Badge>
+                        </button>
+
+                        {stOpen && [...dcMap.entries()].sort(([, a], [, b]) => b.length - a.length).map(([dc, sites]) => {
+                          const dKey = `${mmp}::${hub}::${state}::${dc}`;
+                          const dcOpen = openDCs.has(dKey);
+                          return (
+                            <div key={dc} className="border-l-2 border-emerald-100 ml-5">
+                              {/* Data Collector row — amber */}
+                              <button
+                                onClick={() => toggle(setOpenDCs, dKey)}
+                                className="w-full flex items-center gap-2 px-4 py-1.5 hover:bg-amber-50 transition-colors text-left"
+                                data-testid={`coverage-dc-${dKey}`}
+                              >
+                                <ChevronRight className={`h-3 w-3 text-amber-400 shrink-0 transition-transform ${dcOpen ? 'rotate-90' : ''}`} />
+                                <User className="h-3 w-3 text-amber-400 shrink-0" />
+                                <span className="text-xs font-medium text-amber-900 flex-1 truncate">{dc}</span>
+                                <Badge className="text-[9px] h-4 px-1.5 bg-amber-100 text-amber-700 border-amber-200 border">{sites.length}</Badge>
+                              </button>
+
+                              {dcOpen && (
+                                <div className="border-l-2 border-amber-100 ml-5 py-1">
+                                  {sites.map(s => (
+                                    <div
+                                      key={s.id}
+                                      className="flex items-center gap-2 px-4 py-1 hover:bg-slate-50 text-xs"
+                                      data-testid={`coverage-site-${s.id}`}
+                                    >
+                                      <span className="w-1.5 h-1.5 rounded-full bg-slate-300 shrink-0" />
+                                      <span className="font-medium text-slate-700 flex-1 truncate">{s.site_name || '—'}</span>
+                                      {s.advance_status ? (
+                                        <span className={`text-[9px] px-1.5 py-0.5 rounded border font-medium shrink-0 ${ADV_STATUS_BADGE[s.advance_status] ?? 'bg-slate-100 text-slate-600 border-slate-300'}`}>
+                                          {ADV_STATUS_LABEL[s.advance_status] ?? s.advance_status}
+                                        </span>
+                                      ) : (
+                                        <span className="text-[9px] px-1.5 py-0.5 rounded border bg-slate-100 text-slate-400 border-slate-200 shrink-0">No Request</span>
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })}
+          </div>
+        );
+      })}
     </div>
   );
 }
