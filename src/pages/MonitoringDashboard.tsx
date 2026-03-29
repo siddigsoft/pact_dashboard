@@ -1164,11 +1164,11 @@ function MonitoringContent() {
             : (
               <>
                 <span className="text-xs font-mono bg-primary/10 text-primary px-2 py-0.5 rounded-full">
-                  {coverageSummary.total} active sites
+                  {coverageSummary.total.toLocaleString()} active sites
                 </span>
                 {coverageSummary.noRequest > 0 && (
                   <span className="text-[10px] font-bold bg-red-100 text-red-700 border border-red-200 px-1.5 py-0.5 rounded-full">
-                    {coverageSummary.noRequest} NO REQUEST
+                    {coverageSummary.noRequest.toLocaleString()} NO REQUEST
                   </span>
                 )}
                 {coverageSummary.noRequest === 0 && coverageSummary.total > 0 && (
