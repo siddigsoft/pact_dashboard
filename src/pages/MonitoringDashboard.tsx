@@ -869,18 +869,18 @@ function MonitoringContent() {
         <Card className="border-dashed">
           <CardContent className="pt-4 pb-4">
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
-              <Select value={filters.type} onValueChange={v => setFilters(f => ({ ...f, type: v === 'all' ? '' : v as ActionTypeKey }))}>
-                <SelectTrigger data-testid="filter-type"><SelectValue placeholder="All Modules" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Modules</SelectItem>
-                  {ACTION_TYPES.map(at => <SelectItem key={at.key} value={at.key}>{at.label}</SelectItem>)}
-                </SelectContent>
-              </Select>
               <Select value={filters.status} onValueChange={v => setFilters(f => ({ ...f, status: v === 'all' ? '' : v as DashboardStatus }))}>
                 <SelectTrigger data-testid="filter-status"><SelectValue placeholder="All Statuses" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Statuses</SelectItem>
                   {Object.entries(STATUS_CFG).map(([k, v]) => <SelectItem key={k} value={k}>{v.label}</SelectItem>)}
+                </SelectContent>
+              </Select>
+              <Select value={filters.type} onValueChange={v => setFilters(f => ({ ...f, type: v === 'all' ? '' : v as ActionTypeKey }))}>
+                <SelectTrigger data-testid="filter-type"><SelectValue placeholder="All Modules" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Modules</SelectItem>
+                  {ACTION_TYPES.map(at => <SelectItem key={at.key} value={at.key}>{at.label}</SelectItem>)}
                 </SelectContent>
               </Select>
               <div className="relative">
