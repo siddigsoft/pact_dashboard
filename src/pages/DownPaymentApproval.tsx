@@ -3,12 +3,12 @@ import { useNavigate } from 'react-router-dom';
 import { useUser } from '@/context/user/UserContext';
 import { useSuperAdmin } from '@/context/superAdmin/SuperAdminContext';
 import { useDownPayment } from '@/context/downPayment/DownPaymentContext';
-import { useDebounce } from '@/hooks/useDebounce';
 import { DownPaymentApprovalPanel } from '@/components/downPayment/DownPaymentApprovalPanel';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -20,10 +20,12 @@ import {
   TrendingUp, Receipt, Wallet, MapPin, FolderKanban, ClipboardList,
   ClipboardCheck, FileText, Search, ChevronDown, ChevronRight,
   Calendar, Building2, User, CheckCircle2, XCircle, BarChart3,
+  Filter, X,
 } from 'lucide-react';
 import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
 import { format, parseISO } from 'date-fns';
-import type { DownPaymentRequest } from '@/types/down-payment';
+import type { DownPaymentRequest, DownPaymentFilter } from '@/types/down-payment';
+import { filterDownPayments } from '@/utils/downPaymentExport';
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
@@ -382,11 +384,9 @@ export default function DownPaymentApproval() {
   const [selectedTier, setSelectedTier] = useState<'tier1' | 'tier2'>(isAdmin ? 'tier2' : 'tier1');
   const [viewTab, setViewTab] = useState('approval');
 
-  // ── shared filters (used across all analytics tabs) ──────────────────────
-  const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState('all');
-  const [mmpFilter, setMmpFilter] = useState('all');
-  const debouncedSearch = useDebounce(search, 300);
+  // ── shared full filter (applied to all tabs + approval panel) ───────────
+  const [filters, setFilters] = useState<DownPaymentFilter>({});
+  const [showFilters, setShowFilters] = useState(true);
 
   // ── disbursement tracker specific filters ─────────────────────────────────
   const [disbState, setDisbState] = useState('all');
@@ -404,33 +404,18 @@ export default function DownPaymentApproval() {
 
   const getProfileName = useCallback((id: string) => userMap.get(id) || 'Unknown', [userMap]);
 
-  // Unique MMP names for filter dropdown
-  const uniqueMmps = useMemo(() =>
-    [...new Set(requests.map(r => r.mmpName).filter(Boolean))].sort() as string[],
-    [requests]);
+  // Filter option lists (computed from all requests)
+  const uniqueHubs = useMemo(() => [...new Set(requests.map(r => r.hubName).filter(Boolean))].sort() as string[], [requests]);
+  const uniqueStates = useMemo(() => [...new Set(requests.map(r => r.stateName).filter(Boolean))].sort() as string[], [requests]);
+  const uniqueLocalities = useMemo(() => [...new Set(requests.map(r => r.localityName).filter(Boolean))].sort() as string[], [requests]);
+  const uniqueMmps = useMemo(() => [...new Set(requests.map(r => r.mmpName).filter(Boolean))].sort() as string[], [requests]);
+  const uniqueRequesters = useMemo(() => {
+    const ids = new Set(requests.map(r => r.requestedBy).filter(Boolean));
+    return users.filter(u => ids.has(u.id)).map(u => ({ id: u.id, name: u.fullName || u.email || 'Unknown' })).sort((a, b) => a.name.localeCompare(b.name));
+  }, [requests, users]);
 
-  // Filtered requests for analytics tabs
-  const filteredRequests = useMemo(() => {
-    return requests.filter(req => {
-      if (statusFilter !== 'all' && req.status !== statusFilter) return false;
-      if (mmpFilter !== 'all') {
-        const idMatch = ((req as any).mmpId && (req as any).mmpId === mmpFilter) || ((req as any).mmpSiteEntryId && (req as any).mmpSiteEntryId === mmpFilter) || ((req as any).mmp_file_id && (req as any).mmp_file_id === mmpFilter);
-        const nameMatch = (req.mmpName || '') === mmpFilter;
-        if (!idMatch && !nameMatch) return false;
-      }
-      if (debouncedSearch) {
-        const q = debouncedSearch.toLowerCase();
-        if (
-          !req.siteName?.toLowerCase().includes(q) &&
-          !(req.requestedByName || getProfileName(req.requestedBy)).toLowerCase().includes(q) &&
-          !req.hubName?.toLowerCase().includes(q) &&
-          !req.stateName?.toLowerCase().includes(q) &&
-          !req.mmpName?.toLowerCase().includes(q)
-        ) return false;
-      }
-      return true;
-    });
-  }, [requests, statusFilter, mmpFilter, debouncedSearch, getProfileName]);
+  // Filtered requests shared across all analytics tabs
+  const filteredRequests = useMemo(() => filterDownPayments(requests, filters), [requests, filters]);
 
   // Group helper
   function buildGroups(keyFn: (r: DownPaymentRequest) => string): GroupRow[] {
@@ -452,7 +437,7 @@ export default function DownPaymentApproval() {
   const byProject = useMemo(() => buildGroups(projectLabel), [filteredRequests]);
   const byMMP = useMemo(() => buildGroups(r => r.mmpName || 'Unknown MMP'), [filteredRequests]);
 
-  const activeFilterCount = [statusFilter !== 'all', mmpFilter !== 'all', !!debouncedSearch].filter(Boolean).length;
+  const activeFilterCount = Object.values(filters).filter(v => v !== undefined && v !== '' && !(Array.isArray(v) && v.length === 0)).length;
 
   if (!isSupervisor && !isAdmin && !isFOM) {
     return (
@@ -539,51 +524,112 @@ export default function DownPaymentApproval() {
         ]}
       />
 
-      {/* ── Shared filter bar (applies to all analytics tabs) ── */}
-      <Card className="p-3">
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="relative flex-1 min-w-[200px]">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
-            <Input
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              placeholder="Search site, team member, hub, state…"
-              className="pl-8 h-8 text-sm"
-              data-testid="input-down-filter-search"
-            />
-          </div>
-          <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="h-8 text-sm w-[200px]" data-testid="select-down-filter-status">
-              <SelectValue placeholder="All statuses" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Statuses</SelectItem>
-              <SelectItem value="pending_supervisor">Pending Supervisor</SelectItem>
-              <SelectItem value="pending_admin">Pending Admin</SelectItem>
-              <SelectItem value="approved">Approved</SelectItem>
-              <SelectItem value="partially_paid">Partially Paid</SelectItem>
-              <SelectItem value="fully_paid">Fully Paid</SelectItem>
-              <SelectItem value="rejected">Rejected</SelectItem>
-              <SelectItem value="cancelled">Cancelled</SelectItem>
-            </SelectContent>
-          </Select>
-          <Select value={mmpFilter} onValueChange={setMmpFilter}>
-            <SelectTrigger className="h-8 text-sm w-[180px]" data-testid="select-down-filter-mmp">
-              <SelectValue placeholder="All MMPs" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All MMPs</SelectItem>
-              {uniqueMmps.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}
-            </SelectContent>
-          </Select>
-          {activeFilterCount > 0 && (
-            <Button variant="ghost" size="sm" className="h-8 text-xs text-muted-foreground gap-1" onClick={() => { setSearch(''); setStatusFilter('all'); setMmpFilter('all'); }} data-testid="button-down-clear-filters">
-              Clear ({activeFilterCount})
-            </Button>
-          )}
-          <Badge variant="secondary" className="text-xs ml-auto">{filteredRequests.length} of {requests.length} requests</Badge>
+      {/* ── Full filter panel (primary filter for all tabs) ── */}
+      <div>
+        <div className="flex items-center justify-between mb-2">
+          <Button
+            variant={showFilters ? 'secondary' : 'outline'}
+            size="sm"
+            onClick={() => setShowFilters(!showFilters)}
+            data-testid="button-toggle-page-filters"
+          >
+            <Filter className="h-4 w-4 mr-1.5" />
+            Filters
+            {activeFilterCount > 0 && <Badge variant="secondary" className="ml-1.5">{activeFilterCount} active</Badge>}
+          </Button>
+          <Badge variant="secondary" className="text-xs">{filteredRequests.length} of {requests.length} requests</Badge>
         </div>
-      </Card>
+
+        {showFilters && (
+          <Card data-testid="card-page-filters">
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="font-medium flex items-center gap-2 text-sm">
+                  <Filter className="h-4 w-4" />Filters
+                </h3>
+                {activeFilterCount > 0 && (
+                  <Button variant="ghost" size="sm" onClick={() => setFilters({})} data-testid="button-clear-page-filters">
+                    <X className="h-4 w-4 mr-1" />Clear
+                  </Button>
+                )}
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div>
+                  <Label className="text-xs">Search</Label>
+                  <div className="relative">
+                    <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      placeholder="Site, name, hub, state…"
+                      value={filters.searchTerm || ''}
+                      onChange={e => setFilters(f => ({ ...f, searchTerm: e.target.value || undefined }))}
+                      className="pl-8"
+                      data-testid="input-page-filter-search"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <Label className="text-xs">Hub</Label>
+                  <Select value={filters.hubId || 'all'} onValueChange={v => setFilters(f => ({ ...f, hubId: v === 'all' ? undefined : v }))}>
+                    <SelectTrigger data-testid="select-page-filter-hub"><SelectValue placeholder="All Hubs" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Hubs</SelectItem>
+                      {uniqueHubs.map(h => <SelectItem key={h} value={h}>{h}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label className="text-xs">State</Label>
+                  <Select value={filters.stateName || 'all'} onValueChange={v => setFilters(f => ({ ...f, stateName: v === 'all' ? undefined : v }))}>
+                    <SelectTrigger data-testid="select-page-filter-state"><SelectValue placeholder="All States" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All States</SelectItem>
+                      {uniqueStates.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label className="text-xs">Locality</Label>
+                  <Select value={filters.localityName || 'all'} onValueChange={v => setFilters(f => ({ ...f, localityName: v === 'all' ? undefined : v }))}>
+                    <SelectTrigger data-testid="select-page-filter-locality"><SelectValue placeholder="All Localities" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Localities</SelectItem>
+                      {uniqueLocalities.map(l => <SelectItem key={l} value={l}>{l}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label className="text-xs">Data Collector</Label>
+                  <Select value={filters.dataCollectorId || 'all'} onValueChange={v => setFilters(f => ({ ...f, dataCollectorId: v === 'all' ? undefined : v }))}>
+                    <SelectTrigger data-testid="select-page-filter-collector"><SelectValue placeholder="All Collectors" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Collectors</SelectItem>
+                      {uniqueRequesters.map(r => <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label className="text-xs">MMP</Label>
+                  <Select value={filters.mmpName || 'all'} onValueChange={v => setFilters(f => ({ ...f, mmpName: v === 'all' ? undefined : v }))}>
+                    <SelectTrigger data-testid="select-page-filter-mmp"><SelectValue placeholder="All MMPs" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All MMPs</SelectItem>
+                      {uniqueMmps.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label className="text-xs">Date From</Label>
+                  <Input type="date" value={filters.dateFrom || ''} onChange={e => setFilters(f => ({ ...f, dateFrom: e.target.value || undefined }))} data-testid="input-page-filter-date-from" />
+                </div>
+                <div>
+                  <Label className="text-xs">Date To</Label>
+                  <Input type="date" value={filters.dateTo || ''} onChange={e => setFilters(f => ({ ...f, dateTo: e.target.value || undefined }))} data-testid="input-page-filter-date-to" />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+      </div>
 
       {/* ── View tabs ── */}
       <Tabs value={viewTab} onValueChange={setViewTab} className="space-y-4">
@@ -620,7 +666,7 @@ export default function DownPaymentApproval() {
               )}
             </AlertDescription>
           </Alert>
-          <DownPaymentApprovalPanel userRole={approvalRole} />
+          <DownPaymentApprovalPanel userRole={approvalRole} externalFilters={filters} hideFiltersBar={true} />
         </TabsContent>
 
         {/* ─── By State ─── */}

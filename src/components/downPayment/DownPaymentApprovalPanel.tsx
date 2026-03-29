@@ -89,6 +89,8 @@ import { Mail, Wallet, Upload, ImageIcon } from 'lucide-react';
 
 interface DownPaymentApprovalPanelProps {
   userRole: 'supervisor' | 'admin';
+  externalFilters?: DownPaymentFilter;
+  hideFiltersBar?: boolean;
 }
 
 const STATUS_OPTIONS: { value: DownPaymentStatus; label: string }[] = [
@@ -204,7 +206,7 @@ function BulkSummaryTable({ requests, users }: {
   );
 }
 
-export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelProps) {
+export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFiltersBar }: DownPaymentApprovalPanelProps) {
   const { currentUser, users } = useUser();
   const { isSuperAdmin } = useSuperAdmin();
   const { requests, loading, refreshRequests, supervisorApprove, supervisorReject, adminApprove, adminReject, processPayment, bulkApprove, revertToPending, confirmReceipt, reportNotReceived, resendPaymentNotification, deleteRequest, editRequest } = useDownPayment();
@@ -327,7 +329,8 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
     }).sort((a, b) => a.name.localeCompare(b.name));
   }, [requests, users]);
 
-  const filteredRequests = useMemo(() => filterDownPayments(requests, filters), [requests, filters]);
+  const effectiveFilters = externalFilters ?? filters;
+  const filteredRequests = useMemo(() => filterDownPayments(requests, effectiveFilters), [requests, effectiveFilters]);
 
   const approvedForPayment = useMemo(() =>
     filteredRequests.filter(r => r.status === 'approved'),
@@ -2583,18 +2586,20 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
 
       <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
         <div className="flex items-center gap-2">
-          <Button
-            variant={showFilters ? 'secondary' : 'outline'}
-            size="sm"
-            onClick={() => setShowFilters(!showFilters)}
-            data-testid="button-toggle-filters"
-          >
-            <Filter className="h-4 w-4 mr-1" />
-            Filters
-            {Object.values(filters).some(v => v !== undefined && v !== '') && (
-              <Badge variant="secondary" className="ml-1">Active</Badge>
-            )}
-          </Button>
+          {!hideFiltersBar && (
+            <Button
+              variant={showFilters ? 'secondary' : 'outline'}
+              size="sm"
+              onClick={() => setShowFilters(!showFilters)}
+              data-testid="button-toggle-filters"
+            >
+              <Filter className="h-4 w-4 mr-1" />
+              Filters
+              {Object.values(filters).some(v => v !== undefined && v !== '') && (
+                <Badge variant="secondary" className="ml-1">Active</Badge>
+              )}
+            </Button>
+          )}
           <Button variant="outline" size="sm" onClick={() => refreshRequests()} disabled={loading} data-testid="button-refresh">
             <RefreshCw className={`h-4 w-4 mr-1 ${loading ? 'animate-spin' : ''}`} />
             Refresh
@@ -2648,7 +2653,7 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
         </div>
       </div>
 
-      {showFilters && <FilterPanel />}
+      {!hideFiltersBar && showFilters && <FilterPanel />}
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
         <TabsList className="grid w-full grid-cols-4 mb-4">
