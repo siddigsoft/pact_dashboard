@@ -225,11 +225,22 @@ function MonitoringContent() {
         if (!overrideMap.has(key)) overrideMap.set(key, ov);
       }
 
-      // Step 3: Batch-fetch sender contact info (profiles)
-      const senderIds = [...new Set(rows.map(r => r.sender_id).filter(Boolean))];
+      // Step 3: Batch-fetch sender contact info + full_name (profiles)
+      const isUUIDStr = (s: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-/i.test(s);
+      const rawSenderIds = [...new Set(rows.map(r => r.sender_id).filter(Boolean))];
+      // Also collect any accepted_by / monitoring_by UUIDs from mmp_site_entry details
+      // so we can resolve names for records whose sender_id wasn't a real profile id
+      const extraUUIDs = rows
+        .filter(r => r.action_type === 'mmp_site_entry')
+        .flatMap(r => {
+          const d = (r.details ?? {}) as Record<string, unknown>;
+          return [String(d.accepted_by ?? ''), String(d.monitoring_by ?? '')]
+            .filter(v => v && isUUIDStr(v));
+        });
+      const senderIds = [...new Set([...rawSenderIds, ...extraUUIDs])];
       const { data: profiles } = senderIds.length > 0
-        ? await supabase.from('profiles').select('id, email, phone').in('id', senderIds)
-        : { data: [] as Array<{ id: string; email: string | null; phone: string | null }> };
+        ? await supabase.from('profiles').select('id, full_name, email, phone').in('id', senderIds)
+        : { data: [] as Array<{ id: string; full_name: string | null; email: string | null; phone: string | null }> };
       const profileMap = new Map((profiles ?? []).map(p => [p.id, p]));
 
       // Step 4: Merge and filter
@@ -238,11 +249,22 @@ function MonitoringContent() {
           const key = `${r.action_type}:${r.action_id}`;
           const ov = overrideMap.get(key);
           const profile = profileMap.get(r.sender_id);
+          // Resolve sender_name: prefer freshly-fetched profile full_name;
+          // for mmp_site_entry, also try accepted_by profile lookup
+          let resolvedName = profile?.full_name ?? r.sender_name ?? null;
+          if (r.action_type === 'mmp_site_entry' && (!resolvedName || isUUIDStr(resolvedName))) {
+            const d = (r.details ?? {}) as Record<string, unknown>;
+            const abProfile = profileMap.get(String(d.accepted_by ?? ''));
+            resolvedName = abProfile?.full_name ?? resolvedName;
+          }
+          // Never surface a raw UUID or a site name as the display name
+          const finalName = (resolvedName && !isUUIDStr(resolvedName)) ? resolvedName : 'Unknown';
           return {
             ...r,
             action_type: r.action_type as ActionTypeKey,
             dashboard_status: (ov?.status ?? 'received') as DashboardStatus,
             latest_notes: ov?.notes ?? null,
+            sender_name: finalName,
             sender_email: profile?.email ?? null,
             sender_phone: profile?.phone ?? null,
             details: (r.details ?? {}) as Record<string, unknown>,
