@@ -1460,38 +1460,42 @@ function ModuleSummaryCard({
       {/* ── Detail rows — visible only when expanded ── */}
       {open && (
         <div className="border-t border-border/60 bg-card px-2 py-2">
-          {at.key === 'mmp_site_entry'
-            ? <HubStateEnumeratorTree
-                items={items} selectedIds={selectedIds} expandedId={expandedId}
-                onToggleSelect={onToggleSelect} onToggleExpand={onToggleExpand}
-                onStatusChange={onStatusChange} onWorkflow={onWorkflow}
-                workflowPending={workflowPending}
-              />
-            : <div className="flex flex-col gap-1">
-                {items.map(action => (
-                  <ActionRow
-                    key={action.action_id}
-                    action={action}
-                    selected={selectedIds.has(action.action_id)}
-                    expanded={expandedId === action.action_id}
-                    onToggleSelect={() => onToggleSelect(action.action_id)}
-                    onToggleExpand={() => onToggleExpand(action.action_id)}
-                    onStatusChange={(status, label) => onStatusChange(action, status, label)}
-                    onWorkflow={(wa, wl) => onWorkflow(action, wa, wl)}
-                    workflowPending={workflowPending}
-                  />
-                ))}
-              </div>
-          }
+          <StatusHubTree
+            items={items} selectedIds={selectedIds} expandedId={expandedId}
+            onToggleSelect={onToggleSelect} onToggleExpand={onToggleExpand}
+            onStatusChange={onStatusChange} onWorkflow={onWorkflow}
+            workflowPending={workflowPending}
+          />
         </div>
       )}
     </div>
   );
 }
 
-// ── Hub → State → Enumerator tree (MMP Site Entries only) ─────────────────────
+// ── Status → Hub tree (all module cards) ──────────────────────────────────────
 
-function HubStateEnumeratorTree({
+const STATUS_CHIP_COLORS: Record<string, string> = {
+  pending:              'bg-amber-100 text-amber-800 border-amber-200',
+  dispatched:           'bg-blue-100 text-blue-800 border-blue-200',
+  accepted:             'bg-emerald-100 text-emerald-800 border-emerald-200',
+  completed:            'bg-green-100 text-green-800 border-green-200',
+  approved:             'bg-green-100 text-green-800 border-green-200',
+  rejected:             'bg-red-100 text-red-800 border-red-200',
+  returned:             'bg-orange-100 text-orange-800 border-orange-200',
+  returnedtofom:        'bg-orange-100 text-orange-800 border-orange-200',
+  returnedtocoordinator:'bg-orange-100 text-orange-800 border-orange-200',
+  forwarded:            'bg-violet-100 text-violet-800 border-violet-200',
+  forwardedtocoordinator:'bg-violet-100 text-violet-800 border-violet-200',
+  verified:             'bg-teal-100 text-teal-800 border-teal-200',
+  costed:               'bg-cyan-100 text-cyan-800 border-cyan-200',
+  permitsattached:      'bg-sky-100 text-sky-800 border-sky-200',
+};
+function statusChipClass(raw: string) {
+  const k = raw.toLowerCase().replace(/[\s_-]/g, '');
+  return STATUS_CHIP_COLORS[k] ?? 'bg-slate-100 text-slate-700 border-slate-200';
+}
+
+function StatusHubTree({
   items, selectedIds, expandedId,
   onToggleSelect, onToggleExpand, onStatusChange, onWorkflow, workflowPending,
 }: {
@@ -1504,125 +1508,112 @@ function HubStateEnumeratorTree({
   onWorkflow: (action: DashboardAction, wa: string, wl: string) => void;
   workflowPending: boolean;
 }) {
-  const [openHubs, setOpenHubs] = useState<Set<string>>(() => new Set());
-  const [openStates, setOpenStates] = useState<Set<string>>(() => new Set());
-  const [openEnumerators, setOpenEnumerators] = useState<Set<string>>(() => new Set());
+  const [openStatuses, setOpenStatuses]   = useState<Set<string>>(() => new Set());
+  const [openHubs,     setOpenHubs]       = useState<Set<string>>(() => new Set());
 
-  const hub = (a: DashboardAction) => String((a.details as Record<string,unknown>)?.hub_office ?? '—');
-  const state = (a: DashboardAction) => String((a.details as Record<string,unknown>)?.state ?? '—');
-  const enumerator = (a: DashboardAction) => a.sender_name || 'Unknown';
+  const getHub = (a: DashboardAction) =>
+    String((a.details as Record<string, unknown>)?.hub_office ?? '—');
 
-  // Build Hub → State → Enumerator → items map
-  const hubMap = useMemo(() => {
-    const map = new Map<string, Map<string, Map<string, DashboardAction[]>>>();
+  // Build Status → Hub → items map
+  const statusMap = useMemo(() => {
+    const map = new Map<string, Map<string, DashboardAction[]>>();
     for (const a of items) {
-      const h = hub(a), s = state(a), e = enumerator(a);
-      if (!map.has(h)) map.set(h, new Map());
-      const sm = map.get(h)!;
-      if (!sm.has(s)) sm.set(s, new Map());
-      const em = sm.get(s)!;
-      if (!em.has(e)) em.set(e, []);
-      em.get(e)!.push(a);
+      const s = a.native_status || 'unknown';
+      const h = getHub(a);
+      if (!map.has(s)) map.set(s, new Map());
+      const hm = map.get(s)!;
+      if (!hm.has(h)) hm.set(h, []);
+      hm.get(h)!.push(a);
     }
-    // Sort hubs, states, enumerators alphabetically
-    return new Map([...map.entries()].sort(([a],[b]) => a.localeCompare(b)));
+    // Sort statuses by count desc, hubs alphabetically
+    return new Map(
+      [...map.entries()]
+        .sort(([, am], [, bm]) =>
+          [...bm.values()].flat().length - [...am.values()].flat().length)
+    );
   }, [items]);
 
-  // Auto-expand if only 1 hub
+  // Auto-expand first status when data loads
   useEffect(() => {
-    if (hubMap.size === 1) {
-      const [onlyHub] = hubMap.keys();
-      setOpenHubs(new Set([onlyHub]));
-    }
-  }, [hubMap]);
+    const [first] = statusMap.keys();
+    if (first) setOpenStatuses(new Set([first]));
+  }, [statusMap]);
 
-  const toggle = (key: string, setter: (fn: (prev: Set<string>) => Set<string>) => void) => {
+  const toggleSet = (key: string, setter: React.Dispatch<React.SetStateAction<Set<string>>>) =>
     setter(prev => { const n = new Set(prev); n.has(key) ? n.delete(key) : n.add(key); return n; });
-  };
 
   return (
     <div className="flex flex-col gap-1">
-      {[...hubMap.entries()].map(([hubName, stateMap]) => {
-        const hubTotal = [...stateMap.values()].flatMap(em => [...em.values()]).flat().length;
-        const hubOpen = openHubs.has(hubName);
+      {[...statusMap.entries()].map(([statusName, hubMap]) => {
+        const statusTotal = [...hubMap.values()].flat().length;
+        const statusOpen  = openStatuses.has(statusName);
+        const chipCls     = statusChipClass(statusName);
+
         return (
-          <div key={hubName} className="rounded-lg border border-border overflow-hidden">
-            {/* Hub header */}
+          <div key={statusName} className="rounded-lg border border-border overflow-hidden">
+            {/* Status header */}
             <button
               className="w-full flex items-center gap-2 px-3 py-2 bg-slate-50 hover:bg-slate-100 text-left transition-colors"
-              onClick={() => toggle(hubName, setOpenHubs)}
-              data-testid={`hub-group-${hubName}`}
+              onClick={() => toggleSet(statusName, setOpenStatuses)}
+              data-testid={`status-group-${statusName}`}
             >
-              {hubOpen ? <ChevronDown className="h-3.5 w-3.5 text-muted-foreground shrink-0" /> : <ChevronUp className="h-3.5 w-3.5 text-muted-foreground shrink-0 rotate-180" />}
-              <Database className="h-3.5 w-3.5 text-primary/70 shrink-0" />
-              <span className="text-sm font-bold flex-1 text-slate-800">{hubName}</span>
-              <span className="text-[10px] font-mono bg-primary/10 text-primary px-2 py-0.5 rounded-full">{hubTotal} sites</span>
+              {statusOpen
+                ? <ChevronDown className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                : <ChevronUp   className="h-3.5 w-3.5 text-muted-foreground shrink-0 rotate-180" />}
+              <span className={`text-[10px] font-semibold px-2 py-0.5 rounded border capitalize ${chipCls}`}>
+                {statusName.replace(/_/g, ' ')}
+              </span>
+              <span className="text-xs font-bold flex-1 text-slate-700 text-right">
+                {statusTotal} record{statusTotal !== 1 ? 's' : ''}
+              </span>
             </button>
 
-            {hubOpen && (
-              <div className="flex flex-col">
-                {[...stateMap.entries()].sort(([a],[b]) => a.localeCompare(b)).map(([stateName, enumMap]) => {
-                  const stateTotal = [...enumMap.values()].flat().length;
-                  const stateKey = `${hubName}::${stateName}`;
-                  const stateOpen = openStates.has(stateKey);
-                  return (
-                    <div key={stateKey} className="border-t border-border/50">
-                      {/* State header */}
-                      <button
-                        className="w-full flex items-center gap-2 px-4 py-1.5 bg-white hover:bg-blue-50/40 text-left transition-colors"
-                        onClick={() => toggle(stateKey, setOpenStates)}
-                        data-testid={`state-group-${stateKey}`}
-                      >
-                        {stateOpen ? <ChevronDown className="h-3 w-3 text-muted-foreground shrink-0" /> : <ChevronUp className="h-3 w-3 text-muted-foreground shrink-0 rotate-180" />}
-                        <MapPin className="h-3 w-3 text-blue-500 shrink-0" />
-                        <span className="text-xs font-semibold flex-1 text-slate-700">{stateName}</span>
-                        <span className="text-[9px] font-mono bg-blue-50 text-blue-700 border border-blue-200 px-1.5 py-0.5 rounded">{stateTotal}</span>
-                      </button>
+            {statusOpen && (
+              <div className="flex flex-col divide-y divide-border/40">
+                {[...hubMap.entries()]
+                  .sort(([ha, ia], [hb, ib]) => ib.length - ia.length)
+                  .map(([hubName, actions]) => {
+                    const hubKey  = `${statusName}::${hubName}`;
+                    const hubOpen = openHubs.has(hubKey);
 
-                      {stateOpen && (
-                        <div className="flex flex-col">
-                          {[...enumMap.entries()].sort(([a],[b]) => a.localeCompare(b)).map(([enumName, actions]) => {
-                            const enumKey = `${stateKey}::${enumName}`;
-                            const enumOpen = openEnumerators.has(enumKey);
-                            return (
-                              <div key={enumKey} className="border-t border-border/30">
-                                {/* Enumerator header */}
-                                <button
-                                  className="w-full flex items-center gap-2 px-6 py-1.5 bg-slate-50/50 hover:bg-violet-50/30 text-left transition-colors"
-                                  onClick={() => toggle(enumKey, setOpenEnumerators)}
-                                  data-testid={`enum-group-${enumKey}`}
-                                >
-                                  {enumOpen ? <ChevronDown className="h-3 w-3 text-muted-foreground shrink-0" /> : <ChevronUp className="h-3 w-3 text-muted-foreground shrink-0 rotate-180" />}
-                                  <User className="h-3 w-3 text-violet-500 shrink-0" />
-                                  <span className="text-xs font-medium flex-1 text-slate-700">{enumName}</span>
-                                  <span className="text-[9px] font-mono bg-violet-50 text-violet-700 border border-violet-200 px-1.5 py-0.5 rounded">{actions.length}</span>
-                                </button>
+                    return (
+                      <div key={hubKey}>
+                        {/* Hub sub-header */}
+                        <button
+                          className="w-full flex items-center gap-2 px-4 py-1.5 bg-white hover:bg-blue-50/40 text-left transition-colors"
+                          onClick={() => toggleSet(hubKey, setOpenHubs)}
+                          data-testid={`hub-group-${hubKey}`}
+                        >
+                          {hubOpen
+                            ? <ChevronDown className="h-3 w-3 text-muted-foreground shrink-0" />
+                            : <ChevronUp   className="h-3 w-3 text-muted-foreground shrink-0 rotate-180" />}
+                          <Database className="h-3 w-3 text-primary/60 shrink-0" />
+                          <span className="text-xs font-semibold flex-1 text-slate-700">{hubName}</span>
+                          <span className="text-[9px] font-mono bg-primary/10 text-primary px-2 py-0.5 rounded-full">
+                            {actions.length}
+                          </span>
+                        </button>
 
-                                {enumOpen && (
-                                  <div className="flex flex-col gap-0.5 pl-1">
-                                    {actions.map(action => (
-                                      <ActionRow
-                                        key={action.action_id}
-                                        action={action}
-                                        selected={selectedIds.has(action.action_id)}
-                                        expanded={expandedId === action.action_id}
-                                        onToggleSelect={() => onToggleSelect(action.action_id)}
-                                        onToggleExpand={() => onToggleExpand(action.action_id)}
-                                        onStatusChange={(status, label) => onStatusChange(action, status, label)}
-                                        onWorkflow={(wa, wl) => onWorkflow(action, wa, wl)}
-                                        workflowPending={workflowPending}
-                                      />
-                                    ))}
-                                  </div>
-                                )}
-                              </div>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
+                        {hubOpen && (
+                          <div className="flex flex-col gap-0.5 px-1 py-1 bg-slate-50/40">
+                            {actions.map(action => (
+                              <ActionRow
+                                key={action.action_id}
+                                action={action}
+                                selected={selectedIds.has(action.action_id)}
+                                expanded={expandedId === action.action_id}
+                                onToggleSelect={() => onToggleSelect(action.action_id)}
+                                onToggleExpand={() => onToggleExpand(action.action_id)}
+                                onStatusChange={(status, label) => onStatusChange(action, status, label)}
+                                onWorkflow={(wa, wl) => onWorkflow(action, wa, wl)}
+                                workflowPending={workflowPending}
+                              />
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
               </div>
             )}
           </div>
