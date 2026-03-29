@@ -23,7 +23,7 @@ import {
   Shield, RefreshCw, Download, Search, CheckCircle, XCircle,
   Clock, AlertTriangle, User, Activity, Eye, Layers, TrendingUp,
   AlertCircle, CheckSquare, X, Loader2, Calendar, Mail, Phone,
-  Zap, Database, BarChart2, ChevronDown, ChevronUp,
+  Zap, Database, BarChart2, ChevronDown, ChevronUp, ChevronRight,
   Circle, ArrowUpRight, Timer, Filter, Info, MapPin, ArrowRight,
   FileText, CheckCircle2, CalendarDays, Bell, Send, Users,
 } from 'lucide-react';
@@ -1533,14 +1533,41 @@ function StatusHubTree({
     );
   }, [items]);
 
-  // Auto-expand first status when data loads
-  useEffect(() => {
-    const [first] = statusMap.keys();
-    if (first) setOpenStatuses(new Set([first]));
-  }, [statusMap]);
+  // When status opens → auto-open all its hub keys; when it closes → remove them
+  const toggleStatus = (statusName: string, hubs: Map<string, DashboardAction[]>) => {
+    setOpenStatuses(prev => {
+      const n = new Set(prev);
+      if (n.has(statusName)) {
+        n.delete(statusName);
+        // collapse all hub keys for this status
+        setOpenHubs(ph => {
+          const nh = new Set(ph);
+          for (const hubName of hubs.keys()) nh.delete(`${statusName}::${hubName}`);
+          return nh;
+        });
+      } else {
+        n.add(statusName);
+        // auto-open all hubs within this status so records are immediately visible
+        setOpenHubs(ph => {
+          const nh = new Set(ph);
+          for (const hubName of hubs.keys()) nh.add(`${statusName}::${hubName}`);
+          return nh;
+        });
+      }
+      return n;
+    });
+  };
 
-  const toggleSet = (key: string, setter: React.Dispatch<React.SetStateAction<Set<string>>>) =>
-    setter(prev => { const n = new Set(prev); n.has(key) ? n.delete(key) : n.add(key); return n; });
+  const toggleHub = (hubKey: string) =>
+    setOpenHubs(prev => { const n = new Set(prev); n.has(hubKey) ? n.delete(hubKey) : n.add(hubKey); return n; });
+
+  // Auto-expand first (largest) status + its hubs on load
+  useEffect(() => {
+    const [[first, firstHubs] = []] = statusMap.entries();
+    if (!first || !firstHubs) return;
+    setOpenStatuses(new Set([first]));
+    setOpenHubs(new Set([...firstHubs.keys()].map(h => `${first}::${h}`)));
+  }, [statusMap]);
 
   return (
     <div className="flex flex-col gap-1">
@@ -1554,12 +1581,12 @@ function StatusHubTree({
             {/* Status header */}
             <button
               className="w-full flex items-center gap-2 px-3 py-2 bg-slate-50 hover:bg-slate-100 text-left transition-colors"
-              onClick={() => toggleSet(statusName, setOpenStatuses)}
+              onClick={() => toggleStatus(statusName, hubMap)}
               data-testid={`status-group-${statusName}`}
             >
               {statusOpen
-                ? <ChevronDown className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                : <ChevronUp   className="h-3.5 w-3.5 text-muted-foreground shrink-0 rotate-180" />}
+                ? <ChevronDown  className="h-3.5 w-3.5 text-violet-500 shrink-0" />
+                : <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />}
               <span className={`text-[10px] font-semibold px-2 py-0.5 rounded border capitalize ${chipCls}`}>
                 {statusName.replace(/_/g, ' ')}
               </span>
@@ -1571,7 +1598,7 @@ function StatusHubTree({
             {statusOpen && (
               <div className="flex flex-col divide-y divide-border/40">
                 {[...hubMap.entries()]
-                  .sort(([ha, ia], [hb, ib]) => ib.length - ia.length)
+                  .sort(([, ia], [, ib]) => ib.length - ia.length)
                   .map(([hubName, actions]) => {
                     const hubKey  = `${statusName}::${hubName}`;
                     const hubOpen = openHubs.has(hubKey);
@@ -1581,12 +1608,12 @@ function StatusHubTree({
                         {/* Hub sub-header */}
                         <button
                           className="w-full flex items-center gap-2 px-4 py-1.5 bg-white hover:bg-blue-50/40 text-left transition-colors"
-                          onClick={() => toggleSet(hubKey, setOpenHubs)}
+                          onClick={() => toggleHub(hubKey)}
                           data-testid={`hub-group-${hubKey}`}
                         >
                           {hubOpen
-                            ? <ChevronDown className="h-3 w-3 text-muted-foreground shrink-0" />
-                            : <ChevronUp   className="h-3 w-3 text-muted-foreground shrink-0 rotate-180" />}
+                            ? <ChevronDown  className="h-3 w-3 text-blue-400 shrink-0" />
+                            : <ChevronRight className="h-3 w-3 text-muted-foreground shrink-0" />}
                           <Database className="h-3 w-3 text-primary/60 shrink-0" />
                           <span className="text-xs font-semibold flex-1 text-slate-700">{hubName}</span>
                           <span className="text-[9px] font-mono bg-primary/10 text-primary px-2 py-0.5 rounded-full">
