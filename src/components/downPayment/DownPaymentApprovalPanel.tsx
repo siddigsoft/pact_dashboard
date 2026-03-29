@@ -2370,12 +2370,28 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
         <CardContent className="p-4">
           <div className="text-2xl font-bold" data-testid="text-stats-total-count">{stats.counts.total}</div>
           <div className="text-sm text-muted-foreground">Total Requests</div>
+          {(stats.counts.rejected > 0 || stats.counts.cancelled > 0) && (
+            <div className="text-xs text-muted-foreground mt-1 flex items-center gap-1 flex-wrap">
+              {stats.counts.rejected > 0 && (
+                <span className="text-red-500 dark:text-red-400">{stats.counts.rejected} rejected</span>
+              )}
+              {stats.counts.rejected > 0 && stats.counts.cancelled > 0 && <span>·</span>}
+              {stats.counts.cancelled > 0 && (
+                <span className="text-gray-500">{stats.counts.cancelled} cancelled</span>
+              )}
+            </div>
+          )}
         </CardContent>
       </Card>
       <Card data-testid="card-stats-pending">
         <CardContent className="p-4">
           <div className="text-2xl font-bold text-yellow-600" data-testid="text-stats-pending-count">{stats.counts.pendingSupervisor + stats.counts.pendingAdmin}</div>
           <div className="text-sm text-muted-foreground">Pending</div>
+          {stats.counts.pendingSupervisor > 0 && stats.counts.pendingAdmin > 0 && (
+            <div className="text-xs text-muted-foreground mt-1">
+              {stats.counts.pendingSupervisor} supervisor · {stats.counts.pendingAdmin} admin
+            </div>
+          )}
         </CardContent>
       </Card>
       <Card data-testid="card-stats-paid">

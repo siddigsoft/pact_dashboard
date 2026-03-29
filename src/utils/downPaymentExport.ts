@@ -453,6 +453,7 @@ export function getDownPaymentStats(requests: DownPaymentRequest[]) {
   const pendingAdmin = requests.filter(r => r.status === 'pending_admin').length;
   const approved = requests.filter(r => r.status === 'approved').length;
   const rejected = requests.filter(r => r.status === 'rejected').length;
+  const cancelled = requests.filter(r => r.status === 'cancelled').length;
   const partiallyPaid = requests.filter(r => r.status === 'partially_paid').length;
   const fullyPaid = requests.filter(r => r.status === 'fully_paid').length;
 
@@ -468,6 +469,7 @@ export function getDownPaymentStats(requests: DownPaymentRequest[]) {
       pendingAdmin,
       approved,
       rejected,
+      cancelled,
       partiallyPaid,
       fullyPaid,
     },
