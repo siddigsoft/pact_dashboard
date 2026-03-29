@@ -1511,6 +1511,7 @@ function StatusHubTree({
   const [openStatuses,   setOpenStatuses]   = useState<Set<string>>(() => new Set());
   const [openHubs,       setOpenHubs]       = useState<Set<string>>(() => new Set());
   const [openStates,     setOpenStates]     = useState<Set<string>>(() => new Set());
+  const [openLocalities, setOpenLocalities] = useState<Set<string>>(() => new Set());
   const [openCollectors, setOpenCollectors] = useState<Set<string>>(() => new Set());
 
   const getHub = (a: DashboardAction) => {
@@ -1546,9 +1547,13 @@ function StatusHubTree({
     return a.sender_name || 'Unknown';
   };
 
-  // Build Status → Hub → State → DataCollector → items
+  const getLocality = (a: DashboardAction) =>
+    String((a.details as Record<string, unknown>)?.locality ?? '—');
+
+  // Build Status → Hub → State → Locality → DataCollector → items
   type DCMap  = Map<string, DashboardAction[]>;
-  type StMap  = Map<string, DCMap>;
+  type LocMap = Map<string, DCMap>;
+  type StMap  = Map<string, LocMap>;
   type HubMap = Map<string, StMap>;
   type StsMap = Map<string, HubMap>;
 
@@ -1556,25 +1561,28 @@ function StatusHubTree({
     const map: StsMap = new Map();
     for (const a of items) {
       const s = a.native_status || 'unknown';
-      const h = getHub(a), st = getState(a), dc = getCollector(a);
-      if (!map.has(s))                          map.set(s, new Map());
-      if (!map.get(s)!.has(h))                  map.get(s)!.set(h, new Map());
-      if (!map.get(s)!.get(h)!.has(st))         map.get(s)!.get(h)!.set(st, new Map());
-      if (!map.get(s)!.get(h)!.get(st)!.has(dc)) map.get(s)!.get(h)!.get(st)!.set(dc, []);
-      map.get(s)!.get(h)!.get(st)!.get(dc)!.push(a);
+      const h = getHub(a), st = getState(a), loc = getLocality(a), dc = getCollector(a);
+      if (!map.has(s))                                    map.set(s, new Map());
+      if (!map.get(s)!.has(h))                            map.get(s)!.set(h, new Map());
+      if (!map.get(s)!.get(h)!.has(st))                   map.get(s)!.get(h)!.set(st, new Map());
+      if (!map.get(s)!.get(h)!.get(st)!.has(loc))         map.get(s)!.get(h)!.get(st)!.set(loc, new Map());
+      if (!map.get(s)!.get(h)!.get(st)!.get(loc)!.has(dc)) map.get(s)!.get(h)!.get(st)!.get(loc)!.set(dc, []);
+      map.get(s)!.get(h)!.get(st)!.get(loc)!.get(dc)!.push(a);
     }
-    const total = (hm: HubMap) => [...hm.values()].flatMap(sm => [...sm.values()]).flatMap(dm => [...dm.values()]).flat().length;
+    const total = (hm: HubMap) => [...hm.values()].flatMap(sm => [...sm.values()]).flatMap(lm => [...lm.values()]).flatMap(dm => [...dm.values()]).flat().length;
     return new Map([...map.entries()].sort(([, a], [, b]) => total(b) - total(a)));
   }, [items]);
 
   // ── key helpers ──────────────────────────────────────────────────────────────
-  const hKey  = (s: string, h: string)              => `${s}::${h}`;
-  const stKey = (s: string, h: string, st: string)  => `${s}::${h}::${st}`;
-  const dcKey = (s: string, h: string, st: string, dc: string) => `${s}::${h}::${st}::${dc}`;
+  const hKey   = (s: string, h: string)                                => `${s}::${h}`;
+  const stKey  = (s: string, h: string, st: string)                    => `${s}::${h}::${st}`;
+  const locKey = (s: string, h: string, st: string, loc: string)       => `${s}::${h}::${st}::${loc}`;
+  const dcKey  = (s: string, h: string, st: string, loc: string, dc: string) => `${s}::${h}::${st}::${loc}::${dc}`;
 
   const allHubKeys = (s: string, hm: HubMap) => [...hm.keys()].map(h => hKey(s, h));
   const allStKeys  = (s: string, h: string, sm: StMap)  => [...sm.keys()].map(st => stKey(s, h, st));
-  const allDcKeys  = (s: string, h: string, st: string, dm: DCMap) => [...dm.keys()].map(dc => dcKey(s, h, st, dc));
+  const allLocKeys = (s: string, h: string, st: string, lm: LocMap) => [...lm.keys()].map(loc => locKey(s, h, st, loc));
+  const allDcKeys  = (s: string, h: string, st: string, loc: string, dm: DCMap) => [...dm.keys()].map(dc => dcKey(s, h, st, loc, dc));
 
   // ── toggle helpers ──────────────────────────────────────────────────────────
   const removeFrom = (setter: React.Dispatch<React.SetStateAction<Set<string>>>, keys: string[]) =>
@@ -1588,7 +1596,10 @@ function StatusHubTree({
         removeFrom(setOpenHubs, allHubKeys(s, hm));
         for (const [h, sm] of hm) {
           removeFrom(setOpenStates, allStKeys(s, h, sm));
-          for (const [st, dm] of sm) removeFrom(setOpenCollectors, allDcKeys(s, h, st, dm));
+          for (const [st, lm] of sm) {
+            removeFrom(setOpenLocalities, allLocKeys(s, h, st, lm));
+            for (const [loc, dm] of lm) removeFrom(setOpenCollectors, allDcKeys(s, h, st, loc, dm));
+          }
         }
       }
       return n;
@@ -1602,18 +1613,34 @@ function StatusHubTree({
       opening ? n.add(k) : n.delete(k);
       if (!opening) {
         removeFrom(setOpenStates, allStKeys(s, h, sm));
-        for (const [st, dm] of sm) removeFrom(setOpenCollectors, allDcKeys(s, h, st, dm));
+        for (const [st, lm] of sm) {
+          removeFrom(setOpenLocalities, allLocKeys(s, h, st, lm));
+          for (const [loc, dm] of lm) removeFrom(setOpenCollectors, allDcKeys(s, h, st, loc, dm));
+        }
       }
       return n;
     });
   };
 
-  const toggleState = (s: string, h: string, st: string, dm: DCMap) => {
+  const toggleState = (s: string, h: string, st: string, lm: LocMap) => {
     const k = stKey(s, h, st);
     setOpenStates(prev => {
       const n = new Set(prev); const opening = !n.has(k);
       opening ? n.add(k) : n.delete(k);
-      if (!opening) removeFrom(setOpenCollectors, allDcKeys(s, h, st, dm));
+      if (!opening) {
+        removeFrom(setOpenLocalities, allLocKeys(s, h, st, lm));
+        for (const [loc, dm] of lm) removeFrom(setOpenCollectors, allDcKeys(s, h, st, loc, dm));
+      }
+      return n;
+    });
+  };
+
+  const toggleLocality = (s: string, h: string, st: string, loc: string, dm: DCMap) => {
+    const k = locKey(s, h, st, loc);
+    setOpenLocalities(prev => {
+      const n = new Set(prev); const opening = !n.has(k);
+      opening ? n.add(k) : n.delete(k);
+      if (!opening) removeFrom(setOpenCollectors, allDcKeys(s, h, st, loc, dm));
       return n;
     });
   };
@@ -1622,7 +1649,7 @@ function StatusHubTree({
     setOpenCollectors(prev => { const n = new Set(prev); n.has(k) ? n.delete(k) : n.add(k); return n; });
 
   // ── render ──────────────────────────────────────────────────────────────────
-  const stTotal = (hm: HubMap) => [...hm.values()].flatMap(sm => [...sm.values()]).flatMap(dm => [...dm.values()]).flat().length;
+  const stTotal = (hm: HubMap) => [...hm.values()].flatMap(sm => [...sm.values()]).flatMap(lm => [...lm.values()]).flatMap(dm => [...dm.values()]).flat().length;
 
   return (
     <div className="flex flex-col gap-1">
@@ -1644,9 +1671,10 @@ function StatusHubTree({
             {statusOpen && (
               <div className="flex flex-col divide-y divide-blue-100">
                 {[...hMap.entries()].sort(([, a], [, b]) =>
-                  [...b.values()].flatMap(dm => [...dm.values()]).flat().length - [...a.values()].flatMap(dm => [...dm.values()]).flat().length
+                  [...b.values()].flatMap(sm => [...sm.values()]).flatMap(lm => [...lm.values()]).flat().length -
+                  [...a.values()].flatMap(sm => [...sm.values()]).flatMap(lm => [...lm.values()]).flat().length
                 ).map(([hName, stMap]) => {
-                  const hubTotal = [...stMap.values()].flatMap(dm => [...dm.values()]).flat().length;
+                  const hubTotal = [...stMap.values()].flatMap(lm => [...lm.values()]).flatMap(dm => [...dm.values()]).flat().length;
                   const hubOpen  = openHubs.has(hKey(sName, hName));
                   return (
                     <div key={hKey(sName, hName)}>
@@ -1663,21 +1691,22 @@ function StatusHubTree({
                       {hubOpen && (
                         <div className="flex flex-col divide-y divide-emerald-100">
                           {[...stMap.entries()].sort(([, a], [, b]) =>
-                            [...b.values()].flat().length - [...a.values()].flat().length
-                          ).map(([stName, dcMap]) => {
-                            const stateTotal = [...dcMap.values()].flat().length;
+                            [...b.values()].flatMap(dm => [...dm.values()]).flat().length -
+                            [...a.values()].flatMap(dm => [...dm.values()]).flat().length
+                          ).map(([stName, locMap]) => {
+                            const stateTotal = [...locMap.values()].flatMap(dm => [...dm.values()]).flat().length;
                             const stOpen     = openStates.has(stKey(sName, hName, stName));
                             return (
                               <div key={stKey(sName, hName, stName)}>
 
                                 {/* ── State / Category — emerald ── */}
                                 {(() => {
-                                  const sampleAction = [...dcMap.values()][0]?.[0];
+                                  const sampleAction = [...locMap.values()][0] ? [...[...locMap.values()][0].values()][0]?.[0] : undefined;
                                   const isCategory = sampleAction?.action_type === 'operational_cost';
                                   const StateIcon = isCategory ? Layers : MapPin;
                                   return (
                                   <button className="w-full flex items-center gap-2 px-6 py-1.5 bg-emerald-50 hover:bg-emerald-100 border-l-4 border-l-emerald-400 text-left transition-colors"
-                                    onClick={() => toggleState(sName, hName, stName, dcMap)} data-testid={`state-group-${stKey(sName, hName, stName)}`}>
+                                    onClick={() => toggleState(sName, hName, stName, locMap)} data-testid={`state-group-${stKey(sName, hName, stName)}`}>
                                     {stOpen ? <ChevronDown className="h-3 w-3 text-emerald-600 shrink-0" /> : <ChevronRight className="h-3 w-3 text-emerald-500 shrink-0" />}
                                     <StateIcon className="h-3 w-3 text-emerald-600 shrink-0" />
                                     <span className="text-xs font-medium flex-1 text-emerald-900 capitalize">{stName}</span>
@@ -1687,39 +1716,64 @@ function StatusHubTree({
                                 })()}
 
                                 {stOpen && (
-                                  <div className="flex flex-col divide-y divide-amber-100">
-                                    {[...dcMap.entries()].sort(([, a], [, b]) => b.length - a.length).map(([dcName, actions]) => {
-                                      const ck     = dcKey(sName, hName, stName, dcName);
-                                      const dcOpen = openCollectors.has(ck);
+                                  <div className="flex flex-col divide-y divide-teal-100">
+                                    {[...locMap.entries()].sort(([, a], [, b]) =>
+                                      [...b.values()].flat().length - [...a.values()].flat().length
+                                    ).map(([locName, dcMap]) => {
+                                      const lk       = locKey(sName, hName, stName, locName);
+                                      const locTotal  = [...dcMap.values()].flat().length;
+                                      const locOpen   = openLocalities.has(lk);
                                       return (
-                                        <div key={ck}>
+                                        <div key={lk}>
 
-                                          {/* ── Data Collector — amber ── */}
-                                          <button className="w-full flex items-center gap-2 px-8 py-1.5 bg-amber-50 hover:bg-amber-100 border-l-4 border-l-amber-400 text-left transition-colors"
-                                            onClick={() => toggleCollector(ck)} data-testid={`dc-group-${ck}`}>
-                                            {dcOpen ? <ChevronDown className="h-3 w-3 text-amber-600 shrink-0" /> : <ChevronRight className="h-3 w-3 text-amber-500 shrink-0" />}
-                                            <User className="h-3 w-3 text-amber-600 shrink-0" />
-                                            <span className="text-xs font-medium flex-1 text-amber-900">{dcName}</span>
-                                            <span className="text-[9px] font-mono bg-amber-100 text-amber-700 border border-amber-200 px-1.5 py-0.5 rounded">
-                                              {actions.length} {actions[0]?.action_type === 'mmp_site_entry' ? 'site' : 'record'}{actions.length !== 1 ? 's' : ''}
-                                            </span>
+                                          {/* ── Locality — teal ── */}
+                                          <button className="w-full flex items-center gap-2 px-8 py-1.5 bg-teal-50 hover:bg-teal-100 border-l-4 border-l-teal-400 text-left transition-colors"
+                                            onClick={() => toggleLocality(sName, hName, stName, locName, dcMap)} data-testid={`loc-group-${lk}`}>
+                                            {locOpen ? <ChevronDown className="h-3 w-3 text-teal-600 shrink-0" /> : <ChevronRight className="h-3 w-3 text-teal-500 shrink-0" />}
+                                            <MapPin className="h-3 w-3 text-teal-600 shrink-0" />
+                                            <span className="text-xs font-medium flex-1 text-teal-900">{locName}</span>
+                                            <span className="text-[9px] font-mono bg-teal-100 text-teal-700 border border-teal-200 px-1.5 py-0.5 rounded">{locTotal}</span>
                                           </button>
 
-                                          {dcOpen && (
-                                            <div className="flex flex-col gap-0.5 px-1 py-1 bg-white">
-                                              {actions.map(action => (
-                                                <ActionRow
-                                                  key={action.action_id}
-                                                  action={action}
-                                                  selected={selectedIds.has(action.action_id)}
-                                                  expanded={expandedId === action.action_id}
-                                                  onToggleSelect={() => onToggleSelect(action.action_id)}
-                                                  onToggleExpand={() => onToggleExpand(action.action_id)}
-                                                  onStatusChange={(status, label) => onStatusChange(action, status, label)}
-                                                  onWorkflow={(wa, wl) => onWorkflow(action, wa, wl)}
-                                                  workflowPending={workflowPending}
-                                                />
-                                              ))}
+                                          {locOpen && (
+                                            <div className="flex flex-col divide-y divide-amber-100">
+                                              {[...dcMap.entries()].sort(([, a], [, b]) => b.length - a.length).map(([dcName, actions]) => {
+                                                const ck     = dcKey(sName, hName, stName, locName, dcName);
+                                                const dcOpen = openCollectors.has(ck);
+                                                return (
+                                                  <div key={ck}>
+
+                                                    {/* ── Data Collector — amber ── */}
+                                                    <button className="w-full flex items-center gap-2 px-10 py-1.5 bg-amber-50 hover:bg-amber-100 border-l-4 border-l-amber-400 text-left transition-colors"
+                                                      onClick={() => toggleCollector(ck)} data-testid={`dc-group-${ck}`}>
+                                                      {dcOpen ? <ChevronDown className="h-3 w-3 text-amber-600 shrink-0" /> : <ChevronRight className="h-3 w-3 text-amber-500 shrink-0" />}
+                                                      <User className="h-3 w-3 text-amber-600 shrink-0" />
+                                                      <span className="text-xs font-medium flex-1 text-amber-900">{dcName}</span>
+                                                      <span className="text-[9px] font-mono bg-amber-100 text-amber-700 border border-amber-200 px-1.5 py-0.5 rounded">
+                                                        {actions.length} {actions[0]?.action_type === 'mmp_site_entry' ? 'site' : 'record'}{actions.length !== 1 ? 's' : ''}
+                                                      </span>
+                                                    </button>
+
+                                                    {dcOpen && (
+                                                      <div className="flex flex-col gap-0.5 px-1 py-1 bg-white">
+                                                        {actions.map(action => (
+                                                          <ActionRow
+                                                            key={action.action_id}
+                                                            action={action}
+                                                            selected={selectedIds.has(action.action_id)}
+                                                            expanded={expandedId === action.action_id}
+                                                            onToggleSelect={() => onToggleSelect(action.action_id)}
+                                                            onToggleExpand={() => onToggleExpand(action.action_id)}
+                                                            onStatusChange={(status, label) => onStatusChange(action, status, label)}
+                                                            onWorkflow={(wa, wl) => onWorkflow(action, wa, wl)}
+                                                            workflowPending={workflowPending}
+                                                          />
+                                                        ))}
+                                                      </div>
+                                                    )}
+                                                  </div>
+                                                );
+                                              })}
                                             </div>
                                           )}
                                         </div>
