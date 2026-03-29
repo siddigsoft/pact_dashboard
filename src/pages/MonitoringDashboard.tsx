@@ -29,6 +29,7 @@ import {
   FileText, CheckCircle2, CalendarDays, Bell, Send, Users, Globe, Wrench,
 } from 'lucide-react';
 import { insertNotifications } from '@/services/mmpActions';
+import EmailNotificationService from '@/services/email-notification.service';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -1561,10 +1562,14 @@ function NotifyUsersDialog({ open, onClose, allActions, categoryLabel }: {
     if (selectedUsers.length === 0) { toast({ title: 'No recipients selected', variant: 'destructive' }); return; }
     setSending(true);
     try {
+      const titleEn = priority === 'urgent' ? '🚨 URGENT: Action Required' : priority === 'high' ? '⚠️ Action Required' : '📋 Action Required';
+      const titleAr = priority === 'urgent' ? '🚨 عاجل: إجراء مطلوب'     : priority === 'high' ? '⚠️ إجراء مطلوب'     : '📋 إجراء مطلوب';
+
+      // ── In-app notifications ──────────────────────────────────────────
       const rows = selectedUsers.map(u => ({
         recipient_id: u.id,
-        title_en: priority === 'urgent' ? '🚨 URGENT: Action Required' : priority === 'high' ? '⚠️ Action Required' : '📋 Action Required',
-        title_ar: priority === 'urgent' ? '🚨 عاجل: إجراء مطلوب' : priority === 'high' ? '⚠️ إجراء مطلوب' : '📋 إجراء مطلوب',
+        title_en: titleEn,
+        title_ar: titleAr,
         message_en: msgEn,
         message_ar: msgAr,
         event_type: 'monitoring_reminder',
@@ -1573,7 +1578,52 @@ function NotifyUsersDialog({ open, onClose, allActions, categoryLabel }: {
         status: 'unread',
       }));
       await insertNotifications(rows);
-      toast({ title: `Notification sent to ${selectedUsers.length} user${selectedUsers.length !== 1 ? 's' : ''}` });
+
+      // ── Emails (fire-and-forget, don't block success toast) ───────────
+      const usersWithEmail = selectedUsers.filter(u => u.email);
+      if (usersWithEmail.length > 0) {
+        const emailSubject = priority === 'urgent'
+          ? 'URGENT: Action Required — PACT System | عاجل: إجراء مطلوب'
+          : priority === 'high'
+          ? 'Action Required — PACT System | إجراء مطلوب'
+          : 'Action Required — PACT System | إجراء مطلوب';
+
+        const emailHtml = `
+          <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:24px;">
+            <div style="background:#0F2041;padding:20px 24px;border-radius:8px 8px 0 0;">
+              <h2 style="color:#fff;margin:0;font-size:18px;">${titleEn}</h2>
+            </div>
+            <div style="border:1px solid #e5e7eb;border-top:none;padding:24px;border-radius:0 0 8px 8px;">
+              <p style="color:#374151;font-size:15px;line-height:1.6;margin:0 0 16px;">${msgEn}</p>
+              <hr style="border:none;border-top:1px solid #e5e7eb;margin:20px 0;" />
+              <p style="color:#6b7280;font-size:13px;text-align:right;direction:rtl;line-height:1.8;margin:0;">${titleAr}<br/>${msgAr}</p>
+              <div style="margin-top:24px;text-align:center;">
+                <a href="https://app.pactorg.com/dashboard" style="background:#0F2041;color:#fff;padding:10px 24px;border-radius:6px;text-decoration:none;font-size:14px;font-weight:600;">
+                  Open PACT System
+                </a>
+              </div>
+            </div>
+            <p style="color:#9ca3af;font-size:11px;text-align:center;margin-top:16px;">This is an automated reminder from the PACT Command Center.</p>
+          </div>`;
+
+        const emailText = `${titleEn}\n\n${msgEn}\n\n---\n\n${titleAr}\n\n${msgAr}\n\nOpen the PACT system: https://app.pactorg.com/dashboard`;
+
+        // Send all emails concurrently; failures are silent so the dialog still closes
+        await Promise.allSettled(
+          usersWithEmail.map(u =>
+            EmailNotificationService.sendEmail({
+              to: u.email!,
+              subject: emailSubject,
+              recipientName: u.name,
+              html: emailHtml,
+              text: emailText,
+              priority,
+            })
+          )
+        );
+      }
+
+      toast({ title: `Notification sent to ${selectedUsers.length} user${selectedUsers.length !== 1 ? 's' : ''}`, description: usersWithEmail.length > 0 ? `In-app + email sent to ${usersWithEmail.length} user${usersWithEmail.length !== 1 ? 's' : ''} with email addresses.` : 'In-app notification only (no email addresses on file).' });
       onClose();
     } catch (err) {
       toast({ title: 'Failed to send notifications', description: String(err), variant: 'destructive' });
@@ -1594,8 +1644,8 @@ function NotifyUsersDialog({ open, onClose, allActions, categoryLabel }: {
           </DialogTitle>
           <DialogDescription className="text-xs">
             {categoryLabel
-              ? `Send an in-app notification to users who have pending actions in the ${categoryLabel} module.`
-              : 'Send an in-app notification to users who have pending actions in the system.'}
+              ? `Send an in-app notification + email to users who have pending actions in the ${categoryLabel} module.`
+              : 'Send an in-app notification + email to users who have pending actions in the system.'}
           </DialogDescription>
         </DialogHeader>
 
@@ -1661,7 +1711,7 @@ function NotifyUsersDialog({ open, onClose, allActions, categoryLabel }: {
 
         <DialogFooter className="px-5 py-3 border-t shrink-0 flex items-center justify-between gap-3">
           <p className="text-xs text-muted-foreground flex-1">
-            Will send in-app notification to <span className="font-bold text-foreground">{selectedIds.size}</span> user{selectedIds.size !== 1 ? 's' : ''}
+            Will send <span className="font-semibold text-foreground">in-app + email</span> to <span className="font-bold text-foreground">{selectedIds.size}</span> user{selectedIds.size !== 1 ? 's' : ''}
           </p>
           <Button variant="outline" size="sm" onClick={onClose} disabled={sending}>Cancel</Button>
           <Button size="sm" className="bg-violet-600 hover:bg-violet-700 text-white" onClick={send} disabled={sending || selectedIds.size === 0} data-testid="notify-send-btn">
