@@ -830,15 +830,14 @@ function MonitoringContent() {
                 <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">Cycle Status</p>
                 <div className="flex flex-wrap gap-2">
                   {[
-                    { key: 'active',            label: 'Active',            color: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
-                    { key: 'closing',           label: 'Closing',           color: 'bg-amber-50 text-amber-700 border-amber-200' },
-                    { key: 'pending_approval',  label: 'Pending Approval',  color: 'bg-blue-50 text-blue-700 border-blue-200' },
-                    { key: 'closed',            label: 'Closed',            color: 'bg-slate-100 text-slate-600 border-slate-200' },
-                  ].map(({ key, label, color }) => {
+                    { key: 'active',            label: 'Active',            color: 'bg-emerald-50 text-emerald-700 border-emerald-200',  zeroColor: 'bg-slate-50 text-slate-400 border-slate-200' },
+                    { key: 'closing',           label: 'Closing',           color: 'bg-amber-50 text-amber-700 border-amber-200',        zeroColor: 'bg-slate-50 text-slate-400 border-slate-200' },
+                    { key: 'pending_approval',  label: 'Pending Approval',  color: 'bg-blue-50 text-blue-700 border-blue-200',           zeroColor: 'bg-slate-50 text-slate-400 border-slate-200' },
+                    { key: 'closed',            label: 'Closed',            color: 'bg-slate-100 text-slate-700 border-slate-300',       zeroColor: 'bg-slate-50 text-slate-400 border-slate-200' },
+                  ].map(({ key, label, color, zeroColor }) => {
                     const count = mmpOverview.cycleStatusCounts[key] ?? 0;
-                    if (count === 0) return null;
                     return (
-                      <div key={key} className={`flex flex-col items-center rounded-lg border px-3 py-1.5 min-w-[64px] text-center ${color}`} data-testid={`cycle-status-${key}`}>
+                      <div key={key} className={`flex flex-col items-center rounded-lg border px-3 py-1.5 min-w-[64px] text-center ${count > 0 ? color : zeroColor}`} data-testid={`cycle-status-${key}`}>
                         <span className="text-[10px] font-medium leading-tight">{label}</span>
                         <span className="text-lg font-bold leading-none mt-0.5">{count}</span>
                       </div>
@@ -848,12 +847,18 @@ function MonitoringContent() {
               </div>
             </div>
 
-            {/* Recently closed MMPs */}
-            {mmpOverview.recentlyClosed.length > 0 && (
-              <div>
-                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-2 flex items-center gap-1">
-                  <CheckCircle2 className="h-3 w-3 text-slate-500" />Recently Closed Cycles
-                </p>
+            {/* Recently closed MMPs — always visible */}
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-2 flex items-center gap-1">
+                <CheckCircle2 className="h-3 w-3 text-slate-500" />Recently Closed Cycles
+                <span className="ml-1 font-mono bg-slate-100 text-slate-500 px-1 rounded">{mmpOverview.recentlyClosed.length}</span>
+              </p>
+              {mmpOverview.recentlyClosed.length === 0 ? (
+                <div className="flex items-center gap-2 text-xs text-slate-400 bg-slate-50 border border-dashed border-slate-200 rounded-md px-3 py-2.5" data-testid="no-closed-mmps">
+                  <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
+                  <span>No MMP cycles have been closed yet</span>
+                </div>
+              ) : (
                 <div className="flex flex-col gap-1">
                   {mmpOverview.recentlyClosed.map(mmp => (
                     <div key={mmp.id} className="flex items-center gap-3 text-xs bg-slate-50 border border-slate-200 rounded-md px-3 py-1.5" data-testid={`closed-mmp-${mmp.id}`}>
@@ -867,8 +872,8 @@ function MonitoringContent() {
                     </div>
                   ))}
                 </div>
-              </div>
-            )}
+              )}
+            </div>
           </CardContent>
         </Card>
       )}
