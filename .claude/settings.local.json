@@ -6,7 +6,14 @@
       "mcp__supabase__get_advisors",
       "mcp__supabase__execute_sql",
       "mcp__supabase__list_tables",
-      "mcp__supabase__apply_migration"
+      "mcp__supabase__apply_migration",
+      "Bash(python -c \"import json,sys; d=json.load\\(sys.stdin\\); mcps=d.get\\(''''mcpServers'''',{}\\); print\\(json.dumps\\(list\\(mcps.keys\\(\\)\\), indent=2\\)\\)\")",
+      "Bash(python -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\(json.dumps\\(d.get\\(''''mcpServers'''',{}\\), indent=2\\)\\)\")",
+      "Bash(supabase --version)",
+      "Bash(supabase projects:*)",
+      "Bash(supabase logs:*)",
+      "Bash(supabase --help)",
+      "Bash(supabase inspect:*)"
     ]
   },
   "enableAllProjectMcpServers": true,

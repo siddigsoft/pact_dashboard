@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Bell, CheckCheck, AlertTriangle, Clock, Mail, ChevronRight,
@@ -11,11 +11,10 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
-import { supabase } from '@/integrations/supabase/client';
 import { useNotifications } from '@/context/notifications/NotificationContext';
+import { useNavBadgeCountsContext } from '@/context/NavBadgeCountsContext';
 import { useAppContext } from '@/context/AppContext';
 import { useAuthorization } from '@/hooks/use-authorization';
-import { useSuperAdmin } from '@/context/superAdmin/SuperAdminContext';
 import { formatDistanceToNow } from 'date-fns';
 
 interface PendingAction {
@@ -30,11 +29,15 @@ interface PendingAction {
 export function NavbarNotificationBell() {
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
-  const [pendingActions, setPendingActions] = useState<PendingAction[]>([]);
-  const [loadingActions, setLoadingActions] = useState(false);
   const [loadingNotifs, setLoadingNotifs] = useState(false);
-  const [directUnreadCount, setDirectUnreadCount] = useState(0);
   const [activeTab, setActiveTab] = useState<string>('actions');
+  const {
+    counts,
+    loading: badgeCountsLoading,
+    refresh: refreshBadgeCounts,
+    includeAdminBellCounts,
+    includeFomVerifiedCounts,
+  } = useNavBadgeCountsContext();
 
   const { notifications, markNotificationAsRead, markAllNotificationsAsRead, getUnreadNotificationsCount } =
     useNotifications() as any;
@@ -56,141 +59,89 @@ export function NavbarNotificationBell() {
 
   const { currentUser } = useAppContext();
   const { hasAnyRole } = useAuthorization();
-  const { isSuperAdmin } = useSuperAdmin(); // boolean — stable across renders
-
   // All role checks return boolean primitives — safe to use in useCallback deps
   const isSupervisor = hasAnyRole(['supervisor', 'Supervisor', 'hubSupervisor', 'hub_supervisor']);
-  const isAdmin = isSuperAdmin || hasAnyRole(['admin', 'Admin', 'super_admin']);
-  const isFOM = hasAnyRole(['fom', 'FOM', 'Field Operation Manager (FOM)']);
 
-  const fetchPendingActions = useCallback(async () => {
-    if (!currentUser?.id) return;
-    setLoadingActions(true);
+  const pendingActions = useMemo((): PendingAction[] => {
     const actions: PendingAction[] = [];
+    if (!currentUser?.id) return actions;
 
-    try {
-      if (isSupervisor && currentUser?.hubId) {
-        const { count: costCount } = await supabase
-          .from('operational_cost_submissions')
-          .select('id', { count: 'exact', head: true })
-          .eq('hub_id', currentUser.hubId)
-          .eq('tier1_status', 'pending')
-          .neq('submitted_by', currentUser.id);
-        if ((costCount || 0) > 0) {
-          actions.push({
-            id: 'cost-tier1',
-            label: 'Cost submissions awaiting your approval',
-            count: costCount!,
-            url: '/finance/operational-costs?tab=approvals',
-            icon: <ClipboardCheck className="h-4 w-4 text-amber-500" />,
-            urgency: 'high',
-          });
-        }
-
-        const { count: dpCount } = await supabase
-          .from('down_payment_requests')
-          .select('id', { count: 'exact', head: true })
-          .eq('hub_id', currentUser.hubId)
-          .eq('status', 'pending_supervisor');
-        if ((dpCount || 0) > 0) {
-          actions.push({
-            id: 'dp-supervisor',
-            label: 'Down-payment requests awaiting approval',
-            count: dpCount!,
-            url: '/finance/down-payments?tab=pending',
-            icon: <CreditCard className="h-4 w-4 text-blue-500" />,
-            urgency: 'high',
-          });
-        }
+    if (isSupervisor && currentUser.hubId) {
+      if (counts.pendingCostTier1Hub > 0) {
+        actions.push({
+          id: 'cost-tier1',
+          label: 'Cost submissions awaiting your approval',
+          count: counts.pendingCostTier1Hub,
+          url: '/finance/operational-costs?tab=approvals',
+          icon: <ClipboardCheck className="h-4 w-4 text-amber-500" />,
+          urgency: 'high',
+        });
       }
-
-      if (isAdmin) {
-        const { count: userCount } = await supabase
-          .from('profiles')
-          .select('id', { count: 'exact', head: true })
-          .eq('status', 'pending');
-        if ((userCount || 0) > 0) {
-          actions.push({
-            id: 'pending-users',
-            label: 'New user registrations awaiting approval',
-            count: userCount!,
-            url: '/users?tab=pending-approvals',
-            icon: <UserCheck className="h-4 w-4 text-purple-500" />,
-            urgency: 'high',
-          });
-        }
-
-        const { count: costT2 } = await supabase
-          .from('operational_cost_submissions')
-          .select('id', { count: 'exact', head: true })
-          .eq('tier2_status', 'pending')
-          .eq('tier1_status', 'approved');
-        if ((costT2 || 0) > 0) {
-          actions.push({
-            id: 'cost-tier2',
-            label: 'Cost submissions pending final approval',
-            count: costT2!,
-            url: '/finance/operational-costs?tab=approvals',
-            icon: <ClipboardCheck className="h-4 w-4 text-orange-500" />,
-            urgency: 'normal',
-          });
-        }
-
-        const { count: dpAdmin } = await supabase
-          .from('down_payment_requests')
-          .select('id', { count: 'exact', head: true })
-          .eq('status', 'pending_admin');
-        if ((dpAdmin || 0) > 0) {
-          actions.push({
-            id: 'dp-admin',
-            label: 'Down-payment requests pending admin review',
-            count: dpAdmin!,
-            url: '/finance/down-payments?tab=pending',
-            icon: <CreditCard className="h-4 w-4 text-red-500" />,
-            urgency: 'high',
-          });
-        }
+      if (counts.pendingDpSupervisor > 0) {
+        actions.push({
+          id: 'dp-supervisor',
+          label: 'Down-payment requests awaiting approval',
+          count: counts.pendingDpSupervisor,
+          url: '/finance/down-payments?tab=pending',
+          icon: <CreditCard className="h-4 w-4 text-blue-500" />,
+          urgency: 'high',
+        });
       }
-
-      if (isFOM) {
-        const { count: verifyCount } = await supabase
-          .from('mmp_site_entries')
-          .select('id', { count: 'exact', head: true })
-          .eq('status', 'verified');
-        if ((verifyCount || 0) > 0) {
-          actions.push({
-            id: 'site-verify',
-            label: 'Verified sites awaiting MMP approval',
-            count: verifyCount!,
-            url: '/mmp?tab=verified',
-            icon: <FileText className="h-4 w-4 text-green-500" />,
-            urgency: 'normal',
-          });
-        }
-      }
-    } catch (err) {
-      console.warn('[NavbarNotificationBell] fetchPendingActions error:', err);
-    } finally {
-      setLoadingActions(false);
-      setPendingActions(actions);
     }
-  }, [currentUser?.id, currentUser?.hubId, isSupervisor, isAdmin, isFOM]);
 
-  useEffect(() => {
-    const initialDelay = setTimeout(fetchPendingActions, 3_000);
-    const interval = setInterval(fetchPendingActions, 5 * 60_000);
-    return () => { clearTimeout(initialDelay); clearInterval(interval); };
-  }, [fetchPendingActions]);
+    if (includeAdminBellCounts) {
+      if (counts.pendingUsers > 0) {
+        actions.push({
+          id: 'pending-users',
+          label: 'New user registrations awaiting approval',
+          count: counts.pendingUsers,
+          url: '/users?tab=pending-approvals',
+          icon: <UserCheck className="h-4 w-4 text-purple-500" />,
+          urgency: 'high',
+        });
+      }
+      if (counts.pendingTier2Cost > 0) {
+        actions.push({
+          id: 'cost-tier2',
+          label: 'Cost submissions pending final approval',
+          count: counts.pendingTier2Cost,
+          url: '/finance/operational-costs?tab=approvals',
+          icon: <ClipboardCheck className="h-4 w-4 text-orange-500" />,
+          urgency: 'normal',
+        });
+      }
+      if (counts.pendingDpAdmin > 0) {
+        actions.push({
+          id: 'dp-admin',
+          label: 'Down-payment requests pending admin review',
+          count: counts.pendingDpAdmin,
+          url: '/finance/down-payments?tab=pending',
+          icon: <CreditCard className="h-4 w-4 text-red-500" />,
+          urgency: 'high',
+        });
+      }
+    }
 
-  useEffect(() => {
-    if (!currentUser?.id) return;
-    supabase
-      .from('notifications')
-      .select('id', { count: 'exact', head: true })
-      .eq('recipient_id', currentUser.id)
-      .eq('is_read', false)
-      .then(({ count }) => setDirectUnreadCount(count || 0));
-  }, [currentUser?.id, open]);
+    if (includeFomVerifiedCounts && counts.mmpVerifiedSites > 0) {
+      actions.push({
+        id: 'site-verify',
+        label: 'Verified sites awaiting MMP approval',
+        count: counts.mmpVerifiedSites,
+        url: '/mmp?tab=verified',
+        icon: <FileText className="h-4 w-4 text-green-500" />,
+        urgency: 'normal',
+      });
+    }
+
+    return actions;
+  }, [
+    currentUser?.id,
+    currentUser?.hubId,
+    isSupervisor,
+    includeAdminBellCounts,
+    includeFomVerifiedCounts,
+    counts,
+  ]);
 
   // Switch to the more relevant tab when panel opens
   useEffect(() => {
@@ -205,7 +156,7 @@ export function NavbarNotificationBell() {
       ? (getUnreadNotificationsCount() || 0)
       : (notifications || []).filter((n: any) => !n.isRead).length;
   } catch { contextUnreadCount = 0; }
-  const unreadCount = Math.max(contextUnreadCount, directUnreadCount);
+  const unreadCount = Math.max(contextUnreadCount, counts.unreadNotifications);
 
   const pendingActionsCount = pendingActions.reduce((sum, a) => sum + a.count, 0);
   const totalBadge = unreadCount + pendingActionsCount;
@@ -283,11 +234,11 @@ export function NavbarNotificationBell() {
               variant="ghost"
               size="icon"
               className="h-6 w-6 text-muted-foreground hover:text-foreground"
-              onClick={() => fetchPendingActions()}
+              onClick={() => void refreshBadgeCounts()}
               title="Refresh"
               data-testid="button-refresh-notifications"
             >
-              <RefreshCw className={cn("h-3 w-3", loadingActions && "animate-spin")} />
+              <RefreshCw className={cn("h-3 w-3", badgeCountsLoading && "animate-spin")} />
             </Button>
             {unreadCount > 0 && (
               <Button
@@ -348,7 +299,7 @@ export function NavbarNotificationBell() {
           {/* ── Pending Actions Tab ──────────────────────────────────── */}
           <TabsContent value="actions" className="m-0 flex flex-col">
             <ScrollArea className="h-[min(360px,calc(100vh-220px))]">
-              {loadingActions ? (
+              {badgeCountsLoading ? (
                 <div className="flex flex-col items-center justify-center py-12 gap-3">
                   <div className="h-6 w-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
                   <p className="text-xs text-muted-foreground">Loading actions…</p>

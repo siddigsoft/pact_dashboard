@@ -17,6 +17,7 @@ import { useLiveDashboard } from "@/hooks/useLiveDashboard";
 import { RealtimeBanner } from "@/components/realtime";
 import { queryClient } from "@/lib/queryClient";
 import { useDailyCoordinatorDigest } from "@/hooks/use-daily-coordinator-digest";
+import { NavBadgeCountsProvider } from "@/context/NavBadgeCountsContext";
 
 interface MainLayoutContentProps {
   children?: React.ReactNode;
@@ -84,6 +85,7 @@ const MainLayoutContent: React.FC<MainLayoutContentProps> = ({ children }) => {
     <TooltipProvider>
       <UpdateDialog />
       <NotificationInitializer />
+      <NavBadgeCountsProvider>
       <SidebarProvider>
         <div className={`min-h-screen max-h-screen flex w-full ${isTransitioning ? 'transition-all duration-300 ease-in-out' : ''}`}>
           {!isMobile && !isTablet && <AppSidebar />}
@@ -117,6 +119,7 @@ const MainLayoutContent: React.FC<MainLayoutContentProps> = ({ children }) => {
           </SidebarInset>
         </div>
       </SidebarProvider>
+      </NavBadgeCountsProvider>
     </TooltipProvider>
   );
 };

@@ -12,6 +12,3 @@ jwt_expiry = 120
 
 [functions.monitoring-flag-no-response]
 verify_jwt = false
-
-[[functions.monitoring-flag-no-response.schedule]]
-cron = "0 * * * *"

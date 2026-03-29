@@ -86,8 +86,8 @@
   } from "@/components/ui/dropdown-menu";
   import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
   import { ChevronDown } from "lucide-react";
-  import { useState, useMemo, useCallback, useEffect } from "react";
-  import { supabase } from "@/integrations/supabase/client";
+  import { useState, useMemo, useCallback } from "react";
+  import { useNavBadgeCountsContext } from "@/context/NavBadgeCountsContext";
   import { MenuPreferences, DEFAULT_MENU_PREFERENCES } from "@/types/user-preferences";
   import { normalizeRole } from "@/utils/roleMapping";
   import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, DragEndEvent } from '@dnd-kit/core';
@@ -554,146 +554,20 @@
 
     const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
     const [isFavoritesCollapsed, setIsFavoritesCollapsed] = useState(false);
-    const [pendingReclaimCount, setPendingReclaimCount] = useState(0);
-    const [pendingCostApprovalCount, setPendingCostApprovalCount] = useState(0);
-    const [pendingDownPaymentCount, setPendingDownPaymentCount] = useState(0);
-    const [pendingMmpCount, setPendingMmpCount] = useState(0);
-    const [pendingTier2CostCount, setPendingTier2CostCount] = useState(0);
-    const [pendingFinanceCount, setPendingFinanceCount] = useState(0);
-    const [unreadNotifCount, setUnreadNotifCount] = useState(0);
-    const [openIncidentCount, setOpenIncidentCount] = useState(0);
-    const [pendingVerificationCount, setPendingVerificationCount] = useState(0);
-    const [pendingWalletCount, setPendingWalletCount] = useState(0);
 
-    // Fetch count of Tier-1 pending cost submissions that the supervisor needs to approve
-    useEffect(() => {
-      if (!roleIsSupervisor || !currentUser?.id || !currentUser?.hubId) return;
-      supabase
-        .from('operational_cost_submissions')
-        .select('id', { count: 'exact', head: true })
-        .eq('hub_id', currentUser.hubId)
-        .eq('tier1_status', 'pending')
-        .neq('submitted_by', currentUser.id)
-        .then(({ count }) => {
-          setPendingCostApprovalCount(count || 0);
-        });
-    }, [currentUser?.id, currentUser?.hubId, roleIsSupervisor]);
-
-    useEffect(() => {
-      if (!roleIsFinance || !currentUser?.id) return;
-      supabase
-        .from('down_payment_requests')
-        .select('id, metadata')
-        .neq('status', 'cancelled')
-        .then(({ data }) => {
-          if (!data) return;
-          const count = data.filter((r: any) => {
-            try {
-              const meta = typeof r.metadata === 'string' ? JSON.parse(r.metadata) : (r.metadata || {});
-              return meta?.manual_reconciliation_required === true;
-            } catch { return false; }
-          }).length;
-          setPendingReclaimCount(count);
-        });
-    }, [currentUser?.id, roleIsFinance]);
-
-    // Fetch count of pending down-payment requests awaiting supervisor approval
-    useEffect(() => {
-      if (!roleIsSupervisor || !currentUser?.id || !currentUser?.hubId) return;
-      supabase
-        .from('down_payment_requests')
-        .select('id', { count: 'exact', head: true })
-        .eq('hub_id', currentUser.hubId)
-        .eq('status', 'pending_supervisor')
-        .then(({ count }) => {
-          setPendingDownPaymentCount(count || 0);
-        });
-    }, [currentUser?.id, currentUser?.hubId, roleIsSupervisor]);
-
-    // MMP count — coordinator sees MMPs forwarded/assigned to them; FOM/admin see all pending acceptance
-    useEffect(() => {
-      if (!currentUser?.id) return;
-      if (roleIsCoordinator) {
-        supabase
-          .from('mmp_files')
-          .select('id', { count: 'exact', head: true })
-          .eq('coordinator_id', currentUser.id)
-          .in('status', ['forwarded_to_coordinator', 'pending_acceptance'])
-          .then(({ count }) => setPendingMmpCount(count || 0));
-      } else if (roleIsFomOrAdmin) {
-        supabase
-          .from('mmp_files')
-          .select('id', { count: 'exact', head: true })
-          .is('coordinator_id', null)
-          .not('status', 'in', '("completed","archived","deleted","rejected","cancelled")')
-          .then(({ count }) => setPendingMmpCount(count || 0));
-      }
-    }, [currentUser?.id, roleIsCoordinator, roleIsFomOrAdmin]);
-
-    // Tier 2 cost approval count — admin/FOM see submissions awaiting tier-2 review
-    useEffect(() => {
-      if (!roleIsFomOrAdmin || !currentUser?.id) return;
-      supabase
-        .from('operational_cost_submissions')
-        .select('id', { count: 'exact', head: true })
-        .eq('tier1_status', 'approved')
-        .eq('tier2_status', 'pending')
-        .then(({ count }) => setPendingTier2CostCount(count || 0));
-    }, [currentUser?.id, roleIsFomOrAdmin]);
-
-    // Finance processing count — DPs awaiting payment (supervisor-approved or admin-pending)
-    useEffect(() => {
-      if (!roleIsFinance || !currentUser?.id) return;
-      supabase
-        .from('down_payment_requests')
-        .select('id', { count: 'exact', head: true })
-        .in('status', ['supervisor_approved', 'pending_admin'])
-        .then(({ count }) => setPendingFinanceCount(count || 0));
-    }, [currentUser?.id, roleIsFinance]);
-
-    // Unread notification count — every user sees their own unread count
-    useEffect(() => {
-      if (!currentUser?.id) return;
-      supabase
-        .from('notifications')
-        .select('id', { count: 'exact', head: true })
-        .eq('recipient_id', currentUser.id)
-        .eq('is_read', false)
-        .then(({ count }) => setUnreadNotifCount(count || 0));
-    }, [currentUser?.id]);
-
-    // Open incident count — supervisors and above see open/investigating incidents
-    useEffect(() => {
-      if (!roleCanSeeIncident || !currentUser?.id) return;
-      supabase
-        .from('incident_reports')
-        .select('id', { count: 'exact', head: true })
-        .in('status', ['open', 'investigating'])
-        .then(({ count }) => setOpenIncidentCount(count || 0));
-    }, [currentUser?.id, roleCanSeeIncident]);
-
-    // Pending site verification count — dispatched sites the coordinator is assigned to
-    useEffect(() => {
-      if (!roleIsCoordinator || !currentUser?.id) return;
-      supabase
-        .from('mmp_site_entries')
-        .select('id', { count: 'exact', head: true })
-        .eq('accepted_by', currentUser.id)
-        .or('status.eq.dispatched,status.eq.Dispatched')
-        .then(({ count }) => setPendingVerificationCount(count || 0));
-    }, [currentUser?.id, roleIsCoordinator]);
-
-    // Pending wallet count — DPs the current user requested that are approved but not yet paid
-    useEffect(() => {
-      if (!currentUser?.id) return;
-      if (!roleIsCoordinator && !isDataCollector) return;
-      supabase
-        .from('down_payment_requests')
-        .select('id', { count: 'exact', head: true })
-        .eq('requested_by', currentUser.id)
-        .eq('status', 'supervisor_approved')
-        .then(({ count }) => setPendingWalletCount(count || 0));
-    }, [currentUser?.id, roleIsCoordinator, isDataCollector]);
+    const { counts } = useNavBadgeCountsContext();
+    const pendingReclaimCount = counts.pendingReclaimCount;
+    const pendingCostApprovalCount = counts.pendingCostTier1Hub;
+    const pendingDownPaymentCount = counts.pendingDpSupervisor;
+    const pendingMmpCount = roleIsCoordinator
+      ? counts.pendingMmpCoordinator
+      : counts.pendingMmpUnassigned;
+    const pendingTier2CostCount = counts.pendingTier2Cost;
+    const pendingFinanceCount = counts.pendingFinanceDp;
+    const unreadNotifCount = counts.unreadNotifications;
+    const openIncidentCount = counts.openIncidents;
+    const pendingVerificationCount = counts.pendingVerification;
+    const pendingWalletCount = counts.pendingWallet;
 
     const menuPrefs: MenuPreferences = useMemo(() => {
       const savedPrefs = userSettings?.settings?.menuPreferences;
