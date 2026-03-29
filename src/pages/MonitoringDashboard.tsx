@@ -26,7 +26,7 @@ import {
   AlertCircle, CheckSquare, X, Loader2, Calendar, Mail, Phone,
   Zap, Database, BarChart2, ChevronDown, ChevronUp, ChevronRight,
   Circle, ArrowUpRight, Timer, Filter, Info, MapPin, ArrowRight,
-  FileText, CheckCircle2, CalendarDays, Bell, Send, Users, Globe,
+  FileText, CheckCircle2, CalendarDays, Bell, Send, Users, Globe, Wrench,
 } from 'lucide-react';
 import { insertNotifications } from '@/services/mmpActions';
 
@@ -164,6 +164,7 @@ function MonitoringContent() {
   });
   const [showFilters, setShowFilters] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [isFixingHubs, setIsFixingHubs] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [workflowDialog, setWorkflowDialog] = useState<{ action: DashboardAction; workflowAction: string; workflowLabel: string } | null>(null);
   const [workflowNotes, setWorkflowNotes] = useState('');
@@ -628,6 +629,30 @@ function MonitoringContent() {
     onError: (err: Error) => toast({ title: 'Workflow action failed', description: err.message, variant: 'destructive' }),
   });
 
+  // ── Fix Hub Names (backfill existing mmp_site_entries) ────────────────────
+  const handleFixHubNames = useCallback(async () => {
+    setIsFixingHubs(true);
+    try {
+      const { data, error } = await supabase.rpc('backfill_hub_office_names');
+      if (error) throw error;
+      const updated = (data as any)?.updated ?? 0;
+      toast({
+        title: updated > 0 ? `Hub names fixed` : 'Hub names already clean',
+        description: updated > 0
+          ? `${updated} site entr${updated === 1 ? 'y' : 'ies'} updated to canonical hub names.`
+          : 'All hub_office values already match canonical hub names.',
+      });
+    } catch (err: any) {
+      toast({
+        title: 'Fix Hub Names failed',
+        description: err?.message || 'Could not run the backfill. Ensure the SQL migration has been applied in Supabase.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsFixingHubs(false);
+    }
+  }, [toast]);
+
   // ── CSV Export ─────────────────────────────────────────────────────────────
   const handleExportCSV = useCallback(async () => {
     const headers = ['action_id','action_type','sender_name','sender_email','sender_phone','native_status','dashboard_status','created_at'];
@@ -696,6 +721,19 @@ function MonitoringContent() {
         <div className="flex items-center gap-2">
           <Button variant="ghost" size="sm" onClick={() => setShowFilters(f => !f)} data-testid="button-toggle-filters">
             <Filter className="h-4 w-4 mr-1" />{showFilters ? 'Hide Filters' : 'Filters'}
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleFixHubNames}
+            disabled={isFixingHubs}
+            title="Normalize hub_office values in all existing MMP site entries to canonical hub names"
+            data-testid="button-fix-hub-names"
+          >
+            {isFixingHubs
+              ? <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+              : <Wrench className="h-4 w-4 mr-1" />}
+            Fix Hub Names
           </Button>
           <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isFetching} data-testid="button-refresh">
             <RefreshCw className={`h-4 w-4 mr-1 ${isFetching ? 'animate-spin' : ''}`} />Refresh
