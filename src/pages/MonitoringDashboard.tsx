@@ -180,16 +180,30 @@ function MonitoringContent() {
   const { data: allActions = [], isLoading, isFetching, refetch, dataUpdatedAt, error } = useQuery<DashboardAction[]>({
     queryKey: ['/admin/monitoring/actions', filters],
     queryFn: async () => {
-      // Step 1: Call get_monitoring_actions (SECURITY DEFINER — bypasses all RLS)
-      const { data: rows, error: rpcErr } = await supabase.rpc('get_monitoring_actions', {
+      // Step 1: Call get_monitoring_actions — paginate past the PostgREST 1000-row default limit
+      const PAGE_SIZE = 1000;
+      const allRows: RawAction[] = [];
+      let pageStart = 0;
+      const rpcArgs = {
         p_type:   filters.type   || null,
         p_from:   filters.from   ? filters.from + 'T00:00:00Z' : null,
         p_to:     filters.to     ? filters.to   + 'T23:59:59Z' : null,
         p_sender: filters.sender || null,
-      }) as { data: RawAction[] | null; error: unknown };
-
-      if (rpcErr) throw new Error((rpcErr as { message?: string })?.message ?? String(rpcErr));
-      if (!rows || rows.length === 0) return [];
+      };
+      while (true) {
+        // eslint-disable-next-line no-await-in-loop
+        const result = await (supabase.rpc('get_monitoring_actions', rpcArgs) as ReturnType<typeof supabase.rpc>)
+          .range(pageStart, pageStart + PAGE_SIZE - 1);
+        const rpcErr = result.error;
+        const page = result.data as RawAction[] | null;
+        if (rpcErr) throw new Error((rpcErr as { message?: string })?.message ?? String(rpcErr));
+        if (!page || page.length === 0) break;
+        allRows.push(...page);
+        if (page.length < PAGE_SIZE) break;
+        pageStart += PAGE_SIZE;
+      }
+      const rows = allRows;
+      if (rows.length === 0) return [];
 
       // Step 2: Batch-fetch latest awareness overrides via RPC
       const ids = rows.map(r => r.action_id);
