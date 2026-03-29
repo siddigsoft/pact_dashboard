@@ -1582,17 +1582,6 @@ function StatusHubTree({
   const toggleState = (sk: string) =>
     setOpenStates(prev => { const n = new Set(prev); n.has(sk) ? n.delete(sk) : n.add(sk); return n; });
 
-  // Auto-expand first (largest) status + all its hubs + all states on load
-  useEffect(() => {
-    const [[first, firstHubs] = []] = statusMap.entries();
-    if (!first || !firstHubs) return;
-    setOpenStatuses(new Set([first]));
-    setOpenHubs(new Set(hubKeys(first, firstHubs)));
-    const allStates = new Set<string>();
-    for (const [hName, sMap] of firstHubs)
-      for (const sk of stateKeys(first, hName, sMap)) allStates.add(sk);
-    setOpenStates(allStates);
-  }, [statusMap]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div className="flex flex-col gap-1">
