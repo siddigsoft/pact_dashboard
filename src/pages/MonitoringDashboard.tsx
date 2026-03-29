@@ -157,6 +157,7 @@ function MonitoringContent() {
     type: '' as ActionTypeKey | '',
     status: '' as DashboardStatus | '',
     from: '', to: '', sender: '',
+    urgency: '' as 'critical' | 'high' | '',
   });
   const [showFilters, setShowFilters] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -169,11 +170,18 @@ function MonitoringContent() {
   const [pipelineFilter, setPipelineFilter] = useState<{ type: ActionTypeKey; status: string; label: string } | null>(null);
   const actionFeedRef = useRef<HTMLDivElement>(null);
 
+  const scrollToFeed = () =>
+    setTimeout(() => actionFeedRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 80);
+
   const applyPipelineFilter = (next: { type: ActionTypeKey; status: string; label: string } | null) => {
     setPipelineFilter(next);
-    if (next) {
-      setTimeout(() => actionFeedRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 80);
-    }
+    if (next) scrollToFeed();
+  };
+
+  const applyKpiFilter = (patch: Partial<typeof filters>) => {
+    setPipelineFilter(null);
+    setFilters(f => ({ ...f, ...patch }));
+    scrollToFeed();
   };
 
   // ── Fetch via SECURITY DEFINER RPC (bypasses all RLS) ─────────────────────
@@ -269,7 +277,7 @@ function MonitoringContent() {
     const ignored    = allActions.filter(a => a.dashboard_status === 'ignored').length;
     const noResponse = allActions.filter(a => a.dashboard_status === 'no_response').length;
     const received   = allActions.filter(a => a.dashboard_status === 'received').length;
-    const actedToday = allActions.filter(a => a.dashboard_status === 'acted' && isToday(parseISO(a.updated_at))).length;
+    const actedToday = allActions.filter(a => isToday(parseISO(a.updated_at))).length;
     const critical   = allActions.filter(a => urgencyLevel(a) === 'critical').length;
     const responseRate = total > 0 ? Math.round((acted / total) * 100) : 0;
     return { total, acted, ignored, noResponse, received, actedToday, critical, responseRate };
@@ -482,13 +490,25 @@ function MonitoringContent() {
   // ── Pipeline filter application ────────────────────────────────────────────
   // When a stage box is clicked, displayedActions narrows to just that type+status.
   const displayedActions = useMemo(() => {
-    if (!pipelineFilter) return allActions;
-    return allActions.filter(a => {
-      if (a.action_type !== pipelineFilter.type) return false;
-      const norm = (s: string) => (s ?? '').toLowerCase().replace(/[_\s]/g, '');
-      return norm(a.native_status) === norm(pipelineFilter.status);
-    });
-  }, [allActions, pipelineFilter]);
+    let actions = allActions;
+    // Pipeline stage filter (from clicking a stage box)
+    if (pipelineFilter) {
+      actions = actions.filter(a => {
+        if (a.action_type !== pipelineFilter.type) return false;
+        const norm = (s: string) => (s ?? '').toLowerCase().replace(/[_\s]/g, '');
+        return norm(a.native_status) === norm(pipelineFilter.status);
+      });
+    }
+    // Dashboard status filter (client-side — the RPC has no p_status param)
+    if (filters.status) {
+      actions = actions.filter(a => a.dashboard_status === filters.status);
+    }
+    // Urgency quick-filter (client-side computed)
+    if (filters.urgency) {
+      actions = actions.filter(a => urgencyLevel(a) === filters.urgency);
+    }
+    return actions;
+  }, [allActions, pipelineFilter, filters.status, filters.urgency]);
 
   // ── Selection ──────────────────────────────────────────────────────────────
   const toggleSelect = (id: string) => setSelectedIds(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
@@ -553,10 +573,34 @@ function MonitoringContent() {
         </div>
       ) : (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          <KpiCard label="Total Actions"  value={stats.total}      sub={`${stats.actedToday} acted today`} icon={<BarChart2 className="h-4 w-4" />} accent="blue"  testId="stat-total" />
-          <KpiCard label="Acted"          value={stats.acted}      sub={`${stats.responseRate}% response rate`} icon={<CheckCircle className="h-4 w-4" />} accent="green" testId="stat-acted" />
-          <KpiCard label="No Response"    value={stats.noResponse} sub="awaiting action" icon={<AlertTriangle className="h-4 w-4" />} accent="amber" testId="stat-no-response" />
-          <KpiCard label="Critical"       value={stats.critical}   sub=">48h or flagged" icon={<Zap className="h-4 w-4" />} accent="red"   testId="stat-critical" />
+          <KpiCard
+            label="Total Actions" value={stats.total}
+            sub={`${stats.actedToday} record${stats.actedToday !== 1 ? 's' : ''} updated today`}
+            icon={<BarChart2 className="h-4 w-4" />} accent="blue" testId="stat-total"
+            active={!filters.status && !filters.urgency && !pipelineFilter}
+            onClick={() => { applyKpiFilter({ status: '', urgency: '' }); }}
+          />
+          <KpiCard
+            label="Acted" value={stats.acted}
+            sub={`${stats.responseRate}% response rate`}
+            icon={<CheckCircle className="h-4 w-4" />} accent="green" testId="stat-acted"
+            active={filters.status === 'acted'}
+            onClick={() => applyKpiFilter({ status: filters.status === 'acted' ? '' : 'acted', urgency: '' })}
+          />
+          <KpiCard
+            label="No Response" value={stats.noResponse}
+            sub="awaiting action"
+            icon={<AlertTriangle className="h-4 w-4" />} accent="amber" testId="stat-no-response"
+            active={filters.status === 'no_response'}
+            onClick={() => applyKpiFilter({ status: filters.status === 'no_response' ? '' : 'no_response', urgency: '' })}
+          />
+          <KpiCard
+            label="Critical" value={stats.critical}
+            sub=">48h or flagged as no-response"
+            icon={<Zap className="h-4 w-4" />} accent="red" testId="stat-critical"
+            active={filters.urgency === 'critical'}
+            onClick={() => applyKpiFilter({ urgency: filters.urgency === 'critical' ? '' : 'critical', status: '' })}
+          />
         </div>
       )}
 
@@ -924,6 +968,24 @@ function MonitoringContent() {
         </div>
       )}
 
+      {/* KPI quick-filter active banner */}
+      {(filters.status || filters.urgency) && (
+        <div className="flex items-center gap-3 bg-violet-50 border border-violet-200 rounded-lg px-4 py-2.5" data-testid="kpi-filter-banner">
+          <Filter className="h-4 w-4 text-violet-600 shrink-0" />
+          <span className="text-sm font-medium text-violet-700 flex-1">
+            Filtering by:{' '}
+            {filters.status && <span className="font-bold capitalize">{filters.status.replace(/_/g, ' ')}</span>}
+            {filters.urgency && <span className="font-bold capitalize">{filters.urgency} urgency</span>}
+            <span className="ml-2 font-mono text-xs bg-violet-100 px-1.5 py-0.5 rounded">{displayedActions.length} records</span>
+          </span>
+          <Button size="sm" variant="ghost" className="text-violet-600 text-xs h-7"
+            onClick={() => setFilters(f => ({ ...f, status: '', urgency: '' }))}
+            data-testid="button-clear-kpi-filter">
+            <X className="h-3 w-3 mr-1" />Clear
+          </Button>
+        </div>
+      )}
+
       {/* Action Feed — grouped by module */}
       {!isLoading && !error && allActions.length > 0 && (
         <div ref={actionFeedRef} className="flex flex-col gap-3" data-testid="action-feed">
@@ -1040,23 +1102,31 @@ function MonitoringContent() {
 
 // ── KPI Card ──────────────────────────────────────────────────────────────────
 
-function KpiCard({ label, value, sub, icon, accent, testId }: {
+function KpiCard({ label, value, sub, icon, accent, testId, onClick, active }: {
   label: string; value: number; sub: string;
-  icon: React.ReactNode; accent: 'blue' | 'green' | 'amber' | 'red'; testId: string;
+  icon: React.ReactNode; accent: 'blue' | 'green' | 'amber' | 'red';
+  testId: string; onClick?: () => void; active?: boolean;
 }) {
   const map = {
-    blue:  { icon: 'text-blue-600 bg-blue-50 border-blue-100',   val: 'text-blue-700' },
-    green: { icon: 'text-emerald-600 bg-emerald-50 border-emerald-100', val: 'text-emerald-700' },
-    amber: { icon: 'text-amber-600 bg-amber-50 border-amber-100',  val: 'text-amber-700' },
-    red:   { icon: 'text-red-600 bg-red-50 border-red-100',        val: 'text-red-700' },
+    blue:  { icon: 'text-blue-600 bg-blue-50 border-blue-100',   val: 'text-blue-700',    ring: 'ring-2 ring-blue-300 border-blue-300' },
+    green: { icon: 'text-emerald-600 bg-emerald-50 border-emerald-100', val: 'text-emerald-700', ring: 'ring-2 ring-emerald-300 border-emerald-300' },
+    amber: { icon: 'text-amber-600 bg-amber-50 border-amber-100',  val: 'text-amber-700',   ring: 'ring-2 ring-amber-300 border-amber-300' },
+    red:   { icon: 'text-red-600 bg-red-50 border-red-100',        val: 'text-red-700',     ring: 'ring-2 ring-red-300 border-red-300' },
   };
   return (
-    <Card className="hover:shadow-sm transition-shadow">
+    <Card
+      className={`transition-all ${onClick ? 'cursor-pointer hover:shadow-md hover:scale-[1.02] active:scale-100' : 'hover:shadow-sm'} ${active ? map[accent].ring : ''}`}
+      onClick={onClick}
+      data-testid={testId}
+    >
       <CardContent className="pt-4 pb-4">
         <div className="flex items-start justify-between gap-2">
           <div className="flex-1 min-w-0">
-            <p className="text-xs font-medium text-muted-foreground truncate">{label}</p>
-            <p className={`text-3xl font-bold font-mono mt-1 ${value > 0 && (accent === 'red' || accent === 'amber') ? map[accent].val : ''}`} data-testid={testId}>
+            <p className="text-xs font-medium text-muted-foreground truncate flex items-center gap-1">
+              {label}
+              {onClick && <span className="text-[9px] opacity-40">↓ click to filter</span>}
+            </p>
+            <p className={`text-3xl font-bold font-mono mt-1 ${value > 0 && (accent === 'red' || accent === 'amber') ? map[accent].val : ''}`}>
               {value}
             </p>
             <p className="text-[10px] text-muted-foreground mt-1">{sub}</p>
