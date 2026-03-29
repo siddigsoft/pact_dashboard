@@ -222,19 +222,20 @@ LEFT JOIN public.profiles p_cs ON p_cs.id = cs.submitted_by
 UNION ALL
 
 SELECT
-  ocs.id::text                                                   AS action_id,
-  'operational_cost'                                             AS action_type,
-  'operational_cost_submissions'                                 AS source_table,
-  COALESCE(ocs.submitted_by::text, '')                           AS sender_id,
-  COALESCE(p_ocs.full_name, ocs.submitted_by::text, 'Unknown')  AS sender_name,
-  COALESCE(ocs.submitter_role, 'fieldOfficer')                   AS sender_role,
-  'admin'                                                        AS recipient_role,
-  ocs.status                                                     AS native_status,
+  ocs.id::text                                                                        AS action_id,
+  'operational_cost'                                                                  AS action_type,
+  'operational_cost_submissions'                                                      AS source_table,
+  COALESCE(ocs.submitted_by::text, '')                                                AS sender_id,
+  COALESCE(p_ocs.full_name, ocs.submitted_by::text, 'Unknown')                       AS sender_name,
+  COALESCE(ocs.submitter_role, 'fieldOfficer')                                        AS sender_role,
+  'admin'                                                                             AS recipient_role,
+  ocs.status                                                                          AS native_status,
   ocs.created_at,
-  COALESCE(ocs.updated_at, ocs.created_at)                       AS updated_at,
-  to_jsonb(ocs.*)                                                AS details
+  COALESCE(ocs.updated_at, ocs.created_at)                                            AS updated_at,
+  to_jsonb(ocs.*) || jsonb_build_object('hub_name', COALESCE(h_ocs.hub_name, '—'))   AS details
 FROM public.operational_cost_submissions ocs
-LEFT JOIN public.profiles p_ocs ON p_ocs.id = ocs.submitted_by
+LEFT JOIN public.profiles  p_ocs ON p_ocs.id = ocs.submitted_by
+LEFT JOIN public.hubs      h_ocs ON h_ocs.id::text = ocs.hub_id
 
 UNION ALL
 

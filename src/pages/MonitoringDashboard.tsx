@@ -1513,8 +1513,22 @@ function StatusHubTree({
   const [openStates,     setOpenStates]     = useState<Set<string>>(() => new Set());
   const [openCollectors, setOpenCollectors] = useState<Set<string>>(() => new Set());
 
-  const getHub       = (a: DashboardAction) => String((a.details as Record<string, unknown>)?.hub_office ?? '—');
-  const getState     = (a: DashboardAction) => String((a.details as Record<string, unknown>)?.state ?? '—');
+  const getHub = (a: DashboardAction) => {
+    const d = a.details as Record<string, unknown>;
+    // advance_payment has hub_name directly; operational_cost gets it injected via SQL join;
+    // mmp_site_entry and others use hub_office
+    const raw = d?.hub_name ?? d?.hub_office ?? '—';
+    return String(raw || '—');
+  };
+  const getState = (a: DashboardAction) => {
+    const d = a.details as Record<string, unknown>;
+    // For operational costs, group by expense category instead of geographic state
+    if (a.action_type === 'operational_cost') {
+      const cat = String(d?.expense_category ?? '').replace(/_/g, ' ');
+      return cat || '—';
+    }
+    return String(d?.state ?? '—');
+  };
   const getCollector = (a: DashboardAction) => {
     const d = a.details as Record<string, unknown>;
     // For MMP site entries the data collector is stored in monitoring_by (text: email or name)
@@ -1650,14 +1664,21 @@ function StatusHubTree({
                             return (
                               <div key={stKey(sName, hName, stName)}>
 
-                                {/* ── State — emerald ── */}
-                                <button className="w-full flex items-center gap-2 px-6 py-1.5 bg-emerald-50 hover:bg-emerald-100 border-l-4 border-l-emerald-400 text-left transition-colors"
-                                  onClick={() => toggleState(sName, hName, stName, dcMap)} data-testid={`state-group-${stKey(sName, hName, stName)}`}>
-                                  {stOpen ? <ChevronDown className="h-3 w-3 text-emerald-600 shrink-0" /> : <ChevronRight className="h-3 w-3 text-emerald-500 shrink-0" />}
-                                  <MapPin className="h-3 w-3 text-emerald-600 shrink-0" />
-                                  <span className="text-xs font-medium flex-1 text-emerald-900">{stName}</span>
-                                  <span className="text-[9px] font-mono bg-emerald-100 text-emerald-700 border border-emerald-200 px-1.5 py-0.5 rounded">{stateTotal}</span>
-                                </button>
+                                {/* ── State / Category — emerald ── */}
+                                {(() => {
+                                  const sampleAction = [...dcMap.values()][0]?.[0];
+                                  const isCategory = sampleAction?.action_type === 'operational_cost';
+                                  const StateIcon = isCategory ? Layers : MapPin;
+                                  return (
+                                  <button className="w-full flex items-center gap-2 px-6 py-1.5 bg-emerald-50 hover:bg-emerald-100 border-l-4 border-l-emerald-400 text-left transition-colors"
+                                    onClick={() => toggleState(sName, hName, stName, dcMap)} data-testid={`state-group-${stKey(sName, hName, stName)}`}>
+                                    {stOpen ? <ChevronDown className="h-3 w-3 text-emerald-600 shrink-0" /> : <ChevronRight className="h-3 w-3 text-emerald-500 shrink-0" />}
+                                    <StateIcon className="h-3 w-3 text-emerald-600 shrink-0" />
+                                    <span className="text-xs font-medium flex-1 text-emerald-900 capitalize">{stName}</span>
+                                    <span className="text-[9px] font-mono bg-emerald-100 text-emerald-700 border border-emerald-200 px-1.5 py-0.5 rounded">{stateTotal}</span>
+                                  </button>
+                                  );
+                                })()}
 
                                 {stOpen && (
                                   <div className="flex flex-col divide-y divide-amber-100">
@@ -1673,7 +1694,9 @@ function StatusHubTree({
                                             {dcOpen ? <ChevronDown className="h-3 w-3 text-amber-600 shrink-0" /> : <ChevronRight className="h-3 w-3 text-amber-500 shrink-0" />}
                                             <User className="h-3 w-3 text-amber-600 shrink-0" />
                                             <span className="text-xs font-medium flex-1 text-amber-900">{dcName}</span>
-                                            <span className="text-[9px] font-mono bg-amber-100 text-amber-700 border border-amber-200 px-1.5 py-0.5 rounded">{actions.length} site{actions.length !== 1 ? 's' : ''}</span>
+                                            <span className="text-[9px] font-mono bg-amber-100 text-amber-700 border border-amber-200 px-1.5 py-0.5 rounded">
+                                              {actions.length} {actions[0]?.action_type === 'mmp_site_entry' ? 'site' : 'record'}{actions.length !== 1 ? 's' : ''}
+                                            </span>
                                           </button>
 
                                           {dcOpen && (
