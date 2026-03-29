@@ -359,10 +359,10 @@ function MonitoringContent() {
           p_from: null,
           p_to: null,
           p_sender: null,
-        }) as ReturnType<typeof supabase.rpc>).select('native_status').range(vPage * 1000, vPage * 1000 + 999);
+        }) as ReturnType<typeof supabase.rpc>).range(vPage * 1000, vPage * 1000 + 999);
         if (!vChunk || vChunk.length === 0) break;
         for (const r of vChunk as Array<Record<string,unknown>>) {
-          visitRows.push({ status: r['native_status'] as string | null });
+          visitRows.push({ status: (r['native_status'] ?? r['status']) as string | null });
         }
         if (vChunk.length < 1000) break;
         vPage++;
