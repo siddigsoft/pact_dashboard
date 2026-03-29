@@ -335,11 +335,20 @@ function MonitoringContent() {
   const { data: sitePipeline, isLoading: pipelineLoading } = useQuery({
     queryKey: ['/admin/monitoring/site-pipeline'],
     queryFn: async () => {
-      // Query mmp_site_entries directly — no row limit, catches all statuses
-      const { data: entryRows } = await supabase
-        .from('mmp_site_entries')
-        .select('status')
-        .not('status', 'is', null);
+      // Paginate mmp_site_entries to bypass PostgREST's 1000-row default cap
+      const entryRows: Array<{ status: string | null }> = [];
+      let ePage = 0;
+      while (true) {
+        const { data: eChunk } = await supabase
+          .from('mmp_site_entries')
+          .select('status')
+          .not('status', 'is', null)
+          .range(ePage * 1000, ePage * 1000 + 999);
+        if (!eChunk || eChunk.length === 0) break;
+        entryRows.push(...eChunk);
+        if (eChunk.length < 1000) break;
+        ePage++;
+      }
 
       // Query site_visits via SECURITY DEFINER RPC (direct table query is blocked by RLS)
       const visitRows: Array<{ status: string | null }> = [];
