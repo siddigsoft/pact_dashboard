@@ -928,21 +928,37 @@ function MonitoringContent() {
                   <Badge variant="secondary" className="text-[9px] h-4 px-1.5 rounded font-mono">{items.length}</Badge>
                   <div className="flex-1 h-px bg-border" />
                 </div>
-                <div className="flex flex-col gap-1">
-                  {items.map(action => (
-                    <ActionRow
-                      key={action.action_id}
-                      action={action}
-                      selected={selectedIds.has(action.action_id)}
-                      expanded={expandedId === action.action_id}
-                      onToggleSelect={() => toggleSelect(action.action_id)}
-                      onToggleExpand={() => setExpandedId(p => p === action.action_id ? null : action.action_id)}
-                      onStatusChange={(status, label) => { setStatusDialog({ actions: [action], targetStatus: status, label }); setStatusNotes(''); }}
-                      onWorkflow={(wa, wl) => { setWorkflowDialog({ action, workflowAction: wa, workflowLabel: wl }); setWorkflowNotes(''); }}
+
+                {/* MMP Site Entries — Hub → State → Enumerator hierarchy */}
+                {at.key === 'mmp_site_entry'
+                  ? <HubStateEnumeratorTree
+                      items={items}
+                      selectedIds={selectedIds}
+                      expandedId={expandedId}
+                      onToggleSelect={toggleSelect}
+                      onToggleExpand={id => setExpandedId(p => p === id ? null : id)}
+                      onStatusChange={(action, status, label) => { setStatusDialog({ actions: [action], targetStatus: status, label }); setStatusNotes(''); }}
+                      onWorkflow={(action, wa, wl) => { setWorkflowDialog({ action, workflowAction: wa, workflowLabel: wl }); setWorkflowNotes(''); }}
                       workflowPending={workflowMutation.isPending}
                     />
-                  ))}
-                </div>
+                  : (
+                    <div className="flex flex-col gap-1">
+                      {items.map(action => (
+                        <ActionRow
+                          key={action.action_id}
+                          action={action}
+                          selected={selectedIds.has(action.action_id)}
+                          expanded={expandedId === action.action_id}
+                          onToggleSelect={() => toggleSelect(action.action_id)}
+                          onToggleExpand={() => setExpandedId(p => p === action.action_id ? null : action.action_id)}
+                          onStatusChange={(status, label) => { setStatusDialog({ actions: [action], targetStatus: status, label }); setStatusNotes(''); }}
+                          onWorkflow={(wa, wl) => { setWorkflowDialog({ action, workflowAction: wa, workflowLabel: wl }); setWorkflowNotes(''); }}
+                          workflowPending={workflowMutation.isPending}
+                        />
+                      ))}
+                    </div>
+                  )
+                }
               </div>
             );
           })}
@@ -1037,6 +1053,149 @@ function KpiCard({ label, value, sub, icon, accent, testId }: {
         </div>
       </CardContent>
     </Card>
+  );
+}
+
+// ── Hub → State → Enumerator tree (MMP Site Entries only) ────────────────────
+
+function HubStateEnumeratorTree({
+  items, selectedIds, expandedId,
+  onToggleSelect, onToggleExpand, onStatusChange, onWorkflow, workflowPending,
+}: {
+  items: DashboardAction[];
+  selectedIds: Set<string>;
+  expandedId: string | null;
+  onToggleSelect: (id: string) => void;
+  onToggleExpand: (id: string) => void;
+  onStatusChange: (action: DashboardAction, status: DashboardStatus, label: string) => void;
+  onWorkflow: (action: DashboardAction, wa: string, wl: string) => void;
+  workflowPending: boolean;
+}) {
+  const [openHubs, setOpenHubs] = useState<Set<string>>(() => new Set());
+  const [openStates, setOpenStates] = useState<Set<string>>(() => new Set());
+  const [openEnumerators, setOpenEnumerators] = useState<Set<string>>(() => new Set());
+
+  const hub = (a: DashboardAction) => String((a.details as Record<string,unknown>)?.hub_office ?? '—');
+  const state = (a: DashboardAction) => String((a.details as Record<string,unknown>)?.state ?? '—');
+  const enumerator = (a: DashboardAction) => a.sender_name || 'Unknown';
+
+  // Build Hub → State → Enumerator → items map
+  const hubMap = useMemo(() => {
+    const map = new Map<string, Map<string, Map<string, DashboardAction[]>>>();
+    for (const a of items) {
+      const h = hub(a), s = state(a), e = enumerator(a);
+      if (!map.has(h)) map.set(h, new Map());
+      const sm = map.get(h)!;
+      if (!sm.has(s)) sm.set(s, new Map());
+      const em = sm.get(s)!;
+      if (!em.has(e)) em.set(e, []);
+      em.get(e)!.push(a);
+    }
+    // Sort hubs, states, enumerators alphabetically
+    return new Map([...map.entries()].sort(([a],[b]) => a.localeCompare(b)));
+  }, [items]);
+
+  // Auto-expand if only 1 hub
+  useEffect(() => {
+    if (hubMap.size === 1) {
+      const [onlyHub] = hubMap.keys();
+      setOpenHubs(new Set([onlyHub]));
+    }
+  }, [hubMap]);
+
+  const toggle = (key: string, setter: (fn: (prev: Set<string>) => Set<string>) => void) => {
+    setter(prev => { const n = new Set(prev); n.has(key) ? n.delete(key) : n.add(key); return n; });
+  };
+
+  return (
+    <div className="flex flex-col gap-1">
+      {[...hubMap.entries()].map(([hubName, stateMap]) => {
+        const hubTotal = [...stateMap.values()].flatMap(em => [...em.values()]).flat().length;
+        const hubOpen = openHubs.has(hubName);
+        return (
+          <div key={hubName} className="rounded-lg border border-border overflow-hidden">
+            {/* Hub header */}
+            <button
+              className="w-full flex items-center gap-2 px-3 py-2 bg-slate-50 hover:bg-slate-100 text-left transition-colors"
+              onClick={() => toggle(hubName, setOpenHubs)}
+              data-testid={`hub-group-${hubName}`}
+            >
+              {hubOpen ? <ChevronDown className="h-3.5 w-3.5 text-muted-foreground shrink-0" /> : <ChevronUp className="h-3.5 w-3.5 text-muted-foreground shrink-0 rotate-180" />}
+              <Database className="h-3.5 w-3.5 text-primary/70 shrink-0" />
+              <span className="text-sm font-bold flex-1 text-slate-800">{hubName}</span>
+              <span className="text-[10px] font-mono bg-primary/10 text-primary px-2 py-0.5 rounded-full">{hubTotal} sites</span>
+            </button>
+
+            {hubOpen && (
+              <div className="flex flex-col">
+                {[...stateMap.entries()].sort(([a],[b]) => a.localeCompare(b)).map(([stateName, enumMap]) => {
+                  const stateTotal = [...enumMap.values()].flat().length;
+                  const stateKey = `${hubName}::${stateName}`;
+                  const stateOpen = openStates.has(stateKey);
+                  return (
+                    <div key={stateKey} className="border-t border-border/50">
+                      {/* State header */}
+                      <button
+                        className="w-full flex items-center gap-2 px-4 py-1.5 bg-white hover:bg-blue-50/40 text-left transition-colors"
+                        onClick={() => toggle(stateKey, setOpenStates)}
+                        data-testid={`state-group-${stateKey}`}
+                      >
+                        {stateOpen ? <ChevronDown className="h-3 w-3 text-muted-foreground shrink-0" /> : <ChevronUp className="h-3 w-3 text-muted-foreground shrink-0 rotate-180" />}
+                        <MapPin className="h-3 w-3 text-blue-500 shrink-0" />
+                        <span className="text-xs font-semibold flex-1 text-slate-700">{stateName}</span>
+                        <span className="text-[9px] font-mono bg-blue-50 text-blue-700 border border-blue-200 px-1.5 py-0.5 rounded">{stateTotal}</span>
+                      </button>
+
+                      {stateOpen && (
+                        <div className="flex flex-col">
+                          {[...enumMap.entries()].sort(([a],[b]) => a.localeCompare(b)).map(([enumName, actions]) => {
+                            const enumKey = `${stateKey}::${enumName}`;
+                            const enumOpen = openEnumerators.has(enumKey);
+                            return (
+                              <div key={enumKey} className="border-t border-border/30">
+                                {/* Enumerator header */}
+                                <button
+                                  className="w-full flex items-center gap-2 px-6 py-1.5 bg-slate-50/50 hover:bg-violet-50/30 text-left transition-colors"
+                                  onClick={() => toggle(enumKey, setOpenEnumerators)}
+                                  data-testid={`enum-group-${enumKey}`}
+                                >
+                                  {enumOpen ? <ChevronDown className="h-3 w-3 text-muted-foreground shrink-0" /> : <ChevronUp className="h-3 w-3 text-muted-foreground shrink-0 rotate-180" />}
+                                  <User className="h-3 w-3 text-violet-500 shrink-0" />
+                                  <span className="text-xs font-medium flex-1 text-slate-700">{enumName}</span>
+                                  <span className="text-[9px] font-mono bg-violet-50 text-violet-700 border border-violet-200 px-1.5 py-0.5 rounded">{actions.length}</span>
+                                </button>
+
+                                {enumOpen && (
+                                  <div className="flex flex-col gap-0.5 pl-1">
+                                    {actions.map(action => (
+                                      <ActionRow
+                                        key={action.action_id}
+                                        action={action}
+                                        selected={selectedIds.has(action.action_id)}
+                                        expanded={expandedId === action.action_id}
+                                        onToggleSelect={() => onToggleSelect(action.action_id)}
+                                        onToggleExpand={() => onToggleExpand(action.action_id)}
+                                        onStatusChange={(status, label) => onStatusChange(action, status, label)}
+                                        onWorkflow={(wa, wl) => onWorkflow(action, wa, wl)}
+                                        workflowPending={workflowPending}
+                                      />
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
   );
 }
 
