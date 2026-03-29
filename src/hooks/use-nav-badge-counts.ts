@@ -85,16 +85,57 @@ export function useNavBadgeCounts({
     setLoading(true);
     const next = emptyCounts();
 
+    /** PostgREST builders are PromiseLike; typing as Promise<...> was incorrect and broke the linter. */
     const headCount = async (
-      fn: () => Promise<{ count: number | null }>
+      query: PromiseLike<{ count: number | null }>
     ): Promise<number> => {
-      const { count } = await fn();
+      const { count } = await query;
       return count ?? 0;
     };
 
     try {
+      const { data: rpcData, error: rpcError } = await supabase.rpc(
+        'get_nav_badge_counts',
+        {
+          p_hub_id: hubId ?? null,
+          p_role_supervisor: roleIsSupervisor,
+          p_role_finance: roleIsFinance,
+          p_role_coordinator: roleIsCoordinator,
+          p_role_fom_or_admin: roleIsFomOrAdmin,
+          p_role_incident: roleCanSeeIncident,
+          p_is_data_collector: isDataCollector,
+          p_include_admin_bell: includeAdminBellCounts,
+          p_include_fom_verified: includeFomVerifiedCounts,
+        }
+      );
+
+      if (!rpcError && rpcData && typeof rpcData === 'object' && !Array.isArray(rpcData)) {
+        const d = rpcData as Record<string, unknown>;
+        const num = (key: string) => Number(d[key]) || 0;
+        const fromRpc: NavBadgeCounts = {
+          pendingCostTier1Hub: num('pendingCostTier1Hub'),
+          pendingDpSupervisor: num('pendingDpSupervisor'),
+          pendingTier2Cost: num('pendingTier2Cost'),
+          pendingDpAdmin: num('pendingDpAdmin'),
+          pendingUsers: num('pendingUsers'),
+          mmpVerifiedSites: num('mmpVerifiedSites'),
+          pendingMmpCoordinator: num('pendingMmpCoordinator'),
+          pendingMmpUnassigned: num('pendingMmpUnassigned'),
+          pendingFinanceDp: num('pendingFinanceDp'),
+          unreadNotifications: num('unreadNotifications'),
+          openIncidents: num('openIncidents'),
+          pendingVerification: num('pendingVerification'),
+          pendingWallet: num('pendingWallet'),
+          pendingReclaimCount: num('pendingReclaimCount'),
+        };
+        if (gen === genRef.current) {
+          setCounts(fromRpc);
+        }
+        return;
+      }
+
       if (roleIsSupervisor && hubId) {
-        next.pendingCostTier1Hub = await headCount(() =>
+        next.pendingCostTier1Hub = await headCount(
           supabase
             .from('operational_cost_submissions')
             .select('id', { count: 'exact', head: true })
@@ -102,7 +143,7 @@ export function useNavBadgeCounts({
             .eq('tier1_status', 'pending')
             .neq('submitted_by', currentUserId)
         );
-        next.pendingDpSupervisor = await headCount(() =>
+        next.pendingDpSupervisor = await headCount(
           supabase
             .from('down_payment_requests')
             .select('id', { count: 'exact', head: true })
@@ -112,7 +153,7 @@ export function useNavBadgeCounts({
       }
 
       if (roleIsFomOrAdmin) {
-        next.pendingTier2Cost = await headCount(() =>
+        next.pendingTier2Cost = await headCount(
           supabase
             .from('operational_cost_submissions')
             .select('id', { count: 'exact', head: true })
@@ -120,13 +161,13 @@ export function useNavBadgeCounts({
             .eq('tier2_status', 'pending')
         );
         if (includeAdminBellCounts) {
-          next.pendingUsers = await headCount(() =>
+          next.pendingUsers = await headCount(
             supabase
               .from('profiles')
               .select('id', { count: 'exact', head: true })
               .eq('status', 'pending')
           );
-          next.pendingDpAdmin = await headCount(() =>
+          next.pendingDpAdmin = await headCount(
             supabase
               .from('down_payment_requests')
               .select('id', { count: 'exact', head: true })
@@ -134,7 +175,7 @@ export function useNavBadgeCounts({
           );
         }
         if (includeFomVerifiedCounts) {
-          next.mmpVerifiedSites = await headCount(() =>
+          next.mmpVerifiedSites = await headCount(
             supabase
               .from('mmp_site_entries')
               .select('id', { count: 'exact', head: true })
@@ -144,14 +185,14 @@ export function useNavBadgeCounts({
       }
 
       if (roleIsCoordinator) {
-        next.pendingMmpCoordinator = await headCount(() =>
+        next.pendingMmpCoordinator = await headCount(
           supabase
             .from('mmp_files')
             .select('id', { count: 'exact', head: true })
             .eq('coordinator_id', currentUserId)
             .in('status', ['forwarded_to_coordinator', 'pending_acceptance'])
         );
-        next.pendingVerification = await headCount(() =>
+        next.pendingVerification = await headCount(
           supabase
             .from('mmp_site_entries')
             .select('id', { count: 'exact', head: true })
@@ -159,7 +200,7 @@ export function useNavBadgeCounts({
             .or('status.eq.dispatched,status.eq.Dispatched')
         );
       } else if (roleIsFomOrAdmin) {
-        next.pendingMmpUnassigned = await headCount(() =>
+        next.pendingMmpUnassigned = await headCount(
           supabase
             .from('mmp_files')
             .select('id', { count: 'exact', head: true })
@@ -169,7 +210,7 @@ export function useNavBadgeCounts({
       }
 
       if (roleIsFinance) {
-        next.pendingFinanceDp = await headCount(() =>
+        next.pendingFinanceDp = await headCount(
           supabase
             .from('down_payment_requests')
             .select('id', { count: 'exact', head: true })
@@ -195,7 +236,7 @@ export function useNavBadgeCounts({
         }
       }
 
-      next.unreadNotifications = await headCount(() =>
+      next.unreadNotifications = await headCount(
         supabase
           .from('notifications')
           .select('id', { count: 'exact', head: true })
@@ -204,7 +245,7 @@ export function useNavBadgeCounts({
       );
 
       if (roleCanSeeIncident) {
-        next.openIncidents = await headCount(() =>
+        next.openIncidents = await headCount(
           supabase
             .from('incident_reports')
             .select('id', { count: 'exact', head: true })
@@ -213,7 +254,7 @@ export function useNavBadgeCounts({
       }
 
       if (roleIsCoordinator || isDataCollector) {
-        next.pendingWallet = await headCount(() =>
+        next.pendingWallet = await headCount(
           supabase
             .from('down_payment_requests')
             .select('id', { count: 'exact', head: true })

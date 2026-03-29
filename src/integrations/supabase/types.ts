@@ -1054,6 +1054,20 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      get_nav_badge_counts: {
+        Args: {
+          p_hub_id?: string | null
+          p_include_admin_bell?: boolean
+          p_include_fom_verified?: boolean
+          p_is_data_collector?: boolean
+          p_role_coordinator?: boolean
+          p_role_finance?: boolean
+          p_role_fom_or_admin?: boolean
+          p_role_incident?: boolean
+          p_role_supervisor?: boolean
+        }
+        Returns: Json
+      }
       get_sudan_default_coordinates: {
         Args: Record<PropertyKey, never>
         Returns: Json
