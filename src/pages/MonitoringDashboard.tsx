@@ -1420,7 +1420,10 @@ function ModuleSummaryCard({
   const [open, setOpen] = useState(false);
   const Icon = at.icon;
 
-  const getHub   = (a: DashboardAction) => String((a.details as Record<string,unknown>)?.hub_office ?? '—');
+  const getHub   = (a: DashboardAction) => {
+    const d = a.details as Record<string, unknown>;
+    return String(d?.hub_name ?? d?.hub_office ?? '—');
+  };
   const getSender = (a: DashboardAction) => a.sender_name || 'Unknown';
 
   // Status breakdown
@@ -2175,17 +2178,23 @@ function ActionRow({ action, selected, expanded, onToggleSelect, onToggleExpand,
           {Object.keys(action.details ?? {}).length > 0 && (() => {
             // Separate key operational fields from secondary/audit fields
             const KEY_FIELDS = new Set([
-              'site_name','site_code','state','locality','status','hub_office','cp_name',
+              'site_name','site_code','state','locality','status','hub_office','hub_name','cp_name',
               'visit_date','visit_type','cost','enumerator_fee','transport_fee',
               'monitoring_by','survey_tool','main_activity','activity_at_site',
               'dispatched_by','dispatched_at','accepted_by','accepted_at',
               'claimed_by','claimed_at','completed_at','returned_at','rejected_at',
               'not_covered_flag','not_covered_reason','comments','mmp_file_id',
+              // Operational cost fields
+              'expense_category','total_amount','amount','description','period','purpose',
+              'payment_method','receipt_number','expense_date','approved_by','approved_at',
+              // Advance payment fields
+              'requested_amount','approved_amount','disbursed_amount','due_date',
+              'beneficiary_name','project_code','activity_description','hub_id',
             ]);
             const DATE_KEYS = new Set([
               'dispatched_at','accepted_at','claimed_at','completed_at','returned_at',
               'rejected_at','created_at','updated_at','visit_date','not_covered_at',
-              'verified_at','cycle_closed_at',
+              'verified_at','cycle_closed_at','expense_date','approved_at','due_date',
             ]);
             const formatVal = (k: string, v: unknown): string => {
               if (v === null || v === undefined || v === '') return '—';
