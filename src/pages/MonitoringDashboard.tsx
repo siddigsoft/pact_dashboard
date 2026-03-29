@@ -191,7 +191,7 @@ function MonitoringContent() {
   type CoverageEntry = {
     id: string; site_name: string; hub_name: string; state_name: string;
     locality_name: string; mmp_file_id: string; mmp_name: string;
-    advance_status: string | null;
+    advance_status: string | null; data_collector_name: string;
   };
   const { data: coverageData = [], isLoading: coverageLoading } = useQuery<CoverageEntry[]>({
     queryKey: ['advance-site-coverage'],
@@ -209,23 +209,24 @@ function MonitoringContent() {
         offset += BATCH;
       }
       return all.map((r) => ({
-        id:            String(r.entry_id ?? ''),
-        site_name:     String(r.site_name ?? '—'),
-        hub_name:      String(r.hub_name ?? '—'),
-        state_name:    String(r.state_name ?? '—'),
-        locality_name: String(r.locality_name ?? '—'),
-        mmp_file_id:   String(r.mmp_file_id ?? ''),
-        mmp_name:      String(r.mmp_name ?? '—'),
-        advance_status: r.advance_status ? String(r.advance_status) : null,
+        id:                   String(r.entry_id ?? ''),
+        site_name:            String(r.site_name ?? '—'),
+        hub_name:             String(r.hub_name ?? '—'),
+        state_name:           String(r.state_name ?? '—'),
+        locality_name:        String(r.locality_name ?? '—'),
+        mmp_file_id:          String(r.mmp_file_id ?? ''),
+        mmp_name:             String(r.mmp_name ?? '—'),
+        advance_status:       r.advance_status ? String(r.advance_status) : null,
+        data_collector_name:  String(r.data_collector_name ?? '—'),
       }));
     },
   });
   const [showCoverage, setShowCoverage] = useState(false);
-  const [coverageHubFilter,      setCoverageHubFilter]      = useState<string>('all');
-  const [coverageStatusFilter,   setCoverageStatusFilter]   = useState<string>('all');
-  const [coverageMmpFilter,      setCoverageMmpFilter]      = useState<string>('all');
-  const [coverageStateFilter,    setCoverageStateFilter]    = useState<string>('all');
-  const [coverageLocalityFilter, setCoverageLocalityFilter] = useState<string>('all');
+  const [coverageHubFilter,    setCoverageHubFilter]    = useState<string>('all');
+  const [coverageStatusFilter, setCoverageStatusFilter] = useState<string>('all');
+  const [coverageMmpFilter,    setCoverageMmpFilter]    = useState<string>('all');
+  const [coverageStateFilter,  setCoverageStateFilter]  = useState<string>('all');
+  const [coverageDcFilter,     setCoverageDcFilter]     = useState<string>('all');
   const coverageSummary = useMemo(() => {
     const cnt = (statuses: (string | null)[]) => coverageData.filter(e => statuses.includes(e.advance_status)).length;
     const total            = coverageData.length;
@@ -248,10 +249,10 @@ function MonitoringContent() {
     if (coverageStatusFilter === 'all')             subset = coverageData;
     else if (coverageStatusFilter === 'no_request') subset = coverageData.filter(e => !e.advance_status);
     else                                             subset = coverageData.filter(e => e.advance_status === coverageStatusFilter);
-    if (coverageMmpFilter      !== 'all') subset = subset.filter(e => e.mmp_name   === coverageMmpFilter);
-    if (coverageStateFilter    !== 'all') subset = subset.filter(e => e.state_name === coverageStateFilter);
-    if (coverageLocalityFilter !== 'all') subset = subset.filter(e => e.locality_name === coverageLocalityFilter);
-    if (coverageHubFilter      !== 'all') subset = subset.filter(e => e.hub_name   === coverageHubFilter);
+    if (coverageMmpFilter   !== 'all') subset = subset.filter(e => e.mmp_name             === coverageMmpFilter);
+    if (coverageHubFilter   !== 'all') subset = subset.filter(e => e.hub_name             === coverageHubFilter);
+    if (coverageStateFilter !== 'all') subset = subset.filter(e => e.state_name           === coverageStateFilter);
+    if (coverageDcFilter    !== 'all') subset = subset.filter(e => e.data_collector_name  === coverageDcFilter);
     const byHub = new Map<string, CoverageEntry[]>();
     for (const e of subset) {
       const h = e.hub_name || '—';
@@ -259,11 +260,11 @@ function MonitoringContent() {
       byHub.get(h)!.push(e);
     }
     return byHub;
-  }, [coverageData, coverageHubFilter, coverageStatusFilter, coverageMmpFilter, coverageStateFilter, coverageLocalityFilter]);
-  const coverageHubs      = useMemo(() => [...new Set(coverageData.map(e => e.hub_name).filter(Boolean))].sort()      as string[], [coverageData]);
-  const coverageMmps      = useMemo(() => [...new Set(coverageData.map(e => e.mmp_name).filter(m => m && m !== '—'))].sort()  as string[], [coverageData]);
-  const coverageStates    = useMemo(() => [...new Set(coverageData.map(e => e.state_name).filter(s => s && s !== '—'))].sort() as string[], [coverageData]);
-  const coverageLocalities = useMemo(() => [...new Set(coverageData.map(e => e.locality_name).filter(l => l && l !== '—'))].sort() as string[], [coverageData]);
+  }, [coverageData, coverageHubFilter, coverageStatusFilter, coverageMmpFilter, coverageStateFilter, coverageDcFilter]);
+  const coverageHubs           = useMemo(() => [...new Set(coverageData.map(e => e.hub_name).filter(Boolean))].sort() as string[], [coverageData]);
+  const coverageMmps           = useMemo(() => [...new Set(coverageData.map(e => e.mmp_name).filter(m => m && m !== '—'))].sort() as string[], [coverageData]);
+  const coverageStates         = useMemo(() => [...new Set(coverageData.map(e => e.state_name).filter(s => s && s !== '—'))].sort() as string[], [coverageData]);
+  const coverageDataCollectors = useMemo(() => [...new Set(coverageData.map(e => e.data_collector_name).filter(d => d && d !== '—'))].sort() as string[], [coverageData]);
 
   // ── Fetch via SECURITY DEFINER RPC (bypasses all RLS) ─────────────────────
   const { data: allActions = [], isLoading, isFetching, refetch, dataUpdatedAt, error } = useQuery<DashboardAction[]>({
@@ -1280,9 +1281,9 @@ function MonitoringContent() {
                   })()}
                 </span>
                 <span className="text-[10px] text-muted-foreground">{[...coverageFiltered.values()].reduce((s, a) => s + a.length, 0).toLocaleString()} sites</span>
-                {(coverageMmpFilter !== 'all' || coverageStateFilter !== 'all' || coverageLocalityFilter !== 'all' || coverageHubFilter !== 'all') && (
+                {(coverageMmpFilter !== 'all' || coverageHubFilter !== 'all' || coverageStateFilter !== 'all' || coverageDcFilter !== 'all') && (
                   <button
-                    onClick={() => { setCoverageMmpFilter('all'); setCoverageStateFilter('all'); setCoverageLocalityFilter('all'); setCoverageHubFilter('all'); }}
+                    onClick={() => { setCoverageMmpFilter('all'); setCoverageHubFilter('all'); setCoverageStateFilter('all'); setCoverageDcFilter('all'); }}
                     className="text-[10px] text-muted-foreground hover:text-foreground flex items-center gap-1 px-1.5 py-0.5 rounded border border-muted hover:border-foreground/30 transition-colors"
                     data-testid="button-clear-coverage-filters"
                   >
@@ -1291,7 +1292,7 @@ function MonitoringContent() {
                 )}
               </div>
               <div className="flex flex-wrap gap-2">
-                {/* Order: MMP → Hub → State → Locality (mirrors MMP Site Entries tree) */}
+                {/* Order: MMP → Hub → State → Data Collector (mirrors MMP Site Entries tree) */}
                 <Select value={coverageMmpFilter} onValueChange={setCoverageMmpFilter}>
                   <SelectTrigger className="h-7 text-xs w-[160px]" data-testid="select-coverage-mmp-filter">
                     <SelectValue placeholder="All MMPs" />
@@ -1319,13 +1320,13 @@ function MonitoringContent() {
                     {coverageStates.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
                   </SelectContent>
                 </Select>
-                <Select value={coverageLocalityFilter} onValueChange={setCoverageLocalityFilter}>
-                  <SelectTrigger className="h-7 text-xs w-[150px]" data-testid="select-coverage-locality-filter">
-                    <SelectValue placeholder="All Localities" />
+                <Select value={coverageDcFilter} onValueChange={setCoverageDcFilter}>
+                  <SelectTrigger className="h-7 text-xs w-[180px]" data-testid="select-coverage-dc-filter">
+                    <SelectValue placeholder="All Data Collectors" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">All Localities</SelectItem>
-                    {coverageLocalities.map(l => <SelectItem key={l} value={l}>{l}</SelectItem>)}
+                    <SelectItem value="all">All Data Collectors</SelectItem>
+                    {coverageDataCollectors.map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>

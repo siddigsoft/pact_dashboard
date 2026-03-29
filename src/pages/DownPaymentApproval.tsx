@@ -442,7 +442,7 @@ export default function DownPaymentApproval() {
   const activeFilterCount = Object.values(filters).filter(v => v !== undefined && v !== '' && !(Array.isArray(v) && v.length === 0)).length;
 
   // ── Site Coverage query ────────────────────────────────────────────────────
-  type SiteCovEntry = { id: string; site_name: string; hub_name: string; state_name: string; locality_name: string; mmp_name: string; advance_status: string | null };
+  type SiteCovEntry = { id: string; site_name: string; hub_name: string; state_name: string; locality_name: string; mmp_name: string; advance_status: string | null; data_collector_name: string };
   const { data: siteCoverageData = [], isLoading: coverageLoading } = useQuery<SiteCovEntry[]>({
     queryKey: ['dp-site-coverage'],
     staleTime: 0,
@@ -459,13 +459,14 @@ export default function DownPaymentApproval() {
         offset += BATCH;
       }
       return all.map((r) => ({
-        id:            String(r.entry_id ?? ''),
-        site_name:     String(r.site_name ?? '—'),
-        hub_name:      String(r.hub_name ?? '—'),
-        state_name:    String(r.state_name ?? '—'),
-        locality_name: String(r.locality_name ?? '—'),
-        mmp_name:      String(r.mmp_name ?? '—'),
-        advance_status: r.advance_status ? String(r.advance_status) : null,
+        id:                   String(r.entry_id ?? ''),
+        site_name:            String(r.site_name ?? '—'),
+        hub_name:             String(r.hub_name ?? '—'),
+        state_name:           String(r.state_name ?? '—'),
+        locality_name:        String(r.locality_name ?? '—'),
+        mmp_name:             String(r.mmp_name ?? '—'),
+        advance_status:       r.advance_status ? String(r.advance_status) : null,
+        data_collector_name:  String(r.data_collector_name ?? '—'),
       }));
     },
   });
