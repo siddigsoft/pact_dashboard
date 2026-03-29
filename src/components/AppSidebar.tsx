@@ -651,7 +651,11 @@
 
     const getPrimaryRole = (): string => {
       if (!currentUser) return "";
+      // isSuperAdmin from context (may still be loading async)
       if (isSuperAdmin) return "Super Admin";
+      // Guard: if profile role itself says superAdmin, trust it even if context hasn't resolved yet
+      const profileRoleNorm = currentUser.role?.toLowerCase().replace(/[\s_-]/g, '');
+      if (profileRoleNorm === 'superadmin') return "Super Admin";
       if (roles && roles.length > 0) {
         if (roles.includes("admin" as AppRole)) return "Admin";
         const roleMap: Record<string, string> = {
@@ -666,7 +670,18 @@
         };
         return roleMap[roles[0]] || roles[0].charAt(0).toUpperCase() + roles[0].slice(1);
       }
-      return currentUser.role.charAt(0).toUpperCase() + currentUser.role.slice(1);
+      const fallbackRoleMap: Record<string, string> = {
+        superadmin: "Super Admin",
+        admin: "Admin",
+        ict: "ICT",
+        fom: "Field Ops Manager",
+        financialadmin: "Financial Admin",
+        auditor: "Financial Auditor",
+        supervisor: "Supervisor",
+        coordinator: "Coordinator",
+        datacollector: "Data Collector",
+      };
+      return fallbackRoleMap[profileRoleNorm] || currentUser.role.charAt(0).toUpperCase() + currentUser.role.slice(1);
     };
 
     const handleLogout = () => {
