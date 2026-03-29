@@ -1178,20 +1178,93 @@ function ActionRow({ action, selected, expanded, onToggleSelect, onToggleExpand,
             </div>
           </div>
 
-          {/* Details grid */}
-          {Object.keys(action.details ?? {}).length > 0 && (
-            <div className="bg-background border rounded-lg p-3">
-              <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-2">Record Details</p>
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-x-4 gap-y-2">
-                {Object.entries(action.details).slice(0, 20).map(([k, v]) => (
-                  <div key={k} className="flex flex-col min-w-0">
-                    <span className="text-[9px] text-muted-foreground uppercase tracking-wide">{k.replace(/_/g, ' ')}</span>
-                    <span className="text-xs font-mono truncate" title={String(v ?? '')}>{String(v ?? '—')}</span>
+          {/* Record Details — full, with date formatting and copy support */}
+          {Object.keys(action.details ?? {}).length > 0 && (() => {
+            // Separate key operational fields from secondary/audit fields
+            const KEY_FIELDS = new Set([
+              'site_name','site_code','state','locality','status','hub_office','cp_name',
+              'visit_date','visit_type','cost','enumerator_fee','transport_fee',
+              'monitoring_by','survey_tool','main_activity','activity_at_site',
+              'dispatched_by','dispatched_at','accepted_by','accepted_at',
+              'claimed_by','claimed_at','completed_at','returned_at','rejected_at',
+              'not_covered_flag','not_covered_reason','comments','mmp_file_id',
+            ]);
+            const DATE_KEYS = new Set([
+              'dispatched_at','accepted_at','claimed_at','completed_at','returned_at',
+              'rejected_at','created_at','updated_at','visit_date','not_covered_at',
+              'verified_at','cycle_closed_at',
+            ]);
+            const formatVal = (k: string, v: unknown): string => {
+              if (v === null || v === undefined || v === '') return '—';
+              if (typeof v === 'boolean') return v ? 'Yes' : 'No';
+              const str = String(v);
+              if (DATE_KEYS.has(k) && str.includes('T')) {
+                try {
+                  const d = parseISO(str);
+                  return `${format(d, 'dd MMM yyyy  HH:mm')}  (${formatDistanceToNow(d, { addSuffix: true })})`;
+                } catch { return str; }
+              }
+              return str;
+            };
+
+            const allEntries = Object.entries(action.details ?? {});
+            const keyEntries = allEntries.filter(([k]) => KEY_FIELDS.has(k));
+            const otherEntries = allEntries.filter(([k]) => !KEY_FIELDS.has(k));
+
+            const DetailRow = ({ k, v }: { k: string; v: unknown }) => {
+              const formatted = formatVal(k, v);
+              const isEmpty = formatted === '—';
+              const isUUID = typeof v === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-/i.test(v);
+              return (
+                <div className="flex flex-col min-w-0 gap-0.5">
+                  <span className="text-[9px] text-muted-foreground uppercase tracking-wide">{k.replace(/_/g,' ')}</span>
+                  <span className={`text-xs break-all ${isEmpty ? 'text-muted-foreground italic' : ''} ${isUUID ? 'font-mono text-[10px]' : ''}`}
+                    title={typeof v === 'string' ? v : ''}>
+                    {isUUID ? String(v) : formatted}
+                  </span>
+                </div>
+              );
+            };
+
+            return (
+              <div className="bg-background border rounded-lg p-3 flex flex-col gap-3">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+                  Record Details
+                  <span className="ml-2 normal-case font-normal text-muted-foreground/70">({allEntries.length} fields)</span>
+                </p>
+
+                {/* Full record ID with copy */}
+                <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded px-2 py-1">
+                  <span className="text-[9px] text-muted-foreground uppercase">Record ID</span>
+                  <span className="font-mono text-[10px] flex-1 truncate">{action.action_id}</span>
+                  <button
+                    onClick={() => { navigator.clipboard.writeText(action.action_id); }}
+                    className="text-[10px] text-blue-600 hover:text-blue-800 shrink-0"
+                    title="Copy ID"
+                  >Copy</button>
+                </div>
+
+                {/* Primary operational fields */}
+                {keyEntries.length > 0 && (
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-x-4 gap-y-3">
+                    {keyEntries.map(([k, v]) => <DetailRow key={k} k={k} v={v} />)}
                   </div>
-                ))}
+                )}
+
+                {/* Additional / audit fields */}
+                {otherEntries.length > 0 && (
+                  <>
+                    <div className="border-t pt-2">
+                      <p className="text-[9px] text-muted-foreground uppercase tracking-wide mb-2">Additional Fields</p>
+                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-x-4 gap-y-3">
+                        {otherEntries.map(([k, v]) => <DetailRow key={k} k={k} v={v} />)}
+                      </div>
+                    </div>
+                  </>
+                )}
               </div>
-            </div>
-          )}
+            );
+          })()}
 
           {/* History timeline */}
           <StatusHistoryTimeline actionId={action.action_id} actionType={action.action_type} />
