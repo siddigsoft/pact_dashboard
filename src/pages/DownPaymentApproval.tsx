@@ -473,12 +473,24 @@ export default function DownPaymentApproval() {
   const [covStatusFilter, setCovStatusFilter] = useState('all');
 
   const covSummary = useMemo(() => {
-    const total    = siteCoverageData.length;
-    const approved = siteCoverageData.filter(e => ['approved','fully_paid','partially_paid'].includes(e.advance_status ?? '')).length;
-    const pending  = siteCoverageData.filter(e => ['pending_supervisor','pending_admin'].includes(e.advance_status ?? '')).length;
-    const rejected = siteCoverageData.filter(e => ['rejected','cancelled'].includes(e.advance_status ?? '')).length;
-    const noReq    = siteCoverageData.filter(e => !e.advance_status).length;
-    return { total, approved, pending, rejected, noReq, pct: total > 0 ? Math.round(((approved + pending) / total) * 100) : 0 };
+    const cnt = (statuses: (string | null)[]) => siteCoverageData.filter(e => statuses.includes(e.advance_status)).length;
+    const total            = siteCoverageData.length;
+    const pendingSupervisor = cnt(['pending_supervisor']);
+    const pendingAdmin     = cnt(['pending_admin']);
+    const approved         = cnt(['approved']);
+    const fullyPaid        = cnt(['fully_paid']);
+    const partiallyPaid    = cnt(['partially_paid']);
+    const confirmed        = cnt(['confirmed']);
+    const acknowledged     = cnt(['acknowledged']);
+    const rejected         = cnt(['rejected']);
+    const cancelled        = cnt(['cancelled']);
+    const noReq            = cnt([null]);
+    const totalWithReq     = total - noReq;
+    return {
+      total, pendingSupervisor, pendingAdmin, approved, fullyPaid, partiallyPaid,
+      confirmed, acknowledged, rejected, cancelled, noReq, totalWithReq,
+      pct: total > 0 ? Math.round((totalWithReq / total) * 100) : 0,
+    };
   }, [siteCoverageData]);
 
   const covHubs = useMemo(() => [...new Set(siteCoverageData.map(e => e.hub_name).filter(h => h && h !== '—'))].sort(), [siteCoverageData]);
@@ -499,10 +511,8 @@ export default function DownPaymentApproval() {
         // ── Coverage-specific filters ─────────────────────────────────────
         if (covHubFilter !== 'all' && e.hub_name !== covHubFilter) return false;
         if (covStatusFilter !== 'all') {
-          if (covStatusFilter === 'no_request' && e.advance_status) return false;
-          if (covStatusFilter === 'approved'   && !['approved','fully_paid','partially_paid'].includes(e.advance_status ?? '')) return false;
-          if (covStatusFilter === 'pending'    && !['pending_supervisor','pending_admin'].includes(e.advance_status ?? ''))     return false;
-          if (covStatusFilter === 'rejected'   && !['rejected','cancelled'].includes(e.advance_status ?? ''))                  return false;
+          if (covStatusFilter === 'no_request') { if (e.advance_status) return false; }
+          else { if ((e.advance_status ?? '') !== covStatusFilter) return false; }
         }
         return true;
       })
@@ -1140,45 +1150,68 @@ export default function DownPaymentApproval() {
         {/* ─── Site Coverage ─── */}
         <TabsContent value="coverage" className="space-y-4">
           {/* Summary cards — click to filter */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            {[
-              { label: 'Total Active Sites', value: covSummary.total,    cls: 'text-foreground',  status: 'all',        ring: 'ring-gray-400' },
-              { label: 'Advance Approved',   value: covSummary.approved,  cls: 'text-emerald-600', status: 'approved',   ring: 'ring-emerald-500' },
-              { label: 'Pending Approval',   value: covSummary.pending,   cls: 'text-amber-500',   status: 'pending',    ring: 'ring-amber-400' },
-              { label: 'No Request Yet',     value: covSummary.noReq,     cls: covSummary.noReq > 0 ? 'text-red-600' : 'text-emerald-600', status: 'no_request', ring: 'ring-red-400' },
-            ].map(c => {
-              const active = covStatusFilter === c.status;
-              return (
-                <Card
-                  key={c.label}
-                  onClick={() => setCovStatusFilter(active ? 'all' : c.status)}
-                  className={`p-3 text-center cursor-pointer transition-all hover:shadow-md select-none ${active ? `ring-2 ${c.ring} shadow-md` : 'hover:ring-1 hover:ring-muted-foreground/30'}`}
-                  data-testid={`card-cov-${c.status}`}
-                >
-                  <div className={`text-2xl font-bold ${c.cls}`}>{coverageLoading ? '…' : c.value.toLocaleString()}</div>
-                  <div className="text-xs text-muted-foreground mt-0.5">{c.label}</div>
-                  {active && <div className="text-[9px] text-muted-foreground mt-1 font-medium">● FILTERING</div>}
-                </Card>
-              );
-            })}
-          </div>
+          {(() => {
+            const cards = [
+              { label: 'Total Sites',        value: covSummary.total,             cls: 'text-foreground',   status: 'all',               ring: 'ring-gray-400',   dot: 'bg-gray-400' },
+              { label: 'Pending Supervisor', value: covSummary.pendingSupervisor, cls: 'text-orange-500',   status: 'pending_supervisor', ring: 'ring-orange-400', dot: 'bg-orange-400' },
+              { label: 'Pending Admin',      value: covSummary.pendingAdmin,      cls: 'text-amber-500',    status: 'pending_admin',      ring: 'ring-amber-400',  dot: 'bg-amber-400' },
+              { label: 'Approved',           value: covSummary.approved,          cls: 'text-emerald-600',  status: 'approved',           ring: 'ring-emerald-500',dot: 'bg-emerald-500' },
+              { label: 'Fully Paid',         value: covSummary.fullyPaid,         cls: 'text-emerald-700',  status: 'fully_paid',         ring: 'ring-emerald-600',dot: 'bg-emerald-600' },
+              { label: 'Partially Paid',     value: covSummary.partiallyPaid,     cls: 'text-teal-600',     status: 'partially_paid',     ring: 'ring-teal-500',   dot: 'bg-teal-500' },
+              { label: 'Confirmed',          value: covSummary.confirmed,         cls: 'text-blue-600',     status: 'confirmed',          ring: 'ring-blue-500',   dot: 'bg-blue-500' },
+              { label: 'Acknowledged',       value: covSummary.acknowledged,      cls: 'text-indigo-600',   status: 'acknowledged',       ring: 'ring-indigo-500', dot: 'bg-indigo-500' },
+              { label: 'Rejected',           value: covSummary.rejected,          cls: 'text-rose-600',     status: 'rejected',           ring: 'ring-rose-500',   dot: 'bg-rose-500' },
+              { label: 'Cancelled',          value: covSummary.cancelled,         cls: 'text-red-400',      status: 'cancelled',          ring: 'ring-red-300',    dot: 'bg-red-300' },
+              { label: 'No Request Yet',     value: covSummary.noReq,             cls: covSummary.noReq > 0 ? 'text-red-600' : 'text-emerald-600', status: 'no_request', ring: 'ring-red-400', dot: 'bg-red-400' },
+            ];
+            return (
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-2">
+                {cards.map(c => {
+                  const active = covStatusFilter === c.status;
+                  return (
+                    <Card
+                      key={c.label}
+                      onClick={() => setCovStatusFilter(active ? 'all' : c.status)}
+                      className={`p-2.5 text-center cursor-pointer transition-all hover:shadow-md select-none ${active ? `ring-2 ${c.ring} shadow-md` : 'hover:ring-1 hover:ring-muted-foreground/30'}`}
+                      data-testid={`card-cov-${c.status}`}
+                    >
+                      <div className={`text-xl font-bold ${c.cls}`}>{coverageLoading ? '…' : c.value.toLocaleString()}</div>
+                      <div className="text-[10px] text-muted-foreground mt-0.5 leading-tight">{c.label}</div>
+                      {active && <div className="text-[8px] text-muted-foreground mt-0.5 font-medium">● FILTERING</div>}
+                    </Card>
+                  );
+                })}
+              </div>
+            );
+          })()}
 
           {/* Coverage bar */}
           {!coverageLoading && covSummary.total > 0 && (
             <Card className="p-3">
               <div className="flex justify-between text-xs text-muted-foreground mb-1.5">
                 <span className="font-medium">Advance Request Coverage: <strong>{covSummary.pct}%</strong></span>
-                <span>{covSummary.approved + covSummary.pending} of {covSummary.total} sites have requests</span>
+                <span>{covSummary.totalWithReq.toLocaleString()} of {covSummary.total.toLocaleString()} sites have requests</span>
               </div>
               <div className="h-3 rounded-full bg-muted overflow-hidden flex">
+                <div className="bg-orange-400 h-full" style={{ width: `${(covSummary.pendingSupervisor / covSummary.total) * 100}%` }} />
+                <div className="bg-amber-400  h-full" style={{ width: `${(covSummary.pendingAdmin / covSummary.total) * 100}%` }} />
                 <div className="bg-emerald-500 h-full" style={{ width: `${(covSummary.approved / covSummary.total) * 100}%` }} />
-                <div className="bg-amber-400 h-full" style={{ width: `${(covSummary.pending / covSummary.total) * 100}%` }} />
-                <div className="bg-rose-400 h-full" style={{ width: `${(covSummary.rejected / covSummary.total) * 100}%` }} />
+                <div className="bg-emerald-700 h-full" style={{ width: `${(covSummary.fullyPaid / covSummary.total) * 100}%` }} />
+                <div className="bg-teal-500   h-full" style={{ width: `${(covSummary.partiallyPaid / covSummary.total) * 100}%` }} />
+                <div className="bg-blue-500   h-full" style={{ width: `${(covSummary.confirmed / covSummary.total) * 100}%` }} />
+                <div className="bg-indigo-500 h-full" style={{ width: `${(covSummary.acknowledged / covSummary.total) * 100}%` }} />
+                <div className="bg-rose-500   h-full" style={{ width: `${(covSummary.rejected / covSummary.total) * 100}%` }} />
               </div>
-              <div className="flex flex-wrap gap-4 mt-1.5 text-[10px] text-muted-foreground">
+              <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2 text-[10px] text-muted-foreground">
+                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-orange-400" />Pending Supervisor ({covSummary.pendingSupervisor})</span>
+                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-amber-400" />Pending Admin ({covSummary.pendingAdmin})</span>
                 <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-emerald-500" />Approved ({covSummary.approved})</span>
-                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-amber-400" />Pending ({covSummary.pending})</span>
-                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-rose-400" />Rejected ({covSummary.rejected})</span>
+                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-emerald-700" />Fully Paid ({covSummary.fullyPaid})</span>
+                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-teal-500" />Partially Paid ({covSummary.partiallyPaid})</span>
+                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-blue-500" />Confirmed ({covSummary.confirmed})</span>
+                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-indigo-500" />Acknowledged ({covSummary.acknowledged})</span>
+                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-rose-500" />Rejected ({covSummary.rejected})</span>
+                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-red-300" />Cancelled ({covSummary.cancelled})</span>
                 <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-muted-foreground/30" />No Request ({covSummary.noReq})</span>
               </div>
             </Card>
@@ -1218,13 +1251,19 @@ export default function DownPaymentApproval() {
                   </SelectContent>
                 </Select>
                 <Select value={covStatusFilter} onValueChange={setCovStatusFilter}>
-                  <SelectTrigger className="h-8 text-xs w-[180px]" data-testid="select-cov-status"><SelectValue placeholder="All Advance Statuses" /></SelectTrigger>
+                  <SelectTrigger className="h-8 text-xs w-[200px]" data-testid="select-cov-status"><SelectValue placeholder="All Advance Statuses" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">All Advance Statuses</SelectItem>
                     <SelectItem value="no_request">No Request Yet</SelectItem>
-                    <SelectItem value="pending">Pending Approval</SelectItem>
-                    <SelectItem value="approved">Approved / Paid</SelectItem>
-                    <SelectItem value="rejected">Rejected / Cancelled</SelectItem>
+                    <SelectItem value="pending_supervisor">Pending Supervisor</SelectItem>
+                    <SelectItem value="pending_admin">Pending Admin</SelectItem>
+                    <SelectItem value="approved">Approved</SelectItem>
+                    <SelectItem value="fully_paid">Fully Paid</SelectItem>
+                    <SelectItem value="partially_paid">Partially Paid</SelectItem>
+                    <SelectItem value="confirmed">Confirmed</SelectItem>
+                    <SelectItem value="acknowledged">Acknowledged</SelectItem>
+                    <SelectItem value="rejected">Rejected</SelectItem>
+                    <SelectItem value="cancelled">Cancelled</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
