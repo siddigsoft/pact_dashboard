@@ -171,6 +171,7 @@ function MonitoringContent() {
   const [workflowNotes, setWorkflowNotes] = useState('');
   const [statusDialog, setStatusDialog] = useState<{ actions: DashboardAction[]; targetStatus: DashboardStatus; label: string } | null>(null);
   const [notifyOpen, setNotifyOpen] = useState(false);
+  const [coverageNotifyOpen, setCoverageNotifyOpen] = useState(false);
   const [notifyCategory, setNotifyCategory] = useState<{ label: string; items: DashboardAction[] } | null>(null);
   const [statusNotes, setStatusNotes] = useState('');
   // Pipeline click-to-filter: clicking a stage box narrows the action feed
@@ -1197,9 +1198,10 @@ function MonitoringContent() {
 
       {/* ── Transportation Advance Coverage Card ─────────────────────────── */}
       <Card data-testid="card-advance-coverage">
-        <button
-          className="w-full flex items-center gap-3 px-4 py-3 hover:bg-muted/40 transition-colors text-left rounded-t-lg"
+        <div
+          className="w-full flex items-center gap-3 px-4 py-3 hover:bg-muted/40 transition-colors rounded-t-lg cursor-pointer"
           onClick={() => setShowCoverage(v => !v)}
+          role="button"
           data-testid="button-toggle-advance-coverage"
         >
           <span className="p-1.5 rounded-md bg-orange-100 text-orange-600 shrink-0"><ArrowRight className="h-3.5 w-3.5" /></span>
@@ -1224,8 +1226,16 @@ function MonitoringContent() {
               </>
             )
           }
+          <button
+            onClick={e => { e.stopPropagation(); setCoverageNotifyOpen(true); }}
+            className="flex items-center gap-1 text-[10px] text-violet-600 hover:text-violet-700 hover:bg-violet-50 border border-violet-200 rounded px-1.5 py-0.5 transition-colors shrink-0"
+            title="Send notification to supervisors, FOMs and data collectors about advance coverage"
+            data-testid="button-notify-coverage"
+          >
+            <Bell className="h-3 w-3" />Notify
+          </button>
           {showCoverage ? <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" /> : <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />}
-        </button>
+        </div>
 
         {/* Summary stat cards — always visible, click to filter */}
         {!coverageLoading && coverageSummary.total > 0 && (
@@ -1445,6 +1455,14 @@ function MonitoringContent() {
         onClose={() => { setNotifyOpen(false); setNotifyCategory(null); }}
         allActions={notifyCategory ? notifyCategory.items : allActions}
         categoryLabel={notifyCategory?.label}
+      />
+
+      {/* Coverage Notify Dialog */}
+      <CoverageNotifyDialog
+        open={coverageNotifyOpen}
+        onClose={() => setCoverageNotifyOpen(false)}
+        summary={coverageSummary}
+        coverageData={coverageData}
       />
 
       {/* Workflow Dialog */}
@@ -1715,6 +1733,264 @@ function NotifyUsersDialog({ open, onClose, allActions, categoryLabel }: {
           </p>
           <Button variant="outline" size="sm" onClick={onClose} disabled={sending}>Cancel</Button>
           <Button size="sm" className="bg-violet-600 hover:bg-violet-700 text-white" onClick={send} disabled={sending || selectedIds.size === 0} data-testid="notify-send-btn">
+            {sending ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Send className="h-4 w-4 mr-1" />}
+            Send {selectedIds.size > 0 ? `to ${selectedIds.size}` : ''}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ── Coverage Notify Dialog ────────────────────────────────────────────────────
+type CoverageProfile = { id: string; full_name: string | null; email: string | null; role: string | null; };
+type CoverageRoleGroup = { label: string; labelAr: string; role: string[]; contextEn: string; contextAr: string; color: string; };
+
+const COVERAGE_ROLE_GROUPS: CoverageRoleGroup[] = [
+  { label: 'Supervisors',          labelAr: 'المشرفون',            role: ['supervisor'],               contextEn: 'pending_supervisor',  contextAr: 'في انتظار موافقة المشرف',    color: 'bg-amber-100 text-amber-800 border-amber-300' },
+  { label: 'FOMs',                 labelAr: 'مديرو العمليات',     role: ['fom'],                      contextEn: 'pending_admin',       contextAr: 'في انتظار موافقة المسؤول',   color: 'bg-orange-100 text-orange-800 border-orange-300' },
+  { label: 'Admins',               labelAr: 'المسؤولون',           role: ['admin', 'super_admin'],     contextEn: 'pending_admin',       contextAr: 'في انتظار موافقة المسؤول',   color: 'bg-red-100 text-red-800 border-red-300' },
+  { label: 'Coordinators',         labelAr: 'المنسقون',             role: ['coordinator'],              contextEn: 'no_request',          contextAr: 'بدون طلب مسبق',              color: 'bg-blue-100 text-blue-800 border-blue-300' },
+];
+
+function CoverageNotifyDialog({
+  open, onClose, summary, coverageData,
+}: {
+  open: boolean;
+  onClose: () => void;
+  summary: { total: number; noRequest: number; pendingSupervisor: number; pendingAdmin: number; pct: number };
+  coverageData: CoverageEntry[];
+}) {
+  const { toast } = useToast();
+  const [profiles, setProfiles] = useState<CoverageProfile[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [priority, setPriority] = useState<'normal' | 'high' | 'urgent'>('normal');
+  const [sending, setSending] = useState(false);
+
+  const defaultMsgEn = `Transportation advance coverage requires your attention.\n\n• ${summary.noRequest.toLocaleString()} site${summary.noRequest !== 1 ? 's' : ''} with no advance request yet\n• ${summary.pendingSupervisor.toLocaleString()} site${summary.pendingSupervisor !== 1 ? 's' : ''} pending supervisor approval\n• ${summary.pendingAdmin.toLocaleString()} site${summary.pendingAdmin !== 1 ? 's' : ''} pending admin approval\n\nOverall coverage: ${summary.pct}% of ${summary.total.toLocaleString()} active sites. Please log in and take the necessary action.`;
+  const defaultMsgAr = `يحتاج تغطية مسبقة للنقل إلى اهتمامكم.\n\n• ${summary.noRequest.toLocaleString()} موقع بدون طلب مسبق حتى الآن\n• ${summary.pendingSupervisor.toLocaleString()} موقع في انتظار موافقة المشرف\n• ${summary.pendingAdmin.toLocaleString()} موقع في انتظار موافقة المسؤول\n\nنسبة التغطية الإجمالية: ${summary.pct}% من ${summary.total.toLocaleString()} موقعاً نشطاً. يرجى تسجيل الدخول واتخاذ الإجراء اللازم.`;
+
+  const [msgEn, setMsgEn] = useState(defaultMsgEn);
+  const [msgAr, setMsgAr] = useState(defaultMsgAr);
+
+  // Fetch all relevant profiles when dialog opens
+  useEffect(() => {
+    if (!open) return;
+    setLoading(true);
+    setMsgEn(defaultMsgEn);
+    setMsgAr(defaultMsgAr);
+    const allRoles = COVERAGE_ROLE_GROUPS.flatMap(g => g.role);
+    supabase
+      .from('profiles')
+      .select('id, full_name, email, role')
+      .in('role', allRoles)
+      .eq('is_active', true)
+      .order('role')
+      .then(({ data, error }) => {
+        setLoading(false);
+        if (error || !data) return;
+        setProfiles(data as CoverageProfile[]);
+        setSelectedIds(new Set(data.map(p => p.id)));
+      });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
+  const toggle = (id: string) =>
+    setSelectedIds(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
+
+  const toggleGroup = (ids: string[]) => {
+    const allOn = ids.every(id => selectedIds.has(id));
+    setSelectedIds(prev => {
+      const n = new Set(prev);
+      allOn ? ids.forEach(id => n.delete(id)) : ids.forEach(id => n.add(id));
+      return n;
+    });
+  };
+
+  const send = async () => {
+    const chosen = profiles.filter(p => selectedIds.has(p.id));
+    if (chosen.length === 0) { toast({ title: 'No recipients selected', variant: 'destructive' }); return; }
+    setSending(true);
+    try {
+      const titleEn = priority === 'urgent' ? '🚨 URGENT: Transportation Advance Coverage' : priority === 'high' ? '⚠️ Transportation Advance Coverage' : '📋 Transportation Advance Coverage';
+      const titleAr = priority === 'urgent' ? '🚨 عاجل: تغطية مسبقة للنقل' : priority === 'high' ? '⚠️ تغطية مسبقة للنقل' : '📋 تغطية مسبقة للنقل';
+
+      // In-app notifications
+      await insertNotifications(chosen.map(p => ({
+        recipient_id: p.id,
+        title_en: titleEn,
+        title_ar: titleAr,
+        message_en: msgEn,
+        message_ar: msgAr,
+        event_type: 'coverage_reminder',
+        action_url: '/admin/monitoring',
+        priority,
+        status: 'unread',
+      })));
+
+      // Emails
+      const withEmail = chosen.filter(p => p.email);
+      if (withEmail.length > 0) {
+        const subject = priority === 'urgent'
+          ? 'URGENT: Transportation Advance Coverage | عاجل: تغطية مسبقة للنقل'
+          : 'Transportation Advance Coverage — PACT System | تغطية مسبقة للنقل';
+        const html = `
+          <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:24px;">
+            <div style="background:#0F2041;padding:20px 24px;border-radius:8px 8px 0 0;">
+              <h2 style="color:#fff;margin:0;font-size:18px;">${titleEn}</h2>
+            </div>
+            <div style="border:1px solid #e5e7eb;border-top:none;padding:24px;border-radius:0 0 8px 8px;">
+              <table style="width:100%;border-collapse:collapse;margin-bottom:20px;">
+                <tr>
+                  <td style="padding:8px 12px;background:#fef2f2;border-radius:6px;text-align:center;width:33%">
+                    <div style="font-size:22px;font-weight:700;color:#dc2626">${summary.noRequest.toLocaleString()}</div>
+                    <div style="font-size:11px;color:#6b7280">No Request Yet</div>
+                  </td>
+                  <td style="width:8px"></td>
+                  <td style="padding:8px 12px;background:#fffbeb;border-radius:6px;text-align:center;width:33%">
+                    <div style="font-size:22px;font-weight:700;color:#d97706">${summary.pendingSupervisor.toLocaleString()}</div>
+                    <div style="font-size:11px;color:#6b7280">Pending Supervisor</div>
+                  </td>
+                  <td style="width:8px"></td>
+                  <td style="padding:8px 12px;background:#fff7ed;border-radius:6px;text-align:center;width:33%">
+                    <div style="font-size:22px;font-weight:700;color:#ea580c">${summary.pendingAdmin.toLocaleString()}</div>
+                    <div style="font-size:11px;color:#6b7280">Pending Admin</div>
+                  </td>
+                </tr>
+              </table>
+              <p style="color:#374151;font-size:14px;line-height:1.7;white-space:pre-line;margin:0 0 16px;">${msgEn}</p>
+              <hr style="border:none;border-top:1px solid #e5e7eb;margin:20px 0;" />
+              <p style="color:#6b7280;font-size:13px;text-align:right;direction:rtl;line-height:1.8;margin:0;">${titleAr}<br/><br/>${msgAr}</p>
+              <div style="margin-top:24px;text-align:center;">
+                <a href="https://app.pactorg.com/admin/monitoring" style="background:#0F2041;color:#fff;padding:10px 24px;border-radius:6px;text-decoration:none;font-size:14px;font-weight:600;">
+                  View Transportation Coverage
+                </a>
+              </div>
+            </div>
+            <p style="color:#9ca3af;font-size:11px;text-align:center;margin-top:16px;">Automated reminder from PACT Command Center – System Monitoring</p>
+          </div>`;
+        const text = `${titleEn}\n\n${msgEn}\n\n---\n\n${titleAr}\n\n${msgAr}\n\nView coverage: https://app.pactorg.com/admin/monitoring`;
+        await Promise.allSettled(withEmail.map(p =>
+          EmailNotificationService.sendEmail({ to: p.email!, subject, recipientName: p.full_name || 'User', html, text, priority })
+        ));
+      }
+
+      toast({
+        title: `Coverage reminder sent to ${chosen.length} user${chosen.length !== 1 ? 's' : ''}`,
+        description: withEmail.length > 0 ? `In-app + email sent to ${withEmail.length} user${withEmail.length !== 1 ? 's' : ''} with email on file.` : 'In-app only (no email addresses on file).',
+      });
+      onClose();
+    } catch (err) {
+      toast({ title: 'Failed to send', description: String(err), variant: 'destructive' });
+    } finally {
+      setSending(false);
+    }
+  };
+
+  // Group profiles by role group
+  const grouped = COVERAGE_ROLE_GROUPS.map(g => ({
+    ...g,
+    members: profiles.filter(p => g.role.includes(p.role || '')),
+  })).filter(g => g.members.length > 0);
+
+  const withEmail = profiles.filter(p => selectedIds.has(p.id) && p.email);
+
+  return (
+    <Dialog open={open} onOpenChange={v => { if (!v) onClose(); }}>
+      <DialogContent className="max-w-2xl max-h-[88vh] flex flex-col gap-0 p-0" data-testid="coverage-notify-dialog">
+        <DialogHeader className="px-5 pt-5 pb-3 border-b shrink-0">
+          <DialogTitle className="flex items-center gap-2 text-base">
+            <Bell className="h-4 w-4 text-violet-600" />Notify — Transportation Advance Coverage
+          </DialogTitle>
+          <DialogDescription className="text-xs">
+            Send an in-app notification + email to supervisors, FOMs, admins and coordinators about the current advance coverage status.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="flex-1 overflow-y-auto px-5 py-4 flex flex-col gap-4">
+          {/* Coverage summary pills */}
+          <div className="flex flex-wrap gap-2">
+            <span className="text-[11px] font-semibold bg-red-100 text-red-700 border border-red-200 px-2 py-1 rounded-full">{summary.noRequest.toLocaleString()} No Request</span>
+            <span className="text-[11px] font-semibold bg-amber-100 text-amber-700 border border-amber-200 px-2 py-1 rounded-full">{summary.pendingSupervisor.toLocaleString()} Pending Supervisor</span>
+            <span className="text-[11px] font-semibold bg-orange-100 text-orange-700 border border-orange-200 px-2 py-1 rounded-full">{summary.pendingAdmin.toLocaleString()} Pending Admin</span>
+            <span className="text-[11px] font-semibold bg-slate-100 text-slate-600 border px-2 py-1 rounded-full">Coverage: {summary.pct}%</span>
+          </div>
+
+          {/* Recipients grouped by role */}
+          <div className="flex flex-col gap-3">
+            <p className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground">Recipients</p>
+            {loading ? (
+              <div className="flex flex-col gap-2">{[1,2,3].map(i => <Skeleton key={i} className="h-10 w-full rounded-lg" />)}</div>
+            ) : grouped.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-4">No active supervisors, FOMs, admins or coordinators found.</p>
+            ) : grouped.map(g => (
+              <div key={g.label} className={`rounded-lg border p-3 ${g.color}`}>
+                <div className="flex items-center justify-between mb-2">
+                  <div>
+                    <span className="text-xs font-bold">{g.label}</span>
+                    <span className="text-[10px] ml-1 opacity-70">/ {g.labelAr}</span>
+                    <span className="text-[10px] ml-2 opacity-60">({g.members.length})</span>
+                  </div>
+                  <button
+                    onClick={() => toggleGroup(g.members.map(m => m.id))}
+                    className="text-[10px] underline opacity-70 hover:opacity-100"
+                  >
+                    {g.members.every(m => selectedIds.has(m.id)) ? 'Deselect all' : 'Select all'}
+                  </button>
+                </div>
+                <div className="flex flex-col gap-1">
+                  {g.members.map(p => (
+                    <label key={p.id} className="flex items-center gap-2 cursor-pointer hover:opacity-80">
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.has(p.id)}
+                        onChange={() => toggle(p.id)}
+                        className="accent-violet-600 h-3.5 w-3.5 shrink-0"
+                      />
+                      <span className="text-xs font-medium flex-1 truncate">{p.full_name || 'Unknown'}</span>
+                      {p.email
+                        ? <span className="text-[9px] opacity-60 truncate max-w-[130px]">{p.email}</span>
+                        : <span className="text-[9px] italic opacity-50">no email</span>
+                      }
+                    </label>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Priority */}
+          <div className="flex flex-col gap-1.5">
+            <p className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground">Priority</p>
+            <div className="flex gap-2">
+              {(['normal','high','urgent'] as const).map(p => (
+                <button key={p} onClick={() => setPriority(p)}
+                  className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-colors capitalize ${priority === p ? 'bg-violet-600 text-white border-violet-600' : 'bg-background text-muted-foreground border-border hover:border-violet-400'}`}>
+                  {p}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Message */}
+          <div className="flex flex-col gap-2">
+            <p className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground">Message (English)</p>
+            <Textarea value={msgEn} onChange={e => setMsgEn(e.target.value)} rows={5} className="text-xs resize-none" data-testid="input-coverage-msg-en" />
+          </div>
+          <div className="flex flex-col gap-2">
+            <p className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground">Message (Arabic)</p>
+            <Textarea value={msgAr} onChange={e => setMsgAr(e.target.value)} rows={5} className="text-xs resize-none text-right" dir="rtl" data-testid="input-coverage-msg-ar" />
+          </div>
+        </div>
+
+        <DialogFooter className="px-5 py-3 border-t shrink-0 flex items-center justify-between gap-3">
+          <p className="text-xs text-muted-foreground flex-1">
+            Will send <span className="font-semibold text-foreground">in-app + email</span> to <span className="font-bold text-foreground">{selectedIds.size}</span> user{selectedIds.size !== 1 ? 's' : ''}
+            {withEmail.length > 0 && <span className="ml-1 text-emerald-600">({withEmail.length} with email)</span>}
+          </p>
+          <Button variant="outline" size="sm" onClick={onClose} disabled={sending}>Cancel</Button>
+          <Button size="sm" className="bg-violet-600 hover:bg-violet-700 text-white" onClick={send} disabled={sending || selectedIds.size === 0} data-testid="coverage-notify-send-btn">
             {sending ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Send className="h-4 w-4 mr-1" />}
             Send {selectedIds.size > 0 ? `to ${selectedIds.size}` : ''}
           </Button>
