@@ -445,9 +445,9 @@ export default function DownPaymentApproval() {
   type SiteCovEntry = { id: string; site_name: string; hub_name: string; state_name: string; mmp_name: string; advance_status: string | null };
   const { data: siteCoverageData = [], isLoading: coverageLoading } = useQuery<SiteCovEntry[]>({
     queryKey: ['dp-site-coverage'],
-    staleTime: 5 * 60 * 1000,
+    staleTime: 0,
     queryFn: async () => {
-      const { data, error } = await supabase.rpc('get_advance_coverage_data');
+      const { data, error } = await (supabase.rpc('get_advance_coverage_data') as ReturnType<typeof supabase.rpc>).range(0, 49999);
       if (error) console.error('[Coverage] RPC error:', error);
       return (data ?? []).map((r: Record<string, unknown>) => ({
         id:           String(r.entry_id ?? ''),
@@ -459,23 +459,46 @@ export default function DownPaymentApproval() {
       }));
     },
   });
-  const [covHubFilter, setCovHubFilter] = useState('all');
+  const [covHubFilter,    setCovHubFilter]    = useState('all');
+  const [covStateFilter,  setCovStateFilter]  = useState('all');
+  const [covMmpFilter,    setCovMmpFilter]    = useState('all');
+  const [covStatusFilter, setCovStatusFilter] = useState('all');
+  const [covSearch,       setCovSearch]       = useState('');
+
   const covSummary = useMemo(() => {
-    const total = siteCoverageData.length;
+    const total    = siteCoverageData.length;
     const approved = siteCoverageData.filter(e => ['approved','fully_paid','partially_paid'].includes(e.advance_status ?? '')).length;
     const pending  = siteCoverageData.filter(e => ['pending_supervisor','pending_admin'].includes(e.advance_status ?? '')).length;
     const rejected = siteCoverageData.filter(e => ['rejected','cancelled'].includes(e.advance_status ?? '')).length;
     const noReq    = siteCoverageData.filter(e => !e.advance_status).length;
     return { total, approved, pending, rejected, noReq, pct: total > 0 ? Math.round(((approved + pending) / total) * 100) : 0 };
   }, [siteCoverageData]);
-  const covHubs = useMemo(() => [...new Set(siteCoverageData.map(e => e.hub_name).filter(Boolean))].sort(), [siteCoverageData]);
+
+  const covHubs   = useMemo(() => [...new Set(siteCoverageData.map(e => e.hub_name).filter(h => h && h !== '—'))].sort(), [siteCoverageData]);
+  const covStates = useMemo(() => [...new Set(siteCoverageData.map(e => e.state_name).filter(s => s && s !== '—'))].sort(), [siteCoverageData]);
+  const covMmps   = useMemo(() => [...new Set(siteCoverageData.map(e => e.mmp_name).filter(m => m && m !== '—'))].sort(), [siteCoverageData]);
+
   const covRows = useMemo(() => {
-    const f = covHubFilter === 'all' ? siteCoverageData : siteCoverageData.filter(e => e.hub_name === covHubFilter);
-    return f.sort((a, b) => {
-      const order = (s: string | null) => !s ? 0 : ['pending_supervisor','pending_admin'].includes(s) ? 1 : ['approved','fully_paid','partially_paid'].includes(s) ? 2 : 3;
-      return order(a.advance_status) - order(b.advance_status);
-    });
-  }, [siteCoverageData, covHubFilter]);
+    const term = covSearch.toLowerCase().trim();
+    return siteCoverageData
+      .filter(e => {
+        if (covHubFilter    !== 'all' && e.hub_name   !== covHubFilter)    return false;
+        if (covStateFilter  !== 'all' && e.state_name !== covStateFilter)  return false;
+        if (covMmpFilter    !== 'all' && e.mmp_name   !== covMmpFilter)    return false;
+        if (covStatusFilter !== 'all') {
+          if (covStatusFilter === 'no_request' && e.advance_status)        return false;
+          if (covStatusFilter === 'approved'   && !['approved','fully_paid','partially_paid'].includes(e.advance_status ?? '')) return false;
+          if (covStatusFilter === 'pending'    && !['pending_supervisor','pending_admin'].includes(e.advance_status ?? ''))     return false;
+          if (covStatusFilter === 'rejected'   && !['rejected','cancelled'].includes(e.advance_status ?? ''))                  return false;
+        }
+        if (term && !e.site_name.toLowerCase().includes(term)) return false;
+        return true;
+      })
+      .sort((a, b) => {
+        const order = (s: string | null) => !s ? 0 : ['pending_supervisor','pending_admin'].includes(s) ? 1 : ['approved','fully_paid','partially_paid'].includes(s) ? 2 : 3;
+        return order(a.advance_status) - order(b.advance_status);
+      });
+  }, [siteCoverageData, covHubFilter, covStateFilter, covMmpFilter, covStatusFilter, covSearch]);
 
   if (!isSupervisor && !isAdmin && !isFOM) {
     return (
@@ -1142,21 +1165,57 @@ export default function DownPaymentApproval() {
 
           {/* Site table */}
           <Card>
-            <CardHeader className="py-3 px-4 border-b">
+            <CardHeader className="py-3 px-4 border-b space-y-3">
               <div className="flex items-center justify-between flex-wrap gap-2">
                 <CardTitle className="text-sm font-semibold">All Active Sites — Advance Status</CardTitle>
                 <div className="flex items-center gap-2">
-                  <Select value={covHubFilter} onValueChange={setCovHubFilter}>
-                    <SelectTrigger className="h-8 text-xs w-[160px]" data-testid="select-cov-hub-filter">
-                      <SelectValue placeholder="All Hubs" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Hubs</SelectItem>
-                      {covHubs.map(h => <SelectItem key={h} value={h}>{h}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                  <Badge variant="secondary" className="text-xs">{covRows.length} sites</Badge>
+                  <Badge variant="secondary" className="text-xs">{covRows.length} of {covSummary.total} sites</Badge>
+                  {(covHubFilter !== 'all' || covStateFilter !== 'all' || covMmpFilter !== 'all' || covStatusFilter !== 'all' || covSearch) && (
+                    <Button variant="ghost" size="sm" className="h-7 text-xs text-muted-foreground gap-1"
+                      onClick={() => { setCovHubFilter('all'); setCovStateFilter('all'); setCovMmpFilter('all'); setCovStatusFilter('all'); setCovSearch(''); }}>
+                      <X className="h-3 w-3" />Clear
+                    </Button>
+                  )}
                 </div>
+              </div>
+              {/* Filter bar */}
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
+                <div className="relative lg:col-span-1">
+                  <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground" />
+                  <Input value={covSearch} onChange={e => setCovSearch(e.target.value)}
+                    placeholder="Search site…" className="h-8 text-xs pl-7" data-testid="input-cov-search" />
+                </div>
+                <Select value={covHubFilter} onValueChange={setCovHubFilter}>
+                  <SelectTrigger className="h-8 text-xs" data-testid="select-cov-hub"><SelectValue placeholder="All Hubs" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Hubs</SelectItem>
+                    {covHubs.map(h => <SelectItem key={h} value={h}>{h}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+                <Select value={covStateFilter} onValueChange={setCovStateFilter}>
+                  <SelectTrigger className="h-8 text-xs" data-testid="select-cov-state"><SelectValue placeholder="All States" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All States</SelectItem>
+                    {covStates.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+                <Select value={covMmpFilter} onValueChange={setCovMmpFilter}>
+                  <SelectTrigger className="h-8 text-xs" data-testid="select-cov-mmp"><SelectValue placeholder="All MMPs" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All MMPs</SelectItem>
+                    {covMmps.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+                <Select value={covStatusFilter} onValueChange={setCovStatusFilter}>
+                  <SelectTrigger className="h-8 text-xs" data-testid="select-cov-status"><SelectValue placeholder="All Statuses" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Statuses</SelectItem>
+                    <SelectItem value="no_request">No Request</SelectItem>
+                    <SelectItem value="pending">Pending Approval</SelectItem>
+                    <SelectItem value="approved">Approved</SelectItem>
+                    <SelectItem value="rejected">Rejected / Cancelled</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
             </CardHeader>
             <CardContent className="p-0">

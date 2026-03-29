@@ -195,9 +195,9 @@ function MonitoringContent() {
   };
   const { data: coverageData = [], isLoading: coverageLoading } = useQuery<CoverageEntry[]>({
     queryKey: ['advance-site-coverage'],
-    staleTime: 5 * 60 * 1000,
+    staleTime: 0,
     queryFn: async () => {
-      const { data, error } = await supabase.rpc('get_advance_coverage_data');
+      const { data, error } = await (supabase.rpc('get_advance_coverage_data') as ReturnType<typeof supabase.rpc>).range(0, 49999);
       if (error) console.error('[MonCoverage] RPC error:', error);
       return (data ?? []).map((r: Record<string, unknown>) => ({
         id:            String(r.entry_id ?? ''),
