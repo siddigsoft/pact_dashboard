@@ -442,7 +442,7 @@ export default function DownPaymentApproval() {
   const activeFilterCount = Object.values(filters).filter(v => v !== undefined && v !== '' && !(Array.isArray(v) && v.length === 0)).length;
 
   // ── Site Coverage query ────────────────────────────────────────────────────
-  type SiteCovEntry = { id: string; site_name: string; hub_name: string; state_name: string; mmp_name: string; advance_status: string | null };
+  type SiteCovEntry = { id: string; site_name: string; hub_name: string; state_name: string; locality_name: string; mmp_name: string; advance_status: string | null };
   const { data: siteCoverageData = [], isLoading: coverageLoading } = useQuery<SiteCovEntry[]>({
     queryKey: ['dp-site-coverage'],
     staleTime: 0,
@@ -450,20 +450,18 @@ export default function DownPaymentApproval() {
       const { data, error } = await (supabase.rpc('get_advance_coverage_data') as ReturnType<typeof supabase.rpc>).range(0, 49999);
       if (error) console.error('[Coverage] RPC error:', error);
       return (data ?? []).map((r: Record<string, unknown>) => ({
-        id:           String(r.entry_id ?? ''),
-        site_name:    String(r.site_name ?? '—'),
-        hub_name:     String(r.hub_name ?? '—'),
-        state_name:   String(r.state_name ?? '—'),
-        mmp_name:     String(r.mmp_name ?? '—'),
+        id:            String(r.entry_id ?? ''),
+        site_name:     String(r.site_name ?? '—'),
+        hub_name:      String(r.hub_name ?? '—'),
+        state_name:    String(r.state_name ?? '—'),
+        locality_name: String(r.locality_name ?? '—'),
+        mmp_name:      String(r.mmp_name ?? '—'),
         advance_status: r.advance_status ? String(r.advance_status) : null,
       }));
     },
   });
   const [covHubFilter,    setCovHubFilter]    = useState('all');
-  const [covStateFilter,  setCovStateFilter]  = useState('all');
-  const [covMmpFilter,    setCovMmpFilter]    = useState('all');
   const [covStatusFilter, setCovStatusFilter] = useState('all');
-  const [covSearch,       setCovSearch]       = useState('');
 
   const covSummary = useMemo(() => {
     const total    = siteCoverageData.length;
@@ -474,31 +472,36 @@ export default function DownPaymentApproval() {
     return { total, approved, pending, rejected, noReq, pct: total > 0 ? Math.round(((approved + pending) / total) * 100) : 0 };
   }, [siteCoverageData]);
 
-  const covHubs   = useMemo(() => [...new Set(siteCoverageData.map(e => e.hub_name).filter(h => h && h !== '—'))].sort(), [siteCoverageData]);
-  const covStates = useMemo(() => [...new Set(siteCoverageData.map(e => e.state_name).filter(s => s && s !== '—'))].sort(), [siteCoverageData]);
-  const covMmps   = useMemo(() => [...new Set(siteCoverageData.map(e => e.mmp_name).filter(m => m && m !== '—'))].sort(), [siteCoverageData]);
+  const covHubs = useMemo(() => [...new Set(siteCoverageData.map(e => e.hub_name).filter(h => h && h !== '—'))].sort(), [siteCoverageData]);
 
   const covRows = useMemo(() => {
-    const term = covSearch.toLowerCase().trim();
     return siteCoverageData
       .filter(e => {
-        if (covHubFilter    !== 'all' && e.hub_name   !== covHubFilter)    return false;
-        if (covStateFilter  !== 'all' && e.state_name !== covStateFilter)  return false;
-        if (covMmpFilter    !== 'all' && e.mmp_name   !== covMmpFilter)    return false;
+        // ── Page-level filters (same as Approval tab) ─────────────────────
+        if (filters.hubId && e.hub_name.toLowerCase() !== filters.hubId.toLowerCase()) return false;
+        if (filters.stateName && e.state_name.toLowerCase() !== filters.stateName.toLowerCase()) return false;
+        if (filters.localityName && e.locality_name.toLowerCase() !== filters.localityName.toLowerCase()) return false;
+        if (filters.mmpName && e.mmp_name.toLowerCase() !== filters.mmpName.toLowerCase()) return false;
+        if (filters.siteName && !e.site_name.toLowerCase().includes(filters.siteName.toLowerCase())) return false;
+        if (filters.searchTerm) {
+          const term = filters.searchTerm.toLowerCase();
+          if (!e.site_name.toLowerCase().includes(term) && !e.hub_name.toLowerCase().includes(term) && !e.state_name.toLowerCase().includes(term)) return false;
+        }
+        // ── Coverage-specific filters ─────────────────────────────────────
+        if (covHubFilter !== 'all' && e.hub_name !== covHubFilter) return false;
         if (covStatusFilter !== 'all') {
-          if (covStatusFilter === 'no_request' && e.advance_status)        return false;
+          if (covStatusFilter === 'no_request' && e.advance_status) return false;
           if (covStatusFilter === 'approved'   && !['approved','fully_paid','partially_paid'].includes(e.advance_status ?? '')) return false;
           if (covStatusFilter === 'pending'    && !['pending_supervisor','pending_admin'].includes(e.advance_status ?? ''))     return false;
           if (covStatusFilter === 'rejected'   && !['rejected','cancelled'].includes(e.advance_status ?? ''))                  return false;
         }
-        if (term && !e.site_name.toLowerCase().includes(term)) return false;
         return true;
       })
       .sort((a, b) => {
         const order = (s: string | null) => !s ? 0 : ['pending_supervisor','pending_admin'].includes(s) ? 1 : ['approved','fully_paid','partially_paid'].includes(s) ? 2 : 3;
         return order(a.advance_status) - order(b.advance_status);
       });
-  }, [siteCoverageData, covHubFilter, covStateFilter, covMmpFilter, covStatusFilter, covSearch]);
+  }, [siteCoverageData, filters, covHubFilter, covStatusFilter]);
 
   if (!isSupervisor && !isAdmin && !isFOM) {
     return (
@@ -1168,51 +1171,41 @@ export default function DownPaymentApproval() {
             <CardHeader className="py-3 px-4 border-b space-y-3">
               <div className="flex items-center justify-between flex-wrap gap-2">
                 <CardTitle className="text-sm font-semibold">All Active Sites — Advance Status</CardTitle>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   <Badge variant="secondary" className="text-xs">{covRows.length} of {covSummary.total} sites</Badge>
-                  {(covHubFilter !== 'all' || covStateFilter !== 'all' || covMmpFilter !== 'all' || covStatusFilter !== 'all' || covSearch) && (
+                  {(covHubFilter !== 'all' || covStatusFilter !== 'all') && (
                     <Button variant="ghost" size="sm" className="h-7 text-xs text-muted-foreground gap-1"
-                      onClick={() => { setCovHubFilter('all'); setCovStateFilter('all'); setCovMmpFilter('all'); setCovStatusFilter('all'); setCovSearch(''); }}>
-                      <X className="h-3 w-3" />Clear
+                      onClick={() => { setCovHubFilter('all'); setCovStatusFilter('all'); }}>
+                      <X className="h-3 w-3" />Clear local
                     </Button>
                   )}
                 </div>
               </div>
-              {/* Filter bar */}
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
-                <div className="relative lg:col-span-1">
-                  <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground" />
-                  <Input value={covSearch} onChange={e => setCovSearch(e.target.value)}
-                    placeholder="Search site…" className="h-8 text-xs pl-7" data-testid="input-cov-search" />
+
+              {/* Page-level active filters indicator */}
+              {activeFilterCount > 0 && (
+                <div className="flex items-center gap-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-3 py-1.5">
+                  <Filter className="h-3 w-3 shrink-0" />
+                  <span>Page filters active ({activeFilterCount}) — Hub · State · Locality · MMP · Search are applied from the filter bar above</span>
                 </div>
+              )}
+
+              {/* Coverage-specific filters */}
+              <div className="flex flex-wrap gap-2">
                 <Select value={covHubFilter} onValueChange={setCovHubFilter}>
-                  <SelectTrigger className="h-8 text-xs" data-testid="select-cov-hub"><SelectValue placeholder="All Hubs" /></SelectTrigger>
+                  <SelectTrigger className="h-8 text-xs w-[180px]" data-testid="select-cov-hub"><SelectValue placeholder="All Hubs" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">All Hubs</SelectItem>
                     {covHubs.map(h => <SelectItem key={h} value={h}>{h}</SelectItem>)}
                   </SelectContent>
                 </Select>
-                <Select value={covStateFilter} onValueChange={setCovStateFilter}>
-                  <SelectTrigger className="h-8 text-xs" data-testid="select-cov-state"><SelectValue placeholder="All States" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All States</SelectItem>
-                    {covStates.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-                <Select value={covMmpFilter} onValueChange={setCovMmpFilter}>
-                  <SelectTrigger className="h-8 text-xs" data-testid="select-cov-mmp"><SelectValue placeholder="All MMPs" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All MMPs</SelectItem>
-                    {covMmps.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}
-                  </SelectContent>
-                </Select>
                 <Select value={covStatusFilter} onValueChange={setCovStatusFilter}>
-                  <SelectTrigger className="h-8 text-xs" data-testid="select-cov-status"><SelectValue placeholder="All Statuses" /></SelectTrigger>
+                  <SelectTrigger className="h-8 text-xs w-[180px]" data-testid="select-cov-status"><SelectValue placeholder="All Advance Statuses" /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">All Statuses</SelectItem>
-                    <SelectItem value="no_request">No Request</SelectItem>
+                    <SelectItem value="all">All Advance Statuses</SelectItem>
+                    <SelectItem value="no_request">No Request Yet</SelectItem>
                     <SelectItem value="pending">Pending Approval</SelectItem>
-                    <SelectItem value="approved">Approved</SelectItem>
+                    <SelectItem value="approved">Approved / Paid</SelectItem>
                     <SelectItem value="rejected">Rejected / Cancelled</SelectItem>
                   </SelectContent>
                 </Select>
