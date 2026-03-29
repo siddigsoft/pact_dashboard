@@ -1513,6 +1513,7 @@ function ModuleSummaryCard({
             onToggleSelect={onToggleSelect} onToggleExpand={onToggleExpand}
             onStatusChange={onStatusChange} onWorkflow={onWorkflow}
             workflowPending={workflowPending}
+            actionType={at.key}
           />
         </div>
       )}
@@ -1546,6 +1547,7 @@ function statusChipClass(raw: string) {
 function StatusHubTree({
   items, selectedIds, expandedId,
   onToggleSelect, onToggleExpand, onStatusChange, onWorkflow, workflowPending,
+  actionType,
 }: {
   items: DashboardAction[];
   selectedIds: Set<string>;
@@ -1555,6 +1557,7 @@ function StatusHubTree({
   onStatusChange: (action: DashboardAction, status: DashboardStatus, label: string) => void;
   onWorkflow: (action: DashboardAction, wa: string, wl: string) => void;
   workflowPending: boolean;
+  actionType?: string;
 }) {
   const [openStatuses,   setOpenStatuses]   = useState<Set<string>>(() => new Set());
   const [openHubs,       setOpenHubs]       = useState<Set<string>>(() => new Set());
@@ -1763,72 +1766,166 @@ function StatusHubTree({
                                   );
                                 })()}
 
-                                {stOpen && (
-                                  <div className="flex flex-col divide-y divide-teal-100">
-                                    {[...locMap.entries()].sort(([, a], [, b]) =>
+                                {stOpen && (() => {
+                                  const isMSE     = actionType === 'mmp_site_entry';
+                                  const isPending = sName.toLowerCase() === 'pending';
+
+                                  /* ── Helper: render individual ActionRows ── */
+                                  const renderRows = (actions: DashboardAction[]) => (
+                                    <div className="flex flex-col gap-0.5 px-1 py-1 bg-white">
+                                      {actions.map(action => (
+                                        <ActionRow
+                                          key={action.action_id}
+                                          action={action}
+                                          selected={selectedIds.has(action.action_id)}
+                                          expanded={expandedId === action.action_id}
+                                          onToggleSelect={() => onToggleSelect(action.action_id)}
+                                          onToggleExpand={() => onToggleExpand(action.action_id)}
+                                          onStatusChange={(status, label) => onStatusChange(action, status, label)}
+                                          onWorkflow={(wa, wl) => onWorkflow(action, wa, wl)}
+                                          workflowPending={workflowPending}
+                                        />
+                                      ))}
+                                    </div>
+                                  );
+
+                                  /* ── Mode A: MSE non-pending → Enumerator → Locality → Records ── */
+                                  if (isMSE && !isPending) {
+                                    // Invert locMap: build dcName → Map<locName, actions[]>
+                                    const dcToLocMap = new Map<string, Map<string, DashboardAction[]>>();
+                                    for (const [locName, dcMap] of locMap.entries()) {
+                                      for (const [dcName, actions] of dcMap.entries()) {
+                                        if (!dcToLocMap.has(dcName)) dcToLocMap.set(dcName, new Map());
+                                        if (!dcToLocMap.get(dcName)!.has(locName)) dcToLocMap.get(dcName)!.set(locName, []);
+                                        for (const a of actions) dcToLocMap.get(dcName)!.get(locName)!.push(a);
+                                      }
+                                    }
+                                    const sortedDCs = [...dcToLocMap.entries()].sort(([, a], [, b]) =>
                                       [...b.values()].flat().length - [...a.values()].flat().length
-                                    ).map(([locName, dcMap]) => {
-                                      const lk       = locKey(sName, hName, stName, locName);
-                                      const locTotal  = [...dcMap.values()].flat().length;
-                                      const locOpen   = openLocalities.has(lk);
-                                      return (
-                                        <div key={lk}>
-
-                                          {/* ── Locality — teal ── */}
-                                          <button className="w-full flex items-center gap-2 px-8 py-1.5 bg-teal-50 hover:bg-teal-100 border-l-4 border-l-teal-400 text-left transition-colors"
-                                            onClick={() => toggleLocality(sName, hName, stName, locName, dcMap)} data-testid={`loc-group-${lk}`}>
-                                            {locOpen ? <ChevronDown className="h-3 w-3 text-teal-600 shrink-0" /> : <ChevronRight className="h-3 w-3 text-teal-500 shrink-0" />}
-                                            <MapPin className="h-3 w-3 text-teal-600 shrink-0" />
-                                            <span className="text-xs font-medium flex-1 text-teal-900">{locName}</span>
-                                            <span className="text-[9px] font-mono bg-teal-100 text-teal-700 border border-teal-200 px-1.5 py-0.5 rounded">{locTotal}</span>
-                                          </button>
-
-                                          {locOpen && (
-                                            <div className="flex flex-col divide-y divide-amber-100">
-                                              {[...dcMap.entries()].sort(([, a], [, b]) => b.length - a.length).map(([dcName, actions]) => {
-                                                const ck     = dcKey(sName, hName, stName, locName, dcName);
-                                                const dcOpen = openCollectors.has(ck);
-                                                return (
-                                                  <div key={ck}>
-
-                                                    {/* ── Data Collector — amber ── */}
-                                                    <button className="w-full flex items-center gap-2 px-10 py-1.5 bg-amber-50 hover:bg-amber-100 border-l-4 border-l-amber-400 text-left transition-colors"
-                                                      onClick={() => toggleCollector(ck)} data-testid={`dc-group-${ck}`}>
-                                                      {dcOpen ? <ChevronDown className="h-3 w-3 text-amber-600 shrink-0" /> : <ChevronRight className="h-3 w-3 text-amber-500 shrink-0" />}
-                                                      <User className="h-3 w-3 text-amber-600 shrink-0" />
-                                                      <span className="text-xs font-medium flex-1 text-amber-900">{dcName}</span>
-                                                      <span className="text-[9px] font-mono bg-amber-100 text-amber-700 border border-amber-200 px-1.5 py-0.5 rounded">
-                                                        {actions.length} {actions[0]?.action_type === 'mmp_site_entry' ? 'site' : 'record'}{actions.length !== 1 ? 's' : ''}
-                                                      </span>
-                                                    </button>
-
-                                                    {dcOpen && (
-                                                      <div className="flex flex-col gap-0.5 px-1 py-1 bg-white">
-                                                        {actions.map(action => (
-                                                          <ActionRow
-                                                            key={action.action_id}
-                                                            action={action}
-                                                            selected={selectedIds.has(action.action_id)}
-                                                            expanded={expandedId === action.action_id}
-                                                            onToggleSelect={() => onToggleSelect(action.action_id)}
-                                                            onToggleExpand={() => onToggleExpand(action.action_id)}
-                                                            onStatusChange={(status, label) => onStatusChange(action, status, label)}
-                                                            onWorkflow={(wa, wl) => onWorkflow(action, wa, wl)}
-                                                            workflowPending={workflowPending}
-                                                          />
-                                                        ))}
+                                    );
+                                    return (
+                                      <div className="flex flex-col divide-y divide-amber-100">
+                                        {sortedDCs.map(([dcName, locToActions]) => {
+                                          const ck      = `${sName}::${hName}::${stName}::__dc__::${dcName}`;
+                                          const dcOpen  = openCollectors.has(ck);
+                                          const dcTotal = [...locToActions.values()].flat().length;
+                                          return (
+                                            <div key={ck}>
+                                              {/* ── Enumerator — amber (px-8) ── */}
+                                              <button className="w-full flex items-center gap-2 px-8 py-1.5 bg-amber-50 hover:bg-amber-100 border-l-4 border-l-amber-400 text-left transition-colors"
+                                                onClick={() => toggleCollector(ck)} data-testid={`dc-group-${ck}`}>
+                                                {dcOpen ? <ChevronDown className="h-3 w-3 text-amber-600 shrink-0" /> : <ChevronRight className="h-3 w-3 text-amber-500 shrink-0" />}
+                                                <User className="h-3 w-3 text-amber-600 shrink-0" />
+                                                <span className="text-xs font-medium flex-1 text-amber-900">{dcName}</span>
+                                                <span className="text-[9px] font-mono bg-amber-100 text-amber-700 border border-amber-200 px-1.5 py-0.5 rounded">{dcTotal} site{dcTotal !== 1 ? 's' : ''}</span>
+                                              </button>
+                                              {dcOpen && (
+                                                <div className="flex flex-col divide-y divide-teal-100">
+                                                  {[...locToActions.entries()].sort(([, a], [, b]) => b.length - a.length).map(([locName, actions]) => {
+                                                    const lk2     = `${ck}::${locName}`;
+                                                    const locOpen2 = openLocalities.has(lk2);
+                                                    return (
+                                                      <div key={lk2}>
+                                                        {/* ── Locality — teal (px-10) ── */}
+                                                        <button className="w-full flex items-center gap-2 px-10 py-1.5 bg-teal-50 hover:bg-teal-100 border-l-4 border-l-teal-400 text-left transition-colors"
+                                                          onClick={() => setOpenLocalities(prev => { const n = new Set(prev); n.has(lk2) ? n.delete(lk2) : n.add(lk2); return n; })}
+                                                          data-testid={`loc-group-${lk2}`}>
+                                                          {locOpen2 ? <ChevronDown className="h-3 w-3 text-teal-600 shrink-0" /> : <ChevronRight className="h-3 w-3 text-teal-500 shrink-0" />}
+                                                          <MapPin className="h-3 w-3 text-teal-600 shrink-0" />
+                                                          <span className="text-xs font-medium flex-1 text-teal-900">{locName}</span>
+                                                          <span className="text-[9px] font-mono bg-teal-100 text-teal-700 border border-teal-200 px-1.5 py-0.5 rounded">{actions.length}</span>
+                                                        </button>
+                                                        {locOpen2 && renderRows(actions)}
                                                       </div>
-                                                    )}
-                                                  </div>
-                                                );
-                                              })}
+                                                    );
+                                                  })}
+                                                </div>
+                                              )}
                                             </div>
-                                          )}
-                                        </div>
-                                      );
-                                    })}
-                                  </div>
-                                )}
+                                          );
+                                        })}
+                                      </div>
+                                    );
+
+                                  /* ── Mode B: MSE pending → Locality → Records (no Enumerator) ── */
+                                  } else if (isMSE && isPending) {
+                                    const sortedLocs = [...locMap.entries()].sort(([, a], [, b]) =>
+                                      [...b.values()].flat().length - [...a.values()].flat().length
+                                    );
+                                    return (
+                                      <div className="flex flex-col divide-y divide-teal-100">
+                                        {sortedLocs.map(([locName, dcMap]) => {
+                                          const lk      = locKey(sName, hName, stName, locName);
+                                          const locOpen = openLocalities.has(lk);
+                                          const allActs = [...dcMap.values()].flat();
+                                          return (
+                                            <div key={lk}>
+                                              {/* ── Locality — teal (px-8) ── */}
+                                              <button className="w-full flex items-center gap-2 px-8 py-1.5 bg-teal-50 hover:bg-teal-100 border-l-4 border-l-teal-400 text-left transition-colors"
+                                                onClick={() => setOpenLocalities(prev => { const n = new Set(prev); n.has(lk) ? n.delete(lk) : n.add(lk); return n; })}
+                                                data-testid={`loc-group-${lk}`}>
+                                                {locOpen ? <ChevronDown className="h-3 w-3 text-teal-600 shrink-0" /> : <ChevronRight className="h-3 w-3 text-teal-500 shrink-0" />}
+                                                <MapPin className="h-3 w-3 text-teal-600 shrink-0" />
+                                                <span className="text-xs font-medium flex-1 text-teal-900">{locName}</span>
+                                                <span className="text-[9px] font-mono bg-teal-100 text-teal-700 border border-teal-200 px-1.5 py-0.5 rounded">{allActs.length}</span>
+                                              </button>
+                                              {locOpen && renderRows(allActs)}
+                                            </div>
+                                          );
+                                        })}
+                                      </div>
+                                    );
+
+                                  /* ── Mode C: all other types → Locality → Enumerator → Records ── */
+                                  } else {
+                                    return (
+                                      <div className="flex flex-col divide-y divide-teal-100">
+                                        {[...locMap.entries()].sort(([, a], [, b]) =>
+                                          [...b.values()].flat().length - [...a.values()].flat().length
+                                        ).map(([locName, dcMap]) => {
+                                          const lk      = locKey(sName, hName, stName, locName);
+                                          const locTotal = [...dcMap.values()].flat().length;
+                                          const locOpen  = openLocalities.has(lk);
+                                          return (
+                                            <div key={lk}>
+                                              {/* ── Locality — teal ── */}
+                                              <button className="w-full flex items-center gap-2 px-8 py-1.5 bg-teal-50 hover:bg-teal-100 border-l-4 border-l-teal-400 text-left transition-colors"
+                                                onClick={() => toggleLocality(sName, hName, stName, locName, dcMap)} data-testid={`loc-group-${lk}`}>
+                                                {locOpen ? <ChevronDown className="h-3 w-3 text-teal-600 shrink-0" /> : <ChevronRight className="h-3 w-3 text-teal-500 shrink-0" />}
+                                                <MapPin className="h-3 w-3 text-teal-600 shrink-0" />
+                                                <span className="text-xs font-medium flex-1 text-teal-900">{locName}</span>
+                                                <span className="text-[9px] font-mono bg-teal-100 text-teal-700 border border-teal-200 px-1.5 py-0.5 rounded">{locTotal}</span>
+                                              </button>
+                                              {locOpen && (
+                                                <div className="flex flex-col divide-y divide-amber-100">
+                                                  {[...dcMap.entries()].sort(([, a], [, b]) => b.length - a.length).map(([dcName, actions]) => {
+                                                    const ck     = dcKey(sName, hName, stName, locName, dcName);
+                                                    const dcOpen = openCollectors.has(ck);
+                                                    return (
+                                                      <div key={ck}>
+                                                        {/* ── Data Collector — amber ── */}
+                                                        <button className="w-full flex items-center gap-2 px-10 py-1.5 bg-amber-50 hover:bg-amber-100 border-l-4 border-l-amber-400 text-left transition-colors"
+                                                          onClick={() => toggleCollector(ck)} data-testid={`dc-group-${ck}`}>
+                                                          {dcOpen ? <ChevronDown className="h-3 w-3 text-amber-600 shrink-0" /> : <ChevronRight className="h-3 w-3 text-amber-500 shrink-0" />}
+                                                          <User className="h-3 w-3 text-amber-600 shrink-0" />
+                                                          <span className="text-xs font-medium flex-1 text-amber-900">{dcName}</span>
+                                                          <span className="text-[9px] font-mono bg-amber-100 text-amber-700 border border-amber-200 px-1.5 py-0.5 rounded">
+                                                            {actions.length} record{actions.length !== 1 ? 's' : ''}
+                                                          </span>
+                                                        </button>
+                                                        {dcOpen && renderRows(actions)}
+                                                      </div>
+                                                    );
+                                                  })}
+                                                </div>
+                                              )}
+                                            </div>
+                                          );
+                                        })}
+                                      </div>
+                                    );
+                                  }
+                                })()}
                               </div>
                             );
                           })}
