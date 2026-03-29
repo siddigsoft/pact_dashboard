@@ -447,9 +447,18 @@ export default function DownPaymentApproval() {
     queryKey: ['dp-site-coverage'],
     staleTime: 0,
     queryFn: async () => {
-      const { data, error } = await (supabase.rpc('get_advance_coverage_data') as ReturnType<typeof supabase.rpc>).range(0, 49999);
-      if (error) console.error('[Coverage] RPC error:', error);
-      return (data ?? []).map((r: Record<string, unknown>) => ({
+      const BATCH = 1000;
+      let all: Record<string, unknown>[] = [];
+      let offset = 0;
+      while (true) {
+        const { data, error } = await (supabase.rpc('get_advance_coverage_data') as ReturnType<typeof supabase.rpc>).range(offset, offset + BATCH - 1);
+        if (error) { console.error('[Coverage] RPC error:', error); break; }
+        if (!data || (data as unknown[]).length === 0) break;
+        all = all.concat(data as Record<string, unknown>[]);
+        if ((data as unknown[]).length < BATCH) break;
+        offset += BATCH;
+      }
+      return all.map((r) => ({
         id:            String(r.entry_id ?? ''),
         site_name:     String(r.site_name ?? '—'),
         hub_name:      String(r.hub_name ?? '—'),
@@ -1130,19 +1139,28 @@ export default function DownPaymentApproval() {
 
         {/* ─── Site Coverage ─── */}
         <TabsContent value="coverage" className="space-y-4">
-          {/* Summary cards */}
+          {/* Summary cards — click to filter */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             {[
-              { label: 'Total Active Sites', value: covSummary.total, cls: 'text-foreground' },
-              { label: 'Advance Approved', value: covSummary.approved, cls: 'text-emerald-600' },
-              { label: 'Pending Approval', value: covSummary.pending, cls: 'text-amber-500' },
-              { label: 'No Request Yet', value: covSummary.noReq, cls: covSummary.noReq > 0 ? 'text-red-600' : 'text-emerald-600' },
-            ].map(c => (
-              <Card key={c.label} className="p-3 text-center">
-                <div className={`text-2xl font-bold ${c.cls}`}>{coverageLoading ? '…' : c.value}</div>
-                <div className="text-xs text-muted-foreground mt-0.5">{c.label}</div>
-              </Card>
-            ))}
+              { label: 'Total Active Sites', value: covSummary.total,    cls: 'text-foreground',  status: 'all',        ring: 'ring-gray-400' },
+              { label: 'Advance Approved',   value: covSummary.approved,  cls: 'text-emerald-600', status: 'approved',   ring: 'ring-emerald-500' },
+              { label: 'Pending Approval',   value: covSummary.pending,   cls: 'text-amber-500',   status: 'pending',    ring: 'ring-amber-400' },
+              { label: 'No Request Yet',     value: covSummary.noReq,     cls: covSummary.noReq > 0 ? 'text-red-600' : 'text-emerald-600', status: 'no_request', ring: 'ring-red-400' },
+            ].map(c => {
+              const active = covStatusFilter === c.status;
+              return (
+                <Card
+                  key={c.label}
+                  onClick={() => setCovStatusFilter(active ? 'all' : c.status)}
+                  className={`p-3 text-center cursor-pointer transition-all hover:shadow-md select-none ${active ? `ring-2 ${c.ring} shadow-md` : 'hover:ring-1 hover:ring-muted-foreground/30'}`}
+                  data-testid={`card-cov-${c.status}`}
+                >
+                  <div className={`text-2xl font-bold ${c.cls}`}>{coverageLoading ? '…' : c.value.toLocaleString()}</div>
+                  <div className="text-xs text-muted-foreground mt-0.5">{c.label}</div>
+                  {active && <div className="text-[9px] text-muted-foreground mt-1 font-medium">● FILTERING</div>}
+                </Card>
+              );
+            })}
           </div>
 
           {/* Coverage bar */}
