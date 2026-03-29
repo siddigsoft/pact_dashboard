@@ -1006,47 +1006,45 @@ function MonitoringContent() {
           {ACTION_TYPES.map(at => {
             const items = displayedActions.filter(a => a.action_type === at.key);
             if (items.length === 0) return null;
+            const sharedProps = {
+              selectedIds, expandedId,
+              onToggleSelect: toggleSelect,
+              onToggleExpand: (id: string) => setExpandedId(p => p === id ? null : id),
+              onStatusChange: (action: DashboardAction, status: DashboardStatus, label: string) => { setStatusDialog({ actions: [action], targetStatus: status, label }); setStatusNotes(''); },
+              onWorkflow: (action: DashboardAction, wa: string, wl: string) => { setWorkflowDialog({ action, workflowAction: wa, workflowLabel: wl }); setWorkflowNotes(''); },
+              workflowPending: workflowMutation.isPending,
+            };
             const Icon = at.icon;
+
+            // 4 target modules → collapsible summary card with stats
+            if (CARD_MODULES.has(at.key)) {
+              return <ModuleSummaryCard key={at.key} at={at} items={items} {...sharedProps} />;
+            }
+
+            // Other modules → flat list with simple header
             return (
               <div key={at.key}>
-                {/* Module header */}
                 <div className="flex items-center gap-2 px-1 mb-1.5">
                   <Icon className="h-3.5 w-3.5 text-muted-foreground" />
                   <span className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground">{at.label}</span>
                   <Badge variant="secondary" className="text-[9px] h-4 px-1.5 rounded font-mono">{items.length}</Badge>
                   <div className="flex-1 h-px bg-border" />
                 </div>
-
-                {/* MMP Site Entries — Hub → State → Enumerator hierarchy */}
-                {at.key === 'mmp_site_entry'
-                  ? <HubStateEnumeratorTree
-                      items={items}
-                      selectedIds={selectedIds}
-                      expandedId={expandedId}
-                      onToggleSelect={toggleSelect}
-                      onToggleExpand={id => setExpandedId(p => p === id ? null : id)}
-                      onStatusChange={(action, status, label) => { setStatusDialog({ actions: [action], targetStatus: status, label }); setStatusNotes(''); }}
-                      onWorkflow={(action, wa, wl) => { setWorkflowDialog({ action, workflowAction: wa, workflowLabel: wl }); setWorkflowNotes(''); }}
+                <div className="flex flex-col gap-1">
+                  {items.map(action => (
+                    <ActionRow
+                      key={action.action_id}
+                      action={action}
+                      selected={selectedIds.has(action.action_id)}
+                      expanded={expandedId === action.action_id}
+                      onToggleSelect={() => toggleSelect(action.action_id)}
+                      onToggleExpand={() => setExpandedId(p => p === action.action_id ? null : action.action_id)}
+                      onStatusChange={(status, label) => { setStatusDialog({ actions: [action], targetStatus: status, label }); setStatusNotes(''); }}
+                      onWorkflow={(wa, wl) => { setWorkflowDialog({ action, workflowAction: wa, workflowLabel: wl }); setWorkflowNotes(''); }}
                       workflowPending={workflowMutation.isPending}
                     />
-                  : (
-                    <div className="flex flex-col gap-1">
-                      {items.map(action => (
-                        <ActionRow
-                          key={action.action_id}
-                          action={action}
-                          selected={selectedIds.has(action.action_id)}
-                          expanded={expandedId === action.action_id}
-                          onToggleSelect={() => toggleSelect(action.action_id)}
-                          onToggleExpand={() => setExpandedId(p => p === action.action_id ? null : action.action_id)}
-                          onStatusChange={(status, label) => { setStatusDialog({ actions: [action], targetStatus: status, label }); setStatusNotes(''); }}
-                          onWorkflow={(wa, wl) => { setWorkflowDialog({ action, workflowAction: wa, workflowLabel: wl }); setWorkflowNotes(''); }}
-                          workflowPending={workflowMutation.isPending}
-                        />
-                      ))}
-                    </div>
-                  )
-                }
+                  ))}
+                </div>
               </div>
             );
           })}
@@ -1152,7 +1150,168 @@ function KpiCard({ label, value, sub, icon, accent, testId, onClick, active }: {
   );
 }
 
-// ── Hub → State → Enumerator tree (MMP Site Entries only) ────────────────────
+// ── Module Summary Card ────────────────────────────────────────────────────────
+// Wraps a module's action rows inside a collapsible card with hub/requester/status stats.
+
+const CARD_MODULES = new Set(['mmp_lifecycle', 'mmp_site_entry', 'operational_cost', 'advance_payment']);
+
+function ModuleSummaryCard({
+  at, items, selectedIds, expandedId,
+  onToggleSelect, onToggleExpand, onStatusChange, onWorkflow, workflowPending,
+}: {
+  at: { key: ActionTypeKey; label: string; icon: React.ComponentType<{ className?: string }> };
+  items: DashboardAction[];
+  selectedIds: Set<string>;
+  expandedId: string | null;
+  onToggleSelect: (id: string) => void;
+  onToggleExpand: (id: string) => void;
+  onStatusChange: (action: DashboardAction, status: DashboardStatus, label: string) => void;
+  onWorkflow: (action: DashboardAction, wa: string, wl: string) => void;
+  workflowPending: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const Icon = at.icon;
+
+  const getHub   = (a: DashboardAction) => String((a.details as Record<string,unknown>)?.hub_office ?? '—');
+  const getSender = (a: DashboardAction) => a.sender_name || 'Unknown';
+
+  // Status breakdown
+  const statusMap = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const a of items) {
+      const k = a.native_status || 'unknown';
+      m.set(k, (m.get(k) ?? 0) + 1);
+    }
+    return [...m.entries()].sort((a, b) => b[1] - a[1]);
+  }, [items]);
+
+  // Hub breakdown (top 6)
+  const hubMap = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const a of items) { const k = getHub(a); m.set(k, (m.get(k) ?? 0) + 1); }
+    return [...m.entries()].sort((a, b) => b[1] - a[1]).slice(0, 6);
+  }, [items]);
+
+  // Requester breakdown (top 6)
+  const senderMap = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const a of items) { const k = getSender(a); m.set(k, (m.get(k) ?? 0) + 1); }
+    return [...m.entries()].sort((a, b) => b[1] - a[1]).slice(0, 6);
+  }, [items]);
+
+  // Dashboard status counts
+  const actedCount      = items.filter(a => a.dashboard_status === 'acted').length;
+  const noRespCount     = items.filter(a => a.dashboard_status === 'no_response').length;
+  const criticalCount   = items.filter(a => urgencyLevel(a) === 'critical').length;
+  const maxHubCount     = hubMap[0]?.[1] ?? 1;
+  const maxSenderCount  = senderMap[0]?.[1] ?? 1;
+
+  const statusColors: Record<string, string> = {
+    approved: 'bg-emerald-100 text-emerald-700', completed: 'bg-emerald-100 text-emerald-700',
+    pending:  'bg-amber-100 text-amber-700',     dispatched: 'bg-blue-100 text-blue-700',
+    rejected: 'bg-rose-100 text-rose-700',       returned:   'bg-orange-100 text-orange-700',
+    accepted: 'bg-indigo-100 text-indigo-700',   cancelled:  'bg-red-100 text-red-700',
+  };
+  const statusColor = (k: string) => statusColors[k.toLowerCase().replace(/[\s_-]/g, '')] ?? statusColors[k] ?? 'bg-slate-100 text-slate-600';
+
+  return (
+    <div className="rounded-xl border border-border overflow-hidden shadow-sm" data-testid={`module-card-${at.key}`}>
+      {/* ── Card header — always visible, click to toggle rows ── */}
+      <button
+        className="w-full flex items-center gap-3 px-4 py-3 bg-card hover:bg-muted/40 transition-colors text-left"
+        onClick={() => setOpen(v => !v)}
+        data-testid={`module-card-toggle-${at.key}`}
+      >
+        <span className="p-1.5 rounded-md bg-primary/10 text-primary shrink-0"><Icon className="h-3.5 w-3.5" /></span>
+        <span className="text-sm font-bold text-foreground flex-1">{at.label}</span>
+        <span className="font-mono text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full shrink-0">{items.length} records</span>
+        {criticalCount > 0 && <span className="text-[10px] font-bold bg-red-100 text-red-700 border border-red-200 px-1.5 py-0.5 rounded-full">{criticalCount} CRITICAL</span>}
+        {actedCount > 0    && <span className="text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 px-1.5 py-0.5 rounded-full">{actedCount} acted</span>}
+        {noRespCount > 0   && <span className="text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200 px-1.5 py-0.5 rounded-full">{noRespCount} no response</span>}
+        {open ? <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" /> : <ChevronUp className="h-4 w-4 text-muted-foreground shrink-0 rotate-180" />}
+      </button>
+
+      {/* ── Stats panel — always visible ── */}
+      <div className="px-4 py-3 border-t border-border/60 bg-slate-50/60 grid grid-cols-1 sm:grid-cols-3 gap-4">
+
+        {/* Status distribution */}
+        <div>
+          <p className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground mb-1.5">Status Distribution</p>
+          <div className="flex flex-wrap gap-1">
+            {statusMap.slice(0, 8).map(([k, n]) => (
+              <span key={k} className={`inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded ${statusColor(k)}`}>
+                {k} <span className="font-mono font-bold">{n}</span>
+              </span>
+            ))}
+          </div>
+        </div>
+
+        {/* Hub breakdown */}
+        <div>
+          <p className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground mb-1.5">By Hub</p>
+          <div className="flex flex-col gap-1">
+            {hubMap.map(([hub, n]) => (
+              <div key={hub} className="flex items-center gap-2">
+                <span className="text-[10px] text-slate-600 w-28 truncate shrink-0">{hub}</span>
+                <div className="flex-1 bg-slate-200 rounded-full h-1.5 overflow-hidden">
+                  <div className="bg-primary/60 h-full rounded-full" style={{ width: `${Math.round((n / maxHubCount) * 100)}%` }} />
+                </div>
+                <span className="text-[10px] font-mono font-bold text-slate-700 shrink-0 w-6 text-right">{n}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Requester breakdown */}
+        <div>
+          <p className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground mb-1.5">By Requester</p>
+          <div className="flex flex-col gap-1">
+            {senderMap.map(([sender, n]) => (
+              <div key={sender} className="flex items-center gap-2">
+                <span className="text-[10px] text-slate-600 w-28 truncate shrink-0">{sender}</span>
+                <div className="flex-1 bg-slate-200 rounded-full h-1.5 overflow-hidden">
+                  <div className="bg-violet-400/70 h-full rounded-full" style={{ width: `${Math.round((n / maxSenderCount) * 100)}%` }} />
+                </div>
+                <span className="text-[10px] font-mono font-bold text-slate-700 shrink-0 w-6 text-right">{n}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* ── Detail rows — visible only when expanded ── */}
+      {open && (
+        <div className="border-t border-border/60 bg-card px-2 py-2">
+          {at.key === 'mmp_site_entry'
+            ? <HubStateEnumeratorTree
+                items={items} selectedIds={selectedIds} expandedId={expandedId}
+                onToggleSelect={onToggleSelect} onToggleExpand={onToggleExpand}
+                onStatusChange={onStatusChange} onWorkflow={onWorkflow}
+                workflowPending={workflowPending}
+              />
+            : <div className="flex flex-col gap-1">
+                {items.map(action => (
+                  <ActionRow
+                    key={action.action_id}
+                    action={action}
+                    selected={selectedIds.has(action.action_id)}
+                    expanded={expandedId === action.action_id}
+                    onToggleSelect={() => onToggleSelect(action.action_id)}
+                    onToggleExpand={() => onToggleExpand(action.action_id)}
+                    onStatusChange={(status, label) => onStatusChange(action, status, label)}
+                    onWorkflow={(wa, wl) => onWorkflow(action, wa, wl)}
+                    workflowPending={workflowPending}
+                  />
+                ))}
+              </div>
+          }
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Hub → State → Enumerator tree (MMP Site Entries only) ─────────────────────
 
 function HubStateEnumeratorTree({
   items, selectedIds, expandedId,
