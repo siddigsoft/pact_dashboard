@@ -1,4 +1,6 @@
 import { useState, useMemo, useCallback } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { supabase } from '@/integrations/supabase/client';
 import { useNavigate } from 'react-router-dom';
 import { useUser } from '@/context/user/UserContext';
 import { useSuperAdmin } from '@/context/superAdmin/SuperAdminContext';
@@ -439,6 +441,46 @@ export default function DownPaymentApproval() {
 
   const activeFilterCount = Object.values(filters).filter(v => v !== undefined && v !== '' && !(Array.isArray(v) && v.length === 0)).length;
 
+  // ── Site Coverage query ────────────────────────────────────────────────────
+  type SiteCovEntry = { id: string; site_name: string; hub_name: string; state_name: string; mmp_name: string; advance_status: string | null };
+  const { data: siteCoverageData = [], isLoading: coverageLoading } = useQuery<SiteCovEntry[]>({
+    queryKey: ['dp-site-coverage'],
+    staleTime: 5 * 60 * 1000,
+    queryFn: async () => {
+      const [{ data: entries }, { data: mmps }] = await Promise.all([
+        supabase.from('mmp_site_entries').select('id, site_name, hub_name, state_name, mmp_file_id')
+          .not('status', 'in', '("cancelled","removed","reclaimed")'),
+        supabase.from('mmp_files').select('id, name').eq('is_active', true),
+      ]);
+      const advMap = new Map<string, string>(requests.map(r => [r.mmpSiteEntryId ?? (r as any).mmp_site_entry_id, r.status]).filter(([k]) => !!k) as [string, string][]);
+      const mmpNameMap = new Map((mmps ?? []).map(m => [m.id, m.name ?? '—']));
+      return (entries ?? []).map(e => ({
+        id: e.id, site_name: e.site_name || '—', hub_name: e.hub_name || '—',
+        state_name: e.state_name || '—',
+        mmp_name: mmpNameMap.get(e.mmp_file_id) ?? '—',
+        advance_status: advMap.get(e.id) ?? null,
+      }));
+    },
+    enabled: !!requests.length,
+  });
+  const [covHubFilter, setCovHubFilter] = useState('all');
+  const covSummary = useMemo(() => {
+    const total = siteCoverageData.length;
+    const approved = siteCoverageData.filter(e => ['approved','fully_paid','partially_paid'].includes(e.advance_status ?? '')).length;
+    const pending  = siteCoverageData.filter(e => ['pending_supervisor','pending_admin'].includes(e.advance_status ?? '')).length;
+    const rejected = siteCoverageData.filter(e => ['rejected','cancelled'].includes(e.advance_status ?? '')).length;
+    const noReq    = siteCoverageData.filter(e => !e.advance_status).length;
+    return { total, approved, pending, rejected, noReq, pct: total > 0 ? Math.round(((approved + pending) / total) * 100) : 0 };
+  }, [siteCoverageData]);
+  const covHubs = useMemo(() => [...new Set(siteCoverageData.map(e => e.hub_name).filter(Boolean))].sort(), [siteCoverageData]);
+  const covRows = useMemo(() => {
+    const f = covHubFilter === 'all' ? siteCoverageData : siteCoverageData.filter(e => e.hub_name === covHubFilter);
+    return f.sort((a, b) => {
+      const order = (s: string | null) => !s ? 0 : ['pending_supervisor','pending_admin'].includes(s) ? 1 : ['approved','fully_paid','partially_paid'].includes(s) ? 2 : 3;
+      return order(a.advance_status) - order(b.advance_status);
+    });
+  }, [siteCoverageData, covHubFilter]);
+
   if (!isSupervisor && !isAdmin && !isFOM) {
     return (
       <div className="p-6">
@@ -651,6 +693,12 @@ export default function DownPaymentApproval() {
           </TabsTrigger>
           <TabsTrigger value="disbursement" className="gap-1.5" data-testid="tab-down-disbursement">
             <BarChart3 className="h-4 w-4" />Disbursement Tracker
+          </TabsTrigger>
+          <TabsTrigger value="coverage" className="gap-1.5" data-testid="tab-down-coverage">
+            <CheckCircle2 className="h-4 w-4" />Site Coverage
+            {!coverageLoading && covSummary.noReq > 0 && (
+              <Badge variant="destructive" className="ml-1 text-[9px] h-4 px-1">{covSummary.noReq}</Badge>
+            )}
           </TabsTrigger>
         </TabsList>
 
@@ -1056,6 +1104,112 @@ export default function DownPaymentApproval() {
               </>
             );
           })()}
+        </TabsContent>
+
+        {/* ─── Site Coverage ─── */}
+        <TabsContent value="coverage" className="space-y-4">
+          {/* Summary cards */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            {[
+              { label: 'Total Active Sites', value: covSummary.total, cls: 'text-foreground' },
+              { label: 'Advance Approved', value: covSummary.approved, cls: 'text-emerald-600' },
+              { label: 'Pending Approval', value: covSummary.pending, cls: 'text-amber-500' },
+              { label: 'No Request Yet', value: covSummary.noReq, cls: covSummary.noReq > 0 ? 'text-red-600' : 'text-emerald-600' },
+            ].map(c => (
+              <Card key={c.label} className="p-3 text-center">
+                <div className={`text-2xl font-bold ${c.cls}`}>{coverageLoading ? '…' : c.value}</div>
+                <div className="text-xs text-muted-foreground mt-0.5">{c.label}</div>
+              </Card>
+            ))}
+          </div>
+
+          {/* Coverage bar */}
+          {!coverageLoading && covSummary.total > 0 && (
+            <Card className="p-3">
+              <div className="flex justify-between text-xs text-muted-foreground mb-1.5">
+                <span className="font-medium">Advance Request Coverage: <strong>{covSummary.pct}%</strong></span>
+                <span>{covSummary.approved + covSummary.pending} of {covSummary.total} sites have requests</span>
+              </div>
+              <div className="h-3 rounded-full bg-muted overflow-hidden flex">
+                <div className="bg-emerald-500 h-full" style={{ width: `${(covSummary.approved / covSummary.total) * 100}%` }} />
+                <div className="bg-amber-400 h-full" style={{ width: `${(covSummary.pending / covSummary.total) * 100}%` }} />
+                <div className="bg-rose-400 h-full" style={{ width: `${(covSummary.rejected / covSummary.total) * 100}%` }} />
+              </div>
+              <div className="flex flex-wrap gap-4 mt-1.5 text-[10px] text-muted-foreground">
+                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-emerald-500" />Approved ({covSummary.approved})</span>
+                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-amber-400" />Pending ({covSummary.pending})</span>
+                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-rose-400" />Rejected ({covSummary.rejected})</span>
+                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-muted-foreground/30" />No Request ({covSummary.noReq})</span>
+              </div>
+            </Card>
+          )}
+
+          {/* Site table */}
+          <Card>
+            <CardHeader className="py-3 px-4 border-b">
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <CardTitle className="text-sm font-semibold">All Active Sites — Advance Status</CardTitle>
+                <div className="flex items-center gap-2">
+                  <Select value={covHubFilter} onValueChange={setCovHubFilter}>
+                    <SelectTrigger className="h-8 text-xs w-[160px]" data-testid="select-cov-hub-filter">
+                      <SelectValue placeholder="All Hubs" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Hubs</SelectItem>
+                      {covHubs.map(h => <SelectItem key={h} value={h}>{h}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                  <Badge variant="secondary" className="text-xs">{covRows.length} sites</Badge>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="p-0">
+              {coverageLoading ? (
+                <div className="p-4 flex flex-col gap-2">{Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-8 w-full" />)}</div>
+              ) : covRows.length === 0 ? (
+                <div className="py-8 text-center text-sm text-muted-foreground">No sites found</div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="text-xs">
+                        <TableHead>Site Name</TableHead>
+                        <TableHead>Hub</TableHead>
+                        <TableHead>State</TableHead>
+                        <TableHead>MMP</TableHead>
+                        <TableHead>Advance Status</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {covRows.map(s => {
+                        const st = s.advance_status;
+                        const { label, cls } = !st
+                          ? { label: 'No Request', cls: 'bg-slate-100 text-slate-600' }
+                          : st === 'approved' || st === 'fully_paid' || st === 'partially_paid'
+                            ? { label: st === 'fully_paid' ? 'Fully Paid' : st === 'partially_paid' ? 'Partially Paid' : 'Approved', cls: 'bg-emerald-100 text-emerald-700' }
+                          : st === 'pending_supervisor' ? { label: 'Pending Supervisor', cls: 'bg-amber-100 text-amber-700' }
+                          : st === 'pending_admin' ? { label: 'Pending Admin', cls: 'bg-orange-100 text-orange-700' }
+                          : st === 'rejected' ? { label: 'Rejected', cls: 'bg-red-100 text-red-700' }
+                          : st === 'cancelled' ? { label: 'Cancelled', cls: 'bg-slate-100 text-slate-500' }
+                          : { label: st, cls: 'bg-slate-100 text-slate-600' };
+                        return (
+                          <TableRow key={s.id} className="text-xs" data-testid={`row-coverage-${s.id}`}>
+                            <TableCell className="font-medium">{s.site_name}</TableCell>
+                            <TableCell>{s.hub_name}</TableCell>
+                            <TableCell>{s.state_name}</TableCell>
+                            <TableCell className="text-muted-foreground max-w-[140px] truncate">{s.mmp_name}</TableCell>
+                            <TableCell>
+                              <Badge className={`text-[10px] px-2 py-0.5 ${cls}`}>{label}</Badge>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </TabsContent>
       </Tabs>
     </div>

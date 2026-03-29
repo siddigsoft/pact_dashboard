@@ -187,6 +187,59 @@ function MonitoringContent() {
     scrollToFeed();
   };
 
+  // ── Transportation Advance Coverage ──────────────────────────────────────────
+  type CoverageEntry = {
+    id: string; site_name: string; hub_name: string; state_name: string;
+    locality_name: string; mmp_file_id: string; mmp_name: string;
+    advance_status: string | null;
+  };
+  const { data: coverageData = [], isLoading: coverageLoading } = useQuery<CoverageEntry[]>({
+    queryKey: ['advance-site-coverage'],
+    staleTime: 5 * 60 * 1000,
+    queryFn: async () => {
+      const [{ data: entries }, { data: advances }, { data: mmps }] = await Promise.all([
+        supabase.from('mmp_site_entries').select('id, site_name, hub_name, state_name, locality_name, mmp_file_id')
+          .not('status', 'in', '("cancelled","removed","reclaimed")'),
+        supabase.from('down_payment_requests').select('mmp_site_entry_id, status')
+          .not('mmp_site_entry_id', 'is', null),
+        supabase.from('mmp_files').select('id, name').eq('is_active', true),
+      ]);
+      const advMap = new Map<string, string>();
+      for (const a of (advances ?? [])) {
+        if (a.mmp_site_entry_id && !advMap.has(a.mmp_site_entry_id))
+          advMap.set(a.mmp_site_entry_id, a.status);
+      }
+      const mmpNameMap = new Map((mmps ?? []).map(m => [m.id, m.name ?? '—']));
+      return (entries ?? []).map(e => ({
+        ...e, mmp_name: mmpNameMap.get(e.mmp_file_id) ?? '—',
+        advance_status: advMap.get(e.id) ?? null,
+      }));
+    },
+  });
+  const [showCoverage, setShowCoverage] = useState(false);
+  const [coverageHubFilter, setCoverageHubFilter] = useState<string>('all');
+  const coverageSummary = useMemo(() => {
+    const total   = coverageData.length;
+    const approved = coverageData.filter(e => ['approved','fully_paid','partially_paid'].includes(e.advance_status ?? '')).length;
+    const pending  = coverageData.filter(e => ['pending_supervisor','pending_admin'].includes(e.advance_status ?? '')).length;
+    const rejected = coverageData.filter(e => ['rejected','cancelled'].includes(e.advance_status ?? '')).length;
+    const noRequest = coverageData.filter(e => !e.advance_status).length;
+    const pct = total > 0 ? Math.round(((approved + pending) / total) * 100) : 0;
+    return { total, approved, pending, rejected, noRequest, pct };
+  }, [coverageData]);
+  const coverageUncovered = useMemo(() => {
+    const uncovered = coverageData.filter(e => !e.advance_status);
+    const filtered = coverageHubFilter === 'all' ? uncovered : uncovered.filter(e => e.hub_name === coverageHubFilter);
+    const byHub = new Map<string, CoverageEntry[]>();
+    for (const e of filtered) {
+      const h = e.hub_name || '—';
+      if (!byHub.has(h)) byHub.set(h, []);
+      byHub.get(h)!.push(e);
+    }
+    return byHub;
+  }, [coverageData, coverageHubFilter]);
+  const coverageHubs = useMemo(() => [...new Set(coverageData.map(e => e.hub_name).filter(Boolean))].sort() as string[], [coverageData]);
+
   // ── Fetch via SECURITY DEFINER RPC (bypasses all RLS) ─────────────────────
   const { data: allActions = [], isLoading, isFetching, refetch, dataUpdatedAt, error } = useQuery<DashboardAction[]>({
     queryKey: ['/admin/monitoring/actions', filters],
@@ -1080,6 +1133,135 @@ function MonitoringContent() {
           </Button>
         </div>
       )}
+
+      {/* ── Transportation Advance Coverage Card ─────────────────────────── */}
+      <Card data-testid="card-advance-coverage">
+        <button
+          className="w-full flex items-center gap-3 px-4 py-3 hover:bg-muted/40 transition-colors text-left rounded-t-lg"
+          onClick={() => setShowCoverage(v => !v)}
+          data-testid="button-toggle-advance-coverage"
+        >
+          <span className="p-1.5 rounded-md bg-orange-100 text-orange-600 shrink-0"><ArrowRight className="h-3.5 w-3.5" /></span>
+          <span className="text-sm font-bold text-foreground flex-1">Transportation Advance Coverage</span>
+          {coverageLoading
+            ? <Skeleton className="h-5 w-24" />
+            : (
+              <>
+                <span className="text-xs font-mono bg-primary/10 text-primary px-2 py-0.5 rounded-full">
+                  {coverageSummary.total} active sites
+                </span>
+                {coverageSummary.noRequest > 0 && (
+                  <span className="text-[10px] font-bold bg-red-100 text-red-700 border border-red-200 px-1.5 py-0.5 rounded-full">
+                    {coverageSummary.noRequest} NO REQUEST
+                  </span>
+                )}
+                {coverageSummary.noRequest === 0 && coverageSummary.total > 0 && (
+                  <span className="text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 px-1.5 py-0.5 rounded-full">
+                    100% covered
+                  </span>
+                )}
+              </>
+            )
+          }
+          {showCoverage ? <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" /> : <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />}
+        </button>
+
+        {/* Summary stat row — always visible */}
+        {!coverageLoading && coverageSummary.total > 0 && (
+          <div className="px-4 pb-3 border-t">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-3">
+              <div className="text-center">
+                <div className="text-lg font-bold text-emerald-600">{coverageSummary.approved}</div>
+                <div className="text-[10px] text-muted-foreground">Advance Approved</div>
+              </div>
+              <div className="text-center">
+                <div className="text-lg font-bold text-amber-500">{coverageSummary.pending}</div>
+                <div className="text-[10px] text-muted-foreground">Pending Approval</div>
+              </div>
+              <div className="text-center">
+                <div className="text-lg font-bold text-rose-500">{coverageSummary.rejected}</div>
+                <div className="text-[10px] text-muted-foreground">Rejected / Cancelled</div>
+              </div>
+              <div className="text-center">
+                <div className={`text-lg font-bold ${coverageSummary.noRequest > 0 ? 'text-slate-800' : 'text-emerald-600'}`}>
+                  {coverageSummary.noRequest}
+                </div>
+                <div className="text-[10px] text-muted-foreground">No Request Yet</div>
+              </div>
+            </div>
+            {/* Coverage bar */}
+            <div className="mt-3">
+              <div className="flex justify-between text-[10px] text-muted-foreground mb-1">
+                <span>Coverage: {coverageSummary.pct}%</span>
+                <span>{coverageSummary.approved + coverageSummary.pending} of {coverageSummary.total} sites</span>
+              </div>
+              <div className="h-2 rounded-full bg-muted overflow-hidden flex">
+                <div className="bg-emerald-500 h-full transition-all" style={{ width: `${coverageSummary.total > 0 ? (coverageSummary.approved / coverageSummary.total) * 100 : 0}%` }} />
+                <div className="bg-amber-400 h-full transition-all" style={{ width: `${coverageSummary.total > 0 ? (coverageSummary.pending / coverageSummary.total) * 100 : 0}%` }} />
+                <div className="bg-rose-400 h-full transition-all" style={{ width: `${coverageSummary.total > 0 ? (coverageSummary.rejected / coverageSummary.total) * 100 : 0}%` }} />
+              </div>
+              <div className="flex gap-4 mt-1.5 text-[9px] text-muted-foreground">
+                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-emerald-500 inline-block" />Approved</span>
+                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-amber-400 inline-block" />Pending</span>
+                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-rose-400 inline-block" />Rejected</span>
+                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-muted-foreground/30 inline-block" />No Request</span>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Expanded: sites with NO request, grouped by hub */}
+        {showCoverage && coverageSummary.noRequest > 0 && (
+          <div className="border-t">
+            <div className="flex items-center gap-3 px-4 py-2.5 bg-slate-50">
+              <AlertCircle className="h-4 w-4 text-slate-500 shrink-0" />
+              <span className="text-xs font-semibold text-slate-700 flex-1">Sites with No Advance Request</span>
+              <Select value={coverageHubFilter} onValueChange={setCoverageHubFilter}>
+                <SelectTrigger className="h-7 text-xs w-[160px]" data-testid="select-coverage-hub-filter">
+                  <SelectValue placeholder="All Hubs" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Hubs</SelectItem>
+                  {coverageHubs.map(h => <SelectItem key={h} value={h}>{h}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="divide-y max-h-[400px] overflow-y-auto">
+              {[...coverageUncovered.entries()].sort(([, a], [, b]) => b.length - a.length).map(([hub, sites]) => (
+                <div key={hub} className="px-4 py-2">
+                  <div className="flex items-center gap-2 mb-1.5">
+                    <MapPin className="h-3 w-3 text-muted-foreground" />
+                    <span className="text-xs font-semibold text-slate-700">{hub}</span>
+                    <Badge variant="secondary" className="text-[9px] h-4 px-1.5">{sites.length}</Badge>
+                  </div>
+                  <div className="flex flex-col gap-1 pl-5">
+                    {sites.map(s => (
+                      <div key={s.id} className="flex items-center gap-2 text-xs text-slate-600">
+                        <span className="w-1.5 h-1.5 rounded-full bg-slate-400 shrink-0" />
+                        <span className="font-medium flex-1">{s.site_name || '—'}</span>
+                        <span className="text-[10px] text-muted-foreground truncate max-w-[140px]">{s.mmp_name}</span>
+                        {s.state_name && <span className="text-[10px] text-slate-400">{s.state_name}</span>}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+              {coverageUncovered.size === 0 && (
+                <div className="px-4 py-6 text-center text-sm text-muted-foreground">
+                  {coverageHubFilter !== 'all' ? `No uncovered sites for ${coverageHubFilter}` : 'All sites have advance requests'}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {showCoverage && coverageSummary.noRequest === 0 && coverageSummary.total > 0 && (
+          <div className="px-4 py-6 border-t text-center">
+            <CheckCircle2 className="h-8 w-8 text-emerald-500 mx-auto mb-2" />
+            <p className="text-sm font-medium text-emerald-700">All active sites have advance requests</p>
+          </div>
+        )}
+      </Card>
 
       {/* Action Feed — grouped by module */}
       {!isLoading && !error && allActions.length > 0 && (
