@@ -447,38 +447,15 @@ export default function DownPaymentApproval() {
     queryKey: ['dp-site-coverage'],
     staleTime: 5 * 60 * 1000,
     queryFn: async () => {
-      const [resEntries, resAdvances, resMmps] = await Promise.all([
-        supabase.from('mmp_site_entries')
-          .select('id, site_name, hub_name, state_name, mmp_file_id, status')
-          .limit(10000),
-        supabase.from('down_payment_requests')
-          .select('mmp_site_entry_id, status')
-          .not('mmp_site_entry_id', 'is', null)
-          .limit(10000),
-        supabase.from('mmp_files')
-          .select('id, name')
-          .limit(1000),
-      ]);
-      if (resEntries.error) console.error('[Coverage] mmp_site_entries error:', resEntries.error);
-      if (resAdvances.error) console.error('[Coverage] down_payment_requests error:', resAdvances.error);
-      if (resMmps.error) console.error('[Coverage] mmp_files error:', resMmps.error);
-
-      const EXCLUDED = ['cancelled', 'removed', 'reclaimed'];
-      const entries = (resEntries.data ?? []).filter(e => !EXCLUDED.includes(e.status ?? ''));
-      const advances = resAdvances.data ?? [];
-      const mmps = resMmps.data ?? [];
-
-      const advMap = new Map<string, string>();
-      for (const a of advances) {
-        if (a.mmp_site_entry_id && !advMap.has(a.mmp_site_entry_id))
-          advMap.set(a.mmp_site_entry_id, a.status);
-      }
-      const mmpNameMap = new Map(mmps.map(m => [m.id, m.name ?? '—']));
-      return entries.map(e => ({
-        id: e.id, site_name: e.site_name || '—', hub_name: e.hub_name || '—',
-        state_name: e.state_name || '—',
-        mmp_name: mmpNameMap.get(e.mmp_file_id) ?? '—',
-        advance_status: advMap.get(e.id) ?? null,
+      const { data, error } = await supabase.rpc('get_advance_coverage_data');
+      if (error) console.error('[Coverage] RPC error:', error);
+      return (data ?? []).map((r: Record<string, unknown>) => ({
+        id:           String(r.entry_id ?? ''),
+        site_name:    String(r.site_name ?? '—'),
+        hub_name:     String(r.hub_name ?? '—'),
+        state_name:   String(r.state_name ?? '—'),
+        mmp_name:     String(r.mmp_name ?? '—'),
+        advance_status: r.advance_status ? String(r.advance_status) : null,
       }));
     },
   });
