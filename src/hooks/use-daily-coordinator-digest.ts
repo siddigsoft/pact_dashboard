@@ -88,6 +88,23 @@ function hubMatches(office: string, hubName: string): boolean {
   return a === b || a.includes(b) || b.includes(a);
 }
 
+/** Display name for DP rows: stored in metadata.requested_by_name (no top-level column in DB). */
+function dpRequesterDisplayName(d: { metadata?: unknown; requested_by?: string | null }): string {
+  let meta: Record<string, unknown> = {};
+  if (d.metadata != null && typeof d.metadata === 'object' && !Array.isArray(d.metadata)) {
+    meta = d.metadata as Record<string, unknown>;
+  } else if (typeof d.metadata === 'string') {
+    try {
+      meta = JSON.parse(d.metadata) as Record<string, unknown>;
+    } catch {
+      meta = {};
+    }
+  }
+  const n = meta.requested_by_name;
+  if (typeof n === 'string' && n.trim()) return n.trim();
+  return d.requested_by?.slice(0, 8) || 'Unknown';
+}
+
 // ─── data types ───────────────────────────────────────────────────────────────
 
 interface CoordRow {
@@ -266,7 +283,7 @@ async function fetchCoordinators(): Promise<CoordRow[]> {
 async function fetchDownPayments(): Promise<DPRow[]> {
   const { data } = await supabase
     .from('down_payment_requests')
-    .select('id, status, hub_name, requested_by, requested_by_name, requester_role, created_at')
+    .select('id, status, hub_name, requested_by, metadata, requester_role, created_at')
     .in('status', ['pending_supervisor', 'pending_admin'])
     .order('created_at', { ascending: true })
     .limit(500);
@@ -275,7 +292,7 @@ async function fetchDownPayments(): Promise<DPRow[]> {
     id: d.id,
     status: d.status as 'pending_supervisor' | 'pending_admin',
     hubName: d.hub_name || '',
-    requesterName: d.requested_by_name || d.requested_by?.slice(0, 8) || 'Unknown',
+    requesterName: dpRequesterDisplayName(d),
     requesterId: d.requested_by || '',
     requesterRole: d.requester_role || '',
     createdAt: d.created_at,
@@ -309,7 +326,7 @@ async function fetchStaleMmps(): Promise<StaleMmpRow[]> {
     cutoff.setDate(cutoff.getDate() - STALE_MMP_DAYS);
     const { data } = await supabase
       .from('mmp_files')
-      .select('id, title, coordinator_id, hub_office, updated_at, status')
+      .select('id, name, coordinator_id, hub, updated_at, status')
       .in('status', ['forwarded_to_coordinator', 'pending_acceptance'])
       .lt('updated_at', cutoff.toISOString())
       .order('updated_at', { ascending: true })
@@ -327,10 +344,10 @@ async function fetchStaleMmps(): Promise<StaleMmpRow[]> {
 
     return (data as any[]).map(d => ({
       id: d.id,
-      title: d.title || d.id.slice(0, 8),
+      title: d.name || d.id.slice(0, 8),
       coordinatorId: d.coordinator_id,
       coordinatorName: d.coordinator_id ? (nameMap.get(d.coordinator_id) || d.coordinator_id.slice(0, 8)) : 'Unassigned',
-      hubOffice: d.hub_office || '',
+      hubOffice: d.hub || '',
       forwardedAt: d.updated_at,
       daysStale: daysSince(d.updated_at),
     }));
@@ -375,11 +392,11 @@ async function fetchReturnedSites(): Promise<ReturnedSiteRow[]> {
   }
 }
 
-async function fetchFundReceipts(): Promise<FundReceiptRow[]> {
+async function fetchFundReceipts(hubNameCache: Map<string, string>): Promise<FundReceiptRow[]> {
   try {
     const { data } = await supabase
       .from('withdrawal_requests')
-      .select('id, user_id, approved_at, amount, currency, hub_name, updated_at')
+      .select('id, user_id, approved_at, amount, currency, updated_at')
       .eq('status', 'approved')
       .or('fund_receipt_confirmed.is.null,fund_receipt_confirmed.eq.false')
       .order('approved_at', { ascending: true })
@@ -389,22 +406,30 @@ async function fetchFundReceipts(): Promise<FundReceiptRow[]> {
 
     const userIds = [...new Set((data as any[]).map(d => d.user_id).filter(Boolean))];
     const nameMap = new Map<string, string>();
+    const hubIdByUser = new Map<string, string | null>();
     if (userIds.length) {
       const { data: profs } = await supabase
-        .from('user_profiles').select('id, full_name, email').in('id', userIds);
-      profs?.forEach((p: any) => nameMap.set(p.id, p.full_name || p.email || p.id.slice(0, 8)));
+        .from('user_profiles').select('id, full_name, email, hub_id').in('id', userIds);
+      profs?.forEach((p: any) => {
+        nameMap.set(p.id, p.full_name || p.email || p.id.slice(0, 8));
+        hubIdByUser.set(p.id, p.hub_id ?? null);
+      });
     }
 
-    return (data as any[]).map(d => ({
-      id: d.id,
-      recipientName: d.user_id ? (nameMap.get(d.user_id) || d.user_id.slice(0, 8)) : 'Unknown',
-      recipientId: d.user_id || '',
-      hubName: d.hub_name || '',
-      approvedAt: d.approved_at || d.updated_at,
-      amount: d.amount || 0,
-      currency: d.currency || 'SDG',
-      daysWaiting: daysSince(d.approved_at || d.updated_at),
-    }));
+    return (data as any[]).map(d => {
+      const hid = d.user_id ? hubIdByUser.get(d.user_id) : null;
+      const hubLabel = hid ? (hubNameCache.get(hid) || hid) : '';
+      return {
+        id: d.id,
+        recipientName: d.user_id ? (nameMap.get(d.user_id) || d.user_id.slice(0, 8)) : 'Unknown',
+        recipientId: d.user_id || '',
+        hubName: hubLabel,
+        approvedAt: d.approved_at || d.updated_at,
+        amount: d.amount || 0,
+        currency: d.currency || 'SDG',
+        daysWaiting: daysSince(d.approved_at || d.updated_at),
+      };
+    });
   } catch {
     return [];
   }
@@ -466,16 +491,16 @@ async function fetchOwnDPs(userId: string): Promise<OwnDPRow[]> {
 }
 
 async function fetchAll(): Promise<DigestData> {
-  const [coordinators, allDPs, opCostsPending, staleMmps, returnedSites, fundReceipts, weeklyStats, hubNameCache] =
+  const hubNameCache = await fetchHubNames();
+  const [coordinators, allDPs, opCostsPending, staleMmps, returnedSites, fundReceipts, weeklyStats] =
     await Promise.all([
       fetchCoordinators(),
       fetchDownPayments(),
       fetchOpCosts(),
       fetchStaleMmps(),
       fetchReturnedSites(),
-      fetchFundReceipts(),
+      fetchFundReceipts(hubNameCache),
       fetchWeeklyStats(),
-      fetchHubNames(),
     ]);
   return {
     coordinators,

@@ -77,6 +77,18 @@ function hubMatches(a: string, b: string): boolean {
   return la === lb || la.includes(lb) || lb.includes(la)
 }
 
+function dpRequesterDisplayName(d: { metadata?: unknown; requested_by?: string | null }): string {
+  let meta: Record<string, unknown> = {}
+  if (d.metadata != null && typeof d.metadata === 'object' && !Array.isArray(d.metadata)) {
+    meta = d.metadata as Record<string, unknown>
+  } else if (typeof d.metadata === 'string') {
+    try { meta = JSON.parse(d.metadata) as Record<string, unknown> } catch { meta = {} }
+  }
+  const n = meta.requested_by_name
+  if (typeof n === 'string' && n.trim()) return n.trim()
+  return d.requested_by?.slice(0, 8) ?? 'Unknown'
+}
+
 // ─── types ────────────────────────────────────────────────────────────────────
 interface CoordRow {
   coordinatorId: string; coordinatorName: string; hubOffice: string
@@ -153,11 +165,11 @@ async function fetchCoordinators(sb: ReturnType<typeof createClient>): Promise<C
 
 async function fetchDownPayments(sb: ReturnType<typeof createClient>): Promise<DPRow[]> {
   const { data } = await sb.from('down_payment_requests')
-    .select('id, status, hub_name, requested_by, requested_by_name, created_at')
+    .select('id, status, hub_name, requested_by, metadata, created_at')
     .in('status', ['pending_supervisor', 'pending_admin']).order('created_at', { ascending: true }).limit(500)
   return (data ?? []).map((d: any) => ({
     id: d.id, status: d.status, hubName: d.hub_name ?? '',
-    requesterName: d.requested_by_name ?? d.requested_by?.slice(0, 8) ?? 'Unknown',
+    requesterName: dpRequesterDisplayName(d),
     requesterId: d.requested_by ?? '', createdAt: d.created_at,
   }))
 }
@@ -172,7 +184,7 @@ async function fetchOpCosts(sb: ReturnType<typeof createClient>): Promise<OpCost
 async function fetchStaleMmps(sb: ReturnType<typeof createClient>): Promise<StaleMmpRow[]> {
   try {
     const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - STALE_MMP_DAYS)
-    const { data } = await sb.from('mmp_files').select('id, title, coordinator_id, hub_office, updated_at')
+    const { data } = await sb.from('mmp_files').select('id, name, coordinator_id, hub, updated_at')
       .in('status', ['forwarded_to_coordinator', 'pending_acceptance']).lt('updated_at', cutoff.toISOString()).order('updated_at', { ascending: true }).limit(100)
     if (!data?.length) return []
     const ids = [...new Set((data as any[]).map(d => d.coordinator_id).filter(Boolean))]
@@ -181,7 +193,7 @@ async function fetchStaleMmps(sb: ReturnType<typeof createClient>): Promise<Stal
       const { data: profs } = await sb.from('user_profiles').select('id, full_name, email').in('id', ids)
       ;(profs ?? []).forEach((p: any) => nameMap.set(p.id, p.full_name ?? p.email ?? p.id.slice(0, 8)))
     }
-    return (data as any[]).map(d => ({ id: d.id, title: d.title ?? d.id.slice(0, 8), coordinatorName: d.coordinator_id ? (nameMap.get(d.coordinator_id) ?? d.coordinator_id.slice(0, 8)) : 'Unassigned', hubOffice: d.hub_office ?? '', forwardedAt: d.updated_at, daysStale: daysSince(d.updated_at) }))
+    return (data as any[]).map(d => ({ id: d.id, title: d.name ?? d.id.slice(0, 8), coordinatorName: d.coordinator_id ? (nameMap.get(d.coordinator_id) ?? d.coordinator_id.slice(0, 8)) : 'Unassigned', hubOffice: d.hub ?? '', forwardedAt: d.updated_at, daysStale: daysSince(d.updated_at) }))
   } catch { return [] }
 }
 
@@ -201,18 +213,26 @@ async function fetchReturnedSites(sb: ReturnType<typeof createClient>): Promise<
   } catch { return [] }
 }
 
-async function fetchFundReceipts(sb: ReturnType<typeof createClient>): Promise<FundReceiptRow[]> {
+async function fetchFundReceipts(sb: ReturnType<typeof createClient>, hubNameCache: Map<string, string>): Promise<FundReceiptRow[]> {
   try {
-    const { data } = await sb.from('withdrawal_requests').select('id, user_id, approved_at, amount, currency, hub_name, updated_at')
+    const { data } = await sb.from('withdrawal_requests').select('id, user_id, approved_at, amount, currency, updated_at')
       .eq('status', 'approved').or('fund_receipt_confirmed.is.null,fund_receipt_confirmed.eq.false').order('approved_at', { ascending: true }).limit(100)
     if (!data?.length) return []
     const ids = [...new Set((data as any[]).map(d => d.user_id).filter(Boolean))]
     const nameMap = new Map<string, string>()
+    const hubIdByUser = new Map<string, string | null>()
     if (ids.length) {
-      const { data: profs } = await sb.from('user_profiles').select('id, full_name, email').in('id', ids)
-      ;(profs ?? []).forEach((p: any) => nameMap.set(p.id, p.full_name ?? p.email ?? p.id.slice(0, 8)))
+      const { data: profs } = await sb.from('user_profiles').select('id, full_name, email, hub_id').in('id', ids)
+      ;(profs ?? []).forEach((p: any) => {
+        nameMap.set(p.id, p.full_name ?? p.email ?? p.id.slice(0, 8))
+        hubIdByUser.set(p.id, p.hub_id ?? null)
+      })
     }
-    return (data as any[]).map(d => ({ id: d.id, recipientName: d.user_id ? (nameMap.get(d.user_id) ?? d.user_id.slice(0, 8)) : 'Unknown', recipientId: d.user_id ?? '', hubName: d.hub_name ?? '', approvedAt: d.approved_at ?? d.updated_at, amount: d.amount ?? 0, currency: d.currency ?? 'SDG', daysWaiting: daysSince(d.approved_at ?? d.updated_at) }))
+    return (data as any[]).map(d => {
+      const hid = d.user_id ? hubIdByUser.get(d.user_id) : null
+      const hubLabel = hid ? (hubNameCache.get(hid) ?? hid) : ''
+      return { id: d.id, recipientName: d.user_id ? (nameMap.get(d.user_id) ?? d.user_id.slice(0, 8)) : 'Unknown', recipientId: d.user_id ?? '', hubName: hubLabel, approvedAt: d.approved_at ?? d.updated_at, amount: d.amount ?? 0, currency: d.currency ?? 'SDG', daysWaiting: daysSince(d.approved_at ?? d.updated_at) }
+    })
   } catch { return [] }
 }
 
@@ -540,14 +560,14 @@ serve(async (req) => {
     const serviceKey  = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     const sb = createClient(supabaseUrl, serviceKey)
 
-    // Fetch all data in parallel (visit reminders run independently)
+    const hubNameCache = await fetchHubNames(sb)
     const [
-      coordinators, allDPs, opCostsPending, staleMmps, returnedSites, fundReceipts, weeklyStats, hubNameCache, visitRemindersSent,
+      coordinators, allDPs, opCostsPending, staleMmps, returnedSites, fundReceipts, weeklyStats, visitRemindersSent,
     ] =
       await Promise.all([
         fetchCoordinators(sb), fetchDownPayments(sb), fetchOpCosts(sb),
-        fetchStaleMmps(sb), fetchReturnedSites(sb), fetchFundReceipts(sb),
-        fetchWeeklyStats(sb), fetchHubNames(sb),
+        fetchStaleMmps(sb), fetchReturnedSites(sb), fetchFundReceipts(sb, hubNameCache),
+        fetchWeeklyStats(sb),
         sendVisitReminders(sb),
       ])
 

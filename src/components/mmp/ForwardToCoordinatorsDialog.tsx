@@ -328,6 +328,14 @@ export const ForwardToCoordinatorsDialog: React.FC<ForwardToCoordinatorsDialogPr
 
         toast({ title: 'Sites forwarded', description: `Forwarded sites to coordinators by locality` });
 
+        const groupedCoordinatorIds = new Set<string>();
+        for (const g of siteGroups!) {
+          const gk = `${g.stateId}|${g.localityId}`;
+          for (const id of groupSelections[gk] || []) groupedCoordinatorIds.add(id as string);
+        }
+        const primaryGroupedCoordinatorId =
+          groupedCoordinatorIds.size > 0 ? Array.from(groupedCoordinatorIds)[0] : null;
+
         // Update parent MMP status to reflect coordinator forwarding
         if (mmpId) {
           const now = new Date().toISOString();
@@ -350,6 +358,7 @@ export const ForwardToCoordinatorsDialog: React.FC<ForwardToCoordinatorsDialogPr
             .update({
               status: 'forwarded_to_coordinator',
               workflow: updatedWorkflow,
+              coordinator_id: primaryGroupedCoordinatorId,
             })
             .eq('id', mmpId);
 
@@ -598,6 +607,7 @@ export const ForwardToCoordinatorsDialog: React.FC<ForwardToCoordinatorsDialogPr
             .update({
               status: 'forwarded_to_coordinator',
               workflow: updatedWorkflow,
+              coordinator_id: ids[0] ?? null,
             })
             .eq('id', mmpId);
 
@@ -796,7 +806,8 @@ export const ForwardToCoordinatorsDialog: React.FC<ForwardToCoordinatorsDialogPr
         };
         await supabase.from('mmp_files').update({ 
           workflow: next,
-          status: 'forwarded_to_coordinator'
+          status: 'forwarded_to_coordinator',
+          coordinator_id: ids[0] ?? null,
         }).eq('id', mmpId);
         console.log(`[MMP] Updated MMP ${mmpId} status to forwarded_to_coordinator`);
 
