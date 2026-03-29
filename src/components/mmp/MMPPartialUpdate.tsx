@@ -381,14 +381,23 @@ const MMPPartialUpdate: React.FC<MMPPartialUpdateProps> = ({ mmpFile, onComplete
             status: 'Pending',
           }));
 
-          const batchSize = 100;
+          const batchSize = 25;
+          const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
           for (let i = 0; i < rows.length; i += batchSize) {
             const batch = rows.slice(i, i + batchSize);
-            const { error } = await supabase.from('mmp_site_entries').insert(batch);
-            if (error) {
-              throw new Error(`Failed to insert entries (batch ${Math.floor(i / batchSize) + 1}): ${error.message}`);
+            const batchNum = Math.floor(i / batchSize) + 1;
+            let lastError: any = null;
+            for (let attempt = 1; attempt <= 3; attempt++) {
+              const { error } = await supabase.from('mmp_site_entries').insert(batch);
+              if (!error) { lastError = null; break; }
+              lastError = error;
+              if (attempt < 3) await sleep(800 * attempt);
             }
-            setProgress(50 + Math.round((i / rows.length) * 30));
+            if (lastError) {
+              throw new Error(`Failed to insert entries (batch ${batchNum}): ${lastError.message}`);
+            }
+            setProgress(50 + Math.round(((i + batchSize) / rows.length) * 30));
+            if (i + batchSize < rows.length) await sleep(150);
           }
 
           addedCount = rows.length;
