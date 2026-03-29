@@ -3,7 +3,7 @@ name: Deploy to VPS Production
 on:
   push:
     branches:
-      - master_backup
+      - master
 
 jobs:
   deploy:
@@ -36,7 +36,7 @@ jobs:
 
             # Pull latest code
             git fetch origin
-            git reset --hard origin/master_backup
+            git reset --hard origin/master
             git clean -fd
 
             # Rebuild
