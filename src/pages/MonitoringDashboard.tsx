@@ -1584,7 +1584,14 @@ function StatusHubTree({
   workflowPending: boolean;
   actionType?: string;
 }) {
-  const [openMMPs,       setOpenMMPs]       = useState<Set<string>>(() => new Set());
+  // Detect modules with no MMP association (all items grouped under '—')
+  // For these modules (operational_cost, advance_payment) skip the MMP level
+  const noMmpMode = useMemo(() => {
+    const keys = [...new Set(items.map(a => a.mmp_name || '—'))];
+    return keys.length === 1 && keys[0] === '—';
+  }, [items]);
+
+  const [openMMPs,       setOpenMMPs]       = useState<Set<string>>(() => noMmpMode ? new Set([`mmp::—`]) : new Set());
   const [openStatuses,   setOpenStatuses]   = useState<Set<string>>(() => new Set());
   const [openHubs,       setOpenHubs]       = useState<Set<string>>(() => new Set());
   const [openStates,     setOpenStates]     = useState<Set<string>>(() => new Set());
@@ -1764,18 +1771,20 @@ function StatusHubTree({
       {[...mmpMap.entries()].map(([mmpName, stsMap]) => {
         const mmpTot  = mmpTotal(stsMap);
         const mk      = mmpKey(mmpName);
-        const mmpOpen = openMMPs.has(mk);
+        const mmpOpen = noMmpMode ? true : openMMPs.has(mk);
         return (
           <div key={mk} className="rounded-lg border border-border overflow-hidden">
 
-            {/* ── MMP — indigo ── */}
-            <button className="w-full flex items-center gap-2 px-3 py-2.5 bg-indigo-50 hover:bg-indigo-100 border-l-4 border-l-indigo-500 text-left transition-colors"
-              onClick={() => toggleMMP(mmpName, stsMap)} data-testid={`mmp-group-${mk}`}>
-              {mmpOpen ? <ChevronDown className="h-3.5 w-3.5 text-indigo-500 shrink-0" /> : <ChevronRight className="h-3.5 w-3.5 text-indigo-400 shrink-0" />}
-              <FileText className="h-3.5 w-3.5 text-indigo-500 shrink-0" />
-              <span className="text-xs font-bold flex-1 text-indigo-900">{mmpName}</span>
-              <span className="text-[9px] font-mono bg-indigo-100 text-indigo-700 border border-indigo-200 px-2 py-0.5 rounded-full">{mmpTot}</span>
-            </button>
+            {/* ── MMP — indigo — hidden when there is no MMP association ── */}
+            {!noMmpMode && (
+              <button className="w-full flex items-center gap-2 px-3 py-2.5 bg-indigo-50 hover:bg-indigo-100 border-l-4 border-l-indigo-500 text-left transition-colors"
+                onClick={() => toggleMMP(mmpName, stsMap)} data-testid={`mmp-group-${mk}`}>
+                {mmpOpen ? <ChevronDown className="h-3.5 w-3.5 text-indigo-500 shrink-0" /> : <ChevronRight className="h-3.5 w-3.5 text-indigo-400 shrink-0" />}
+                <FileText className="h-3.5 w-3.5 text-indigo-500 shrink-0" />
+                <span className="text-xs font-bold flex-1 text-indigo-900">{mmpName}</span>
+                <span className="text-[9px] font-mono bg-indigo-100 text-indigo-700 border border-indigo-200 px-2 py-0.5 rounded-full">{mmpTot}</span>
+              </button>
+            )}
 
             {mmpOpen && (
               <div className="flex flex-col divide-y divide-violet-100">
