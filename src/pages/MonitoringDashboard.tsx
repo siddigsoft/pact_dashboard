@@ -65,6 +65,7 @@ interface DashboardAction extends RawAction {
   latest_notes?: string | null;
   sender_email?: string | null;
   sender_phone?: string | null;
+  mmp_name?: string;
 }
 
 interface StatusOverrideEntry {
@@ -254,8 +255,8 @@ function MonitoringContent() {
         : { data: [] as Array<{ id: string; full_name: string | null; email: string | null; phone: string | null }> };
       const profileByEmail = new Map((emailProfiles ?? []).map(p => [p.email ?? '', p]));
 
-      // Step 4: Merge and filter
-      return rows
+      // Step 4: Merge
+      const merged = rows
         .map((r): DashboardAction => {
           const key = `${r.action_type}:${r.action_id}`;
           const ov = overrideMap.get(key);
@@ -295,8 +296,29 @@ function MonitoringContent() {
             sender_phone: resolvedPhone,
             details: (r.details ?? {}) as Record<string, unknown>,
           };
-        })
-        .filter(r => !filters.status || r.dashboard_status === filters.status);
+        });
+
+      // Step 5: Resolve MMP names for all actions
+      const mmpFileIds = [...new Set(
+        merged.map(r => {
+          const d = r.details as Record<string, unknown>;
+          if (r.action_type === 'mmp_lifecycle') return String(d.id ?? '');
+          if (r.action_type === 'mmp_site_entry') return String(d.mmp_file_id ?? '');
+          return '';
+        }).filter(Boolean)
+      )];
+      const { data: mmpFiles } = mmpFileIds.length > 0
+        ? await supabase.from('mmp_files').select('id, name').in('id', mmpFileIds)
+        : { data: [] as Array<{ id: string; name: string | null }> };
+      const mmpNameMap = new Map((mmpFiles ?? []).map(f => [f.id, f.name ?? '—']));
+
+      return merged.map(r => {
+        const d = r.details as Record<string, unknown>;
+        let mmp_name = '—';
+        if (r.action_type === 'mmp_lifecycle') mmp_name = mmpNameMap.get(String(d.id ?? '')) ?? '—';
+        else if (r.action_type === 'mmp_site_entry') mmp_name = mmpNameMap.get(String(d.mmp_file_id ?? '')) ?? '—';
+        return { ...r, mmp_name };
+      }).filter(r => !filters.status || r.dashboard_status === filters.status);
     },
     refetchInterval: 90_000,
     staleTime: 30_000,
@@ -1559,6 +1581,7 @@ function StatusHubTree({
   workflowPending: boolean;
   actionType?: string;
 }) {
+  const [openMMPs,       setOpenMMPs]       = useState<Set<string>>(() => new Set());
   const [openStatuses,   setOpenStatuses]   = useState<Set<string>>(() => new Set());
   const [openHubs,       setOpenHubs]       = useState<Set<string>>(() => new Set());
   const [openStates,     setOpenStates]     = useState<Set<string>>(() => new Set());
@@ -1598,58 +1621,69 @@ function StatusHubTree({
     return a.sender_name || 'Unknown';
   };
 
+  const getMMP     = (a: DashboardAction) => a.mmp_name || '—';
   const getLocality = (a: DashboardAction) =>
     String((a.details as Record<string, unknown>)?.locality ?? '—');
 
-  // Build Status → Hub → State → Locality → DataCollector → items
+  // Build MMP → Status → Hub → State → Locality → DataCollector → items
   type DCMap  = Map<string, DashboardAction[]>;
   type LocMap = Map<string, DCMap>;
   type StMap  = Map<string, LocMap>;
   type HubMap = Map<string, StMap>;
   type StsMap = Map<string, HubMap>;
+  type MMPMap = Map<string, StsMap>;
 
-  const statusMap = useMemo<StsMap>(() => {
-    const map: StsMap = new Map();
+  const mmpMap = useMemo<MMPMap>(() => {
+    const map: MMPMap = new Map();
     for (const a of items) {
-      const s = a.native_status || 'unknown';
-      const h = getHub(a), st = getState(a), loc = getLocality(a), dc = getCollector(a);
-      if (!map.has(s))                                    map.set(s, new Map());
-      if (!map.get(s)!.has(h))                            map.get(s)!.set(h, new Map());
-      if (!map.get(s)!.get(h)!.has(st))                   map.get(s)!.get(h)!.set(st, new Map());
-      if (!map.get(s)!.get(h)!.get(st)!.has(loc))         map.get(s)!.get(h)!.get(st)!.set(loc, new Map());
-      if (!map.get(s)!.get(h)!.get(st)!.get(loc)!.has(dc)) map.get(s)!.get(h)!.get(st)!.get(loc)!.set(dc, []);
-      map.get(s)!.get(h)!.get(st)!.get(loc)!.get(dc)!.push(a);
+      const mmp = getMMP(a);
+      const s   = a.native_status || 'unknown';
+      const h   = getHub(a), st = getState(a), loc = getLocality(a), dc = getCollector(a);
+      if (!map.has(mmp))                                             map.set(mmp, new Map());
+      const sm = map.get(mmp)!;
+      if (!sm.has(s))                                                sm.set(s, new Map());
+      if (!sm.get(s)!.has(h))                                        sm.get(s)!.set(h, new Map());
+      if (!sm.get(s)!.get(h)!.has(st))                               sm.get(s)!.get(h)!.set(st, new Map());
+      if (!sm.get(s)!.get(h)!.get(st)!.has(loc))                    sm.get(s)!.get(h)!.get(st)!.set(loc, new Map());
+      if (!sm.get(s)!.get(h)!.get(st)!.get(loc)!.has(dc))           sm.get(s)!.get(h)!.get(st)!.get(loc)!.set(dc, []);
+      sm.get(s)!.get(h)!.get(st)!.get(loc)!.get(dc)!.push(a);
     }
-    const total = (hm: HubMap) => [...hm.values()].flatMap(sm => [...sm.values()]).flatMap(lm => [...lm.values()]).flatMap(dm => [...dm.values()]).flat().length;
-    return new Map([...map.entries()].sort(([, a], [, b]) => total(b) - total(a)));
+    const mmpTotal = (sm: StsMap) => [...sm.values()].flatMap(hm => [...hm.values()]).flatMap(stm => [...stm.values()]).flatMap(lm => [...lm.values()]).flatMap(dm => [...dm.values()]).flat().length;
+    return new Map([...map.entries()].sort(([, a], [, b]) => mmpTotal(b) - mmpTotal(a)));
   }, [items]);
 
   // ── key helpers ──────────────────────────────────────────────────────────────
-  const hKey   = (s: string, h: string)                                => `${s}::${h}`;
-  const stKey  = (s: string, h: string, st: string)                    => `${s}::${h}::${st}`;
-  const locKey = (s: string, h: string, st: string, loc: string)       => `${s}::${h}::${st}::${loc}`;
-  const dcKey  = (s: string, h: string, st: string, loc: string, dc: string) => `${s}::${h}::${st}::${loc}::${dc}`;
+  const mmpKey = (mmp: string)                                                      => `mmp::${mmp}`;
+  const hKey   = (mmp: string, s: string, h: string)                               => `${mmp}::${s}::${h}`;
+  const stKey  = (mmp: string, s: string, h: string, st: string)                   => `${mmp}::${s}::${h}::${st}`;
+  const locKey = (mmp: string, s: string, h: string, st: string, loc: string)      => `${mmp}::${s}::${h}::${st}::${loc}`;
+  const dcKey  = (mmp: string, s: string, h: string, st: string, loc: string, dc: string) => `${mmp}::${s}::${h}::${st}::${loc}::${dc}`;
 
-  const allHubKeys = (s: string, hm: HubMap) => [...hm.keys()].map(h => hKey(s, h));
-  const allStKeys  = (s: string, h: string, sm: StMap)  => [...sm.keys()].map(st => stKey(s, h, st));
-  const allLocKeys = (s: string, h: string, st: string, lm: LocMap) => [...lm.keys()].map(loc => locKey(s, h, st, loc));
-  const allDcKeys  = (s: string, h: string, st: string, loc: string, dm: DCMap) => [...dm.keys()].map(dc => dcKey(s, h, st, loc, dc));
+  const allStsKeys = (mmp: string, sm: StsMap) => [...sm.keys()].map(s => `sts::${mmp}::${s}`);
+  const allHubKeys = (mmp: string, s: string, hm: HubMap) => [...hm.keys()].map(h => hKey(mmp, s, h));
+  const allStKeys  = (mmp: string, s: string, h: string, stm: StMap) => [...stm.keys()].map(st => stKey(mmp, s, h, st));
+  const allLocKeys = (mmp: string, s: string, h: string, st: string, lm: LocMap) => [...lm.keys()].map(loc => locKey(mmp, s, h, st, loc));
+  const allDcKeys  = (mmp: string, s: string, h: string, st: string, loc: string, dm: DCMap) => [...dm.keys()].map(dc => dcKey(mmp, s, h, st, loc, dc));
 
   // ── toggle helpers ──────────────────────────────────────────────────────────
   const removeFrom = (setter: React.Dispatch<React.SetStateAction<Set<string>>>, keys: string[]) =>
     setter(prev => { const n = new Set(prev); keys.forEach(k => n.delete(k)); return n; });
 
-  const toggleStatus = (s: string, hm: HubMap) => {
-    setOpenStatuses(prev => {
-      const n = new Set(prev); const opening = !n.has(s);
-      opening ? n.add(s) : n.delete(s);
+  const toggleMMP = (mmp: string, sm: StsMap) => {
+    const k = mmpKey(mmp);
+    setOpenMMPs(prev => {
+      const n = new Set(prev); const opening = !n.has(k);
+      opening ? n.add(k) : n.delete(k);
       if (!opening) {
-        removeFrom(setOpenHubs, allHubKeys(s, hm));
-        for (const [h, sm] of hm) {
-          removeFrom(setOpenStates, allStKeys(s, h, sm));
-          for (const [st, lm] of sm) {
-            removeFrom(setOpenLocalities, allLocKeys(s, h, st, lm));
-            for (const [loc, dm] of lm) removeFrom(setOpenCollectors, allDcKeys(s, h, st, loc, dm));
+        removeFrom(setOpenStatuses, allStsKeys(mmp, sm));
+        for (const [s, hm] of sm) {
+          removeFrom(setOpenHubs, allHubKeys(mmp, s, hm));
+          for (const [h, stm] of hm) {
+            removeFrom(setOpenStates, allStKeys(mmp, s, h, stm));
+            for (const [st, lm] of stm) {
+              removeFrom(setOpenLocalities, allLocKeys(mmp, s, h, st, lm));
+              for (const [loc, dm] of lm) removeFrom(setOpenCollectors, allDcKeys(mmp, s, h, st, loc, dm));
+            }
           }
         }
       }
@@ -1657,41 +1691,60 @@ function StatusHubTree({
     });
   };
 
-  const toggleHub = (s: string, h: string, sm: StMap) => {
-    const k = hKey(s, h);
-    setOpenHubs(prev => {
+  const toggleStatus = (mmp: string, s: string, hm: HubMap) => {
+    const k = `sts::${mmp}::${s}`;
+    setOpenStatuses(prev => {
       const n = new Set(prev); const opening = !n.has(k);
       opening ? n.add(k) : n.delete(k);
       if (!opening) {
-        removeFrom(setOpenStates, allStKeys(s, h, sm));
-        for (const [st, lm] of sm) {
-          removeFrom(setOpenLocalities, allLocKeys(s, h, st, lm));
-          for (const [loc, dm] of lm) removeFrom(setOpenCollectors, allDcKeys(s, h, st, loc, dm));
+        removeFrom(setOpenHubs, allHubKeys(mmp, s, hm));
+        for (const [h, sm] of hm) {
+          removeFrom(setOpenStates, allStKeys(mmp, s, h, sm));
+          for (const [st, lm] of sm) {
+            removeFrom(setOpenLocalities, allLocKeys(mmp, s, h, st, lm));
+            for (const [loc, dm] of lm) removeFrom(setOpenCollectors, allDcKeys(mmp, s, h, st, loc, dm));
+          }
         }
       }
       return n;
     });
   };
 
-  const toggleState = (s: string, h: string, st: string, lm: LocMap) => {
-    const k = stKey(s, h, st);
-    setOpenStates(prev => {
+  const toggleHub = (mmp: string, s: string, h: string, sm: StMap) => {
+    const k = hKey(mmp, s, h);
+    setOpenHubs(prev => {
       const n = new Set(prev); const opening = !n.has(k);
       opening ? n.add(k) : n.delete(k);
       if (!opening) {
-        removeFrom(setOpenLocalities, allLocKeys(s, h, st, lm));
-        for (const [loc, dm] of lm) removeFrom(setOpenCollectors, allDcKeys(s, h, st, loc, dm));
+        removeFrom(setOpenStates, allStKeys(mmp, s, h, sm));
+        for (const [st, lm] of sm) {
+          removeFrom(setOpenLocalities, allLocKeys(mmp, s, h, st, lm));
+          for (const [loc, dm] of lm) removeFrom(setOpenCollectors, allDcKeys(mmp, s, h, st, loc, dm));
+        }
       }
       return n;
     });
   };
 
-  const toggleLocality = (s: string, h: string, st: string, loc: string, dm: DCMap) => {
-    const k = locKey(s, h, st, loc);
+  const toggleState = (mmp: string, s: string, h: string, st: string, lm: LocMap) => {
+    const k = stKey(mmp, s, h, st);
+    setOpenStates(prev => {
+      const n = new Set(prev); const opening = !n.has(k);
+      opening ? n.add(k) : n.delete(k);
+      if (!opening) {
+        removeFrom(setOpenLocalities, allLocKeys(mmp, s, h, st, lm));
+        for (const [loc, dm] of lm) removeFrom(setOpenCollectors, allDcKeys(mmp, s, h, st, loc, dm));
+      }
+      return n;
+    });
+  };
+
+  const toggleLocality = (mmp: string, s: string, h: string, st: string, loc: string, dm: DCMap) => {
+    const k = locKey(mmp, s, h, st, loc);
     setOpenLocalities(prev => {
       const n = new Set(prev); const opening = !n.has(k);
       opening ? n.add(k) : n.delete(k);
-      if (!opening) removeFrom(setOpenCollectors, allDcKeys(s, h, st, loc, dm));
+      if (!opening) removeFrom(setOpenCollectors, allDcKeys(mmp, s, h, st, loc, dm));
       return n;
     });
   };
@@ -1700,44 +1753,65 @@ function StatusHubTree({
     setOpenCollectors(prev => { const n = new Set(prev); n.has(k) ? n.delete(k) : n.add(k); return n; });
 
   // ── render ──────────────────────────────────────────────────────────────────
-  const stTotal = (hm: HubMap) => [...hm.values()].flatMap(sm => [...sm.values()]).flatMap(lm => [...lm.values()]).flatMap(dm => [...dm.values()]).flat().length;
+  const hubTotal = (hm: HubMap) => [...hm.values()].flatMap(sm => [...sm.values()]).flatMap(lm => [...lm.values()]).flatMap(dm => [...dm.values()]).flat().length;
+  const mmpTotal = (sm: StsMap) => [...sm.values()].flatMap(hm => [...hm.values()]).flatMap(stm => [...stm.values()]).flatMap(lm => [...lm.values()]).flatMap(dm => [...dm.values()]).flat().length;
 
   return (
     <div className="flex flex-col gap-1">
-      {[...statusMap.entries()].map(([sName, hMap]) => {
-        const statusTotal = stTotal(hMap);
-        const statusOpen  = openStatuses.has(sName);
-        const chipCls     = statusChipClass(sName);
+      {[...mmpMap.entries()].map(([mmpName, stsMap]) => {
+        const mmpTot  = mmpTotal(stsMap);
+        const mk      = mmpKey(mmpName);
+        const mmpOpen = openMMPs.has(mk);
         return (
-          <div key={sName} className="rounded-lg border border-border overflow-hidden">
+          <div key={mk} className="rounded-lg border border-border overflow-hidden">
 
-            {/* ── Status — violet ── */}
-            <button className="w-full flex items-center gap-2 px-3 py-2.5 bg-violet-50 hover:bg-violet-100 border-l-4 border-l-violet-400 text-left transition-colors"
-              onClick={() => toggleStatus(sName, hMap)} data-testid={`status-group-${sName}`}>
-              {statusOpen ? <ChevronDown className="h-3.5 w-3.5 text-violet-500 shrink-0" /> : <ChevronRight className="h-3.5 w-3.5 text-violet-400 shrink-0" />}
-              <span className={`text-[10px] font-semibold px-2 py-0.5 rounded border capitalize ${chipCls}`}>{sName.replace(/_/g, ' ')}</span>
-              <span className="text-xs font-bold flex-1 text-violet-800 text-right">{statusTotal} record{statusTotal !== 1 ? 's' : ''}</span>
+            {/* ── MMP — indigo ── */}
+            <button className="w-full flex items-center gap-2 px-3 py-2.5 bg-indigo-50 hover:bg-indigo-100 border-l-4 border-l-indigo-500 text-left transition-colors"
+              onClick={() => toggleMMP(mmpName, stsMap)} data-testid={`mmp-group-${mk}`}>
+              {mmpOpen ? <ChevronDown className="h-3.5 w-3.5 text-indigo-500 shrink-0" /> : <ChevronRight className="h-3.5 w-3.5 text-indigo-400 shrink-0" />}
+              <FileText className="h-3.5 w-3.5 text-indigo-500 shrink-0" />
+              <span className="text-xs font-bold flex-1 text-indigo-900">{mmpName}</span>
+              <span className="text-[9px] font-mono bg-indigo-100 text-indigo-700 border border-indigo-200 px-2 py-0.5 rounded-full">{mmpTot}</span>
             </button>
 
-            {statusOpen && (
-              <div className="flex flex-col divide-y divide-blue-100">
-                {[...hMap.entries()].sort(([, a], [, b]) =>
-                  [...b.values()].flatMap(sm => [...sm.values()]).flatMap(lm => [...lm.values()]).flat().length -
-                  [...a.values()].flatMap(sm => [...sm.values()]).flatMap(lm => [...lm.values()]).flat().length
-                ).map(([hName, stMap]) => {
-                  const hubTotal = [...stMap.values()].flatMap(lm => [...lm.values()]).flatMap(dm => [...dm.values()]).flat().length;
-                  const hubOpen  = openHubs.has(hKey(sName, hName));
+            {mmpOpen && (
+              <div className="flex flex-col divide-y divide-violet-100">
+                {[...stsMap.entries()].sort(([, a], [, b]) => hubTotal(b) - hubTotal(a)).map(([sName, hMap]) => {
+                  const statusTotal = hubTotal(hMap);
+                  const sk          = `sts::${mmpName}::${sName}`;
+                  const statusOpen  = openStatuses.has(sk);
+                  const chipCls     = statusChipClass(sName);
                   return (
-                    <div key={hKey(sName, hName)}>
+                    <div key={sk}>
 
-                      {/* ── Hub — blue ── */}
-                      <button className="w-full flex items-center gap-2 px-4 py-2 bg-blue-50 hover:bg-blue-100 border-l-4 border-l-blue-400 text-left transition-colors"
-                        onClick={() => toggleHub(sName, hName, stMap)} data-testid={`hub-group-${hKey(sName, hName)}`}>
-                        {hubOpen ? <ChevronDown className="h-3 w-3 text-blue-500 shrink-0" /> : <ChevronRight className="h-3 w-3 text-blue-400 shrink-0" />}
-                        <Database className="h-3 w-3 text-blue-500 shrink-0" />
-                        <span className="text-xs font-semibold flex-1 text-blue-900">{hName}</span>
-                        <span className="text-[9px] font-mono bg-blue-100 text-blue-700 border border-blue-200 px-2 py-0.5 rounded-full">{hubTotal}</span>
+                      {/* ── Status — violet ── */}
+                      <button className="w-full flex items-center gap-2 px-4 py-2 bg-violet-50 hover:bg-violet-100 border-l-4 border-l-violet-400 text-left transition-colors"
+                        onClick={() => toggleStatus(mmpName, sName, hMap)} data-testid={`status-group-${sk}`}>
+                        {statusOpen ? <ChevronDown className="h-3 w-3 text-violet-500 shrink-0" /> : <ChevronRight className="h-3 w-3 text-violet-400 shrink-0" />}
+                        <span className={`text-[10px] font-semibold px-2 py-0.5 rounded border capitalize ${chipCls}`}>{sName.replace(/_/g, ' ')}</span>
+                        <span className="text-xs font-bold flex-1 text-violet-800 text-right">{statusTotal} record{statusTotal !== 1 ? 's' : ''}</span>
                       </button>
+
+                      {statusOpen && (
+                        <div className="flex flex-col divide-y divide-blue-100">
+                          {[...hMap.entries()].sort(([, a], [, b]) =>
+                            [...b.values()].flatMap(sm => [...sm.values()]).flatMap(lm => [...lm.values()]).flat().length -
+                            [...a.values()].flatMap(sm => [...sm.values()]).flatMap(lm => [...lm.values()]).flat().length
+                          ).map(([hName, stMap]) => {
+                            const hTot   = [...stMap.values()].flatMap(lm => [...lm.values()]).flatMap(dm => [...dm.values()]).flat().length;
+                            const hk     = hKey(mmpName, sName, hName);
+                            const hubOpen = openHubs.has(hk);
+                            return (
+                              <div key={hk}>
+
+                                {/* ── Hub — blue ── */}
+                                <button className="w-full flex items-center gap-2 px-6 py-2 bg-blue-50 hover:bg-blue-100 border-l-4 border-l-blue-400 text-left transition-colors"
+                                  onClick={() => toggleHub(mmpName, sName, hName, stMap)} data-testid={`hub-group-${hk}`}>
+                                  {hubOpen ? <ChevronDown className="h-3 w-3 text-blue-500 shrink-0" /> : <ChevronRight className="h-3 w-3 text-blue-400 shrink-0" />}
+                                  <Database className="h-3 w-3 text-blue-500 shrink-0" />
+                                  <span className="text-xs font-semibold flex-1 text-blue-900">{hName}</span>
+                                  <span className="text-[9px] font-mono bg-blue-100 text-blue-700 border border-blue-200 px-2 py-0.5 rounded-full">{hTot}</span>
+                                </button>
 
                       {hubOpen && (
                         <div className="flex flex-col divide-y divide-emerald-100">
@@ -1746,9 +1820,9 @@ function StatusHubTree({
                             [...a.values()].flatMap(dm => [...dm.values()]).flat().length
                           ).map(([stName, locMap]) => {
                             const stateTotal = [...locMap.values()].flatMap(dm => [...dm.values()]).flat().length;
-                            const stOpen     = openStates.has(stKey(sName, hName, stName));
+                            const stOpen     = openStates.has(stKey(mmpName, sName, hName, stName));
                             return (
-                              <div key={stKey(sName, hName, stName)}>
+                              <div key={stKey(mmpName, sName, hName, stName)}>
 
                                 {/* ── State / Category — emerald ── */}
                                 {(() => {
@@ -1757,7 +1831,7 @@ function StatusHubTree({
                                   const StateIcon = isCategory ? Layers : MapPin;
                                   return (
                                   <button className="w-full flex items-center gap-2 px-6 py-1.5 bg-emerald-50 hover:bg-emerald-100 border-l-4 border-l-emerald-400 text-left transition-colors"
-                                    onClick={() => toggleState(sName, hName, stName, locMap)} data-testid={`state-group-${stKey(sName, hName, stName)}`}>
+                                    onClick={() => toggleState(mmpName, sName, hName, stName, locMap)} data-testid={`state-group-${stKey(mmpName, sName, hName, stName)}`}>
                                     {stOpen ? <ChevronDown className="h-3 w-3 text-emerald-600 shrink-0" /> : <ChevronRight className="h-3 w-3 text-emerald-500 shrink-0" />}
                                     <StateIcon className="h-3 w-3 text-emerald-600 shrink-0" />
                                     <span className="text-xs font-medium flex-1 text-emerald-900 capitalize">{stName}</span>
@@ -1806,7 +1880,7 @@ function StatusHubTree({
                                     return (
                                       <div className="flex flex-col divide-y divide-amber-100">
                                         {sortedDCs.map(([dcName, locToActions]) => {
-                                          const ck      = `${sName}::${hName}::${stName}::__dc__::${dcName}`;
+                                          const ck      = `${mmpName}::${sName}::${hName}::${stName}::__dc__::${dcName}`;
                                           const dcOpen  = openCollectors.has(ck);
                                           const dcTotal = [...locToActions.values()].flat().length;
                                           return (
@@ -1855,7 +1929,7 @@ function StatusHubTree({
                                     return (
                                       <div className="flex flex-col divide-y divide-teal-100">
                                         {sortedLocs.map(([locName, dcMap]) => {
-                                          const lk      = locKey(sName, hName, stName, locName);
+                                          const lk      = locKey(mmpName, sName, hName, stName, locName);
                                           const locOpen = openLocalities.has(lk);
                                           const allActs = [...dcMap.values()].flat();
                                           return (
@@ -1883,14 +1957,14 @@ function StatusHubTree({
                                         {[...locMap.entries()].sort(([, a], [, b]) =>
                                           [...b.values()].flat().length - [...a.values()].flat().length
                                         ).map(([locName, dcMap]) => {
-                                          const lk      = locKey(sName, hName, stName, locName);
+                                          const lk      = locKey(mmpName, sName, hName, stName, locName);
                                           const locTotal = [...dcMap.values()].flat().length;
                                           const locOpen  = openLocalities.has(lk);
                                           return (
                                             <div key={lk}>
                                               {/* ── Locality — teal ── */}
                                               <button className="w-full flex items-center gap-2 px-8 py-1.5 bg-teal-50 hover:bg-teal-100 border-l-4 border-l-teal-400 text-left transition-colors"
-                                                onClick={() => toggleLocality(sName, hName, stName, locName, dcMap)} data-testid={`loc-group-${lk}`}>
+                                                onClick={() => toggleLocality(mmpName, sName, hName, stName, locName, dcMap)} data-testid={`loc-group-${lk}`}>
                                                 {locOpen ? <ChevronDown className="h-3 w-3 text-teal-600 shrink-0" /> : <ChevronRight className="h-3 w-3 text-teal-500 shrink-0" />}
                                                 <MapPin className="h-3 w-3 text-teal-600 shrink-0" />
                                                 <span className="text-xs font-medium flex-1 text-teal-900">{locName}</span>
@@ -1899,7 +1973,7 @@ function StatusHubTree({
                                               {locOpen && (
                                                 <div className="flex flex-col divide-y divide-amber-100">
                                                   {[...dcMap.entries()].sort(([, a], [, b]) => b.length - a.length).map(([dcName, actions]) => {
-                                                    const ck     = dcKey(sName, hName, stName, locName, dcName);
+                                                    const ck     = dcKey(mmpName, sName, hName, stName, locName, dcName);
                                                     const dcOpen = openCollectors.has(ck);
                                                     return (
                                                       <div key={ck}>
@@ -1934,6 +2008,11 @@ function StatusHubTree({
                     </div>
                   );
                 })}
+              </div>
+            )}
+          </div>
+        );
+      })}
               </div>
             )}
           </div>
