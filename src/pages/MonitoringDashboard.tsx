@@ -24,7 +24,7 @@ import {
   Clock, AlertTriangle, User, Activity, Eye, Layers, TrendingUp,
   AlertCircle, CheckSquare, X, Loader2, Calendar, Mail, Phone,
   Zap, Database, BarChart2, ChevronDown, ChevronUp,
-  Circle, ArrowUpRight, Timer, Filter, Info,
+  Circle, ArrowUpRight, Timer, Filter, Info, MapPin, ArrowRight,
 } from 'lucide-react';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -265,6 +265,50 @@ function MonitoringContent() {
     { name: 'No Response', value: stats.noResponse,   fill: '#f59e0b' },
   ].filter(d => d.value > 0), [stats]);
 
+  // ── Site Status Pipeline ───────────────────────────────────────────────────
+  // Derived from already-loaded allActions — no extra query needed.
+  const sitePipeline = useMemo(() => {
+    // MMP Site Entries pipeline stages (in workflow order)
+    const ENTRY_STAGES: Array<{ key: string; label: string; color: string; dot: string }> = [
+      { key: 'pending',    label: 'Pending',    color: 'bg-slate-100 text-slate-700 border-slate-200',   dot: 'bg-slate-400' },
+      { key: 'dispatched', label: 'Dispatched', color: 'bg-blue-50 text-blue-700 border-blue-200',        dot: 'bg-blue-500' },
+      { key: 'accepted',   label: 'Accepted',   color: 'bg-violet-50 text-violet-700 border-violet-200',  dot: 'bg-violet-500' },
+      { key: 'completed',  label: 'Completed',  color: 'bg-emerald-50 text-emerald-700 border-emerald-200',dot: 'bg-emerald-500' },
+      { key: 'returned',   label: 'Returned',   color: 'bg-amber-50 text-amber-700 border-amber-200',     dot: 'bg-amber-500' },
+      { key: 'cancelled',  label: 'Cancelled',  color: 'bg-red-50 text-red-700 border-red-200',           dot: 'bg-red-400' },
+    ];
+
+    // Site Visits pipeline stages (in workflow order)
+    const VISIT_STAGES: Array<{ key: string; label: string; color: string; dot: string }> = [
+      { key: 'pending',       label: 'Pending',        color: 'bg-slate-100 text-slate-700 border-slate-200',   dot: 'bg-slate-400' },
+      { key: 'assigned',      label: 'Assigned',       color: 'bg-blue-50 text-blue-700 border-blue-200',        dot: 'bg-blue-500' },
+      { key: 'accepted',      label: 'Accepted',       color: 'bg-indigo-50 text-indigo-700 border-indigo-200',  dot: 'bg-indigo-500' },
+      { key: 'dispatched',    label: 'Dispatched',     color: 'bg-cyan-50 text-cyan-700 border-cyan-200',        dot: 'bg-cyan-500' },
+      { key: 'inprogress',    label: 'In Progress',    color: 'bg-purple-50 text-purple-700 border-purple-200',  dot: 'bg-purple-500' },
+      { key: 'permitverified',label: 'Permit Verified',color: 'bg-teal-50 text-teal-700 border-teal-200',        dot: 'bg-teal-500' },
+      { key: 'completed',     label: 'Completed',      color: 'bg-emerald-50 text-emerald-700 border-emerald-200',dot: 'bg-emerald-500' },
+      { key: 'cancelled',     label: 'Cancelled',      color: 'bg-red-50 text-red-700 border-red-200',           dot: 'bg-red-400' },
+    ];
+
+    const entryActions  = allActions.filter(a => a.action_type === 'mmp_site_entry');
+    const visitActions  = allActions.filter(a => a.action_type === 'site_visit');
+
+    // Normalize status to lowercase key for matching
+    const countByStatus = (items: DashboardAction[], key: string) =>
+      items.filter(a => (a.native_status ?? '').toLowerCase().replace(/[_\s]/g,'') === key.replace(/[_\s]/g,'')).length;
+
+    const entryStages = ENTRY_STAGES.map(s => ({ ...s, count: countByStatus(entryActions, s.key) }));
+    const visitStages = VISIT_STAGES.map(s => ({ ...s, count: countByStatus(visitActions, s.key) }));
+
+    // Also capture any statuses not in the known list (unknown statuses)
+    const knownEntryKeys = new Set(ENTRY_STAGES.map(s => s.key));
+    const knownVisitKeys = new Set(VISIT_STAGES.map(s => s.key));
+    const unknownEntries = entryActions.filter(a => !knownEntryKeys.has((a.native_status ?? '').toLowerCase())).length;
+    const unknownVisits  = visitActions.filter(a => !knownVisitKeys.has((a.native_status ?? '').toLowerCase().replace(/[_\s]/g,''))).length;
+
+    return { entryStages, visitStages, entryTotal: entryActions.length, visitTotal: visitActions.length, unknownEntries, unknownVisits };
+  }, [allActions]);
+
   // ── Mutations ──────────────────────────────────────────────────────────────
   const statusMutation = useMutation({
     mutationFn: async (payload: Array<{ action_id: string; action_type: string; source_table?: string; status: DashboardStatus; notes?: string }>) => {
@@ -443,6 +487,101 @@ function MonitoringContent() {
               </ResponsiveContainer>
             </CardContent>
           </Card>
+        </div>
+      )}
+
+      {/* ── Site Status Pipeline ─────────────────────────────────────────── */}
+      {!isLoading && !error && (sitePipeline.entryTotal > 0 || sitePipeline.visitTotal > 0) && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+          {/* MMP Site Entries */}
+          <Card>
+            <CardHeader className="py-3 px-4 border-b">
+              <CardTitle className="text-xs font-semibold uppercase tracking-wider flex items-center gap-2 text-muted-foreground">
+                <Layers className="h-3.5 w-3.5" />
+                MMP Site Entries Flow
+                <span className="ml-auto text-[10px] font-mono bg-slate-100 px-1.5 py-0.5 rounded text-slate-500">
+                  {sitePipeline.entryTotal} total
+                </span>
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="px-4 py-3">
+              <div className="flex flex-wrap gap-2 items-center">
+                {sitePipeline.entryStages.map((stage, i) => (
+                  <div key={stage.key} className="flex items-center gap-1.5">
+                    <div className={`flex flex-col items-center gap-1 rounded-lg border px-3 py-2 min-w-[72px] text-center ${stage.color}`}>
+                      <span className="text-[10px] font-medium leading-tight">{stage.label}</span>
+                      <span className="text-xl font-bold leading-none">{stage.count}</span>
+                      {sitePipeline.entryTotal > 0 && (
+                        <span className="text-[9px] opacity-60">{Math.round((stage.count / sitePipeline.entryTotal) * 100)}%</span>
+                      )}
+                    </div>
+                    {i < sitePipeline.entryStages.length - 1 && (
+                      <ArrowRight className="h-3.5 w-3.5 text-muted-foreground/40 shrink-0" />
+                    )}
+                  </div>
+                ))}
+              </div>
+              {/* Progress bar */}
+              {sitePipeline.entryTotal > 0 && (
+                <div className="mt-3 flex h-2 rounded-full overflow-hidden gap-px">
+                  {sitePipeline.entryStages.filter(s => s.count > 0).map(stage => (
+                    <div
+                      key={stage.key}
+                      className={`${stage.dot} h-full transition-all`}
+                      style={{ width: `${(stage.count / sitePipeline.entryTotal) * 100}%` }}
+                      title={`${stage.label}: ${stage.count}`}
+                    />
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Site Visits */}
+          <Card>
+            <CardHeader className="py-3 px-4 border-b">
+              <CardTitle className="text-xs font-semibold uppercase tracking-wider flex items-center gap-2 text-muted-foreground">
+                <MapPin className="h-3.5 w-3.5" />
+                Site Visits Flow
+                <span className="ml-auto text-[10px] font-mono bg-slate-100 px-1.5 py-0.5 rounded text-slate-500">
+                  {sitePipeline.visitTotal} total
+                </span>
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="px-4 py-3">
+              <div className="flex flex-wrap gap-2 items-center">
+                {sitePipeline.visitStages.map((stage, i) => (
+                  <div key={stage.key} className="flex items-center gap-1.5">
+                    <div className={`flex flex-col items-center gap-1 rounded-lg border px-3 py-2 min-w-[72px] text-center ${stage.color}`}>
+                      <span className="text-[10px] font-medium leading-tight">{stage.label}</span>
+                      <span className="text-xl font-bold leading-none">{stage.count}</span>
+                      {sitePipeline.visitTotal > 0 && (
+                        <span className="text-[9px] opacity-60">{Math.round((stage.count / sitePipeline.visitTotal) * 100)}%</span>
+                      )}
+                    </div>
+                    {i < sitePipeline.visitStages.length - 1 && (
+                      <ArrowRight className="h-3.5 w-3.5 text-muted-foreground/40 shrink-0" />
+                    )}
+                  </div>
+                ))}
+              </div>
+              {/* Progress bar */}
+              {sitePipeline.visitTotal > 0 && (
+                <div className="mt-3 flex h-2 rounded-full overflow-hidden gap-px">
+                  {sitePipeline.visitStages.filter(s => s.count > 0).map(stage => (
+                    <div
+                      key={stage.key}
+                      className={`${stage.dot} h-full transition-all`}
+                      style={{ width: `${(stage.count / sitePipeline.visitTotal) * 100}%` }}
+                      title={`${stage.label}: ${stage.count}`}
+                    />
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
         </div>
       )}
 
