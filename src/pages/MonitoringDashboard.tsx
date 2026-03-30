@@ -1931,6 +1931,11 @@ function NotifyUsersDialog({ open, onClose, allActions, categoryLabel }: {
   const [autoIntervalDays, setAutoIntervalDays] = useState(7);
   const [autoEndDate, setAutoEndDate] = useState('');
 
+  // Recipient group collapse state — all collapsed by default
+  const [openGroups, setOpenGroups] = useState<Set<string>>(new Set());
+  const toggleGroupOpen = (label: string) =>
+    setOpenGroups(prev => { const n = new Set(prev); n.has(label) ? n.delete(label) : n.add(label); return n; });
+
   // Module type filter — empty set means "all modules"
   const [selectedModules, setSelectedModules] = useState<Set<ActionTypeKey>>(new Set());
 
@@ -2499,40 +2504,68 @@ function CoverageNotifyDialog({
               <div className="flex flex-col gap-2">{[1,2,3].map(i => <Skeleton key={i} className="h-10 w-full rounded-lg" />)}</div>
             ) : grouped.length === 0 ? (
               <p className="text-sm text-muted-foreground text-center py-4">No active supervisors, FOMs, admins or coordinators found.</p>
-            ) : grouped.map(g => (
-              <div key={g.label} className={`rounded-lg border p-3 ${g.color}`}>
-                <div className="flex items-center justify-between mb-2">
-                  <div>
-                    <span className="text-xs font-bold">{g.label}</span>
-                    <span className="text-[10px] ml-1 opacity-70">/ {g.labelAr}</span>
-                    <span className="text-[10px] ml-2 opacity-60">({g.members.length})</span>
-                  </div>
+            ) : grouped.map(g => {
+              const isOpen = openGroups.has(g.label);
+              const selectedCount = g.members.filter(m => selectedIds.has(m.id)).length;
+              const allSelected = selectedCount === g.members.length;
+              return (
+                <div key={g.label} className={`rounded-lg border overflow-hidden ${g.color}`}>
+                  {/* Collapsible header — click to expand */}
                   <button
-                    onClick={() => toggleGroup(g.members.map(m => m.id))}
-                    className="text-[10px] underline opacity-70 hover:opacity-100"
+                    className="w-full flex items-center gap-2 px-3 py-2.5 text-left hover:brightness-95 transition-all"
+                    onClick={() => toggleGroupOpen(g.label)}
+                    data-testid={`notify-group-toggle-${g.label}`}
                   >
-                    {g.members.every(m => selectedIds.has(m.id)) ? 'Deselect all' : 'Select all'}
+                    {isOpen
+                      ? <ChevronDown className="h-3.5 w-3.5 shrink-0 opacity-60" />
+                      : <ChevronRight className="h-3.5 w-3.5 shrink-0 opacity-60" />
+                    }
+                    <span className="text-xs font-bold flex-1">{g.label}</span>
+                    <span className="text-[10px] opacity-70 mr-1">/ {g.labelAr}</span>
+                    {selectedCount > 0 && (
+                      <span className="text-[9px] font-semibold bg-violet-600 text-white px-1.5 py-0.5 rounded-full mr-1">
+                        {selectedCount}/{g.members.length}
+                      </span>
+                    )}
+                    {selectedCount === 0 && (
+                      <span className="text-[9px] opacity-50 mr-1">({g.members.length})</span>
+                    )}
                   </button>
+
+                  {/* Expandable member list */}
+                  {isOpen && (
+                    <div className="border-t border-current/10 px-3 pt-2 pb-3">
+                      <div className="flex justify-end mb-1.5">
+                        <button
+                          onClick={e => { e.stopPropagation(); toggleGroup(g.members.map(m => m.id)); }}
+                          className="text-[10px] underline opacity-70 hover:opacity-100"
+                          data-testid={`notify-group-selectall-${g.label}`}
+                        >
+                          {allSelected ? 'Deselect all' : 'Select all'}
+                        </button>
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        {g.members.map(p => (
+                          <label key={p.id} className="flex items-center gap-2 cursor-pointer hover:opacity-80">
+                            <input
+                              type="checkbox"
+                              checked={selectedIds.has(p.id)}
+                              onChange={() => toggle(p.id)}
+                              className="accent-violet-600 h-3.5 w-3.5 shrink-0"
+                            />
+                            <span className="text-xs font-medium flex-1 truncate">{p.full_name || 'Unknown'}</span>
+                            {p.email
+                              ? <span className="text-[9px] opacity-60 truncate max-w-[130px]">{p.email}</span>
+                              : <span className="text-[9px] italic opacity-50">no email</span>
+                            }
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
-                <div className="flex flex-col gap-1">
-                  {g.members.map(p => (
-                    <label key={p.id} className="flex items-center gap-2 cursor-pointer hover:opacity-80">
-                      <input
-                        type="checkbox"
-                        checked={selectedIds.has(p.id)}
-                        onChange={() => toggle(p.id)}
-                        className="accent-violet-600 h-3.5 w-3.5 shrink-0"
-                      />
-                      <span className="text-xs font-medium flex-1 truncate">{p.full_name || 'Unknown'}</span>
-                      {p.email
-                        ? <span className="text-[9px] opacity-60 truncate max-w-[130px]">{p.email}</span>
-                        : <span className="text-[9px] italic opacity-50">no email</span>
-                      }
-                    </label>
-                  ))}
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
 
           {/* Priority */}
