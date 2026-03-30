@@ -43,6 +43,7 @@ const ReviewAssignCoordinators: React.FC = () => {
   const [expandedGroups, setExpandedGroups] = useState({} as Record<string, boolean>);
   const [expandedLocalities, setExpandedLocalities] = useState({} as Record<string, boolean>);
   const [forwardedSiteIds, setForwardedSiteIds] = useState<Set<string>>(new Set());
+  const [forwardedSiteDetails, setForwardedSiteDetails] = useState<Map<string, { coordinatorId: string | null, forwardedAt: string | null }>>(new Map());
   const [statePermitSiteIds, setStatePermitSiteIds] = useState<Set<string>>(new Set());
   const [selectedSiteForView, setSelectedSiteForView] = useState<any>(null);
   const [viewDialogOpen, setViewDialogOpen] = useState(false);
@@ -112,6 +113,7 @@ const ReviewAssignCoordinators: React.FC = () => {
           
           const forwarded = new Set<string>();
           const statePermitIds = new Set<string>();
+          const details = new Map<string, { coordinatorId: string | null, forwardedAt: string | null }>();
           siteEntries.forEach((entry: any) => {
             const hasForwardedAt = !!entry.forwarded_at;
             const hasDispatchedAt = !!entry.dispatched_at;
@@ -124,9 +126,14 @@ const ReviewAssignCoordinators: React.FC = () => {
             if (hasStatePermit) {
               statePermitIds.add(entry.id);
             }
+            details.set(entry.id, {
+              coordinatorId: entry.forwarded_to_user_id ?? entry.additional_data?.assigned_to ?? null,
+              forwardedAt: entry.forwarded_at ?? entry.dispatched_at ?? null,
+            });
           });
           
           setForwardedSiteIds(forwarded);
+          setForwardedSiteDetails(details);
           setStatePermitSiteIds(statePermitIds);
         } catch (err) {
           console.error('Failed to load forwarded sites:', err);
@@ -787,6 +794,31 @@ const ReviewAssignCoordinators: React.FC = () => {
                   ? [...new Set(groupSites.map((s: any) => String(s.state || '').trim()).filter(Boolean))]
                   : [];
                 
+                // Build coordinator info for forwarded sites in this group
+                const groupForwardedDetails = forwardedSites
+                  .map((s: any) => forwardedSiteDetails.get(s.id))
+                  .filter(Boolean) as { coordinatorId: string | null, forwardedAt: string | null }[];
+                const uniqueCoordIds = [...new Set(groupForwardedDetails.map(d => d.coordinatorId).filter(Boolean))];
+                const latestForwardedAt = groupForwardedDetails
+                  .map(d => d.forwardedAt)
+                  .filter(Boolean)
+                  .sort()
+                  .at(-1);
+                const coordName = uniqueCoordIds.length === 0
+                  ? null
+                  : uniqueCoordIds.length > 1
+                    ? 'Multiple coordinators'
+                    : (() => {
+                        const u = users.find((u: any) => u.id === uniqueCoordIds[0]);
+                        return u?.fullName || u?.full_name || u?.name || u?.email || uniqueCoordIds[0];
+                      })();
+                const forwardedDateStr = latestForwardedAt
+                  ? (() => {
+                      const d = new Date(latestForwardedAt);
+                      return isNaN(d.getTime()) ? null : d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+                    })()
+                  : null;
+
                 return (
                   <div key={groupKey} className="border rounded-lg p-4 bg-gray-50">
                     <div className="flex items-center flex-wrap gap-1 mb-3 font-medium cursor-pointer select-none" onClick={() => setExpandedGroups(g => ({ ...g, [groupKey]: !g[groupKey] }))}>
@@ -807,6 +839,14 @@ const ReviewAssignCoordinators: React.FC = () => {
                       {!isUnassigned && localitiesInGroup.length > 0 && (
                         <span className="text-muted-foreground text-sm ml-2">
                           ({localitiesInGroup.length} {localitiesInGroup.length === 1 ? 'locality' : 'localities'})
+                        </span>
+                      )}
+                      {hasForwardedSites && coordName && (
+                        <span className="ml-2 text-sm text-indigo-700 font-normal flex items-center gap-1">
+                          → <span className="font-medium">{coordName}</span>
+                          {forwardedDateStr && (
+                            <span className="text-muted-foreground font-normal">· {forwardedDateStr}</span>
+                          )}
                         </span>
                       )}
                       {hasForwardedSites && (
