@@ -94,6 +94,15 @@ const OperationalCostForm = ({ hubs = [], projects = [], onSuccess }: Operationa
 
   const totalAmountCents = lineItems.reduce((sum, item) => sum + item.amountCents, 0);
 
+  const sanitizeSupportingDocuments = (docs: SupportingDocument[]): SupportingDocument[] => {
+    return docs.filter((doc) => {
+      const url = (doc.url || "").trim().toLowerCase();
+      if (!url) return false;
+      if (url.startsWith("blob:") || url.startsWith("file:")) return false;
+      return url.startsWith("http://") || url.startsWith("https://");
+    });
+  };
+
   const validateItems = (): string | null => {
     const errors: Record<string, Record<string, string>> = {};
     let firstError: string | null = null;
@@ -139,6 +148,7 @@ const OperationalCostForm = ({ hubs = [], projects = [], onSuccess }: Operationa
     setIsSubmitting(true);
 
     try {
+      const safeSupportingDocuments = sanitizeSupportingDocuments(supportingDocuments);
       const rows = lineItems.map(item => ({
         expense_category: item.expenseCategory,
         amount_cents: item.amountCents,
@@ -151,7 +161,7 @@ const OperationalCostForm = ({ hubs = [], projects = [], onSuccess }: Operationa
         project_id: projectId || null,
         submitted_by: currentUser.id,
         submitter_role: currentUser.role || 'Coordinator',
-        supporting_documents: supportingDocuments,
+        supporting_documents: safeSupportingDocuments,
         status: 'pending',
         tier1_status: 'pending',
         tier2_status: 'pending',

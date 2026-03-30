@@ -201,6 +201,15 @@ export default function UnifiedCostRequestForm({
   const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set([initialItem.id]));
   const [itemErrors, setItemErrors] = useState<ItemErrors>({});
 
+  const sanitizeSupportingDocuments = (docs: SupportingDocument[]): SupportingDocument[] => {
+    return docs.filter((doc) => {
+      const url = (doc.url || '').trim().toLowerCase();
+      if (!url) return false;
+      if (url.startsWith('blob:') || url.startsWith('file:')) return false;
+      return url.startsWith('http://') || url.startsWith('https://');
+    });
+  };
+
   const updateLineItem = useCallback((itemId: string, field: keyof LineItem, value: any) => {
     setLineItems(prev => prev.map(item => {
       if (item.id !== itemId) return item;
@@ -400,6 +409,8 @@ export default function UnifiedCostRequestForm({
       const resolvedHubId = hubId && hubId.trim() !== '' ? hubId : (currentUser.hubId || null);
       const resolvedProjectId = projectId && projectId.trim() !== '' ? projectId : null;
 
+      const safeSupportingDocuments = sanitizeSupportingDocuments(supportingDocuments);
+
       if (isEditMode && editData) {
         const item = lineItems[0];
         const updateData: Record<string, any> = {
@@ -412,7 +423,7 @@ export default function UnifiedCostRequestForm({
           reference_number: item.referenceNumber && item.referenceNumber.trim() !== '' ? item.referenceNumber : null,
           hub_id: resolvedHubId,
           project_id: resolvedProjectId,
-          supporting_documents: supportingDocuments.length > 0 ? supportingDocuments : [],
+          supporting_documents: safeSupportingDocuments.length > 0 ? safeSupportingDocuments : [],
           updated_at: new Date().toISOString(),
         };
 
@@ -482,7 +493,7 @@ export default function UnifiedCostRequestForm({
           reference_number: item.referenceNumber && item.referenceNumber.trim() !== '' ? item.referenceNumber : null,
           hub_id: resolvedHubId,
           project_id: resolvedProjectId,
-          supporting_documents: supportingDocuments.length > 0 ? supportingDocuments : [],
+          supporting_documents: safeSupportingDocuments.length > 0 ? safeSupportingDocuments : [],
           submitted_by: currentUser.id,
           submitter_role: currentUser.role || 'user',
           status: 'pending',
