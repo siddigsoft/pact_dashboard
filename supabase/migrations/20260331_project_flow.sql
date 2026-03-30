@@ -26,12 +26,23 @@ CREATE INDEX IF NOT EXISTS project_flow_log_advanced_at_idx
 
 ALTER TABLE project_flow_log ENABLE ROW LEVEL SECURITY;
 
--- Authenticated users can read flow log for projects they can see
+-- Authenticated approved users can read flow log only for projects that exist
+-- (inherits any RLS on the projects table; non-existent / inaccessible projects are excluded)
 CREATE POLICY "project_flow_log_select"
   ON project_flow_log
   FOR SELECT
   TO authenticated
-  USING (true);
+  USING (
+    EXISTS (
+      SELECT 1 FROM projects p
+      WHERE p.id = project_flow_log.project_id
+    )
+    AND EXISTS (
+      SELECT 1 FROM profiles pr
+      WHERE pr.id = auth.uid()
+        AND pr.status = 'approved'
+    )
+  );
 
 -- Only admins, fom, super_admin can insert (advance stage)
 CREATE POLICY "project_flow_log_insert"
