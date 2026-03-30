@@ -1,6 +1,20 @@
 // Define project types and models for the Project Planning & Activity Management Module
 
-export type ProjectType = 'infrastructure' | 'survey' | 'compliance' | 'monitoring' | 'training' | 'other';
+export type ProjectType =
+  | 'tpm'
+  | 'baseline_survey'
+  | 'endline_survey'
+  | 'assessment'
+  | 'evaluation'
+  | 'research'
+  | 'capacity_building'
+  | 'compliance'
+  | 'infrastructure'
+  | 'other'
+  // Legacy values kept for backward-compatibility with existing DB records
+  | 'survey'
+  | 'monitoring'
+  | 'training';
 
 export type ProjectStatus = 'draft' | 'active' | 'onHold' | 'completed' | 'cancelled';
 
@@ -35,8 +49,8 @@ export interface ProjectTeamMember {
   name: string;
   role: ProjectRole;
   joinedAt: string;
-  assignedActivities?: string[];  // IDs of activities assigned to this member
-  workload?: number;  // Current workload percentage (0-100)
+  assignedActivities?: string[];
+  workload?: number;
 }
 
 export interface Project {
@@ -48,6 +62,7 @@ export interface Project {
   status: ProjectStatus;
   startDate: string;
   endDate: string;
+  currentFlowStage?: string;
   budget?: {
     total: number;
     currency: string;
@@ -58,7 +73,7 @@ export interface Project {
     country: string;
     region: string;
     state: string;
-    selectedStates?: string[];  // Added for multi-selection of Sudan states
+    selectedStates?: string[];
     locality?: string;
     coordinates?: {
       latitude: number;
@@ -68,7 +83,7 @@ export interface Project {
   team?: {
     projectManager?: string;
     members?: string[];
-    teamComposition?: ProjectTeamMember[];  // Detailed team composition with roles
+    teamComposition?: ProjectTeamMember[];
   };
   activities: ProjectActivity[];
   relatedMMPs?: string[];
@@ -76,4 +91,15 @@ export interface Project {
   createdBy?: string;
   createdAt: string;
   updatedAt: string;
+}
+
+/** Normalise legacy project type values from older DB records */
+export function normaliseProjectType(raw: string | undefined | null): ProjectType {
+  const legacyMap: Record<string, ProjectType> = {
+    survey: 'baseline_survey',
+    monitoring: 'tpm',
+    training: 'capacity_building',
+  };
+  if (!raw) return 'other';
+  return (legacyMap[raw] ?? raw) as ProjectType;
 }

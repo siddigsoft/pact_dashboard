@@ -53,7 +53,12 @@ const createFormSchema = (isEditing: boolean) => z.object({
     message: 'Project name must be at least 3 characters.',
   }),
   description: z.string().optional(),
-  projectType: z.enum(['infrastructure', 'survey', 'compliance', 'monitoring', 'training', 'other']),
+  projectType: z.enum([
+    'tpm', 'baseline_survey', 'endline_survey', 'assessment', 'evaluation',
+    'research', 'capacity_building', 'compliance', 'infrastructure', 'other',
+    // legacy values kept for editing existing records
+    'survey', 'monitoring', 'training',
+  ]),
   status: z.enum(['draft', 'active', 'onHold', 'completed', 'cancelled']),
   projectManager: z.string().optional(),
   startDate: z.date({
@@ -122,7 +127,7 @@ const ProjectForm: React.FC<ProjectFormProps> = ({
     defaultValues: {
       name: initialData?.name || '',
       description: initialData?.description || '',
-      projectType: (initialData?.projectType as ProjectType) || 'survey',
+      projectType: (initialData?.projectType as ProjectType) || 'tpm',
       status: (initialData?.status as ProjectStatus) || 'draft',
       startDate: initialData?.startDate ? new Date(initialData.startDate) : new Date(),
       endDate: initialData?.endDate ? new Date(initialData.endDate) : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
@@ -290,11 +295,15 @@ const ProjectForm: React.FC<ProjectFormProps> = ({
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
+                        <SelectItem value="tpm">Third Party Monitoring (TPM)</SelectItem>
+                        <SelectItem value="baseline_survey">Baseline Survey</SelectItem>
+                        <SelectItem value="endline_survey">Endline Survey</SelectItem>
+                        <SelectItem value="assessment">Field Assessment</SelectItem>
+                        <SelectItem value="evaluation">Programme Evaluation</SelectItem>
+                        <SelectItem value="research">Research Study</SelectItem>
+                        <SelectItem value="capacity_building">Capacity Building</SelectItem>
+                        <SelectItem value="compliance">Compliance Review</SelectItem>
                         <SelectItem value="infrastructure">Infrastructure</SelectItem>
-                        <SelectItem value="survey">Survey</SelectItem>
-                        <SelectItem value="compliance">Compliance</SelectItem>
-                        <SelectItem value="monitoring">Monitoring</SelectItem>
-                        <SelectItem value="training">Training</SelectItem>
                         <SelectItem value="other">Other</SelectItem>
                       </SelectContent>
                     </Select>

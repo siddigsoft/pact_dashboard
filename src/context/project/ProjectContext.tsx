@@ -6,6 +6,7 @@ import { ensureValidSession } from '@/lib/session-health';
 import { validateProject } from '@/utils/projectValidation';
 import { useRealtimeTables } from '@/hooks/useRealtimeResource';
 import { useProjectsQuery, useInvalidateProjectsQueries, mapDbProjectToProject, mapProjectToDbProject } from './projectQueries';
+import { getFirstStageId } from '@/config/projectFlows';
 
 interface ProjectContextProps {
   projects: Project[];
@@ -78,7 +79,11 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
         throw new Error(validationResult.errors?.join('\n'));
       }
 
-      const dbProject = mapProjectToDbProject(project) as Record<string, unknown>;
+      const firstStage = getFirstStageId(project.projectType);
+      const dbProject = {
+        ...mapProjectToDbProject(project),
+        current_flow_stage: project.currentFlowStage ?? firstStage,
+      } as Record<string, unknown>;
       const { data, error } = await supabase
         .from('projects')
         .insert(dbProject)

@@ -2,6 +2,13 @@
 import { z } from "zod";
 import { Project, ProjectType, ProjectStatus } from "@/types/project";
 
+const validProjectTypes = [
+  'tpm', 'baseline_survey', 'endline_survey', 'assessment', 'evaluation',
+  'research', 'capacity_building', 'compliance', 'infrastructure', 'other',
+  // Legacy values accepted for backward-compatibility
+  'survey', 'monitoring', 'training',
+] as const;
+
 // Validation schema for budget - allows null, undefined, empty object, or complete budget object
 const completeBudgetSchema = z.object({
   total: z.number().min(0),
@@ -38,7 +45,7 @@ export const projectValidationSchema = z.object({
   name: z.string().min(3, "Project name must be at least 3 characters"),
   projectCode: z.string().min(1, "Project code is required"),
   description: z.string().optional(),
-  projectType: z.enum(["infrastructure", "survey", "compliance", "monitoring", "training", "other"] as const),
+  projectType: z.enum(validProjectTypes),
   status: z.enum(["draft", "active", "onHold", "completed", "cancelled"] as const),
   startDate: z.string().refine(date => !isNaN(Date.parse(date)), {
     message: "Invalid start date format"

@@ -5,21 +5,25 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import type { Project, ProjectActivity, SubActivity } from '@/types/project';
+import { normaliseProjectType } from '@/types/project';
+import { getFirstStageId } from '@/config/projectFlows';
 
 export const projectQueryKeys = {
   all: ['projects'] as const,
 };
 
 export function mapDbProjectToProject(dbProject: any): Omit<Project, 'activities'> {
+  const projectType = normaliseProjectType(dbProject.project_type);
   return {
     id: dbProject.id,
     name: dbProject.name,
     projectCode: dbProject.project_code,
     description: dbProject.description,
-    projectType: dbProject.project_type,
+    projectType,
     status: dbProject.status,
     startDate: dbProject.start_date,
     endDate: dbProject.end_date,
+    currentFlowStage: dbProject.current_flow_stage ?? getFirstStageId(projectType),
     budget: dbProject.budget,
     location: dbProject.location,
     team: dbProject.team,
@@ -41,6 +45,7 @@ async function fetchProjects(): Promise<Project[]> {
       status,
       start_date,
       end_date,
+      current_flow_stage,
       budget,
       location,
       team,
@@ -128,6 +133,7 @@ export function mapProjectToDbProject(project: Project): Record<string, unknown>
     status: project.status,
     start_date: project.startDate,
     end_date: project.endDate,
+    current_flow_stage: project.currentFlowStage,
     budget: project.budget,
     location: project.location,
     team: project.team,
