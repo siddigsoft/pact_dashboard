@@ -3948,6 +3948,7 @@ function StatusHistoryTimeline({ actionId, actionType }: { actionId: string; act
 type CoverageNotifyCtx = {
   label: string;        // Human-readable scope (e.g. "Jamal Elden Adam Mohamed — 15 sites")
   mmpName?: string;
+  mmpFileId?: string;   // mmp_files.id — used to scope coordinator lookup to this exact MMP
   status?: string;
   hubName?: string;
   stateName?: string;
@@ -4083,29 +4084,60 @@ function CoverageScopedNotifyDialog({ open, onClose, ctx }: {
           setProfiles(found);
           setSelectedIds(new Set(found.map(p => p.id)));
         } else {
-          // Scope roles to whoever needs to act for this specific status
-          const rolesToLoad = (() => {
-            const s = ctx.status ?? '';
-            if (s === 'no_request')            return ['coordinator'];
-            if (s === 'pending_supervisor')    return ['supervisor'];
-            if (s === 'pending_admin')         return ['fom', 'admin'];
-            return ['coordinator', 'supervisor', 'fom', 'admin'];
-          })();
+          const s = ctx.status ?? '';
 
-          // Load action-takers and FYI recipients in parallel
-          const fyiRoles = fyiRolesForStatus(ctx.status);
-          const [mainRes, fyiRes] = await Promise.all([
-            supabase.from('profiles').select('id, full_name, email, role')
-              .in('role', rolesToLoad).eq('status', 'approved').order('role'),
-            fyiRoles
-              ? supabase.from('profiles').select('id, full_name, email, role')
-                  .in('role', fyiRoles).eq('status', 'approved').order('full_name')
-              : Promise.resolve({ data: [], error: null }),
-          ]);
-          const mainFound = (mainRes.data ?? []) as typeof profiles;
-          setProfiles(mainFound);
-          setSelectedIds(new Set(mainFound.map(p => p.id)));
-          setFyiProfiles((fyiRes.data ?? []) as typeof fyiProfiles);
+          if (s === 'no_request') {
+            // Scope coordinators to the specific MMP only (not all coordinators system-wide)
+            const mmpRes = ctx.mmpFileId
+              ? await supabase.from('mmp_files').select('coordinator_id')
+                  .eq('id', ctx.mmpFileId).limit(1)
+              : ctx.mmpName
+              ? await supabase.from('mmp_files').select('coordinator_id')
+                  .ilike('name', ctx.mmpName)
+                  .not('coordinator_id', 'is', null)
+                  .limit(10)
+              : { data: [] as { coordinator_id: string | null }[] };
+
+            const coordIds = ((mmpRes.data ?? []) as { coordinator_id: string | null }[])
+              .map(m => m.coordinator_id).filter((id): id is string => !!id);
+
+            if (coordIds.length > 0) {
+              const { data } = await supabase.from('profiles').select('id, full_name, email, role')
+                .in('id', coordIds).eq('status', 'approved').order('full_name');
+              const mainFound = (data ?? []) as typeof profiles;
+              setProfiles(mainFound);
+              setSelectedIds(new Set(mainFound.map(p => p.id)));
+              setFyiProfiles([]);
+            } else {
+              // Fallback: no coordinator assigned to this MMP — load all coordinators
+              const { data } = await supabase.from('profiles').select('id, full_name, email, role')
+                .eq('role', 'coordinator').eq('status', 'approved').order('full_name');
+              const mainFound = (data ?? []) as typeof profiles;
+              setProfiles(mainFound);
+              setSelectedIds(new Set(mainFound.map(p => p.id)));
+              setFyiProfiles([]);
+            }
+          } else {
+            // pending_supervisor / pending_admin / default — load all relevant roles
+            // (supervisors/admins are not scoped to a specific hub in the profiles table)
+            const rolesToLoad = s === 'pending_supervisor' ? ['supervisor']
+              : s === 'pending_admin' ? ['fom', 'admin']
+              : ['coordinator', 'supervisor', 'fom', 'admin'];
+
+            const fyiRoles = fyiRolesForStatus(ctx.status);
+            const [mainRes, fyiRes] = await Promise.all([
+              supabase.from('profiles').select('id, full_name, email, role')
+                .in('role', rolesToLoad).eq('status', 'approved').order('role'),
+              fyiRoles
+                ? supabase.from('profiles').select('id, full_name, email, role')
+                    .in('role', fyiRoles).eq('status', 'approved').order('full_name')
+                : Promise.resolve({ data: [], error: null }),
+            ]);
+            const mainFound = (mainRes.data ?? []) as typeof profiles;
+            setProfiles(mainFound);
+            setSelectedIds(new Set(mainFound.map(p => p.id)));
+            setFyiProfiles((fyiRes.data ?? []) as typeof fyiProfiles);
+          }
         }
       } finally {
         setLoading(false);
@@ -4270,7 +4302,7 @@ function CoverageScopedNotifyDialog({ open, onClose, ctx }: {
               if (ctx.status === 'no_request') return (
                 <div className="flex items-center gap-1.5 text-[10px] bg-blue-50 border border-blue-200 text-blue-700 rounded px-2.5 py-1.5 mb-2">
                   <span>🎯</span>
-                  <span>Notifying <strong>Coordinators</strong> — they need to submit advance requests for these sites</span>
+                  <span>Notifying the <strong>coordinator(s) assigned to this MMP</strong> — they need to submit advance requests for these sites</span>
                 </div>
               );
               if (ctx.status === 'pending_supervisor') return (
@@ -4618,7 +4650,7 @@ function CoverageTree({ entries, onNotify }: { entries: CoverageEntry[]; onNotif
                                                         <span className="text-[9px] font-mono bg-amber-100 text-amber-700 border border-amber-200 px-2 py-0.5 rounded-full">{sites.length}</span>
                                                       </button>
                                                       {onNotify && (
-                                                        <button onClick={e => { e.stopPropagation(); const realDc = dc !== '—' ? dc : undefined; onNotify({ label: realDc ? `${dc} — ${sites.length} site${sites.length !== 1 ? 's' : ''}` : `Unclaimed sites — ${sites.length} site${sites.length !== 1 ? 's' : ''}`, mmpName: mmp, status: advSts, hubName: hub, stateName: state, dcName: realDc, siteCount: sites.length }); }}
+                                                        <button onClick={e => { e.stopPropagation(); const realDc = dc !== '—' ? dc : undefined; onNotify({ label: realDc ? `${dc} — ${sites.length} site${sites.length !== 1 ? 's' : ''}` : `Unclaimed sites — ${sites.length} site${sites.length !== 1 ? 's' : ''}`, mmpName: mmp, mmpFileId: sites[0]?.mmp_file_id, status: advSts, hubName: hub, stateName: state, dcName: realDc, siteCount: sites.length }); }}
                                                           title={`Notify ${dc !== '—' ? dc : 'about unclaimed sites'}`} data-testid={`coverage-notify-dc-${dKey}`}
                                                           className="shrink-0 p-1.5 mr-2 rounded text-amber-500 hover:text-violet-600 hover:bg-violet-50 transition-colors">
                                                           <Bell className="h-3.5 w-3.5" />
