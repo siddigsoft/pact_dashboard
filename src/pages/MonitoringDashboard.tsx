@@ -3391,6 +3391,19 @@ function ManageAccessDialog({ open, onClose }: { open: boolean; onClose: () => v
     toast({ title: 'Access granted', description: `${user.full_name || user.email} can now view System Monitoring.` });
     setGrantedUsers(prev => [{ ...user, granted_at: new Date().toISOString() }, ...prev]);
     setSearchResults(prev => prev.filter(u => u.id !== user.id));
+    // Send in-app notification to the newly granted user
+    const granterName = currentUser?.fullName || currentUser?.full_name || currentUser?.email || 'A Super Admin';
+    insertNotifications([{
+      recipient_id: user.id,
+      title_en: '🔓 System Monitoring Access Granted',
+      title_ar: '🔓 تم منح وصول مراقبة النظام',
+      message_en: `${granterName} has granted you access to the System Monitoring dashboard. You can now track all system activities and pending actions across all modules.`,
+      message_ar: `منحك ${granterName} حق الوصول إلى لوحة مراقبة النظام. يمكنك الآن تتبع جميع أنشطة النظام والإجراءات المعلقة عبر جميع الوحدات.`,
+      event_type: 'access_granted',
+      action_url: '/admin/monitoring',
+      priority: 'normal',
+      status: 'unread',
+    }]).catch(() => {/* silent — notification is non-critical */});
   };
 
   const revokeAccess = async (user: AccessProfile) => {
@@ -3413,6 +3426,23 @@ function ManageAccessDialog({ open, onClose }: { open: boolean; onClose: () => v
     if (r.includes('supervisor')) return 'bg-blue-100 text-blue-700';
     if (r.includes('coordinator')) return 'bg-emerald-100 text-emerald-700';
     return 'bg-slate-100 text-slate-600';
+  };
+
+  // Describes what the user can DO on the monitoring page based on their role
+  const roleAction = (role: string | null): { label: string; labelAr: string; cls: string; tip: string } => {
+    if (!role) return { label: 'View Only', labelAr: 'عرض فقط', cls: 'bg-slate-100 text-slate-500 border border-slate-200', tip: 'Can view monitoring data but cannot take actions.' };
+    const r = role.toLowerCase();
+    if (r.includes('super_admin') || r === 'superadmin')
+      return { label: 'Full Control', labelAr: 'تحكم كامل', cls: 'bg-rose-100 text-rose-700 border border-rose-200', tip: 'Full access: can view, act, approve, and manage access.' };
+    if (r.includes('admin'))
+      return { label: 'View & Act', labelAr: 'عرض وتنفيذ', cls: 'bg-orange-100 text-orange-700 border border-orange-200', tip: 'Can view all data and mark actions as Acted or Ignored.' };
+    if (r.includes('fom'))
+      return { label: 'View & Approve', labelAr: 'عرض وموافقة', cls: 'bg-purple-100 text-purple-700 border border-purple-200', tip: 'Can view and approve pending items in their scope.' };
+    if (r.includes('data') || r.includes('ict'))
+      return { label: 'View & Track', labelAr: 'عرض وتتبع', cls: 'bg-cyan-100 text-cyan-700 border border-cyan-200', tip: 'Can view all monitoring data and track action statuses.' };
+    if (r.includes('supervisor'))
+      return { label: 'View & Track', labelAr: 'عرض وتتبع', cls: 'bg-blue-100 text-blue-700 border border-blue-200', tip: 'Can view monitoring data relevant to their hub.' };
+    return { label: 'View Only', labelAr: 'عرض فقط', cls: 'bg-slate-100 text-slate-500 border border-slate-200', tip: 'Read-only access to system monitoring data.' };
   };
 
   return (
@@ -3444,7 +3474,9 @@ function ManageAccessDialog({ open, onClose }: { open: boolean; onClose: () => v
               </p>
             ) : (
               <div className="flex flex-col gap-1.5">
-                {grantedUsers.map(u => (
+                {grantedUsers.map(u => {
+                  const action = roleAction(u.role);
+                  return (
                   <div key={u.id} className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2" data-testid={`access-granted-${u.id}`}>
                     <div className="h-7 w-7 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
                       <User className="h-3.5 w-3.5 text-primary" />
@@ -3454,6 +3486,10 @@ function ManageAccessDialog({ open, onClose }: { open: boolean; onClose: () => v
                       <p className="text-[10px] text-muted-foreground truncate">{u.email || '—'}</p>
                     </div>
                     <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${roleColor(u.role)}`}>{u.role || 'unknown'}</span>
+                    <span
+                      title={action.tip}
+                      className={`text-[10px] font-semibold px-1.5 py-0.5 rounded hidden sm:inline ${action.cls}`}
+                    >{action.label}</span>
                     {u.granted_at && (
                       <span className="text-[10px] text-muted-foreground hidden sm:block">
                         {format(new Date(u.granted_at), 'MMM d')}
@@ -3470,7 +3506,8 @@ function ManageAccessDialog({ open, onClose }: { open: boolean; onClose: () => v
                       <span className="ml-1 hidden sm:inline">Revoke</span>
                     </Button>
                   </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
@@ -3495,7 +3532,9 @@ function ManageAccessDialog({ open, onClose }: { open: boolean; onClose: () => v
 
             {searchResults.length > 0 && (
               <div className="flex flex-col gap-1.5 mt-2">
-                {searchResults.map(u => (
+                {searchResults.map(u => {
+                  const action = roleAction(u.role);
+                  return (
                   <div key={u.id} className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2" data-testid={`access-result-${u.id}`}>
                     <div className="h-7 w-7 rounded-full bg-slate-200 flex items-center justify-center shrink-0">
                       <User className="h-3.5 w-3.5 text-slate-500" />
@@ -3505,6 +3544,10 @@ function ManageAccessDialog({ open, onClose }: { open: boolean; onClose: () => v
                       <p className="text-[10px] text-muted-foreground truncate">{u.email || '—'}</p>
                     </div>
                     <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${roleColor(u.role)}`}>{u.role || 'unknown'}</span>
+                    <span
+                      title={action.tip}
+                      className={`text-[10px] font-semibold px-1.5 py-0.5 rounded hidden sm:inline ${action.cls}`}
+                    >{action.label}</span>
                     <Button
                       variant="outline" size="sm"
                       className="h-7 px-2 text-emerald-700 border-emerald-200 hover:bg-emerald-50 shrink-0"
@@ -3516,7 +3559,8 @@ function ManageAccessDialog({ open, onClose }: { open: boolean; onClose: () => v
                       <span className="ml-1 hidden sm:inline">Grant</span>
                     </Button>
                   </div>
-                ))}
+                  );
+                })}
               </div>
             )}
 
