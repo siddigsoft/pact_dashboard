@@ -40,6 +40,7 @@ const FieldTeam = lazy(() => import('./pages/FieldTeam'));
 const Finance = lazy(() => import('./pages/Finance'));
 const Reports = lazy(() => import('./pages/Reports'));
 const Projects = lazy(() => import('./pages/Projects'));
+const ProjectAnalytics = lazy(() => import('./pages/ProjectAnalytics'));
 const CreateProject = lazy(() => import('./pages/CreateProject'));
 const CreateProjectActivity = lazy(() => import('./pages/CreateProjectActivity'));
 const ProjectActivityDetail = lazy(() => import('./pages/ProjectActivityDetail'));
@@ -272,6 +273,7 @@ const AppRoutes = () => {
         <Route path="/data-visibility" element={<DataVisibility />} />
         <Route path="/chat" element={<Chat />} />
         <Route path="/projects" element={<Projects />} />
+        <Route path="/projects/analytics" element={<ProjectAnalytics />} />
         <Route path="/projects/create" element={<CreateProject />} />
         <Route path="/projects/:id" element={<ProjectDetail />} />
         <Route path="/projects/:id/edit" element={<EditProject />} />
