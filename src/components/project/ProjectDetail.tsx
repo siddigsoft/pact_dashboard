@@ -25,11 +25,17 @@ import {
   GitBranch,
   Link2,
   FileSpreadsheet,
+  MessageCircle,
+  Paperclip,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useBudget } from '@/context/budget/BudgetContext';
 import { ProjectBudgetCard } from '@/components/budget/BudgetCard';
 import { EditProjectBudgetDialog } from '@/components/budget/EditProjectBudgetDialog';
+import { useUser } from '@/context/user/UserContext';
+import { useAuthorization } from '@/hooks/use-authorization';
+import ProjectCommentsPanel from './ProjectCommentsPanel';
+import ProjectDocumentsPanel from './ProjectDocumentsPanel';
 
 import { Project } from '@/types/project';
 import { Button } from '@/components/ui/button';
@@ -217,6 +223,9 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
   const [editBudgetOpen, setEditBudgetOpen] = useState(false);
   const flow = useProjectFlow(project);
   const { getProjectBudget, loading: budgetLoading, refreshProjectBudgets } = useBudget();
+  const { currentUser } = useUser();
+  const { isSuperAdmin, hasAnyRole } = useAuthorization();
+  const isAdminUser = isSuperAdmin() || hasAnyRole(['admin', 'fom']);
   const projectBudget = getProjectBudget(project.id);
   const [userWorkloads, setUserWorkloads] = useState<Record<string, number>>({});
 
@@ -622,59 +631,80 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
               <ActivityTimeline activities={project.activities} />
             </div>
 
-            {/* Right column: Progress */}
-            <Card className="h-fit">
-              <CardHeader className="p-3 pb-2">
-                <CardTitle className="text-base font-semibold">Progress</CardTitle>
-              </CardHeader>
-              <CardContent className="p-3 pt-0 space-y-4">
-                <div className="space-y-1.5">
-                  <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">Activities</span>
-                    <span className="font-medium">{getCompletedActivities().completed}/{getCompletedActivities().total}</span>
-                  </div>
-                  <Progress value={getCompletedActivities().percentage} className="h-2" />
-                </div>
-                
-                <div className="space-y-1.5">
-                  <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">Timeline</span>
-                    <span className="font-medium">{calculateTimelinePercentage()}%</span>
-                  </div>
-                  <Progress 
-                    value={calculateTimelinePercentage()} 
-                    className="h-2" 
-                  />
-                </div>
-                
-                {budgetSummary && budgetSummary.total != null && budgetSummary.allocated != null && budgetSummary.total > 0 && (
+            {/* Right column: Progress + Documents */}
+            <div className="space-y-4">
+              <Card className="h-fit">
+                <CardHeader className="p-3 pb-2">
+                  <CardTitle className="text-base font-semibold">Progress</CardTitle>
+                </CardHeader>
+                <CardContent className="p-3 pt-0 space-y-4">
                   <div className="space-y-1.5">
                     <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">Budget Used</span>
-                      <span className="font-medium">
-                        {(() => {
+                      <span className="text-muted-foreground">Activities</span>
+                      <span className="font-medium">{getCompletedActivities().completed}/{getCompletedActivities().total}</span>
+                    </div>
+                    <Progress value={getCompletedActivities().percentage} className="h-2" />
+                  </div>
+                  
+                  <div className="space-y-1.5">
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">Timeline</span>
+                      <span className="font-medium">{calculateTimelinePercentage()}%</span>
+                    </div>
+                    <Progress 
+                      value={calculateTimelinePercentage()} 
+                      className="h-2" 
+                    />
+                  </div>
+                  
+                  {budgetSummary && budgetSummary.total != null && budgetSummary.allocated != null && budgetSummary.total > 0 && (
+                    <div className="space-y-1.5">
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">Budget Used</span>
+                        <span className="font-medium">
+                          {(() => {
+                            const total = budgetSummary.total || 0;
+                            const allocated = budgetSummary.allocated || 0;
+                            return total > 0
+                              ? Math.round((allocated / total) * 100)
+                              : 0;
+                          })()}%
+                        </span>
+                      </div>
+                      <Progress 
+                        value={(() => {
                           const total = budgetSummary.total || 0;
                           const allocated = budgetSummary.allocated || 0;
                           return total > 0
                             ? Math.round((allocated / total) * 100)
                             : 0;
-                        })()}%
-                      </span>
+                        })()} 
+                        className="h-2" 
+                      />
                     </div>
-                    <Progress 
-                      value={(() => {
-                        const total = budgetSummary.total || 0;
-                        const allocated = budgetSummary.allocated || 0;
-                        return total > 0
-                          ? Math.round((allocated / total) * 100)
-                          : 0;
-                      })()} 
-                      className="h-2" 
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Documents panel */}
+              {currentUser && (
+                <Card>
+                  <CardHeader className="p-3 pb-2">
+                    <CardTitle className="text-base font-semibold flex items-center gap-2">
+                      <Paperclip className="h-4 w-4" />
+                      Documents
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="p-3 pt-0">
+                    <ProjectDocumentsPanel
+                      projectId={project.id}
+                      currentUserId={currentUser.id}
+                      isAdmin={isAdminUser}
                     />
-                  </div>
-                )}
-              </CardContent>
-            </Card>
+                  </CardContent>
+                </Card>
+              )}
+            </div>
           </div>
         </TabsContent>
         
@@ -753,6 +783,25 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
                 <Plus className="h-4 w-4 mr-2" /> Add First Activity
               </Button>
             </div>
+          )}
+
+          {/* Comments section */}
+          {currentUser && (
+            <Card className="mt-4">
+              <CardHeader className="p-3 pb-2">
+                <CardTitle className="text-base font-semibold flex items-center gap-2">
+                  <MessageCircle className="h-4 w-4" />
+                  Comments
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-3 pt-0">
+                <ProjectCommentsPanel
+                  projectId={project.id}
+                  currentUserId={currentUser.id}
+                  isAdmin={isAdminUser}
+                />
+              </CardContent>
+            </Card>
           )}
         </TabsContent>
         
