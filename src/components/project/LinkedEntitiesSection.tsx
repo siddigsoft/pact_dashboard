@@ -4,6 +4,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { X, ChevronDown, ChevronUp, Link2, Search, FileSpreadsheet, MapPin } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
+import { format, parseISO, isValid } from 'date-fns';
 
 interface MmpResult {
   id: string;
@@ -18,6 +19,25 @@ interface SiteVisitResult {
   id: string;
   siteName: string;
   siteCode?: string;
+  visitDate?: string;
+  state?: string;
+  locality?: string;
+}
+
+interface MmpRow {
+  id: string;
+  name: string;
+  mmp_id?: string;
+  hub?: string;
+  month?: string;
+  year?: number;
+}
+
+interface SiteVisitRow {
+  id: string;
+  site_name?: string;
+  site_code?: string;
+  visit_date?: string;
   state?: string;
   locality?: string;
 }
@@ -36,7 +56,7 @@ async function searchMMPs(q: string): Promise<MmpResult[]> {
     : await base.order('created_at', { ascending: false });
 
   if (error) return [];
-  return (data ?? []).map((r: { id: string; name: string; mmp_id?: string; hub?: string; month?: string; year?: number }) => ({
+  return (data as MmpRow[] ?? []).map((r) => ({
     id: r.id,
     name: r.name,
     mmpId: r.mmp_id,
@@ -48,50 +68,59 @@ async function searchMMPs(q: string): Promise<MmpResult[]> {
 
 async function searchSiteVisits(q: string): Promise<SiteVisitResult[]> {
   const trim = q.trim();
-  const base = supabase
-    .from('site_visits')
-    .select('id, site_name, site_code, state, locality')
-    .limit(20);
-
-  let rows: { id: string; site_name?: string; site_code?: string; state?: string; locality?: string }[] = [];
 
   if (!trim) {
-    const { data } = await base.order('created_at', { ascending: false });
-    rows = data ?? [];
-  } else if (UUID_PATTERN.test(trim)) {
+    const { data } = await supabase
+      .from('site_visits')
+      .select('id, site_name, site_code, visit_date, state, locality')
+      .order('created_at', { ascending: false })
+      .limit(20);
+    return (data as SiteVisitRow[] ?? []).map(rowToSv);
+  }
+
+  if (UUID_PATTERN.test(trim)) {
     const [byId, byName] = await Promise.all([
       supabase
         .from('site_visits')
-        .select('id, site_name, site_code, state, locality')
+        .select('id, site_name, site_code, visit_date, state, locality')
         .eq('id', trim)
         .limit(1),
-      base.ilike('site_name', `%${trim}%`),
+      supabase
+        .from('site_visits')
+        .select('id, site_name, site_code, visit_date, state, locality')
+        .or(`site_name.ilike.%${trim}%,site_code.ilike.%${trim}%`)
+        .limit(20),
     ]);
-    const ids = new Set<string>();
-    rows = [...(byId.data ?? []), ...(byName.data ?? [])].filter((r) => {
-      if (ids.has(r.id)) return false;
-      ids.add(r.id);
-      return true;
-    });
-  } else {
-    const { data } = await base.ilike('site_name', `%${trim}%`);
-    rows = data ?? [];
+    const seen = new Set<string>();
+    return [...(byId.data as SiteVisitRow[] ?? []), ...(byName.data as SiteVisitRow[] ?? [])]
+      .filter((r) => { if (seen.has(r.id)) return false; seen.add(r.id); return true; })
+      .map(rowToSv);
   }
 
-  return rows.map((r) => ({
+  const { data } = await supabase
+    .from('site_visits')
+    .select('id, site_name, site_code, visit_date, state, locality')
+    .or(`site_name.ilike.%${trim}%,site_code.ilike.%${trim}%`)
+    .limit(20);
+  return (data as SiteVisitRow[] ?? []).map(rowToSv);
+}
+
+function rowToSv(r: SiteVisitRow): SiteVisitResult {
+  return {
     id: r.id,
     siteName: r.site_name || 'Unnamed Site',
     siteCode: r.site_code,
+    visitDate: r.visit_date,
     state: r.state,
     locality: r.locality,
-  }));
+  };
 }
 
 async function fetchMmpLabels(ids: string[]): Promise<Record<string, string>> {
   if (ids.length === 0) return {};
   const { data } = await supabase.from('mmp_files').select('id, name').in('id', ids);
   const map: Record<string, string> = {};
-  for (const r of data ?? []) map[r.id] = r.name;
+  for (const r of (data as { id: string; name: string }[] ?? [])) map[r.id] = r.name;
   return map;
 }
 
@@ -99,8 +128,18 @@ async function fetchSvLabels(ids: string[]): Promise<Record<string, string>> {
   if (ids.length === 0) return {};
   const { data } = await supabase.from('site_visits').select('id, site_name').in('id', ids);
   const map: Record<string, string> = {};
-  for (const r of data ?? []) map[r.id] = r.site_name || r.id;
+  for (const r of (data as { id: string; site_name?: string }[] ?? [])) map[r.id] = r.site_name || r.id;
   return map;
+}
+
+function formatVisitDate(dateStr?: string): string | null {
+  if (!dateStr) return null;
+  try {
+    const d = parseISO(dateStr);
+    return isValid(d) ? format(d, 'dd MMM yyyy') : null;
+  } catch {
+    return null;
+  }
 }
 
 function useDebounce<T>(value: T, delay = 300): T {
@@ -399,7 +438,7 @@ export function LinkedEntitiesSection({
             )}
 
             <SearchDropdown<SiteVisitResult>
-              placeholder="Search by site name or visit ID…"
+              placeholder="Search by site name or site code…"
               selectedIds={relatedSiteVisits}
               onToggle={toggleSv}
               results={svResults}
@@ -411,11 +450,9 @@ export function LinkedEntitiesSection({
               renderItem={(sv) => (
                 <span className="flex flex-col">
                   <span className="font-medium truncate">{sv.siteName}</span>
-                  {(sv.state || sv.locality || sv.siteCode) && (
-                    <span className="text-muted-foreground">
-                      {[sv.siteCode, sv.locality, sv.state].filter(Boolean).join(', ')}
-                    </span>
-                  )}
+                  <span className="text-muted-foreground">
+                    {[sv.siteCode, formatVisitDate(sv.visitDate), sv.locality, sv.state].filter(Boolean).join(' · ')}
+                  </span>
                 </span>
               )}
             />

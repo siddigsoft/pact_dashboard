@@ -124,6 +124,9 @@ interface EntityChip {
   path: string;
 }
 
+interface MmpFileRow { id: string; name: string }
+interface SiteVisitRow { id: string; site_name?: string }
+
 function LinkedEntitiesDisplay({
   relatedMMPs,
   relatedSiteVisits,
@@ -143,7 +146,7 @@ function LinkedEntitiesDisplay({
         .in('id', relatedMMPs)
         .then(({ data }) => {
           setMmpChips(
-            (data ?? []).map((r: any) => ({ id: r.id, label: r.name, path: `/mmp/${r.id}` })),
+            (data as MmpFileRow[] ?? []).map((r) => ({ id: r.id, label: r.name, path: `/mmp/${r.id}` })),
           );
         });
     } else {
@@ -159,7 +162,7 @@ function LinkedEntitiesDisplay({
         .in('id', relatedSiteVisits)
         .then(({ data }) => {
           setSvChips(
-            (data ?? []).map((r: any) => ({ id: r.id, label: r.site_name || r.id, path: `/site-visits/${r.id}` })),
+            (data as SiteVisitRow[] ?? []).map((r) => ({ id: r.id, label: r.site_name || r.id, path: `/site-visits/${r.id}` })),
           );
         });
     } else {
