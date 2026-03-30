@@ -48,6 +48,7 @@ import {
   CommandInput,
   CommandItem,
 } from '@/components/ui/command';
+import { LinkedEntitiesSection } from '@/components/project/LinkedEntitiesSection';
 
 const createFormSchema = (isEditing: boolean) => z.object({
   name: z.string().min(3, {
@@ -163,6 +164,8 @@ const ProjectForm: React.FC<ProjectFormProps> = ({
   const [teamMembers, setTeamMembers] = useState<ProjectTeamMember[]>(
     initialData?.team?.teamComposition || []
   );
+  const [relatedMMPs, setRelatedMMPs] = useState<string[]>(initialData?.relatedMMPs ?? []);
+  const [relatedSiteVisits, setRelatedSiteVisits] = useState<string[]>(initialData?.relatedSiteVisits ?? []);
   
   const formSchema = createFormSchema(isEditing);
   const form = useForm<FormSchema>({
@@ -227,6 +230,8 @@ const ProjectForm: React.FC<ProjectFormProps> = ({
           teamComposition: teamMembers
         },
         activities: initialData?.activities || [],
+        relatedMMPs,
+        relatedSiteVisits,
         createdAt: initialData?.createdAt || new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       };
@@ -749,6 +754,13 @@ const ProjectForm: React.FC<ProjectFormProps> = ({
               )
 }
             </div>
+
+            <LinkedEntitiesSection
+              relatedMMPs={relatedMMPs}
+              onRelatedMMPsChange={setRelatedMMPs}
+              relatedSiteVisits={relatedSiteVisits}
+              onRelatedSiteVisitsChange={setRelatedSiteVisits}
+            />
 
             <div className="flex justify-end space-x-4">
               <Button type="button" variant="outline">Cancel</Button>

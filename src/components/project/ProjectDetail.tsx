@@ -23,6 +23,8 @@ import {
   TrendingUp,
   Wallet,
   GitBranch,
+  Link2,
+  FileSpreadsheet,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useBudget } from '@/context/budget/BudgetContext';
@@ -115,6 +117,91 @@ const getBudgetSummary = (budget: any) => {
 
   return { total, allocated, remaining, currency };
 };
+
+interface EntityChip {
+  id: string;
+  label: string;
+  path: string;
+}
+
+function LinkedEntitiesDisplay({
+  relatedMMPs,
+  relatedSiteVisits,
+}: {
+  relatedMMPs: string[];
+  relatedSiteVisits: string[];
+}) {
+  const navigate = useNavigate();
+  const [mmpChips, setMmpChips] = useState<EntityChip[]>([]);
+  const [svChips, setSvChips] = useState<EntityChip[]>([]);
+
+  useEffect(() => {
+    if (relatedMMPs.length > 0) {
+      supabase
+        .from('mmp_files')
+        .select('id, name')
+        .in('id', relatedMMPs)
+        .then(({ data }) => {
+          setMmpChips(
+            (data ?? []).map((r: any) => ({ id: r.id, label: r.name, path: `/mmp/${r.id}` })),
+          );
+        });
+    } else {
+      setMmpChips([]);
+    }
+  }, [relatedMMPs.join(',')]);
+
+  useEffect(() => {
+    if (relatedSiteVisits.length > 0) {
+      supabase
+        .from('site_visits')
+        .select('id, site_name')
+        .in('id', relatedSiteVisits)
+        .then(({ data }) => {
+          setSvChips(
+            (data ?? []).map((r: any) => ({ id: r.id, label: r.site_name || r.id, path: `/site-visits/${r.id}` })),
+          );
+        });
+    } else {
+      setSvChips([]);
+    }
+  }, [relatedSiteVisits.join(',')]);
+
+  if (mmpChips.length === 0 && svChips.length === 0) return null;
+
+  return (
+    <div className="space-y-2 pt-2 border-t border-border/50">
+      <p className="text-xs text-muted-foreground uppercase tracking-wide flex items-center gap-1.5">
+        <Link2 className="h-3 w-3" />
+        Linked MMPs &amp; Site Visits
+      </p>
+      <div className="flex flex-wrap gap-1.5">
+        {mmpChips.map((chip) => (
+          <button
+            key={chip.id}
+            onClick={() => navigate(chip.path)}
+            className="inline-flex items-center gap-1.5 rounded-full border border-[#1D3461]/30 bg-[#0F2041]/5 dark:bg-[#1D3461]/20 px-2.5 py-0.5 text-xs text-[#1D3461] dark:text-blue-300 hover:bg-[#1D3461]/10 transition-colors"
+            data-testid={`chip-linked-mmp-${chip.id}`}
+          >
+            <FileSpreadsheet className="h-2.5 w-2.5 flex-shrink-0" />
+            <span className="max-w-[160px] truncate">{chip.label}</span>
+          </button>
+        ))}
+        {svChips.map((chip) => (
+          <button
+            key={chip.id}
+            onClick={() => navigate(chip.path)}
+            className="inline-flex items-center gap-1.5 rounded-full border border-green-500/30 bg-green-500/5 dark:bg-green-500/10 px-2.5 py-0.5 text-xs text-green-700 dark:text-green-300 hover:bg-green-500/10 transition-colors"
+            data-testid={`chip-linked-sv-${chip.id}`}
+          >
+            <MapPin className="h-2.5 w-2.5 flex-shrink-0" />
+            <span className="max-w-[160px] truncate">{chip.label}</span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 const ProjectDetail: React.FC<ProjectDetailProps> = ({
   project,
@@ -520,6 +607,11 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
                       <p className="text-sm">{project.description}</p>
                     </div>
                   )}
+
+                  <LinkedEntitiesDisplay
+                    relatedMMPs={project.relatedMMPs ?? []}
+                    relatedSiteVisits={project.relatedSiteVisits ?? []}
+                  />
                 </CardContent>
               </Card>
               

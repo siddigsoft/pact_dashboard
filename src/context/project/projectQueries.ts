@@ -141,6 +141,8 @@ export function mapProjectToDbProject(project: Project): Record<string, unknown>
     end_date: project.endDate,
     current_flow_stage: project.currentFlowStage,
     custom_flow_stages: project.customFlowStages ?? null,
+    related_mmps: project.relatedMMPs ?? [],
+    related_site_visits: project.relatedSiteVisits ?? [],
     budget: project.budget,
     location: project.location,
     team: project.team,
