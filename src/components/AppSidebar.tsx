@@ -544,15 +544,15 @@
     const { userSettings, updateMenuPreferences, menuPreferences: contextMenuPrefs } = useSettings();
 
     // Check if non-super-admin user has been explicitly granted monitoring page access
+    // Uses a SECURITY DEFINER RPC to bypass RLS (direct table query blocked for non-admins)
     const [hasMonitoringAccess, setHasMonitoringAccess] = useState(false);
     useEffect(() => {
       if (isSuperAdmin || !currentUser?.id) return;
       supabase
-        .from('monitoring_page_access')
-        .select('id')
-        .eq('user_id', currentUser.id)
-        .maybeSingle()
-        .then(({ data }) => setHasMonitoringAccess(!!data));
+        .rpc('check_monitoring_access')
+        .then(({ data, error }) => {
+          if (!error) setHasMonitoringAccess(!!data);
+        });
     }, [isSuperAdmin, currentUser?.id]);
     
     const { checkPermission, hasAnyRole, canManageRoles } = useAuthorization();

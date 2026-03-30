@@ -140,13 +140,12 @@ function useMonitoringAccess() {
     if (isSuperAdmin) { setGranted(true); return; }
     if (!currentUser?.id) { setGranted(false); return; }
     setGrantLoading(true);
+    // Use SECURITY DEFINER RPC so non-admin users can check their own access
+    // without being blocked by RLS policies on the monitoring_page_access table
     supabase
-      .from('monitoring_page_access')
-      .select('id')
-      .eq('user_id', currentUser.id)
-      .maybeSingle()
-      .then(({ data }) => {
-        setGranted(!!data);
+      .rpc('check_monitoring_access')
+      .then(({ data, error }) => {
+        setGranted(!error && !!data);
         setGrantLoading(false);
       });
   }, [isSuperAdmin, adminLoading, currentUser?.id]);
