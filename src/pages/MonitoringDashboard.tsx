@@ -201,6 +201,7 @@ function MonitoringContent({ isSuperAdmin }: { isSuperAdmin: boolean }) {
   const [workflowNotes, setWorkflowNotes] = useState('');
   const [statusDialog, setStatusDialog] = useState<{ actions: DashboardAction[]; targetStatus: DashboardStatus; label: string } | null>(null);
   const [notifyOpen, setNotifyOpen] = useState(false);
+  const [notifyAction, setNotifyAction] = useState<DashboardAction | null>(null);
   // Debounce ref: prevents multiple rapid Realtime events from firing multiple fetches
   const realtimeDebounce = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [coverageNotifyOpen, setCoverageNotifyOpen] = useState(false);
@@ -1492,7 +1493,7 @@ function MonitoringContent({ isSuperAdmin }: { isSuperAdmin: boolean }) {
 
             // 4 target modules → collapsible summary card with stats
             if (CARD_MODULES.has(at.key)) {
-              return <ModuleSummaryCard key={at.key} at={at} items={items} onNotify={openCategoryNotify} {...sharedProps} />;
+              return <ModuleSummaryCard key={at.key} at={at} items={items} onNotify={openCategoryNotify} onNotifyAction={setNotifyAction} {...sharedProps} />;
             }
 
             // Other modules → flat list with simple header
@@ -1524,6 +1525,7 @@ function MonitoringContent({ isSuperAdmin }: { isSuperAdmin: boolean }) {
                       onStatusChange={(status, label) => { setStatusDialog({ actions: [action], targetStatus: status, label }); setStatusNotes(''); }}
                       onWorkflow={(wa, wl) => { setWorkflowDialog({ action, workflowAction: wa, workflowLabel: wl }); setWorkflowNotes(''); }}
                       workflowPending={workflowMutation.isPending}
+                      onNotify={() => setNotifyAction(action)}
                     />
                   ))}
                 </div>
@@ -1548,6 +1550,15 @@ function MonitoringContent({ isSuperAdmin }: { isSuperAdmin: boolean }) {
         summary={coverageSummary}
         coverageData={coverageData}
       />
+
+      {/* Per-action notify dialog */}
+      {notifyAction && (
+        <NotifyActionDialog
+          open={!!notifyAction}
+          onClose={() => setNotifyAction(null)}
+          action={notifyAction}
+        />
+      )}
 
       {/* Manage Access Dialog — super_admin only */}
       {isSuperAdmin && (
@@ -2572,6 +2583,213 @@ function CoverageNotifyDialog({
   );
 }
 
+// ── Per-Action Notify Dialog ───────────────────────────────────────────────────
+
+function buildActionMsg(action: DashboardAction): { en: string; ar: string } {
+  const at = ACTION_TYPES.find(t => t.key === action.action_type);
+  const moduleLabel = at?.label ?? action.action_type.replace(/_/g, ' ');
+  const det = action.details as Record<string, unknown>;
+  const contextEn = det?.site_name ? ` for site "${det.site_name}"` : det?.hub_name ? ` (${det.hub_name})` : '';
+  const contextAr = det?.site_name ? ` للموقع "${det.site_name}"` : det?.hub_name ? ` (${det.hub_name})` : '';
+  const statusLabel = String(det?.status ?? action.native_status ?? '').replace(/_/g, ' ');
+  return {
+    en: `You have a pending action in the ${moduleLabel} module${contextEn}. Current status: ${statusLabel}. This item requires your attention — please log in and take the necessary action at your earliest convenience.`,
+    ar: `لديك إجراء معلق في وحدة "${moduleLabel}"${contextAr}. الحالة الحالية: ${statusLabel}. هذا العنصر يحتاج إلى اهتمامك — يرجى تسجيل الدخول واتخاذ الإجراء اللازم في أقرب وقت ممكن.`,
+  };
+}
+
+function NotifyActionDialog({ open, onClose, action }: {
+  open: boolean; onClose: () => void; action: DashboardAction;
+}) {
+  const { toast } = useToast();
+  const [sending, setSending] = useState(false);
+  const [channels, setChannels] = useState<Set<NotifChannel>>(new Set(['inApp', 'fcm']));
+  const [sendMode, setSendMode] = useState<SendMode>('now');
+  const [scheduledAt, setScheduledAt] = useState('');
+  const [reminderDays, setReminderDays] = useState(3);
+  const [autoIntervalDays, setAutoIntervalDays] = useState(7);
+  const [autoEndDate, setAutoEndDate] = useState('');
+
+  const defaultMsg = useMemo(() => buildActionMsg(action), [action]);
+  const [msgEn, setMsgEn] = useState(defaultMsg.en);
+  const [msgAr, setMsgAr] = useState(defaultMsg.ar);
+  const [priority, setPriority] = useState<'normal' | 'high' | 'urgent'>('normal');
+
+  // Reset when action changes
+  useEffect(() => {
+    if (!open) return;
+    const m = buildActionMsg(action);
+    setMsgEn(m.en);
+    setMsgAr(m.ar);
+    setChannels(new Set(['inApp', 'fcm']));
+    setSendMode('now');
+    setScheduledAt('');
+    setReminderDays(3);
+    setAutoIntervalDays(7);
+    setAutoEndDate('');
+    setPriority('normal');
+  }, [open, action]);
+
+  const at = ACTION_TYPES.find(t => t.key === action.action_type);
+  const moduleLabel = at?.label ?? action.action_type.replace(/_/g, ' ');
+
+  const send = async () => {
+    if (channels.size === 0) { toast({ title: 'No channels selected', variant: 'destructive' }); return; }
+    if (sendMode === 'schedule' && !scheduledAt) { toast({ title: 'Pick a scheduled date & time', variant: 'destructive' }); return; }
+    setSending(true);
+    try {
+      const titleEn = priority === 'urgent' ? `🚨 URGENT: ${moduleLabel} — Action Required` : priority === 'high' ? `⚠️ ${moduleLabel} — Action Required` : `📋 ${moduleLabel} — Action Required`;
+      const titleAr = priority === 'urgent' ? `🚨 عاجل: ${moduleLabel} — إجراء مطلوب` : priority === 'high' ? `⚠️ ${moduleLabel} — إجراء مطلوب` : `📋 ${moduleLabel} — إجراء مطلوب`;
+      const recipientIds = [action.sender_id];
+
+      if (sendMode === 'schedule') {
+        await saveNotificationSchedule({ recipientIds, channels, titleEn, titleAr, msgEn, msgAr, eventType: 'action_specific_reminder', actionUrl: '/dashboard', priority, sendMode, scheduledAt });
+        toast({ title: `Notification scheduled`, description: `Will be sent to ${action.sender_name} on ${new Date(scheduledAt).toLocaleString()}.` });
+        onClose();
+        return;
+      }
+      if (sendMode === 'reminder' || sendMode === 'auto') {
+        saveNotificationSchedule({ recipientIds, channels, titleEn, titleAr, msgEn, msgAr, eventType: 'action_specific_reminder', actionUrl: '/dashboard', priority, sendMode, reminderDays, autoIntervalDays, autoEndDate }).catch(() => {});
+      }
+
+      if (channels.has('inApp')) {
+        await insertNotifications([{
+          recipient_id: action.sender_id,
+          title_en: titleEn, title_ar: titleAr,
+          message_en: msgEn, message_ar: msgAr,
+          event_type: 'action_specific_reminder',
+          action_url: '/dashboard',
+          priority, status: 'unread',
+        }]);
+      }
+      if (channels.has('email') && action.sender_email) {
+        const emailHtml = `
+          <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:24px;">
+            <div style="background:#0F2041;padding:20px 24px;border-radius:8px 8px 0 0;"><h2 style="color:#fff;margin:0;font-size:18px;">${titleEn}</h2></div>
+            <div style="border:1px solid #e5e7eb;border-top:none;padding:24px;border-radius:0 0 8px 8px;">
+              <p style="color:#374151;font-size:14px;line-height:1.7;white-space:pre-line;margin:0 0 16px;">${msgEn}</p>
+              <hr style="border:none;border-top:1px solid #e5e7eb;margin:16px 0;" />
+              <p style="color:#6b7280;font-size:13px;text-align:right;direction:rtl;line-height:1.8;margin:0;">${titleAr}<br/><br/>${msgAr}</p>
+              <div style="margin-top:24px;text-align:center;"><a href="https://app.pactorg.com/dashboard" style="background:#0F2041;color:#fff;padding:10px 24px;border-radius:6px;text-decoration:none;font-size:14px;font-weight:600;">Open PACT System</a></div>
+            </div>
+            <p style="color:#9ca3af;font-size:11px;text-align:center;margin-top:16px;">Automated reminder from PACT Command Center</p>
+          </div>`;
+        await EmailNotificationService.sendEmail({ to: action.sender_email, subject: `${titleEn} | ${titleAr}`, recipientName: action.sender_name, html: emailHtml, text: `${titleEn}\n\n${msgEn}\n\n---\n\n${titleAr}\n\n${msgAr}`, priority }).catch(() => {});
+      }
+      if (channels.has('fcm')) {
+        supabase.functions.invoke('send-fcm-push', {
+          body: { user_ids: [action.sender_id], title: `${titleEn} | ${titleAr}`, body: `${msgEn}\n${msgAr}`, priority, notification_type: 'action_specific_reminder', data: { type: 'action_specific_reminder', action_url: '/dashboard', priority }, action_url: '/dashboard' },
+        }).catch(() => {});
+      }
+      if (channels.has('broadcast')) {
+        supabase.from('broadcast_messages').insert({ title_en: titleEn, title_ar: titleAr, message_en: msgEn, message_ar: msgAr, priority, created_by: null }).catch(() => {});
+      }
+
+      const channelList = [...channels].map(c => CHANNEL_CFG[c].label).join(' + ');
+      const schedSuffix = sendMode === 'reminder' ? ` + reminder in ${reminderDays} days` : sendMode === 'auto' ? ` + repeats every ${autoIntervalDays} days` : '';
+      toast({ title: `Notification sent to ${action.sender_name}`, description: `Via: ${channelList}${schedSuffix}.` });
+      onClose();
+    } catch (err) {
+      toast({ title: 'Failed to send', description: String(err), variant: 'destructive' });
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const priorityColors = { normal: 'bg-slate-100 text-slate-700 border-slate-300', high: 'bg-amber-100 text-amber-700 border-amber-300', urgent: 'bg-red-100 text-red-700 border-red-300' };
+  const det = action.details as Record<string, unknown>;
+
+  return (
+    <Dialog open={open} onOpenChange={v => { if (!v) onClose(); }}>
+      <DialogContent className="max-w-2xl max-h-[88vh] flex flex-col gap-0 p-0" data-testid="notify-action-dialog">
+        <DialogHeader className="px-5 pt-5 pb-3 border-b shrink-0">
+          <DialogTitle className="flex items-center gap-2 text-base">
+            <Bell className="h-4 w-4 text-violet-600" />
+            Notify — {action.sender_name}
+          </DialogTitle>
+          <DialogDescription className="text-xs">
+            Send a targeted notification to <strong>{action.sender_name}</strong> about their specific pending {moduleLabel} action.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="flex-1 overflow-y-auto px-5 py-4 flex flex-col gap-4">
+          {/* Action context card */}
+          <div className="flex items-start gap-3 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2.5" data-testid="notify-action-context">
+            {at && <span className="p-1.5 rounded bg-primary/10 shrink-0"><at.icon className="h-3.5 w-3.5 text-primary" /></span>}
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-bold text-slate-800">{moduleLabel}</p>
+              <p className="text-[10px] text-muted-foreground mt-0.5">
+                Status: <span className="capitalize font-medium">{action.native_status.replace(/_/g,' ')}</span>
+                {det?.site_name && <span> · Site: {String(det.site_name)}</span>}
+                {det?.hub_name && <span> · Hub: {String(det.hub_name)}</span>}
+              </p>
+              <p className="text-[10px] text-muted-foreground">ID: <span className="font-mono">{action.action_id.slice(0,12)}…</span></p>
+            </div>
+            {action.sender_email && (
+              <a href={`mailto:${action.sender_email}`} className="text-[10px] text-blue-600 hover:underline flex items-center gap-0.5 shrink-0">
+                <Mail className="h-3 w-3" />{action.sender_email}
+              </a>
+            )}
+          </div>
+
+          {/* Channels */}
+          <NotifChannelBar channels={channels} onChange={setChannels} />
+
+          {/* Templates */}
+          <NotifTemplateBar
+            currentMsgEn={msgEn}
+            onApply={t => { setMsgEn(t.msgEn); setMsgAr(t.msgAr); setChannels(new Set(t.channels)); }}
+          />
+
+          {/* Priority */}
+          <div>
+            <p className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground mb-2">Priority</p>
+            <div className="flex gap-2">
+              {(['normal','high','urgent'] as const).map(p => (
+                <button key={p} onClick={() => setPriority(p)}
+                  className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-colors capitalize ${priority === p ? priorityColors[p] + ' border-current' : 'bg-white text-slate-500 border-slate-200 hover:border-slate-300'}`}
+                  data-testid={`notify-action-priority-${p}`}>{p}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Message */}
+          <div className="flex flex-col gap-2">
+            <p className="text-xs font-semibold text-muted-foreground">Message (English)</p>
+            <Textarea rows={3} value={msgEn} onChange={e => setMsgEn(e.target.value)} className="text-xs resize-none" data-testid="notify-action-msg-en" />
+            <p className="text-xs font-semibold text-muted-foreground">Message (Arabic)</p>
+            <Textarea rows={3} value={msgAr} onChange={e => setMsgAr(e.target.value)} className="text-xs resize-none text-right" dir="rtl" data-testid="notify-action-msg-ar" />
+          </div>
+
+          {/* Schedule & Reminders */}
+          <NotifScheduler
+            sendMode={sendMode} setSendMode={setSendMode}
+            scheduledAt={scheduledAt} setScheduledAt={setScheduledAt}
+            reminderDays={reminderDays} setReminderDays={setReminderDays}
+            autoIntervalDays={autoIntervalDays} setAutoIntervalDays={setAutoIntervalDays}
+            autoEndDate={autoEndDate} setAutoEndDate={setAutoEndDate}
+          />
+        </div>
+
+        <DialogFooter className="px-5 py-3 border-t shrink-0 flex items-center justify-between gap-3">
+          <p className="text-xs text-muted-foreground flex-1 leading-snug">
+            {sendMode === 'schedule'
+              ? <>Scheduling to <span className="font-bold text-foreground">{action.sender_name}</span> via <span className="font-semibold">{[...channels].map(c => CHANNEL_CFG[c].label).join(' + ') || '—'}</span></>
+              : <>Sending to <span className="font-bold text-foreground">{action.sender_name}</span> via <span className="font-semibold">{[...channels].map(c => CHANNEL_CFG[c].label).join(' + ') || '—'}</span></>
+            }
+          </p>
+          <Button variant="outline" size="sm" onClick={onClose} disabled={sending}>Cancel</Button>
+          <Button size="sm" className="bg-violet-600 hover:bg-violet-700 text-white" onClick={send} disabled={sending || channels.size === 0} data-testid="notify-action-send-btn">
+            {sending ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : sendMode === 'schedule' ? <CalendarDays className="h-4 w-4 mr-1" /> : <Send className="h-4 w-4 mr-1" />}
+            {sendMode === 'schedule' ? 'Schedule' : sendMode === 'reminder' ? 'Send + Remind' : sendMode === 'auto' ? 'Send + Auto Remind' : 'Send'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 // ── KPI Card ──────────────────────────────────────────────────────────────────
 
 function KpiCard({ label, value, sub, icon, accent, testId, onClick, active }: {
@@ -2617,7 +2835,7 @@ const CARD_MODULES = new Set(['mmp_lifecycle', 'mmp_site_entry', 'operational_co
 
 function ModuleSummaryCard({
   at, items, selectedIds, expandedId,
-  onToggleSelect, onToggleExpand, onStatusChange, onWorkflow, workflowPending, onNotify,
+  onToggleSelect, onToggleExpand, onStatusChange, onWorkflow, workflowPending, onNotify, onNotifyAction,
 }: {
   at: { key: ActionTypeKey; label: string; icon: React.ComponentType<{ className?: string }> };
   items: DashboardAction[];
@@ -2629,6 +2847,7 @@ function ModuleSummaryCard({
   onWorkflow: (action: DashboardAction, wa: string, wl: string) => void;
   workflowPending: boolean;
   onNotify: () => void;
+  onNotifyAction?: (action: DashboardAction) => void;
 }) {
   const [open, setOpen] = useState(false);
   const Icon = at.icon;
@@ -2763,6 +2982,7 @@ function ModuleSummaryCard({
             onStatusChange={onStatusChange} onWorkflow={onWorkflow}
             workflowPending={workflowPending}
             actionType={at.key}
+            onNotifyAction={onNotifyAction}
           />
         </div>
       )}
@@ -2805,7 +3025,7 @@ function statusChipClass(raw: string) {
 function StatusHubTree({
   items, selectedIds, expandedId,
   onToggleSelect, onToggleExpand, onStatusChange, onWorkflow, workflowPending,
-  actionType,
+  actionType, onNotifyAction,
 }: {
   items: DashboardAction[];
   selectedIds: Set<string>;
@@ -2816,6 +3036,7 @@ function StatusHubTree({
   onWorkflow: (action: DashboardAction, wa: string, wl: string) => void;
   workflowPending: boolean;
   actionType?: string;
+  onNotifyAction?: (action: DashboardAction) => void;
 }) {
   // Detect modules with no MMP association (all items grouped under '—')
   // For these modules (operational_cost, advance_payment) skip the MMP level
@@ -3103,6 +3324,7 @@ function StatusHubTree({
                                           onStatusChange={(status, label) => onStatusChange(action, status, label)}
                                           onWorkflow={(wa, wl) => onWorkflow(action, wa, wl)}
                                           workflowPending={workflowPending}
+                                          onNotify={() => onNotifyAction(action)}
                                         />
                                       ))}
                                     </div>
@@ -3269,11 +3491,12 @@ function StatusHubTree({
 
 // ── Action Row ────────────────────────────────────────────────────────────────
 
-function ActionRow({ action, selected, expanded, onToggleSelect, onToggleExpand, onStatusChange, onWorkflow, workflowPending }: {
+function ActionRow({ action, selected, expanded, onToggleSelect, onToggleExpand, onStatusChange, onWorkflow, workflowPending, onNotify }: {
   action: DashboardAction; selected: boolean; expanded: boolean;
   onToggleSelect: () => void; onToggleExpand: () => void;
   onStatusChange: (s: DashboardStatus, l: string) => void;
   onWorkflow: (a: string, l: string) => void; workflowPending: boolean;
+  onNotify?: () => void;
 }) {
   const dsCfg = STATUS_CFG[action.dashboard_status];
   const DsIcon = dsCfg.icon;
@@ -3544,6 +3767,23 @@ function ActionRow({ action, selected, expanded, onToggleSelect, onToggleExpand,
                 </Button>
               </div>
             </div>
+
+            {/* Per-action Notify */}
+            {onNotify && (
+              <div className="flex flex-col gap-2">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Notify Submitter</p>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="border-violet-200 text-violet-700 hover:bg-violet-50 w-fit"
+                  onClick={onNotify}
+                  data-testid={`btn-notify-action-${action.action_id}`}
+                >
+                  <Bell className="h-3 w-3 mr-1.5" />
+                  Notify {action.sender_name?.split(' ')[0] ?? 'Submitter'}
+                </Button>
+              </div>
+            )}
           </div>
         </div>
       )}
