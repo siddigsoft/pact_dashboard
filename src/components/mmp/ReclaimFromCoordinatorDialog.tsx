@@ -107,15 +107,32 @@ export const ReclaimFromCoordinatorDialog: React.FC<ReclaimFromCoordinatorDialog
         }
       });
 
+      if (coordMap.size === 0) { setCoordinators([]); return; }
+
+      // Fetch profile data directly from profiles table so we always get real names
+      const coordIds = [...coordMap.keys()];
+      const { data: profiles } = await supabase
+        .from('profiles')
+        .select('id, full_name, email, username')
+        .in('id', coordIds);
+
+      const profileMap = new Map((profiles || []).map((p: any) => [p.id, p]));
+
       const coordList: CoordinatorInfo[] = [];
       for (const [coordId, count] of coordMap) {
-        const userInfo = (users || []).find((u: any) => u.id === coordId);
-        coordList.push({
-          id: coordId,
-          name: userInfo?.fullName || (userInfo as any)?.full_name || userInfo?.username || userInfo?.email || coordId.slice(0, 8) + '...',
-          email: userInfo?.email,
-          siteCount: count,
-        });
+        const profile = profileMap.get(coordId);
+        // Also fall back to users context as secondary source
+        const ctxUser = (users || []).find((u: any) => u.id === coordId);
+        const name =
+          profile?.full_name ||
+          (ctxUser as any)?.fullName ||
+          (ctxUser as any)?.full_name ||
+          profile?.email ||
+          ctxUser?.email ||
+          profile?.username ||
+          ctxUser?.username ||
+          `Unknown (${coordId.slice(0, 8)}...)`;
+        coordList.push({ id: coordId, name, email: profile?.email || ctxUser?.email, siteCount: count });
       }
 
       coordList.sort((a, b) => a.name.localeCompare(b.name));
