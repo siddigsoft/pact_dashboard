@@ -1605,13 +1605,45 @@ function NotifyUsersDialog({ open, onClose, allActions, categoryLabel }: {
   const [msgEn, setMsgEn] = useState('You have pending actions in the PACT system that require your attention. Please log in and complete your assigned tasks.');
   const [msgAr, setMsgAr] = useState('لديك إجراءات معلقة في نظام PACT تحتاج إلى اهتمامك. يرجى تسجيل الدخول وإكمال المهام المُسنَدة إليك.');
 
-  // Build unique user list from allActions
+  // Module type filter — empty set means "all modules"
+  const [selectedModules, setSelectedModules] = useState<Set<ActionTypeKey>>(new Set());
+
+  const toggleModule = (key: ActionTypeKey) =>
+    setSelectedModules(prev => {
+      const n = new Set(prev);
+      n.has(key) ? n.delete(key) : n.add(key);
+      return n;
+    });
+
+  // Auto-update message when a single module is selected
+  useEffect(() => {
+    if (selectedModules.size === 1) {
+      const key = [...selectedModules][0];
+      const at = ACTION_TYPES.find(t => t.key === key);
+      if (at) {
+        setMsgEn(`You have pending actions in the ${at.label} module that require your attention. Please log in and complete your assigned tasks.`);
+        setMsgAr(`لديك إجراءات معلقة في وحدة "${at.label}" تحتاج إلى اهتمامك. يرجى تسجيل الدخول وإكمال المهام المُسنَدة إليك.`);
+      }
+    } else if (selectedModules.size === 0) {
+      setMsgEn('You have pending actions in the PACT system that require your attention. Please log in and complete your assigned tasks.');
+      setMsgAr('لديك إجراءات معلقة في نظام PACT تحتاج إلى اهتمامك. يرجى تسجيل الدخول وإكمال المهام المُسنَدة إليك.');
+    }
+  }, [selectedModules]);
+
+  // Scope actions to selected modules (empty = all)
+  const scopedActions = useMemo(() =>
+    selectedModules.size === 0
+      ? allActions
+      : allActions.filter(a => selectedModules.has(a.action_type as ActionTypeKey)),
+  [allActions, selectedModules]);
+
+  // Build unique user list from scoped actions
   const userList = useMemo(() => {
     const map = new Map<string, {
       id: string; name: string; email: string | null;
       pending: number; noResponse: number; modules: Set<string>;
     }>();
-    for (const a of allActions) {
+    for (const a of scopedActions) {
       if (!a.sender_id) continue;
       if (!map.has(a.sender_id)) {
         map.set(a.sender_id, { id: a.sender_id, name: a.sender_name || 'Unknown', email: a.sender_email || null, pending: 0, noResponse: 0, modules: new Set() });
@@ -1623,9 +1655,9 @@ function NotifyUsersDialog({ open, onClose, allActions, categoryLabel }: {
       if (at) u.modules.add(at.label);
     }
     return [...map.values()].sort((a, b) => (b.noResponse + b.pending) - (a.noResponse + a.pending));
-  }, [allActions]);
+  }, [scopedActions]);
 
-  // Filter visible users by mode
+  // Filter visible users by status mode
   const filteredUsers = useMemo(() => {
     if (filterMode === 'pending')     return userList.filter(u => u.pending > 0);
     if (filterMode === 'no_response') return userList.filter(u => u.noResponse > 0);
@@ -1636,6 +1668,13 @@ function NotifyUsersDialog({ open, onClose, allActions, categoryLabel }: {
   useEffect(() => {
     setSelectedIds(new Set(filteredUsers.map(u => u.id)));
   }, [filteredUsers]);
+
+  // Reset module filter + status filter when dialog opens/closes
+  useEffect(() => {
+    if (!open) return;
+    setSelectedModules(new Set());
+    setFilterMode('pending');
+  }, [open]);
 
   const toggleUser = (id: string) =>
     setSelectedIds(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
@@ -1752,6 +1791,51 @@ function NotifyUsersDialog({ open, onClose, allActions, categoryLabel }: {
         </DialogHeader>
 
         <div className="flex-1 overflow-y-auto px-5 py-4 flex flex-col gap-4">
+
+          {/* ── Module / Notification Type selector ── */}
+          {!categoryLabel && (
+            <div>
+              <p className="text-xs font-semibold text-muted-foreground mb-2 flex items-center gap-1">
+                <Layers className="h-3.5 w-3.5" />Notification Type
+                <span className="ml-1 text-[10px] font-normal text-muted-foreground">(select one or more modules — default: all)</span>
+              </p>
+              <div className="flex gap-1.5 flex-wrap">
+                <button
+                  onClick={() => setSelectedModules(new Set())}
+                  className={`inline-flex items-center gap-1 text-[11px] px-2.5 py-1 rounded-full border font-medium transition-colors ${
+                    selectedModules.size === 0
+                      ? 'bg-violet-600 text-white border-violet-600'
+                      : 'bg-white text-slate-500 border-slate-200 hover:border-violet-300 hover:text-violet-600'
+                  }`}
+                  data-testid="notify-module-all"
+                >All Modules</button>
+                {ACTION_TYPES.map(at => {
+                  const Icon = at.icon;
+                  const active = selectedModules.has(at.key);
+                  return (
+                    <button
+                      key={at.key}
+                      onClick={() => toggleModule(at.key)}
+                      className={`inline-flex items-center gap-1 text-[11px] px-2.5 py-1 rounded-full border font-medium transition-colors ${
+                        active
+                          ? 'bg-violet-100 text-violet-700 border-violet-400'
+                          : 'bg-white text-slate-500 border-slate-200 hover:border-violet-300 hover:text-violet-600'
+                      }`}
+                      data-testid={`notify-module-${at.key}`}
+                    >
+                      <Icon className="h-3 w-3" />{at.label}
+                    </button>
+                  );
+                })}
+              </div>
+              {selectedModules.size > 0 && (
+                <p className="text-[10px] text-violet-600 mt-1.5">
+                  Filtering to <span className="font-bold">{selectedModules.size}</span> module{selectedModules.size !== 1 ? 's' : ''} — showing {userList.length} affected user{userList.length !== 1 ? 's' : ''}
+                </p>
+              )}
+            </div>
+          )}
+
           {/* Recipient filter tabs */}
           <div>
             <p className="text-xs font-semibold text-muted-foreground mb-2 flex items-center gap-1"><Users className="h-3.5 w-3.5" />Recipients</p>
