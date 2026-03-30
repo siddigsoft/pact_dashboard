@@ -51,6 +51,7 @@ import { getStateName, getLocalityName } from "@/data/sudanStates";
 import { isOverdue, getStatusLabel } from "@/utils/siteVisitUtils";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Separator } from "@/components/ui/separator";
+import { LinkedProjectsBadge } from "@/components/project/LinkedProjectsBadge";
 
 const SiteVisitDetail = () => {
   const navigate = useNavigate();
@@ -274,6 +275,9 @@ const SiteVisitDetail = () => {
       </div>
 
       <div className="px-4 py-6 space-y-6 max-w-5xl mx-auto">
+        {/* Linked Projects badge strip */}
+        <LinkedProjectsBadge entityId={id} type="site_visit" />
+
         {/* Hero Card - Site Summary */}
         <Card className="overflow-hidden" data-testid="card-hero">
           <div className={`h-2 ${statusConfig.color}`} />

@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   CheckCircle2,
   Circle,
@@ -13,6 +14,8 @@ import {
   Loader2,
   AlertCircle,
   RotateCcw,
+  ExternalLink,
+  ListChecks,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -51,6 +54,7 @@ function formatTimestamp(iso: string) {
 
 export function FlowTab({ flow, projectName, projectType, allDefaultStages }: Props) {
   const { toast } = useToast();
+  const navigate = useNavigate();
   const {
     activeStages,
     currentStage,
@@ -257,6 +261,45 @@ export function FlowTab({ flow, projectName, projectType, allDefaultStages }: Pr
                     <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
                       {stage.description}
                     </p>
+                  )}
+
+                  {/* Key outputs checklist */}
+                  {stage.keyOutputs && stage.keyOutputs.length > 0 && (
+                    <div className="mt-2.5">
+                      <div className="flex items-center gap-1 text-xs font-medium text-muted-foreground mb-1">
+                        <ListChecks className="h-3 w-3" />
+                        Key Outputs
+                      </div>
+                      <ul className="space-y-0.5">
+                        {stage.keyOutputs.map((output, oIdx) => (
+                          <li key={oIdx} className="flex items-start gap-1.5 text-xs text-muted-foreground">
+                            <CheckCircle2
+                              className={cn(
+                                'h-3 w-3 flex-shrink-0 mt-0.5',
+                                status === 'completed' ? 'text-emerald-500' : 'text-border',
+                              )}
+                            />
+                            <span>{output}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {/* Go to linked module */}
+                  {stage.linkedModule && (status === 'current' || status === 'completed') && (
+                    <div className="mt-2.5">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-7 text-xs px-2.5"
+                        onClick={() => navigate(stage.linkedModule!)}
+                        data-testid={`button-goto-module-${stage.id}`}
+                      >
+                        <ExternalLink className="h-3 w-3 mr-1.5" />
+                        Go to {stage.linkedModule.replace('/', '').replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}
+                      </Button>
+                    </div>
                   )}
 
                   {/* History entry */}

@@ -316,13 +316,22 @@ const ProjectList: React.FC<ProjectListProps> = ({
                   const stageName = flowDef.stages[stageIdx]?.label;
                   const total = flowDef.stages.length;
                   if (!stageName) return null;
+                  const pct = Math.round(((stageIdx + 1) / total) * 100);
                   return (
-                    <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                      <GitBranch className="h-3 w-3 flex-shrink-0" />
-                      <span className="truncate">{stageName}</span>
-                      <span className="flex-shrink-0 text-muted-foreground/60">
-                        {stageIdx + 1}/{total}
-                      </span>
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                        <GitBranch className="h-3 w-3 flex-shrink-0" />
+                        <span className="truncate">{stageName}</span>
+                        <span className="flex-shrink-0 text-muted-foreground/60">
+                          {stageIdx + 1}/{total}
+                        </span>
+                      </div>
+                      <div className="w-full h-1 rounded-full bg-muted overflow-hidden">
+                        <div
+                          className="h-full rounded-full bg-[#1D3461] transition-all duration-300"
+                          style={{ width: `${pct}%` }}
+                        />
+                      </div>
                     </div>
                   );
                 })()}

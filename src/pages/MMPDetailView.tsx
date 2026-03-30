@@ -46,6 +46,7 @@ import { saveAs } from 'file-saver';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { LinkedProjectsBadge } from "@/components/project/LinkedProjectsBadge";
 
 const MMPDetailView = () => {
   const { id } = useParams<{ id: string }>();
@@ -527,6 +528,9 @@ const MMPDetailView = () => {
           </Button>
         </div>
       </div>
+
+      {/* Linked Projects badge strip */}
+      <LinkedProjectsBadge entityId={id} type="mmp" />
 
       {/* Quick Stats Cards */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">

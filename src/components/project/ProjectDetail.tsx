@@ -52,7 +52,6 @@ import ProjectCostTab from './ProjectCostTab';
 import { useProjectFlow } from '@/hooks/useProjectFlow';
 import { FlowStrip } from './flow/FlowStrip';
 import { FlowTab } from './flow/FlowTab';
-import { FlowStageBanner } from './flow/FlowStageBanner';
 
 interface ProjectDetailProps {
   project: Project;
@@ -416,6 +415,7 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
               stages={flow.flowDef}
               currentStageIndex={flow.currentStageIndex}
               getStageStatus={flow.getStageStatus}
+              stageHistory={flow.stageHistory}
               compact={false}
             />
           </CardContent>
@@ -584,7 +584,6 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
         </TabsContent>
         
         <TabsContent value="activities" className="space-y-4 mt-4">
-          <FlowStageBanner flow={flow} projectName={project.name} onGoToFlow={() => setActiveTab('flow')} />
           <div className="flex items-center justify-between gap-2">
             <h2 className="text-base font-semibold">Activities</h2>
             <Button size="sm" onClick={() => navigate(`/projects/${project.id}/activities/create`)}>
@@ -663,7 +662,6 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
         </TabsContent>
         
         <TabsContent value="team" className="space-y-4 mt-4">
-          <FlowStageBanner flow={flow} projectName={project.name} onGoToFlow={() => setActiveTab('flow')} />
           <div className="flex items-center justify-between gap-2">
             <h2 className="text-base font-semibold">Team Members</h2>
             <Button size="sm" onClick={() => navigate(`/projects/${project.id}/team`)}>
@@ -698,7 +696,6 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
         </TabsContent>
 
         <TabsContent value="costs" className="space-y-4 mt-4">
-          <FlowStageBanner flow={flow} projectName={project.name} onGoToFlow={() => setActiveTab('flow')} />
           <div className="flex items-center justify-between gap-2">
             <h2 className="text-base font-semibold">Costs & Expenses</h2>
           </div>
@@ -714,7 +711,6 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
         </TabsContent>
 
         <TabsContent value="budget" className="space-y-4 mt-4">
-          <FlowStageBanner flow={flow} projectName={project.name} onGoToFlow={() => setActiveTab('flow')} />
           <div className="flex items-center justify-between gap-2">
             <h2 className="text-base font-semibold">Project Budget</h2>
             {projectBudget && (
