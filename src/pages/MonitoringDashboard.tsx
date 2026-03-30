@@ -206,7 +206,11 @@ function MonitoringContent({ isSuperAdmin }: { isSuperAdmin: boolean }) {
   const openNotifyAction = (action: DashboardAction, siteCount?: number) => { setNotifyAction(action); setNotifyActionSiteCount(siteCount); };
   const [coverageScopedCtx, setCoverageScopedCtx] = useState<CoverageNotifyCtx | null>(null);
   // Debounce ref: prevents multiple rapid Realtime events from firing multiple fetches
-  const realtimeDebounce = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const realtimeDebounce      = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Guard refs so the closure inside useEffect can check current state without stale captures
+  const realtimeHasNewDataRef = useRef(false);          // mirrors hasNewData state
+  const realtimeDismissedAtRef = useRef(0);             // timestamp of last banner dismiss
+  const BANNER_COOLDOWN_MS    = 3 * 60 * 1000;         // 3 min quiet period after dismiss
   const [coverageNotifyOpen, setCoverageNotifyOpen] = useState(false);
   const [notifyCategory, setNotifyCategory] = useState<{ label: string; items: DashboardAction[] } | null>(null);
   const [statusNotes, setStatusNotes] = useState('');
@@ -237,7 +241,7 @@ function MonitoringContent({ isSuperAdmin }: { isSuperAdmin: boolean }) {
   };
   const { data: coverageData = [], isLoading: coverageLoading } = useQuery<CoverageEntry[]>({
     queryKey: ['advance-site-coverage'],
-    staleTime: 0,
+    staleTime: 5 * 60 * 1000,   // 5 min — prevents refetch on every remount/HMR
     refetchOnWindowFocus: false,
     queryFn: async () => {
       const BATCH = 1000;
@@ -445,8 +449,15 @@ function MonitoringContent({ isSuperAdmin }: { isSuperAdmin: boolean }) {
   const [hasNewData, setHasNewData] = useState(false);
   useEffect(() => {
     const flagNewData = () => {
+      // Already showing the banner — no need to keep firing
+      if (realtimeHasNewDataRef.current) return;
+      // Within the 3-minute cooldown after user dismissed — stay quiet
+      if (Date.now() - realtimeDismissedAtRef.current < BANNER_COOLDOWN_MS) return;
       if (realtimeDebounce.current) clearTimeout(realtimeDebounce.current);
-      realtimeDebounce.current = setTimeout(() => setHasNewData(true), 2000);
+      realtimeDebounce.current = setTimeout(() => {
+        realtimeHasNewDataRef.current = true;
+        setHasNewData(true);
+      }, 5000); // 5s debounce — waits for burst of events to settle before showing banner
     };
     const tables = [
       'action_status_overrides','mmp_files','mmp_site_entries','site_visits',
@@ -798,6 +809,8 @@ function MonitoringContent({ isSuperAdmin }: { isSuperAdmin: boolean }) {
           <Button
             variant="outline" size="sm"
             onClick={() => {
+              realtimeHasNewDataRef.current = false;
+              realtimeDismissedAtRef.current = Date.now();
               setHasNewData(false);
               refetch();
               qc.invalidateQueries({ queryKey: ['/admin/monitoring/site-pipeline'] });
@@ -831,6 +844,8 @@ function MonitoringContent({ isSuperAdmin }: { isSuperAdmin: boolean }) {
             size="sm" variant="outline"
             className="h-7 text-xs border-emerald-300 text-emerald-700 hover:bg-emerald-100 shrink-0"
             onClick={() => {
+              realtimeHasNewDataRef.current = false;
+              realtimeDismissedAtRef.current = Date.now();
               setHasNewData(false);
               refetch();
               qc.invalidateQueries({ queryKey: ['/admin/monitoring/site-pipeline'] });
@@ -840,7 +855,16 @@ function MonitoringContent({ isSuperAdmin }: { isSuperAdmin: boolean }) {
           >
             <RefreshCw className="h-3 w-3 mr-1" />Load updates
           </Button>
-          <button onClick={() => setHasNewData(false)} className="text-emerald-500 hover:text-emerald-700 shrink-0 text-lg leading-none" title="Dismiss" data-testid="button-dismiss-new-data">×</button>
+          <button
+            onClick={() => {
+              realtimeHasNewDataRef.current = false;
+              realtimeDismissedAtRef.current = Date.now();
+              setHasNewData(false);
+            }}
+            className="text-emerald-500 hover:text-emerald-700 shrink-0 text-lg leading-none"
+            title="Dismiss (won't reappear for 3 minutes)"
+            data-testid="button-dismiss-new-data"
+          >×</button>
         </div>
       )}
 
