@@ -60,8 +60,12 @@ export function FlowStrip({
             <CheckCircle2 className={cn(compact ? 'h-3 w-3' : 'h-4 w-4')} />
           ) : status === 'skipped' ? (
             <SkipForward className={cn(compact ? 'h-3 w-3' : 'h-4 w-4')} />
-          ) : (
+          ) : isCurrent ? (
             <Circle className={cn(compact ? 'h-3 w-3' : 'h-4 w-4')} />
+          ) : (
+            <span className={cn('font-bold leading-none', compact ? 'text-[8px]' : 'text-[10px]')}>
+              {idx + 1}
+            </span>
           );
 
           const nodeEl = (
