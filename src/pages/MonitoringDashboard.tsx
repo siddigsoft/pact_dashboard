@@ -3957,9 +3957,24 @@ function CoverageScopedNotifyDialog({ open, onClose, ctx }: {
         ar: `لديك ${ctx.siteCount} موقع${ctx.siteCount !== 1 ? '' : ''} في مجموعة التغطية "${statusLabel || ctx.mmpName || 'PACT'}"${ctx.hubName ? ` (${ctx.hubName})` : ''} تحتاج إلى طلب مسبق. يرجى تسجيل الدخول وتقديم الطلبات اللازمة في أقرب وقت ممكن.`,
       };
     }
+    const locationCtx = ctx.hubName && !ctx.label.includes(ctx.hubName) ? ` (${ctx.hubName})` : '';
+    const actionPhraseEn = ctx.status === 'no_request'
+      ? 'require an advance request to be submitted'
+      : ctx.status === 'pending_supervisor'
+      ? 'are pending your approval'
+      : ctx.status === 'pending_admin'
+      ? 'are pending admin/FOM approval'
+      : 'require action';
+    const actionPhraseAr = ctx.status === 'no_request'
+      ? 'تحتاج إلى تقديم طلب مسبق'
+      : ctx.status === 'pending_supervisor'
+      ? 'في انتظار موافقتك'
+      : ctx.status === 'pending_admin'
+      ? 'في انتظار موافقة الإدارة'
+      : 'تحتاج إلى إجراء';
     return {
-      en: `Transportation advance coverage requires attention.\n\n• ${ctx.siteCount} site${ctx.siteCount !== 1 ? 's' : ''} in "${ctx.label}" need action${ctx.hubName ? ` (${ctx.hubName})` : ''}.\n\nPlease log in and take the necessary action.`,
-      ar: `تغطية مسبقة النقل تحتاج إلى اهتمام.\n\n• ${ctx.siteCount} موقع في "${ctx.label}"${ctx.hubName ? ` (${ctx.hubName})` : ''} يحتاج إلى إجراء.\n\nيرجى تسجيل الدخول واتخاذ الإجراء اللازم.`,
+      en: `Transportation advance coverage requires attention.\n\n• ${ctx.siteCount} site${ctx.siteCount !== 1 ? 's' : ''} in "${ctx.label}"${locationCtx} ${actionPhraseEn}.\n\nPlease log in and take the necessary action at your earliest convenience.`,
+      ar: `تغطية مسبقة النقل تحتاج إلى اهتمام.\n\n• ${ctx.siteCount} موقع في "${ctx.label}"${locationCtx} ${actionPhraseAr}.\n\nيرجى تسجيل الدخول واتخاذ الإجراء اللازم في أقرب وقت ممكن.`,
     };
   };
 
@@ -3989,11 +4004,19 @@ function CoverageScopedNotifyDialog({ open, onClose, ctx }: {
           setProfiles(found);
           setSelectedIds(new Set(found.map(p => p.id)));
         } else {
-          // Load coordinators + supervisors scoped to coverage roles
+          // Scope roles to whoever needs to act for this specific status
+          const rolesToLoad = (() => {
+            const s = ctx.status ?? '';
+            if (s === 'no_request')            return ['coordinator'];
+            if (s === 'pending_supervisor')    return ['supervisor'];
+            if (s === 'pending_admin')         return ['fom', 'admin'];
+            // status or hub/state level with no specific status → all relevant roles
+            return ['coordinator', 'supervisor', 'fom', 'admin'];
+          })();
           const { data } = await supabase
             .from('profiles')
             .select('id, full_name, email, role')
-            .in('role', ['coordinator', 'supervisor', 'fom', 'admin', 'super_admin'])
+            .in('role', rolesToLoad)
             .eq('status', 'approved')
             .order('role');
           const found = (data ?? []) as typeof profiles;
@@ -4099,6 +4122,12 @@ function CoverageScopedNotifyDialog({ open, onClose, ctx }: {
           <DialogDescription className="text-xs">
             {ctx.dcName
               ? `Send a coverage notification to ${ctx.dcName} about their ${ctx.siteCount} site${ctx.siteCount !== 1 ? 's' : ''}.`
+              : ctx.status === 'no_request'
+              ? `Notifying coordinators — ${ctx.siteCount} site${ctx.siteCount !== 1 ? 's' : ''} still need an advance request submitted.`
+              : ctx.status === 'pending_supervisor'
+              ? `Notifying supervisors — ${ctx.siteCount} site${ctx.siteCount !== 1 ? 's' : ''} are waiting for supervisor approval.`
+              : ctx.status === 'pending_admin'
+              ? `Notifying FOMs/Admins — ${ctx.siteCount} site${ctx.siteCount !== 1 ? 's' : ''} are waiting for admin approval.`
               : `Send a coverage notification about ${ctx.siteCount} site${ctx.siteCount !== 1 ? 's' : ''} in this group.`
             }
           </DialogDescription>
@@ -4347,7 +4376,7 @@ function CoverageTree({ entries, onNotify }: { entries: CoverageEntry[]; onNotif
                                     <span className="text-[9px] font-mono bg-blue-100 text-blue-700 border border-blue-200 px-2 py-0.5 rounded-full">{hubTot}</span>
                                   </button>
                                   {onNotify && (
-                                    <button onClick={e => { e.stopPropagation(); onNotify({ label: `${hub} Hub — ${hubTot} sites`, mmpName: mmp, status: advSts, hubName: hub, siteCount: hubTot }); }}
+                                    <button onClick={e => { e.stopPropagation(); onNotify({ label: `${hub} — ${hubTot} sites`, mmpName: mmp, status: advSts, hubName: hub, siteCount: hubTot }); }}
                                       title={`Notify about ${hub}`} data-testid={`coverage-notify-hub-${hKey}`}
                                       className="shrink-0 p-1.5 mr-2 rounded text-blue-400 hover:text-blue-700 hover:bg-blue-200 transition-colors">
                                       <Bell className="h-3.5 w-3.5" />
