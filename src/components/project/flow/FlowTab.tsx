@@ -269,8 +269,8 @@ export function FlowTab({ flow, projectName, projectType, allDefaultStages }: Pr
                     </div>
                   )}
 
-                  {/* Go to linked module */}
-                  {stage.linkedModule && (isCurrent || status === 'completed') && (
+                  {/* Go to linked module — shown for any stage that has a linked module */}
+                  {stage.linkedModule && (
                     <div className="mt-2.5">
                       <Button
                         variant="outline"

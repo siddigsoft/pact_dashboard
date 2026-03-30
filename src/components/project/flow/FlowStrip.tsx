@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { CheckCircle2, Circle, SkipForward, Clock, User, FileText } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -32,9 +32,22 @@ export function FlowStrip({
   className,
 }: Props) {
   const [openId, setOpenId] = useState<string | null>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const currentNodeRef = useRef<HTMLDivElement>(null);
+
+  // Auto-center current stage on mobile after render
+  useEffect(() => {
+    if (currentNodeRef.current && scrollRef.current) {
+      currentNodeRef.current.scrollIntoView({
+        behavior: 'smooth',
+        block: 'nearest',
+        inline: 'center',
+      });
+    }
+  }, [currentStageIndex]);
 
   return (
-    <div className={cn('w-full overflow-x-auto', className)}>
+    <div ref={scrollRef} className={cn('w-full overflow-x-auto', className)}>
       <div className="flex items-center min-w-max px-1 py-2 gap-0">
         {stages.map((stage, idx) => {
           const status = getStageStatus(stage.id);
@@ -68,7 +81,11 @@ export function FlowStrip({
           );
 
           return (
-            <div key={stage.id} className="flex items-center">
+            <div
+              key={stage.id}
+              className="flex items-center"
+              ref={isCurrent ? currentNodeRef : undefined}
+            >
               {!isFirst && (
                 <div
                   className={cn(
