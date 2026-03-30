@@ -92,50 +92,21 @@ export const ReclaimFromCoordinatorDialog: React.FC<ReclaimFromCoordinatorDialog
   const loadCoordinators = async () => {
     setLoadingCoordinators(true);
     try {
-      const { data: entries, error } = await supabase
-        .from('mmp_site_entries')
-        .select('forwarded_to_user_id, accepted_by')
-        .eq('mmp_file_id', mmpId);
+      // Use SECURITY DEFINER RPC to bypass RLS on mmp_site_entries so we see
+      // every coordinator across all states/localities, not just those the
+      // current user's RLS policy allows.
+      const { data, error } = await supabase
+        .rpc('get_mmp_coordinators', { p_mmp_file_id: mmpId });
 
       if (error) throw error;
 
-      const coordMap = new Map<string, number>();
-      (entries || []).forEach((entry: any) => {
-        const coordId = entry.forwarded_to_user_id || entry.accepted_by;
-        if (coordId) {
-          coordMap.set(coordId, (coordMap.get(coordId) || 0) + 1);
-        }
-      });
+      const coordList: CoordinatorInfo[] = (data || []).map((row: any) => ({
+        id: row.coordinator_id,
+        name: row.full_name || row.username || row.email || `Unknown (${String(row.coordinator_id).slice(0, 8)}...)`,
+        email: row.email,
+        siteCount: Number(row.site_count),
+      }));
 
-      if (coordMap.size === 0) { setCoordinators([]); return; }
-
-      // Fetch profile data directly from profiles table so we always get real names
-      const coordIds = [...coordMap.keys()];
-      const { data: profiles } = await supabase
-        .from('profiles')
-        .select('id, full_name, email, username')
-        .in('id', coordIds);
-
-      const profileMap = new Map((profiles || []).map((p: any) => [p.id, p]));
-
-      const coordList: CoordinatorInfo[] = [];
-      for (const [coordId, count] of coordMap) {
-        const profile = profileMap.get(coordId);
-        // Also fall back to users context as secondary source
-        const ctxUser = (users || []).find((u: any) => u.id === coordId);
-        const name =
-          profile?.full_name ||
-          (ctxUser as any)?.fullName ||
-          (ctxUser as any)?.full_name ||
-          profile?.email ||
-          ctxUser?.email ||
-          profile?.username ||
-          ctxUser?.username ||
-          `Unknown (${coordId.slice(0, 8)}...)`;
-        coordList.push({ id: coordId, name, email: profile?.email || ctxUser?.email, siteCount: count });
-      }
-
-      coordList.sort((a, b) => a.name.localeCompare(b.name));
       setCoordinators(coordList);
     } catch (err) {
       console.error('[Reclaim] Failed to load coordinators:', err);
