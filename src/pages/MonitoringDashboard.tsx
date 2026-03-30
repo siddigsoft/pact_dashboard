@@ -202,6 +202,8 @@ function MonitoringContent({ isSuperAdmin }: { isSuperAdmin: boolean }) {
   const [statusDialog, setStatusDialog] = useState<{ actions: DashboardAction[]; targetStatus: DashboardStatus; label: string } | null>(null);
   const [notifyOpen, setNotifyOpen] = useState(false);
   const [notifyAction, setNotifyAction] = useState<DashboardAction | null>(null);
+  const [notifyActionSiteCount, setNotifyActionSiteCount] = useState<number | undefined>(undefined);
+  const openNotifyAction = (action: DashboardAction, siteCount?: number) => { setNotifyAction(action); setNotifyActionSiteCount(siteCount); };
   // Debounce ref: prevents multiple rapid Realtime events from firing multiple fetches
   const realtimeDebounce = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [coverageNotifyOpen, setCoverageNotifyOpen] = useState(false);
@@ -1493,7 +1495,7 @@ function MonitoringContent({ isSuperAdmin }: { isSuperAdmin: boolean }) {
 
             // 4 target modules → collapsible summary card with stats
             if (CARD_MODULES.has(at.key)) {
-              return <ModuleSummaryCard key={at.key} at={at} items={items} onNotify={openCategoryNotify} onNotifyAction={setNotifyAction} {...sharedProps} />;
+              return <ModuleSummaryCard key={at.key} at={at} items={items} onNotify={openCategoryNotify} onNotifyAction={openNotifyAction} {...sharedProps} />;
             }
 
             // Other modules → flat list with simple header
@@ -1525,7 +1527,7 @@ function MonitoringContent({ isSuperAdmin }: { isSuperAdmin: boolean }) {
                       onStatusChange={(status, label) => { setStatusDialog({ actions: [action], targetStatus: status, label }); setStatusNotes(''); }}
                       onWorkflow={(wa, wl) => { setWorkflowDialog({ action, workflowAction: wa, workflowLabel: wl }); setWorkflowNotes(''); }}
                       workflowPending={workflowMutation.isPending}
-                      onNotify={() => setNotifyAction(action)}
+                      onNotify={() => openNotifyAction(action)}
                     />
                   ))}
                 </div>
@@ -1555,8 +1557,9 @@ function MonitoringContent({ isSuperAdmin }: { isSuperAdmin: boolean }) {
       {notifyAction && (
         <NotifyActionDialog
           open={!!notifyAction}
-          onClose={() => setNotifyAction(null)}
+          onClose={() => { setNotifyAction(null); setNotifyActionSiteCount(undefined); }}
           action={notifyAction}
+          siteCount={notifyActionSiteCount}
         />
       )}
 
@@ -2585,21 +2588,29 @@ function CoverageNotifyDialog({
 
 // ── Per-Action Notify Dialog ───────────────────────────────────────────────────
 
-function buildActionMsg(action: DashboardAction): { en: string; ar: string } {
+function buildActionMsg(action: DashboardAction, siteCount?: number): { en: string; ar: string } {
   const at = ACTION_TYPES.find(t => t.key === action.action_type);
   const moduleLabel = at?.label ?? action.action_type.replace(/_/g, ' ');
   const det = action.details as Record<string, unknown>;
-  const contextEn = det?.site_name ? ` for site "${det.site_name}"` : det?.hub_name ? ` (${det.hub_name})` : '';
-  const contextAr = det?.site_name ? ` للموقع "${det.site_name}"` : det?.hub_name ? ` (${det.hub_name})` : '';
+  const hubCtxEn = det?.hub_name ? ` (${det.hub_name})` : '';
+  const hubCtxAr = det?.hub_name ? ` (${det.hub_name})` : '';
   const statusLabel = String(det?.status ?? action.native_status ?? '').replace(/_/g, ' ');
+  if (siteCount && siteCount > 1) {
+    return {
+      en: `You have ${siteCount} pending site entries in the ${moduleLabel} module${hubCtxEn} that require your attention. Current status: ${statusLabel}. Please log in and complete the required actions at your earliest convenience.`,
+      ar: `لديك ${siteCount} إدخالات موقع معلقة في وحدة "${moduleLabel}"${hubCtxAr} تحتاج إلى اهتمامك. الحالة الحالية: ${statusLabel}. يرجى تسجيل الدخول وإكمال الإجراءات المطلوبة في أقرب وقت ممكن.`,
+    };
+  }
+  const contextEn = det?.site_name ? ` for site "${det.site_name}"` : hubCtxEn;
+  const contextAr = det?.site_name ? ` للموقع "${det.site_name}"` : hubCtxAr;
   return {
     en: `You have a pending action in the ${moduleLabel} module${contextEn}. Current status: ${statusLabel}. This item requires your attention — please log in and take the necessary action at your earliest convenience.`,
     ar: `لديك إجراء معلق في وحدة "${moduleLabel}"${contextAr}. الحالة الحالية: ${statusLabel}. هذا العنصر يحتاج إلى اهتمامك — يرجى تسجيل الدخول واتخاذ الإجراء اللازم في أقرب وقت ممكن.`,
   };
 }
 
-function NotifyActionDialog({ open, onClose, action }: {
-  open: boolean; onClose: () => void; action: DashboardAction;
+function NotifyActionDialog({ open, onClose, action, siteCount }: {
+  open: boolean; onClose: () => void; action: DashboardAction; siteCount?: number;
 }) {
   const { toast } = useToast();
   const [sending, setSending] = useState(false);
@@ -2610,7 +2621,7 @@ function NotifyActionDialog({ open, onClose, action }: {
   const [autoIntervalDays, setAutoIntervalDays] = useState(7);
   const [autoEndDate, setAutoEndDate] = useState('');
 
-  const defaultMsg = useMemo(() => buildActionMsg(action), [action]);
+  const defaultMsg = useMemo(() => buildActionMsg(action, siteCount), [action, siteCount]);
   const [msgEn, setMsgEn] = useState(defaultMsg.en);
   const [msgAr, setMsgAr] = useState(defaultMsg.ar);
   const [priority, setPriority] = useState<'normal' | 'high' | 'urgent'>('normal');
@@ -2618,7 +2629,7 @@ function NotifyActionDialog({ open, onClose, action }: {
   // Reset when action changes
   useEffect(() => {
     if (!open) return;
-    const m = buildActionMsg(action);
+    const m = buildActionMsg(action, siteCount);
     setMsgEn(m.en);
     setMsgAr(m.ar);
     setChannels(new Set(['inApp', 'fcm']));
@@ -2847,7 +2858,7 @@ function ModuleSummaryCard({
   onWorkflow: (action: DashboardAction, wa: string, wl: string) => void;
   workflowPending: boolean;
   onNotify: () => void;
-  onNotifyAction?: (action: DashboardAction) => void;
+  onNotifyAction?: (action: DashboardAction, siteCount?: number) => void;
 }) {
   const [open, setOpen] = useState(false);
   const Icon = at.icon;
@@ -3036,7 +3047,7 @@ function StatusHubTree({
   onWorkflow: (action: DashboardAction, wa: string, wl: string) => void;
   workflowPending: boolean;
   actionType?: string;
-  onNotifyAction?: (action: DashboardAction) => void;
+  onNotifyAction?: (action: DashboardAction, siteCount?: number) => void;
 }) {
   // Detect modules with no MMP association (all items grouped under '—')
   // For these modules (operational_cost, advance_payment) skip the MMP level
@@ -3353,13 +3364,28 @@ function StatusHubTree({
                                           return (
                                             <div key={ck}>
                                               {/* ── Enumerator — amber (px-8) ── */}
-                                              <button className="w-full flex items-center gap-2 px-8 py-1.5 bg-amber-50 hover:bg-amber-100 border-l-4 border-l-amber-400 text-left transition-colors"
-                                                onClick={() => toggleCollector(ck)} data-testid={`dc-group-${ck}`}>
-                                                {dcOpen ? <ChevronDown className="h-3 w-3 text-amber-600 shrink-0" /> : <ChevronRight className="h-3 w-3 text-amber-500 shrink-0" />}
-                                                <User className="h-3 w-3 text-amber-600 shrink-0" />
-                                                <span className="text-xs font-medium flex-1 text-amber-900">{dcName}</span>
-                                                <span className="text-[9px] font-mono bg-amber-100 text-amber-700 border border-amber-200 px-1.5 py-0.5 rounded">{dcTotal} site{dcTotal !== 1 ? 's' : ''}</span>
-                                              </button>
+                                              <div className="w-full flex items-center bg-amber-50 hover:bg-amber-100 border-l-4 border-l-amber-400 transition-colors">
+                                                <button className="flex items-center gap-2 px-8 py-1.5 flex-1 text-left min-w-0"
+                                                  onClick={() => toggleCollector(ck)} data-testid={`dc-group-${ck}`}>
+                                                  {dcOpen ? <ChevronDown className="h-3 w-3 text-amber-600 shrink-0" /> : <ChevronRight className="h-3 w-3 text-amber-500 shrink-0" />}
+                                                  <User className="h-3 w-3 text-amber-600 shrink-0" />
+                                                  <span className="text-xs font-medium flex-1 text-amber-900 truncate">{dcName}</span>
+                                                  <span className="text-[9px] font-mono bg-amber-100 text-amber-700 border border-amber-200 px-1.5 py-0.5 rounded">{dcTotal} site{dcTotal !== 1 ? 's' : ''}</span>
+                                                </button>
+                                                {onNotifyAction && (() => {
+                                                  const firstAct = [...locToActions.values()].flat()[0];
+                                                  return firstAct ? (
+                                                    <button
+                                                      onClick={e => { e.stopPropagation(); onNotifyAction(firstAct, dcTotal); }}
+                                                      title={`Notify ${dcName}`}
+                                                      data-testid={`notify-dc-${ck}`}
+                                                      className="shrink-0 p-1.5 mr-2 rounded text-amber-500 hover:text-violet-600 hover:bg-violet-50 transition-colors"
+                                                    >
+                                                      <Bell className="h-3.5 w-3.5" />
+                                                    </button>
+                                                  ) : null;
+                                                })()}
+                                              </div>
                                               {dcOpen && (
                                                 <div className="flex flex-col divide-y divide-teal-100">
                                                   {[...locToActions.entries()].sort(([, a], [, b]) => b.length - a.length).map(([locName, actions]) => {
