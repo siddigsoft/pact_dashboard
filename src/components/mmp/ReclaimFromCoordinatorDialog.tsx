@@ -92,22 +92,55 @@ export const ReclaimFromCoordinatorDialog: React.FC<ReclaimFromCoordinatorDialog
   const loadCoordinators = async () => {
     setLoadingCoordinators(true);
     try {
-      // Use SECURITY DEFINER RPC to bypass RLS on mmp_site_entries so we see
-      // every coordinator across all states/localities, not just those the
-      // current user's RLS policy allows.
-      const { data, error } = await supabase
+      // Try the SECURITY DEFINER RPC first — bypasses RLS so all coordinators
+      // across every state/locality are returned. Falls back to a direct query
+      // (which may miss some rows due to RLS) if the RPC isn't deployed yet.
+      const { data: rpcData, error: rpcError } = await supabase
         .rpc('get_mmp_coordinators', { p_mmp_file_id: mmpId });
 
-      if (error) throw error;
+      if (!rpcError && rpcData) {
+        const coordList: CoordinatorInfo[] = rpcData.map((row: any) => ({
+          id: row.coordinator_id,
+          name: row.full_name || row.username || row.email || `Unknown (${String(row.coordinator_id).slice(0, 8)}...)`,
+          email: row.email,
+          siteCount: Number(row.site_count),
+        }));
+        setCoordinators(coordList);
+        return;
+      }
 
-      const coordList: CoordinatorInfo[] = (data || []).map((row: any) => ({
-        id: row.coordinator_id,
-        name: row.full_name || row.username || row.email || `Unknown (${String(row.coordinator_id).slice(0, 8)}...)`,
-        email: row.email,
-        siteCount: Number(row.site_count),
-      }));
+      // --- Fallback: direct query (partial results due to RLS) ---
+      console.warn('[Reclaim] RPC unavailable, falling back to direct query:', rpcError?.message);
+      const { data: entries } = await supabase
+        .from('mmp_site_entries')
+        .select('forwarded_to_user_id, accepted_by')
+        .eq('mmp_file_id', mmpId);
 
-      setCoordinators(coordList);
+      const coordMap = new Map<string, number>();
+      (entries || []).forEach((entry: any) => {
+        const coordId = entry.forwarded_to_user_id || entry.accepted_by;
+        if (coordId) coordMap.set(coordId, (coordMap.get(coordId) || 0) + 1);
+      });
+
+      if (coordMap.size === 0) { setCoordinators([]); return; }
+
+      const { data: profiles } = await supabase
+        .from('profiles')
+        .select('id, full_name, email, username')
+        .in('id', [...coordMap.keys()]);
+
+      const profileMap = new Map((profiles || []).map((p: any) => [p.id, p]));
+      const fallbackList: CoordinatorInfo[] = [...coordMap.entries()].map(([coordId, count]) => {
+        const p = profileMap.get(coordId);
+        return {
+          id: coordId,
+          name: p?.full_name || p?.username || p?.email || `Unknown (${coordId.slice(0, 8)}...)`,
+          email: p?.email,
+          siteCount: count,
+        };
+      });
+      fallbackList.sort((a, b) => a.name.localeCompare(b.name));
+      setCoordinators(fallbackList);
     } catch (err) {
       console.error('[Reclaim] Failed to load coordinators:', err);
     } finally {
