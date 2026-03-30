@@ -2120,7 +2120,7 @@ function NotifyUsersDialog({ open, onClose, allActions, categoryLabel }: {
 
   return (
     <Dialog open={open} onOpenChange={v => { if (!v) onClose(); }}>
-      <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col gap-0 p-0" data-testid="notify-users-dialog">
+      <DialogContent className="max-w-2xl max-h-[85vh] overflow-hidden flex flex-col gap-0 p-0" data-testid="notify-users-dialog">
         <DialogHeader className="px-5 pt-5 pb-3 border-b shrink-0">
           <DialogTitle className="flex items-center gap-2 text-base">
             <Bell className="h-4 w-4 text-violet-600" />
@@ -2487,7 +2487,7 @@ function CoverageNotifyDialog({
 
   return (
     <Dialog open={open} onOpenChange={v => { if (!v) onClose(); }}>
-      <DialogContent className="max-w-2xl max-h-[88vh] flex flex-col gap-0 p-0" data-testid="coverage-notify-dialog">
+      <DialogContent className="max-w-2xl max-h-[88vh] overflow-hidden flex flex-col gap-0 p-0" data-testid="coverage-notify-dialog">
         <DialogHeader className="px-5 pt-5 pb-3 border-b shrink-0">
           <DialogTitle className="flex items-center gap-2 text-base">
             <Bell className="h-4 w-4 text-violet-600" />Notify — Transportation Advance Coverage
@@ -2764,7 +2764,7 @@ function NotifyActionDialog({ open, onClose, action, siteCount }: {
 
   return (
     <Dialog open={open} onOpenChange={v => { if (!v) onClose(); }}>
-      <DialogContent className="max-w-2xl max-h-[88vh] flex flex-col gap-0 p-0" data-testid="notify-action-dialog">
+      <DialogContent className="max-w-2xl max-h-[88vh] overflow-hidden flex flex-col gap-0 p-0" data-testid="notify-action-dialog">
         <DialogHeader className="px-5 pt-5 pb-3 border-b shrink-0">
           <DialogTitle className="flex items-center gap-2 text-base">
             <Bell className="h-4 w-4 text-violet-600" />
@@ -4090,7 +4090,7 @@ function CoverageScopedNotifyDialog({ open, onClose, ctx }: {
 
   return (
     <Dialog open={open} onOpenChange={v => { if (!v) onClose(); }}>
-      <DialogContent className="max-w-2xl max-h-[88vh] flex flex-col gap-0 p-0" data-testid="coverage-scoped-notify-dialog">
+      <DialogContent className="max-w-2xl max-h-[88vh] overflow-hidden flex flex-col gap-0 p-0" data-testid="coverage-scoped-notify-dialog">
         <DialogHeader className="px-5 pt-5 pb-3 border-b shrink-0">
           <DialogTitle className="flex items-center gap-2 text-base">
             <Bell className="h-4 w-4 text-amber-600" />
@@ -4575,7 +4575,7 @@ function ManageAccessDialog({ open, onClose }: { open: boolean; onClose: () => v
 
   return (
     <Dialog open={open} onOpenChange={v => { if (!v) onClose(); }}>
-      <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col gap-0 p-0" data-testid="manage-access-dialog">
+      <DialogContent className="max-w-2xl max-h-[85vh] overflow-hidden flex flex-col gap-0 p-0" data-testid="manage-access-dialog">
         <DialogHeader className="px-5 pt-5 pb-3 border-b shrink-0">
           <DialogTitle className="flex items-center gap-2 text-base">
             <Lock className="h-4 w-4 text-primary" />
