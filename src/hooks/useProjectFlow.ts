@@ -93,6 +93,7 @@ export function useProjectFlow(project: Project): UseProjectFlowReturn {
   const advanceMutation = useMutation({
     mutationFn: async (notes: string) => {
       if (!currentUser?.id) throw new Error('Not authenticated');
+      if (!canAdvance) throw new Error('You do not have permission to advance this project stage');
       if (isLastStage) throw new Error('Already at the final stage');
 
       const nextIndex = resolvedIndex + 1;
