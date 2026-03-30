@@ -3374,7 +3374,7 @@ function ManageAccessDialog({ open, onClose }: { open: boolean; onClose: () => v
       .from('profiles')
       .select('id, full_name, email, role')
       .or(`full_name.ilike.%${q.trim()}%,email.ilike.%${q.trim()}%`)
-      .eq('is_active', true)
+      .eq('status', 'approved')
       .not('role', 'eq', 'super_admin')
       .limit(12);
     setSearchResults((data || []).filter((u: { id: string }) => !grantedIds.has(u.id)));
