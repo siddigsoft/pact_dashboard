@@ -70,19 +70,12 @@ export function FlowTab({ flow, projectName, projectType, allDefaultStages }: Pr
     getStageStatus,
   } = flow;
 
-  const [advanceOpen, setAdvanceOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [notes, setNotes] = useState('');
   const [customEntries, setCustomEntries] = useState<CustomStageEntry[]>([]);
 
   useEffect(() => {
     if (editOpen) {
-      const existingIds = new Set(
-        flow.activeStages.map(s => s.id).concat(
-          allDefaultStages.filter(s => getStageStatus(s.id) === 'skipped').map(s => s.id)
-        )
-      );
-      // Build initial custom list from allDefaultStages, preserving current order & skips
       const initial = allDefaultStages.map(s => ({
         id: s.id,
         skipped: getStageStatus(s.id) === 'skipped',
@@ -95,7 +88,6 @@ export function FlowTab({ flow, projectName, projectType, allDefaultStages }: Pr
     try {
       await advanceStage(notes);
       toast({ title: 'Stage advanced successfully' });
-      setAdvanceOpen(false);
       setNotes('');
     } catch (err: any) {
       toast({ title: 'Failed to advance stage', description: err.message, variant: 'destructive' });
@@ -137,12 +129,11 @@ export function FlowTab({ flow, projectName, projectType, allDefaultStages }: Pr
   };
 
   const nextStage = !isLastStage ? activeStages[currentStageIndex + 1] : null;
-  const completedCount = activeStages.filter((_, i) => i < currentStageIndex).length;
   const pct = Math.round(((currentStageIndex + 1) / activeStages.length) * 100);
 
   return (
     <div className="space-y-6">
-      {/* Header: progress + actions */}
+      {/* Header: summary + edit flow button */}
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div className="space-y-1">
           <h2 className="text-base font-semibold">Project Flow</h2>
@@ -150,7 +141,7 @@ export function FlowTab({ flow, projectName, projectType, allDefaultStages }: Pr
             {projectType} · Stage {currentStageIndex + 1} of {activeStages.length} · {pct}% complete
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 items-center">
           {canEditFlow && (
             <Button
               size="sm"
@@ -159,15 +150,6 @@ export function FlowTab({ flow, projectName, projectType, allDefaultStages }: Pr
               data-testid="button-edit-flow"
             >
               <Settings2 className="h-3.5 w-3.5 mr-1.5" /> Edit Flow
-            </Button>
-          )}
-          {canAdvance && (
-            <Button
-              size="sm"
-              onClick={() => setAdvanceOpen(true)}
-              data-testid="button-advance-stage"
-            >
-              <ArrowRight className="h-3.5 w-3.5 mr-1.5" /> Advance Stage
             </Button>
           )}
           {isLastStage && (
@@ -191,13 +173,14 @@ export function FlowTab({ flow, projectName, projectType, allDefaultStages }: Pr
         {allDefaultStages.map((stage, idx) => {
           const status = getStageStatus(stage.id);
           const historyEntry = stageHistory.filter(h => h.stageId === stage.id).at(-1);
+          const isCurrent = status === 'current';
 
           return (
             <div
               key={stage.id}
               className={cn(
                 'rounded-lg border p-4 transition-all',
-                status === 'current' && 'border-[#1D3461]/50 bg-[#0F2041]/5 dark:bg-[#1D3461]/10',
+                isCurrent && 'border-[#1D3461]/50 bg-[#0F2041]/5 dark:bg-[#1D3461]/10',
                 status === 'completed' && 'border-emerald-200 dark:border-emerald-800 bg-emerald-50/50 dark:bg-emerald-900/10',
                 status === 'skipped' && 'border-dashed border-muted-foreground/20 bg-muted/30 opacity-60',
                 status === 'upcoming' && 'border-border bg-background',
@@ -210,7 +193,7 @@ export function FlowTab({ flow, projectName, projectType, allDefaultStages }: Pr
                   className={cn(
                     'h-8 w-8 rounded-full flex items-center justify-center flex-shrink-0 border-2 mt-0.5',
                     status === 'completed' && 'border-emerald-500 bg-emerald-500 text-white',
-                    status === 'current' && 'border-[#1D3461] bg-[#1D3461] text-white',
+                    isCurrent && 'border-[#1D3461] bg-[#1D3461] text-white',
                     status === 'skipped' && 'border-muted-foreground/30 bg-muted text-muted-foreground/50',
                     status === 'upcoming' && 'border-border bg-background text-muted-foreground',
                   )}
@@ -219,7 +202,7 @@ export function FlowTab({ flow, projectName, projectType, allDefaultStages }: Pr
                     <CheckCircle2 className="h-4 w-4" />
                   ) : status === 'skipped' ? (
                     <SkipForward className="h-4 w-4" />
-                  ) : status === 'current' ? (
+                  ) : isCurrent ? (
                     <Circle className="h-4 w-4" />
                   ) : (
                     <span className="text-xs font-bold">{idx + 1}</span>
@@ -237,7 +220,7 @@ export function FlowTab({ flow, projectName, projectType, allDefaultStages }: Pr
                     >
                       {stage.label}
                     </span>
-                    {status === 'current' && (
+                    {isCurrent && (
                       <Badge className="bg-[#1D3461] text-white text-[10px] px-1.5 py-0">
                         Current
                       </Badge>
@@ -287,7 +270,7 @@ export function FlowTab({ flow, projectName, projectType, allDefaultStages }: Pr
                   )}
 
                   {/* Go to linked module */}
-                  {stage.linkedModule && (status === 'current' || status === 'completed') && (
+                  {stage.linkedModule && (isCurrent || status === 'completed') && (
                     <div className="mt-2.5">
                       <Button
                         variant="outline"
@@ -302,7 +285,7 @@ export function FlowTab({ flow, projectName, projectType, allDefaultStages }: Pr
                     </div>
                   )}
 
-                  {/* History entry */}
+                  {/* History entry for completed/skipped stages */}
                   {historyEntry && (
                     <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
                       <span className="flex items-center gap-1">
@@ -323,57 +306,54 @@ export function FlowTab({ flow, projectName, projectType, allDefaultStages }: Pr
                       )}
                     </div>
                   )}
+
+                  {/* Inline advance controls — only on the current stage card */}
+                  {isCurrent && canAdvance && nextStage && (
+                    <div className="mt-4 pt-4 border-t border-[#1D3461]/20 space-y-3">
+                      <div className="space-y-1.5">
+                        <Label htmlFor={`advance-notes-${stage.id}`} className="text-xs font-medium">
+                          Notes for advancing to <span className="text-[#1D3461]">{nextStage.label}</span> (optional)
+                        </Label>
+                        <Textarea
+                          id={`advance-notes-${stage.id}`}
+                          placeholder="Add any notes about this stage transition..."
+                          value={notes}
+                          onChange={e => setNotes(e.target.value)}
+                          rows={2}
+                          className="text-sm"
+                          data-testid="input-advance-notes"
+                        />
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          size="sm"
+                          onClick={handleAdvance}
+                          disabled={isAdvancing}
+                          data-testid="button-confirm-advance"
+                        >
+                          {isAdvancing ? (
+                            <>
+                              <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> Advancing…
+                            </>
+                          ) : (
+                            <>
+                              <ArrowRight className="h-3.5 w-3.5 mr-1.5" /> Mark Complete & Advance to {nextStage.label}
+                            </>
+                          )}
+                        </Button>
+                        <p className="text-xs text-muted-foreground flex items-center gap-1">
+                          <AlertCircle className="h-3 w-3 flex-shrink-0" />
+                          Team will be notified.
+                        </p>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
           );
         })}
       </div>
-
-      {/* Advance stage dialog */}
-      <Dialog open={advanceOpen} onOpenChange={setAdvanceOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Advance to Next Stage</DialogTitle>
-            <DialogDescription>
-              You are advancing <strong>{projectName}</strong> from{' '}
-              <strong>{currentStage?.label}</strong> to{' '}
-              <strong>{nextStage?.label}</strong>.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-3 py-2">
-            <Label htmlFor="advance-notes">Notes (optional)</Label>
-            <Textarea
-              id="advance-notes"
-              placeholder="Add any notes about this stage transition..."
-              value={notes}
-              onChange={e => setNotes(e.target.value)}
-              rows={3}
-              data-testid="input-advance-notes"
-            />
-            <p className="text-xs text-muted-foreground flex items-start gap-1.5">
-              <AlertCircle className="h-3.5 w-3.5 flex-shrink-0 mt-0.5" />
-              All team members will be notified of this stage advance.
-            </p>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setAdvanceOpen(false)} disabled={isAdvancing}>
-              Cancel
-            </Button>
-            <Button onClick={handleAdvance} disabled={isAdvancing} data-testid="button-confirm-advance">
-              {isAdvancing ? (
-                <>
-                  <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> Advancing...
-                </>
-              ) : (
-                <>
-                  <ArrowRight className="h-3.5 w-3.5 mr-1.5" /> Confirm Advance
-                </>
-              )}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       {/* Edit flow dialog */}
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
@@ -474,7 +454,7 @@ export function FlowTab({ flow, projectName, projectType, allDefaultStages }: Pr
             <Button onClick={handleSaveCustom} disabled={isSavingCustom} data-testid="button-save-flow">
               {isSavingCustom ? (
                 <>
-                  <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> Saving...
+                  <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> Saving…
                 </>
               ) : (
                 'Save Flow'

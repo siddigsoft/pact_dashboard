@@ -39,8 +39,17 @@ export function FlowStrip({
         {stages.map((stage, idx) => {
           const status = getStageStatus(stage.id);
           const isFirst = idx === 0;
-          const historyEntry = stageHistory.filter(h => h.stageId === stage.id).at(-1);
           const isCompleted = status === 'completed';
+          const isCurrent = status === 'current';
+          const historyEntry = stageHistory.filter(h => h.stageId === stage.id).at(-1);
+
+          const nodeContent = isCompleted ? (
+            <CheckCircle2 className={cn(compact ? 'h-3 w-3' : 'h-4 w-4')} />
+          ) : status === 'skipped' ? (
+            <SkipForward className={cn(compact ? 'h-3 w-3' : 'h-4 w-4')} />
+          ) : (
+            <Circle className={cn(compact ? 'h-3 w-3' : 'h-4 w-4')} />
+          );
 
           const nodeEl = (
             <div
@@ -48,22 +57,13 @@ export function FlowStrip({
               className={cn(
                 'rounded-full flex items-center justify-center border-2 transition-all',
                 compact ? 'h-6 w-6' : 'h-8 w-8',
-                isCompleted && 'border-emerald-500 bg-emerald-500 text-white',
-                status === 'current' &&
-                  'border-[#1D3461] bg-[#1D3461] text-white ring-2 ring-[#1D3461]/30',
-                status === 'skipped' &&
-                  'border-muted-foreground/30 bg-muted text-muted-foreground/50',
+                isCompleted && 'border-emerald-500 bg-emerald-500 text-white cursor-pointer hover:scale-110',
+                isCurrent && 'border-[#1D3461] bg-[#1D3461] text-white ring-2 ring-[#1D3461]/30 animate-pulse',
+                status === 'skipped' && 'border-muted-foreground/30 bg-muted text-muted-foreground/50',
                 status === 'upcoming' && 'border-border bg-background text-muted-foreground',
-                isCompleted && historyEntry && 'cursor-pointer hover:scale-110',
               )}
             >
-              {isCompleted ? (
-                <CheckCircle2 className={cn(compact ? 'h-3 w-3' : 'h-4 w-4')} />
-              ) : status === 'skipped' ? (
-                <SkipForward className={cn(compact ? 'h-3 w-3' : 'h-4 w-4')} />
-              ) : (
-                <Circle className={cn(compact ? 'h-3 w-3' : 'h-4 w-4')} />
-              )}
+              {nodeContent}
             </div>
           );
 
@@ -73,15 +73,13 @@ export function FlowStrip({
                 <div
                   className={cn(
                     'h-px w-6 flex-shrink-0 transition-colors',
-                    isCompleted || status === 'current'
-                      ? 'bg-emerald-500'
-                      : 'bg-border',
+                    isCompleted || isCurrent ? 'bg-emerald-500' : 'bg-border',
                   )}
                 />
               )}
 
               <div className="flex flex-col items-center gap-1 group">
-                {isCompleted && historyEntry ? (
+                {isCompleted ? (
                   <Popover
                     open={openId === stage.id}
                     onOpenChange={open => setOpenId(open ? stage.id : null)}
@@ -93,24 +91,30 @@ export function FlowStrip({
                       className="w-64 p-3 space-y-2 text-sm"
                     >
                       <p className="font-semibold text-[13px]">{stage.label}</p>
-                      <div className="space-y-1 text-xs text-muted-foreground">
-                        <div className="flex items-center gap-1.5">
-                          <Clock className="h-3 w-3 flex-shrink-0" />
-                          <span>{formatTs(historyEntry.advancedAt)}</span>
-                        </div>
-                        {historyEntry.advancedByName && (
+                      {historyEntry ? (
+                        <div className="space-y-1 text-xs text-muted-foreground">
                           <div className="flex items-center gap-1.5">
-                            <User className="h-3 w-3 flex-shrink-0" />
-                            <span>{historyEntry.advancedByName}</span>
+                            <Clock className="h-3 w-3 flex-shrink-0" />
+                            <span>{formatTs(historyEntry.advancedAt)}</span>
                           </div>
-                        )}
-                        {historyEntry.notes && (
-                          <div className="flex items-start gap-1.5">
-                            <FileText className="h-3 w-3 flex-shrink-0 mt-0.5" />
-                            <span className="break-words">{historyEntry.notes}</span>
-                          </div>
-                        )}
-                      </div>
+                          {historyEntry.advancedByName && (
+                            <div className="flex items-center gap-1.5">
+                              <User className="h-3 w-3 flex-shrink-0" />
+                              <span>{historyEntry.advancedByName}</span>
+                            </div>
+                          )}
+                          {historyEntry.notes && (
+                            <div className="flex items-start gap-1.5">
+                              <FileText className="h-3 w-3 flex-shrink-0 mt-0.5" />
+                              <span className="break-words">{historyEntry.notes}</span>
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <p className="text-xs text-muted-foreground italic">
+                          Stage completed — no advancement record available.
+                        </p>
+                      )}
                     </PopoverContent>
                   </Popover>
                 ) : (
@@ -121,7 +125,7 @@ export function FlowStrip({
                   <span
                     className={cn(
                       'text-[10px] leading-tight text-center max-w-[60px] line-clamp-2',
-                      status === 'current' && 'text-[#1D3461] font-semibold',
+                      isCurrent && 'text-[#1D3461] font-semibold',
                       isCompleted && 'text-emerald-600 font-medium',
                       status === 'skipped' && 'text-muted-foreground/50 line-through',
                       status === 'upcoming' && 'text-muted-foreground',

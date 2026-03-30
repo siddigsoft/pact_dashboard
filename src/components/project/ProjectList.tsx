@@ -321,9 +321,8 @@ const ProjectList: React.FC<ProjectListProps> = ({
                     <div className="space-y-1">
                       <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                         <GitBranch className="h-3 w-3 flex-shrink-0" />
-                        <span className="truncate">{stageName}</span>
-                        <span className="flex-shrink-0 text-muted-foreground/60">
-                          {stageIdx + 1}/{total}
+                        <span className="truncate">
+                          Stage {stageIdx + 1} of {total} — {stageName}
                         </span>
                       </div>
                       <div className="w-full h-1 rounded-full bg-muted overflow-hidden">
