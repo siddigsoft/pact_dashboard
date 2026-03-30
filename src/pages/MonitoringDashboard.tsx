@@ -4222,7 +4222,7 @@ function CoverageScopedNotifyDialog({ open, onClose, ctx }: {
           </DialogDescription>
         </DialogHeader>
 
-        <div className="flex-1 overflow-y-auto px-5 py-4 flex flex-col gap-4">
+        <div className="flex-1 min-h-0 overflow-y-auto px-5 py-4 flex flex-col gap-4">
           {/* Context pill */}
           <div className="flex flex-wrap gap-2">
             {ctx.mmpName && <span className="text-[10px] bg-indigo-100 text-indigo-700 border border-indigo-200 px-2 py-0.5 rounded-full font-medium">{ctx.mmpName}</span>}
