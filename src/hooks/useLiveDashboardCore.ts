@@ -7,7 +7,6 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { useRealtimeResource } from '@/hooks/useRealtimeResource';
 import { queryClient } from '@/lib/queryClient';
-import { queueTableRefresh, queueRealtimeToast } from '@/lib/realtime-utils';
 
 interface LiveDashboardOptions {
   enableToasts?: boolean;
@@ -27,26 +26,12 @@ export const useLiveDashboardCore = (options: LiveDashboardOptions = {}) => {
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
   const mountedRef = useRef(true);
 
-  const showToast = useCallback((config: { title: string; description: string; duration?: number }) => {
-    if (!mountedRef.current) return;
-    toast(config);
-  }, [toast]);
-
   const handleTableChange = useCallback((table: string, eventType: string) => {
     if (!mountedRef.current) return;
     
     console.log(`[LiveDashboard] ${table} change: ${eventType}`);
     setLastUpdate(new Date());
-    
-    queueTableRefresh(table, eventType);
-    
-    if (enableToasts && table !== 'mmp_site_entries') {
-      queueRealtimeToast(table, eventType, showToast, {
-        enabled: enableToasts,
-        batchWindow: toastBatchWindow,
-      });
-    }
-  }, [enableToasts, toastBatchWindow, showToast]);
+  }, []);
 
   const { isSubscribed: projectsSubscribed, eventCount: projectEvents } = useRealtimeResource({
     configs: { table: 'projects', schema: 'public' },

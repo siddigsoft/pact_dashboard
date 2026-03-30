@@ -71,15 +71,13 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
       }
     };
 
-    // Listen for storage changes
+    // Listen for cross-tab storage changes
     window.addEventListener('storage', handleStorageChange);
-    
-    // Check periodically for changes (in case same-tab updates don't trigger storage event)
-    const interval = setInterval(handleStorageChange, 1000);
+    // Run once immediately to pick up any existing value
+    handleStorageChange();
 
     return () => {
       window.removeEventListener('storage', handleStorageChange);
-      clearInterval(interval);
     };
   }, []);
 
