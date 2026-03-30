@@ -288,7 +288,7 @@
     if (!isHidden('/projects') && (isSuperAdmin || isAdmin || isICT || perms.projects)) {
       planningItems.push({ id: 'projects', title: "Projects", url: "/projects", icon: FolderKanban, priority: 1, isPinned: isPinned('/projects') });
     }
-    if (!isHidden('/projects/analytics') && (isSuperAdmin || isAdmin || isFOM)) {
+    if (!isHidden('/projects/analytics') && (isSuperAdmin || isAdmin || isFOM || perms.projects)) {
       planningItems.push({ id: 'project-analytics', title: "Project Analytics", url: "/projects/analytics", icon: BarChart3, priority: 2, isPinned: isPinned('/projects/analytics') });
     }
     if (!isHidden('/mmp') && (isSuperAdmin || isAdmin || isICT || isDataTeam || perms.mmp || isCoordinator || isSupervisor || isDataCollector || isFOM)) {

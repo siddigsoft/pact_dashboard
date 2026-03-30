@@ -10,7 +10,6 @@ import {
   Tooltip,
   Legend,
   ResponsiveContainer,
-  Cell,
 } from 'recharts';
 import {
   BarChart3,
@@ -54,6 +53,22 @@ import { normaliseProjectType } from '@/types/project';
 
 const STALL_THRESHOLD_DAYS = 14;
 
+const STATUS_COLORS: Record<string, string> = {
+  active: '#16a34a',
+  completed: '#1D3461',
+  onHold: '#f59e0b',
+  draft: '#94a3b8',
+  cancelled: '#dc2626',
+};
+
+const STATUS_LABELS: Record<string, string> = {
+  active: 'Active',
+  completed: 'Completed',
+  onHold: 'On Hold',
+  draft: 'Draft',
+  cancelled: 'Cancelled',
+};
+
 interface ProjectRow {
   id: string;
   name: string;
@@ -61,43 +76,29 @@ interface ProjectRow {
   project_type: string;
   status: string;
   start_date: string | null;
-  end_date: string | null;
   current_flow_stage: string | null;
   team: { projectManager?: string } | null;
 }
 
 interface FlowLogRow {
   project_id: string;
-  stage_id: string;
-  stage_label: string;
   advanced_at: string;
-}
-
-interface ProfileRow {
-  id: string;
-  full_name: string;
 }
 
 interface AnalyticsData {
   projects: ProjectRow[];
   latestAdvancedAt: Record<string, string>;
-  pms: ProfileRow[];
 }
 
 async function fetchAnalyticsData(): Promise<AnalyticsData> {
-  const [projRes, logRes, pmRes] = await Promise.all([
+  const [projRes, logRes] = await Promise.all([
     supabase
       .from('projects')
       .select('id, name, project_code, project_type, status, start_date, end_date, current_flow_stage, team'),
     supabase
       .from('project_flow_log')
-      .select('project_id, stage_id, stage_label, advanced_at')
+      .select('project_id, advanced_at')
       .order('advanced_at', { ascending: false }),
-    supabase
-      .from('profiles')
-      .select('id, full_name')
-      .eq('status', 'approved')
-      .order('full_name'),
   ]);
 
   if (projRes.error) throw new Error(projRes.error.message);
@@ -111,11 +112,7 @@ async function fetchAnalyticsData(): Promise<AnalyticsData> {
     }
   }
 
-  return {
-    projects,
-    latestAdvancedAt,
-    pms: (pmRes.data ?? []) as ProfileRow[],
-  };
+  return { projects, latestAdvancedAt };
 }
 
 function safeDate(s: string | null | undefined): Date | null {
@@ -133,21 +130,14 @@ function fmtDate(s: string | null | undefined): string {
   return d ? format(d, 'dd MMM yyyy') : '—';
 }
 
+function isAtFinalStage(p: ProjectRow): boolean {
+  const flow = getProjectFlow(normaliseProjectType(p.project_type));
+  const finalStageId = flow.stages[flow.stages.length - 1]?.id;
+  return !!finalStageId && p.current_flow_stage === finalStageId;
+}
+
 type SortField = 'name' | 'type' | 'stage' | 'daysSince';
 type SortDir = 'asc' | 'desc';
-
-const STATUS_COLORS: Record<string, string> = {
-  active: '#16a34a',
-  completed: '#2563eb',
-  onHold: '#f59e0b',
-  draft: '#64748b',
-  cancelled: '#dc2626',
-};
-
-const TYPE_COLORS = [
-  '#1D3461', '#2563eb', '#16a34a', '#f59e0b', '#8b5cf6',
-  '#06b6d4', '#ec4899', '#f97316', '#14b8a6', '#6366f1',
-];
 
 export default function ProjectAnalytics() {
   const navigate = useNavigate();
@@ -196,36 +186,44 @@ export default function ProjectAnalytics() {
   }, [filteredProjects, data]);
 
   const stageDistribution = useMemo(() => {
-    const counts: Record<string, { label: string; count: number }> = {};
+    type StageEntry = { label: string; active: number; completed: number; onHold: number; draft: number; cancelled: number };
+    const counts: Record<string, StageEntry> = {};
     for (const p of filteredProjects) {
       const flow = getProjectFlow(normaliseProjectType(p.project_type));
       const stageId = p.current_flow_stage ?? flow.stages[0]?.id ?? 'unknown';
       const stage = flow.stages.find(s => s.id === stageId);
       const label = stage?.label ?? stageId;
-      const key = label;
-      if (!counts[key]) counts[key] = { label, count: 0 };
-      counts[key].count += 1;
+      if (!counts[label]) counts[label] = { label, active: 0, completed: 0, onHold: 0, draft: 0, cancelled: 0 };
+      const status = p.status as keyof Omit<StageEntry, 'label'>;
+      if (status in counts[label]) counts[label][status] += 1;
+      else counts[label].draft += 1;
     }
-    return Object.values(counts).sort((a, b) => b.count - a.count).slice(0, 15);
+    return Object.values(counts)
+      .sort((a, b) => {
+        const totalA = a.active + a.completed + a.onHold + a.draft + a.cancelled;
+        const totalB = b.active + b.completed + b.onHold + b.draft + b.cancelled;
+        return totalB - totalA;
+      })
+      .slice(0, 15);
   }, [filteredProjects]);
 
   const completionByType = useMemo(() => {
-    const byType: Record<string, { label: string; total: number; completed: number }> = {};
+    const byType: Record<string, { label: string; total: number; reachedFinal: number }> = {};
     for (const p of filteredProjects) {
       const type = normaliseProjectType(p.project_type);
       const flow = getProjectFlow(type);
       const label = flow.label.replace(' (Legacy)', '');
-      if (!byType[type]) byType[type] = { label, total: 0, completed: 0 };
+      if (!byType[type]) byType[type] = { label, total: 0, reachedFinal: 0 };
       byType[type].total += 1;
-      if (p.status === 'completed') byType[type].completed += 1;
+      if (isAtFinalStage(p) || p.status === 'completed') byType[type].reachedFinal += 1;
     }
     return Object.values(byType)
       .filter(v => v.total > 0)
       .map(v => ({
         label: v.label,
         total: v.total,
-        completed: v.completed,
-        rate: v.total > 0 ? Math.round((v.completed / v.total) * 100) : 0,
+        reachedFinal: v.reachedFinal,
+        rate: v.total > 0 ? Math.round((v.reachedFinal / v.total) * 100) : 0,
       }))
       .sort((a, b) => b.total - a.total);
   }, [filteredProjects]);
@@ -233,7 +231,7 @@ export default function ProjectAnalytics() {
   const stalledProjects = useMemo(() => {
     if (!data) return [];
     const now = new Date();
-    const stalled = filteredProjects
+    return filteredProjects
       .filter(p => {
         if (p.status === 'completed' || p.status === 'cancelled') return false;
         const lastAdv = data.latestAdvancedAt[p.id];
@@ -252,23 +250,22 @@ export default function ProjectAnalytics() {
           id: p.id,
           name: p.name,
           projectCode: p.project_code,
-          type: getProjectFlow(normaliseProjectType(p.project_type)).label.replace(' (Legacy)', ''),
+          type: flow.label.replace(' (Legacy)', ''),
           stageName: stage?.label ?? stageId,
           lastAdvancedAt: lastAdv,
           daysSince,
           status: p.status,
         };
+      })
+      .sort((a, b) => {
+        const { field, dir } = stallSort;
+        let cmp = 0;
+        if (field === 'name') cmp = a.name.localeCompare(b.name);
+        else if (field === 'type') cmp = a.type.localeCompare(b.type);
+        else if (field === 'stage') cmp = a.stageName.localeCompare(b.stageName);
+        else cmp = a.daysSince - b.daysSince;
+        return dir === 'asc' ? cmp : -cmp;
       });
-
-    return stalled.sort((a, b) => {
-      const { field, dir } = stallSort;
-      let cmp = 0;
-      if (field === 'name') cmp = a.name.localeCompare(b.name);
-      else if (field === 'type') cmp = a.type.localeCompare(b.type);
-      else if (field === 'stage') cmp = a.stageName.localeCompare(b.stageName);
-      else cmp = a.daysSince - b.daysSince;
-      return dir === 'asc' ? cmp : -cmp;
-    });
   }, [filteredProjects, data, stallSort]);
 
   const uniquePMs = useMemo(() => {
@@ -301,8 +298,8 @@ export default function ProjectAnalytics() {
         'Type': flow.label.replace(' (Legacy)', ''),
         'Status': p.status,
         'Current Stage': stage?.label ?? stageId,
+        'At Final Stage': isAtFinalStage(p) ? 'Yes' : 'No',
         'Start Date': fmtDate(p.start_date),
-        'End Date': fmtDate(p.end_date),
         'Project Manager': (p.team as { projectManager?: string } | null)?.projectManager ?? '',
         'Last Stage Advancement': lastAdv ? fmtDate(lastAdv) : '',
         'Days Since Last Advancement': daysSince,
@@ -347,6 +344,8 @@ export default function ProjectAnalytics() {
       </div>
     );
   }
+
+  const hasFilters = typeFilter !== 'all' || pmFilter !== 'all' || !!startFrom || !!startTo;
 
   return (
     <div className="min-h-screen bg-background p-3 md:p-4 space-y-4">
@@ -435,7 +434,7 @@ export default function ProjectAnalytics() {
               />
             </div>
 
-            {(typeFilter !== 'all' || pmFilter !== 'all' || startFrom || startTo) && (
+            {hasFilters && (
               <Button
                 variant="ghost"
                 size="sm"
@@ -505,74 +504,74 @@ export default function ProjectAnalytics() {
 
       {/* Charts Row */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {/* Stage Distribution */}
+        {/* Stage Distribution — stacked bar, coloured by status */}
         <Card>
           <CardHeader className="pb-2 pt-4 px-4">
             <CardTitle className="text-sm font-semibold">Stage Distribution</CardTitle>
-            <p className="text-xs text-muted-foreground">Projects currently at each flow stage</p>
+            <p className="text-xs text-muted-foreground">Projects at each flow stage, coloured by status</p>
           </CardHeader>
           <CardContent className="px-2 pb-4">
             {stageDistribution.length === 0 ? (
               <div className="h-52 flex items-center justify-center text-xs text-muted-foreground">No data</div>
             ) : (
-              <ResponsiveContainer width="100%" height={220}>
-                <BarChart data={stageDistribution} margin={{ top: 4, right: 8, left: -20, bottom: 60 }}>
+              <ResponsiveContainer width="100%" height={240}>
+                <BarChart data={stageDistribution} margin={{ top: 4, right: 8, left: -20, bottom: 70 }}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} />
                   <XAxis
                     dataKey="label"
                     tick={{ fontSize: 10 }}
-                    angle={-35}
+                    angle={-40}
                     textAnchor="end"
                     interval={0}
                   />
                   <YAxis tick={{ fontSize: 10 }} allowDecimals={false} />
-                  <Tooltip
-                    contentStyle={{ fontSize: 12 }}
-                    formatter={(v: number) => [v, 'Projects']}
+                  <Tooltip contentStyle={{ fontSize: 12 }} />
+                  <Legend
+                    iconSize={10}
+                    wrapperStyle={{ fontSize: 11, paddingTop: 4 }}
+                    formatter={(v) => STATUS_LABELS[v as string] ?? v}
                   />
-                  <Bar dataKey="count" radius={[3, 3, 0, 0]}>
-                    {stageDistribution.map((_, i) => (
-                      <Cell key={i} fill={TYPE_COLORS[i % TYPE_COLORS.length]} />
-                    ))}
-                  </Bar>
+                  {Object.entries(STATUS_COLORS).map(([status, color]) => (
+                    <Bar key={status} dataKey={status} stackId="a" fill={color} radius={status === 'cancelled' ? [3, 3, 0, 0] : [0, 0, 0, 0]} />
+                  ))}
                 </BarChart>
               </ResponsiveContainer>
             )}
           </CardContent>
         </Card>
 
-        {/* Completion Rate by Type */}
+        {/* Completion Rate by Type — checks if project reached final stage or is status=completed */}
         <Card>
           <CardHeader className="pb-2 pt-4 px-4">
             <CardTitle className="text-sm font-semibold">Completion Rate by Type</CardTitle>
-            <p className="text-xs text-muted-foreground">Completed vs. total projects per project type</p>
+            <p className="text-xs text-muted-foreground">Projects at final stage or completed, per type</p>
           </CardHeader>
           <CardContent className="px-2 pb-4">
             {completionByType.length === 0 ? (
               <div className="h-52 flex items-center justify-center text-xs text-muted-foreground">No data</div>
             ) : (
-              <ResponsiveContainer width="100%" height={220}>
-                <BarChart data={completionByType} margin={{ top: 4, right: 8, left: -20, bottom: 60 }}>
+              <ResponsiveContainer width="100%" height={240}>
+                <BarChart data={completionByType} margin={{ top: 4, right: 8, left: -20, bottom: 70 }}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} />
                   <XAxis
                     dataKey="label"
                     tick={{ fontSize: 10 }}
-                    angle={-35}
+                    angle={-40}
                     textAnchor="end"
                     interval={0}
                   />
                   <YAxis tick={{ fontSize: 10 }} allowDecimals={false} />
                   <Tooltip
                     contentStyle={{ fontSize: 12 }}
-                    formatter={(v: number, name: string) => [v, name === 'completed' ? 'Completed' : 'Total']}
+                    formatter={(v: number, name: string) => [v, name === 'reachedFinal' ? 'Completed / Final Stage' : 'Total']}
                   />
                   <Legend
                     iconSize={10}
                     wrapperStyle={{ fontSize: 11, paddingTop: 4 }}
-                    formatter={(v) => v === 'completed' ? 'Completed' : 'Total'}
+                    formatter={(v) => v === 'reachedFinal' ? 'Completed / Final Stage' : 'Total'}
                   />
                   <Bar dataKey="total" fill="#cbd5e1" radius={[3, 3, 0, 0]} />
-                  <Bar dataKey="completed" fill="#1D3461" radius={[3, 3, 0, 0]} />
+                  <Bar dataKey="reachedFinal" fill="#1D3461" radius={[3, 3, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             )}
@@ -661,7 +660,10 @@ export default function ProjectAnalytics() {
                         <Badge
                           variant="outline"
                           className="text-xs"
-                          style={{ borderColor: STATUS_COLORS[p.status] ?? '#64748b', color: STATUS_COLORS[p.status] ?? '#64748b' }}
+                          style={{
+                            borderColor: STATUS_COLORS[p.status] ?? '#64748b',
+                            color: STATUS_COLORS[p.status] ?? '#64748b',
+                          }}
                         >
                           {p.stageName}
                         </Badge>
