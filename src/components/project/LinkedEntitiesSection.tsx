@@ -22,22 +22,21 @@ interface SiteVisitResult {
   locality?: string;
 }
 
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 async function searchMMPs(q: string): Promise<MmpResult[]> {
-  let query = supabase
+  const base = supabase
     .from('mmp_files')
     .select('id, name, mmp_id, hub, month, year')
     .not('status', 'eq', 'deleted')
     .limit(20);
 
-  if (q.trim()) {
-    query = query.ilike('name', `%${q.trim()}%`);
-  } else {
-    query = query.order('created_at', { ascending: false });
-  }
+  const { data, error } = q.trim()
+    ? await base.or(`name.ilike.%${q.trim()}%,mmp_id.ilike.%${q.trim()}%`)
+    : await base.order('created_at', { ascending: false });
 
-  const { data, error } = await query;
   if (error) return [];
-  return (data ?? []).map((r: any) => ({
+  return (data ?? []).map((r: { id: string; name: string; mmp_id?: string; hub?: string; month?: string; year?: number }) => ({
     id: r.id,
     name: r.name,
     mmpId: r.mmp_id,
@@ -48,26 +47,60 @@ async function searchMMPs(q: string): Promise<MmpResult[]> {
 }
 
 async function searchSiteVisits(q: string): Promise<SiteVisitResult[]> {
-  let query = supabase
+  const trim = q.trim();
+  const base = supabase
     .from('site_visits')
     .select('id, site_name, site_code, state, locality')
     .limit(20);
 
-  if (q.trim()) {
-    query = query.ilike('site_name', `%${q.trim()}%`);
+  let rows: { id: string; site_name?: string; site_code?: string; state?: string; locality?: string }[] = [];
+
+  if (!trim) {
+    const { data } = await base.order('created_at', { ascending: false });
+    rows = data ?? [];
+  } else if (UUID_PATTERN.test(trim)) {
+    const [byId, byName] = await Promise.all([
+      supabase
+        .from('site_visits')
+        .select('id, site_name, site_code, state, locality')
+        .eq('id', trim)
+        .limit(1),
+      base.ilike('site_name', `%${trim}%`),
+    ]);
+    const ids = new Set<string>();
+    rows = [...(byId.data ?? []), ...(byName.data ?? [])].filter((r) => {
+      if (ids.has(r.id)) return false;
+      ids.add(r.id);
+      return true;
+    });
   } else {
-    query = query.order('created_at', { ascending: false });
+    const { data } = await base.ilike('site_name', `%${trim}%`);
+    rows = data ?? [];
   }
 
-  const { data, error } = await query;
-  if (error) return [];
-  return (data ?? []).map((r: any) => ({
+  return rows.map((r) => ({
     id: r.id,
     siteName: r.site_name || 'Unnamed Site',
     siteCode: r.site_code,
     state: r.state,
     locality: r.locality,
   }));
+}
+
+async function fetchMmpLabels(ids: string[]): Promise<Record<string, string>> {
+  if (ids.length === 0) return {};
+  const { data } = await supabase.from('mmp_files').select('id, name').in('id', ids);
+  const map: Record<string, string> = {};
+  for (const r of data ?? []) map[r.id] = r.name;
+  return map;
+}
+
+async function fetchSvLabels(ids: string[]): Promise<Record<string, string>> {
+  if (ids.length === 0) return {};
+  const { data } = await supabase.from('site_visits').select('id, site_name').in('id', ids);
+  const map: Record<string, string> = {};
+  for (const r of data ?? []) map[r.id] = r.site_name || r.id;
+  return map;
 }
 
 function useDebounce<T>(value: T, delay = 300): T {
@@ -152,9 +185,7 @@ function SearchDropdown<T>({
                     'w-full text-left px-3 py-2 text-xs hover:bg-accent transition-colors flex items-center justify-between gap-2',
                     selected && 'bg-accent/50',
                   )}
-                  onClick={() => {
-                    onToggle(id);
-                  }}
+                  onClick={() => onToggle(id)}
                   data-testid={`${testPrefix}-option-${id}`}
                 >
                   <span className="flex-1 min-w-0">{renderItem(item)}</span>
@@ -188,6 +219,25 @@ export function LinkedEntitiesSection({
   const debouncedMmpSearch = useDebounce(mmpSearch);
   const debouncedSvSearch = useDebounce(svSearch);
 
+  const [resolvedMmpLabels, setResolvedMmpLabels] = useState<Record<string, string>>({});
+  const [resolvedSvLabels, setResolvedSvLabels] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    const missing = relatedMMPs.filter((id) => !resolvedMmpLabels[id]);
+    if (missing.length === 0) return;
+    fetchMmpLabels(missing).then((map) =>
+      setResolvedMmpLabels((prev) => ({ ...prev, ...map })),
+    );
+  }, [relatedMMPs.join(',')]);
+
+  useEffect(() => {
+    const missing = relatedSiteVisits.filter((id) => !resolvedSvLabels[id]);
+    if (missing.length === 0) return;
+    fetchSvLabels(missing).then((map) =>
+      setResolvedSvLabels((prev) => ({ ...prev, ...map })),
+    );
+  }, [relatedSiteVisits.join(',')]);
+
   const mmpQuery = useQuery({
     queryKey: ['mmp_search', debouncedMmpSearch],
     queryFn: () => searchMMPs(debouncedMmpSearch),
@@ -203,8 +253,21 @@ export function LinkedEntitiesSection({
   const mmpResults: MmpResult[] = mmpQuery.data ?? [];
   const svResults: SiteVisitResult[] = svQuery.data ?? [];
 
-  const selectedMmpItems = mmpResults.filter((m) => relatedMMPs.includes(m.id));
-  const selectedSvItems = svResults.filter((sv) => relatedSiteVisits.includes(sv.id));
+  useEffect(() => {
+    if (mmpResults.length > 0) {
+      const newLabels: Record<string, string> = {};
+      for (const m of mmpResults) newLabels[m.id] = m.name;
+      setResolvedMmpLabels((prev) => ({ ...prev, ...newLabels }));
+    }
+  }, [mmpResults]);
+
+  useEffect(() => {
+    if (svResults.length > 0) {
+      const newLabels: Record<string, string> = {};
+      for (const sv of svResults) newLabels[sv.id] = sv.siteName;
+      setResolvedSvLabels((prev) => ({ ...prev, ...newLabels }));
+    }
+  }, [svResults]);
 
   function toggleMmp(id: string) {
     if (relatedMMPs.includes(id)) {
@@ -253,12 +316,10 @@ export function LinkedEntitiesSection({
               MMPs
             </p>
 
-            {/* Selected MMP chips */}
             {relatedMMPs.length > 0 && (
               <div className="flex flex-wrap gap-1.5">
                 {relatedMMPs.map((id) => {
-                  const item = mmpResults.find((m) => m.id === id);
-                  const label = item ? item.name : id;
+                  const label = resolvedMmpLabels[id] ?? id;
                   return (
                     <span
                       key={id}
@@ -282,7 +343,7 @@ export function LinkedEntitiesSection({
             )}
 
             <SearchDropdown<MmpResult>
-              placeholder="Search MMPs by name…"
+              placeholder="Search by name or code…"
               selectedIds={relatedMMPs}
               onToggle={toggleMmp}
               results={mmpResults}
@@ -294,9 +355,9 @@ export function LinkedEntitiesSection({
               renderItem={(m) => (
                 <span className="flex flex-col">
                   <span className="font-medium truncate">{m.name}</span>
-                  {(m.hub || m.month) && (
+                  {(m.mmpId || m.hub || m.month) && (
                     <span className="text-muted-foreground">
-                      {[m.hub, m.month && m.year ? `${m.month} ${m.year}` : m.month].filter(Boolean).join(' · ')}
+                      {[m.mmpId, m.hub, m.month && m.year ? `${m.month} ${m.year}` : m.month].filter(Boolean).join(' · ')}
                     </span>
                   )}
                 </span>
@@ -311,12 +372,10 @@ export function LinkedEntitiesSection({
               Site Visits
             </p>
 
-            {/* Selected site visit chips */}
             {relatedSiteVisits.length > 0 && (
               <div className="flex flex-wrap gap-1.5">
                 {relatedSiteVisits.map((id) => {
-                  const item = svResults.find((sv) => sv.id === id);
-                  const label = item ? item.siteName : id;
+                  const label = resolvedSvLabels[id] ?? id;
                   return (
                     <span
                       key={id}
@@ -340,7 +399,7 @@ export function LinkedEntitiesSection({
             )}
 
             <SearchDropdown<SiteVisitResult>
-              placeholder="Search site visits by name…"
+              placeholder="Search by site name or visit ID…"
               selectedIds={relatedSiteVisits}
               onToggle={toggleSv}
               results={svResults}
@@ -352,9 +411,9 @@ export function LinkedEntitiesSection({
               renderItem={(sv) => (
                 <span className="flex flex-col">
                   <span className="font-medium truncate">{sv.siteName}</span>
-                  {(sv.state || sv.locality) && (
+                  {(sv.state || sv.locality || sv.siteCode) && (
                     <span className="text-muted-foreground">
-                      {[sv.locality, sv.state].filter(Boolean).join(', ')}
+                      {[sv.siteCode, sv.locality, sv.state].filter(Boolean).join(', ')}
                     </span>
                   )}
                 </span>
