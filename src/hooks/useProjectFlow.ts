@@ -177,11 +177,13 @@ export function useProjectFlow(project: Project): UseProjectFlowReturn {
       const nextStage = effectiveStages[nextIndex];
       if (!nextStage) throw new Error('No next stage found');
 
-      // Insert log entry
+      // Insert log entry recording the stage being COMPLETED (current stage),
+      // so each completed stage node can show who advanced it and when.
+      const completedStage = effectiveStages[resolvedIndex];
       const { error: logError } = await supabase.from('project_flow_log').insert({
         project_id: project.id,
-        stage_id: nextStage.id,
-        stage_label: nextStage.label,
+        stage_id: completedStage.id,
+        stage_label: completedStage.label,
         advanced_by: currentUser.id,
         notes: notes || null,
       });
