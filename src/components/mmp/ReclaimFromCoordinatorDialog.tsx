@@ -113,12 +113,17 @@ export const ReclaimFromCoordinatorDialog: React.FC<ReclaimFromCoordinatorDialog
       console.warn('[Reclaim] RPC unavailable, falling back to direct query:', rpcError?.message);
       const { data: entries } = await supabase
         .from('mmp_site_entries')
-        .select('forwarded_to_user_id, accepted_by')
-        .eq('mmp_file_id', mmpId);
+        .select('forwarded_to_user_id, accepted_by, additional_data')
+        .eq('mmp_file_id', mmpId)
+        .limit(5000);
 
       const coordMap = new Map<string, number>();
       (entries || []).forEach((entry: any) => {
-        const coordId = entry.forwarded_to_user_id || entry.accepted_by;
+        // Mirror the same priority used in mmpActions: forwarded_to_user_id → additional_data.assigned_to → accepted_by
+        const coordId =
+          entry.forwarded_to_user_id ||
+          entry.additional_data?.assigned_to ||
+          (entry.accepted_by && entry.accepted_by.match(/^[0-9a-f-]{36}$/i) ? entry.accepted_by : null);
         if (coordId) coordMap.set(coordId, (coordMap.get(coordId) || 0) + 1);
       });
 
