@@ -87,6 +87,7 @@ interface FlowLogRow {
 
 interface QueryFilters {
   projectType: string;
+  pmFilter: string;
   startFrom: string;
   startTo: string;
 }
@@ -104,33 +105,33 @@ async function fetchAnalyticsData(filters: QueryFilters): Promise<AnalyticsData>
   if (filters.projectType !== 'all') {
     q = q.eq('project_type', filters.projectType);
   }
-  if (filters.startFrom) {
-    q = q.gte('start_date', filters.startFrom);
-  }
-  if (filters.startTo) {
-    q = q.lte('start_date', filters.startTo);
+  if (filters.pmFilter !== 'all') {
+    q = q.eq('team->>projectManager', filters.pmFilter);
   }
   if (filters.startFrom || filters.startTo) {
     q = q.not('start_date', 'is', null);
+    if (filters.startFrom) q = q.gte('start_date', filters.startFrom);
+    if (filters.startTo) q = q.lte('start_date', filters.startTo);
   }
 
-  const [projRes, logRes] = await Promise.all([
-    q,
-    supabase
-      .from('project_flow_log')
-      .select('project_id, advanced_at')
-      .order('advanced_at', { ascending: false }),
-  ]);
-
+  const projRes = await q;
   if (projRes.error) throw new Error(projRes.error.message);
 
   const projects = (projRes.data ?? []) as ProjectRow[];
+  const relevantIds = projects.map(p => p.id);
 
-  const relevantIds = new Set(projects.map(p => p.id));
-  const latestAdvancedAt: Record<string, string> = {};
-  for (const row of (logRes.data ?? []) as FlowLogRow[]) {
-    if (relevantIds.has(row.project_id) && !latestAdvancedAt[row.project_id]) {
-      latestAdvancedAt[row.project_id] = row.advanced_at;
+  let latestAdvancedAt: Record<string, string> = {};
+  if (relevantIds.length > 0) {
+    const { data: logData } = await supabase
+      .from('project_flow_log')
+      .select('project_id, advanced_at')
+      .in('project_id', relevantIds)
+      .order('advanced_at', { ascending: false });
+
+    for (const row of (logData ?? []) as FlowLogRow[]) {
+      if (!latestAdvancedAt[row.project_id]) {
+        latestAdvancedAt[row.project_id] = row.advanced_at;
+      }
     }
   }
 
@@ -170,30 +171,21 @@ export default function ProjectAnalytics() {
   const [startTo, setStartTo] = useState('');
   const [stallSort, setStallSort] = useState<{ field: SortField; dir: SortDir }>({ field: 'daysSince', dir: 'desc' });
 
-  const queryFilters: QueryFilters = { projectType: typeFilter, startFrom, startTo };
-
   const { data, isLoading } = useQuery({
-    queryKey: ['project_analytics', typeFilter, startFrom, startTo],
-    queryFn: () => fetchAnalyticsData(queryFilters),
+    queryKey: ['project_analytics', typeFilter, pmFilter, startFrom, startTo],
+    queryFn: () => fetchAnalyticsData({ projectType: typeFilter, pmFilter, startFrom, startTo }),
     staleTime: 60_000,
   });
 
-  const filteredProjects = useMemo(() => {
-    if (!data) return [];
-    if (pmFilter === 'all') return data.projects;
-    return data.projects.filter(p => {
-      const pm = (p.team as { projectManager?: string } | null)?.projectManager ?? '';
-      return pm === pmFilter;
-    });
-  }, [data, pmFilter]);
+  const projects = data?.projects ?? [];
 
   const stats = useMemo(() => {
-    const total = filteredProjects.length;
-    const active = filteredProjects.filter(p => p.status === 'active').length;
-    const completed = filteredProjects.filter(p => p.status === 'completed').length;
-    const onHoldOrCancelled = filteredProjects.filter(p => p.status === 'onHold' || p.status === 'cancelled').length;
+    const total = projects.length;
+    const active = projects.filter(p => p.status === 'active').length;
+    const completed = projects.filter(p => p.status === 'completed').length;
+    const onHoldOrCancelled = projects.filter(p => p.status === 'onHold' || p.status === 'cancelled').length;
     const now = new Date();
-    const stalled = filteredProjects.filter(p => {
+    const stalled = projects.filter(p => {
       if (p.status === 'completed' || p.status === 'cancelled') return false;
       const lastAdv = data?.latestAdvancedAt[p.id];
       if (!lastAdv) return false;
@@ -201,12 +193,12 @@ export default function ProjectAnalytics() {
       return d ? differenceInDays(now, d) >= STALL_THRESHOLD_DAYS : false;
     }).length;
     return { total, active, completed, onHoldOrCancelled, stalled };
-  }, [filteredProjects, data]);
+  }, [projects, data]);
 
   const stageDistribution = useMemo(() => {
     type StageEntry = { label: string; active: number; completed: number; onHold: number; draft: number; cancelled: number };
     const counts: Record<string, StageEntry> = {};
-    for (const p of filteredProjects) {
+    for (const p of projects) {
       const flow = getProjectFlow(normaliseProjectType(p.project_type));
       const stageId = p.current_flow_stage ?? flow.stages[0]?.id ?? 'unknown';
       const stage = flow.stages.find(s => s.id === stageId);
@@ -218,16 +210,15 @@ export default function ProjectAnalytics() {
     }
     return Object.values(counts)
       .sort((a, b) => {
-        const totalA = a.active + a.completed + a.onHold + a.draft + a.cancelled;
-        const totalB = b.active + b.completed + b.onHold + b.draft + b.cancelled;
-        return totalB - totalA;
+        const tot = (e: StageEntry) => e.active + e.completed + e.onHold + e.draft + e.cancelled;
+        return tot(b) - tot(a);
       })
       .slice(0, 15);
-  }, [filteredProjects]);
+  }, [projects]);
 
-  const completionRateByType = useMemo(() => {
+  const completionByType = useMemo(() => {
     const byType: Record<string, { label: string; total: number; reachedFinal: number }> = {};
-    for (const p of filteredProjects) {
+    for (const p of projects) {
       const type = normaliseProjectType(p.project_type);
       const flow = getProjectFlow(type);
       const label = flow.label.replace(' (Legacy)', '');
@@ -244,12 +235,12 @@ export default function ProjectAnalytics() {
         rate: v.total > 0 ? Math.round((v.reachedFinal / v.total) * 100) : 0,
       }))
       .sort((a, b) => b.total - a.total);
-  }, [filteredProjects]);
+  }, [projects]);
 
   const stalledProjects = useMemo(() => {
     if (!data) return [];
     const now = new Date();
-    return filteredProjects
+    return projects
       .filter(p => {
         if (p.status === 'completed' || p.status === 'cancelled') return false;
         const lastAdv = data.latestAdvancedAt[p.id];
@@ -284,16 +275,16 @@ export default function ProjectAnalytics() {
         else cmp = a.daysSince - b.daysSince;
         return dir === 'asc' ? cmp : -cmp;
       });
-  }, [filteredProjects, data, stallSort]);
+  }, [projects, data, stallSort]);
 
   const uniquePMs = useMemo(() => {
     const names = new Set<string>();
-    for (const p of data?.projects ?? []) {
+    for (const p of projects) {
       const pm = (p.team as { projectManager?: string } | null)?.projectManager;
       if (pm) names.add(pm);
     }
     return Array.from(names).sort();
-  }, [data?.projects]);
+  }, [projects]);
 
   const handleSort = useCallback((field: SortField) => {
     setStallSort(prev => ({
@@ -303,7 +294,7 @@ export default function ProjectAnalytics() {
   }, []);
 
   const downloadCSV = useCallback(() => {
-    const rows = filteredProjects.map(p => {
+    const rows = projects.map(p => {
       const flow = getProjectFlow(normaliseProjectType(p.project_type));
       const stageId = p.current_flow_stage ?? flow.stages[0]?.id ?? '';
       const stage = flow.stages.find(s => s.id === stageId);
@@ -337,7 +328,7 @@ export default function ProjectAnalytics() {
     a.download = `project-analytics-${format(new Date(), 'yyyy-MM-dd')}.csv`;
     a.click();
     URL.revokeObjectURL(url);
-  }, [filteredProjects, data]);
+  }, [projects, data]);
 
   if (isLoading) {
     return (
@@ -383,7 +374,7 @@ export default function ProjectAnalytics() {
           variant="outline"
           size="sm"
           onClick={downloadCSV}
-          disabled={filteredProjects.length === 0}
+          disabled={projects.length === 0}
           data-testid="button-export-csv"
         >
           <Download className="h-3.5 w-3.5 mr-1.5" />
@@ -466,7 +457,7 @@ export default function ProjectAnalytics() {
             )}
 
             <div className="ml-auto text-xs text-muted-foreground self-end pb-1">
-              {filteredProjects.length} project{filteredProjects.length !== 1 ? 's' : ''} shown
+              {projects.length} project{projects.length !== 1 ? 's' : ''} shown
             </div>
           </div>
         </CardContent>
@@ -565,18 +556,18 @@ export default function ProjectAnalytics() {
           </CardContent>
         </Card>
 
-        {/* Completion Rate by Type — percentage of projects at final stage */}
+        {/* Completion Rate by Type — dual bars (total vs reached final) + % in tooltip */}
         <Card>
           <CardHeader className="pb-2 pt-4 px-4">
             <CardTitle className="text-sm font-semibold">Completion Rate by Type</CardTitle>
-            <p className="text-xs text-muted-foreground">% of projects at final stage or completed, per type</p>
+            <p className="text-xs text-muted-foreground">Completed / final-stage vs. total, per project type</p>
           </CardHeader>
           <CardContent className="px-2 pb-4">
-            {completionRateByType.length === 0 ? (
+            {completionByType.length === 0 ? (
               <div className="h-52 flex items-center justify-center text-xs text-muted-foreground">No data</div>
             ) : (
               <ResponsiveContainer width="100%" height={240}>
-                <BarChart data={completionRateByType} margin={{ top: 4, right: 8, left: -20, bottom: 70 }}>
+                <BarChart data={completionByType} margin={{ top: 4, right: 8, left: -20, bottom: 70 }}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} />
                   <XAxis
                     dataKey="label"
@@ -585,22 +576,24 @@ export default function ProjectAnalytics() {
                     textAnchor="end"
                     interval={0}
                   />
-                  <YAxis
-                    tick={{ fontSize: 10 }}
-                    allowDecimals={false}
-                    domain={[0, 100]}
-                    tickFormatter={(v) => `${v}%`}
-                  />
+                  <YAxis tick={{ fontSize: 10 }} allowDecimals={false} />
                   <Tooltip
                     contentStyle={{ fontSize: 12 }}
-                    formatter={(v: number) => [`${v}%`, 'Completion Rate']}
+                    formatter={(v: number, name: string, props: { payload?: { rate?: number } }) => {
+                      if (name === 'reachedFinal') {
+                        const rate = props.payload?.rate ?? 0;
+                        return [`${v} (${rate}%)`, 'Completed / Final Stage'];
+                      }
+                      return [v, 'Total'];
+                    }}
                   />
                   <Legend
                     iconSize={10}
                     wrapperStyle={{ fontSize: 11, paddingTop: 4 }}
-                    formatter={() => 'Completion Rate (%)'}
+                    formatter={(v) => v === 'reachedFinal' ? 'Completed / Final Stage' : 'Total'}
                   />
-                  <Bar dataKey="rate" fill="#1D3461" radius={[3, 3, 0, 0]} />
+                  <Bar dataKey="total" fill="#cbd5e1" radius={[3, 3, 0, 0]} />
+                  <Bar dataKey="reachedFinal" fill="#1D3461" radius={[3, 3, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             )}
