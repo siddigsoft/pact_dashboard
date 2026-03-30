@@ -4067,14 +4067,16 @@ function CoverageScopedNotifyDialog({ open, onClose, ctx }: {
     setPriority('normal'); setOpenGroups(new Set());
     setLoading(true);
 
+    const isRealDcName = !!ctx.dcName && ctx.dcName !== '—' && ctx.dcName.trim().length > 0;
+
     const loadProfiles = async () => {
       try {
-        if (ctx.dcName) {
+        if (isRealDcName) {
           // Look up this specific data collector by name
           const { data } = await supabase
             .from('profiles')
             .select('id, full_name, email, role')
-            .ilike('full_name', ctx.dcName)
+            .ilike('full_name', ctx.dcName!)
             .eq('status', 'approved')
             .limit(5);
           const found = (data ?? []) as typeof profiles;
@@ -4616,8 +4618,8 @@ function CoverageTree({ entries, onNotify }: { entries: CoverageEntry[]; onNotif
                                                         <span className="text-[9px] font-mono bg-amber-100 text-amber-700 border border-amber-200 px-2 py-0.5 rounded-full">{sites.length}</span>
                                                       </button>
                                                       {onNotify && (
-                                                        <button onClick={e => { e.stopPropagation(); onNotify({ label: `${dc} — ${sites.length} site${sites.length !== 1 ? 's' : ''}`, mmpName: mmp, status: advSts, hubName: hub, stateName: state, dcName: dc, siteCount: sites.length }); }}
-                                                          title={`Notify ${dc}`} data-testid={`coverage-notify-dc-${dKey}`}
+                                                        <button onClick={e => { e.stopPropagation(); const realDc = dc !== '—' ? dc : undefined; onNotify({ label: realDc ? `${dc} — ${sites.length} site${sites.length !== 1 ? 's' : ''}` : `Unclaimed sites — ${sites.length} site${sites.length !== 1 ? 's' : ''}`, mmpName: mmp, status: advSts, hubName: hub, stateName: state, dcName: realDc, siteCount: sites.length }); }}
+                                                          title={`Notify ${dc !== '—' ? dc : 'about unclaimed sites'}`} data-testid={`coverage-notify-dc-${dKey}`}
                                                           className="shrink-0 p-1.5 mr-2 rounded text-amber-500 hover:text-violet-600 hover:bg-violet-50 transition-colors">
                                                           <Bell className="h-3.5 w-3.5" />
                                                         </button>
