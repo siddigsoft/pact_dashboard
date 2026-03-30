@@ -15,7 +15,6 @@ import {
   BarChart3,
   FolderKanban,
   CheckCircle2,
-  Clock3,
   AlertTriangle,
   XCircle,
   Download,
@@ -76,6 +75,7 @@ interface ProjectRow {
   project_type: string;
   status: string;
   start_date: string | null;
+  end_date: string | null;
   current_flow_stage: string | null;
   team: { projectManager?: string } | null;
 }
@@ -85,16 +85,37 @@ interface FlowLogRow {
   advanced_at: string;
 }
 
+interface QueryFilters {
+  projectType: string;
+  startFrom: string;
+  startTo: string;
+}
+
 interface AnalyticsData {
   projects: ProjectRow[];
   latestAdvancedAt: Record<string, string>;
 }
 
-async function fetchAnalyticsData(): Promise<AnalyticsData> {
+async function fetchAnalyticsData(filters: QueryFilters): Promise<AnalyticsData> {
+  let q = supabase
+    .from('projects')
+    .select('id, name, project_code, project_type, status, start_date, end_date, current_flow_stage, team');
+
+  if (filters.projectType !== 'all') {
+    q = q.eq('project_type', filters.projectType);
+  }
+  if (filters.startFrom) {
+    q = q.gte('start_date', filters.startFrom);
+  }
+  if (filters.startTo) {
+    q = q.lte('start_date', filters.startTo);
+  }
+  if (filters.startFrom || filters.startTo) {
+    q = q.not('start_date', 'is', null);
+  }
+
   const [projRes, logRes] = await Promise.all([
-    supabase
-      .from('projects')
-      .select('id, name, project_code, project_type, status, start_date, end_date, current_flow_stage, team'),
+    q,
     supabase
       .from('project_flow_log')
       .select('project_id, advanced_at')
@@ -105,9 +126,10 @@ async function fetchAnalyticsData(): Promise<AnalyticsData> {
 
   const projects = (projRes.data ?? []) as ProjectRow[];
 
+  const relevantIds = new Set(projects.map(p => p.id));
   const latestAdvancedAt: Record<string, string> = {};
   for (const row of (logRes.data ?? []) as FlowLogRow[]) {
-    if (!latestAdvancedAt[row.project_id]) {
+    if (relevantIds.has(row.project_id) && !latestAdvancedAt[row.project_id]) {
       latestAdvancedAt[row.project_id] = row.advanced_at;
     }
   }
@@ -148,26 +170,22 @@ export default function ProjectAnalytics() {
   const [startTo, setStartTo] = useState('');
   const [stallSort, setStallSort] = useState<{ field: SortField; dir: SortDir }>({ field: 'daysSince', dir: 'desc' });
 
+  const queryFilters: QueryFilters = { projectType: typeFilter, startFrom, startTo };
+
   const { data, isLoading } = useQuery({
-    queryKey: ['project_analytics'],
-    queryFn: fetchAnalyticsData,
+    queryKey: ['project_analytics', typeFilter, startFrom, startTo],
+    queryFn: () => fetchAnalyticsData(queryFilters),
     staleTime: 60_000,
   });
 
   const filteredProjects = useMemo(() => {
     if (!data) return [];
-    return data.projects.filter((p) => {
-      if (typeFilter !== 'all' && normaliseProjectType(p.project_type) !== typeFilter) return false;
-      if (pmFilter !== 'all') {
-        const pm = (p.team as { projectManager?: string } | null)?.projectManager ?? '';
-        if (pm !== pmFilter) return false;
-      }
-      const d = safeDate(p.start_date);
-      if (startFrom && d && d < parseISO(startFrom)) return false;
-      if (startTo && d && d > parseISO(startTo)) return false;
-      return true;
+    if (pmFilter === 'all') return data.projects;
+    return data.projects.filter(p => {
+      const pm = (p.team as { projectManager?: string } | null)?.projectManager ?? '';
+      return pm === pmFilter;
     });
-  }, [data, typeFilter, pmFilter, startFrom, startTo]);
+  }, [data, pmFilter]);
 
   const stats = useMemo(() => {
     const total = filteredProjects.length;
@@ -207,7 +225,7 @@ export default function ProjectAnalytics() {
       .slice(0, 15);
   }, [filteredProjects]);
 
-  const completionByType = useMemo(() => {
+  const completionRateByType = useMemo(() => {
     const byType: Record<string, { label: string; total: number; reachedFinal: number }> = {};
     for (const p of filteredProjects) {
       const type = normaliseProjectType(p.project_type);
@@ -300,6 +318,7 @@ export default function ProjectAnalytics() {
         'Current Stage': stage?.label ?? stageId,
         'At Final Stage': isAtFinalStage(p) ? 'Yes' : 'No',
         'Start Date': fmtDate(p.start_date),
+        'End Date': fmtDate(p.end_date),
         'Project Manager': (p.team as { projectManager?: string } | null)?.projectManager ?? '',
         'Last Stage Advancement': lastAdv ? fmtDate(lastAdv) : '',
         'Days Since Last Advancement': daysSince,
@@ -504,7 +523,7 @@ export default function ProjectAnalytics() {
 
       {/* Charts Row */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {/* Stage Distribution — stacked bar, coloured by status */}
+        {/* Stage Distribution — stacked bar coloured by status */}
         <Card>
           <CardHeader className="pb-2 pt-4 px-4">
             <CardTitle className="text-sm font-semibold">Stage Distribution</CardTitle>
@@ -532,7 +551,13 @@ export default function ProjectAnalytics() {
                     formatter={(v) => STATUS_LABELS[v as string] ?? v}
                   />
                   {Object.entries(STATUS_COLORS).map(([status, color]) => (
-                    <Bar key={status} dataKey={status} stackId="a" fill={color} radius={status === 'cancelled' ? [3, 3, 0, 0] : [0, 0, 0, 0]} />
+                    <Bar
+                      key={status}
+                      dataKey={status}
+                      stackId="a"
+                      fill={color}
+                      radius={status === 'cancelled' ? [3, 3, 0, 0] : [0, 0, 0, 0]}
+                    />
                   ))}
                 </BarChart>
               </ResponsiveContainer>
@@ -540,18 +565,18 @@ export default function ProjectAnalytics() {
           </CardContent>
         </Card>
 
-        {/* Completion Rate by Type — checks if project reached final stage or is status=completed */}
+        {/* Completion Rate by Type — percentage of projects at final stage */}
         <Card>
           <CardHeader className="pb-2 pt-4 px-4">
             <CardTitle className="text-sm font-semibold">Completion Rate by Type</CardTitle>
-            <p className="text-xs text-muted-foreground">Projects at final stage or completed, per type</p>
+            <p className="text-xs text-muted-foreground">% of projects at final stage or completed, per type</p>
           </CardHeader>
           <CardContent className="px-2 pb-4">
-            {completionByType.length === 0 ? (
+            {completionRateByType.length === 0 ? (
               <div className="h-52 flex items-center justify-center text-xs text-muted-foreground">No data</div>
             ) : (
               <ResponsiveContainer width="100%" height={240}>
-                <BarChart data={completionByType} margin={{ top: 4, right: 8, left: -20, bottom: 70 }}>
+                <BarChart data={completionRateByType} margin={{ top: 4, right: 8, left: -20, bottom: 70 }}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} />
                   <XAxis
                     dataKey="label"
@@ -560,18 +585,22 @@ export default function ProjectAnalytics() {
                     textAnchor="end"
                     interval={0}
                   />
-                  <YAxis tick={{ fontSize: 10 }} allowDecimals={false} />
+                  <YAxis
+                    tick={{ fontSize: 10 }}
+                    allowDecimals={false}
+                    domain={[0, 100]}
+                    tickFormatter={(v) => `${v}%`}
+                  />
                   <Tooltip
                     contentStyle={{ fontSize: 12 }}
-                    formatter={(v: number, name: string) => [v, name === 'reachedFinal' ? 'Completed / Final Stage' : 'Total']}
+                    formatter={(v: number) => [`${v}%`, 'Completion Rate']}
                   />
                   <Legend
                     iconSize={10}
                     wrapperStyle={{ fontSize: 11, paddingTop: 4 }}
-                    formatter={(v) => v === 'reachedFinal' ? 'Completed / Final Stage' : 'Total'}
+                    formatter={() => 'Completion Rate (%)'}
                   />
-                  <Bar dataKey="total" fill="#cbd5e1" radius={[3, 3, 0, 0]} />
-                  <Bar dataKey="reachedFinal" fill="#1D3461" radius={[3, 3, 0, 0]} />
+                  <Bar dataKey="rate" fill="#1D3461" radius={[3, 3, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             )}
@@ -649,7 +678,7 @@ export default function ProjectAnalytics() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {stalledProjects.map((p) => (
+                  {stalledProjects.map(p => (
                     <TableRow key={p.id} data-testid={`row-stalled-${p.id}`}>
                       <TableCell className="py-2">
                         <div className="font-medium text-sm truncate max-w-[180px]" title={p.name}>{p.name}</div>
