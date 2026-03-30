@@ -430,7 +430,14 @@ const AuthForm = ({ mode }: AuthFormProps) => {
               description: t('notifications.auth.loginSuccessDesc'),
               variant: "default"
             });
-            navigate('/dashboard');
+            // Super admins land on System Monitoring; everyone else on Dashboard
+            try {
+              const { data: profile } = await supabase.from('profiles').select('role').eq('id', authData.user.id).single();
+              const r = profile?.role ? profile.role.toLowerCase().replace(/[\s()]/g, '_') : '';
+              navigate((r === 'super_admin' || r === 'superadmin') ? '/admin/monitoring' : '/dashboard');
+            } catch {
+              navigate('/dashboard');
+            }
           }
         }
       }
@@ -476,7 +483,17 @@ const AuthForm = ({ mode }: AuthFormProps) => {
     setShowMFAChallenge(false);
     setPendingLoginEmail('');
     setPendingLoginPassword('');
-    
+
+    // Super admins land on System Monitoring; everyone else on Dashboard
+    try {
+      const { data: { user: mfaUser } } = await supabase.auth.getUser();
+      if (mfaUser) {
+        const { data: profile } = await supabase.from('profiles').select('role').eq('id', mfaUser.id).single();
+        const r = profile?.role ? profile.role.toLowerCase().replace(/[\s()]/g, '_') : '';
+        navigate((r === 'super_admin' || r === 'superadmin') ? '/admin/monitoring' : '/dashboard');
+        return;
+      }
+    } catch { /* fall through */ }
     navigate('/dashboard');
   };
 

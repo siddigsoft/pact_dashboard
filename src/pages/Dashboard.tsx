@@ -1,5 +1,4 @@
 import { useEffect, useState, useMemo, lazy, Suspense } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { useSiteVisitRemindersUI } from '@/hooks/use-site-visit-reminders-ui';
 import { useAppContext } from '@/context/AppContext';
 import { useSettings } from '@/context/settings/SettingsContext';
@@ -30,24 +29,11 @@ const normalizeRole = (role: string): string => {
 };
 
 const Dashboard = () => {
-  const navigate = useNavigate();
   const { SiteVisitRemindersDialog, showDueReminders } = useSiteVisitRemindersUI();
   const { roles, currentUser } = useAppContext();
   const { dashboardPreferences, getDefaultZoneForRole, userSettings } = useSettings();
 
-  // Super admins land on System Monitoring unless they explicitly chose a different page in Settings
-  useEffect(() => {
-    if (!currentUser) return;
-    const normalized = currentUser.role ? normalizeRole(currentUser.role) : '';
-    const isSuperAdmin = normalized === 'superadmin' || normalized === 'super_admin'
-      || roles?.some(r => { const n = normalizeRole(r); return n === 'superadmin' || n === 'super_admin'; });
-    if (!isSuperAdmin) return;
-    const savedPage = userSettings?.settings?.defaultPage;
-    // Redirect to monitoring if: no preference saved, or preference is explicitly "monitoring"
-    if (!savedPage || savedPage === 'monitoring') {
-      navigate('/admin/monitoring', { replace: true });
-    }
-  }, [currentUser, roles, userSettings, navigate]);
+  // Dashboard stays as-is — super admin landing redirect is handled at login time in AuthForm
 
   const defaultZone = useMemo((): DashboardZone => {
     const normalizedCurrentRole = currentUser?.role ? normalizeRole(currentUser.role) : undefined;
