@@ -201,6 +201,8 @@ function MonitoringContent({ isSuperAdmin }: { isSuperAdmin: boolean }) {
   const [workflowNotes, setWorkflowNotes] = useState('');
   const [statusDialog, setStatusDialog] = useState<{ actions: DashboardAction[]; targetStatus: DashboardStatus; label: string } | null>(null);
   const [notifyOpen, setNotifyOpen] = useState(false);
+  // Debounce ref: prevents multiple rapid Realtime events from firing multiple fetches
+  const realtimeDebounce = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [coverageNotifyOpen, setCoverageNotifyOpen] = useState(false);
   const [notifyCategory, setNotifyCategory] = useState<{ label: string; items: DashboardAction[] } | null>(null);
   const [statusNotes, setStatusNotes] = useState('');
@@ -232,6 +234,7 @@ function MonitoringContent({ isSuperAdmin }: { isSuperAdmin: boolean }) {
   const { data: coverageData = [], isLoading: coverageLoading } = useQuery<CoverageEntry[]>({
     queryKey: ['advance-site-coverage'],
     staleTime: 0,
+    refetchOnWindowFocus: false,
     queryFn: async () => {
       const BATCH = 1000;
       let all: Record<string, unknown>[] = [];
@@ -430,12 +433,21 @@ function MonitoringContent({ isSuperAdmin }: { isSuperAdmin: boolean }) {
       }).filter(r => !filters.status || r.dashboard_status === filters.status);
     },
     refetchInterval: 90_000,
+    refetchIntervalInBackground: true,
+    refetchOnWindowFocus: false,
     staleTime: 30_000,
     retry: 1,
   });
 
   // ── Realtime refresh ───────────────────────────────────────────────────────
+  // Debounced: multiple rapid table events are collapsed into a single background refetch
   useEffect(() => {
+    const triggerSilentRefresh = () => {
+      if (realtimeDebounce.current) clearTimeout(realtimeDebounce.current);
+      realtimeDebounce.current = setTimeout(() => {
+        qc.invalidateQueries({ queryKey: ['/admin/monitoring/actions'] });
+      }, 2000);
+    };
     const tables = [
       'action_status_overrides','mmp_files','mmp_site_entries','site_visits',
       'site_visit_cost_submissions','operational_cost_submissions',
@@ -443,12 +455,13 @@ function MonitoringContent({ isSuperAdmin }: { isSuperAdmin: boolean }) {
     ];
     const channels = tables.map(table =>
       supabase.channel(`mon_${table}`)
-        .on('postgres_changes', { event: '*', schema: 'public', table }, () => {
-          qc.invalidateQueries({ queryKey: ['/admin/monitoring/actions'] });
-        })
+        .on('postgres_changes', { event: '*', schema: 'public', table }, triggerSilentRefresh)
         .subscribe()
     );
-    return () => { channels.forEach(ch => supabase.removeChannel(ch)); };
+    return () => {
+      if (realtimeDebounce.current) clearTimeout(realtimeDebounce.current);
+      channels.forEach(ch => supabase.removeChannel(ch));
+    };
   }, [qc]);
 
   // ── Stats ──────────────────────────────────────────────────────────────────
@@ -581,6 +594,8 @@ function MonitoringContent({ isSuperAdmin }: { isSuperAdmin: boolean }) {
       };
     },
     refetchInterval: 120_000,
+    refetchIntervalInBackground: true,
+    refetchOnWindowFocus: false,
     staleTime: 60_000,
   });
 
@@ -612,6 +627,8 @@ function MonitoringContent({ isSuperAdmin }: { isSuperAdmin: boolean }) {
       return { mmpStatusCounts, cycleStatusCounts, recentlyClosed, total: rows.length };
     },
     refetchInterval: 120_000,
+    refetchIntervalInBackground: true,
+    refetchOnWindowFocus: false,
     staleTime: 60_000,
   });
 
@@ -746,9 +763,17 @@ function MonitoringContent({ isSuperAdmin }: { isSuperAdmin: boolean }) {
                 {stats.critical > 0 ? `${stats.critical} CRITICAL` : 'SYSTEMS NORMAL'}
               </span>
             </div>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              9 modules · {allActions.length} total actions
-              {dataUpdatedAt ? ` · synced ${formatDistanceToNow(dataUpdatedAt, { addSuffix: true })}` : ''}
+            <p className="text-xs text-muted-foreground mt-0.5 flex items-center gap-2 flex-wrap">
+              <span>9 modules · {allActions.length} total actions</span>
+              {dataUpdatedAt && !isFetching && (
+                <span>· synced {formatDistanceToNow(dataUpdatedAt, { addSuffix: true })}</span>
+              )}
+              {isFetching && !isLoading && (
+                <span className="inline-flex items-center gap-1 text-emerald-600 font-medium">
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                  Syncing…
+                </span>
+              )}
             </p>
           </div>
         </div>
@@ -774,8 +799,8 @@ function MonitoringContent({ isSuperAdmin }: { isSuperAdmin: boolean }) {
               : <Wrench className="h-4 w-4 mr-1" />}
             Fix Hub Names
           </Button>
-          <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isFetching} data-testid="button-refresh">
-            <RefreshCw className={`h-4 w-4 mr-1 ${isFetching ? 'animate-spin' : ''}`} />Refresh
+          <Button variant="outline" size="sm" onClick={() => refetch()} data-testid="button-refresh">
+            <RefreshCw className="h-4 w-4 mr-1" />Refresh
           </Button>
           <Button variant="outline" size="sm" onClick={handleExportCSV} disabled={allActions.length === 0} data-testid="button-export-csv">
             <Download className="h-4 w-4 mr-1" />Export CSV
