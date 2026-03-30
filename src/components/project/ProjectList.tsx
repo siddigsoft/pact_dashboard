@@ -15,7 +15,8 @@ import {
   MapPin,
   UserCircle,
   DollarSign,
-  Eye
+  Eye,
+  GitBranch,
 } from 'lucide-react';
 
 import { Project } from '@/types/project';
@@ -30,6 +31,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { getProjectFlow, getFirstStageId, PROJECT_TYPE_OPTIONS } from '@/config/projectFlows';
 
 interface ProjectListProps {
   projects: Project[];
@@ -195,17 +197,14 @@ const ProjectList: React.FC<ProjectListProps> = ({
         
         <div className="flex flex-wrap gap-3 w-full md:w-auto">
           <Select value={typeFilter} onValueChange={setTypeFilter}>
-            <SelectTrigger className="w-full md:w-[180px]">
+            <SelectTrigger className="w-full md:w-[200px]">
               <SelectValue placeholder="Project Type" />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Types</SelectItem>
-              <SelectItem value="infrastructure">Infrastructure</SelectItem>
-              <SelectItem value="survey">Survey</SelectItem>
-              <SelectItem value="compliance">Compliance</SelectItem>
-              <SelectItem value="monitoring">Monitoring</SelectItem>
-              <SelectItem value="training">Training</SelectItem>
-              <SelectItem value="other">Other</SelectItem>
+              {PROJECT_TYPE_OPTIONS.map(opt => (
+                <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+              ))}
             </SelectContent>
           </Select>
           
@@ -308,6 +307,25 @@ const ProjectList: React.FC<ProjectListProps> = ({
                     {project.description}
                   </p>
                 )}
+
+                {/* Flow stage indicator */}
+                {(() => {
+                  const flowDef = getProjectFlow(project.projectType);
+                  const currentStageId = project.currentFlowStage ?? flowDef.stages[0]?.id;
+                  const stageIdx = flowDef.stages.findIndex(s => s.id === currentStageId);
+                  const stageName = flowDef.stages[stageIdx]?.label;
+                  const total = flowDef.stages.length;
+                  if (!stageName) return null;
+                  return (
+                    <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                      <GitBranch className="h-3 w-3 flex-shrink-0" />
+                      <span className="truncate">{stageName}</span>
+                      <span className="flex-shrink-0 text-muted-foreground/60">
+                        {stageIdx + 1}/{total}
+                      </span>
+                    </div>
+                  );
+                })()}
               </CardContent>
 
               {/* Zone 3: Footer - Quick actions */}

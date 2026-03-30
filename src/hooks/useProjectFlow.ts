@@ -17,16 +17,26 @@ export interface FlowLogEntry {
   notes: string | null;
 }
 
+export interface CustomStageEntry {
+  id: string;
+  skipped?: boolean;
+}
+
 export interface UseProjectFlowReturn {
   flowDef: FlowStage[];
+  activeStages: FlowStage[];
   currentStage: FlowStage | null;
   currentStageIndex: number;
   stageHistory: FlowLogEntry[];
   isLastStage: boolean;
   canAdvance: boolean;
+  canEditFlow: boolean;
   isLoading: boolean;
   isAdvancing: boolean;
+  isSavingCustom: boolean;
   advanceStage: (notes: string) => Promise<void>;
+  updateCustomStages: (customStages: CustomStageEntry[]) => Promise<void>;
+  getStageStatus: (stageId: string) => 'completed' | 'current' | 'skipped' | 'upcoming';
 }
 
 async function fetchFlowLog(projectId: string): Promise<FlowLogEntry[]> {
@@ -59,13 +69,65 @@ async function fetchFlowLog(projectId: string): Promise<FlowLogEntry[]> {
   }));
 }
 
+async function sendStageNotifications(
+  projectId: string,
+  projectName: string,
+  nextStageLabel: string,
+  teamMembers: string[],
+  advancedByName: string,
+) {
+  if (!teamMembers.length) return;
+
+  // Resolve team member profile IDs from full names
+  const { data: profiles } = await supabase
+    .from('profiles')
+    .select('id, full_name')
+    .in('full_name', teamMembers)
+    .eq('status', 'approved');
+
+  if (!profiles?.length) return;
+
+  const notifications = profiles.map((p: any) => ({
+    recipient_id: p.id,
+    user_id: p.id,
+    title_en: `Project Stage Advanced: ${projectName}`,
+    title_ar: `تقدم مرحلة المشروع: ${projectName}`,
+    message_en: `${advancedByName} advanced "${projectName}" to stage: ${nextStageLabel}`,
+    message_ar: `قام ${advancedByName} بتقديم "${projectName}" إلى المرحلة: ${nextStageLabel}`,
+    priority: 'normal',
+    action_url: `/projects/${projectId}`,
+    entity_id: projectId,
+    entity_type: 'project',
+    event_type: 'assignments',
+    status: 'pending',
+    email_sent: false,
+  }));
+
+  await supabase.from('notifications').insert(notifications);
+}
+
 export function useProjectFlow(project: Project): UseProjectFlowReturn {
   const { currentUser } = useUser();
   const { hasAnyRole } = useAuthorization();
   const queryClient = useQueryClient();
 
-  const flow = getProjectFlow(project.projectType);
-  const stages = flow.stages;
+  const defaultFlow = getProjectFlow(project.projectType);
+  const allDefaultStages = defaultFlow.stages;
+
+  // Build effective stage list: apply custom ordering/skips if present
+  const customEntries: CustomStageEntry[] = project.customFlowStages ?? [];
+  const hasCustom = customEntries.length > 0;
+
+  const effectiveStages: FlowStage[] = hasCustom
+    ? customEntries
+        .map(ce => ({ entry: ce, stage: allDefaultStages.find(s => s.id === ce.id) }))
+        .filter((x): x is { entry: CustomStageEntry; stage: FlowStage } => !!x.stage)
+        .filter(x => !x.entry.skipped)
+        .map(x => x.stage)
+    : allDefaultStages;
+
+  // Include all stages in flowDef (for the editing UI), active = non-skipped
+  const skippedIds = new Set(customEntries.filter(e => e.skipped).map(e => e.id));
 
   const historyQuery = useQuery({
     queryKey: ['project_flow_log', project.id],
@@ -75,21 +137,36 @@ export function useProjectFlow(project: Project): UseProjectFlowReturn {
 
   const stageHistory = historyQuery.data ?? [];
 
-  // Determine current stage from project record (authoritative source)
-  const currentStageId = project.currentFlowStage ?? stages[0]?.id;
-  const currentStageIndex = stages.findIndex(s => s.id === currentStageId);
+  // Current stage index in the ACTIVE (non-skipped) list
+  const currentStageId = project.currentFlowStage ?? effectiveStages[0]?.id;
+  const currentStageIndex = effectiveStages.findIndex(s => s.id === currentStageId);
   const resolvedIndex = currentStageIndex >= 0 ? currentStageIndex : 0;
-  const currentStage = stages[resolvedIndex] ?? null;
-  const isLastStage = resolvedIndex >= stages.length - 1;
+  const currentStage = effectiveStages[resolvedIndex] ?? null;
+  const isLastStage = resolvedIndex >= effectiveStages.length - 1;
 
-  // Permission: super_admin, admin, fom can advance; also PM on the project team
+  // Permissions
   const isPrivilegedRole = hasAnyRole(['super_admin', 'admin', 'fom']);
   const isProjectManager =
     !!currentUser?.id &&
     !!project.team?.projectManager &&
     project.team.projectManager === currentUser.fullName;
   const canAdvance = (isPrivilegedRole || isProjectManager) && !isLastStage;
+  const canEditFlow = isPrivilegedRole || isProjectManager;
 
+  // Helper: given a stageId from allDefaultStages, return its status
+  const getStageStatus = useCallback(
+    (stageId: string): 'completed' | 'current' | 'skipped' | 'upcoming' => {
+      if (skippedIds.has(stageId)) return 'skipped';
+      const activeIdx = effectiveStages.findIndex(s => s.id === stageId);
+      if (activeIdx < 0) return 'upcoming';
+      if (activeIdx < resolvedIndex) return 'completed';
+      if (activeIdx === resolvedIndex) return 'current';
+      return 'upcoming';
+    },
+    [effectiveStages, resolvedIndex, skippedIds],
+  );
+
+  // Advance to next active stage
   const advanceMutation = useMutation({
     mutationFn: async (notes: string) => {
       if (!currentUser?.id) throw new Error('Not authenticated');
@@ -97,9 +174,10 @@ export function useProjectFlow(project: Project): UseProjectFlowReturn {
       if (isLastStage) throw new Error('Already at the final stage');
 
       const nextIndex = resolvedIndex + 1;
-      const nextStage = stages[nextIndex];
+      const nextStage = effectiveStages[nextIndex];
       if (!nextStage) throw new Error('No next stage found');
 
+      // Insert log entry
       const { error: logError } = await supabase.from('project_flow_log').insert({
         project_id: project.id,
         stage_id: nextStage.id,
@@ -109,14 +187,45 @@ export function useProjectFlow(project: Project): UseProjectFlowReturn {
       });
       if (logError) throw new Error(logError.message);
 
+      // Update project record
       const { error: updateError } = await supabase
         .from('projects')
         .update({ current_flow_stage: nextStage.id })
         .eq('id', project.id);
       if (updateError) throw new Error(updateError.message);
+
+      // Send notifications to all team members (fire and forget)
+      const teamNames = [
+        project.team?.projectManager,
+        ...(project.team?.members ?? []),
+        ...(project.team?.teamComposition?.map(m => m.name) ?? []),
+      ].filter((n): n is string => !!n && n !== currentUser.fullName);
+
+      sendStageNotifications(
+        project.id,
+        project.name,
+        nextStage.label,
+        [...new Set(teamNames)],
+        currentUser.fullName ?? 'A team member',
+      ).catch(() => {});
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['project_flow_log', project.id] });
+      queryClient.invalidateQueries({ queryKey: ['projects'] });
+    },
+  });
+
+  // Save custom stage order / skip flags
+  const customMutation = useMutation({
+    mutationFn: async (customStages: CustomStageEntry[]) => {
+      if (!canEditFlow) throw new Error('Permission denied');
+      const { error } = await supabase
+        .from('projects')
+        .update({ custom_flow_stages: customStages })
+        .eq('id', project.id);
+      if (error) throw new Error(error.message);
+    },
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['projects'] });
     },
   });
@@ -128,15 +237,27 @@ export function useProjectFlow(project: Project): UseProjectFlowReturn {
     [advanceMutation],
   );
 
+  const updateCustomStages = useCallback(
+    async (customStages: CustomStageEntry[]) => {
+      await customMutation.mutateAsync(customStages);
+    },
+    [customMutation],
+  );
+
   return {
-    flowDef: stages,
+    flowDef: allDefaultStages,
+    activeStages: effectiveStages,
     currentStage,
     currentStageIndex: resolvedIndex,
     stageHistory,
     isLastStage,
     canAdvance,
+    canEditFlow,
     isLoading: historyQuery.isLoading,
     isAdvancing: advanceMutation.isPending,
+    isSavingCustom: customMutation.isPending,
     advanceStage,
+    updateCustomStages,
+    getStageStatus,
   };
 }

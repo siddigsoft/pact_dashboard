@@ -21,7 +21,8 @@ import {
   DollarSign,
   Target,
   TrendingUp,
-  Wallet
+  Wallet,
+  GitBranch,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useBudget } from '@/context/budget/BudgetContext';
@@ -48,6 +49,10 @@ import {
 import ActivityTimeline from './ActivityTimeline';
 import TeamMemberCard from './TeamMemberCard';
 import ProjectCostTab from './ProjectCostTab';
+import { useProjectFlow } from '@/hooks/useProjectFlow';
+import { FlowStrip } from './flow/FlowStrip';
+import { FlowTab } from './flow/FlowTab';
+import { FlowStageBanner } from './flow/FlowStageBanner';
 
 interface ProjectDetailProps {
   project: Project;
@@ -121,6 +126,7 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('overview');
   const [editBudgetOpen, setEditBudgetOpen] = useState(false);
+  const flow = useProjectFlow(project);
   const { getProjectBudget, loading: budgetLoading, refreshProjectBudgets } = useBudget();
   const projectBudget = getProjectBudget(project.id);
   const [userWorkloads, setUserWorkloads] = useState<Record<string, number>>({});
@@ -396,14 +402,37 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
         </CardContent>
       </Card>
       
+      {/* Flow Strip */}
+      {flow.activeStages.length > 0 && (
+        <Card className="border-[#1D3461]/20 bg-[#0F2041]/5 dark:bg-[#1D3461]/10">
+          <CardContent className="px-4 py-2">
+            <div className="flex items-center gap-2 mb-1">
+              <GitBranch className="h-3.5 w-3.5 text-[#1D3461] dark:text-blue-400" />
+              <span className="text-xs font-medium text-[#1D3461] dark:text-blue-300">
+                {flow.currentStage?.label ?? 'Initialising'} · Stage {flow.currentStageIndex + 1}/{flow.activeStages.length}
+              </span>
+            </div>
+            <FlowStrip
+              stages={flow.flowDef}
+              currentStageIndex={flow.currentStageIndex}
+              getStageStatus={flow.getStageStatus}
+              compact={false}
+            />
+          </CardContent>
+        </Card>
+      )}
+
       {/* Project content */}
       <Tabs defaultValue="overview" value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="grid grid-cols-5 w-full md:w-[600px]">
+        <TabsList className="grid grid-cols-6 w-full md:w-[700px]">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="activities">Activities</TabsTrigger>
           <TabsTrigger value="team">Team</TabsTrigger>
           <TabsTrigger value="costs" data-testid="tab-costs">Costs</TabsTrigger>
           <TabsTrigger value="budget">Budget</TabsTrigger>
+          <TabsTrigger value="flow" data-testid="tab-flow">
+            <GitBranch className="h-3.5 w-3.5 mr-1" />Flow
+          </TabsTrigger>
         </TabsList>
         
         <TabsContent value="overview" className="space-y-4 mt-4">
@@ -555,6 +584,7 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
         </TabsContent>
         
         <TabsContent value="activities" className="space-y-4 mt-4">
+          <FlowStageBanner flow={flow} projectName={project.name} onGoToFlow={() => setActiveTab('flow')} />
           <div className="flex items-center justify-between gap-2">
             <h2 className="text-base font-semibold">Activities</h2>
             <Button size="sm" onClick={() => navigate(`/projects/${project.id}/activities/create`)}>
@@ -633,6 +663,7 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
         </TabsContent>
         
         <TabsContent value="team" className="space-y-4 mt-4">
+          <FlowStageBanner flow={flow} projectName={project.name} onGoToFlow={() => setActiveTab('flow')} />
           <div className="flex items-center justify-between gap-2">
             <h2 className="text-base font-semibold">Team Members</h2>
             <Button size="sm" onClick={() => navigate(`/projects/${project.id}/team`)}>
@@ -667,6 +698,7 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
         </TabsContent>
 
         <TabsContent value="costs" className="space-y-4 mt-4">
+          <FlowStageBanner flow={flow} projectName={project.name} onGoToFlow={() => setActiveTab('flow')} />
           <div className="flex items-center justify-between gap-2">
             <h2 className="text-base font-semibold">Costs & Expenses</h2>
           </div>
@@ -682,6 +714,7 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
         </TabsContent>
 
         <TabsContent value="budget" className="space-y-4 mt-4">
+          <FlowStageBanner flow={flow} projectName={project.name} onGoToFlow={() => setActiveTab('flow')} />
           <div className="flex items-center justify-between gap-2">
             <h2 className="text-base font-semibold">Project Budget</h2>
             {projectBudget && (
@@ -727,6 +760,14 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
               </Button>
             </div>
           )}
+        </TabsContent>
+        <TabsContent value="flow" className="mt-4">
+          <FlowTab
+            flow={flow}
+            projectName={project.name}
+            projectType={project.projectType}
+            allDefaultStages={flow.flowDef}
+          />
         </TabsContent>
       </Tabs>
     </div>

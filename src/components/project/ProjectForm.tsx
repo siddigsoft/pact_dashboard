@@ -3,7 +3,8 @@ import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { format } from 'date-fns';
-import { CalendarIcon, Plus, X, UserCircle } from 'lucide-react';
+import { CalendarIcon, Plus, X, UserCircle, GitBranch, ChevronDown, ChevronUp } from 'lucide-react';
+import { getProjectFlow } from '@/config/projectFlows';
 
 import { Project, ProjectType, ProjectStatus, ProjectTeamMember } from '@/types/project';
 import { useUser } from '@/context/user/UserContext';
@@ -91,6 +92,48 @@ interface ProjectFormProps {
   initialData?: Partial<Project>;
   isEditing?: boolean;
 }
+
+interface FlowTypePreviewProps {
+  stages: { id: string; label: string; description?: string }[];
+  typeName: string;
+}
+
+const FlowTypePreview: React.FC<FlowTypePreviewProps> = ({ stages, typeName }) => {
+  const [expanded, setExpanded] = useState(false);
+  return (
+    <div className="mt-2 rounded-md border border-[#1D3461]/20 bg-[#0F2041]/5 dark:bg-[#1D3461]/10 text-xs">
+      <button
+        type="button"
+        className="w-full flex items-center justify-between px-3 py-2 text-[#1D3461] dark:text-blue-300 font-medium"
+        onClick={() => setExpanded(v => !v)}
+        data-testid="button-toggle-flow-preview"
+      >
+        <span className="flex items-center gap-1.5">
+          <GitBranch className="h-3.5 w-3.5" />
+          {stages.length}-stage flow for {typeName}
+        </span>
+        {expanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+      </button>
+      {expanded && (
+        <div className="px-3 pb-3 space-y-1.5">
+          {stages.map((s, i) => (
+            <div key={s.id} className="flex items-start gap-2">
+              <span className="flex-shrink-0 h-4 w-4 rounded-full bg-[#1D3461]/20 dark:bg-[#1D3461]/40 text-[#1D3461] dark:text-blue-300 flex items-center justify-center font-bold leading-none" style={{ fontSize: '9px' }}>
+                {i + 1}
+              </span>
+              <div>
+                <span className="font-medium text-foreground">{s.label}</span>
+                {s.description && (
+                  <span className="text-muted-foreground ml-1">— {s.description}</span>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
 
 const ProjectForm: React.FC<ProjectFormProps> = ({ 
   onSubmit, 
@@ -308,6 +351,14 @@ const ProjectForm: React.FC<ProjectFormProps> = ({
                       </SelectContent>
                     </Select>
                     <FormMessage />
+                    {/* Flow preview for selected type */}
+                    {field.value && (() => {
+                      const flowDef = getProjectFlow(field.value as any);
+                      if (!flowDef.stages.length) return null;
+                      return (
+                        <FlowTypePreview stages={flowDef.stages} typeName={flowDef.label} />
+                      );
+                    })()}
                   </FormItem>
                 )}
               />

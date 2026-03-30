@@ -1,11 +1,15 @@
--- Migration: Project Flow Engine
+-- Migration: Project Flow Engine (includes custom stage ordering + notification support)
 -- Adds current_flow_stage column to projects table and creates project_flow_log audit table.
 
 -- 1. Add current_flow_stage column to projects
 ALTER TABLE projects
   ADD COLUMN IF NOT EXISTS current_flow_stage text;
 
--- 2. Create project_flow_log table
+-- 2. Add custom_flow_stages column (JSON array allowing per-project stage overrides)
+ALTER TABLE projects
+  ADD COLUMN IF NOT EXISTS custom_flow_stages jsonb;
+
+-- 3. Create project_flow_log table
 CREATE TABLE IF NOT EXISTS project_flow_log (
   id            uuid DEFAULT gen_random_uuid() PRIMARY KEY,
   project_id    uuid NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
