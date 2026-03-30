@@ -28,7 +28,7 @@ import {
   Zap, Database, BarChart2, ChevronDown, ChevronUp, ChevronRight,
   Circle, ArrowUpRight, Timer, Filter, Info, MapPin, ArrowRight,
   FileText, CheckCircle2, CalendarDays, Bell, Send, Users, Globe, Wrench,
-  UserPlus, UserMinus, Lock,
+  UserPlus, UserMinus, Lock, Smartphone, Repeat2, AlarmClock, Radio,
 } from 'lucide-react';
 import { insertNotifications } from '@/services/mmpActions';
 import EmailNotificationService from '@/services/email-notification.service';
@@ -1615,6 +1615,287 @@ function MonitoringContent({ isSuperAdmin }: { isSuperAdmin: boolean }) {
   );
 }
 
+// ── Notification shared constants ──────────────────────────────────────────────
+
+type NotifChannel = 'inApp' | 'fcm' | 'email' | 'broadcast';
+type SendMode = 'now' | 'schedule' | 'reminder' | 'auto';
+
+const CHANNEL_CFG: Record<NotifChannel, {
+  label: string; labelAr: string;
+  Icon: React.ComponentType<{ className?: string }>;
+  activeClass: string; inactiveClass: string; desc: string;
+}> = {
+  inApp:     { label: 'In-App',    labelAr: 'داخل التطبيق', Icon: Bell,        activeClass: 'bg-violet-100 text-violet-700 border-violet-400', inactiveClass: 'bg-white text-slate-500 border-slate-200 hover:border-violet-300', desc: 'Bell icon in the app' },
+  fcm:       { label: 'FCM Push',  labelAr: 'إشعار FCM',    Icon: Smartphone,  activeClass: 'bg-blue-100 text-blue-700 border-blue-400',       inactiveClass: 'bg-white text-slate-500 border-slate-200 hover:border-blue-300',   desc: 'Mobile push notification' },
+  email:     { label: 'Email',     labelAr: 'البريد',        Icon: Mail,        activeClass: 'bg-emerald-100 text-emerald-700 border-emerald-400', inactiveClass: 'bg-white text-slate-500 border-slate-200 hover:border-emerald-300', desc: 'IONOS SMTP email' },
+  broadcast: { label: 'Broadcast', labelAr: 'بث عام',        Icon: Radio,       activeClass: 'bg-orange-100 text-orange-700 border-orange-400',  inactiveClass: 'bg-white text-slate-500 border-slate-200 hover:border-orange-300',  desc: 'System-wide announcement' },
+};
+
+const NOTIFICATION_TEMPLATES = [
+  {
+    id: 'action_reminder', label: 'Action Reminder', labelAr: 'تذكير بالإجراء',
+    channels: new Set<NotifChannel>(['inApp', 'fcm']),
+    msgEn: 'You have pending actions in the PACT system that require your attention. Please log in and complete your assigned tasks.',
+    msgAr: 'لديك إجراءات معلقة في نظام PACT تحتاج إلى اهتمامك. يرجى تسجيل الدخول وإكمال المهام المُسنَدة إليك.',
+  },
+  {
+    id: 'escalation', label: 'Escalation Notice', labelAr: 'إشعار تصعيد',
+    channels: new Set<NotifChannel>(['inApp', 'fcm', 'email']),
+    msgEn: '⚠️ ESCALATION: Your pending items have not been addressed for more than 48 hours. Immediate action is required to avoid delays in field operations.',
+    msgAr: '⚠️ تصعيد: لم تتم معالجة عناصرك المعلقة منذ أكثر من 48 ساعة. يلزم اتخاذ إجراء فوري لتجنب التأخير في العمليات الميدانية.',
+  },
+  {
+    id: 'deadline', label: 'Deadline Alert', labelAr: 'تنبيه الموعد',
+    channels: new Set<NotifChannel>(['inApp', 'fcm', 'email']),
+    msgEn: '⏰ DEADLINE ALERT: The deadline for your pending actions is approaching. Please complete your tasks immediately to avoid impact on field operations.',
+    msgAr: '⏰ تنبيه الموعد النهائي: يقترب الموعد النهائي لإجراءاتك المعلقة. يرجى إتمام مهامك على الفور لتجنب التأثير على العمليات الميدانية.',
+  },
+  {
+    id: 'progress', label: 'Progress Update', labelAr: 'تحديث التقدم',
+    channels: new Set<NotifChannel>(['inApp']),
+    msgEn: 'This is a progress update on your assigned tasks in the PACT system. Please review the current status and take any necessary action.',
+    msgAr: 'هذا تحديث بشأن تقدم المهام المُسنَدة إليك في نظام PACT. يرجى مراجعة الوضع الحالي واتخاذ أي إجراء ضروري.',
+  },
+  {
+    id: 'broadcast_announce', label: 'System Announcement', labelAr: 'إعلان رسمي',
+    channels: new Set<NotifChannel>(['inApp', 'fcm', 'email', 'broadcast']),
+    msgEn: 'Important system-wide announcement from PACT Command Center. Please read carefully and note any required actions.',
+    msgAr: 'إعلان مهم على مستوى النظام من مركز قيادة PACT. يرجى القراءة بعناية والانتباه إلى أي إجراءات مطلوبة.',
+  },
+];
+
+// Saves a scheduled/reminder/auto notification to the notification_schedules table
+async function saveNotificationSchedule(payload: {
+  recipientIds: string[];
+  channels: Set<NotifChannel>;
+  titleEn: string; titleAr?: string;
+  msgEn: string; msgAr?: string;
+  eventType: string; actionUrl?: string;
+  priority: string;
+  sendMode: SendMode;
+  scheduledAt?: string;
+  reminderDays?: number;
+  autoIntervalDays?: number;
+  autoEndDate?: string;
+}) {
+  const schedAt = payload.sendMode === 'schedule' && payload.scheduledAt
+    ? new Date(payload.scheduledAt).toISOString()
+    : payload.sendMode === 'reminder' || payload.sendMode === 'auto'
+    ? new Date(Date.now() + (payload.reminderDays ?? 3) * 86_400_000).toISOString()
+    : new Date().toISOString();
+
+  const repeatIntervalHours = payload.sendMode === 'auto'
+    ? (payload.autoIntervalDays ?? 7) * 24
+    : payload.sendMode === 'reminder'
+    ? null
+    : null;
+
+  const channelObj: Record<string, boolean> = {};
+  (['inApp', 'fcm', 'email', 'broadcast'] as NotifChannel[]).forEach(c => {
+    channelObj[c] = payload.channels.has(c);
+  });
+
+  await supabase.from('notification_schedules').insert({
+    recipient_ids: payload.recipientIds,
+    channels: channelObj,
+    title_en: payload.titleEn,
+    title_ar: payload.titleAr ?? null,
+    message_en: payload.msgEn,
+    message_ar: payload.msgAr ?? null,
+    event_type: payload.eventType,
+    action_url: payload.actionUrl ?? null,
+    priority: payload.priority,
+    scheduled_at: schedAt,
+    repeat_mode: payload.sendMode === 'reminder' ? 'reminder' : payload.sendMode === 'auto' ? 'auto' : null,
+    repeat_interval_hours: repeatIntervalHours,
+    end_date: payload.autoEndDate ? new Date(payload.autoEndDate).toISOString() : null,
+    status: 'pending',
+  });
+}
+
+// ── Shared channel + template + schedule sub-components ────────────────────────
+
+function NotifChannelBar({ channels, onChange }: {
+  channels: Set<NotifChannel>;
+  onChange: (c: Set<NotifChannel>) => void;
+}) {
+  const toggle = (ch: NotifChannel) => {
+    const n = new Set(channels);
+    n.has(ch) ? n.delete(ch) : n.add(ch);
+    onChange(n);
+  };
+  return (
+    <div>
+      <p className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground mb-2 flex items-center gap-1.5">
+        <Zap className="h-3.5 w-3.5" />Notification Channels
+        <span className="font-normal normal-case tracking-normal text-[10px]">— choose where to send</span>
+      </p>
+      <div className="flex gap-2 flex-wrap">
+        {(Object.entries(CHANNEL_CFG) as [NotifChannel, typeof CHANNEL_CFG[NotifChannel]][]).map(([key, cfg]) => {
+          const active = channels.has(key);
+          return (
+            <button
+              key={key}
+              onClick={() => toggle(key)}
+              title={cfg.desc}
+              className={`inline-flex items-center gap-1.5 text-[11px] px-3 py-1.5 rounded-full border font-semibold transition-colors ${active ? cfg.activeClass : cfg.inactiveClass}`}
+              data-testid={`notif-channel-${key}`}
+            >
+              <cfg.Icon className="h-3.5 w-3.5" />
+              {cfg.label}
+              <span className="opacity-60 font-normal">/ {cfg.labelAr}</span>
+            </button>
+          );
+        })}
+      </div>
+      {channels.size === 0 && (
+        <p className="text-[10px] text-red-500 mt-1">Select at least one channel to send through.</p>
+      )}
+    </div>
+  );
+}
+
+function NotifTemplateBar({ onApply, currentMsgEn }: {
+  onApply: (t: typeof NOTIFICATION_TEMPLATES[number]) => void;
+  currentMsgEn: string;
+}) {
+  return (
+    <div>
+      <p className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground mb-2 flex items-center gap-1.5">
+        <FileText className="h-3.5 w-3.5" />Quick Templates
+        <span className="font-normal normal-case tracking-normal text-[10px]">— auto-fill message + recommended channels</span>
+      </p>
+      <div className="flex gap-1.5 flex-wrap">
+        {NOTIFICATION_TEMPLATES.map(t => {
+          const active = currentMsgEn === t.msgEn;
+          return (
+            <button
+              key={t.id}
+              onClick={() => onApply(t)}
+              className={`inline-flex items-center gap-1 text-[11px] px-2.5 py-1 rounded-full border font-medium transition-colors ${
+                active
+                  ? 'bg-slate-700 text-white border-slate-700'
+                  : 'bg-white text-slate-600 border-slate-200 hover:border-slate-400 hover:text-slate-800'
+              }`}
+              data-testid={`notif-template-${t.id}`}
+            >
+              {t.label} <span className="opacity-60">/ {t.labelAr}</span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function NotifScheduler({ sendMode, setSendMode, scheduledAt, setScheduledAt, reminderDays, setReminderDays, autoIntervalDays, setAutoIntervalDays, autoEndDate, setAutoEndDate }: {
+  sendMode: SendMode; setSendMode: (m: SendMode) => void;
+  scheduledAt: string; setScheduledAt: (v: string) => void;
+  reminderDays: number; setReminderDays: (v: number) => void;
+  autoIntervalDays: number; setAutoIntervalDays: (v: number) => void;
+  autoEndDate: string; setAutoEndDate: (v: string) => void;
+}) {
+  const modes: Array<{ key: SendMode; label: string; labelAr: string; Icon: React.ComponentType<{ className?: string }>; color: string }> = [
+    { key: 'now',      label: 'Send Now',      labelAr: 'إرسال الآن',        Icon: Send,       color: 'bg-violet-600 text-white border-violet-600' },
+    { key: 'schedule', label: 'Schedule',       labelAr: 'جدولة',            Icon: CalendarDays, color: 'bg-blue-600 text-white border-blue-600' },
+    { key: 'reminder', label: 'Reminder',       labelAr: 'تذكير مرة واحدة',  Icon: AlarmClock, color: 'bg-amber-600 text-white border-amber-600' },
+    { key: 'auto',     label: 'Auto Reminder',  labelAr: 'تذكير تلقائي',     Icon: Repeat2,    color: 'bg-emerald-600 text-white border-emerald-600' },
+  ];
+
+  const minDate = new Date(Date.now() + 60_000).toISOString().slice(0, 16);
+
+  return (
+    <div className="border rounded-xl p-3.5 bg-slate-50/80 flex flex-col gap-3">
+      <p className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground flex items-center gap-1.5">
+        <CalendarDays className="h-3.5 w-3.5" />Delivery Options
+      </p>
+
+      {/* Mode selector */}
+      <div className="flex gap-1.5 flex-wrap">
+        {modes.map(m => {
+          const active = sendMode === m.key;
+          return (
+            <button
+              key={m.key}
+              onClick={() => setSendMode(m.key)}
+              className={`inline-flex items-center gap-1.5 text-[11px] px-3 py-1.5 rounded-full border font-semibold transition-colors ${
+                active ? m.color : 'bg-white text-slate-600 border-slate-200 hover:border-slate-400'
+              }`}
+              data-testid={`notif-sendmode-${m.key}`}
+            >
+              <m.Icon className="h-3 w-3" />{m.label}
+              <span className={`font-normal ${active ? 'opacity-80' : 'opacity-50'}`}>/ {m.labelAr}</span>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Schedule options */}
+      {sendMode === 'schedule' && (
+        <div className="flex flex-col gap-1.5 bg-blue-50 border border-blue-200 rounded-lg p-3">
+          <p className="text-[11px] font-semibold text-blue-700">Send at specific date & time</p>
+          <input
+            type="datetime-local"
+            min={minDate}
+            value={scheduledAt}
+            onChange={e => setScheduledAt(e.target.value)}
+            className="text-xs border border-blue-200 rounded-lg px-3 py-1.5 bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-300 w-full"
+            data-testid="notif-scheduled-at"
+          />
+          {scheduledAt && (
+            <p className="text-[10px] text-blue-600">Will be queued and sent at {new Date(scheduledAt).toLocaleString()}</p>
+          )}
+        </div>
+      )}
+
+      {sendMode === 'reminder' && (
+        <div className="flex flex-col gap-1.5 bg-amber-50 border border-amber-200 rounded-lg p-3">
+          <p className="text-[11px] font-semibold text-amber-700">Send immediately + follow-up reminder after:</p>
+          <div className="flex items-center gap-2">
+            <input
+              type="number" min={1} max={90}
+              value={reminderDays}
+              onChange={e => setReminderDays(Number(e.target.value))}
+              className="text-xs border border-amber-200 rounded-lg px-3 py-1.5 bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-amber-300 w-24"
+              data-testid="notif-reminder-days"
+            />
+            <span className="text-xs text-amber-700">day{reminderDays !== 1 ? 's' : ''} later</span>
+          </div>
+          <p className="text-[10px] text-amber-600">Sends now, then one automatic follow-up on {new Date(Date.now() + reminderDays * 86_400_000).toLocaleDateString()}</p>
+        </div>
+      )}
+
+      {sendMode === 'auto' && (
+        <div className="flex flex-col gap-2 bg-emerald-50 border border-emerald-200 rounded-lg p-3">
+          <p className="text-[11px] font-semibold text-emerald-700">Send now + repeat every:</p>
+          <div className="flex items-center gap-2">
+            <input
+              type="number" min={1} max={90}
+              value={autoIntervalDays}
+              onChange={e => setAutoIntervalDays(Number(e.target.value))}
+              className="text-xs border border-emerald-200 rounded-lg px-3 py-1.5 bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-300 w-24"
+              data-testid="notif-auto-interval"
+            />
+            <span className="text-xs text-emerald-700">day{autoIntervalDays !== 1 ? 's' : ''}</span>
+          </div>
+          <div className="flex flex-col gap-1">
+            <p className="text-[11px] text-emerald-700 font-medium">Stop repeating on (optional):</p>
+            <input
+              type="date"
+              min={new Date(Date.now() + 86_400_000).toISOString().slice(0,10)}
+              value={autoEndDate}
+              onChange={e => setAutoEndDate(e.target.value)}
+              className="text-xs border border-emerald-200 rounded-lg px-3 py-1.5 bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-300 w-full"
+              data-testid="notif-auto-end-date"
+            />
+          </div>
+          <p className="text-[10px] text-emerald-600">Sends now, then repeats every {autoIntervalDays} day{autoIntervalDays !== 1 ? 's' : ''}{autoEndDate ? ` until ${new Date(autoEndDate).toLocaleDateString()}` : ' (no end date)'}.</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Notify Users Dialog ────────────────────────────────────────────────────────
 
 function NotifyUsersDialog({ open, onClose, allActions, categoryLabel }: {
@@ -1627,6 +1908,14 @@ function NotifyUsersDialog({ open, onClose, allActions, categoryLabel }: {
   const [priority, setPriority] = useState<'normal' | 'high' | 'urgent'>('normal');
   const [msgEn, setMsgEn] = useState('You have pending actions in the PACT system that require your attention. Please log in and complete your assigned tasks.');
   const [msgAr, setMsgAr] = useState('لديك إجراءات معلقة في نظام PACT تحتاج إلى اهتمامك. يرجى تسجيل الدخول وإكمال المهام المُسنَدة إليك.');
+
+  // Channel + schedule state
+  const [channels, setChannels] = useState<Set<NotifChannel>>(new Set(['inApp', 'fcm', 'email']));
+  const [sendMode, setSendMode] = useState<SendMode>('now');
+  const [scheduledAt, setScheduledAt] = useState('');
+  const [reminderDays, setReminderDays] = useState(3);
+  const [autoIntervalDays, setAutoIntervalDays] = useState(7);
+  const [autoEndDate, setAutoEndDate] = useState('');
 
   // Module type filter — empty set means "all modules"
   const [selectedModules, setSelectedModules] = useState<Set<ActionTypeKey>>(new Set());
@@ -1692,11 +1981,17 @@ function NotifyUsersDialog({ open, onClose, allActions, categoryLabel }: {
     setSelectedIds(new Set(filteredUsers.map(u => u.id)));
   }, [filteredUsers]);
 
-  // Reset module filter + status filter when dialog opens/closes
+  // Reset all state when dialog opens
   useEffect(() => {
     if (!open) return;
     setSelectedModules(new Set());
     setFilterMode('pending');
+    setChannels(new Set(['inApp', 'fcm', 'email']));
+    setSendMode('now');
+    setScheduledAt('');
+    setReminderDays(3);
+    setAutoIntervalDays(7);
+    setAutoEndDate('');
   }, [open]);
 
   const toggleUser = (id: string) =>
@@ -1706,34 +2001,48 @@ function NotifyUsersDialog({ open, onClose, allActions, categoryLabel }: {
 
   const send = async () => {
     if (selectedUsers.length === 0) { toast({ title: 'No recipients selected', variant: 'destructive' }); return; }
+    if (channels.size === 0) { toast({ title: 'No channels selected', description: 'Pick at least one notification channel.', variant: 'destructive' }); return; }
+    if (sendMode === 'schedule' && !scheduledAt) { toast({ title: 'Pick a scheduled date & time', variant: 'destructive' }); return; }
     setSending(true);
     try {
       const titleEn = priority === 'urgent' ? '🚨 URGENT: Action Required' : priority === 'high' ? '⚠️ Action Required' : '📋 Action Required';
       const titleAr = priority === 'urgent' ? '🚨 عاجل: إجراء مطلوب'     : priority === 'high' ? '⚠️ إجراء مطلوب'     : '📋 إجراء مطلوب';
 
+      const recipientIds = selectedUsers.map(u => u.id);
+
+      // If scheduled → save to queue and skip immediate sends
+      if (sendMode === 'schedule') {
+        await saveNotificationSchedule({ recipientIds, channels, titleEn, titleAr, msgEn, msgAr, eventType: 'monitoring_reminder', actionUrl: '/dashboard', priority, sendMode, scheduledAt });
+        toast({ title: `Notification scheduled`, description: `Will be sent to ${selectedUsers.length} user${selectedUsers.length !== 1 ? 's' : ''} on ${new Date(scheduledAt).toLocaleString()}.` });
+        onClose();
+        return;
+      }
+
+      // For reminder / auto → send now AND save the future schedule
+      if (sendMode === 'reminder' || sendMode === 'auto') {
+        saveNotificationSchedule({ recipientIds, channels, titleEn, titleAr, msgEn, msgAr, eventType: 'monitoring_reminder', actionUrl: '/dashboard', priority, sendMode, reminderDays, autoIntervalDays, autoEndDate }).catch(() => {});
+      }
+
       // ── In-app notifications ──────────────────────────────────────────
-      const rows = selectedUsers.map(u => ({
-        recipient_id: u.id,
-        title_en: titleEn,
-        title_ar: titleAr,
-        message_en: msgEn,
-        message_ar: msgAr,
-        event_type: 'monitoring_reminder',
-        action_url: '/dashboard',
-        priority,
-        status: 'unread',
-      }));
-      await insertNotifications(rows);
+      if (channels.has('inApp')) {
+        const rows = selectedUsers.map(u => ({
+          recipient_id: u.id,
+          title_en: titleEn,
+          title_ar: titleAr,
+          message_en: msgEn,
+          message_ar: msgAr,
+          event_type: 'monitoring_reminder',
+          action_url: '/dashboard',
+          priority,
+          status: 'unread',
+        }));
+        await insertNotifications(rows);
+      }
 
-      // ── Emails (fire-and-forget, don't block success toast) ───────────
+      // ── Emails ────────────────────────────────────────────────────────
       const usersWithEmail = selectedUsers.filter(u => u.email);
-      if (usersWithEmail.length > 0) {
-        const emailSubject = priority === 'urgent'
-          ? 'URGENT: Action Required — PACT System | عاجل: إجراء مطلوب'
-          : priority === 'high'
-          ? 'Action Required — PACT System | إجراء مطلوب'
-          : 'Action Required — PACT System | إجراء مطلوب';
-
+      if (channels.has('email') && usersWithEmail.length > 0) {
+        const emailSubject = priority === 'urgent' ? 'URGENT: Action Required — PACT System | عاجل: إجراء مطلوب' : 'Action Required — PACT System | إجراء مطلوب';
         const emailHtml = `
           <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:24px;">
             <div style="background:#0F2041;padding:20px 24px;border-radius:8px 8px 0 0;">
@@ -1744,50 +2053,30 @@ function NotifyUsersDialog({ open, onClose, allActions, categoryLabel }: {
               <hr style="border:none;border-top:1px solid #e5e7eb;margin:20px 0;" />
               <p style="color:#6b7280;font-size:13px;text-align:right;direction:rtl;line-height:1.8;margin:0;">${titleAr}<br/>${msgAr}</p>
               <div style="margin-top:24px;text-align:center;">
-                <a href="https://app.pactorg.com/dashboard" style="background:#0F2041;color:#fff;padding:10px 24px;border-radius:6px;text-decoration:none;font-size:14px;font-weight:600;">
-                  Open PACT System
-                </a>
+                <a href="https://app.pactorg.com/dashboard" style="background:#0F2041;color:#fff;padding:10px 24px;border-radius:6px;text-decoration:none;font-size:14px;font-weight:600;">Open PACT System</a>
               </div>
             </div>
-            <p style="color:#9ca3af;font-size:11px;text-align:center;margin-top:16px;">This is an automated reminder from the PACT Command Center.</p>
+            <p style="color:#9ca3af;font-size:11px;text-align:center;margin-top:16px;">Automated reminder from the PACT Command Center.</p>
           </div>`;
-
-        const emailText = `${titleEn}\n\n${msgEn}\n\n---\n\n${titleAr}\n\n${msgAr}\n\nOpen the PACT system: https://app.pactorg.com/dashboard`;
-
-        // Send all emails concurrently; failures are silent so the dialog still closes
-        await Promise.allSettled(
-          usersWithEmail.map(u =>
-            EmailNotificationService.sendEmail({
-              to: u.email!,
-              subject: emailSubject,
-              recipientName: u.name,
-              html: emailHtml,
-              text: emailText,
-              priority,
-            })
-          )
-        );
+        const emailText = `${titleEn}\n\n${msgEn}\n\n---\n\n${titleAr}\n\n${msgAr}\n\nhttps://app.pactorg.com/dashboard`;
+        await Promise.allSettled(usersWithEmail.map(u => EmailNotificationService.sendEmail({ to: u.email!, subject: emailSubject, recipientName: u.name, html: emailHtml, text: emailText, priority })));
       }
 
-      // ── FCM push (fire-and-forget, mirrors Broadcast Center) ──────────
-      const userIds = selectedUsers.map(u => u.id);
-      if (userIds.length > 0) {
-        const fcmTitle = `${titleEn} | ${titleAr}`;
-        const fcmBody = `${msgEn}\n${msgAr}`;
+      // ── FCM push ──────────────────────────────────────────────────────
+      if (channels.has('fcm') && recipientIds.length > 0) {
         supabase.functions.invoke('send-fcm-push', {
-          body: {
-            user_ids: userIds,
-            title: fcmTitle,
-            body: fcmBody,
-            priority,
-            notification_type: 'monitoring_reminder',
-            data: { type: 'monitoring_reminder', action_url: '/dashboard', priority },
-            action_url: '/dashboard',
-          },
+          body: { user_ids: recipientIds, title: `${titleEn} | ${titleAr}`, body: `${msgEn}\n${msgAr}`, priority, notification_type: 'monitoring_reminder', data: { type: 'monitoring_reminder', action_url: '/dashboard', priority }, action_url: '/dashboard' },
         }).catch(() => {});
       }
 
-      toast({ title: `Notification sent to ${selectedUsers.length} user${selectedUsers.length !== 1 ? 's' : ''}`, description: usersWithEmail.length > 0 ? `In-app + FCM push + email sent to ${usersWithEmail.length} user${usersWithEmail.length !== 1 ? 's' : ''} with email addresses.` : 'In-app + FCM push sent (no email addresses on file).' });
+      // ── Broadcast ─────────────────────────────────────────────────────
+      if (channels.has('broadcast')) {
+        supabase.from('broadcast_messages').insert({ title_en: titleEn, title_ar: titleAr, message_en: msgEn, message_ar: msgAr, priority, created_by: null }).catch(() => {});
+      }
+
+      const channelList = [...channels].map(c => CHANNEL_CFG[c].label).join(' + ');
+      const schedSuffix = sendMode === 'reminder' ? ` + reminder in ${reminderDays} days` : sendMode === 'auto' ? ` + repeats every ${autoIntervalDays} days` : '';
+      toast({ title: `Sent to ${selectedUsers.length} user${selectedUsers.length !== 1 ? 's' : ''}`, description: `Via: ${channelList}${schedSuffix}.` });
       onClose();
     } catch (err) {
       toast({ title: 'Failed to send notifications', description: String(err), variant: 'destructive' });
@@ -1807,15 +2096,22 @@ function NotifyUsersDialog({ open, onClose, allActions, categoryLabel }: {
             {categoryLabel ? `Notify — ${categoryLabel}` : 'Send Action Reminder'}
           </DialogTitle>
           <DialogDescription className="text-xs">
-            {categoryLabel
-              ? `Send an in-app notification + FCM push + email to users who have pending actions in the ${categoryLabel} module.`
-              : 'Send an in-app notification + FCM push + email to users who have pending actions in the system.'}
+            Choose your channels and template, then configure recipients, message and delivery schedule.
           </DialogDescription>
         </DialogHeader>
 
         <div className="flex-1 overflow-y-auto px-5 py-4 flex flex-col gap-4">
 
-          {/* ── Module / Notification Type selector ── */}
+          {/* ── 1. Channels ── */}
+          <NotifChannelBar channels={channels} onChange={setChannels} />
+
+          {/* ── 2. Templates ── */}
+          <NotifTemplateBar
+            currentMsgEn={msgEn}
+            onApply={t => { setMsgEn(t.msgEn); setMsgAr(t.msgAr); setChannels(new Set(t.channels)); }}
+          />
+
+          {/* ── 3. Module / Notification Type selector ── */}
           {!categoryLabel && (
             <div>
               <p className="text-xs font-semibold text-muted-foreground mb-2 flex items-center gap-1">
@@ -1916,16 +2212,28 @@ function NotifyUsersDialog({ open, onClose, allActions, categoryLabel }: {
             <p className="text-xs font-semibold text-muted-foreground">Message (Arabic)</p>
             <Textarea rows={3} value={msgAr} onChange={e => setMsgAr(e.target.value)} className="text-xs resize-none text-right" dir="rtl" data-testid="notify-message-ar" />
           </div>
+
+          {/* Schedule & Reminders */}
+          <NotifScheduler
+            sendMode={sendMode} setSendMode={setSendMode}
+            scheduledAt={scheduledAt} setScheduledAt={setScheduledAt}
+            reminderDays={reminderDays} setReminderDays={setReminderDays}
+            autoIntervalDays={autoIntervalDays} setAutoIntervalDays={setAutoIntervalDays}
+            autoEndDate={autoEndDate} setAutoEndDate={setAutoEndDate}
+          />
         </div>
 
         <DialogFooter className="px-5 py-3 border-t shrink-0 flex items-center justify-between gap-3">
-          <p className="text-xs text-muted-foreground flex-1">
-            Will send <span className="font-semibold text-foreground">in-app + FCM push + email</span> to <span className="font-bold text-foreground">{selectedIds.size}</span> user{selectedIds.size !== 1 ? 's' : ''}
+          <p className="text-xs text-muted-foreground flex-1 leading-snug">
+            {sendMode === 'schedule'
+              ? <>Scheduling to <span className="font-bold text-foreground">{selectedIds.size}</span> user{selectedIds.size !== 1 ? 's' : ''} via <span className="font-semibold">{[...channels].map(c => CHANNEL_CFG[c].label).join(' + ') || '—'}</span></>
+              : <>Sending to <span className="font-bold text-foreground">{selectedIds.size}</span> user{selectedIds.size !== 1 ? 's' : ''} via <span className="font-semibold">{[...channels].map(c => CHANNEL_CFG[c].label).join(' + ') || '—'}</span></>
+            }
           </p>
           <Button variant="outline" size="sm" onClick={onClose} disabled={sending}>Cancel</Button>
-          <Button size="sm" className="bg-violet-600 hover:bg-violet-700 text-white" onClick={send} disabled={sending || selectedIds.size === 0} data-testid="notify-send-btn">
-            {sending ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Send className="h-4 w-4 mr-1" />}
-            Send {selectedIds.size > 0 ? `to ${selectedIds.size}` : ''}
+          <Button size="sm" className="bg-violet-600 hover:bg-violet-700 text-white" onClick={send} disabled={sending || selectedIds.size === 0 || channels.size === 0} data-testid="notify-send-btn">
+            {sending ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : sendMode === 'schedule' ? <CalendarDays className="h-4 w-4 mr-1" /> : <Send className="h-4 w-4 mr-1" />}
+            {sendMode === 'schedule' ? 'Schedule' : sendMode === 'reminder' ? 'Send + Remind' : sendMode === 'auto' ? 'Send + Auto Remind' : `Send${selectedIds.size > 0 ? ` to ${selectedIds.size}` : ''}`}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -1959,6 +2267,14 @@ function CoverageNotifyDialog({
   const [priority, setPriority] = useState<'normal' | 'high' | 'urgent'>('normal');
   const [sending, setSending] = useState(false);
 
+  // Channel + schedule state
+  const [channels, setChannels] = useState<Set<NotifChannel>>(new Set(['inApp', 'fcm', 'email']));
+  const [sendMode, setSendMode] = useState<SendMode>('now');
+  const [scheduledAt, setScheduledAt] = useState('');
+  const [reminderDays, setReminderDays] = useState(3);
+  const [autoIntervalDays, setAutoIntervalDays] = useState(7);
+  const [autoEndDate, setAutoEndDate] = useState('');
+
   const defaultMsgEn = `Transportation advance coverage requires your attention.\n\n• ${summary.noRequest.toLocaleString()} site${summary.noRequest !== 1 ? 's' : ''} with no advance request yet\n• ${summary.pendingSupervisor.toLocaleString()} site${summary.pendingSupervisor !== 1 ? 's' : ''} pending supervisor approval\n• ${summary.pendingAdmin.toLocaleString()} site${summary.pendingAdmin !== 1 ? 's' : ''} pending admin approval\n\nOverall coverage: ${summary.pct}% of ${summary.total.toLocaleString()} active sites. Please log in and take the necessary action.`;
   const defaultMsgAr = `يحتاج تغطية مسبقة للنقل إلى اهتمامكم.\n\n• ${summary.noRequest.toLocaleString()} موقع بدون طلب مسبق حتى الآن\n• ${summary.pendingSupervisor.toLocaleString()} موقع في انتظار موافقة المشرف\n• ${summary.pendingAdmin.toLocaleString()} موقع في انتظار موافقة المسؤول\n\nنسبة التغطية الإجمالية: ${summary.pct}% من ${summary.total.toLocaleString()} موقعاً نشطاً. يرجى تسجيل الدخول واتخاذ الإجراء اللازم.`;
 
@@ -1971,12 +2287,18 @@ function CoverageNotifyDialog({
     setLoading(true);
     setMsgEn(defaultMsgEn);
     setMsgAr(defaultMsgAr);
+    setChannels(new Set(['inApp', 'fcm', 'email']));
+    setSendMode('now');
+    setScheduledAt('');
+    setReminderDays(3);
+    setAutoIntervalDays(7);
+    setAutoEndDate('');
     const allRoles = COVERAGE_ROLE_GROUPS.flatMap(g => g.role);
     supabase
       .from('profiles')
       .select('id, full_name, email, role')
       .in('role', allRoles)
-      .eq('is_active', true)
+      .eq('status', 'approved')
       .order('role')
       .then(({ data, error }) => {
         setLoading(false);
@@ -2002,27 +2324,45 @@ function CoverageNotifyDialog({
   const send = async () => {
     const chosen = profiles.filter(p => selectedIds.has(p.id));
     if (chosen.length === 0) { toast({ title: 'No recipients selected', variant: 'destructive' }); return; }
+    if (channels.size === 0) { toast({ title: 'No channels selected', description: 'Pick at least one notification channel.', variant: 'destructive' }); return; }
+    if (sendMode === 'schedule' && !scheduledAt) { toast({ title: 'Pick a scheduled date & time', variant: 'destructive' }); return; }
     setSending(true);
     try {
       const titleEn = priority === 'urgent' ? '🚨 URGENT: Transportation Advance Coverage' : priority === 'high' ? '⚠️ Transportation Advance Coverage' : '📋 Transportation Advance Coverage';
       const titleAr = priority === 'urgent' ? '🚨 عاجل: تغطية مسبقة للنقل' : priority === 'high' ? '⚠️ تغطية مسبقة للنقل' : '📋 تغطية مسبقة للنقل';
+      const recipientIds = chosen.map(p => p.id);
+
+      // If scheduled → save to queue and skip immediate sends
+      if (sendMode === 'schedule') {
+        await saveNotificationSchedule({ recipientIds, channels, titleEn, titleAr, msgEn, msgAr, eventType: 'coverage_reminder', actionUrl: '/admin/monitoring', priority, sendMode, scheduledAt });
+        toast({ title: `Coverage notification scheduled`, description: `Will be sent to ${chosen.length} user${chosen.length !== 1 ? 's' : ''} on ${new Date(scheduledAt).toLocaleString()}.` });
+        onClose();
+        return;
+      }
+
+      // For reminder / auto → send now AND save the future schedule
+      if (sendMode === 'reminder' || sendMode === 'auto') {
+        saveNotificationSchedule({ recipientIds, channels, titleEn, titleAr, msgEn, msgAr, eventType: 'coverage_reminder', actionUrl: '/admin/monitoring', priority, sendMode, reminderDays, autoIntervalDays, autoEndDate }).catch(() => {});
+      }
 
       // In-app notifications
-      await insertNotifications(chosen.map(p => ({
-        recipient_id: p.id,
-        title_en: titleEn,
-        title_ar: titleAr,
-        message_en: msgEn,
-        message_ar: msgAr,
-        event_type: 'coverage_reminder',
-        action_url: '/admin/monitoring',
-        priority,
-        status: 'unread',
-      })));
+      if (channels.has('inApp')) {
+        await insertNotifications(chosen.map(p => ({
+          recipient_id: p.id,
+          title_en: titleEn,
+          title_ar: titleAr,
+          message_en: msgEn,
+          message_ar: msgAr,
+          event_type: 'coverage_reminder',
+          action_url: '/admin/monitoring',
+          priority,
+          status: 'unread',
+        })));
+      }
 
       // Emails
       const withEmail = chosen.filter(p => p.email);
-      if (withEmail.length > 0) {
+      if (channels.has('email') && withEmail.length > 0) {
         const subject = priority === 'urgent'
           ? 'URGENT: Transportation Advance Coverage | عاجل: تغطية مسبقة للنقل'
           : 'Transportation Advance Coverage — PACT System | تغطية مسبقة للنقل';
@@ -2067,16 +2407,13 @@ function CoverageNotifyDialog({
         ));
       }
 
-      // ── FCM push (fire-and-forget, mirrors Broadcast Center) ──────────
-      const chosenIds = chosen.map(p => p.id);
-      if (chosenIds.length > 0) {
-        const fcmTitle = `${titleEn} | ${titleAr}`;
-        const fcmBody = `${msgEn}\n${msgAr}`;
+      // ── FCM push ──────────────────────────────────────────────────────
+      if (channels.has('fcm') && recipientIds.length > 0) {
         supabase.functions.invoke('send-fcm-push', {
           body: {
-            user_ids: chosenIds,
-            title: fcmTitle,
-            body: fcmBody,
+            user_ids: recipientIds,
+            title: `${titleEn} | ${titleAr}`,
+            body: `${msgEn}\n${msgAr}`,
             priority,
             notification_type: 'coverage_reminder',
             data: { type: 'coverage_reminder', action_url: '/admin/monitoring', priority },
@@ -2085,9 +2422,16 @@ function CoverageNotifyDialog({
         }).catch(() => {});
       }
 
+      // ── Broadcast ─────────────────────────────────────────────────────
+      if (channels.has('broadcast')) {
+        supabase.from('broadcast_messages').insert({ title_en: titleEn, title_ar: titleAr, message_en: msgEn, message_ar: msgAr, priority, created_by: null }).catch(() => {});
+      }
+
+      const channelList = [...channels].map(c => CHANNEL_CFG[c].label).join(' + ');
+      const schedSuffix = sendMode === 'reminder' ? ` + reminder in ${reminderDays} days` : sendMode === 'auto' ? ` + repeats every ${autoIntervalDays} days` : '';
       toast({
         title: `Coverage reminder sent to ${chosen.length} user${chosen.length !== 1 ? 's' : ''}`,
-        description: withEmail.length > 0 ? `In-app + FCM push + email sent to ${withEmail.length} user${withEmail.length !== 1 ? 's' : ''} with email on file.` : 'In-app + FCM push sent (no email addresses on file).',
+        description: `Via: ${channelList}${schedSuffix}.`,
       });
       onClose();
     } catch (err) {
@@ -2103,8 +2447,6 @@ function CoverageNotifyDialog({
     members: profiles.filter(p => g.role.includes(p.role || '')),
   })).filter(g => g.members.length > 0);
 
-  const withEmail = profiles.filter(p => selectedIds.has(p.id) && p.email);
-
   return (
     <Dialog open={open} onOpenChange={v => { if (!v) onClose(); }}>
       <DialogContent className="max-w-2xl max-h-[88vh] flex flex-col gap-0 p-0" data-testid="coverage-notify-dialog">
@@ -2113,11 +2455,21 @@ function CoverageNotifyDialog({
             <Bell className="h-4 w-4 text-violet-600" />Notify — Transportation Advance Coverage
           </DialogTitle>
           <DialogDescription className="text-xs">
-            Send an in-app notification + FCM push + email to supervisors, FOMs, admins and coordinators about the current advance coverage status.
+            Choose channels and delivery options, then send to supervisors, FOMs, admins and coordinators.
           </DialogDescription>
         </DialogHeader>
 
         <div className="flex-1 overflow-y-auto px-5 py-4 flex flex-col gap-4">
+
+          {/* ── 1. Channels ── */}
+          <NotifChannelBar channels={channels} onChange={setChannels} />
+
+          {/* ── 2. Templates ── */}
+          <NotifTemplateBar
+            currentMsgEn={msgEn}
+            onApply={t => { setMsgEn(t.msgEn); setMsgAr(t.msgAr); setChannels(new Set(t.channels)); }}
+          />
+
           {/* Coverage summary pills */}
           <div className="flex flex-wrap gap-2">
             <span className="text-[11px] font-semibold bg-red-100 text-red-700 border border-red-200 px-2 py-1 rounded-full">{summary.noRequest.toLocaleString()} No Request</span>
@@ -2185,23 +2537,34 @@ function CoverageNotifyDialog({
           {/* Message */}
           <div className="flex flex-col gap-2">
             <p className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground">Message (English)</p>
-            <Textarea value={msgEn} onChange={e => setMsgEn(e.target.value)} rows={5} className="text-xs resize-none" data-testid="input-coverage-msg-en" />
+            <Textarea value={msgEn} onChange={e => setMsgEn(e.target.value)} rows={4} className="text-xs resize-none" data-testid="input-coverage-msg-en" />
           </div>
           <div className="flex flex-col gap-2">
             <p className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground">Message (Arabic)</p>
-            <Textarea value={msgAr} onChange={e => setMsgAr(e.target.value)} rows={5} className="text-xs resize-none text-right" dir="rtl" data-testid="input-coverage-msg-ar" />
+            <Textarea value={msgAr} onChange={e => setMsgAr(e.target.value)} rows={4} className="text-xs resize-none text-right" dir="rtl" data-testid="input-coverage-msg-ar" />
           </div>
+
+          {/* Schedule & Reminders */}
+          <NotifScheduler
+            sendMode={sendMode} setSendMode={setSendMode}
+            scheduledAt={scheduledAt} setScheduledAt={setScheduledAt}
+            reminderDays={reminderDays} setReminderDays={setReminderDays}
+            autoIntervalDays={autoIntervalDays} setAutoIntervalDays={setAutoIntervalDays}
+            autoEndDate={autoEndDate} setAutoEndDate={setAutoEndDate}
+          />
         </div>
 
         <DialogFooter className="px-5 py-3 border-t shrink-0 flex items-center justify-between gap-3">
-          <p className="text-xs text-muted-foreground flex-1">
-            Will send <span className="font-semibold text-foreground">in-app + FCM push + email</span> to <span className="font-bold text-foreground">{selectedIds.size}</span> user{selectedIds.size !== 1 ? 's' : ''}
-            {withEmail.length > 0 && <span className="ml-1 text-emerald-600">({withEmail.length} with email)</span>}
+          <p className="text-xs text-muted-foreground flex-1 leading-snug">
+            {sendMode === 'schedule'
+              ? <>Scheduling to <span className="font-bold text-foreground">{selectedIds.size}</span> user{selectedIds.size !== 1 ? 's' : ''} via <span className="font-semibold">{[...channels].map(c => CHANNEL_CFG[c].label).join(' + ') || '—'}</span></>
+              : <>Sending to <span className="font-bold text-foreground">{selectedIds.size}</span> user{selectedIds.size !== 1 ? 's' : ''} via <span className="font-semibold">{[...channels].map(c => CHANNEL_CFG[c].label).join(' + ') || '—'}</span></>
+            }
           </p>
           <Button variant="outline" size="sm" onClick={onClose} disabled={sending}>Cancel</Button>
-          <Button size="sm" className="bg-violet-600 hover:bg-violet-700 text-white" onClick={send} disabled={sending || selectedIds.size === 0} data-testid="coverage-notify-send-btn">
-            {sending ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Send className="h-4 w-4 mr-1" />}
-            Send {selectedIds.size > 0 ? `to ${selectedIds.size}` : ''}
+          <Button size="sm" className="bg-violet-600 hover:bg-violet-700 text-white" onClick={send} disabled={sending || selectedIds.size === 0 || channels.size === 0} data-testid="coverage-notify-send-btn">
+            {sending ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : sendMode === 'schedule' ? <CalendarDays className="h-4 w-4 mr-1" /> : <Send className="h-4 w-4 mr-1" />}
+            {sendMode === 'schedule' ? 'Schedule' : sendMode === 'reminder' ? 'Send + Remind' : sendMode === 'auto' ? 'Send + Auto Remind' : `Send${selectedIds.size > 0 ? ` to ${selectedIds.size}` : ''}`}
           </Button>
         </DialogFooter>
       </DialogContent>
