@@ -432,21 +432,17 @@ function MonitoringContent({ isSuperAdmin }: { isSuperAdmin: boolean }) {
         return { ...r, mmp_name };
       }).filter(r => !filters.status || r.dashboard_status === filters.status);
     },
-    refetchInterval: 90_000,
-    refetchIntervalInBackground: true,
     refetchOnWindowFocus: false,
-    staleTime: 30_000,
+    staleTime: Infinity,
     retry: 1,
   });
 
-  // ── Realtime refresh ───────────────────────────────────────────────────────
-  // Debounced: multiple rapid table events are collapsed into a single background refetch
+  // ── Realtime: show a "new data available" banner, do NOT auto-fetch ──────────
+  const [hasNewData, setHasNewData] = useState(false);
   useEffect(() => {
-    const triggerSilentRefresh = () => {
+    const flagNewData = () => {
       if (realtimeDebounce.current) clearTimeout(realtimeDebounce.current);
-      realtimeDebounce.current = setTimeout(() => {
-        qc.invalidateQueries({ queryKey: ['/admin/monitoring/actions'] });
-      }, 2000);
+      realtimeDebounce.current = setTimeout(() => setHasNewData(true), 2000);
     };
     const tables = [
       'action_status_overrides','mmp_files','mmp_site_entries','site_visits',
@@ -455,14 +451,14 @@ function MonitoringContent({ isSuperAdmin }: { isSuperAdmin: boolean }) {
     ];
     const channels = tables.map(table =>
       supabase.channel(`mon_${table}`)
-        .on('postgres_changes', { event: '*', schema: 'public', table }, triggerSilentRefresh)
+        .on('postgres_changes', { event: '*', schema: 'public', table }, flagNewData)
         .subscribe()
     );
     return () => {
       if (realtimeDebounce.current) clearTimeout(realtimeDebounce.current);
       channels.forEach(ch => supabase.removeChannel(ch));
     };
-  }, [qc]);
+  }, []);
 
   // ── Stats ──────────────────────────────────────────────────────────────────
   const stats = useMemo(() => {
@@ -593,10 +589,8 @@ function MonitoringContent({ isSuperAdmin }: { isSuperAdmin: boolean }) {
         otherVisitStatuses:  Array.from(new Set(otherVisits.map(r => r.status))),
       };
     },
-    refetchInterval: 120_000,
-    refetchIntervalInBackground: true,
     refetchOnWindowFocus: false,
-    staleTime: 60_000,
+    staleTime: Infinity,
   });
 
   // ── MMP Files — status + cycle close overview ──────────────────────────────
@@ -626,10 +620,8 @@ function MonitoringContent({ isSuperAdmin }: { isSuperAdmin: boolean }) {
 
       return { mmpStatusCounts, cycleStatusCounts, recentlyClosed, total: rows.length };
     },
-    refetchInterval: 120_000,
-    refetchIntervalInBackground: true,
     refetchOnWindowFocus: false,
-    staleTime: 60_000,
+    staleTime: Infinity,
   });
 
   // ── Mutations ──────────────────────────────────────────────────────────────
@@ -799,8 +791,17 @@ function MonitoringContent({ isSuperAdmin }: { isSuperAdmin: boolean }) {
               : <Wrench className="h-4 w-4 mr-1" />}
             Fix Hub Names
           </Button>
-          <Button variant="outline" size="sm" onClick={() => refetch()} data-testid="button-refresh">
-            <RefreshCw className="h-4 w-4 mr-1" />Refresh
+          <Button
+            variant="outline" size="sm"
+            onClick={() => {
+              setHasNewData(false);
+              refetch();
+              qc.invalidateQueries({ queryKey: ['/admin/monitoring/site-pipeline'] });
+              qc.invalidateQueries({ queryKey: ['/admin/monitoring/mmp-overview'] });
+            }}
+            data-testid="button-refresh"
+          >
+            <RefreshCw className={`h-4 w-4 mr-1 ${isFetching && !isLoading ? 'animate-spin' : ''}`} />Refresh
           </Button>
           <Button variant="outline" size="sm" onClick={handleExportCSV} disabled={allActions.length === 0} data-testid="button-export-csv">
             <Download className="h-4 w-4 mr-1" />Export CSV
@@ -816,6 +817,28 @@ function MonitoringContent({ isSuperAdmin }: { isSuperAdmin: boolean }) {
           </Button>
         </div>
       </div>
+
+      {/* New data available banner */}
+      {hasNewData && !isFetching && (
+        <div className="flex items-center gap-3 bg-emerald-50 border border-emerald-200 rounded-lg px-4 py-2.5" data-testid="new-data-banner">
+          <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+          <p className="text-sm text-emerald-800 flex-1">New data is available in the system.</p>
+          <Button
+            size="sm" variant="outline"
+            className="h-7 text-xs border-emerald-300 text-emerald-700 hover:bg-emerald-100 shrink-0"
+            onClick={() => {
+              setHasNewData(false);
+              refetch();
+              qc.invalidateQueries({ queryKey: ['/admin/monitoring/site-pipeline'] });
+              qc.invalidateQueries({ queryKey: ['/admin/monitoring/mmp-overview'] });
+            }}
+            data-testid="button-load-new-data"
+          >
+            <RefreshCw className="h-3 w-3 mr-1" />Load updates
+          </Button>
+          <button onClick={() => setHasNewData(false)} className="text-emerald-500 hover:text-emerald-700 shrink-0 text-lg leading-none" title="Dismiss" data-testid="button-dismiss-new-data">×</button>
+        </div>
+      )}
 
       {/* Error banner */}
       {error && (
