@@ -20,6 +20,7 @@ import { useProjectComments } from '@/hooks/useProjectComments';
 interface ProjectCommentsPanelProps {
   projectId: string;
   currentUserId: string;
+  currentUserName?: string;
   isAdmin: boolean;
 }
 
@@ -35,6 +36,7 @@ function getInitials(name: string): string {
 const ProjectCommentsPanel: React.FC<ProjectCommentsPanelProps> = ({
   projectId,
   currentUserId,
+  currentUserName,
   isAdmin,
 }) => {
   const { comments, loading, submitting, addComment, deleteComment } = useProjectComments(projectId);
@@ -42,7 +44,7 @@ const ProjectCommentsPanel: React.FC<ProjectCommentsPanelProps> = ({
 
   const handleSubmit = async () => {
     if (!text.trim()) return;
-    const ok = await addComment(text, currentUserId);
+    const ok = await addComment(text, currentUserId, currentUserName);
     if (ok) setText('');
   };
 

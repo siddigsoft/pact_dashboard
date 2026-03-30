@@ -798,6 +798,7 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
                 <ProjectCommentsPanel
                   projectId={project.id}
                   currentUserId={currentUser.id}
+                  currentUserName={currentUser.fullName}
                   isAdmin={isAdminUser}
                 />
               </CardContent>
