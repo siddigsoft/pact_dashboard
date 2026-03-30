@@ -1,28 +1,35 @@
 -- ============================================================
--- FIX: Move 73 South Darfur entries back to the correct coordinator
+-- FIX: Remove 73 South Darfur entries from the Blue Nile coordinator
 --
 -- PROBLEM: The original restore script incorrectly assigned 73 South Darfur
 -- "Pending" site entries to the Blue Nile coordinator (ee667ad1).
--- These entries belonged to a DIFFERENT coordinator (633d0cb0 — South Darfur).
+-- These entries belonged to coordinator 633d0cb0 (South Darfur), whose
+-- account has since been deleted from the profiles table.
 --
 -- WHAT THIS DOES:
---   1. Removes the 73 South Darfur entries from the Blue Nile coordinator
---   2. Restores them to the correct South Darfur coordinator (633d0cb0)
---      with status = 'Pending' (their original state before the accidental reclaim)
+--   1. Clears forwarded_to_user_id for the 73 South Darfur entries
+--      (unassigns them from the Blue Nile coordinator)
+--   2. Sets status back to 'Pending' so they are available for re-assignment
+--      to an active South Darfur coordinator
 --
 -- AFFECTED:
 --   MMP:              1e1909b4-1d70-4b90-898a-97c496d2c888
 --   Blue Nile coord:  ee667ad1-dee7-4901-a53b-20cfbb7b35d6  (was WRONG owner)
---   SD coord:         633d0cb0-b5db-4ce7-9c6f-0f68d2cb3993  (correct owner)
 --   Entry count:      73  (all state = 'South Darfur', status was 'Pending')
+--
+-- AFTER RUNNING: Re-assign these 73 sites to a South Darfur coordinator via
+-- the Review & Assign Coordinators page in the app.
+-- Active South Darfur coordinators:
+--   1e96f1a7  Yassen Adam gedo
+--   c7f16620  ياسر إبراهيم عمر جبريل
 -- ============================================================
 
 BEGIN;
 
--- Step 1: Restore the 73 South Darfur entries to their correct coordinator
+-- Step 1: Unassign the 73 South Darfur entries from the Blue Nile coordinator
 UPDATE mmp_site_entries
 SET
-  forwarded_to_user_id = '633d0cb0-b5db-4ce7-9c6f-0f68d2cb3993',
+  forwarded_to_user_id = NULL,
   status               = 'Pending',
   updated_at           = NOW()
 WHERE id IN (
@@ -105,20 +112,22 @@ WHERE id IN (
 DO $$
 DECLARE
   blue_nile_sd_count INT;
-  sd_coord_count INT;
+  unassigned_pending INT;
 BEGIN
   SELECT COUNT(*) INTO blue_nile_sd_count
   FROM mmp_site_entries
   WHERE forwarded_to_user_id = 'ee667ad1-dee7-4901-a53b-20cfbb7b35d6'
     AND state = 'South Darfur';
 
-  SELECT COUNT(*) INTO sd_coord_count
+  SELECT COUNT(*) INTO unassigned_pending
   FROM mmp_site_entries
-  WHERE forwarded_to_user_id = '633d0cb0-b5db-4ce7-9c6f-0f68d2cb3993'
+  WHERE forwarded_to_user_id IS NULL
+    AND status = 'Pending'
+    AND state  = 'South Darfur'
     AND mmp_file_id = '1e1909b4-1d70-4b90-898a-97c496d2c888';
 
   RAISE NOTICE 'Blue Nile coordinator South Darfur entries remaining: % (should be 0)', blue_nile_sd_count;
-  RAISE NOTICE 'South Darfur coordinator entries restored: % (should be 73)', sd_coord_count;
+  RAISE NOTICE 'Unassigned South Darfur Pending entries: % (should be 73)', unassigned_pending;
 END $$;
 
 COMMIT;
