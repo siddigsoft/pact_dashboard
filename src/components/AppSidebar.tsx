@@ -57,6 +57,7 @@
   import Logo from "../assets/logo.png";
   import { Avatar, AvatarFallback, AvatarImage } from "./ui/avatar";
   import { useAppContext } from "@/context/AppContext";
+  import { supabase } from "@/lib/supabase";
   import { 
     Sidebar, 
     SidebarContent, 
@@ -86,7 +87,7 @@
   } from "@/components/ui/dropdown-menu";
   import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
   import { ChevronDown } from "lucide-react";
-  import { useState, useMemo, useCallback } from "react";
+  import { useState, useMemo, useCallback, useEffect } from "react";
   import { useNavBadgeCountsContext } from "@/context/NavBadgeCountsContext";
   import { MenuPreferences, DEFAULT_MENU_PREFERENCES } from "@/types/user-preferences";
   import { normalizeRole } from "@/utils/roleMapping";
@@ -240,7 +241,8 @@
     defaultRole: string = 'dataCollector',
     perms: Record<string, boolean> = {},
     isSuperAdmin: boolean = false,
-    menuPrefs: MenuPreferences = DEFAULT_MENU_PREFERENCES
+    menuPrefs: MenuPreferences = DEFAULT_MENU_PREFERENCES,
+    hasMonitoringAccess: boolean = false
   ): MenuGroup[] => {
     const normalizedDefault = normalizeRole(defaultRole);
     const normalizedRoles = roles.map(r => normalizeRole(r)).filter(Boolean);
@@ -465,6 +467,10 @@
     if (!isHidden('/settings') && (isSuperAdmin || ((isAdmin || perms.settings) && !isDataCollector))) {
       adminItems.push({ id: 'settings', title: "Settings", url: "/settings", icon: Settings, priority: 5, isPinned: isPinned('/settings') });
     }
+    // Show System Monitoring to non-super-admin users who have been explicitly granted access
+    if (!isSuperAdmin && hasMonitoringAccess && !isHidden('/admin/monitoring')) {
+      adminItems.push({ id: 'monitoring-dashboard', title: "System Monitoring", url: "/admin/monitoring", icon: Activity, priority: 5.5, isPinned: isPinned('/admin/monitoring') });
+    }
     if (adminItems.length) groups.push({ id: 'admin', label: "Administration", order: 7, items: adminItems });
 
     // Super Admin category - Super admin exclusive pages
@@ -536,6 +542,18 @@
     const { showDueReminders } = useSiteVisitReminders();
     const { isSuperAdmin } = useSuperAdmin();
     const { userSettings, updateMenuPreferences, menuPreferences: contextMenuPrefs } = useSettings();
+
+    // Check if non-super-admin user has been explicitly granted monitoring page access
+    const [hasMonitoringAccess, setHasMonitoringAccess] = useState(false);
+    useEffect(() => {
+      if (isSuperAdmin || !currentUser?.id) return;
+      supabase
+        .from('monitoring_page_access')
+        .select('id')
+        .eq('user_id', currentUser.id)
+        .maybeSingle()
+        .then(({ data }) => setHasMonitoringAccess(!!data));
+    }, [isSuperAdmin, currentUser?.id]);
     
     const { checkPermission, hasAnyRole, canManageRoles } = useAuthorization();
     const isAdmin = hasAnyRole(['admin']);
@@ -632,7 +650,7 @@
       financialOperations: checkPermission('finances', 'update') || checkPermission('finances', 'approve') || isAdmin || hasAnyRole(['financialAdmin']),
     };
 
-    const menuGroups = currentUser ? getWorkflowMenuGroups(roles || [], currentUser.role, perms, isSuperAdmin, menuPrefs) : [];
+    const menuGroups = currentUser ? getWorkflowMenuGroups(roles || [], currentUser.role, perms, isSuperAdmin, menuPrefs, hasMonitoringAccess) : [];
 
     const toggleGroupCollapse = (groupId: string) => {
       setCollapsedGroups(prev => {
