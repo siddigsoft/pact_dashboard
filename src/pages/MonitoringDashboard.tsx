@@ -204,6 +204,7 @@ function MonitoringContent({ isSuperAdmin }: { isSuperAdmin: boolean }) {
   const [notifyAction, setNotifyAction] = useState<DashboardAction | null>(null);
   const [notifyActionSiteCount, setNotifyActionSiteCount] = useState<number | undefined>(undefined);
   const openNotifyAction = (action: DashboardAction, siteCount?: number) => { setNotifyAction(action); setNotifyActionSiteCount(siteCount); };
+  const [coverageScopedCtx, setCoverageScopedCtx] = useState<CoverageNotifyCtx | null>(null);
   // Debounce ref: prevents multiple rapid Realtime events from firing multiple fetches
   const realtimeDebounce = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [coverageNotifyOpen, setCoverageNotifyOpen] = useState(false);
@@ -1464,7 +1465,7 @@ function MonitoringContent({ isSuperAdmin }: { isSuperAdmin: boolean }) {
               </div>
             </div>
             {/* Collapsible tree — same structure as MMP Site Entries */}
-            <CoverageTree entries={coverageFiltered} />
+            <CoverageTree entries={coverageFiltered} onNotify={ctx => setCoverageScopedCtx(ctx)} />
           </div>
         )}
 
@@ -1552,6 +1553,15 @@ function MonitoringContent({ isSuperAdmin }: { isSuperAdmin: boolean }) {
         summary={coverageSummary}
         coverageData={coverageData}
       />
+
+      {/* Coverage Scoped Notify Dialog — per DC / status / hub / state */}
+      {coverageScopedCtx && (
+        <CoverageScopedNotifyDialog
+          open={!!coverageScopedCtx}
+          onClose={() => setCoverageScopedCtx(null)}
+          ctx={coverageScopedCtx}
+        />
+      )}
 
       {/* Per-action notify dialog */}
       {notifyAction && (
@@ -3899,6 +3909,298 @@ function StatusHistoryTimeline({ actionId, actionType }: { actionId: string; act
   );
 }
 
+// ── Coverage Scoped Notify Dialog ─────────────────────────────────────────────
+// Lightweight notify dialog scoped to a specific DC / status / hub / state in the coverage tree.
+
+type CoverageNotifyCtx = {
+  label: string;        // Human-readable scope (e.g. "Jamal Elden Adam Mohamed — 15 sites")
+  mmpName?: string;
+  status?: string;
+  hubName?: string;
+  stateName?: string;
+  dcName?: string;      // If set, look up this person by name
+  siteCount: number;
+};
+
+function CoverageScopedNotifyDialog({ open, onClose, ctx }: {
+  open: boolean; onClose: () => void; ctx: CoverageNotifyCtx;
+}) {
+  const { toast } = useToast();
+  const [profiles, setProfiles] = useState<{ id: string; full_name: string | null; email: string | null; role: string | null }[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [sending, setSending] = useState(false);
+  const [channels, setChannels] = useState<Set<NotifChannel>>(new Set(['inApp', 'fcm', 'email']));
+  const [sendMode, setSendMode] = useState<SendMode>('now');
+  const [scheduledAt, setScheduledAt] = useState('');
+  const [reminderDays, setReminderDays] = useState(3);
+  const [autoIntervalDays, setAutoIntervalDays] = useState(7);
+  const [autoEndDate, setAutoEndDate] = useState('');
+  const [priority, setPriority] = useState<'normal' | 'high' | 'urgent'>('normal');
+  const [openGroups, setOpenGroups] = useState<Set<string>>(new Set());
+
+  const statusLabel = ctx.status ? (ADV_STATUS_LABEL[ctx.status] ?? ctx.status.replace(/_/g, ' ')) : '';
+
+  const buildMsgs = () => {
+    if (ctx.dcName) {
+      return {
+        en: `You have ${ctx.siteCount} site${ctx.siteCount !== 1 ? 's' : ''} in the "${statusLabel || ctx.mmpName || 'PACT'}" coverage group${ctx.hubName ? ` (${ctx.hubName})` : ''} that require an advance request. Please log in and submit the necessary requests at your earliest convenience.`,
+        ar: `لديك ${ctx.siteCount} موقع${ctx.siteCount !== 1 ? '' : ''} في مجموعة التغطية "${statusLabel || ctx.mmpName || 'PACT'}"${ctx.hubName ? ` (${ctx.hubName})` : ''} تحتاج إلى طلب مسبق. يرجى تسجيل الدخول وتقديم الطلبات اللازمة في أقرب وقت ممكن.`,
+      };
+    }
+    return {
+      en: `Transportation advance coverage requires attention.\n\n• ${ctx.siteCount} site${ctx.siteCount !== 1 ? 's' : ''} in "${ctx.label}" need action${ctx.hubName ? ` (${ctx.hubName})` : ''}.\n\nPlease log in and take the necessary action.`,
+      ar: `تغطية مسبقة النقل تحتاج إلى اهتمام.\n\n• ${ctx.siteCount} موقع في "${ctx.label}"${ctx.hubName ? ` (${ctx.hubName})` : ''} يحتاج إلى إجراء.\n\nيرجى تسجيل الدخول واتخاذ الإجراء اللازم.`,
+    };
+  };
+
+  const [msgEn, setMsgEn] = useState(() => buildMsgs().en);
+  const [msgAr, setMsgAr] = useState(() => buildMsgs().ar);
+
+  useEffect(() => {
+    if (!open) return;
+    const msgs = buildMsgs();
+    setMsgEn(msgs.en); setMsgAr(msgs.ar);
+    setChannels(new Set(['inApp', 'fcm', 'email']));
+    setSendMode('now'); setScheduledAt(''); setReminderDays(3); setAutoIntervalDays(7); setAutoEndDate('');
+    setPriority('normal'); setOpenGroups(new Set());
+    setLoading(true);
+
+    const loadProfiles = async () => {
+      try {
+        if (ctx.dcName) {
+          // Look up this specific data collector by name
+          const { data } = await supabase
+            .from('profiles')
+            .select('id, full_name, email, role')
+            .ilike('full_name', ctx.dcName)
+            .eq('status', 'approved')
+            .limit(5);
+          const found = (data ?? []) as typeof profiles;
+          setProfiles(found);
+          setSelectedIds(new Set(found.map(p => p.id)));
+        } else {
+          // Load coordinators + supervisors scoped to coverage roles
+          const { data } = await supabase
+            .from('profiles')
+            .select('id, full_name, email, role')
+            .in('role', ['coordinator', 'supervisor', 'fom', 'admin', 'super_admin'])
+            .eq('status', 'approved')
+            .order('role');
+          const found = (data ?? []) as typeof profiles;
+          setProfiles(found);
+          setSelectedIds(new Set(found.map(p => p.id)));
+        }
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadProfiles();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, ctx.dcName, ctx.label]);
+
+  const toggle = (id: string) => setSelectedIds(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  const toggleGroup = (role: string, ids: string[]) => {
+    const allSelected = ids.every(id => selectedIds.has(id));
+    setSelectedIds(prev => { const n = new Set(prev); ids.forEach(id => allSelected ? n.delete(id) : n.add(id)); return n; });
+  };
+  const toggleGroupOpen = (role: string) =>
+    setOpenGroups(prev => { const n = new Set(prev); n.has(role) ? n.delete(role) : n.add(role); return n; });
+
+  // Group profiles by role
+  const grouped = useMemo(() => {
+    const roleOrder = ['data_collector', 'coordinator', 'supervisor', 'fom', 'admin', 'super_admin'];
+    const roleLabel: Record<string, string> = {
+      data_collector: 'Data Collectors', coordinator: 'Coordinators', supervisor: 'Supervisors',
+      fom: 'Field Operations Managers', admin: 'Admins', super_admin: 'Super Admins',
+    };
+    const roleColor: Record<string, string> = {
+      data_collector: 'bg-amber-50 border-amber-200', coordinator: 'bg-blue-50 border-blue-200',
+      supervisor: 'bg-violet-50 border-violet-200', fom: 'bg-emerald-50 border-emerald-200',
+      admin: 'bg-red-50 border-red-200', super_admin: 'bg-slate-50 border-slate-200',
+    };
+    const map = new Map<string, typeof profiles>();
+    for (const p of profiles) {
+      const r = p.role ?? 'unknown';
+      if (!map.has(r)) map.set(r, []);
+      map.get(r)!.push(p);
+    }
+    return roleOrder.filter(r => map.has(r)).map(r => ({
+      role: r, label: roleLabel[r] ?? r, color: roleColor[r] ?? 'bg-slate-50 border-slate-200',
+      members: map.get(r)!,
+    }));
+  }, [profiles]);
+
+  const send = async () => {
+    if (channels.size === 0) { toast({ title: 'No channels selected', variant: 'destructive' }); return; }
+    if (sendMode === 'schedule' && !scheduledAt) { toast({ title: 'Pick a scheduled date & time', variant: 'destructive' }); return; }
+    if (selectedIds.size === 0) { toast({ title: 'No recipients selected', variant: 'destructive' }); return; }
+    setSending(true);
+    try {
+      const titleEn = priority === 'urgent' ? `🚨 URGENT: Coverage Gap — Action Required` : priority === 'high' ? `⚠️ Coverage Alert — Action Required` : `📋 Coverage Update — Action Required`;
+      const titleAr = priority === 'urgent' ? `🚨 عاجل: فجوة التغطية — إجراء مطلوب` : priority === 'high' ? `⚠️ تنبيه التغطية — إجراء مطلوب` : `📋 تحديث التغطية — إجراء مطلوب`;
+      const recipientIds = [...selectedIds];
+
+      if (sendMode === 'schedule') {
+        await saveNotificationSchedule({ recipientIds, channels, titleEn, titleAr, msgEn, msgAr, eventType: 'coverage_gap_alert', actionUrl: '/admin/monitoring', priority, sendMode, scheduledAt });
+        toast({ title: 'Notification scheduled', description: `Will be sent to ${recipientIds.length} recipient${recipientIds.length !== 1 ? 's' : ''}.` });
+        onClose(); return;
+      }
+      if (sendMode === 'reminder' || sendMode === 'auto') {
+        saveNotificationSchedule({ recipientIds, channels, titleEn, titleAr, msgEn, msgAr, eventType: 'coverage_gap_alert', actionUrl: '/admin/monitoring', priority, sendMode, reminderDays, autoIntervalDays, autoEndDate }).catch(() => {});
+      }
+
+      if (channels.has('inApp')) {
+        const rows = recipientIds.map(id => ({ recipient_id: id, title_en: titleEn, title_ar: titleAr, message_en: msgEn, message_ar: msgAr, event_type: 'coverage_gap_alert', action_url: '/admin/monitoring', priority, status: 'unread' }));
+        await insertNotifications(rows);
+      }
+      if (channels.has('fcm')) {
+        supabase.functions.invoke('send-fcm-push', { body: { user_ids: recipientIds, title: `${titleEn} | ${titleAr}`, body: `${msgEn}\n${msgAr}`, priority, notification_type: 'coverage_gap_alert', data: { type: 'coverage_gap_alert', action_url: '/admin/monitoring', priority }, action_url: '/admin/monitoring' } }).catch(() => {});
+      }
+      if (channels.has('email')) {
+        const emailProfiles = profiles.filter(p => selectedIds.has(p.id) && p.email);
+        for (const p of emailProfiles) {
+          const html = `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:24px;"><div style="background:#0F2041;padding:20px 24px;border-radius:8px 8px 0 0;"><h2 style="color:#fff;margin:0;font-size:18px;">${titleEn}</h2></div><div style="border:1px solid #e5e7eb;border-top:none;padding:24px;border-radius:0 0 8px 8px;"><p style="color:#374151;font-size:14px;line-height:1.7;white-space:pre-line;">${msgEn}</p><hr style="border:none;border-top:1px solid #e5e7eb;margin:16px 0;" /><p style="color:#6b7280;font-size:13px;text-align:right;direction:rtl;line-height:1.8;">${titleAr}<br/><br/>${msgAr}</p><div style="margin-top:24px;text-align:center;"><a href="https://app.pactorg.com/admin/monitoring" style="background:#0F2041;color:#fff;padding:10px 24px;border-radius:6px;text-decoration:none;font-size:14px;font-weight:600;">Open PACT System</a></div></div></div>`;
+          await EmailNotificationService.sendEmail({ to: p.email!, subject: `${titleEn} | ${titleAr}`, recipientName: p.full_name ?? undefined, html, text: `${titleEn}\n\n${msgEn}\n\n---\n\n${titleAr}\n\n${msgAr}`, priority }).catch(() => {});
+        }
+      }
+      if (channels.has('broadcast')) {
+        supabase.from('broadcast_messages').insert({ title_en: titleEn, title_ar: titleAr, message_en: msgEn, message_ar: msgAr, priority, created_by: null }).catch(() => {});
+      }
+
+      toast({ title: `Sent to ${recipientIds.length} recipient${recipientIds.length !== 1 ? 's' : ''}`, description: `Via: ${[...channels].map(c => CHANNEL_CFG[c].label).join(' + ')}` });
+      onClose();
+    } catch (err) {
+      toast({ title: 'Failed to send', description: String(err), variant: 'destructive' });
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const priorityColors = { normal: 'bg-slate-100 text-slate-700 border-slate-300', high: 'bg-amber-100 text-amber-700 border-amber-300', urgent: 'bg-red-100 text-red-700 border-red-300' };
+
+  return (
+    <Dialog open={open} onOpenChange={v => { if (!v) onClose(); }}>
+      <DialogContent className="max-w-2xl max-h-[88vh] flex flex-col gap-0 p-0" data-testid="coverage-scoped-notify-dialog">
+        <DialogHeader className="px-5 pt-5 pb-3 border-b shrink-0">
+          <DialogTitle className="flex items-center gap-2 text-base">
+            <Bell className="h-4 w-4 text-amber-600" />
+            Notify — {ctx.label}
+          </DialogTitle>
+          <DialogDescription className="text-xs">
+            {ctx.dcName
+              ? `Send a coverage notification to ${ctx.dcName} about their ${ctx.siteCount} site${ctx.siteCount !== 1 ? 's' : ''}.`
+              : `Send a coverage notification about ${ctx.siteCount} site${ctx.siteCount !== 1 ? 's' : ''} in this group.`
+            }
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="flex-1 overflow-y-auto px-5 py-4 flex flex-col gap-4">
+          {/* Context pill */}
+          <div className="flex flex-wrap gap-2">
+            {ctx.mmpName && <span className="text-[10px] bg-indigo-100 text-indigo-700 border border-indigo-200 px-2 py-0.5 rounded-full font-medium">{ctx.mmpName}</span>}
+            {ctx.status && <span className={`text-[10px] px-2 py-0.5 rounded-full border font-medium capitalize ${statusChipClass(ctx.status)}`}>{statusLabel}</span>}
+            {ctx.hubName && <span className="text-[10px] bg-blue-100 text-blue-700 border border-blue-200 px-2 py-0.5 rounded-full font-medium">{ctx.hubName}</span>}
+            {ctx.stateName && <span className="text-[10px] bg-emerald-100 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded-full font-medium">{ctx.stateName}</span>}
+            {ctx.dcName && <span className="text-[10px] bg-amber-100 text-amber-700 border border-amber-200 px-2 py-0.5 rounded-full font-medium">{ctx.dcName}</span>}
+            <span className="text-[10px] bg-slate-100 text-slate-600 border px-2 py-0.5 rounded-full font-medium">{ctx.siteCount} sites</span>
+          </div>
+
+          <NotifChannelBar channels={channels} onChange={setChannels} />
+          <NotifTemplateBar currentMsgEn={msgEn} onApply={t => { setMsgEn(t.msgEn); setMsgAr(t.msgAr); setChannels(new Set(t.channels)); }} />
+
+          {/* Recipients */}
+          <div>
+            <p className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground mb-2">
+              Recipients {selectedIds.size > 0 && <span className="ml-1 text-violet-600">({selectedIds.size} selected)</span>}
+            </p>
+            {loading ? (
+              <div className="flex flex-col gap-1">{[1,2].map(i => <Skeleton key={i} className="h-10 w-full rounded-lg" />)}</div>
+            ) : profiles.length === 0 ? (
+              <p className="text-xs text-muted-foreground italic py-3 text-center">No matching profiles found{ctx.dcName ? ` for "${ctx.dcName}"` : ''}.</p>
+            ) : (
+              <div className="flex flex-col gap-2">
+                {grouped.map(g => {
+                  const isOpen = openGroups.has(g.role);
+                  const groupIds = g.members.map(m => m.id);
+                  const selectedCount = groupIds.filter(id => selectedIds.has(id)).length;
+                  return (
+                    <div key={g.role} className={`rounded-lg border overflow-hidden ${g.color}`}>
+                      <button className="w-full flex items-center gap-2 px-3 py-2 text-left hover:brightness-95 transition-all" onClick={() => toggleGroupOpen(g.role)}>
+                        {isOpen ? <ChevronDown className="h-3.5 w-3.5 shrink-0 opacity-60" /> : <ChevronRight className="h-3.5 w-3.5 shrink-0 opacity-60" />}
+                        <span className="text-xs font-bold flex-1">{g.label}</span>
+                        {selectedCount > 0 ? (
+                          <span className="text-[9px] font-semibold bg-violet-600 text-white px-1.5 py-0.5 rounded-full mr-1">{selectedCount}/{g.members.length}</span>
+                        ) : (
+                          <span className="text-[9px] opacity-50 mr-1">({g.members.length})</span>
+                        )}
+                      </button>
+                      {isOpen && (
+                        <div className="border-t border-current/10 px-3 pt-1.5 pb-2.5">
+                          <div className="flex justify-end mb-1">
+                            <button onClick={() => toggleGroup(g.role, groupIds)} className="text-[10px] underline opacity-70 hover:opacity-100">
+                              {groupIds.every(id => selectedIds.has(id)) ? 'Deselect all' : 'Select all'}
+                            </button>
+                          </div>
+                          <div className="flex flex-col gap-1">
+                            {g.members.map(p => (
+                              <label key={p.id} className="flex items-center gap-2 cursor-pointer hover:opacity-80">
+                                <input type="checkbox" checked={selectedIds.has(p.id)} onChange={() => toggle(p.id)} className="accent-violet-600 h-3.5 w-3.5 shrink-0" />
+                                <span className="text-xs font-medium flex-1 truncate">{p.full_name || 'Unknown'}</span>
+                                {p.email ? <span className="text-[9px] opacity-60 truncate max-w-[130px]">{p.email}</span> : <span className="text-[9px] italic opacity-50">no email</span>}
+                              </label>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* Priority */}
+          <div>
+            <p className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground mb-2">Priority</p>
+            <div className="flex gap-2">
+              {(['normal','high','urgent'] as const).map(p => (
+                <button key={p} onClick={() => setPriority(p)}
+                  className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-colors capitalize ${priority === p ? priorityColors[p] + ' border-current' : 'bg-white text-slate-500 border-slate-200 hover:border-slate-300'}`}>
+                  {p}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Message */}
+          <div className="flex flex-col gap-2">
+            <p className="text-xs font-semibold text-muted-foreground">Message (English)</p>
+            <Textarea rows={3} value={msgEn} onChange={e => setMsgEn(e.target.value)} className="text-xs resize-none" />
+            <p className="text-xs font-semibold text-muted-foreground">Message (Arabic)</p>
+            <Textarea rows={3} value={msgAr} onChange={e => setMsgAr(e.target.value)} className="text-xs resize-none text-right" dir="rtl" />
+          </div>
+
+          <NotifScheduler sendMode={sendMode} setSendMode={setSendMode} scheduledAt={scheduledAt} setScheduledAt={setScheduledAt}
+            reminderDays={reminderDays} setReminderDays={setReminderDays} autoIntervalDays={autoIntervalDays} setAutoIntervalDays={setAutoIntervalDays}
+            autoEndDate={autoEndDate} setAutoEndDate={setAutoEndDate} />
+        </div>
+
+        <DialogFooter className="px-5 py-3 border-t shrink-0 flex items-center justify-between gap-3">
+          <p className="text-xs text-muted-foreground flex-1">
+            {sendMode === 'schedule' ? 'Scheduling' : 'Sending'} to <span className="font-bold text-foreground">{selectedIds.size}</span> recipient{selectedIds.size !== 1 ? 's' : ''} via <span className="font-semibold">{[...channels].map(c => CHANNEL_CFG[c].label).join(' + ') || '—'}</span>
+          </p>
+          <Button variant="outline" size="sm" onClick={onClose} disabled={sending}>Cancel</Button>
+          <Button size="sm" className="bg-amber-600 hover:bg-amber-700 text-white" onClick={send} disabled={sending || channels.size === 0 || selectedIds.size === 0} data-testid="coverage-scoped-notify-send-btn">
+            {sending ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : sendMode === 'schedule' ? <CalendarDays className="h-4 w-4 mr-1" /> : <Send className="h-4 w-4 mr-1" />}
+            {sendMode === 'schedule' ? 'Schedule' : sendMode === 'reminder' ? 'Send + Remind' : sendMode === 'auto' ? 'Send + Auto' : 'Send'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 // ── Coverage Tree ─────────────────────────────────────────────────────────────
 // Collapsible MMP → Status → Hub → State → Data Collector → Sites tree.
 // Mirrors StatusHubTree layout, colours, and badge style exactly.
@@ -3916,7 +4218,7 @@ const ADV_STATUS_LABEL: Record<string, string> = {
   no_request:         'No Request',
 };
 
-function CoverageTree({ entries }: { entries: CoverageEntry[] }) {
+function CoverageTree({ entries, onNotify }: { entries: CoverageEntry[]; onNotify?: (ctx: CoverageNotifyCtx) => void; }) {
   // Build MMP → Status → Hub → State → DC → sites
   type DCMap  = Map<string, CoverageEntry[]>;
   type StMap  = Map<string, DCMap>;
@@ -4001,15 +4303,21 @@ function CoverageTree({ entries }: { entries: CoverageEntry[] }) {
                     <div key={stsKey}>
 
                       {/* ── Status — violet ── */}
-                      <button
-                        className="w-full flex items-center gap-2 px-4 py-2 bg-violet-50 hover:bg-violet-100 border-l-4 border-l-violet-400 text-left transition-colors"
-                        onClick={() => toggle(setOpenStss, stsKey)}
-                        data-testid={`coverage-status-${stsKey}`}
-                      >
-                        {stsOpen ? <ChevronDown className="h-3 w-3 text-violet-500 shrink-0" /> : <ChevronRight className="h-3 w-3 text-violet-400 shrink-0" />}
-                        <span className={`text-[10px] font-semibold px-2 py-0.5 rounded border capitalize ${statusChipClass(advSts)}`}>{label}</span>
-                        <span className="text-xs font-bold flex-1 text-violet-800 text-right">{stsTot} site{stsTot !== 1 ? 's' : ''}</span>
-                      </button>
+                      <div className="flex items-center bg-violet-50 hover:bg-violet-100 border-l-4 border-l-violet-400 transition-colors">
+                        <button className="flex items-center gap-2 px-4 py-2 flex-1 text-left min-w-0"
+                          onClick={() => toggle(setOpenStss, stsKey)} data-testid={`coverage-status-${stsKey}`}>
+                          {stsOpen ? <ChevronDown className="h-3 w-3 text-violet-500 shrink-0" /> : <ChevronRight className="h-3 w-3 text-violet-400 shrink-0" />}
+                          <span className={`text-[10px] font-semibold px-2 py-0.5 rounded border capitalize ${statusChipClass(advSts)}`}>{label}</span>
+                          <span className="text-xs font-bold flex-1 text-violet-800 text-right">{stsTot} site{stsTot !== 1 ? 's' : ''}</span>
+                        </button>
+                        {onNotify && (
+                          <button onClick={e => { e.stopPropagation(); onNotify({ label: `${label} — ${stsTot} sites`, mmpName: mmp, status: advSts, siteCount: stsTot }); }}
+                            title={`Notify about ${label}`} data-testid={`coverage-notify-status-${stsKey}`}
+                            className="shrink-0 p-1.5 mr-2 rounded text-violet-400 hover:text-violet-700 hover:bg-violet-200 transition-colors">
+                            <Bell className="h-3.5 w-3.5" />
+                          </button>
+                        )}
+                      </div>
 
                       {stsOpen && (
                         <div className="flex flex-col divide-y divide-blue-100">
@@ -4021,16 +4329,22 @@ function CoverageTree({ entries }: { entries: CoverageEntry[] }) {
                               <div key={hKey}>
 
                                 {/* ── Hub — blue ── */}
-                                <button
-                                  className="w-full flex items-center gap-2 px-6 py-2 bg-blue-50 hover:bg-blue-100 border-l-4 border-l-blue-400 text-left transition-colors"
-                                  onClick={() => toggle(setOpenHubs, hKey)}
-                                  data-testid={`coverage-hub-${hKey}`}
-                                >
-                                  {hubOpen ? <ChevronDown className="h-3 w-3 text-blue-500 shrink-0" /> : <ChevronRight className="h-3 w-3 text-blue-400 shrink-0" />}
-                                  <Database className="h-3 w-3 text-blue-500 shrink-0" />
-                                  <span className="text-xs font-semibold flex-1 text-blue-900 truncate">{hub}</span>
-                                  <span className="text-[9px] font-mono bg-blue-100 text-blue-700 border border-blue-200 px-2 py-0.5 rounded-full">{hubTot}</span>
-                                </button>
+                                <div className="flex items-center bg-blue-50 hover:bg-blue-100 border-l-4 border-l-blue-400 transition-colors">
+                                  <button className="flex items-center gap-2 px-6 py-2 flex-1 text-left min-w-0"
+                                    onClick={() => toggle(setOpenHubs, hKey)} data-testid={`coverage-hub-${hKey}`}>
+                                    {hubOpen ? <ChevronDown className="h-3 w-3 text-blue-500 shrink-0" /> : <ChevronRight className="h-3 w-3 text-blue-400 shrink-0" />}
+                                    <Database className="h-3 w-3 text-blue-500 shrink-0" />
+                                    <span className="text-xs font-semibold flex-1 text-blue-900 truncate">{hub}</span>
+                                    <span className="text-[9px] font-mono bg-blue-100 text-blue-700 border border-blue-200 px-2 py-0.5 rounded-full">{hubTot}</span>
+                                  </button>
+                                  {onNotify && (
+                                    <button onClick={e => { e.stopPropagation(); onNotify({ label: `${hub} Hub — ${hubTot} sites`, mmpName: mmp, status: advSts, hubName: hub, siteCount: hubTot }); }}
+                                      title={`Notify about ${hub}`} data-testid={`coverage-notify-hub-${hKey}`}
+                                      className="shrink-0 p-1.5 mr-2 rounded text-blue-400 hover:text-blue-700 hover:bg-blue-200 transition-colors">
+                                      <Bell className="h-3.5 w-3.5" />
+                                    </button>
+                                  )}
+                                </div>
 
                                 {hubOpen && (
                                   <div className="flex flex-col divide-y divide-emerald-100">
@@ -4042,16 +4356,22 @@ function CoverageTree({ entries }: { entries: CoverageEntry[] }) {
                                         <div key={stKey}>
 
                                           {/* ── State — emerald ── */}
-                                          <button
-                                            className="w-full flex items-center gap-2 px-8 py-1.5 bg-emerald-50 hover:bg-emerald-100 border-l-4 border-l-emerald-400 text-left transition-colors"
-                                            onClick={() => toggle(setOpenSts, stKey)}
-                                            data-testid={`coverage-state-${stKey}`}
-                                          >
-                                            {stOpen ? <ChevronDown className="h-3 w-3 text-emerald-500 shrink-0" /> : <ChevronRight className="h-3 w-3 text-emerald-400 shrink-0" />}
-                                            <Globe className="h-3 w-3 text-emerald-500 shrink-0" />
-                                            <span className="text-xs font-semibold flex-1 text-emerald-900 truncate">{state}</span>
-                                            <span className="text-[9px] font-mono bg-emerald-100 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded-full">{stTot}</span>
-                                          </button>
+                                          <div className="flex items-center bg-emerald-50 hover:bg-emerald-100 border-l-4 border-l-emerald-400 transition-colors">
+                                            <button className="flex items-center gap-2 px-8 py-1.5 flex-1 text-left min-w-0"
+                                              onClick={() => toggle(setOpenSts, stKey)} data-testid={`coverage-state-${stKey}`}>
+                                              {stOpen ? <ChevronDown className="h-3 w-3 text-emerald-500 shrink-0" /> : <ChevronRight className="h-3 w-3 text-emerald-400 shrink-0" />}
+                                              <Globe className="h-3 w-3 text-emerald-500 shrink-0" />
+                                              <span className="text-xs font-semibold flex-1 text-emerald-900 truncate">{state}</span>
+                                              <span className="text-[9px] font-mono bg-emerald-100 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded-full">{stTot}</span>
+                                            </button>
+                                            {onNotify && (
+                                              <button onClick={e => { e.stopPropagation(); onNotify({ label: `${state} — ${stTot} sites`, mmpName: mmp, status: advSts, hubName: hub, stateName: state, siteCount: stTot }); }}
+                                                title={`Notify about ${state}`} data-testid={`coverage-notify-state-${stKey}`}
+                                                className="shrink-0 p-1.5 mr-2 rounded text-emerald-400 hover:text-emerald-700 hover:bg-emerald-200 transition-colors">
+                                                <Bell className="h-3.5 w-3.5" />
+                                              </button>
+                                            )}
+                                          </div>
 
                                           {stOpen && (
                                             <div className="flex flex-col divide-y divide-amber-100">
@@ -4062,16 +4382,22 @@ function CoverageTree({ entries }: { entries: CoverageEntry[] }) {
                                                   <div key={dKey}>
 
                                                     {/* ── Data Collector — amber ── */}
-                                                    <button
-                                                      className="w-full flex items-center gap-2 px-10 py-1.5 bg-amber-50 hover:bg-amber-100 border-l-4 border-l-amber-400 text-left transition-colors"
-                                                      onClick={() => toggle(setOpenDCs, dKey)}
-                                                      data-testid={`coverage-dc-${dKey}`}
-                                                    >
-                                                      {dcOpen ? <ChevronDown className="h-3 w-3 text-amber-500 shrink-0" /> : <ChevronRight className="h-3 w-3 text-amber-400 shrink-0" />}
-                                                      <User className="h-3 w-3 text-amber-500 shrink-0" />
-                                                      <span className="text-xs font-semibold flex-1 text-amber-900 truncate">{dc}</span>
-                                                      <span className="text-[9px] font-mono bg-amber-100 text-amber-700 border border-amber-200 px-2 py-0.5 rounded-full">{sites.length}</span>
-                                                    </button>
+                                                    <div className="flex items-center bg-amber-50 hover:bg-amber-100 border-l-4 border-l-amber-400 transition-colors">
+                                                      <button className="flex items-center gap-2 px-10 py-1.5 flex-1 text-left min-w-0"
+                                                        onClick={() => toggle(setOpenDCs, dKey)} data-testid={`coverage-dc-${dKey}`}>
+                                                        {dcOpen ? <ChevronDown className="h-3 w-3 text-amber-500 shrink-0" /> : <ChevronRight className="h-3 w-3 text-amber-400 shrink-0" />}
+                                                        <User className="h-3 w-3 text-amber-500 shrink-0" />
+                                                        <span className="text-xs font-semibold flex-1 text-amber-900 truncate">{dc}</span>
+                                                        <span className="text-[9px] font-mono bg-amber-100 text-amber-700 border border-amber-200 px-2 py-0.5 rounded-full">{sites.length}</span>
+                                                      </button>
+                                                      {onNotify && (
+                                                        <button onClick={e => { e.stopPropagation(); onNotify({ label: `${dc} — ${sites.length} site${sites.length !== 1 ? 's' : ''}`, mmpName: mmp, status: advSts, hubName: hub, stateName: state, dcName: dc, siteCount: sites.length }); }}
+                                                          title={`Notify ${dc}`} data-testid={`coverage-notify-dc-${dKey}`}
+                                                          className="shrink-0 p-1.5 mr-2 rounded text-amber-500 hover:text-violet-600 hover:bg-violet-50 transition-colors">
+                                                          <Bell className="h-3.5 w-3.5" />
+                                                        </button>
+                                                      )}
+                                                    </div>
 
                                                     {/* ── Sites ── */}
                                                     {dcOpen && (
