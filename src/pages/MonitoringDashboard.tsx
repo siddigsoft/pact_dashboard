@@ -3931,6 +3931,13 @@ type CoverageNotifyCtx = {
   siteCount: number;
 };
 
+// Determines who originally submitted / who should get the FYI back-notification
+function fyiRolesForStatus(status?: string): string[] | null {
+  if (status === 'pending_supervisor') return ['coordinator'];
+  if (status === 'pending_admin')      return ['supervisor'];
+  return null; // no FYI needed
+}
+
 function CoverageScopedNotifyDialog({ open, onClose, ctx }: {
   open: boolean; onClose: () => void; ctx: CoverageNotifyCtx;
 }) {
@@ -3947,6 +3954,13 @@ function CoverageScopedNotifyDialog({ open, onClose, ctx }: {
   const [autoEndDate, setAutoEndDate] = useState('');
   const [priority, setPriority] = useState<'normal' | 'high' | 'urgent'>('normal');
   const [openGroups, setOpenGroups] = useState<Set<string>>(new Set());
+
+  // FYI back-notification state (sent to the requester for awareness)
+  const hasFyiTier = !ctx.dcName && fyiRolesForStatus(ctx.status) !== null;
+  const [notifyFyi, setNotifyFyi] = useState(true);
+  const [fyiProfiles, setFyiProfiles] = useState<{ id: string; full_name: string | null; email: string | null; role: string | null }[]>([]);
+  const [fyiMsgEn, setFyiMsgEn] = useState('');
+  const [fyiMsgAr, setFyiMsgAr] = useState('');
 
   const statusLabel = ctx.status ? (ADV_STATUS_LABEL[ctx.status] ?? ctx.status.replace(/_/g, ' ')) : '';
 
@@ -3978,6 +3992,26 @@ function CoverageScopedNotifyDialog({ open, onClose, ctx }: {
     };
   };
 
+  // Build FYI back-notification message (sent to the requester for awareness)
+  const buildFyiMsgs = () => {
+    const hub = ctx.hubName ?? ctx.label;
+    const mmp = ctx.mmpName ? ` (${ctx.mmpName})` : '';
+    const n = ctx.siteCount;
+    if (ctx.status === 'pending_supervisor') {
+      return {
+        en: `Update on your advance requests${mmp}: The supervisors have been notified about your ${n} pending site${n !== 1 ? 's' : ''} in "${hub}" that are awaiting approval. No action is needed from you at this time — you will be notified once a decision has been made.`,
+        ar: `تحديث بشأن طلباتك المسبقة${mmp}: لقد تم إبلاغ المشرفين بشأن ${n} موقع${n !== 1 ? '' : ''} معلق لديك في "${hub}" الذي ينتظر الموافقة. لا حاجة لأي إجراء من جانبك في الوقت الحالي — سيتم إخطارك فور اتخاذ القرار.`,
+      };
+    }
+    if (ctx.status === 'pending_admin') {
+      return {
+        en: `Update on your approved requests${mmp}: The admin/FOMs have been notified about ${n} site${n !== 1 ? 's' : ''} in "${hub}" awaiting final approval. No further action is needed from your side at this time — you will be notified once the final decision is made.`,
+        ar: `تحديث بشأن طلباتك الموافق عليها${mmp}: لقد تم إبلاغ الإدارة / مديري العمليات الميدانية بشأن ${n} موقع${n !== 1 ? '' : ''} في "${hub}" في انتظار الموافقة النهائية. لا حاجة لأي إجراء إضافي من جانبك في الوقت الحالي — سيتم إخطارك فور صدور القرار النهائي.`,
+      };
+    }
+    return { en: '', ar: '' };
+  };
+
   const [msgEn, setMsgEn] = useState(() => buildMsgs().en);
   const [msgAr, setMsgAr] = useState(() => buildMsgs().ar);
 
@@ -3985,6 +4019,9 @@ function CoverageScopedNotifyDialog({ open, onClose, ctx }: {
     if (!open) return;
     const msgs = buildMsgs();
     setMsgEn(msgs.en); setMsgAr(msgs.ar);
+    const fyiMsgs = buildFyiMsgs();
+    setFyiMsgEn(fyiMsgs.en); setFyiMsgAr(fyiMsgs.ar);
+    setNotifyFyi(hasFyiTier);
     setChannels(new Set(['inApp', 'fcm', 'email']));
     setSendMode('now'); setScheduledAt(''); setReminderDays(3); setAutoIntervalDays(7); setAutoEndDate('');
     setPriority('normal'); setOpenGroups(new Set());
@@ -4010,18 +4047,23 @@ function CoverageScopedNotifyDialog({ open, onClose, ctx }: {
             if (s === 'no_request')            return ['coordinator'];
             if (s === 'pending_supervisor')    return ['supervisor'];
             if (s === 'pending_admin')         return ['fom', 'admin'];
-            // status or hub/state level with no specific status → all relevant roles
             return ['coordinator', 'supervisor', 'fom', 'admin'];
           })();
-          const { data } = await supabase
-            .from('profiles')
-            .select('id, full_name, email, role')
-            .in('role', rolesToLoad)
-            .eq('status', 'approved')
-            .order('role');
-          const found = (data ?? []) as typeof profiles;
-          setProfiles(found);
-          setSelectedIds(new Set(found.map(p => p.id)));
+
+          // Load action-takers and FYI recipients in parallel
+          const fyiRoles = fyiRolesForStatus(ctx.status);
+          const [mainRes, fyiRes] = await Promise.all([
+            supabase.from('profiles').select('id, full_name, email, role')
+              .in('role', rolesToLoad).eq('status', 'approved').order('role'),
+            fyiRoles
+              ? supabase.from('profiles').select('id, full_name, email, role')
+                  .in('role', fyiRoles).eq('status', 'approved').order('full_name')
+              : Promise.resolve({ data: [], error: null }),
+          ]);
+          const mainFound = (mainRes.data ?? []) as typeof profiles;
+          setProfiles(mainFound);
+          setSelectedIds(new Set(mainFound.map(p => p.id)));
+          setFyiProfiles((fyiRes.data ?? []) as typeof fyiProfiles);
         }
       } finally {
         setLoading(false);
@@ -4100,7 +4142,29 @@ function CoverageScopedNotifyDialog({ open, onClose, ctx }: {
         supabase.from('broadcast_messages').insert({ title_en: titleEn, title_ar: titleAr, message_en: msgEn, message_ar: msgAr, priority, created_by: null }).catch(() => {});
       }
 
-      toast({ title: `Sent to ${recipientIds.length} recipient${recipientIds.length !== 1 ? 's' : ''}`, description: `Via: ${[...channels].map(c => CHANNEL_CFG[c].label).join(' + ')}` });
+      // ── FYI back-notification to requester ──────────────────────────────────
+      if (hasFyiTier && notifyFyi && fyiProfiles.length > 0 && fyiMsgEn) {
+        const fyiIds = fyiProfiles.map(p => p.id);
+        const fyiTitleEn = '📢 Update on Your Advance Requests';
+        const fyiTitleAr = '📢 تحديث بشأن طلباتك المسبقة';
+        // In-app FYI always
+        await insertNotifications(fyiIds.map(id => ({
+          recipient_id: id, title_en: fyiTitleEn, title_ar: fyiTitleAr,
+          message_en: fyiMsgEn, message_ar: fyiMsgAr,
+          event_type: 'coverage_fyi', action_url: '/admin/monitoring', priority: 'normal', status: 'unread',
+        }))).catch(() => {});
+        // Email FYI if channel selected
+        if (channels.has('email')) {
+          const fyiEmailProfiles = fyiProfiles.filter(p => p.email);
+          for (const p of fyiEmailProfiles) {
+            const fyiHtml = `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:24px;"><div style="background:#1D3461;padding:20px 24px;border-radius:8px 8px 0 0;"><h2 style="color:#fff;margin:0;font-size:17px;">${fyiTitleEn}</h2></div><div style="border:1px solid #e5e7eb;border-top:none;padding:24px;border-radius:0 0 8px 8px;"><p style="color:#374151;font-size:14px;line-height:1.7;white-space:pre-line;margin:0 0 16px;">${fyiMsgEn}</p><hr style="border:none;border-top:1px solid #e5e7eb;margin:16px 0;" /><p style="color:#6b7280;font-size:13px;text-align:right;direction:rtl;line-height:1.8;">${fyiTitleAr}<br/><br/>${fyiMsgAr}</p></div><p style="color:#9ca3af;font-size:11px;text-align:center;margin-top:12px;">For your information only — no action required</p></div>`;
+            await EmailNotificationService.sendEmail({ to: p.email!, subject: `${fyiTitleEn} | ${fyiTitleAr}`, recipientName: p.full_name ?? undefined, html: fyiHtml, text: `${fyiTitleEn}\n\n${fyiMsgEn}\n\n---\n\n${fyiTitleAr}\n\n${fyiMsgAr}`, priority: 'normal' }).catch(() => {});
+          }
+        }
+      }
+
+      const fyiSuffix = hasFyiTier && notifyFyi && fyiProfiles.length > 0 ? ` + FYI to ${fyiProfiles.length} requester${fyiProfiles.length !== 1 ? 's' : ''}` : '';
+      toast({ title: `Sent to ${recipientIds.length} recipient${recipientIds.length !== 1 ? 's' : ''}${fyiSuffix}`, description: `Via: ${[...channels].map(c => CHANNEL_CFG[c].label).join(' + ')}` });
       onClose();
     } catch (err) {
       toast({ title: 'Failed to send', description: String(err), variant: 'destructive' });
@@ -4110,6 +4174,7 @@ function CoverageScopedNotifyDialog({ open, onClose, ctx }: {
   };
 
   const priorityColors = { normal: 'bg-slate-100 text-slate-700 border-slate-300', high: 'bg-amber-100 text-amber-700 border-amber-300', urgent: 'bg-red-100 text-red-700 border-red-300' };
+  const fyiRoleLabel = ctx.status === 'pending_supervisor' ? 'coordinators' : ctx.status === 'pending_admin' ? 'supervisors' : 'requesters';
 
   return (
     <Dialog open={open} onOpenChange={v => { if (!v) onClose(); }}>
@@ -4222,11 +4287,60 @@ function CoverageScopedNotifyDialog({ open, onClose, ctx }: {
           <NotifScheduler sendMode={sendMode} setSendMode={setSendMode} scheduledAt={scheduledAt} setScheduledAt={setScheduledAt}
             reminderDays={reminderDays} setReminderDays={setReminderDays} autoIntervalDays={autoIntervalDays} setAutoIntervalDays={setAutoIntervalDays}
             autoEndDate={autoEndDate} setAutoEndDate={setAutoEndDate} />
+
+          {/* ── FYI back-notification tier ── */}
+          {hasFyiTier && (
+            <div className={`rounded-lg border px-3 py-3 flex flex-col gap-2.5 transition-colors ${notifyFyi ? 'bg-sky-50 border-sky-200' : 'bg-slate-50 border-slate-200 opacity-60'}`}>
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id="fyi-toggle"
+                    checked={notifyFyi}
+                    onChange={e => setNotifyFyi(e.target.checked)}
+                    className="h-4 w-4 accent-sky-600 cursor-pointer"
+                    data-testid="fyi-notify-toggle"
+                  />
+                  <label htmlFor="fyi-toggle" className="text-xs font-bold text-sky-800 cursor-pointer select-none flex items-center gap-1.5">
+                    <span className="text-sky-600">📢</span>
+                    Also notify the requester (FYI only)
+                  </label>
+                </div>
+                {fyiProfiles.length > 0 && (
+                  <span className="text-[10px] font-semibold bg-sky-100 text-sky-700 border border-sky-200 px-2 py-0.5 rounded-full">
+                    {fyiProfiles.length} {fyiRoleLabel}
+                  </span>
+                )}
+              </div>
+              {notifyFyi && (
+                <>
+                  <p className="text-[10px] text-sky-600 leading-snug">
+                    {ctx.status === 'pending_supervisor'
+                      ? `Coordinators will be informed that supervisors have been notified — no action required from them.`
+                      : `Supervisors will be informed that admin/FOMs have been notified — no action required from them.`
+                    }
+                  </p>
+                  <div className="flex flex-col gap-1">
+                    <label className="text-[10px] font-semibold text-sky-700 uppercase tracking-wide">FYI Message (English)</label>
+                    <Textarea rows={2} value={fyiMsgEn} onChange={e => setFyiMsgEn(e.target.value)} className="text-xs resize-none bg-white border-sky-200 focus-visible:ring-sky-300" data-testid="fyi-msg-en" />
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <label className="text-[10px] font-semibold text-sky-700 uppercase tracking-wide">FYI Message (Arabic)</label>
+                    <Textarea rows={2} value={fyiMsgAr} onChange={e => setFyiMsgAr(e.target.value)} className="text-xs resize-none text-right bg-white border-sky-200 focus-visible:ring-sky-300" dir="rtl" data-testid="fyi-msg-ar" />
+                  </div>
+                </>
+              )}
+            </div>
+          )}
         </div>
 
         <DialogFooter className="px-5 py-3 border-t shrink-0 flex items-center justify-between gap-3">
-          <p className="text-xs text-muted-foreground flex-1">
-            {sendMode === 'schedule' ? 'Scheduling' : 'Sending'} to <span className="font-bold text-foreground">{selectedIds.size}</span> recipient{selectedIds.size !== 1 ? 's' : ''} via <span className="font-semibold">{[...channels].map(c => CHANNEL_CFG[c].label).join(' + ') || '—'}</span>
+          <p className="text-xs text-muted-foreground flex-1 leading-snug">
+            {sendMode === 'schedule' ? 'Scheduling' : 'Sending'} to <span className="font-bold text-foreground">{selectedIds.size}</span> action-taker{selectedIds.size !== 1 ? 's' : ''}
+            {hasFyiTier && notifyFyi && fyiProfiles.length > 0 && (
+              <> + <span className="font-bold text-sky-700">{fyiProfiles.length}</span> FYI</>
+            )}
+            {' '}via <span className="font-semibold">{[...channels].map(c => CHANNEL_CFG[c].label).join(' + ') || '—'}</span>
           </p>
           <Button variant="outline" size="sm" onClick={onClose} disabled={sending}>Cancel</Button>
           <Button size="sm" className="bg-amber-600 hover:bg-amber-700 text-white" onClick={send} disabled={sending || channels.size === 0 || selectedIds.size === 0} data-testid="coverage-scoped-notify-send-btn">
