@@ -2021,6 +2021,8 @@ function NotifyUsersDialog({ open, onClose, allActions, categoryLabel }: {
     setReminderDays(3);
     setAutoIntervalDays(7);
     setAutoEndDate('');
+    setPriority('normal');
+    setOpenGroups(new Set());
   }, [open]);
 
   const toggleUser = (id: string) =>
@@ -2304,6 +2306,11 @@ function CoverageNotifyDialog({
   const [autoIntervalDays, setAutoIntervalDays] = useState(7);
   const [autoEndDate, setAutoEndDate] = useState('');
 
+  // Recipient group collapse state — all collapsed by default
+  const [openGroups, setOpenGroups] = useState<Set<string>>(new Set());
+  const toggleGroupOpen = (label: string) =>
+    setOpenGroups(prev => { const n = new Set(prev); n.has(label) ? n.delete(label) : n.add(label); return n; });
+
   const defaultMsgEn = `Transportation advance coverage requires your attention.\n\n• ${summary.noRequest.toLocaleString()} site${summary.noRequest !== 1 ? 's' : ''} with no advance request yet\n• ${summary.pendingSupervisor.toLocaleString()} site${summary.pendingSupervisor !== 1 ? 's' : ''} pending supervisor approval\n• ${summary.pendingAdmin.toLocaleString()} site${summary.pendingAdmin !== 1 ? 's' : ''} pending admin approval\n\nOverall coverage: ${summary.pct}% of ${summary.total.toLocaleString()} active sites. Please log in and take the necessary action.`;
   const defaultMsgAr = `يحتاج تغطية مسبقة للنقل إلى اهتمامكم.\n\n• ${summary.noRequest.toLocaleString()} موقع بدون طلب مسبق حتى الآن\n• ${summary.pendingSupervisor.toLocaleString()} موقع في انتظار موافقة المشرف\n• ${summary.pendingAdmin.toLocaleString()} موقع في انتظار موافقة المسؤول\n\nنسبة التغطية الإجمالية: ${summary.pct}% من ${summary.total.toLocaleString()} موقعاً نشطاً. يرجى تسجيل الدخول واتخاذ الإجراء اللازم.`;
 
@@ -2322,6 +2329,8 @@ function CoverageNotifyDialog({
     setReminderDays(3);
     setAutoIntervalDays(7);
     setAutoEndDate('');
+    setPriority('normal');
+    setOpenGroups(new Set());
     const allRoles = COVERAGE_ROLE_GROUPS.flatMap(g => g.role);
     supabase
       .from('profiles')
