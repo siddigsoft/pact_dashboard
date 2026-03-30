@@ -3990,9 +3990,25 @@ function CoverageScopedNotifyDialog({ open, onClose, ctx }: {
 
   const buildMsgs = () => {
     if (ctx.dcName) {
+      const hub = ctx.hubName ? ` (${ctx.hubName})` : '';
+      const grp = statusLabel || ctx.mmpName || 'PACT';
+      const n = ctx.siteCount;
+      const s = n !== 1 ? 's' : '';
+      if (ctx.status === 'pending_supervisor') {
+        return {
+          en: `Your advance request${s} for ${n} site${s} in the "${grp}" group${hub} ${n !== 1 ? 'are' : 'is'} currently pending supervisor approval. No action is needed from you at this time — you will be notified once a decision has been made.`,
+          ar: `طلب${n !== 1 ? 'اتك' : 'ك'} المسبق${n !== 1 ? 'ة' : ''} لـ ${n} موقع في مجموعة "${grp}"${hub} ${n !== 1 ? 'قيد انتظار' : 'قيد انتظار'} موافقة المشرف. لا حاجة لأي إجراء من جانبك الآن — سيتم إخطارك فور اتخاذ القرار.`,
+        };
+      }
+      if (ctx.status === 'pending_admin') {
+        return {
+          en: `Your advance request${s} for ${n} site${s} in the "${grp}" group${hub} ${n !== 1 ? 'have' : 'has'} been approved by the supervisor and ${n !== 1 ? 'are' : 'is'} now pending final admin/FOM approval. No further action is needed from you — you will be notified of the outcome.`,
+          ar: `طلب${n !== 1 ? 'اتك' : 'ك'} المسبق${n !== 1 ? 'ة' : ''} لـ ${n} موقع في مجموعة "${grp}"${hub} تمت الموافقة عليها من قِبل المشرف وهي الآن في انتظار الموافقة النهائية من الإدارة. لا حاجة لأي إجراء إضافي منك — سيتم إخطارك بالنتيجة.`,
+        };
+      }
       return {
-        en: `You have ${ctx.siteCount} site${ctx.siteCount !== 1 ? 's' : ''} in the "${statusLabel || ctx.mmpName || 'PACT'}" coverage group${ctx.hubName ? ` (${ctx.hubName})` : ''} that require an advance request. Please log in and submit the necessary requests at your earliest convenience.`,
-        ar: `لديك ${ctx.siteCount} موقع${ctx.siteCount !== 1 ? '' : ''} في مجموعة التغطية "${statusLabel || ctx.mmpName || 'PACT'}"${ctx.hubName ? ` (${ctx.hubName})` : ''} تحتاج إلى طلب مسبق. يرجى تسجيل الدخول وتقديم الطلبات اللازمة في أقرب وقت ممكن.`,
+        en: `You have ${n} site${s} in the "${grp}" coverage group${hub} that require an advance request. Please log in and submit the necessary requests at your earliest convenience.`,
+        ar: `لديك ${n} موقع في مجموعة التغطية "${grp}"${hub} تحتاج إلى طلب مسبق. يرجى تسجيل الدخول وتقديم الطلبات اللازمة في أقرب وقت ممكن.`,
       };
     }
     const locationCtx = ctx.hubName && !ctx.label.includes(ctx.hubName) ? ` (${ctx.hubName})` : '';
@@ -4241,6 +4257,39 @@ function CoverageScopedNotifyDialog({ open, onClose, ctx }: {
             <p className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground mb-2">
               Recipients {selectedIds.size > 0 && <span className="ml-1 text-violet-600">({selectedIds.size} selected)</span>}
             </p>
+            {/* Who-gets-notified hint */}
+            {(() => {
+              if (ctx.dcName) return (
+                <div className="flex items-center gap-1.5 text-[10px] bg-amber-50 border border-amber-200 text-amber-700 rounded px-2.5 py-1.5 mb-2">
+                  <span>👤</span>
+                  <span>Personal reminder to <strong>{ctx.dcName}</strong> about their sites</span>
+                </div>
+              );
+              if (ctx.status === 'no_request') return (
+                <div className="flex items-center gap-1.5 text-[10px] bg-blue-50 border border-blue-200 text-blue-700 rounded px-2.5 py-1.5 mb-2">
+                  <span>🎯</span>
+                  <span>Notifying <strong>Coordinators</strong> — they need to submit advance requests for these sites</span>
+                </div>
+              );
+              if (ctx.status === 'pending_supervisor') return (
+                <div className="flex items-center gap-1.5 text-[10px] bg-violet-50 border border-violet-200 text-violet-700 rounded px-2.5 py-1.5 mb-2">
+                  <span>🎯</span>
+                  <span>Notifying <strong>Supervisors</strong> — they need to approve the pending advance requests</span>
+                </div>
+              );
+              if (ctx.status === 'pending_admin') return (
+                <div className="flex items-center gap-1.5 text-[10px] bg-emerald-50 border border-emerald-200 text-emerald-700 rounded px-2.5 py-1.5 mb-2">
+                  <span>🎯</span>
+                  <span>Notifying <strong>FOMs & Admins</strong> — they need to grant final approval</span>
+                </div>
+              );
+              return (
+                <div className="flex items-center gap-1.5 text-[10px] bg-slate-50 border border-slate-200 text-slate-600 rounded px-2.5 py-1.5 mb-2">
+                  <span>🎯</span>
+                  <span>Notifying <strong>all relevant roles</strong> — select recipients below</span>
+                </div>
+              );
+            })()}
             {loading ? (
               <div className="flex flex-col gap-1">{[1,2].map(i => <Skeleton key={i} className="h-10 w-full rounded-lg" />)}</div>
             ) : profiles.length === 0 ? (
