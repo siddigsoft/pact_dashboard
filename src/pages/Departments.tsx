@@ -669,7 +669,7 @@ export default function Departments() {
     }
   }, [toast]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { if (canAccess) load(); }, [canAccess, load]);
 
   const handleDelete = async () => {
     if (!deleteTarget) return;
