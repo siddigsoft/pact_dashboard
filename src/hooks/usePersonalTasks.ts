@@ -41,6 +41,7 @@ export interface CreatePersonalTask {
   notes?: string | null;
   assignedTo?: string | null;
   assignedToName?: string | null;
+  assignedToEmail?: string | null;
   // Task #10 additions
   parentTaskId?: string | null;
   targetDepartmentId?: string | null;
@@ -401,9 +402,11 @@ export function usePersonalTasks(userId: string | undefined) {
       if (assignedTo !== task.userId && data?.id) {
         try {
           await sendTaskNotification({ userId: assignedTo, taskId: data.id, title: task.title, priority: p, event: 'assigned' });
-          if (task.userEmail) {
+          // Use the per-assignee email if supplied (dept bulk assign), otherwise fall back to creator email
+          const emailToNotify = task.assignedToEmail ?? task.userEmail ?? null;
+          if (emailToNotify) {
             await sendTaskEmail({
-              email: task.userEmail,
+              email: emailToNotify,
               titleEn: 'New Task Assigned',
               body: `You have been assigned a new task: "${task.title}".\n\nView your tasks: https://app.pactorg.com/my-tasks`,
             });
@@ -544,6 +547,25 @@ export function usePersonalTasks(userId: string | undefined) {
   };
 }
 
+// ── Assigned project task shape ────────────────────────────────────────────
+export interface AssignedProjectTask {
+  id: string;
+  title: unknown;
+  description: unknown;
+  priority: unknown;
+  status: unknown;
+  dueDate: unknown;
+  startDate: unknown;
+  projectId: unknown;
+  projectName: string;
+  stageId: unknown;
+  stateName: unknown;
+  localityName: unknown;
+  notes: unknown;
+  assignedToName: unknown;
+  createdAt: unknown;
+}
+
 export function useUpdateProjectTaskStatus() {
   const qc = useQueryClient();
   return useMutation({
@@ -559,9 +581,9 @@ export function useUpdateProjectTaskStatus() {
 }
 
 export function useAssignedProjectTasks(userId: string | undefined) {
-  return useQuery({
+  return useQuery<AssignedProjectTask[]>({
     queryKey: ['assigned_project_tasks', userId],
-    queryFn: async () => {
+    queryFn: async (): Promise<AssignedProjectTask[]> => {
       if (!userId) return [];
       const { data, error } = await supabase
         .from('project_field_tasks')
@@ -571,8 +593,9 @@ export function useAssignedProjectTasks(userId: string | undefined) {
         .order('due_date', { ascending: true, nullsFirst: false });
       if (error) throw error;
 
-      const projectIds = [...new Set((data ?? []).map((t: Record<string, unknown>) => t.project_id as string).filter(Boolean))];
-      let projectNames: Record<string, string> = {};
+      const rows = (data ?? []) as Record<string, unknown>[];
+      const projectIds = [...new Set(rows.map(t => t.project_id as string).filter(Boolean))];
+      const projectNames: Record<string, string> = {};
       if (projectIds.length > 0) {
         const { data: projects } = await supabase
           .from('projects')
@@ -581,8 +604,8 @@ export function useAssignedProjectTasks(userId: string | undefined) {
         (projects ?? []).forEach((p: Record<string, unknown>) => { projectNames[p.id as string] = p.name as string; });
       }
 
-      return (data ?? []).map((t: Record<string, unknown>) => ({
-        id: t.id,
+      return rows.map((t): AssignedProjectTask => ({
+        id: t.id as string,
         title: t.title,
         description: t.description,
         priority: t.priority,

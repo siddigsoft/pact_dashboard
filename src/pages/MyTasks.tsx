@@ -11,7 +11,7 @@ import {
   Search, PlayCircle, Sparkles, LayoutGrid, LayoutList,
   Users, Trophy, Zap, TrendingUp, Target, ChevronDown,
   ChevronUp, Eye, EyeOff, Award, Lightbulb, BookOpen,
-  GanttChartSquare, HelpCircle, Info, Building2,
+  GanttChartSquare, HelpCircle, Info, Building2, ListChecks,
 } from 'lucide-react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -52,6 +52,7 @@ import {
   usePersonalTasks, useAssignedProjectTasks, useUpdateProjectTaskStatus, useCreatedByMeTasks,
   materialiseDailyTasks,
   type PersonalTask, type PersonalTaskPriority, type PersonalTaskStatus, type CreatePersonalTask,
+  type AssignedProjectTask,
 } from '@/hooks/usePersonalTasks';
 
 // ── Config ─────────────────────────────────────────────────────────────────
@@ -172,127 +173,247 @@ function QuickAddBar({ onAdd, isCreating }: QuickAddProps) {
 
 interface PersonalTaskCardProps {
   task: PersonalTask;
+  subtasks: PersonalTask[];
   onStatusChange: (status: PersonalTaskStatus, prev: PersonalTaskStatus) => void;
   onEdit: () => void;
   onDelete: () => void;
+  onCreateSubtask?: (title: string) => Promise<void>;
+  onSubtaskStatusChange?: (id: string, status: PersonalTaskStatus, prev: PersonalTaskStatus) => void;
 }
 
-function PersonalTaskCard({ task, onStatusChange, onEdit, onDelete }: PersonalTaskCardProps) {
+function PersonalTaskCard({
+  task, subtasks, onStatusChange, onEdit, onDelete,
+  onCreateSubtask, onSubtaskStatusChange,
+}: PersonalTaskCardProps) {
   const pCfg = PRIORITY_CFG[task.priority] ?? PRIORITY_CFG.medium;
   const sCfg = STATUS_CFG[task.status] ?? STATUS_CFG.todo;
   const overdue = isOverdue(task.dueDate, task.status);
   const isDone = task.status === 'done';
   const isInProgress = task.status === 'inprogress';
+  const [subtaskOpen, setSubtaskOpen] = useState(false);
+  const [newSubtaskTitle, setNewSubtaskTitle] = useState('');
+  const [addingSubtask, setAddingSubtask] = useState(false);
+
+  const doneSubs = subtasks.filter(s => s.status === 'done').length;
+  const totalSubs = subtasks.length;
+  const subProgress = totalSubs > 0 ? Math.round((doneSubs / totalSubs) * 100) : 0;
+
+  const handleAddSubtask = async () => {
+    const t = newSubtaskTitle.trim();
+    if (!t || !onCreateSubtask) return;
+    setAddingSubtask(true);
+    try {
+      await onCreateSubtask(t);
+      setNewSubtaskTitle('');
+    } finally {
+      setAddingSubtask(false);
+    }
+  };
 
   return (
     <div className={cn(
-      'group flex items-start gap-3 px-3 py-2.5 rounded-lg border border-l-4 bg-card hover:shadow-sm transition-all',
+      'rounded-lg border border-l-4 bg-card hover:shadow-sm transition-all',
       sCfg.border,
       isDone && 'opacity-60',
     )}>
-      {/* Status toggle circle */}
-      <button
-        type="button"
-        className={cn(
-          'mt-0.5 h-5 w-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-all hover:scale-110',
-          isDone
-            ? 'border-emerald-500 bg-emerald-500'
-            : isInProgress
-            ? 'border-[#1D3461] bg-[#1D3461]/10'
-            : 'border-muted-foreground/40 hover:border-emerald-500 hover:bg-emerald-50',
-        )}
-        onClick={() => onStatusChange(isDone ? 'todo' : 'done', task.status)}
-        title={isDone ? 'Click to reopen' : 'Click to mark as done'}
-        data-testid={`task-toggle-${task.id}`}
-      >
-        {isDone
-          ? <CheckCircle2 className="h-3 w-3 text-white" />
-          : isInProgress
-          ? <div className="h-2 w-2 rounded-full bg-[#1D3461]" />
-          : <CheckCircle2 className="h-3 w-3 text-emerald-500 opacity-0 group-hover:opacity-60 transition-opacity" />
-        }
-      </button>
-
-      {/* Content */}
-      <div className="flex-1 min-w-0">
-        <p className={cn('text-sm font-medium leading-snug', isDone && 'line-through text-muted-foreground')}>
-          {task.title}
-        </p>
-        {task.description && (
-          <p className="text-xs text-muted-foreground mt-0.5 truncate">{task.description}</p>
-        )}
-        <div className="flex items-center gap-2 mt-1 flex-wrap">
-          <span className={cn('text-[9px] font-semibold px-1.5 py-0.5 rounded-full', pCfg.color)}>
-            {pCfg.label}
-          </span>
-          {task.dueDate && (
-            <span className={cn(
-              'text-[10px] flex items-center gap-0.5',
-              overdue ? 'text-red-600 font-semibold' : (isValid(parseISO(task.dueDate)) && isToday(parseISO(task.dueDate))) ? 'text-amber-600 font-medium' : 'text-muted-foreground',
-            )}>
-              <Calendar className="h-2.5 w-2.5" />
-              {overdue && '⚠ '}{fmtDate(task.dueDate)}
-            </span>
-          )}
-          {task.category && task.category !== 'personal' && (
-            <span className="text-[9px] bg-muted text-muted-foreground px-1.5 py-0.5 rounded-full">{task.category}</span>
-          )}
-          {task.completionRewardAmount && task.completionRewardAmount > 0 && (
-            <span className="text-[9px] bg-emerald-50 text-emerald-700 border border-emerald-200 px-1.5 py-0.5 rounded-full flex items-center gap-0.5">
-              <span>+{task.completionRewardCurrency} {task.completionRewardAmount}</span>
-            </span>
-          )}
-          {task.recurrence && task.recurrence !== 'none' && (
-            <span className="text-[9px] bg-blue-50 text-blue-600 border border-blue-200 px-1.5 py-0.5 rounded-full capitalize">{task.recurrence}</span>
-          )}
-        </div>
-      </div>
-
-      {/* "Mark Done" visible button (not done tasks only) */}
-      {!isDone && (
+      {/* Main row */}
+      <div className="group flex items-start gap-3 px-3 py-2.5">
+        {/* Status toggle circle */}
         <button
           type="button"
-          onClick={() => onStatusChange('done', task.status)}
-          className="opacity-0 group-hover:opacity-100 transition-opacity text-[10px] font-medium text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-2 py-0.5 rounded-full flex items-center gap-1 flex-shrink-0"
-          data-testid={`task-mark-done-${task.id}`}
+          className={cn(
+            'mt-0.5 h-5 w-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-all hover:scale-110',
+            isDone
+              ? 'border-emerald-500 bg-emerald-500'
+              : isInProgress
+              ? 'border-[#1D3461] bg-[#1D3461]/10'
+              : 'border-muted-foreground/40 hover:border-emerald-500 hover:bg-emerald-50',
+          )}
+          onClick={() => onStatusChange(isDone ? 'todo' : 'done', task.status)}
+          title={isDone ? 'Click to reopen' : 'Click to mark as done'}
+          data-testid={`task-toggle-${task.id}`}
         >
-          <CheckCircle2 className="h-3 w-3" /> Done
+          {isDone
+            ? <CheckCircle2 className="h-3 w-3 text-white" />
+            : isInProgress
+            ? <div className="h-2 w-2 rounded-full bg-[#1D3461]" />
+            : <CheckCircle2 className="h-3 w-3 text-emerald-500 opacity-0 group-hover:opacity-60 transition-opacity" />
+          }
         </button>
-      )}
 
-      {/* Status dropdown */}
-      <Select
-        value={task.status}
-        onValueChange={v => onStatusChange(v as PersonalTaskStatus, task.status)}
-      >
-        <SelectTrigger className="h-6 w-6 border-0 bg-transparent p-0 focus:ring-0 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" title="Change status">
-          <MoreHorizontal className="h-4 w-4 text-muted-foreground" />
-        </SelectTrigger>
-        <SelectContent>
-          <div className="px-2 py-1 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Change Status</div>
-          {(['todo', 'inprogress', 'done', 'cancelled'] as PersonalTaskStatus[]).map(s => (
-            <SelectItem key={s} value={s} className="text-xs">
-              <span className={cn('px-1.5 py-0.5 rounded-full text-[9px] font-semibold', STATUS_CFG[s].color)}>{STATUS_CFG[s].label}</span>
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+        {/* Content */}
+        <div className="flex-1 min-w-0">
+          <p className={cn('text-sm font-medium leading-snug', isDone && 'line-through text-muted-foreground')}>
+            {task.title}
+          </p>
+          {task.description && (
+            <p className="text-xs text-muted-foreground mt-0.5 truncate">{task.description}</p>
+          )}
+          <div className="flex items-center gap-2 mt-1 flex-wrap">
+            <span className={cn('text-[9px] font-semibold px-1.5 py-0.5 rounded-full', pCfg.color)}>
+              {pCfg.label}
+            </span>
+            {task.dueDate && (
+              <span className={cn(
+                'text-[10px] flex items-center gap-0.5',
+                overdue ? 'text-red-600 font-semibold' : (isValid(parseISO(task.dueDate)) && isToday(parseISO(task.dueDate))) ? 'text-amber-600 font-medium' : 'text-muted-foreground',
+              )}>
+                <Calendar className="h-2.5 w-2.5" />
+                {overdue && '⚠ '}{fmtDate(task.dueDate)}
+              </span>
+            )}
+            {task.category && task.category !== 'personal' && (
+              <span className="text-[9px] bg-muted text-muted-foreground px-1.5 py-0.5 rounded-full">{task.category}</span>
+            )}
+            {task.completionRewardAmount && task.completionRewardAmount > 0 && (
+              <span className="text-[9px] bg-emerald-50 text-emerald-700 border border-emerald-200 px-1.5 py-0.5 rounded-full flex items-center gap-0.5">
+                <span>+{task.completionRewardCurrency} {task.completionRewardAmount}</span>
+              </span>
+            )}
+            {task.recurrence && task.recurrence !== 'none' && (
+              <span className="text-[9px] bg-blue-50 text-blue-600 border border-blue-200 px-1.5 py-0.5 rounded-full capitalize">{task.recurrence}</span>
+            )}
+          </div>
+          {/* Subtask progress bar */}
+          {totalSubs > 0 && (
+            <button
+              type="button"
+              onClick={() => setSubtaskOpen(v => !v)}
+              className="mt-1.5 flex items-center gap-1.5 group/sub hover:opacity-80 transition-opacity"
+              data-testid={`subtask-toggle-${task.id}`}
+            >
+              <div className="flex-1 h-1 bg-muted rounded-full overflow-hidden w-24">
+                <div className="h-full bg-[#1D3461] rounded-full transition-all" style={{ width: `${subProgress}%` }} />
+              </div>
+              <span className="text-[9px] text-muted-foreground">
+                {doneSubs}/{totalSubs} subtasks
+              </span>
+              {subtaskOpen
+                ? <ChevronDown className="h-2.5 w-2.5 text-muted-foreground" />
+                : <ChevronRight className="h-2.5 w-2.5 text-muted-foreground" />
+              }
+            </button>
+          )}
+        </div>
 
-      {/* More actions */}
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <button type="button" className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-foreground p-0.5 flex-shrink-0">
-            <Edit2 className="h-3.5 w-3.5" />
+        {/* "Mark Done" visible button (not done tasks only) */}
+        {!isDone && (
+          <button
+            type="button"
+            onClick={() => onStatusChange('done', task.status)}
+            className="opacity-0 group-hover:opacity-100 transition-opacity text-[10px] font-medium text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-2 py-0.5 rounded-full flex items-center gap-1 flex-shrink-0"
+            data-testid={`task-mark-done-${task.id}`}
+          >
+            <CheckCircle2 className="h-3 w-3" /> Done
           </button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="text-sm">
-          <DropdownMenuItem onClick={onEdit}><Edit2 className="h-3.5 w-3.5 mr-2" />Edit Task</DropdownMenuItem>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem onClick={onDelete} className="text-destructive focus:text-destructive">
-            <Trash2 className="h-3.5 w-3.5 mr-2" />Delete
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
+        )}
+
+        {/* Subtask expand toggle (when no subtasks yet, show as icon) */}
+        {onCreateSubtask && (
+          <button
+            type="button"
+            onClick={() => setSubtaskOpen(v => !v)}
+            className={cn(
+              'opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-[#1D3461] p-0.5 flex-shrink-0',
+              subtaskOpen && 'opacity-100 text-[#1D3461]',
+            )}
+            title={subtaskOpen ? 'Hide subtasks' : 'Show subtasks'}
+            data-testid={`subtask-expand-${task.id}`}
+          >
+            <ListChecks className="h-3.5 w-3.5" />
+          </button>
+        )}
+
+        {/* Status dropdown */}
+        <Select
+          value={task.status}
+          onValueChange={v => onStatusChange(v as PersonalTaskStatus, task.status)}
+        >
+          <SelectTrigger className="h-6 w-6 border-0 bg-transparent p-0 focus:ring-0 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" title="Change status">
+            <MoreHorizontal className="h-4 w-4 text-muted-foreground" />
+          </SelectTrigger>
+          <SelectContent>
+            <div className="px-2 py-1 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Change Status</div>
+            {(['todo', 'inprogress', 'done', 'cancelled'] as PersonalTaskStatus[]).map(s => (
+              <SelectItem key={s} value={s} className="text-xs">
+                <span className={cn('px-1.5 py-0.5 rounded-full text-[9px] font-semibold', STATUS_CFG[s].color)}>{STATUS_CFG[s].label}</span>
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        {/* More actions */}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button type="button" className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-foreground p-0.5 flex-shrink-0">
+              <Edit2 className="h-3.5 w-3.5" />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="text-sm">
+            <DropdownMenuItem onClick={onEdit}><Edit2 className="h-3.5 w-3.5 mr-2" />Edit Task</DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={onDelete} className="text-destructive focus:text-destructive">
+              <Trash2 className="h-3.5 w-3.5 mr-2" />Delete
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+
+      {/* Subtask panel */}
+      {subtaskOpen && (
+        <div className="px-3 pb-2.5 pt-0 ml-8 border-t border-dashed border-muted space-y-1" data-testid={`subtask-panel-${task.id}`}>
+          {subtasks.length === 0 && (
+            <p className="text-[10px] text-muted-foreground py-1">No subtasks yet.</p>
+          )}
+          {subtasks.map(sub => {
+            const subDone = sub.status === 'done';
+            return (
+              <div key={sub.id} className="flex items-center gap-2 py-0.5 group/sub" data-testid={`subtask-item-${sub.id}`}>
+                <button
+                  type="button"
+                  className={cn(
+                    'h-4 w-4 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-all hover:scale-110',
+                    subDone ? 'border-emerald-500 bg-emerald-500' : 'border-muted-foreground/40 hover:border-emerald-500',
+                  )}
+                  onClick={() => onSubtaskStatusChange?.(sub.id, subDone ? 'todo' : 'done', sub.status)}
+                  title={subDone ? 'Reopen' : 'Mark done'}
+                >
+                  {subDone && <CheckCircle2 className="h-2.5 w-2.5 text-white" />}
+                </button>
+                <span className={cn('text-xs flex-1', subDone && 'line-through text-muted-foreground')}>{sub.title}</span>
+                {sub.dueDate && (
+                  <span className="text-[9px] text-muted-foreground">{fmtDate(sub.dueDate)}</span>
+                )}
+              </div>
+            );
+          })}
+          {/* Quick-add subtask */}
+          {onCreateSubtask && (
+            <div className="flex items-center gap-1.5 mt-1.5">
+              <Plus className="h-3 w-3 text-muted-foreground flex-shrink-0" />
+              <input
+                type="text"
+                placeholder="Add subtask…"
+                value={newSubtaskTitle}
+                onChange={e => setNewSubtaskTitle(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') handleAddSubtask(); }}
+                className="flex-1 text-xs bg-muted/40 border border-muted rounded px-2 py-0.5 outline-none focus:border-[#1D3461]/40"
+                disabled={addingSubtask}
+                data-testid={`subtask-input-${task.id}`}
+              />
+              <button
+                type="button"
+                onClick={handleAddSubtask}
+                disabled={!newSubtaskTitle.trim() || addingSubtask}
+                className="text-[10px] font-medium text-[#1D3461] bg-blue-50 hover:bg-blue-100 border border-blue-200 px-2 py-0.5 rounded disabled:opacity-40"
+                data-testid={`subtask-add-btn-${task.id}`}
+              >
+                Add
+              </button>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -300,16 +421,18 @@ function PersonalTaskCard({ task, onStatusChange, onEdit, onDelete }: PersonalTa
 // ── Assigned Project Task Card ──────────────────────────────────────────────
 
 interface ProjectTaskCardProps {
-  task: any;
+  task: AssignedProjectTask;
   onStatusChange: (id: string, status: string) => void;
   isUpdating: boolean;
 }
 
 function ProjectTaskCard({ task, onStatusChange, isUpdating }: ProjectTaskCardProps) {
   const navigate = useNavigate();
-  const overdue = isOverdue(task.dueDate, task.status);
-  const isDone = task.status === 'done';
-  const isInProgress = task.status === 'inprogress';
+  const dueDateStr = typeof task.dueDate === 'string' ? task.dueDate : null;
+  const statusStr = typeof task.status === 'string' ? task.status : 'todo';
+  const overdue = isOverdue(dueDateStr, statusStr);
+  const isDone = statusStr === 'done';
+  const isInProgress = statusStr === 'inprogress';
   const pCfg = PRIORITY_CFG[task.priority as PersonalTaskPriority] ?? PRIORITY_CFG.medium;
 
   const borderColor = isDone ? 'border-l-emerald-500'
@@ -364,13 +487,13 @@ function ProjectTaskCard({ task, onStatusChange, isUpdating }: ProjectTaskCardPr
           <span className={cn('text-[9px] font-semibold px-1.5 py-0.5 rounded-full', pCfg.color)}>
             {pCfg.label}
           </span>
-          {task.dueDate && (
+          {dueDateStr && (
             <span className={cn(
               'text-[10px] flex items-center gap-0.5',
-              overdue ? 'text-red-600 font-semibold' : (isValid(parseISO(task.dueDate)) && isToday(parseISO(task.dueDate))) ? 'text-amber-600 font-medium' : 'text-muted-foreground',
+              overdue ? 'text-red-600 font-semibold' : (isValid(parseISO(dueDateStr)) && isToday(parseISO(dueDateStr))) ? 'text-amber-600 font-medium' : 'text-muted-foreground',
             )}>
               <Calendar className="h-2.5 w-2.5" />
-              {overdue && '⚠ '}{fmtDate(task.dueDate)}
+              {overdue && '⚠ '}{fmtDate(dueDateStr)}
             </span>
           )}
         </div>
@@ -578,20 +701,21 @@ function NewTaskDialog({ open, onClose, onCreate, isCreating, isAdmin, currentUs
     const reward = rewardAmount ? parseFloat(rewardAmount) : null;
 
     if (assignMode === 'dept' && selectedDeptId) {
-      // Fetch department members and create a task for each
+      // Fetch department members (including email for notification)
       const { data: members } = await supabase
         .from('profiles')
-        .select('id, full_name')
+        .select('id, full_name, email')
         .eq('department_id', selectedDeptId);
-      for (const member of (members ?? [])) {
+      for (const member of (members ?? []) as { id: string; full_name: string | null; email: string | null }[]) {
         await onCreate({
           title: title.trim(),
           description: description.trim() || null,
           priority,
           dueDate: dueDate || null,
           notes: notes.trim() || null,
-          assignedTo: member.id as string,
-          assignedToName: member.full_name as string,
+          assignedTo: member.id,
+          assignedToName: member.full_name,
+          assignedToEmail: member.email,
           targetDepartmentId: selectedDeptId,
           completionRewardAmount: reward,
           completionRewardCurrency: reward ? rewardCurrency : null,
@@ -1499,7 +1623,7 @@ export default function MyTasks() {
     materialiseDailyTasks({
       userId,
       userRole: currentUser?.role ?? null,
-      userDepartmentId: (currentUser as any)?.departmentId ?? null,
+      userDepartmentId: currentUser?.departmentId ?? null,
       userEmail: currentUser?.email ?? null,
       userName: currentUser?.fullName ?? null,
     }).catch(() => {/* non-critical */});
@@ -1524,14 +1648,25 @@ export default function MyTasks() {
 
   // Stats (computed before search filter so counts stay accurate)
   const stats = useMemo(() => {
-    const allActive = [...personalTasks, ...projectTasks];
-    const safeDate = (s: string | null | undefined) => { if (!s) return null; try { const d = parseISO(s); return isValid(d) ? d : null; } catch { return null; } };
-    const dueToday = allActive.filter(t => { const d = safeDate(t.dueDate); return d && isToday(d) && t.status !== 'done' && t.status !== 'cancelled'; }).length;
-    const dueWeek = allActive.filter(t => { const d = safeDate(t.dueDate); return d && isThisWeek(d, { weekStartsOn: 0 }) && t.status !== 'done' && t.status !== 'cancelled'; }).length;
-    const overdue = allActive.filter(t => isOverdue(t.dueDate, t.status)).length;
+    const safeDate = (s: unknown) => {
+      if (!s || typeof s !== 'string') return null;
+      try { const d = parseISO(s); return isValid(d) ? d : null; } catch { return null; }
+    };
+    const safeStatus = (s: unknown) => (typeof s === 'string' ? s : '');
+    const pDueToday = personalTasks.filter(t => { const d = safeDate(t.dueDate); return d && isToday(d) && t.status !== 'done' && t.status !== 'cancelled'; }).length;
+    const pDueWeek  = personalTasks.filter(t => { const d = safeDate(t.dueDate); return d && isThisWeek(d, { weekStartsOn: 0 }) && t.status !== 'done' && t.status !== 'cancelled'; }).length;
+    const pOverdue  = personalTasks.filter(t => isOverdue(t.dueDate, t.status)).length;
+    const ptDueToday = projectTasks.filter(t => { const d = safeDate(t.dueDate); const s = safeStatus(t.status); return d && isToday(d) && s !== 'done' && s !== 'cancelled'; }).length;
+    const ptDueWeek  = projectTasks.filter(t => { const d = safeDate(t.dueDate); const s = safeStatus(t.status); return d && isThisWeek(d, { weekStartsOn: 0 }) && s !== 'done' && s !== 'cancelled'; }).length;
+    const ptOverdue  = projectTasks.filter(t => isOverdue(typeof t.dueDate === 'string' ? t.dueDate : null, safeStatus(t.status))).length;
     const done = personalTasks.filter(t => t.status === 'done').length
-      + projectTasks.filter((t: any) => t.status === 'done').length;
-    return { dueToday, dueWeek, overdue, done };
+      + projectTasks.filter(t => String(t.status) === 'done').length;
+    return {
+      dueToday: pDueToday + ptDueToday,
+      dueWeek:  pDueWeek  + ptDueWeek,
+      overdue:  pOverdue  + ptOverdue,
+      done,
+    };
   }, [personalTasks, projectTasks]);
 
   const q = searchQuery.toLowerCase().trim();
@@ -1546,8 +1681,8 @@ export default function MyTasks() {
 
   const filteredProject = useMemo(() =>
     projectTasks
-      .filter((t: any) => matchFilter(t.dueDate, t.status, filter))
-      .filter((t: any) => !q || t.title.toLowerCase().includes(q) || (t.description ?? '').toLowerCase().includes(q) || t.projectName.toLowerCase().includes(q)),
+      .filter(t => matchFilter(String(t.dueDate ?? ''), String(t.status ?? ''), filter))
+      .filter(t => !q || String(t.title ?? '').toLowerCase().includes(q) || String(t.description ?? '').toLowerCase().includes(q) || t.projectName.toLowerCase().includes(q)),
     [projectTasks, filter, q],
   );
 
@@ -1623,7 +1758,7 @@ export default function MyTasks() {
   };
 
   const FILTERS: { key: FilterType; label: string; count?: number }[] = [
-    { key: 'all',     label: 'All',      count: personalTasks.filter(t => t.status !== 'done' && t.status !== 'cancelled').length + projectTasks.filter((t: any) => t.status !== 'done').length },
+    { key: 'all',     label: 'All',      count: personalTasks.filter(t => t.status !== 'done' && t.status !== 'cancelled').length + projectTasks.filter(t => String(t.status) !== 'done').length },
     { key: 'today',   label: 'Today',    count: stats.dueToday },
     { key: 'week',    label: 'This Week', count: stats.dueWeek },
     { key: 'overdue', label: 'Overdue',  count: stats.overdue },
@@ -1718,7 +1853,14 @@ export default function MyTasks() {
       </div>
 
       {/* ── Planning Hub ── */}
-      <PlanningHub allTasks={[...personalTasks, ...projectTasks]} />
+      <PlanningHub allTasks={[
+        ...personalTasks,
+        ...projectTasks.map(t => ({
+          dueDate: typeof t.dueDate === 'string' ? t.dueDate : null,
+          status: typeof t.status === 'string' ? t.status : 'todo',
+          priority: typeof t.priority === 'string' ? t.priority : 'medium',
+        })),
+      ]} />
 
       {/* ── Quick Add ── */}
       <QuickAddBar onAdd={handleQuickAdd} isCreating={isCreating} />
@@ -1899,9 +2041,14 @@ export default function MyTasks() {
               <PersonalTaskCard
                 key={task.id}
                 task={task}
+                subtasks={allPersonalTasks.filter(t => t.parentTaskId === task.id)}
                 onStatusChange={(s, prev) => handleStatusChange(task.id, s, prev)}
                 onEdit={() => setEditingTask(task)}
                 onDelete={() => handleDelete(task.id)}
+                onCreateSubtask={async (title) => {
+                  await createTask({ title, priority: task.priority, category: task.category ?? 'personal', parentTaskId: task.id });
+                }}
+                onSubtaskStatusChange={(id, s, prev) => handleStatusChange(id, s, prev)}
               />
             ))}
           </div>

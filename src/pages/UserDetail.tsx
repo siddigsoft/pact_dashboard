@@ -65,6 +65,7 @@ const UserDetail: React.FC = () => {
   const [empContractStart, setEmpContractStart] = useState<string>("");
   const [empContractEnd, setEmpContractEnd] = useState<string>("");
   const [empReportsTo, setEmpReportsTo] = useState<string>("");
+  const [taskDigestOptOut, setTaskDigestOptOut] = useState<boolean>(false);
   const [empSaving, setEmpSaving] = useState(false);
   // Tracks the last successfully saved department to avoid stale-closure issues
   // on consecutive saves within the same session.
@@ -202,6 +203,15 @@ const UserDetail: React.FC = () => {
       setEmpContractEnd(user.contractEndDate ?? "");
       setEmpReportsTo(user.reportsTo ?? "");
       savedDepartmentIdRef.current = deptId || null;
+      // Load task digest opt-out from profile
+      supabase
+        .from("profiles")
+        .select("task_digest_opt_out")
+        .eq("id", user.id)
+        .single()
+        .then(({ data }) => {
+          if (data) setTaskDigestOptOut(data.task_digest_opt_out === true);
+        });
     }
   }, [user?.id]);
 
@@ -219,6 +229,7 @@ const UserDetail: React.FC = () => {
         contract_start_date: empContractStart || null,
         contract_end_date: empContractEnd || null,
         reports_to: empReportsTo || null,
+        task_digest_opt_out: taskDigestOptOut,
         updated_at: new Date().toISOString(),
       }).eq("id", user.id);
       if (error) throw error;
@@ -1189,6 +1200,36 @@ const UserDetail: React.FC = () => {
                     )}
                   </div>
                 </div>
+
+                {/* Notification Preferences */}
+                {isAdmin && (
+                  <div className="bg-muted/20 rounded-xl p-4 border border-border/40 space-y-2">
+                    <h4 className="font-semibold text-[11px] text-muted-foreground uppercase tracking-widest flex items-center gap-1">
+                      Notification Preferences
+                    </h4>
+                    <label className="flex items-center gap-3 cursor-pointer select-none">
+                      <div className="relative">
+                        <input
+                          type="checkbox"
+                          className="sr-only"
+                          checked={taskDigestOptOut}
+                          onChange={e => setTaskDigestOptOut(e.target.checked)}
+                          data-testid="toggle-task-digest-opt-out"
+                        />
+                        <div
+                          onClick={() => setTaskDigestOptOut(v => !v)}
+                          className={`w-10 h-5 rounded-full transition-colors cursor-pointer ${taskDigestOptOut ? 'bg-destructive' : 'bg-muted'} border border-border/60`}
+                        >
+                          <div className={`absolute top-0.5 left-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform ${taskDigestOptOut ? 'translate-x-5' : 'translate-x-0'}`} />
+                        </div>
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium">Opt out of Daily Task Digest email</p>
+                        <p className="text-xs text-muted-foreground">When enabled, this user will not receive the daily task summary email.</p>
+                      </div>
+                    </label>
+                  </div>
+                )}
 
                 {isAdmin && (
                   <div className="flex justify-end pt-2">
