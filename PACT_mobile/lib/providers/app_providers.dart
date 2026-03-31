@@ -130,8 +130,16 @@ final projectsProvider = FutureProvider.family<List<ProjectModel>, (int, bool)>(
     final (page, isAdmin) = params;
     final supabase = Supabase.instance.client;
     final userId = supabase.auth.currentUser?.id ?? '';
+    // fullName is needed to match team.projectManager and team.members on server
+    final userProfile = ref.watch(userProfileProvider).valueOrNull;
+    final fullName = userProfile?.fullName ?? '';
     final repo = ref.watch(projectRepositoryProvider);
-    return repo.fetchProjects(userId: userId, isAdmin: isAdmin, page: page);
+    return repo.fetchProjects(
+      userId: userId,
+      fullName: fullName,
+      isAdmin: isAdmin,
+      page: page,
+    );
   },
 );
 

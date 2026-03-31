@@ -124,13 +124,15 @@ class _ProjectDetailScreenState
 
   bool _canAdvance(ProjectModel project, UserProfile? userProfile) {
     if (userProfile == null) return false;
-    // Only admin, super_admin, or fom can advance
+    // Privileged roles (mirrors web: super_admin, admin, fom)
     if (userProfile.isAdmin || userProfile.isFom) return true;
-    // Or the designated project manager (matched by stored profileId)
+    // Project manager: web stores as team.projectManager (string name),
+    // so we compare by fullName — same logic as useProjectFlow.ts ln 149-152.
     final teamData = project.team;
     if (teamData == null) return false;
-    final pmId = teamData['projectManagerId'] as String?;
-    return pmId != null && pmId == userProfile.id;
+    final pmName = teamData['projectManager'] as String?;
+    final userName = userProfile.fullName;
+    return pmName != null && userName != null && pmName == userName;
   }
 
   void _showAdvanceSheet(
@@ -780,7 +782,7 @@ class _AdvanceStageSheetState extends ConsumerState<_AdvanceStageSheet> {
             child: ElevatedButton.icon(
               onPressed: (!isOnline || _isSubmitting)
                   ? null
-                  : () => _advance(nextStage),
+                  : () => _advance(currentStage, nextStage),
               icon: _isSubmitting
                   ? const SizedBox(
                       width: 16,
@@ -805,15 +807,19 @@ class _AdvanceStageSheetState extends ConsumerState<_AdvanceStageSheet> {
     );
   }
 
-  Future<void> _advance(ProjectFlowStage nextStage) async {
+  Future<void> _advance(
+      ProjectFlowStage completedStage, ProjectFlowStage nextStage) async {
     if (widget.userProfile == null) return;
     setState(() => _isSubmitting = true);
     try {
       final repo = ref.read(projectRepositoryProvider);
+      // Log the COMPLETED stage (mirrors web useProjectFlow.ts ln 183-196):
+      // insert flow_log for current stage, then update current_flow_stage to next.
       await repo.advanceStage(
         projectId: widget.project.id,
+        completedStageId: completedStage.id,
+        completedStageLabel: completedStage.label,
         nextStageId: nextStage.id,
-        nextStageLabel: nextStage.label,
         advancedById: widget.userProfile!.id,
         notes: _notesController.text.trim().isEmpty
             ? null
