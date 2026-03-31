@@ -463,6 +463,9 @@
     if (!isHidden('/admin/staff-profiles') && (isSuperAdmin || isAdmin || isFinancialAdmin)) {
       adminItems.push({ id: 'staff-directory', title: "Staff Directory", url: "/admin/staff-profiles", icon: Users, priority: 1.5, isPinned: isPinned('/admin/staff-profiles') });
     }
+    if (!isHidden('/departments') && (isSuperAdmin || isAdmin)) {
+      adminItems.push({ id: 'departments', title: "Departments", url: "/departments", icon: Building2, priority: 1.7, isPinned: isPinned('/departments') });
+    }
     if (!isHidden('/role-management') && (isSuperAdmin || isAdmin || perms.roleManagement)) {
       adminItems.push({ id: 'role-management', title: "Role Management", url: "/role-management", icon: Shield, priority: 2, isPinned: isPinned('/role-management') });
     }

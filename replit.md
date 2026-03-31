@@ -37,7 +37,8 @@ The frontend is built with React 18, TypeScript, Tailwind CSS v3, and Shadcn UI,
 *   **Cross-Platform Feature Parity (Web ↔ Mobile):** Both platforms support Safety Hub (SOS alerts, emergency contacts, safety checklist), Incident Reports, Equipment Tracking, Comprehensive Monitoring Form, and Helpline. Mobile features include shimmer skeleton loaders, paginated lists, and role-gated navigation.
 *   **Project Flow Engine UI:** Full lifecycle UI for 10 project types with `FlowStrip` (horizontal stepper), `FlowTab` (stage cards), and `FlowStageBanner`. Stage advance sends in-app notifications. Includes project archiving, PDF export, health score widgets, stalled project alerts, and enhanced `ProjectDetail` screens on mobile.
 *   **Transaction Screenshot Scanner:** AI-powered OCR tool using Gemini 2.0 Flash with Groq fallback via a Supabase Edge Function.
-*   **Staff Directory:** Admin page with staff profiles, bank accounts, capacity, and online status.
+*   **Staff Directory:** Admin page with staff profiles, bank accounts, capacity, and online status. Includes department badge per staff card and a "View Departments" link.
+*   **Departments & Org Hierarchy:** New `departments` table (nested sub-departments, manager, color) and extended `profiles` with `department_id`, `employment_type`, `contract_start_date`, `contract_end_date`, `reports_to`. Departments page at `/departments` provides CRUD, org-tree view, member panels, and employee move. UserDetail has an Employment Record tab. Notifications + IONOS emails are sent on manager assignment, employee department change, and contract expiry (employee + manager).
 *   **Sidebar Favorites System:** User-customizable sidebar.
 *   **Retainer Management System:** Retainer payment tracking and processing.
 *   **Payments & Finance Organization:** Unified section with collapsible sub-categories.

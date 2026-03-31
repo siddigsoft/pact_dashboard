@@ -5,7 +5,7 @@ import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ArrowLeft, MapPin, Mail, Phone, Award, Calendar, Edit, UserCheck, UserX, CreditCard, User as UserIcon, ShieldCheck } from "lucide-react";
+import { ArrowLeft, MapPin, Mail, Phone, Award, Calendar, Edit, UserCheck, UserX, CreditCard, User as UserIcon, ShieldCheck, Briefcase, Building2 } from "lucide-react";
 import { BankakAccountForm, BankakAccountFormValues } from "@/components/BankakAccountForm";
 import type { User } from "@/types/user";
 import { AppRole } from "@/types/roles";
@@ -57,6 +57,16 @@ const UserDetail: React.FC = () => {
 
   // Add loading state for save
   const [isLoadingUser, setIsLoadingUser] = useState(false);
+
+  // Employment record state
+  const [departments, setDepartments] = useState<{ id: string; name: string }[]>([]);
+  const [empDepartmentId, setEmpDepartmentId] = useState<string>("");
+  const [empType, setEmpType] = useState<string>("full-time");
+  const [empContractStart, setEmpContractStart] = useState<string>("");
+  const [empContractEnd, setEmpContractEnd] = useState<string>("");
+  const [empReportsTo, setEmpReportsTo] = useState<string>("");
+  const [empSaving, setEmpSaving] = useState(false);
+  const [allUsers, setAllUsers] = useState<{ id: string; full_name: string | null; email: string | null }[]>([]);
 
   // Classification management
   const { canManageFinances } = useAuthorization();
@@ -163,6 +173,115 @@ const UserDetail: React.FC = () => {
     };
     fetchHubName();
   }, [user?.hubId, user?.stateId]);
+
+  // Load departments and employment data for this user
+  useEffect(() => {
+    const loadEmploymentData = async () => {
+      const [deptRes, usersRes] = await Promise.all([
+        supabase.from("departments").select("id, name").order("name"),
+        supabase.from("profiles").select("id, full_name, email").order("full_name"),
+      ]);
+      setDepartments((deptRes.data || []) as { id: string; name: string }[]);
+      setAllUsers((usersRes.data || []) as { id: string; full_name: string | null; email: string | null }[]);
+    };
+    loadEmploymentData();
+  }, []);
+
+  // Populate employment fields when user loads
+  useEffect(() => {
+    if (user) {
+      setEmpDepartmentId((user as any).department_id ?? "");
+      setEmpType((user as any).employment_type ?? "full-time");
+      setEmpContractStart((user as any).contract_start_date ?? "");
+      setEmpContractEnd((user as any).contract_end_date ?? "");
+      setEmpReportsTo((user as any).reports_to ?? "");
+    }
+  }, [user?.id]);
+
+  const handleEmploymentSave = async () => {
+    if (!user) return;
+    setEmpSaving(true);
+    try {
+      const { error } = await supabase.from("profiles").update({
+        department_id: empDepartmentId || null,
+        employment_type: empType || "full-time",
+        contract_start_date: empContractStart || null,
+        contract_end_date: empContractEnd || null,
+        reports_to: empReportsTo || null,
+        updated_at: new Date().toISOString(),
+      }).eq("id", user.id);
+      if (error) throw error;
+
+      // Check contract expiry warning
+      if (empContractEnd) {
+        const daysLeft = Math.ceil((new Date(empContractEnd).getTime() - Date.now()) / 86400000);
+        if (daysLeft <= 30 && daysLeft >= 0) {
+          const expiryMsgEn = `Your contract expires in ${daysLeft} day${daysLeft === 1 ? "" : "s"} (${empContractEnd}).`;
+          const expiryMsgAr = `عقدك ينتهي خلال ${daysLeft} يوم (${empContractEnd}).`;
+          const priority = daysLeft <= 7 ? "high" : "medium";
+
+          // Notify employee
+          await supabase.from("notifications").insert({
+            event_type: "contract_expiry",
+            entity_type: "profile",
+            entity_id: user.id,
+            recipient_id: user.id,
+            triggered_by: currentUser?.id,
+            title_en: "Contract Expiry Notice",
+            title_ar: "إشعار انتهاء العقد",
+            message_en: expiryMsgEn,
+            message_ar: expiryMsgAr,
+            priority,
+            action_url: `/users/${user.id}`,
+          });
+
+          // Email employee
+          if (user.email) {
+            await supabase.functions.invoke("send-email", {
+              body: {
+                to: user.email,
+                subject: `Contract Expiry Notice — ${daysLeft} day${daysLeft === 1 ? "" : "s"} remaining`,
+                html: `<div style="font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px"><h2 style="color:#0F2041">Contract Expiry Notice</h2><p>Dear ${user.name},</p><p>${expiryMsgEn}</p><p>Please contact HR to discuss contract renewal.</p><a href="https://app.pactorg.com/users/${user.id}" style="background:#1D3461;color:#fff;padding:10px 20px;border-radius:6px;text-decoration:none;display:inline-block;margin-top:12px">View Profile</a></div>`,
+              },
+            });
+          }
+
+          // Notify manager if set
+          if (empReportsTo) {
+            const mgr = allUsers.find(u => u.id === empReportsTo);
+            await supabase.from("notifications").insert({
+              event_type: "contract_expiry",
+              entity_type: "profile",
+              entity_id: user.id,
+              recipient_id: empReportsTo,
+              triggered_by: currentUser?.id,
+              title_en: `Contract Expiry: ${user.name}`,
+              title_ar: `انتهاء عقد: ${user.name}`,
+              message_en: `${user.name}'s contract expires in ${daysLeft} day${daysLeft === 1 ? "" : "s"}.`,
+              message_ar: `عقد ${user.name} ينتهي خلال ${daysLeft} يوم.`,
+              priority,
+              action_url: `/users/${user.id}`,
+            });
+            if (mgr?.email) {
+              await supabase.functions.invoke("send-email", {
+                body: {
+                  to: mgr.email,
+                  subject: `Team Member Contract Expiry — ${user.name}`,
+                  html: `<div style="font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px"><h2 style="color:#0F2041">Contract Expiry Notice</h2><p>This is to inform you that ${user.name}'s contract expires in ${daysLeft} day${daysLeft === 1 ? "" : "s"} (${empContractEnd}).</p><a href="https://app.pactorg.com/users/${user.id}" style="background:#1D3461;color:#fff;padding:10px 20px;border-radius:6px;text-decoration:none;display:inline-block;margin-top:12px">View Employee Profile</a></div>`,
+                },
+              });
+            }
+          }
+        }
+      }
+
+      toast({ title: "Employment record updated" });
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    } finally {
+      setEmpSaving(false);
+    }
+  };
 
   useEffect(() => {
     const fetchClassificationHistory = async () => {
@@ -750,10 +869,15 @@ const UserDetail: React.FC = () => {
           </CardHeader>
           <CardContent className="p-4 sm:p-5">
             <Tabs defaultValue="details" className="w-full">
-              <TabsList className="grid w-full grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-1 h-auto p-1.5 mb-5 bg-muted/40 rounded-xl">
+              <TabsList className="flex flex-row flex-wrap gap-1 h-auto p-1.5 mb-5 bg-muted/40 rounded-xl w-full justify-start">
                 <TabsTrigger value="details" className="flex items-center justify-center gap-1.5 py-2.5 px-3 min-h-[44px] text-xs sm:text-sm rounded-lg data-[state=active]:bg-background data-[state=active]:shadow-md data-[state=active]:font-semibold transition-all">
                   <UserIcon className="h-4 w-4" />
                   <span>Details</span>
+                </TabsTrigger>
+                <TabsTrigger value="employment" className="flex items-center justify-center gap-1.5 py-2.5 px-3 min-h-[44px] text-xs sm:text-sm rounded-lg data-[state=active]:bg-background data-[state=active]:shadow-md data-[state=active]:font-semibold transition-all">
+                  <Briefcase className="h-4 w-4" />
+                  <span className="hidden sm:inline">Employment</span>
+                  <span className="sm:hidden">Emp</span>
                 </TabsTrigger>
                 <TabsTrigger value="performance" className="flex items-center justify-center gap-1.5 py-2.5 px-3 min-h-[44px] text-xs sm:text-sm rounded-lg data-[state=active]:bg-background data-[state=active]:shadow-md data-[state=active]:font-semibold transition-all">
                   <Award className="h-4 w-4" />
@@ -963,6 +1087,131 @@ const UserDetail: React.FC = () => {
                 </div>
               </TabsContent>
               
+              {/* Employment Record Tab */}
+              <TabsContent value="employment" className="space-y-5 mt-2">
+                <div className="flex items-center gap-2 mb-2">
+                  <Briefcase className="h-5 w-5 text-primary" />
+                  <h3 className="font-semibold text-base">Employment Record</h3>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {/* Department */}
+                  <div className="bg-muted/20 rounded-xl p-4 space-y-2 border border-border/40">
+                    <h4 className="font-semibold text-[11px] text-muted-foreground uppercase tracking-widest flex items-center gap-1">
+                      <Building2 className="h-3.5 w-3.5" /> Department
+                    </h4>
+                    {isAdmin ? (
+                      <Select value={empDepartmentId || "none"} onValueChange={v => setEmpDepartmentId(v === "none" ? "" : v)}>
+                        <SelectTrigger className="h-11" data-testid="select-emp-department">
+                          <SelectValue placeholder="No department" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">No Department</SelectItem>
+                          {departments.map(d => (
+                            <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    ) : (
+                      <p className="font-semibold text-base">
+                        {departments.find(d => d.id === empDepartmentId)?.name || "—"}
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Employment type */}
+                  <div className="bg-muted/20 rounded-xl p-4 space-y-2 border border-border/40">
+                    <h4 className="font-semibold text-[11px] text-muted-foreground uppercase tracking-widest">Employment Type</h4>
+                    {isAdmin ? (
+                      <Select value={empType} onValueChange={setEmpType}>
+                        <SelectTrigger className="h-11" data-testid="select-emp-type">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="full-time">Full-Time</SelectItem>
+                          <SelectItem value="part-time">Part-Time</SelectItem>
+                          <SelectItem value="contractor">Contractor</SelectItem>
+                          <SelectItem value="intern">Intern</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    ) : (
+                      <p className="font-semibold text-base capitalize">{empType || "—"}</p>
+                    )}
+                  </div>
+
+                  {/* Contract start */}
+                  <div className="bg-muted/20 rounded-xl p-4 space-y-2 border border-border/40">
+                    <h4 className="font-semibold text-[11px] text-muted-foreground uppercase tracking-widest">Contract Start Date</h4>
+                    {isAdmin ? (
+                      <Input
+                        type="date"
+                        value={empContractStart}
+                        onChange={e => setEmpContractStart(e.target.value)}
+                        className="h-11"
+                        data-testid="input-contract-start"
+                      />
+                    ) : (
+                      <p className="font-semibold text-base">{empContractStart || "—"}</p>
+                    )}
+                  </div>
+
+                  {/* Contract end */}
+                  <div className="bg-muted/20 rounded-xl p-4 space-y-2 border border-border/40">
+                    <h4 className="font-semibold text-[11px] text-muted-foreground uppercase tracking-widest">Contract End Date</h4>
+                    {isAdmin ? (
+                      <Input
+                        type="date"
+                        value={empContractEnd}
+                        onChange={e => setEmpContractEnd(e.target.value)}
+                        className="h-11"
+                        data-testid="input-contract-end"
+                      />
+                    ) : (
+                      <p className="font-semibold text-base">{empContractEnd || "—"}</p>
+                    )}
+                    {empContractEnd && (() => {
+                      const d = Math.ceil((new Date(empContractEnd).getTime() - Date.now()) / 86400000);
+                      if (d < 0) return <p className="text-xs text-destructive font-medium">Contract expired</p>;
+                      if (d <= 30) return <p className="text-xs text-amber-600 font-medium">Expires in {d} day{d === 1 ? "" : "s"}</p>;
+                      return null;
+                    })()}
+                  </div>
+
+                  {/* Reports to */}
+                  <div className="bg-muted/20 rounded-xl p-4 space-y-2 border border-border/40 sm:col-span-2">
+                    <h4 className="font-semibold text-[11px] text-muted-foreground uppercase tracking-widest flex items-center gap-1">
+                      <UserCheck className="h-3.5 w-3.5" /> Reports To (Manager)
+                    </h4>
+                    {isAdmin ? (
+                      <Select value={empReportsTo || "none"} onValueChange={v => setEmpReportsTo(v === "none" ? "" : v)}>
+                        <SelectTrigger className="h-11" data-testid="select-reports-to">
+                          <SelectValue placeholder="No manager" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">No Manager</SelectItem>
+                          {allUsers.filter(u => u.id !== user.id).map(u => (
+                            <SelectItem key={u.id} value={u.id}>
+                              {u.full_name || u.email || u.id}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    ) : (
+                      <p className="font-semibold text-base">
+                        {allUsers.find(u => u.id === empReportsTo)?.full_name || "—"}
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                {isAdmin && (
+                  <div className="flex justify-end pt-2">
+                    <Button onClick={handleEmploymentSave} disabled={empSaving} data-testid="button-save-employment">
+                      {empSaving ? "Saving…" : "Save Employment Record"}
+                    </Button>
+                  </div>
+                )}
+              </TabsContent>
+
               <TabsContent value="performance">
                 {user.performance ? (
                   <div className="space-y-3 sm:space-y-4">

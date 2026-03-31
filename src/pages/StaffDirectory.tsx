@@ -58,6 +58,7 @@ interface StaffProfile {
   status: string | null; location: any; location_sharing: boolean | null;
   updated_at: string; created_at: string; bank_account: BankAccount | null;
   last_activity: string | null; device_info: string | null; app_version: string | null;
+  department_id: string | null; department_name?: string | null;
 }
 
 const ROLE_LABELS: Record<string, string> = {
@@ -1102,9 +1103,15 @@ export default function StaffDirectory() {
         .order('name');
       if (hubsData?.length) setDbHubs(hubsData);
 
+      const { data: deptsData } = await (supabase as any)
+        .from('departments')
+        .select('id, name');
+      const deptMap: Record<string, string> = {};
+      (deptsData || []).forEach((d: any) => { deptMap[d.id] = d.name; });
+
       const { data: pData, error: pErr } = await (supabase as any)
         .from('profiles')
-        .select('id, full_name, email, phone, role, employee_id, hub_id, state_id, locality_id, availability, status, location, location_sharing, updated_at, created_at, bank_account, last_activity, device_info, app_version')
+        .select('id, full_name, email, phone, role, employee_id, hub_id, state_id, locality_id, availability, status, location, location_sharing, updated_at, created_at, bank_account, last_activity, device_info, app_version, department_id')
         .order('full_name');
       if (pErr) throw pErr;
 
@@ -1157,7 +1164,7 @@ export default function StaffDirectory() {
           : (profileTs || actTs);
 
         const presence = presenceFromActivity(last_activity, p.updated_at);
-        return { ...p, bank_account: ba, last_activity, device_info, app_version, presence };
+        return { ...p, bank_account: ba, last_activity, device_info, app_version, presence, department_name: p.department_id ? (deptMap[p.department_id] || null) : null };
       });
 
       setProfiles(merged);
@@ -1329,6 +1336,14 @@ export default function StaffDirectory() {
                 <p className="text-[11px] text-muted-foreground truncate">{p.email}</p>
               </div>
             </div>
+
+            {/* Department badge */}
+            {p.department_name && (
+              <div className="flex items-center gap-1 text-[10px] font-medium text-primary bg-primary/10 rounded-full px-2 py-0.5 w-fit">
+                <Building2 className="h-2.5 w-2.5 shrink-0" />
+                <span className="truncate max-w-[120px]">{p.department_name}</span>
+              </div>
+            )}
 
             {/* Role + status row */}
             <div className="flex items-center gap-1.5 flex-wrap">
@@ -1572,11 +1587,21 @@ export default function StaffDirectory() {
 
       <div className="max-w-7xl mx-auto px-4 md:px-6 py-5 space-y-5">
         {/* ── Info Banner ── */}
-        <PageInfoBanner
-          title="Staff Directory"
-          description="View all staff profiles across field operations. The Directory tab shows live online status and device info. Bank Accounts shows full payment details (both web and mobile entries). Capacity shows headcount breakdown by Hub, State, and Role. Online Now shows who is currently active."
-          descriptionAr="عرض جميع ملفات تعريف الموظفين عبر العمليات الميدانية. يعرض حساباتهم البنكية وحالتهم الإلكترونية ومعلومات الجهاز وتفاصيل التحصيل."
-        />
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <PageInfoBanner
+            title="Staff Directory"
+            description="View all staff profiles across field operations. The Directory tab shows live online status and device info. Bank Accounts shows full payment details (both web and mobile entries). Capacity shows headcount breakdown by Hub, State, and Role. Online Now shows who is currently active."
+            descriptionAr="عرض جميع ملفات تعريف الموظفين عبر العمليات الميدانية. يعرض حساباتهم البنكية وحالتهم الإلكترونية ومعلومات الجهاز وتفاصيل التحصيل."
+          />
+          <a
+            href="/departments"
+            className="inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:underline whitespace-nowrap"
+            data-testid="link-departments"
+          >
+            <Building2 className="h-3.5 w-3.5" />
+            View Departments
+          </a>
+        </div>
 
         {/* ── Stats row ── */}
         <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
