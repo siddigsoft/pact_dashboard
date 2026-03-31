@@ -1,7 +1,7 @@
 import { Card, CardContent } from '@/components/ui/card';
 import { LucideIcon } from 'lucide-react';
 
-type GradientColor = 'blue' | 'green' | 'purple' | 'orange' | 'cyan' | 'pink' | 'indigo' | 'teal';
+type GradientColor = 'blue' | 'green' | 'purple' | 'orange' | 'cyan' | 'pink' | 'indigo' | 'teal' | 'red';
 type CardSize = 'sm' | 'default';
 
 const colorConfig: Record<GradientColor, { icon: string; value: string; border: string; bg: string }> = {
@@ -13,6 +13,7 @@ const colorConfig: Record<GradientColor, { icon: string; value: string; border: 
   pink:   { icon: 'bg-pink-100 dark:bg-pink-900/40 text-pink-600 dark:text-pink-400',     value: 'text-pink-700 dark:text-pink-300',    border: 'border-l-pink-500',   bg: 'bg-pink-50/50 dark:bg-pink-900/10' },
   indigo: { icon: 'bg-indigo-100 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-400', value: 'text-indigo-700 dark:text-indigo-300', border: 'border-l-indigo-500', bg: 'bg-indigo-50/50 dark:bg-indigo-900/10' },
   teal:   { icon: 'bg-teal-100 dark:bg-teal-900/40 text-teal-600 dark:text-teal-400',     value: 'text-teal-700 dark:text-teal-300',    border: 'border-l-teal-500',   bg: 'bg-teal-50/50 dark:bg-teal-900/10' },
+  red:    { icon: 'bg-red-100 dark:bg-red-900/40 text-red-600 dark:text-red-400',         value: 'text-red-700 dark:text-red-300',      border: 'border-l-red-500',    bg: 'bg-red-50/50 dark:bg-red-900/10' },
 };
 
 interface GradientStatCardProps {
