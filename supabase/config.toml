@@ -19,3 +19,8 @@ verify_jwt = false
 # Auth is enforced via CRON_SECRET shared-secret header (see edge function).
 [functions.contract-expiry-check]
 verify_jwt = false
+
+# Added by Task #10: task-daily-digest is invoked by pg_cron scheduler.
+# Sends each user a daily email + in-app notification of pending tasks.
+[functions.task-daily-digest]
+verify_jwt = false

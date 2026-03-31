@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-import { isToday, isBefore, parseISO, isValid, startOfDay } from 'date-fns';
+import { isToday, isBefore, parseISO, isValid, startOfDay, format } from 'date-fns';
 
 export type PersonalTaskPriority = 'low' | 'medium' | 'high' | 'critical';
 export type PersonalTaskStatus = 'todo' | 'inprogress' | 'done' | 'cancelled';
@@ -20,6 +20,14 @@ export interface PersonalTask {
   notes: string | null;
   createdAt: string;
   updatedAt: string;
+  // Task #10 additions
+  parentTaskId: string | null;
+  targetDepartmentId: string | null;
+  completionRewardAmount: number | null;
+  completionRewardCurrency: string;
+  recurrence: string;
+  templateId: string | null;
+  dailyTaskDate: string | null;
 }
 
 export interface CreatePersonalTask {
@@ -33,29 +41,78 @@ export interface CreatePersonalTask {
   notes?: string | null;
   assignedTo?: string | null;
   assignedToName?: string | null;
+  // Task #10 additions
+  parentTaskId?: string | null;
+  targetDepartmentId?: string | null;
+  completionRewardAmount?: number | null;
+  completionRewardCurrency?: string | null;
+  recurrence?: string;
+  templateId?: string | null;
+  dailyTaskDate?: string | null;
 }
 
-function mapRow(r: any): PersonalTask {
+export interface DailyTaskDefinition {
+  id: string;
+  title: string;
+  description: string | null;
+  priority: PersonalTaskPriority;
+  roleTargets: string[];
+  departmentId: string | null;
+  recurrence: string;
+  rewardAmount: number | null;
+  rewardCurrency: string;
+  active: boolean;
+  createdBy: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+function mapRow(r: Record<string, unknown>): PersonalTask {
   return {
-    id: r.id,
-    userId: r.user_id,
-    assignedTo: r.assigned_to ?? null,
-    assignedToName: r.assigned_to_name ?? null,
-    title: r.title,
-    description: r.description ?? null,
+    id: r.id as string,
+    userId: r.user_id as string,
+    assignedTo: (r.assigned_to as string) ?? null,
+    assignedToName: (r.assigned_to_name as string) ?? null,
+    title: r.title as string,
+    description: (r.description as string) ?? null,
     priority: r.priority as PersonalTaskPriority,
     status: r.status as PersonalTaskStatus,
-    dueDate: r.due_date ?? null,
-    category: r.category ?? null,
-    tags: r.tags ?? null,
-    notes: r.notes ?? null,
-    createdAt: r.created_at,
-    updatedAt: r.updated_at,
+    dueDate: (r.due_date as string) ?? null,
+    category: (r.category as string) ?? null,
+    tags: (r.tags as string[]) ?? null,
+    notes: (r.notes as string) ?? null,
+    createdAt: r.created_at as string,
+    updatedAt: r.updated_at as string,
+    parentTaskId: (r.parent_task_id as string) ?? null,
+    targetDepartmentId: (r.target_department_id as string) ?? null,
+    completionRewardAmount: (r.completion_reward_amount as number) ?? null,
+    completionRewardCurrency: (r.completion_reward_currency as string) ?? 'USD',
+    recurrence: (r.recurrence as string) ?? 'none',
+    templateId: (r.template_id as string) ?? null,
+    dailyTaskDate: (r.daily_task_date as string) ?? null,
+  };
+}
+
+function mapDefRow(r: Record<string, unknown>): DailyTaskDefinition {
+  return {
+    id: r.id as string,
+    title: r.title as string,
+    description: (r.description as string) ?? null,
+    priority: (r.priority as PersonalTaskPriority) ?? 'medium',
+    roleTargets: (r.role_targets as string[]) ?? [],
+    departmentId: (r.department_id as string) ?? null,
+    recurrence: (r.recurrence as string) ?? 'daily',
+    rewardAmount: (r.reward_amount as number) ?? null,
+    rewardCurrency: (r.reward_currency as string) ?? 'USD',
+    active: Boolean(r.active),
+    createdBy: (r.created_by as string) ?? null,
+    createdAt: r.created_at as string,
+    updatedAt: r.updated_at as string,
   };
 }
 
 function notifPriority(p: PersonalTaskPriority): string {
-  return p === 'critical' ? 'high' : p === 'high' ? 'high' : 'medium';
+  return p === 'critical' || p === 'high' ? 'high' : 'medium';
 }
 
 async function sendTaskNotification(opts: {
@@ -63,7 +120,8 @@ async function sendTaskNotification(opts: {
   taskId: string;
   title: string;
   priority: PersonalTaskPriority;
-  event: 'created_due_today' | 'created_overdue' | 'completed' | 'assigned';
+  event: 'created_due_today' | 'created_overdue' | 'completed' | 'assigned' | 'reward_credited' | 'subtasks_done';
+  extra?: string;
 }) {
   const msgs: Record<typeof opts.event, { titleEn: string; titleAr: string; msgEn: string; msgAr: string }> = {
     created_due_today: {
@@ -90,6 +148,18 @@ async function sendTaskNotification(opts: {
       msgEn: `You have been assigned a new task: "${opts.title}".`,
       msgAr: `تم تعيين مهمة جديدة لك: "${opts.title}".`,
     },
+    reward_credited: {
+      titleEn: `Reward Credited to Wallet`,
+      titleAr: `تم إضافة المكافأة للمحفظة`,
+      msgEn: `Your wallet has been credited ${opts.extra ?? ''} for completing "${opts.title}".`,
+      msgAr: `تمت إضافة ${opts.extra ?? ''} إلى محفظتك لإتمام "${opts.title}".`,
+    },
+    subtasks_done: {
+      titleEn: `All Subtasks Complete`,
+      titleAr: `تم إكمال جميع المهام الفرعية`,
+      msgEn: `All subtasks for "${opts.title}" are done — consider marking the parent task as done.`,
+      msgAr: `تم إكمال جميع المهام الفرعية لـ "${opts.title}" — ضع في اعتبارك إنهاء المهمة الأصلية.`,
+    },
   };
 
   const m = msgs[opts.event];
@@ -113,7 +183,169 @@ async function sendTaskNotification(opts: {
   }
 }
 
+async function sendTaskEmail(opts: {
+  email: string | null | undefined;
+  titleEn: string;
+  body: string;
+}) {
+  if (!opts.email) return;
+  try {
+    await supabase.functions.invoke('send-email', {
+      body: {
+        to: opts.email,
+        subject: opts.titleEn,
+        html: `<p style="font-family:sans-serif;white-space:pre-line">${opts.body}</p>`,
+      },
+    });
+  } catch {
+    // Non-critical
+  }
+}
+
 const KEY = ['personal_tasks'];
+
+// ── Credit wallet on task completion ─────────────────────────────────────────
+
+async function creditWallet(opts: {
+  userId: string;
+  taskId: string;
+  taskTitle: string;
+  amount: number;
+  currency: string;
+  userEmail: string | null | undefined;
+  taskPriority: PersonalTaskPriority;
+}) {
+  try {
+    // Find or upsert wallet for the user
+    const { data: wallet } = await supabase
+      .from('wallets')
+      .select('id, total_earned')
+      .eq('user_id', opts.userId)
+      .maybeSingle();
+
+    if (!wallet) return; // No wallet configured — skip silently
+
+    const amountCents = Math.round(opts.amount * 100);
+    const now = new Date().toISOString();
+
+    await supabase.from('wallet_transactions').insert({
+      wallet_id: wallet.id,
+      user_id: opts.userId,
+      amount: opts.amount,
+      amount_cents: amountCents,
+      currency: opts.currency,
+      type: 'credit',
+      status: 'completed',
+      memo: `Task reward: ${opts.taskTitle}`,
+      description: `Completion reward for task "${opts.taskTitle}"`,
+      posted_at: now,
+      created_at: now,
+      metadata: { source: 'task_completion', task_id: opts.taskId },
+    });
+
+    const rewardStr = `${opts.currency} ${opts.amount.toFixed(2)}`;
+
+    await Promise.all([
+      sendTaskNotification({
+        userId: opts.userId,
+        taskId: opts.taskId,
+        title: opts.taskTitle,
+        priority: opts.taskPriority,
+        event: 'reward_credited',
+        extra: rewardStr,
+      }),
+      sendTaskEmail({
+        email: opts.userEmail,
+        titleEn: 'Task Reward Credited',
+        body: `Your wallet has been credited ${rewardStr} for completing the task "${opts.taskTitle}".\n\nView your wallet: https://app.pactorg.com/wallets`,
+      }),
+    ]);
+  } catch (err: unknown) {
+    console.error('[usePersonalTasks] creditWallet error:', err instanceof Error ? err.message : err);
+  }
+}
+
+// ── Materialise daily recurring tasks for the logged-in user ─────────────────
+
+export async function materialiseDailyTasks(opts: {
+  userId: string;
+  userRole: string | null;
+  userDepartmentId: string | null;
+  userEmail: string | null | undefined;
+  userName: string | null;
+}) {
+  try {
+    const today = format(new Date(), 'yyyy-MM-dd');
+
+    // Fetch active definitions
+    const { data: defs } = await supabase
+      .from('daily_task_definitions')
+      .select('*')
+      .eq('active', true);
+
+    if (!defs?.length) return;
+
+    const roleNorm = (opts.userRole ?? '').toLowerCase().replace(/[_\s]/g, '');
+
+    for (const def of defs) {
+      const d = mapDefRow(def as Record<string, unknown>);
+
+      // Check recurrence day match
+      if (d.recurrence === 'weekly' && new Date().getDay() !== 1) continue; // Monday only
+
+      // Check role match
+      const roleMatch = !d.roleTargets.length ||
+        d.roleTargets.some(r => r.toLowerCase().replace(/[_\s]/g, '') === roleNorm);
+      // Check department match
+      const deptMatch = !d.departmentId || d.departmentId === opts.userDepartmentId;
+
+      if (!roleMatch || !deptMatch) continue;
+
+      // Deduplicate: skip if already materialised today for this user+template
+      const { count } = await supabase
+        .from('personal_tasks')
+        .select('id', { count: 'exact', head: true })
+        .eq('template_id', d.id)
+        .eq('assigned_to', opts.userId)
+        .eq('daily_task_date', today);
+
+      if ((count ?? 0) > 0) continue;
+
+      // Materialise
+      const { data: created } = await supabase
+        .from('personal_tasks')
+        .insert({
+          user_id: opts.userId,
+          assigned_to: opts.userId,
+          assigned_to_name: opts.userName,
+          title: d.title,
+          description: d.description,
+          priority: d.priority,
+          status: 'todo',
+          category: 'recurring',
+          completion_reward_amount: d.rewardAmount,
+          completion_reward_currency: d.rewardCurrency,
+          recurrence: d.recurrence,
+          template_id: d.id,
+          daily_task_date: today,
+        })
+        .select('id')
+        .single();
+
+      if (created?.id) {
+        await sendTaskNotification({
+          userId: opts.userId,
+          taskId: created.id,
+          title: d.title,
+          priority: d.priority as PersonalTaskPriority,
+          event: 'assigned',
+        });
+      }
+    }
+  } catch (err: unknown) {
+    console.error('[materialiseDailyTasks] error:', err instanceof Error ? err.message : err);
+  }
+}
 
 export function usePersonalTasks(userId: string | undefined) {
   const qc = useQueryClient();
@@ -128,14 +360,14 @@ export function usePersonalTasks(userId: string | undefined) {
         .or(`assigned_to.eq.${userId},and(user_id.eq.${userId},assigned_to.is.null)`)
         .order('created_at', { ascending: false });
       if (error) throw error;
-      return (data ?? []).map(mapRow);
+      return (data ?? []).map(r => mapRow(r as Record<string, unknown>));
     },
     enabled: !!userId,
     staleTime: 30_000,
   });
 
   const createMutation = useMutation({
-    mutationFn: async (task: CreatePersonalTask & { userId: string }) => {
+    mutationFn: async (task: CreatePersonalTask & { userId: string; userEmail?: string | null }) => {
       const assignedTo = task.assignedTo ?? task.userId;
       const assignedToName = task.assignedToName ?? null;
       const { data, error } = await supabase
@@ -152,6 +384,13 @@ export function usePersonalTasks(userId: string | undefined) {
           category: task.category ?? 'personal',
           tags: task.tags ?? null,
           notes: task.notes ?? null,
+          parent_task_id: task.parentTaskId ?? null,
+          target_department_id: task.targetDepartmentId ?? null,
+          completion_reward_amount: task.completionRewardAmount ?? null,
+          completion_reward_currency: task.completionRewardCurrency ?? 'USD',
+          recurrence: task.recurrence ?? 'none',
+          template_id: task.templateId ?? null,
+          daily_task_date: task.dailyTaskDate ?? null,
         })
         .select('id')
         .single();
@@ -159,14 +398,19 @@ export function usePersonalTasks(userId: string | undefined) {
 
       const p = (task.priority ?? 'medium') as PersonalTaskPriority;
 
-      // If assigned to someone else, send them an "assigned" notification
       if (assignedTo !== task.userId && data?.id) {
         try {
           await sendTaskNotification({ userId: assignedTo, taskId: data.id, title: task.title, priority: p, event: 'assigned' });
+          if (task.userEmail) {
+            await sendTaskEmail({
+              email: task.userEmail,
+              titleEn: 'New Task Assigned',
+              body: `You have been assigned a new task: "${task.title}".\n\nView your tasks: https://app.pactorg.com/my-tasks`,
+            });
+          }
         } catch { /* non-critical */ }
       }
 
-      // Fire notification to creator if due today or overdue
       if (task.dueDate && data?.id) {
         try {
           const d = parseISO(task.dueDate);
@@ -186,28 +430,79 @@ export function usePersonalTasks(userId: string | undefined) {
   });
 
   const updateMutation = useMutation({
-    mutationFn: async ({ id, _prevStatus, ...updates }: Partial<CreatePersonalTask> & { id: string; _prevStatus?: PersonalTaskStatus }) => {
-      const patch: any = { updated_at: new Date().toISOString() };
-      if (updates.title !== undefined) patch.title = updates.title;
+    mutationFn: async (opts: Partial<CreatePersonalTask> & {
+      id: string;
+      _prevStatus?: PersonalTaskStatus;
+      _userId?: string;
+      _userEmail?: string | null;
+      _taskPriority?: PersonalTaskPriority;
+      _rewardAmount?: number | null;
+      _rewardCurrency?: string;
+    }) => {
+      const { id, _prevStatus, _userId, _userEmail, _taskPriority, _rewardAmount, _rewardCurrency, ...updates } = opts;
+      const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
+      if (updates.title !== undefined)       patch.title = updates.title;
       if (updates.description !== undefined) patch.description = updates.description;
-      if (updates.priority !== undefined) patch.priority = updates.priority;
-      if (updates.status !== undefined) patch.status = updates.status;
-      if (updates.dueDate !== undefined) patch.due_date = updates.dueDate;
-      if (updates.category !== undefined) patch.category = updates.category;
-      if (updates.tags !== undefined) patch.tags = updates.tags;
-      if (updates.notes !== undefined) patch.notes = updates.notes;
+      if (updates.priority !== undefined)    patch.priority = updates.priority;
+      if (updates.status !== undefined)      patch.status = updates.status;
+      if (updates.dueDate !== undefined)     patch.due_date = updates.dueDate;
+      if (updates.category !== undefined)    patch.category = updates.category;
+      if (updates.tags !== undefined)        patch.tags = updates.tags;
+      if (updates.notes !== undefined)       patch.notes = updates.notes;
+      if (updates.completionRewardAmount !== undefined) patch.completion_reward_amount = updates.completionRewardAmount;
+      if (updates.completionRewardCurrency !== undefined) patch.completion_reward_currency = updates.completionRewardCurrency;
+
       const { error } = await supabase.from('personal_tasks').update(patch).eq('id', id);
       if (error) throw error;
 
-      // Notify when marked done
-      if (updates.status === 'done' && _prevStatus && _prevStatus !== 'done' && userId && updates.title) {
-        await sendTaskNotification({
-          userId,
-          taskId: id,
-          title: updates.title,
-          priority: (updates.priority ?? 'medium') as PersonalTaskPriority,
-          event: 'completed',
-        });
+      if (updates.status === 'done' && _prevStatus && _prevStatus !== 'done' && _userId && updates.title) {
+        const priority = _taskPriority ?? 'medium';
+        await sendTaskNotification({ userId: _userId, taskId: id, title: updates.title, priority, event: 'completed' });
+
+        // Credit wallet if there's a completion reward
+        if (_rewardAmount && _rewardAmount > 0) {
+          await creditWallet({
+            userId: _userId,
+            taskId: id,
+            taskTitle: updates.title,
+            amount: _rewardAmount,
+            currency: _rewardCurrency ?? 'USD',
+            userEmail: _userEmail,
+            taskPriority: priority,
+          });
+        }
+
+        // Check if this was a subtask and if all siblings are now done
+        const { data: taskData } = await supabase
+          .from('personal_tasks')
+          .select('parent_task_id, user_id, title')
+          .eq('id', id)
+          .maybeSingle();
+
+        if (taskData?.parent_task_id) {
+          const { data: siblings } = await supabase
+            .from('personal_tasks')
+            .select('id, status')
+            .eq('parent_task_id', taskData.parent_task_id);
+
+          if (siblings && siblings.every((s: Record<string, unknown>) => s.status === 'done')) {
+            const { data: parent } = await supabase
+              .from('personal_tasks')
+              .select('assigned_to, title')
+              .eq('id', taskData.parent_task_id)
+              .maybeSingle();
+
+            if (parent?.assigned_to && parent.title) {
+              await sendTaskNotification({
+                userId: parent.assigned_to as string,
+                taskId: taskData.parent_task_id,
+                title: parent.title as string,
+                priority: 'medium',
+                event: 'subtasks_done',
+              });
+            }
+          }
+        }
       }
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: KEY }),
@@ -224,9 +519,24 @@ export function usePersonalTasks(userId: string | undefined) {
   return {
     tasks: query.data ?? [],
     isLoading: query.isLoading,
-    createTask: (task: CreatePersonalTask) => createMutation.mutateAsync({ ...task, userId: userId! }),
-    updateTask: (id: string, updates: Partial<CreatePersonalTask>, prevStatus?: PersonalTaskStatus) =>
-      updateMutation.mutateAsync({ id, _prevStatus: prevStatus, ...updates }),
+    createTask: (task: CreatePersonalTask & { userEmail?: string | null }) =>
+      createMutation.mutateAsync({ ...task, userId: userId! }),
+    updateTask: (
+      id: string,
+      updates: Partial<CreatePersonalTask>,
+      prevStatus?: PersonalTaskStatus,
+      meta?: { userId?: string; userEmail?: string | null; taskPriority?: PersonalTaskPriority; rewardAmount?: number | null; rewardCurrency?: string }
+    ) =>
+      updateMutation.mutateAsync({
+        id,
+        _prevStatus: prevStatus,
+        _userId: meta?.userId ?? userId,
+        _userEmail: meta?.userEmail,
+        _taskPriority: meta?.taskPriority,
+        _rewardAmount: meta?.rewardAmount,
+        _rewardCurrency: meta?.rewardCurrency,
+        ...updates,
+      }),
     deleteTask: (id: string) => deleteMutation.mutateAsync(id),
     isCreating: createMutation.isPending,
     isUpdating: updateMutation.isPending,
@@ -261,17 +571,17 @@ export function useAssignedProjectTasks(userId: string | undefined) {
         .order('due_date', { ascending: true, nullsFirst: false });
       if (error) throw error;
 
-      const projectIds = [...new Set((data ?? []).map((t: any) => t.project_id).filter(Boolean))];
+      const projectIds = [...new Set((data ?? []).map((t: Record<string, unknown>) => t.project_id as string).filter(Boolean))];
       let projectNames: Record<string, string> = {};
       if (projectIds.length > 0) {
         const { data: projects } = await supabase
           .from('projects')
           .select('id, name')
           .in('id', projectIds);
-        (projects ?? []).forEach((p: any) => { projectNames[p.id] = p.name; });
+        (projects ?? []).forEach((p: Record<string, unknown>) => { projectNames[p.id as string] = p.name as string; });
       }
 
-      return (data ?? []).map((t: any) => ({
+      return (data ?? []).map((t: Record<string, unknown>) => ({
         id: t.id,
         title: t.title,
         description: t.description,
@@ -280,7 +590,7 @@ export function useAssignedProjectTasks(userId: string | undefined) {
         dueDate: t.due_date,
         startDate: t.start_date,
         projectId: t.project_id,
-        projectName: projectNames[t.project_id] ?? 'Unknown Project',
+        projectName: projectNames[t.project_id as string] ?? 'Unknown Project',
         stageId: t.stage_id,
         stateName: t.state_name,
         localityName: t.locality_name,
@@ -306,12 +616,30 @@ export function useCreatedByMeTasks(userId: string | undefined) {
         .eq('user_id', userId)
         .neq('assigned_to', userId)
         .not('assigned_to', 'is', null)
+        .is('parent_task_id', null)
         .order('created_at', { ascending: false });
       if (error) throw error;
-      return (data ?? []).map(mapRow);
+      return (data ?? []).map(r => mapRow(r as Record<string, unknown>));
     },
     enabled: !!userId,
     staleTime: 30_000,
+    meta: { qc },
+  });
+}
+
+export function useDailyTaskDefinitions() {
+  const qc = useQueryClient();
+  return useQuery({
+    queryKey: ['daily_task_definitions'],
+    queryFn: async (): Promise<DailyTaskDefinition[]> => {
+      const { data, error } = await supabase
+        .from('daily_task_definitions')
+        .select('*')
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      return (data ?? []).map(r => mapDefRow(r as Record<string, unknown>));
+    },
+    staleTime: 60_000,
     meta: { qc },
   });
 }

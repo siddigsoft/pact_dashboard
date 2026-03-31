@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef } from 'react';
+import { useState, useMemo, useRef, useEffect } from 'react';
 import {
   format, isToday, isThisWeek, isBefore, parseISO, isValid,
   startOfDay, addDays, eachDayOfInterval, startOfToday, isAfter,
@@ -11,7 +11,7 @@ import {
   Search, PlayCircle, Sparkles, LayoutGrid, LayoutList,
   Users, Trophy, Zap, TrendingUp, Target, ChevronDown,
   ChevronUp, Eye, EyeOff, Award, Lightbulb, BookOpen,
-  GanttChartSquare, HelpCircle, Info,
+  GanttChartSquare, HelpCircle, Info, Building2,
 } from 'lucide-react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -50,6 +50,7 @@ import { cn } from '@/lib/utils';
 import { useUser } from '@/context/user/UserContext';
 import {
   usePersonalTasks, useAssignedProjectTasks, useUpdateProjectTaskStatus, useCreatedByMeTasks,
+  materialiseDailyTasks,
   type PersonalTask, type PersonalTaskPriority, type PersonalTaskStatus, type CreatePersonalTask,
 } from '@/hooks/usePersonalTasks';
 
@@ -235,6 +236,14 @@ function PersonalTaskCard({ task, onStatusChange, onEdit, onDelete }: PersonalTa
           )}
           {task.category && task.category !== 'personal' && (
             <span className="text-[9px] bg-muted text-muted-foreground px-1.5 py-0.5 rounded-full">{task.category}</span>
+          )}
+          {task.completionRewardAmount && task.completionRewardAmount > 0 && (
+            <span className="text-[9px] bg-emerald-50 text-emerald-700 border border-emerald-200 px-1.5 py-0.5 rounded-full flex items-center gap-0.5">
+              <span>+{task.completionRewardCurrency} {task.completionRewardAmount}</span>
+            </span>
+          )}
+          {task.recurrence && task.recurrence !== 'none' && (
+            <span className="text-[9px] bg-blue-50 text-blue-600 border border-blue-200 px-1.5 py-0.5 rounded-full capitalize">{task.recurrence}</span>
           )}
         </div>
       </div>
@@ -523,9 +532,12 @@ function NewTaskDialog({ open, onClose, onCreate, isCreating, isAdmin, currentUs
   const [priority, setPriority] = useState<PersonalTaskPriority>('medium');
   const [dueDate, setDueDate] = useState('');
   const [notes, setNotes] = useState('');
-  const [assignMode, setAssignMode] = useState<'self' | 'other'>('self');
+  const [assignMode, setAssignMode] = useState<'self' | 'other' | 'dept'>('self');
   const [selectedUser, setSelectedUser] = useState<{ id: string; name: string } | null>(null);
   const [userSearch, setUserSearch] = useState('');
+  const [selectedDeptId, setSelectedDeptId] = useState('');
+  const [rewardAmount, setRewardAmount] = useState('');
+  const [rewardCurrency, setRewardCurrency] = useState('USD');
 
   const { data: users = [], isLoading: loadingUsers } = useQuery({
     queryKey: ['profiles-for-task-assign'],
@@ -537,6 +549,16 @@ function NewTaskDialog({ open, onClose, onCreate, isCreating, isAdmin, currentUs
     staleTime: 5 * 60_000,
   });
 
+  const { data: departments = [] } = useQuery({
+    queryKey: ['departments-list'],
+    queryFn: async () => {
+      const { data } = await supabase.from('departments').select('id, name').order('name');
+      return (data ?? []) as { id: string; name: string }[];
+    },
+    enabled: isAdmin && open,
+    staleTime: 60_000,
+  });
+
   const filteredUsers = users.filter(u =>
     u.id !== currentUserId && (!userSearch || (u.full_name ?? '').toLowerCase().includes(userSearch.toLowerCase()))
   );
@@ -544,7 +566,8 @@ function NewTaskDialog({ open, onClose, onCreate, isCreating, isAdmin, currentUs
   const reset = () => {
     setTitle(''); setDescription(''); setPriority('medium');
     setDueDate(''); setNotes(''); setAssignMode('self');
-    setSelectedUser(null); setUserSearch('');
+    setSelectedUser(null); setUserSearch(''); setSelectedDeptId('');
+    setRewardAmount(''); setRewardCurrency('USD');
   };
 
   const handleClose = () => { reset(); onClose(); };
@@ -552,15 +575,41 @@ function NewTaskDialog({ open, onClose, onCreate, isCreating, isAdmin, currentUs
   const handleSubmit = async () => {
     if (!title.trim()) return;
     const assignTo = assignMode === 'other' && selectedUser ? selectedUser : null;
-    await onCreate({
-      title: title.trim(),
-      description: description.trim() || null,
-      priority,
-      dueDate: dueDate || null,
-      notes: notes.trim() || null,
-      assignedTo: assignTo?.id ?? null,
-      assignedToName: assignTo?.name ?? null,
-    });
+    const reward = rewardAmount ? parseFloat(rewardAmount) : null;
+
+    if (assignMode === 'dept' && selectedDeptId) {
+      // Fetch department members and create a task for each
+      const { data: members } = await supabase
+        .from('profiles')
+        .select('id, full_name')
+        .eq('department_id', selectedDeptId);
+      for (const member of (members ?? [])) {
+        await onCreate({
+          title: title.trim(),
+          description: description.trim() || null,
+          priority,
+          dueDate: dueDate || null,
+          notes: notes.trim() || null,
+          assignedTo: member.id as string,
+          assignedToName: member.full_name as string,
+          targetDepartmentId: selectedDeptId,
+          completionRewardAmount: reward,
+          completionRewardCurrency: reward ? rewardCurrency : null,
+        });
+      }
+    } else {
+      await onCreate({
+        title: title.trim(),
+        description: description.trim() || null,
+        priority,
+        dueDate: dueDate || null,
+        notes: notes.trim() || null,
+        assignedTo: assignTo?.id ?? null,
+        assignedToName: assignTo?.name ?? null,
+        completionRewardAmount: reward,
+        completionRewardCurrency: reward ? rewardCurrency : null,
+      });
+    }
     reset();
     onClose();
   };
@@ -634,12 +683,12 @@ function NewTaskDialog({ open, onClose, onCreate, isCreating, isAdmin, currentUs
               <User className="h-3.5 w-3.5 text-muted-foreground" />
               Assign to
             </Label>
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-3 gap-2">
               <button
                 onClick={() => { setAssignMode('self'); setSelectedUser(null); }}
                 data-testid="button-assign-myself"
                 className={cn(
-                  'flex items-center gap-2 px-3 py-2.5 rounded-lg border text-sm font-medium transition-all',
+                  'flex items-center gap-1.5 px-2 py-2 rounded-lg border text-xs font-medium transition-all',
                   assignMode === 'self'
                     ? 'bg-[#1D3461] text-white border-[#1D3461]'
                     : 'bg-muted/50 text-muted-foreground border-border hover:border-[#1D3461]/40'
@@ -653,7 +702,7 @@ function NewTaskDialog({ open, onClose, onCreate, isCreating, isAdmin, currentUs
                 data-testid="button-assign-other"
                 disabled={!isAdmin}
                 className={cn(
-                  'flex items-center gap-2 px-3 py-2.5 rounded-lg border text-sm font-medium transition-all',
+                  'flex items-center gap-1.5 px-2 py-2 rounded-lg border text-xs font-medium transition-all',
                   assignMode === 'other'
                     ? 'bg-[#1D3461] text-white border-[#1D3461]'
                     : 'bg-muted/50 text-muted-foreground border-border hover:border-[#1D3461]/40',
@@ -662,6 +711,21 @@ function NewTaskDialog({ open, onClose, onCreate, isCreating, isAdmin, currentUs
               >
                 <Users className="h-3.5 w-3.5 flex-shrink-0" />
                 <span className="truncate">Someone else</span>
+              </button>
+              <button
+                onClick={() => isAdmin && setAssignMode('dept')}
+                data-testid="button-assign-dept"
+                disabled={!isAdmin}
+                className={cn(
+                  'flex items-center gap-1.5 px-2 py-2 rounded-lg border text-xs font-medium transition-all',
+                  assignMode === 'dept'
+                    ? 'bg-[#1D3461] text-white border-[#1D3461]'
+                    : 'bg-muted/50 text-muted-foreground border-border hover:border-[#1D3461]/40',
+                  !isAdmin && 'opacity-40 cursor-not-allowed'
+                )}
+              >
+                <Building2 className="h-3.5 w-3.5 flex-shrink-0" />
+                <span className="truncate">Dept</span>
               </button>
             </div>
 
@@ -673,6 +737,24 @@ function NewTaskDialog({ open, onClose, onCreate, isCreating, isAdmin, currentUs
                 </div>
                 <span className="truncate">{currentUserName}</span>
                 <span className="ml-auto text-xs opacity-60">(you)</span>
+              </div>
+            )}
+
+            {/* Department assign */}
+            {assignMode === 'dept' && isAdmin && (
+              <div className="space-y-1.5">
+                <Select value={selectedDeptId || 'none'} onValueChange={v => setSelectedDeptId(v === 'none' ? '' : v)}>
+                  <SelectTrigger className="h-9 text-sm">
+                    <SelectValue placeholder="Select department…" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Select department…</SelectItem>
+                    {departments.map(d => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+                {selectedDeptId && (
+                  <p className="text-[10px] text-muted-foreground">A copy of this task will be assigned to each member of the selected department.</p>
+                )}
               </div>
             )}
 
@@ -727,6 +809,37 @@ function NewTaskDialog({ open, onClose, onCreate, isCreating, isAdmin, currentUs
             )}
           </div>
 
+          {/* Completion Reward (admin only) */}
+          {isAdmin && (
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium flex items-center gap-1.5">
+                <Trophy className="h-3.5 w-3.5 text-emerald-600" />
+                Completion Reward <span className="text-muted-foreground font-normal">(optional — credited to wallet on completion)</span>
+              </Label>
+              <div className="grid grid-cols-3 gap-2">
+                <div className="col-span-2">
+                  <Input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    placeholder="0.00"
+                    value={rewardAmount}
+                    onChange={e => setRewardAmount(e.target.value)}
+                    className="h-8 text-sm"
+                    data-testid="input-reward-amount"
+                  />
+                </div>
+                <Input
+                  placeholder="USD"
+                  value={rewardCurrency}
+                  onChange={e => setRewardCurrency(e.target.value)}
+                  className="h-8 text-sm"
+                  data-testid="input-reward-currency"
+                />
+              </div>
+            </div>
+          )}
+
           {/* Notes */}
           <div className="space-y-1.5">
             <Label className="text-xs font-medium">Notes</Label>
@@ -745,12 +858,14 @@ function NewTaskDialog({ open, onClose, onCreate, isCreating, isAdmin, currentUs
           <Button
             size="sm"
             onClick={handleSubmit}
-            disabled={!title.trim() || isCreating || (assignMode === 'other' && !selectedUser)}
+            disabled={!title.trim() || isCreating || (assignMode === 'other' && !selectedUser) || (assignMode === 'dept' && !selectedDeptId)}
             className="bg-[#1D3461] hover:bg-[#0F2041] text-white"
             data-testid="button-create-task-submit"
           >
             {isCreating ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : <Plus className="h-3.5 w-3.5 mr-1" />}
-            {assignMode === 'other' && selectedUser ? `Assign to ${selectedUser.name.split(' ')[0]}` : 'Create Task'}
+            {assignMode === 'other' && selectedUser ? `Assign to ${selectedUser.name.split(' ')[0]}`
+              : assignMode === 'dept' && selectedDeptId ? 'Assign to Dept'
+              : 'Create Task'}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -1371,10 +1486,25 @@ export default function MyTasks() {
   const userId = currentUser?.id;
   const isAdmin = hasAnyRole(['super_admin', 'admin']);
 
-  const { tasks: personalTasks, isLoading: loadingPersonal, createTask, updateTask, deleteTask, isCreating, isUpdating } = usePersonalTasks(userId);
+  const { tasks: allPersonalTasks, isLoading: loadingPersonal, createTask, updateTask, deleteTask, isCreating, isUpdating } = usePersonalTasks(userId);
+  // Exclude subtasks (parent_task_id set) from the main task list — they are shown inside the parent
+  const personalTasks = useMemo(() => allPersonalTasks.filter(t => !t.parentTaskId), [allPersonalTasks]);
   const { data: projectTasks = [], isLoading: loadingProject, refetch: refetchProject } = useAssignedProjectTasks(userId);
   const { data: delegatedTasks = [] } = useCreatedByMeTasks(isAdmin ? userId : undefined);
   const updateProjectTaskStatus = useUpdateProjectTaskStatus();
+
+  // Materialise daily recurring tasks on first mount
+  useEffect(() => {
+    if (!userId) return;
+    materialiseDailyTasks({
+      userId,
+      userRole: currentUser?.role ?? null,
+      userDepartmentId: (currentUser as any)?.departmentId ?? null,
+      userEmail: currentUser?.email ?? null,
+      userName: currentUser?.fullName ?? null,
+    }).catch(() => {/* non-critical */});
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userId]);
 
   const [filter, setFilter] = useState<FilterType>('all');
   const [searchQuery, setSearchQuery] = useState('');
@@ -1444,8 +1574,21 @@ export default function MyTasks() {
   const handleStatusChange = async (id: string, status: PersonalTaskStatus, prevStatus: PersonalTaskStatus) => {
     try {
       const task = personalTasks.find(t => t.id === id);
-      await updateTask(id, { status, title: task?.title, priority: task?.priority }, prevStatus);
-      if (status === 'done') toast({ title: '✓ Task completed!' });
+      await updateTask(
+        id,
+        { status, title: task?.title, priority: task?.priority },
+        prevStatus,
+        {
+          userId: currentUser?.id,
+          userEmail: currentUser?.email,
+          taskPriority: task?.priority,
+          rewardAmount: task?.completionRewardAmount ?? null,
+          rewardCurrency: task?.completionRewardCurrency ?? 'USD',
+        },
+      );
+      if (status === 'done') {
+        toast({ title: task?.completionRewardAmount ? `✓ Task completed! Reward credited to your wallet.` : '✓ Task completed!' });
+      }
     } catch {
       toast({ title: 'Failed to update', variant: 'destructive' });
     }

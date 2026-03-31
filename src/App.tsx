@@ -102,6 +102,7 @@ const EmailManagement = lazy(() => import('./pages/EmailManagement'));
 const AdminBroadcast = lazy(() => import('./pages/AdminBroadcast'));
 const StaffDirectory = lazy(() => import('./pages/StaffDirectory'));
 const Departments = lazy(() => import('./pages/Departments'));
+const TaskAdmin = lazy(() => import('./pages/TaskAdmin'));
 const TransactionScanner = lazy(() => import('./pages/TransactionScanner'));
 const PermissionsManagement = lazy(() => import('./pages/PermissionsManagement'));
 const RolePerspectiveViewer = lazy(() => import('./pages/RolePerspectiveViewer'));
@@ -374,6 +375,7 @@ const AppRoutes = () => {
         <Route path="/admin/broadcast" element={<AdminBroadcast />} />
         <Route path="/admin/staff-profiles" element={<StaffDirectory />} />
         <Route path="/departments" element={<Departments />} />
+        <Route path="/task-admin" element={<TaskAdmin />} />
         <Route path="/admin/transaction-scanner" element={<TransactionScanner />} />
         <Route path="/permissions-management" element={<PermissionsManagement />} />
         <Route path="/role-perspective" element={<RolePerspectiveViewer />} />
