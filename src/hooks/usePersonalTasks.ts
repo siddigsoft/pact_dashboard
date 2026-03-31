@@ -246,82 +246,44 @@ export async function materialiseDailyTasks(opts: {
   try {
     const today = format(new Date(), 'yyyy-MM-dd');
 
-    // Fetch active definitions
-    const { data: defs } = await supabase
-      .from('daily_task_definitions')
-      .select('*')
-      .eq('active', true);
+    // Call SECURITY DEFINER RPC — reward amounts are read from template rows
+    // by the trusted DB function, never from caller input. This is the only
+    // correct way to materialise tasks with rewards for non-admin users.
+    const { data: created, error: rpcErr } = await supabase.rpc(
+      'materialise_daily_tasks_for_user',
+      {
+        p_user_id: opts.userId,
+        p_role: opts.userRole ?? '',
+        p_department_id: opts.userDepartmentId ?? null,
+      },
+    );
 
-    if (!defs?.length) return;
-
-    const roleNorm = (opts.userRole ?? '').toLowerCase().replace(/[_\s]/g, '');
-
-    // Track newly created tasks for post-loop email digest
-    const newTaskTitles: string[] = [];
-
-    for (const def of defs) {
-      const d = mapDefRow(def as Record<string, unknown>);
-
-      // Check recurrence day match
-      if (d.recurrence === 'weekly' && new Date().getDay() !== 1) continue; // Monday only
-
-      // Check role match
-      const roleMatch = !d.roleTargets.length ||
-        d.roleTargets.some(r => r.toLowerCase().replace(/[_\s]/g, '') === roleNorm);
-      // Check department match
-      const deptMatch = !d.departmentId || d.departmentId === opts.userDepartmentId;
-
-      if (!roleMatch || !deptMatch) continue;
-
-      // Deduplicate: skip if already materialised today for this user+template
-      const { count } = await supabase
-        .from('personal_tasks')
-        .select('id', { count: 'exact', head: true })
-        .eq('template_id', d.id)
-        .eq('assigned_to', opts.userId)
-        .eq('daily_task_date', today);
-
-      if ((count ?? 0) > 0) continue;
-
-      // Materialise
-      const { data: created } = await supabase
-        .from('personal_tasks')
-        .insert({
-          user_id: opts.userId,
-          assigned_to: opts.userId,
-          assigned_to_name: opts.userName,
-          title: d.title,
-          description: d.description,
-          priority: d.priority,
-          status: 'todo',
-          category: 'recurring',
-          completion_reward_amount: d.rewardAmount,
-          completion_reward_currency: d.rewardCurrency,
-          recurrence: d.recurrence,
-          template_id: d.id,
-          daily_task_date: today,
-        })
-        .select('id')
-        .single();
-
-      if (created?.id) {
-        newTaskTitles.push(d.title);
-        await sendTaskNotification({
-          userId: opts.userId,
-          taskId: created.id,
-          title: d.title,
-          priority: d.priority as PersonalTaskPriority,
-          event: 'assigned',
-        });
-      }
+    if (rpcErr) {
+      console.error('[materialiseDailyTasks] RPC error:', rpcErr.message);
+      return;
     }
 
-    // Send a single email summary to the user if any new tasks were materialised
-    if (newTaskTitles.length > 0 && opts.userEmail) {
-      const taskList = newTaskTitles.map((t, i) => `<li>${i + 1}. ${t}</li>`).join('');
+    const rows = (created ?? []) as Array<{ task_id: string; task_title: string; reward_amount: number | null }>;
+
+    if (!rows.length) return;
+
+    // Send per-task in-app notifications
+    await Promise.all(rows.map(r =>
+      sendTaskNotification({
+        userId: opts.userId,
+        taskId: r.task_id,
+        title: r.task_title,
+        priority: 'medium',
+        event: 'assigned',
+      })
+    ));
+
+    // Send a single email digest listing all new tasks
+    if (opts.userEmail) {
+      const taskList = rows.map((r, i) => `<li>${i + 1}. ${r.task_title}</li>`).join('');
       const html = `
         <p>Hello${opts.userName ? ` ${opts.userName}` : ''},</p>
-        <p>You have <strong>${newTaskTitles.length} new recurring task${newTaskTitles.length > 1 ? 's' : ''}</strong> assigned to you for today (${today}):</p>
+        <p>You have <strong>${rows.length} new recurring task${rows.length > 1 ? 's' : ''}</strong> assigned to you for today (${today}):</p>
         <ul>${taskList}</ul>
         <p>Log in to <a href="https://app.pactorg.com/my-tasks">PACT Command Center</a> to view and complete your tasks.</p>
         <p>– PACT Task System</p>

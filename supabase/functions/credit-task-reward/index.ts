@@ -94,14 +94,37 @@ serve(async (req: Request) => {
   // Verify reward was admin-authorized.
   // Two valid authorization paths:
   //  1. reward_set_by is set (admin manually assigned reward to this task)
-  //  2. template_id is set (reward inherited from a daily_task_definitions template;
-  //     the DB trigger verified amount matches template before allowing the insert)
-  const isTemplateTask = !!(task.template_id)
-  if (!task.reward_set_by && !isTemplateTask) {
-    return new Response(JSON.stringify({ ok: false, error: 'Reward not admin-authorized' }), {
-      status: 403,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    })
+  //  2. template_id is set AND reward matches the template's reward_amount
+  //     (task was created by SECURITY DEFINER RPC materialise_daily_tasks_for_user,
+  //      which is the only path that can insert rewards without an admin caller)
+  if (!task.reward_set_by) {
+    if (!task.template_id) {
+      return new Response(JSON.stringify({ ok: false, error: 'Reward not admin-authorized' }), {
+        status: 403,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
+    }
+
+    // Verify reward matches the original template (prevents spoofing even if template_id is set)
+    const { data: tmpl } = await sb
+      .from('daily_task_definitions')
+      .select('reward_amount, active')
+      .eq('id', task.template_id)
+      .maybeSingle()
+
+    const taskAmount = task.completion_reward_amount as number | null
+    const tmplAmount = tmpl?.reward_amount as number | null
+    const rewardMatchesTemplate = tmpl?.active === true &&
+      tmplAmount !== null &&
+      taskAmount !== null &&
+      Math.abs(taskAmount - tmplAmount) < 0.001
+
+    if (!rewardMatchesTemplate) {
+      return new Response(JSON.stringify({ ok: false, error: 'Template reward mismatch' }), {
+        status: 403,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
+    }
   }
 
   const amount = task.completion_reward_amount as number | null
