@@ -153,7 +153,7 @@ function QuickAddBar({ onAdd, isCreating }: QuickAddProps) {
 
 interface PersonalTaskCardProps {
   task: PersonalTask;
-  onStatusChange: (status: PersonalTaskStatus) => void;
+  onStatusChange: (status: PersonalTaskStatus, prev: PersonalTaskStatus) => void;
   onEdit: () => void;
   onDelete: () => void;
 }
@@ -163,6 +163,7 @@ function PersonalTaskCard({ task, onStatusChange, onEdit, onDelete }: PersonalTa
   const sCfg = STATUS_CFG[task.status];
   const overdue = isOverdue(task.dueDate, task.status);
   const isDone = task.status === 'done';
+  const isInProgress = task.status === 'inprogress';
 
   return (
     <div className={cn(
@@ -170,18 +171,27 @@ function PersonalTaskCard({ task, onStatusChange, onEdit, onDelete }: PersonalTa
       sCfg.border,
       isDone && 'opacity-60',
     )}>
-      {/* Status toggle */}
+      {/* Status toggle circle */}
       <button
         type="button"
         className={cn(
-          'mt-0.5 h-4 w-4 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-colors',
-          isDone ? 'border-emerald-500 bg-emerald-500' : 'border-muted-foreground/40 hover:border-[#1D3461]',
+          'mt-0.5 h-5 w-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-all hover:scale-110',
+          isDone
+            ? 'border-emerald-500 bg-emerald-500'
+            : isInProgress
+            ? 'border-[#1D3461] bg-[#1D3461]/10'
+            : 'border-muted-foreground/40 hover:border-emerald-500 hover:bg-emerald-50',
         )}
-        onClick={() => onStatusChange(isDone ? 'todo' : 'done')}
-        title={isDone ? 'Mark as to do' : 'Mark as done'}
+        onClick={() => onStatusChange(isDone ? 'todo' : 'done', task.status)}
+        title={isDone ? 'Click to reopen' : 'Click to mark as done'}
         data-testid={`task-toggle-${task.id}`}
       >
-        {isDone && <CheckCircle2 className="h-2.5 w-2.5 text-white" />}
+        {isDone
+          ? <CheckCircle2 className="h-3 w-3 text-white" />
+          : isInProgress
+          ? <div className="h-2 w-2 rounded-full bg-[#1D3461]" />
+          : <CheckCircle2 className="h-3 w-3 text-emerald-500 opacity-0 group-hover:opacity-60 transition-opacity" />
+        }
       </button>
 
       {/* Content */}
@@ -211,30 +221,45 @@ function PersonalTaskCard({ task, onStatusChange, onEdit, onDelete }: PersonalTa
         </div>
       </div>
 
+      {/* "Mark Done" visible button (not done tasks only) */}
+      {!isDone && (
+        <button
+          type="button"
+          onClick={() => onStatusChange('done', task.status)}
+          className="opacity-0 group-hover:opacity-100 transition-opacity text-[10px] font-medium text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-2 py-0.5 rounded-full flex items-center gap-1 flex-shrink-0"
+          data-testid={`task-mark-done-${task.id}`}
+        >
+          <CheckCircle2 className="h-3 w-3" /> Done
+        </button>
+      )}
+
       {/* Status dropdown */}
       <Select
         value={task.status}
-        onValueChange={v => onStatusChange(v as PersonalTaskStatus)}
+        onValueChange={v => onStatusChange(v as PersonalTaskStatus, task.status)}
       >
-        <SelectTrigger className="h-6 w-24 text-[10px] border-0 bg-transparent p-0 gap-0.5 focus:ring-0 opacity-0 group-hover:opacity-100 transition-opacity">
-          <span className={cn('px-1.5 py-0.5 rounded-full text-[9px] font-semibold', sCfg.color)}>{sCfg.label}</span>
+        <SelectTrigger className="h-6 w-6 border-0 bg-transparent p-0 focus:ring-0 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" title="Change status">
+          <MoreHorizontal className="h-4 w-4 text-muted-foreground" />
         </SelectTrigger>
         <SelectContent>
+          <div className="px-2 py-1 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Change Status</div>
           {(['todo', 'inprogress', 'done', 'cancelled'] as PersonalTaskStatus[]).map(s => (
-            <SelectItem key={s} value={s} className="text-xs">{STATUS_CFG[s].label}</SelectItem>
+            <SelectItem key={s} value={s} className="text-xs">
+              <span className={cn('px-1.5 py-0.5 rounded-full text-[9px] font-semibold', STATUS_CFG[s].color)}>{STATUS_CFG[s].label}</span>
+            </SelectItem>
           ))}
         </SelectContent>
       </Select>
 
-      {/* Actions */}
+      {/* More actions */}
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <button type="button" className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-foreground p-0.5">
-            <MoreHorizontal className="h-4 w-4" />
+          <button type="button" className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-foreground p-0.5 flex-shrink-0">
+            <Edit2 className="h-3.5 w-3.5" />
           </button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="text-sm">
-          <DropdownMenuItem onClick={onEdit}><Edit2 className="h-3.5 w-3.5 mr-2" />Edit</DropdownMenuItem>
+          <DropdownMenuItem onClick={onEdit}><Edit2 className="h-3.5 w-3.5 mr-2" />Edit Task</DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem onClick={onDelete} className="text-destructive focus:text-destructive">
             <Trash2 className="h-3.5 w-3.5 mr-2" />Delete
@@ -452,9 +477,11 @@ export default function MyTasks() {
     }
   };
 
-  const handleStatusChange = async (id: string, status: PersonalTaskStatus) => {
+  const handleStatusChange = async (id: string, status: PersonalTaskStatus, prevStatus: PersonalTaskStatus) => {
     try {
-      await updateTask(id, { status });
+      const task = personalTasks.find(t => t.id === id);
+      await updateTask(id, { status, title: task?.title, priority: task?.priority }, prevStatus);
+      if (status === 'done') toast({ title: '✓ Task completed!' });
     } catch {
       toast({ title: 'Failed to update', variant: 'destructive' });
     }
@@ -649,7 +676,7 @@ export default function MyTasks() {
               <PersonalTaskCard
                 key={task.id}
                 task={task}
-                onStatusChange={s => handleStatusChange(task.id, s)}
+                onStatusChange={(s, prev) => handleStatusChange(task.id, s, prev)}
                 onEdit={() => setEditingTask(task)}
                 onDelete={() => handleDelete(task.id)}
               />
