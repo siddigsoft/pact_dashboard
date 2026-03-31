@@ -674,8 +674,10 @@ export default function Departments() {
     if (!deleteTarget) return;
     setDeleting(true);
     try {
-      await supabase.from("profiles").update({ department_id: null }).eq("department_id", deleteTarget.id);
-      await supabase.from("departments").update({ parent_department_id: deleteTarget.parent_department_id }).eq("parent_department_id", deleteTarget.id);
+      const { error: unassignErr } = await supabase.from("profiles").update({ department_id: null }).eq("department_id", deleteTarget.id);
+      if (unassignErr) throw unassignErr;
+      const { error: reparentErr } = await supabase.from("departments").update({ parent_department_id: deleteTarget.parent_department_id }).eq("parent_department_id", deleteTarget.id);
+      if (reparentErr) throw reparentErr;
       const { error } = await supabase.from("departments").delete().eq("id", deleteTarget.id);
       if (error) throw error;
       toast({ title: "Department deleted" });

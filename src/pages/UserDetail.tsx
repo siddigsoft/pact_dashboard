@@ -184,8 +184,10 @@ const UserDetail: React.FC = () => {
         supabase.from("departments").select("id, name").order("name"),
         supabase.from("profiles").select("id, full_name, email").order("full_name"),
       ]);
-      setDepartments((deptRes.data || []) as { id: string; name: string }[]);
-      setAllUsers((usersRes.data || []) as { id: string; full_name: string | null; email: string | null }[]);
+      if (deptRes.error) console.error("[UserDetail] failed to load departments:", deptRes.error.message);
+      else setDepartments(deptRes.data as { id: string; name: string }[]);
+      if (usersRes.error) console.error("[UserDetail] failed to load profiles for reports-to:", usersRes.error.message);
+      else setAllUsers(usersRes.data as { id: string; full_name: string | null; email: string | null }[]);
     };
     loadEmploymentData();
   }, []);
