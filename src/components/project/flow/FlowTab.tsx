@@ -1,8 +1,7 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   CheckCircle2,
-  Circle,
   SkipForward,
   ChevronUp,
   ChevronDown,
@@ -22,13 +21,17 @@ import {
   TrendingUp,
   Layers,
   CheckSquare,
-  GripVertical,
   Download,
   FileDown,
   Plus,
   X,
   Pencil,
-  ChevronRight,
+  BarChart2,
+  List,
+  Calendar,
+  Users,
+  Circle,
+  Link2,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -54,14 +57,16 @@ import { Separator } from '@/components/ui/separator';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
-import { format, formatDistanceToNow } from 'date-fns';
+import { format, formatDistanceToNow, parseISO, isBefore } from 'date-fns';
 import type { UseProjectFlowReturn, CustomStageEntry } from '@/hooks/useProjectFlow';
 import type { FlowStage } from '@/config/projectFlows';
 import { StageAssignees } from './StageAssignees';
 import { StageChecklist } from './StageChecklist';
 import { StageAttachments } from './StageAttachments';
+import { GanttView } from './GanttView';
 import { exportFlowPDF, exportFlowDocx } from './flowExport';
-import { useStageAssignees, useStageChecklist, useStageAttachments } from '@/hooks/useStageData';
+
+type ViewMode = 'list' | 'gantt';
 
 interface Props {
   flow: UseProjectFlowReturn;
@@ -70,9 +75,13 @@ interface Props {
   projectCode?: string;
   projectId: string;
   currentUserId?: string;
+  projectStart?: string;
+  projectEnd?: string;
   allDefaultStages: FlowStage[];
   customFlowStages?: CustomStageEntry[];
 }
+
+// ── Formatters ─────────────────────────────────────────────────────────────
 
 function formatTimestamp(iso: string) {
   try { return format(new Date(iso), 'dd MMM yyyy, HH:mm'); } catch { return iso; }
@@ -80,6 +89,16 @@ function formatTimestamp(iso: string) {
 function timeAgo(iso: string) {
   try { return formatDistanceToNow(new Date(iso), { addSuffix: true }); } catch { return ''; }
 }
+function fmtDate(iso?: string | null) {
+  if (!iso) return null;
+  try { return format(parseISO(iso), 'dd MMM yyyy'); } catch { return iso; }
+}
+function isOverdueFn(iso?: string | null, status?: string) {
+  if (!iso || status === 'completed' || status === 'skipped') return false;
+  try { return isBefore(parseISO(iso), new Date()); } catch { return false; }
+}
+
+// ── Status config ──────────────────────────────────────────────────────────
 
 const STATUS_CFG = {
   completed: {
@@ -88,7 +107,6 @@ const STATUS_CFG = {
     ring: 'border-emerald-200 dark:border-emerald-800',
     icon: 'bg-emerald-500 text-white border-emerald-500',
     badge: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300',
-    dot: 'bg-emerald-500',
     label: 'Completed',
   },
   current: {
@@ -97,7 +115,6 @@ const STATUS_CFG = {
     ring: 'border-[#1D3461]/40 dark:border-[#1D3461]/60',
     icon: 'bg-[#1D3461] text-white border-[#1D3461]',
     badge: 'bg-[#1D3461]/10 text-[#1D3461] dark:bg-[#1D3461]/30 dark:text-blue-300',
-    dot: 'bg-[#1D3461]',
     label: 'In Progress',
   },
   skipped: {
@@ -106,7 +123,6 @@ const STATUS_CFG = {
     ring: 'border-dashed border-slate-200 dark:border-slate-700',
     icon: 'bg-slate-100 text-slate-400 border-slate-300 dark:bg-slate-800',
     badge: 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400',
-    dot: 'bg-slate-300',
     label: 'Skipped',
   },
   upcoming: {
@@ -115,69 +131,43 @@ const STATUS_CFG = {
     ring: 'border-border',
     icon: 'bg-background text-muted-foreground border-border',
     badge: 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300',
-    dot: 'bg-slate-200',
     label: 'Upcoming',
   },
 };
 
-// ── Export helpers ─────────────────────────────────────────────────────────
+// ── Export button ──────────────────────────────────────────────────────────
 
-function ExportButton({
-  projectId, projectName, projectType, projectCode, flow, allDefaultStages, customEntries,
-}: {
+function ExportButton({ projectId, projectName, projectType, projectCode, flow, allDefaultStages, customEntries }: {
   projectId: string; projectName: string; projectType: string; projectCode?: string;
   flow: UseProjectFlowReturn; allDefaultStages: FlowStage[]; customEntries: CustomStageEntry[];
 }) {
   const { toast } = useToast();
   const [exporting, setExporting] = useState<'pdf' | 'docx' | null>(null);
 
-  // Gather per-stage data at export time by calling a simple query
   const doExport = async (type: 'pdf' | 'docx') => {
     setExporting(type);
     try {
       const { supabase } = await import('@/integrations/supabase/client');
-      const stageIds = allDefaultStages.map(s => s.id);
       const [assigneesRes, checklistRes, attachmentsRes] = await Promise.all([
         supabase.from('project_stage_assignees').select('stage_id, profiles:user_id(full_name, role)').eq('project_id', projectId),
         supabase.from('project_stage_checklist').select('stage_id, item_text, completed').eq('project_id', projectId),
         supabase.from('project_stage_attachments').select('stage_id, file_name, file_url, file_type, file_size').eq('project_id', projectId),
       ]);
-
       const extras: Record<string, any> = {};
-      stageIds.forEach(sid => {
-        extras[sid] = {
-          assignees: (assigneesRes.data ?? []).filter((r: any) => r.stage_id === sid).map((r: any) => ({
-            id: sid + r.profiles?.full_name, userId: '', fullName: r.profiles?.full_name ?? '', role: r.profiles?.role ?? '', avatarUrl: null, assignedAt: '',
-          })),
-          checklist: (checklistRes.data ?? []).filter((r: any) => r.stage_id === sid).map((r: any) => ({
-            id: sid, itemText: r.item_text, completed: r.completed, completedBy: null, completedAt: null, createdAt: '', sortOrder: 0,
-          })),
-          attachments: (attachmentsRes.data ?? []).filter((r: any) => r.stage_id === sid).map((r: any) => ({
-            id: sid, fileName: r.file_name, fileUrl: r.file_url, fileType: r.file_type, fileSize: r.file_size, uploadedByName: null, createdAt: '',
-          })),
+      allDefaultStages.forEach(s => {
+        extras[s.id] = {
+          assignees: (assigneesRes.data ?? []).filter((r: any) => r.stage_id === s.id).map((r: any) => ({ id: s.id + r.profiles?.full_name, userId: '', fullName: r.profiles?.full_name ?? '', role: r.profiles?.role ?? '', avatarUrl: null, assignedAt: '' })),
+          checklist: (checklistRes.data ?? []).filter((r: any) => r.stage_id === s.id).map((r: any) => ({ id: s.id, itemText: r.item_text, completed: r.completed, completedBy: null, completedAt: null, createdAt: '', sortOrder: 0 })),
+          attachments: (attachmentsRes.data ?? []).filter((r: any) => r.stage_id === s.id).map((r: any) => ({ id: s.id, fileName: r.file_name, fileUrl: r.file_url, fileType: r.file_type, fileSize: r.file_size, uploadedByName: null, createdAt: '' })),
         };
       });
-
-      const exportData = {
-        projectName, projectType, projectCode,
-        stages: allDefaultStages,
-        stageHistory: flow.stageHistory,
-        currentStageId: flow.currentStage?.id ?? null,
-        extras,
-        customEntries,
-      };
-
-      if (type === 'pdf') {
-        await exportFlowPDF(exportData);
-      } else {
-        await exportFlowDocx(exportData);
-      }
+      const exportData = { projectName, projectType, projectCode, stages: allDefaultStages, stageHistory: flow.stageHistory, currentStageId: flow.currentStage?.id ?? null, extras, customEntries };
+      if (type === 'pdf') await exportFlowPDF(exportData);
+      else await exportFlowDocx(exportData);
       toast({ title: `${type.toUpperCase()} exported successfully` });
     } catch (err: any) {
       toast({ title: 'Export failed', description: err.message, variant: 'destructive' });
-    } finally {
-      setExporting(null);
-    }
+    } finally { setExporting(null); }
   };
 
   return (
@@ -189,12 +179,8 @@ function ExportButton({
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-44">
-        <DropdownMenuItem onClick={() => doExport('pdf')}>
-          <FileText className="h-3.5 w-3.5 mr-2 text-red-500" /> Export PDF
-        </DropdownMenuItem>
-        <DropdownMenuItem onClick={() => doExport('docx')}>
-          <FileText className="h-3.5 w-3.5 mr-2 text-blue-500" /> Export Word (.docx)
-        </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => doExport('pdf')}><FileText className="h-3.5 w-3.5 mr-2 text-red-500" />Export PDF</DropdownMenuItem>
+        <DropdownMenuItem onClick={() => doExport('docx')}><FileText className="h-3.5 w-3.5 mr-2 text-blue-500" />Export Word (.docx)</DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
   );
@@ -203,77 +189,60 @@ function ExportButton({
 // ── Edit Flow Dialog ───────────────────────────────────────────────────────
 
 interface EditFlowDialogProps {
-  open: boolean;
-  onClose: () => void;
-  customEntries: CustomStageEntry[];
-  setCustomEntries: (entries: CustomStageEntry[]) => void;
-  allDefaultStages: FlowStage[];
-  projectName: string;
-  isSaving: boolean;
-  onSave: () => void;
-  onReset: () => void;
+  open: boolean; onClose: () => void;
+  customEntries: CustomStageEntry[]; setCustomEntries: (e: CustomStageEntry[]) => void;
+  allDefaultStages: FlowStage[]; projectName: string;
+  isSaving: boolean; onSave: () => void; onReset: () => void;
   getStageStatus: (id: string) => 'completed' | 'current' | 'upcoming' | 'skipped';
 }
 
-function EditFlowDialog({
-  open, onClose, customEntries, setCustomEntries, allDefaultStages, projectName,
-  isSaving, onSave, onReset, getStageStatus,
-}: EditFlowDialogProps) {
+function EditFlowDialog({ open, onClose, customEntries, setCustomEntries, allDefaultStages, projectName, isSaving, onSave, onReset, getStageStatus }: EditFlowDialogProps) {
   const [expandedEditIds, setExpandedEditIds] = useState<Set<string>>(new Set());
 
-  const toggleEditExpand = (id: string) => {
-    setExpandedEditIds(prev => {
-      const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
-      return next;
-    });
-  };
+  const toggleEditExpand = (id: string) => setExpandedEditIds(prev => {
+    const next = new Set(prev);
+    next.has(id) ? next.delete(id) : next.add(id);
+    return next;
+  });
 
-  const updateEntry = (id: string, patch: Partial<CustomStageEntry>) => {
-    setCustomEntries(customEntries.map(e => (e.id === id ? { ...e, ...patch } : e)));
-  };
+  const updateEntry = (id: string, patch: Partial<CustomStageEntry>) =>
+    setCustomEntries(customEntries.map(e => e.id === id ? { ...e, ...patch } : e));
 
-  const moveEntry = (idx: number, direction: 'up' | 'down') => {
+  const moveEntry = (idx: number, dir: 'up' | 'down') => {
     const next = [...customEntries];
-    const targetIdx = direction === 'up' ? idx - 1 : idx + 1;
-    if (targetIdx < 0 || targetIdx >= next.length) return;
-    [next[idx], next[targetIdx]] = [next[targetIdx], next[idx]];
+    const t = dir === 'up' ? idx - 1 : idx + 1;
+    if (t < 0 || t >= next.length) return;
+    [next[idx], next[t]] = [next[t], next[idx]];
     setCustomEntries(next);
-  };
-
-  const toggleSkip = (id: string) => {
-    setCustomEntries(customEntries.map(e => (e.id === id ? { ...e, skipped: !e.skipped } : e)));
   };
 
   const addOutput = (id: string) => {
     const entry = customEntries.find(e => e.id === id);
-    const outputs = entry?.customOutputs ?? [];
-    updateEntry(id, { customOutputs: [...outputs, ''] });
+    updateEntry(id, { customOutputs: [...(entry?.customOutputs ?? []), ''] });
+  };
+  const updateOutput = (id: string, oi: number, val: string) => {
+    const entry = customEntries.find(e => e.id === id);
+    const outs = [...(entry?.customOutputs ?? [])];
+    outs[oi] = val;
+    updateEntry(id, { customOutputs: outs });
+  };
+  const removeOutput = (id: string, oi: number) => {
+    const entry = customEntries.find(e => e.id === id);
+    updateEntry(id, { customOutputs: (entry?.customOutputs ?? []).filter((_, i) => i !== oi) });
   };
 
-  const updateOutput = (id: string, outputIdx: number, value: string) => {
-    const entry = customEntries.find(e => e.id === id);
-    const outputs = [...(entry?.customOutputs ?? [])];
-    outputs[outputIdx] = value;
-    updateEntry(id, { customOutputs: outputs });
-  };
-
-  const removeOutput = (id: string, outputIdx: number) => {
-    const entry = customEntries.find(e => e.id === id);
-    const outputs = (entry?.customOutputs ?? []).filter((_, i) => i !== outputIdx);
-    updateEntry(id, { customOutputs: outputs });
-  };
+  // Collect all used parallelGroup values
+  const usedGroups = [...new Set(customEntries.map(e => e.parallelGroup).filter((g): g is number => g != null))];
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
       <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Settings2 className="h-4 w-4 text-[#1D3461]" />
-            Edit Project Flow
+            <Settings2 className="h-4 w-4 text-[#1D3461]" /> Edit Project Flow
           </DialogTitle>
           <DialogDescription>
-            Reorder, rename, or configure stages for <strong>{projectName}</strong>. Changes only affect this project.
+            Configure stages, dates, and parallel groups for <strong>{projectName}</strong>.
           </DialogDescription>
         </DialogHeader>
 
@@ -284,167 +253,119 @@ function EditFlowDialog({
             const isExpanded = expandedEditIds.has(entry.id);
             const displayLabel = entry.customLabel || stageDef.label;
             const status = getStageStatus(entry.id);
+            const isParallel = entry.parallelGroup != null;
 
             return (
-              <div
-                key={entry.id}
-                className={cn(
-                  'rounded-xl border transition-colors overflow-hidden',
-                  entry.skipped
-                    ? 'bg-slate-50 dark:bg-slate-800/30 border-dashed border-slate-200 dark:border-slate-700 opacity-70'
-                    : 'bg-white dark:bg-slate-900 border-border',
-                  isExpanded && 'border-[#1D3461]/30 shadow-sm',
-                )}
-              >
+              <div key={entry.id} className={cn(
+                'rounded-xl border transition-colors overflow-hidden',
+                entry.skipped ? 'bg-slate-50 dark:bg-slate-800/30 border-dashed border-slate-200 opacity-70' : 'bg-white dark:bg-slate-900 border-border',
+                isExpanded && 'border-[#1D3461]/30 shadow-sm',
+              )}>
                 {/* Row header */}
                 <div className="flex items-center gap-2 p-3">
-                  {/* Stage number */}
                   <div className="w-6 h-6 rounded-full bg-muted flex items-center justify-center flex-shrink-0">
                     <span className="text-[10px] font-bold text-muted-foreground">{idx + 1}</span>
                   </div>
-
-                  {/* Reorder buttons */}
                   <div className="flex flex-col gap-0.5 flex-shrink-0">
-                    <Button variant="ghost" size="icon" className="h-5 w-5" disabled={idx === 0} onClick={() => moveEntry(idx, 'up')}>
-                      <ChevronUp className="h-3 w-3" />
-                    </Button>
-                    <Button variant="ghost" size="icon" className="h-5 w-5" disabled={idx === customEntries.length - 1} onClick={() => moveEntry(idx, 'down')}>
-                      <ChevronDown className="h-3 w-3" />
-                    </Button>
+                    <Button variant="ghost" size="icon" className="h-5 w-5" disabled={idx === 0} onClick={() => moveEntry(idx, 'up')}><ChevronUp className="h-3 w-3" /></Button>
+                    <Button variant="ghost" size="icon" className="h-5 w-5" disabled={idx === customEntries.length - 1} onClick={() => moveEntry(idx, 'down')}><ChevronDown className="h-3 w-3" /></Button>
                   </div>
-
-                  {/* Stage info */}
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-1.5">
+                    <div className="flex items-center gap-1.5 flex-wrap">
                       <p className={cn('text-sm font-medium truncate', entry.skipped && 'line-through text-muted-foreground')}>
                         {displayLabel}
-                        {entry.customLabel && entry.customLabel !== stageDef.label && (
-                          <span className="ml-1.5 text-[10px] text-[#1D3461] font-normal not-italic">(custom)</span>
-                        )}
+                        {entry.customLabel && entry.customLabel !== stageDef.label && <span className="ml-1 text-[10px] text-[#1D3461]">(custom)</span>}
                       </p>
+                      {isParallel && (
+                        <span className="text-[9px] bg-violet-100 text-violet-700 rounded px-1 font-medium">∥ Group {entry.parallelGroup}</span>
+                      )}
                     </div>
-                    <p className="text-xs text-muted-foreground truncate mt-0.5">
-                      {entry.customDescription || stageDef.description}
-                    </p>
+                    {(entry.plannedStart || entry.plannedEnd) && (
+                      <p className="text-[10px] text-muted-foreground mt-0.5">
+                        {entry.plannedStart && fmtDate(entry.plannedStart)}
+                        {entry.plannedStart && entry.plannedEnd && ' → '}
+                        {entry.plannedEnd && fmtDate(entry.plannedEnd)}
+                        {entry.dueDate && ` · Due: ${fmtDate(entry.dueDate)}`}
+                      </p>
+                    )}
                   </div>
-
-                  {/* Status badge */}
                   <span className={cn('text-[10px] px-1.5 py-0.5 rounded-full font-medium flex-shrink-0', STATUS_CFG[status].badge)}>
                     {STATUS_CFG[status].label}
                   </span>
-
-                  {/* Skip toggle */}
                   <div className="flex items-center gap-2 flex-shrink-0">
                     <Label htmlFor={`skip-${entry.id}`} className="text-xs text-muted-foreground cursor-pointer">Skip</Label>
-                    <Switch
-                      id={`skip-${entry.id}`}
-                      checked={entry.skipped ?? false}
-                      onCheckedChange={() => toggleSkip(entry.id)}
-                    />
+                    <Switch id={`skip-${entry.id}`} checked={entry.skipped ?? false} onCheckedChange={() => updateEntry(entry.id, { skipped: !entry.skipped })} />
                   </div>
-
-                  {/* Expand detail edit */}
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-7 w-7 flex-shrink-0"
-                    onClick={() => toggleEditExpand(entry.id)}
-                    title="Edit stage details"
-                  >
+                  <Button variant="ghost" size="icon" className="h-7 w-7 flex-shrink-0" onClick={() => toggleEditExpand(entry.id)} title="Edit details">
                     <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
                   </Button>
                 </div>
 
-                {/* Expanded detail editor */}
+                {/* Expanded editor */}
                 {isExpanded && (
                   <div className="border-t border-border/60 px-4 pb-4 pt-3 space-y-3 bg-muted/20">
-                    {/* Custom label */}
-                    <div className="space-y-1">
-                      <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                        Stage Name (override)
-                      </Label>
-                      <Input
-                        placeholder={stageDef.label}
-                        value={entry.customLabel ?? ''}
-                        onChange={e => updateEntry(entry.id, { customLabel: e.target.value })}
-                        className="h-8 text-sm"
-                      />
-                      <p className="text-[10px] text-muted-foreground">Leave blank to use the default: "{stageDef.label}"</p>
+                    {/* Name + description */}
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1">
+                        <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Stage Name</Label>
+                        <Input placeholder={stageDef.label} value={entry.customLabel ?? ''} onChange={e => updateEntry(entry.id, { customLabel: e.target.value })} className="h-8 text-sm" />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Parallel Group #</Label>
+                        <Input
+                          type="number" min="1" placeholder="None (sequential)"
+                          value={entry.parallelGroup ?? ''}
+                          onChange={e => updateEntry(entry.id, { parallelGroup: e.target.value ? parseInt(e.target.value) : null })}
+                          className="h-8 text-sm"
+                        />
+                        <p className="text-[10px] text-muted-foreground">Stages with the same number run in parallel</p>
+                      </div>
                     </div>
 
-                    {/* Custom description */}
                     <div className="space-y-1">
-                      <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                        Description (override)
-                      </Label>
-                      <Textarea
-                        placeholder={stageDef.description ?? 'Stage description...'}
-                        value={entry.customDescription ?? ''}
-                        onChange={e => updateEntry(entry.id, { customDescription: e.target.value })}
-                        rows={2}
-                        className="text-sm resize-none"
-                      />
+                      <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Description</Label>
+                      <Textarea placeholder={stageDef.description ?? ''} value={entry.customDescription ?? ''} onChange={e => updateEntry(entry.id, { customDescription: e.target.value })} rows={2} className="text-sm resize-none" />
                     </div>
 
-                    {/* Custom key outputs */}
+                    {/* Date fields */}
+                    <div className="grid grid-cols-3 gap-3">
+                      <div className="space-y-1">
+                        <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1">
+                          <Calendar className="h-3 w-3" /> Planned Start
+                        </Label>
+                        <Input type="date" value={entry.plannedStart ?? ''} onChange={e => updateEntry(entry.id, { plannedStart: e.target.value || null })} className="h-8 text-xs" />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1">
+                          <Calendar className="h-3 w-3" /> Planned End
+                        </Label>
+                        <Input type="date" value={entry.plannedEnd ?? ''} onChange={e => updateEntry(entry.id, { plannedEnd: e.target.value || null })} className="h-8 text-xs" />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide text-orange-600">
+                          Deadline
+                        </Label>
+                        <Input type="date" value={entry.dueDate ?? ''} onChange={e => updateEntry(entry.id, { dueDate: e.target.value || null })} className="h-8 text-xs border-orange-200 focus:border-orange-400" />
+                      </div>
+                    </div>
+
+                    {/* Custom outputs */}
                     <div className="space-y-2">
                       <div className="flex items-center justify-between">
-                        <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                          Custom Key Outputs
-                        </Label>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          className="h-6 text-xs px-2"
-                          onClick={() => addOutput(entry.id)}
-                        >
-                          <Plus className="h-3 w-3 mr-1" /> Add Output
+                        <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Custom Key Outputs</Label>
+                        <Button type="button" variant="ghost" size="sm" className="h-6 text-xs px-2" onClick={() => addOutput(entry.id)}>
+                          <Plus className="h-3 w-3 mr-1" /> Add
                         </Button>
                       </div>
-
-                      {/* Default outputs (read-only preview) */}
-                      {stageDef.keyOutputs && stageDef.keyOutputs.length > 0 && (
-                        <div className="space-y-1">
-                          <p className="text-[10px] text-muted-foreground font-medium">Default outputs (always shown):</p>
-                          {stageDef.keyOutputs.map((o, i) => (
-                            <div key={i} className="flex items-center gap-2 text-xs text-muted-foreground">
-                              <CheckCircle2 className="h-3 w-3 text-muted-foreground/40 flex-shrink-0" />
-                              <span>{o}</span>
-                            </div>
-                          ))}
+                      {(entry.customOutputs ?? []).map((output, oi) => (
+                        <div key={oi} className="flex items-center gap-2">
+                          <span className="text-muted-foreground/40 text-sm">+</span>
+                          <Input value={output} onChange={e => updateOutput(entry.id, oi, e.target.value)} placeholder="Custom output item..." className="h-7 text-xs flex-1" />
+                          <Button type="button" variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive" onClick={() => removeOutput(entry.id, oi)}>
+                            <X className="h-3.5 w-3.5" />
+                          </Button>
                         </div>
-                      )}
-
-                      {/* Custom outputs (editable) */}
-                      {(entry.customOutputs ?? []).length > 0 && (
-                        <div className="space-y-1.5">
-                          {(entry.customOutputs ?? []).map((output, oIdx) => (
-                            <div key={oIdx} className="flex items-center gap-2">
-                              <span className="text-muted-foreground/40">+</span>
-                              <Input
-                                value={output}
-                                onChange={e => updateOutput(entry.id, oIdx, e.target.value)}
-                                placeholder="Custom output item..."
-                                className="h-7 text-xs flex-1"
-                              />
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="icon"
-                                className="h-7 w-7 text-muted-foreground hover:text-destructive"
-                                onClick={() => removeOutput(entry.id, oIdx)}
-                              >
-                                <X className="h-3.5 w-3.5" />
-                              </Button>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-
-                      {(entry.customOutputs ?? []).length === 0 && (
-                        <p className="text-[10px] text-muted-foreground italic">No custom outputs added yet</p>
-                      )}
+                      ))}
                     </div>
                   </div>
                 )}
@@ -454,20 +375,13 @@ function EditFlowDialog({
         </div>
 
         <Separator />
-
         <DialogFooter className="flex-shrink-0 pt-3 gap-2">
           <Button variant="ghost" size="sm" className="text-muted-foreground mr-auto text-xs" onClick={onReset} disabled={isSaving}>
             <RotateCcw className="h-3.5 w-3.5 mr-1.5" /> Reset to Default
           </Button>
           <Button variant="outline" size="sm" onClick={onClose} disabled={isSaving}>Cancel</Button>
-          <Button
-            size="sm"
-            onClick={onSave}
-            disabled={isSaving}
-            className="bg-[#1D3461] hover:bg-[#0F2041] text-white"
-            data-testid="button-save-flow"
-          >
-            {isSaving ? <><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> Saving…</> : 'Save Flow'}
+          <Button size="sm" onClick={onSave} disabled={isSaving} className="bg-[#1D3461] hover:bg-[#0F2041] text-white" data-testid="button-save-flow">
+            {isSaving ? <><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />Saving…</> : 'Save Flow'}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -475,25 +389,27 @@ function EditFlowDialog({
   );
 }
 
-// ── Main component ─────────────────────────────────────────────────────────
+// ── Main FlowTab ───────────────────────────────────────────────────────────
 
 export function FlowTab({
-  flow, projectName, projectType, projectCode, projectId, currentUserId, allDefaultStages, customFlowStages,
+  flow, projectName, projectType, projectCode, projectId, currentUserId,
+  projectStart, projectEnd, allDefaultStages, customFlowStages,
 }: Props) {
   const { toast } = useToast();
   const navigate = useNavigate();
   const {
-    activeStages, currentStage, currentStageIndex, stageHistory,
-    isLastStage, canAdvance, canEditFlow, isAdvancing, isSavingCustom,
-    advanceStage, updateCustomStages, getStageStatus,
+    activeStages, groups, currentStages, currentStage, currentStageIndex, currentGroupIdx,
+    stageHistory, isLastGroup, canAdvance, canEditFlow,
+    isAdvancing, isSavingCustom,
+    completeStage, updateCustomStages, getStageStatus, isStageCompleted,
   } = flow;
 
+  const [viewMode, setViewMode] = useState<ViewMode>('list');
   const [editOpen, setEditOpen] = useState(false);
-  const [notes, setNotes] = useState('');
+  const [notes, setNotes] = useState<Record<string, string>>({});
   const [customEntries, setCustomEntries] = useState<CustomStageEntry[]>([]);
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
 
-  // Resolve effective custom entry per stage (for label overrides in main view)
   const resolvedEntry = (stageId: string): CustomStageEntry | undefined =>
     (customFlowStages ?? []).find(e => e.id === stageId);
 
@@ -508,27 +424,26 @@ export function FlowTab({
     }
   }, [editOpen]);
 
+  // Auto-expand all current stages
   useEffect(() => {
-    if (currentStage) {
-      setExpandedIds(prev => new Set([...prev, currentStage.id]));
+    if (currentStages.length > 0) {
+      setExpandedIds(prev => new Set([...prev, ...currentStages.map(s => s.id)]));
     }
-  }, [currentStage?.id]);
+  }, [currentStages.map(s => s.id).join(',')]);
 
-  const toggleExpand = (id: string) => {
-    setExpandedIds(prev => {
-      const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
-      return next;
-    });
-  };
+  const toggleExpand = (id: string) => setExpandedIds(prev => {
+    const next = new Set(prev);
+    next.has(id) ? next.delete(id) : next.add(id);
+    return next;
+  });
 
-  const handleAdvance = async () => {
+  const handleCompleteStage = async (stageId: string) => {
     try {
-      await advanceStage(notes);
-      toast({ title: 'Stage advanced', description: 'Team has been notified.' });
-      setNotes('');
+      await completeStage(stageId, notes[stageId] ?? '');
+      toast({ title: 'Stage marked complete', description: 'Team has been notified.' });
+      setNotes(prev => ({ ...prev, [stageId]: '' }));
     } catch (err: any) {
-      toast({ title: 'Failed to advance stage', description: err.message, variant: 'destructive' });
+      toast({ title: 'Failed to complete stage', description: err.message, variant: 'destructive' });
     }
   };
 
@@ -552,11 +467,11 @@ export function FlowTab({
     }
   };
 
-  const nextStage = !isLastStage ? activeStages[currentStageIndex + 1] : null;
-  const pct = Math.round(((currentStageIndex + 1) / activeStages.length) * 100);
   const completedCount = allDefaultStages.filter(s => getStageStatus(s.id) === 'completed').length;
   const skippedCount = allDefaultStages.filter(s => getStageStatus(s.id) === 'skipped').length;
-  const remainingCount = allDefaultStages.length - completedCount - skippedCount - 1;
+  const remainingCount = allDefaultStages.length - completedCount - skippedCount - currentStages.length;
+  const activeCount = allDefaultStages.filter(s => getStageStatus(s.id) !== 'skipped').length;
+  const pct = activeCount > 0 ? Math.round((completedCount / activeCount) * 100) : 0;
 
   return (
     <div className="space-y-5">
@@ -585,11 +500,23 @@ export function FlowTab({
           <CardContent className="p-4">
             <div className="flex items-center gap-2 mb-1">
               <Flag className="h-3.5 w-3.5 text-[#1D3461]" />
-              <span className="text-xs text-muted-foreground font-medium">Active Stage</span>
+              <span className="text-xs text-muted-foreground font-medium">
+                {currentStages.length > 1 ? 'Active Stages' : 'Active Stage'}
+              </span>
             </div>
-            <p className="text-sm font-bold text-[#1D3461] dark:text-blue-300 leading-tight line-clamp-2">
-              {currentStage ? (resolvedEntry(currentStage.id)?.customLabel || currentStage.label) : '—'}
-            </p>
+            {currentStages.length > 1 ? (
+              <div className="space-y-0.5">
+                {currentStages.map(s => (
+                  <p key={s.id} className="text-xs font-semibold text-[#1D3461] dark:text-blue-300 leading-tight truncate">
+                    {resolvedEntry(s.id)?.customLabel || s.label}
+                  </p>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm font-bold text-[#1D3461] dark:text-blue-300 leading-tight line-clamp-2">
+                {currentStage ? (resolvedEntry(currentStage.id)?.customLabel || currentStage.label) : '—'}
+              </p>
+            )}
           </CardContent>
         </Card>
         <Card className="border-0 shadow-sm bg-gradient-to-br from-amber-50 to-white dark:from-amber-900/20 dark:to-slate-800">
@@ -603,51 +530,54 @@ export function FlowTab({
         </Card>
       </div>
 
-      {/* ── Progress bar + header actions ──────────────────────── */}
+      {/* ── Toolbar: progress bar + view toggle + actions ─────── */}
       <div className="space-y-2">
-        <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          {/* Left: stage count */}
           <div className="flex items-center gap-2 flex-wrap">
             <span className="text-xs text-muted-foreground">
-              Stage <span className="font-semibold text-foreground">{currentStageIndex + 1}</span> of {activeStages.length}
+              Group <span className="font-semibold text-foreground">{currentGroupIdx + 1}</span> of {groups.length}
+              {currentStages.length > 1 && <span className="ml-1 text-violet-600 font-medium"> · {currentStages.length} stages in parallel</span>}
             </span>
-            {isLastStage && (
+            {isLastGroup && completedCount === activeCount && (
               <Badge className="bg-emerald-500 text-white hover:bg-emerald-600 text-[10px] px-2 py-0.5">
                 <CheckCircle2 className="h-2.5 w-2.5 mr-1" /> All Stages Complete
               </Badge>
             )}
-            {skippedCount > 0 && (
-              <Badge variant="secondary" className="text-[10px] px-2 py-0.5">{skippedCount} skipped</Badge>
-            )}
+            {skippedCount > 0 && <Badge variant="secondary" className="text-[10px] px-2 py-0.5">{skippedCount} skipped</Badge>}
           </div>
+
+          {/* Right: view toggle + actions */}
           <div className="flex items-center gap-2">
-            <ExportButton
-              projectId={projectId}
-              projectName={projectName}
-              projectType={projectType}
-              projectCode={projectCode}
-              flow={flow}
-              allDefaultStages={allDefaultStages}
-              customEntries={customFlowStages ?? []}
-            />
-            {canEditFlow && (
+            {/* View toggle */}
+            <div className="flex rounded-lg border overflow-hidden">
               <Button
-                size="sm"
-                variant="outline"
-                onClick={() => setEditOpen(true)}
-                className="h-7 text-xs px-3 shrink-0"
-                data-testid="button-edit-flow"
+                size="sm" variant="ghost"
+                className={cn('h-7 px-2.5 rounded-none text-xs gap-1.5', viewMode === 'list' && 'bg-muted')}
+                onClick={() => setViewMode('list')}
               >
+                <List className="h-3 w-3" /> List
+              </Button>
+              <Button
+                size="sm" variant="ghost"
+                className={cn('h-7 px-2.5 rounded-none text-xs gap-1.5 border-l', viewMode === 'gantt' && 'bg-muted')}
+                onClick={() => setViewMode('gantt')}
+              >
+                <BarChart2 className="h-3 w-3" /> Gantt
+              </Button>
+            </div>
+            <ExportButton projectId={projectId} projectName={projectName} projectType={projectType} projectCode={projectCode} flow={flow} allDefaultStages={allDefaultStages} customEntries={customFlowStages ?? []} />
+            {canEditFlow && (
+              <Button size="sm" variant="outline" onClick={() => setEditOpen(true)} className="h-7 text-xs px-3 shrink-0" data-testid="button-edit-flow">
                 <Settings2 className="h-3 w-3 mr-1.5" /> Edit Flow
               </Button>
             )}
           </div>
         </div>
 
+        {/* Progress bar */}
         <div className="w-full rounded-full bg-muted h-2.5 overflow-hidden">
-          <div
-            className="h-full rounded-full bg-gradient-to-r from-[#0F2041] to-[#1D3461] transition-all duration-700 ease-in-out"
-            style={{ width: `${pct}%` }}
-          />
+          <div className="h-full rounded-full bg-gradient-to-r from-[#0F2041] to-[#1D3461] transition-all duration-700 ease-in-out" style={{ width: `${pct}%` }} />
         </div>
         <div className="flex justify-between text-[10px] text-muted-foreground px-0.5">
           <span>{completedCount} done</span>
@@ -655,252 +585,275 @@ export function FlowTab({
         </div>
       </div>
 
-      {/* ── Stage cards ────────────────────────────────────────── */}
-      <div className="space-y-2.5">
-        {allDefaultStages.map((stage, idx) => {
-          const status = getStageStatus(stage.id);
-          const cfg = STATUS_CFG[status];
-          const historyEntry = stageHistory.filter(h => h.stageId === stage.id).at(-1);
-          const isCurrent = status === 'current';
-          const isExpanded = expandedIds.has(stage.id);
-          const entry = resolvedEntry(stage.id);
-          const displayLabel = entry?.customLabel || stage.label;
-          const displayDesc = entry?.customDescription || stage.description;
-          const allOutputs = [...(entry?.customOutputs ?? []), ...(stage.keyOutputs ?? [])];
-          const hasDetails = allOutputs.length > 0 || !!stage.linkedModule || !!displayDesc || isCurrent;
+      {/* ── Gantt View ─────────────────────────────────────────── */}
+      {viewMode === 'gantt' && (
+        <GanttView
+          allDefaultStages={allDefaultStages}
+          groups={groups}
+          stageHistory={stageHistory}
+          customEntries={customFlowStages ?? []}
+          getStageStatus={getStageStatus}
+          projectStart={projectStart}
+          projectEnd={projectEnd}
+          onEditFlow={canEditFlow ? () => setEditOpen(true) : undefined}
+        />
+      )}
 
-          return (
-            <div
-              key={stage.id}
-              className={cn(
-                'rounded-xl border border-l-4 transition-all duration-200',
-                cfg.border, cfg.ring, cfg.bg,
-                isCurrent && 'shadow-sm',
-                status === 'skipped' && 'opacity-60',
-              )}
-              data-testid={`flow-stage-${stage.id}`}
-            >
-              {/* Card header row */}
-              <button
-                type="button"
-                className="w-full text-left"
-                onClick={() => hasDetails ? toggleExpand(stage.id) : undefined}
+      {/* ── List View ──────────────────────────────────────────── */}
+      {viewMode === 'list' && (
+        <div className="space-y-2.5">
+          {allDefaultStages.map((stage, idx) => {
+            const status = getStageStatus(stage.id);
+            const cfg = STATUS_CFG[status];
+            const historyEntry = stageHistory.filter(h => h.stageId === stage.id).at(-1);
+            const isCurrent = status === 'current';
+            const isExpanded = expandedIds.has(stage.id);
+            const entry = resolvedEntry(stage.id);
+            const displayLabel = entry?.customLabel || stage.label;
+            const displayDesc = entry?.customDescription || stage.description;
+            const allOutputs = [...(entry?.customOutputs ?? []), ...(stage.keyOutputs ?? [])];
+            const hasDetails = allOutputs.length > 0 || !!stage.linkedModule || !!displayDesc || isCurrent;
+
+            // Parallel info
+            const stageGroup = groups.find(g => g.some(s => s.id === stage.id));
+            const isInParallelGroup = (stageGroup?.length ?? 0) > 1;
+            const parallelPartners = (stageGroup ?? []).filter(s => s.id !== stage.id);
+
+            // Next group's first stage (for advance label)
+            const nextGroupStages = groups[currentGroupIdx + 1] ?? [];
+
+            // Date info
+            const plannedStart = entry?.plannedStart;
+            const plannedEnd = entry?.plannedEnd;
+            const dueDate = entry?.dueDate;
+            const overdue = isOverdueFn(dueDate || plannedEnd, status);
+            const stageNotes = notes[stage.id] ?? '';
+
+            return (
+              <div
+                key={stage.id}
+                className={cn(
+                  'rounded-xl border border-l-4 transition-all duration-200',
+                  cfg.border, cfg.ring, cfg.bg,
+                  isCurrent && 'shadow-sm',
+                  status === 'skipped' && 'opacity-60',
+                )}
+                data-testid={`flow-stage-${stage.id}`}
               >
-                <div className="flex items-center gap-3 px-4 py-3.5">
-                  <div
-                    className={cn(
-                      'h-8 w-8 rounded-full flex items-center justify-center flex-shrink-0 border-2 transition-all',
-                      cfg.icon,
-                      isCurrent && 'ring-2 ring-[#1D3461]/20 ring-offset-1',
-                    )}
-                  >
-                    {status === 'completed' ? (
-                      <CheckCircle2 className="h-4 w-4" />
-                    ) : status === 'skipped' ? (
-                      <SkipForward className="h-3.5 w-3.5" />
-                    ) : isCurrent ? (
-                      <span className="h-2.5 w-2.5 rounded-full bg-white animate-pulse" />
-                    ) : (
-                      <span className="text-[11px] font-bold">{idx + 1}</span>
-                    )}
-                  </div>
-
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className={cn(
-                        'font-semibold text-sm leading-snug',
-                        status === 'skipped' && 'line-through text-muted-foreground',
-                        isCurrent && 'text-[#1D3461] dark:text-blue-200',
-                      )}>
-                        {displayLabel}
-                      </span>
-                      <span className={cn('text-[10px] font-medium px-1.5 py-0.5 rounded-full', cfg.badge)}>
-                        {cfg.label}
-                      </span>
+                {/* Card header */}
+                <button type="button" className="w-full text-left" onClick={() => hasDetails ? toggleExpand(stage.id) : undefined}>
+                  <div className="flex items-center gap-3 px-4 py-3.5">
+                    {/* Status icon */}
+                    <div className={cn('h-8 w-8 rounded-full flex items-center justify-center flex-shrink-0 border-2 transition-all', cfg.icon, isCurrent && 'ring-2 ring-[#1D3461]/20 ring-offset-1')}>
+                      {status === 'completed' ? <CheckCircle2 className="h-4 w-4" />
+                        : status === 'skipped' ? <SkipForward className="h-3.5 w-3.5" />
+                        : isCurrent ? <span className="h-2.5 w-2.5 rounded-full bg-white animate-pulse" />
+                        : <span className="text-[11px] font-bold">{idx + 1}</span>}
                     </div>
-                    {historyEntry && (
-                      <div className="flex items-center gap-2 mt-0.5 text-[11px] text-muted-foreground">
-                        <Clock className="h-3 w-3 flex-shrink-0" />
-                        <span>{timeAgo(historyEntry.advancedAt)}</span>
-                        {historyEntry.advancedByName && (
-                          <>
-                            <span className="text-muted-foreground/40">·</span>
-                            <User className="h-3 w-3 flex-shrink-0" />
-                            <span>{historyEntry.advancedByName}</span>
-                          </>
-                        )}
-                      </div>
-                    )}
-                    {!historyEntry && displayDesc && !isExpanded && (
-                      <p className="text-[11px] text-muted-foreground mt-0.5 truncate">{displayDesc}</p>
-                    )}
-                  </div>
 
-                  {hasDetails && (
-                    <div className="flex-shrink-0 text-muted-foreground/60">
-                      {isExpanded ? <CollapseIcon className="h-4 w-4" /> : <ExpandIcon className="h-4 w-4" />}
-                    </div>
-                  )}
-                </div>
-              </button>
-
-              {/* Expanded detail panel */}
-              {isExpanded && (
-                <div className="px-4 pb-4 space-y-5 border-t border-border/50">
-                  {/* Description */}
-                  {displayDesc && (
-                    <p className="text-sm text-muted-foreground pt-3 leading-relaxed">{displayDesc}</p>
-                  )}
-
-                  {/* Completion record */}
-                  {historyEntry && (
-                    <div className="rounded-lg bg-muted/40 px-3 py-2.5 space-y-1.5">
-                      <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Completion Record</p>
-                      <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
-                        <span className="flex items-center gap-1">
-                          <Clock className="h-3 w-3" />{formatTimestamp(historyEntry.advancedAt)}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className={cn('font-semibold text-sm leading-snug', status === 'skipped' && 'line-through text-muted-foreground', isCurrent && 'text-[#1D3461] dark:text-blue-200')}>
+                          {displayLabel}
                         </span>
-                        {historyEntry.advancedByName && (
-                          <span className="flex items-center gap-1">
-                            <User className="h-3 w-3" />{historyEntry.advancedByName}
+                        <span className={cn('text-[10px] font-medium px-1.5 py-0.5 rounded-full', cfg.badge)}>
+                          {cfg.label}
+                        </span>
+                        {isInParallelGroup && (
+                          <span className="text-[10px] bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300 rounded-full px-1.5 py-0.5 font-medium flex items-center gap-0.5">
+                            <Link2 className="h-2.5 w-2.5" /> Parallel
                           </span>
                         )}
-                        {historyEntry.notes && (
-                          <span className="flex items-start gap-1">
-                            <FileText className="h-3 w-3 mt-0.5 flex-shrink-0" />{historyEntry.notes}
-                          </span>
+                        {overdue && (
+                          <span className="text-[10px] bg-red-100 text-red-700 rounded-full px-1.5 py-0.5 font-medium">Overdue</span>
                         )}
                       </div>
-                    </div>
-                  )}
 
-                  {/* Key outputs */}
-                  {allOutputs.length > 0 && (
-                    <div>
-                      <div className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
-                        <ListChecks className="h-3.5 w-3.5" /> Key Outputs
-                      </div>
-                      <ul className="space-y-1.5">
-                        {allOutputs.map((output, oIdx) => (
-                          <li key={oIdx} className="flex items-start gap-2 text-sm text-muted-foreground">
-                            <CheckCircle2 className={cn('h-3.5 w-3.5 flex-shrink-0 mt-0.5', status === 'completed' ? 'text-emerald-500' : 'text-muted-foreground/30')} />
-                            <span>{output}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-
-                  {/* Linked module button */}
-                  {stage.linkedModule && (
-                    <Button
-                      variant="outline" size="sm" className="h-8 text-xs"
-                      onClick={() => navigate(stage.linkedModule!)}
-                      data-testid={`button-goto-module-${stage.id}`}
-                    >
-                      <ExternalLink className="h-3.5 w-3.5 mr-1.5" />
-                      Go to {stage.linkedModule.replace('/', '').replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}
-                    </Button>
-                  )}
-
-                  {/* ── Per-stage data sections ── */}
-                  <div className="grid gap-4 pt-1">
-                    <div className="rounded-lg border bg-muted/20 p-3">
-                      <StageAssignees
-                        projectId={projectId}
-                        stageId={stage.id}
-                        currentUserId={currentUserId}
-                        canEdit={canEditFlow}
-                      />
-                    </div>
-                    <div className="rounded-lg border bg-muted/20 p-3">
-                      <StageChecklist
-                        projectId={projectId}
-                        stageId={stage.id}
-                        currentUserId={currentUserId}
-                        canEdit={status !== 'upcoming'}
-                      />
-                    </div>
-                    <div className="rounded-lg border bg-muted/20 p-3">
-                      <StageAttachments
-                        projectId={projectId}
-                        stageId={stage.id}
-                        currentUserId={currentUserId}
-                        canEdit={status !== 'upcoming'}
-                      />
-                    </div>
-                  </div>
-
-                  {/* ── Advance controls (current stage only) ── */}
-                  {isCurrent && canAdvance && nextStage && (
-                    <div className="rounded-xl border border-[#1D3461]/20 bg-[#0F2041]/5 dark:bg-[#1D3461]/10 p-4 space-y-3">
-                      <div className="flex items-center gap-2">
-                        <ArrowRight className="h-4 w-4 text-[#1D3461]" />
-                        <p className="text-sm font-semibold text-[#1D3461] dark:text-blue-200">
-                          Advance to: <span className="font-bold">{resolvedEntry(nextStage.id)?.customLabel || nextStage.label}</span>
-                        </p>
-                      </div>
-                      <div className="space-y-1.5">
-                        <Label htmlFor={`advance-notes-${stage.id}`} className="text-xs font-medium text-muted-foreground">
-                          Transition notes (optional)
-                        </Label>
-                        <Textarea
-                          id={`advance-notes-${stage.id}`}
-                          placeholder="What was achieved in this stage? Any handoff notes..."
-                          value={notes}
-                          onChange={e => setNotes(e.target.value)}
-                          rows={2}
-                          className="text-sm resize-none"
-                          data-testid="input-advance-notes"
-                        />
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <Button
-                          size="sm"
-                          onClick={handleAdvance}
-                          disabled={isAdvancing}
-                          className="bg-[#1D3461] hover:bg-[#0F2041] text-white"
-                          data-testid="button-confirm-advance"
-                        >
-                          {isAdvancing ? (
-                            <><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> Advancing…</>
-                          ) : (
-                            <><CheckCircle2 className="h-3.5 w-3.5 mr-1.5" /> Mark Complete & Advance</>
+                      {/* Date row */}
+                      {(plannedStart || plannedEnd || dueDate) && (
+                        <div className="flex items-center gap-3 mt-0.5 text-[10px] text-muted-foreground">
+                          {plannedStart && (
+                            <span className="flex items-center gap-0.5">
+                              <Calendar className="h-2.5 w-2.5" />
+                              {fmtDate(plannedStart)}
+                              {plannedEnd && ` → ${fmtDate(plannedEnd)}`}
+                            </span>
                           )}
-                        </Button>
-                        <p className="text-[11px] text-muted-foreground flex items-center gap-1">
-                          <AlertCircle className="h-3 w-3 flex-shrink-0" /> Team will be notified
-                        </p>
+                          {dueDate && (
+                            <span className={cn('flex items-center gap-0.5 font-medium', overdue ? 'text-red-600' : 'text-orange-600')}>
+                              <Clock className="h-2.5 w-2.5" /> Due {fmtDate(dueDate)}
+                            </span>
+                          )}
+                        </div>
+                      )}
+
+                      {historyEntry && (
+                        <div className="flex items-center gap-2 mt-0.5 text-[11px] text-muted-foreground">
+                          <Clock className="h-3 w-3 flex-shrink-0" />
+                          <span>{timeAgo(historyEntry.advancedAt)}</span>
+                          {historyEntry.advancedByName && (
+                            <><span className="text-muted-foreground/40">·</span><User className="h-3 w-3 flex-shrink-0" /><span>{historyEntry.advancedByName}</span></>
+                          )}
+                        </div>
+                      )}
+                      {!historyEntry && displayDesc && !isExpanded && (
+                        <p className="text-[11px] text-muted-foreground mt-0.5 truncate">{displayDesc}</p>
+                      )}
+                    </div>
+
+                    {hasDetails && (
+                      <div className="flex-shrink-0 text-muted-foreground/60">
+                        {isExpanded ? <CollapseIcon className="h-4 w-4" /> : <ExpandIcon className="h-4 w-4" />}
+                      </div>
+                    )}
+                  </div>
+                </button>
+
+                {/* Expanded panel */}
+                {isExpanded && (
+                  <div className="px-4 pb-4 space-y-5 border-t border-border/50">
+                    {displayDesc && <p className="text-sm text-muted-foreground pt-3 leading-relaxed">{displayDesc}</p>}
+
+                    {/* Parallel partners */}
+                    {isInParallelGroup && parallelPartners.length > 0 && (
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground bg-violet-50 dark:bg-violet-900/20 rounded-lg px-3 py-2">
+                        <Link2 className="h-3.5 w-3.5 text-violet-600 flex-shrink-0" />
+                        <span>Running in parallel with: <span className="font-medium text-violet-700 dark:text-violet-300">{parallelPartners.map(s => resolvedEntry(s.id)?.customLabel || s.label).join(', ')}</span></span>
+                      </div>
+                    )}
+
+                    {/* Completion record */}
+                    {historyEntry && (
+                      <div className="rounded-lg bg-muted/40 px-3 py-2.5 space-y-1.5">
+                        <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Completion Record</p>
+                        <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                          <span className="flex items-center gap-1"><Clock className="h-3 w-3" />{formatTimestamp(historyEntry.advancedAt)}</span>
+                          {historyEntry.advancedByName && <span className="flex items-center gap-1"><User className="h-3 w-3" />{historyEntry.advancedByName}</span>}
+                          {historyEntry.notes && <span className="flex items-start gap-1"><FileText className="h-3 w-3 mt-0.5 flex-shrink-0" />{historyEntry.notes}</span>}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Key outputs */}
+                    {allOutputs.length > 0 && (
+                      <div>
+                        <div className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
+                          <ListChecks className="h-3.5 w-3.5" /> Key Outputs
+                        </div>
+                        <ul className="space-y-1.5">
+                          {allOutputs.map((output, oi) => (
+                            <li key={oi} className="flex items-start gap-2 text-sm text-muted-foreground">
+                              <CheckCircle2 className={cn('h-3.5 w-3.5 flex-shrink-0 mt-0.5', status === 'completed' ? 'text-emerald-500' : 'text-muted-foreground/30')} />
+                              <span>{output}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
+                    {/* Linked module */}
+                    {stage.linkedModule && (
+                      <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => navigate(stage.linkedModule!)} data-testid={`button-goto-module-${stage.id}`}>
+                        <ExternalLink className="h-3.5 w-3.5 mr-1.5" />
+                        Go to {stage.linkedModule.replace('/', '').replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}
+                      </Button>
+                    )}
+
+                    {/* Per-stage data: Assignees, Checklist, Attachments */}
+                    <div className="grid gap-3 pt-1">
+                      <div className="rounded-lg border bg-muted/20 p-3">
+                        <StageAssignees projectId={projectId} stageId={stage.id} currentUserId={currentUserId} canEdit={canEditFlow} />
+                      </div>
+                      <div className="rounded-lg border bg-muted/20 p-3">
+                        <StageChecklist projectId={projectId} stageId={stage.id} currentUserId={currentUserId} canEdit={status !== 'upcoming'} />
+                      </div>
+                      <div className="rounded-lg border bg-muted/20 p-3">
+                        <StageAttachments projectId={projectId} stageId={stage.id} currentUserId={currentUserId} canEdit={status !== 'upcoming'} />
                       </div>
                     </div>
-                  )}
 
-                  {isCurrent && isLastStage && (
-                    <div className="flex items-center gap-2 rounded-lg bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 px-4 py-3">
-                      <CheckCircle2 className="h-4 w-4 text-emerald-600 flex-shrink-0" />
-                      <p className="text-sm text-emerald-800 dark:text-emerald-300 font-medium">
-                        This is the final stage — all stages are complete!
-                      </p>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
+                    {/* ── Advance control (current stage, not yet completed) ── */}
+                    {isCurrent && canAdvance && !isStageCompleted(stage.id) && (
+                      <div className="rounded-xl border border-[#1D3461]/20 bg-[#0F2041]/5 dark:bg-[#1D3461]/10 p-4 space-y-3">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <ArrowRight className="h-4 w-4 text-[#1D3461] flex-shrink-0" />
+                          <p className="text-sm font-semibold text-[#1D3461] dark:text-blue-200">
+                            {isInParallelGroup
+                              ? `Mark "${displayLabel}" as complete`
+                              : `Advance to: ${nextGroupStages[0] ? (resolvedEntry(nextGroupStages[0].id)?.customLabel || nextGroupStages[0].label) : 'next stage'}`}
+                          </p>
+                          {isInParallelGroup && (
+                            <span className="text-xs text-muted-foreground">
+                              (Flow advances when all {stageGroup?.length} parallel stages are done)
+                            </span>
+                          )}
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label htmlFor={`advance-notes-${stage.id}`} className="text-xs font-medium text-muted-foreground">
+                            {isInParallelGroup ? 'Completion notes (optional)' : 'Transition notes (optional)'}
+                          </Label>
+                          <Textarea
+                            id={`advance-notes-${stage.id}`}
+                            placeholder="What was achieved? Any handoff notes..."
+                            value={stageNotes}
+                            onChange={e => setNotes(prev => ({ ...prev, [stage.id]: e.target.value }))}
+                            rows={2} className="text-sm resize-none" data-testid="input-advance-notes"
+                          />
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <Button
+                            size="sm"
+                            onClick={() => handleCompleteStage(stage.id)}
+                            disabled={isAdvancing}
+                            className="bg-[#1D3461] hover:bg-[#0F2041] text-white"
+                            data-testid="button-confirm-advance"
+                          >
+                            {isAdvancing ? (
+                              <><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />Completing…</>
+                            ) : (
+                              <><CheckCircle2 className="h-3.5 w-3.5 mr-1.5" />
+                                {isInParallelGroup ? 'Mark Stage Complete' : 'Mark Complete & Advance'}
+                              </>
+                            )}
+                          </Button>
+                          <p className="text-[11px] text-muted-foreground flex items-center gap-1">
+                            <AlertCircle className="h-3 w-3 flex-shrink-0" /> Team will be notified
+                          </p>
+                        </div>
+                      </div>
+                    )}
 
-      {/* ── Edit Flow Dialog ────────────────────────────────────── */}
+                    {/* Stage completed badge (for parallel partners) */}
+                    {isCurrent && isStageCompleted(stage.id) && (
+                      <div className="flex items-center gap-2 rounded-lg bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 px-4 py-3">
+                        <CheckCircle2 className="h-4 w-4 text-emerald-600 flex-shrink-0" />
+                        <p className="text-sm text-emerald-800 dark:text-emerald-300 font-medium">
+                          This stage is complete{isInParallelGroup ? ' — waiting for parallel partners' : ''}.
+                        </p>
+                      </div>
+                    )}
+
+                    {/* Final stage message */}
+                    {isCurrent && isLastGroup && !isInParallelGroup && (
+                      <div className="flex items-center gap-2 rounded-lg bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 px-4 py-3">
+                        <CheckCircle2 className="h-4 w-4 text-emerald-600 flex-shrink-0" />
+                        <p className="text-sm text-emerald-800 dark:text-emerald-300 font-medium">This is the final stage!</p>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* ── Edit Flow Dialog ─────────────────────────────────────── */}
       <EditFlowDialog
-        open={editOpen}
-        onClose={() => setEditOpen(false)}
-        customEntries={customEntries}
-        setCustomEntries={setCustomEntries}
-        allDefaultStages={allDefaultStages}
-        projectName={projectName}
-        isSaving={isSavingCustom}
-        onSave={handleSaveCustom}
-        onReset={handleResetCustom}
+        open={editOpen} onClose={() => setEditOpen(false)}
+        customEntries={customEntries} setCustomEntries={setCustomEntries}
+        allDefaultStages={allDefaultStages} projectName={projectName}
+        isSaving={isSavingCustom} onSave={handleSaveCustom} onReset={handleResetCustom}
         getStageStatus={getStageStatus}
       />
     </div>

@@ -1150,8 +1150,10 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
             projectCode={project.projectCode}
             projectId={project.id}
             currentUserId={currentUser?.id}
+            projectStart={project.startDate}
+            projectEnd={project.endDate}
             allDefaultStages={flow.flowDef}
-            customFlowStages={project.customFlowStages ?? []}
+            customFlowStages={(project.customFlowStages ?? []) as any}
           />
         </TabsContent>
       </Tabs>

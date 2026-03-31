@@ -23,24 +23,44 @@ export interface CustomStageEntry {
   customLabel?: string;
   customDescription?: string;
   customOutputs?: string[];
+  /** Stages sharing the same parallelGroup number run concurrently */
+  parallelGroup?: number | null;
+  /** ISO date strings for timeline / Gantt */
+  plannedStart?: string | null;
+  plannedEnd?: string | null;
+  dueDate?: string | null;
 }
 
 export interface UseProjectFlowReturn {
   flowDef: FlowStage[];
   activeStages: FlowStage[];
+  /** All parallel groups in order, each is an array of stages */
+  groups: FlowStage[][];
+  /** Stages in the currently active group (may be > 1 for parallel) */
+  currentStages: FlowStage[];
+  /** Primary current stage (first in current group, for backward compat) */
   currentStage: FlowStage | null;
   currentStageIndex: number;
+  currentGroupIdx: number;
   stageHistory: FlowLogEntry[];
+  isLastGroup: boolean;
+  /** @deprecated use isLastGroup */
   isLastStage: boolean;
   canAdvance: boolean;
   canEditFlow: boolean;
   isLoading: boolean;
   isAdvancing: boolean;
   isSavingCustom: boolean;
+  /** Complete a specific stage (handles parallel groups) */
+  completeStage: (stageId: string, notes: string) => Promise<void>;
+  /** Backward-compat: completes first current stage */
   advanceStage: (notes: string) => Promise<void>;
   updateCustomStages: (customStages: CustomStageEntry[]) => Promise<void>;
   getStageStatus: (stageId: string) => 'completed' | 'current' | 'skipped' | 'upcoming';
+  isStageCompleted: (stageId: string) => boolean;
 }
+
+// ── Helpers ────────────────────────────────────────────────────────────────
 
 async function fetchFlowLog(projectId: string): Promise<FlowLogEntry[]> {
   const { data, error } = await supabase
@@ -72,6 +92,26 @@ async function fetchFlowLog(projectId: string): Promise<FlowLogEntry[]> {
   }));
 }
 
+/** Build ordered list of parallel groups from effective stages */
+function buildGroups(effectiveStages: FlowStage[], customEntries: CustomStageEntry[]): FlowStage[][] {
+  const groups: FlowStage[][] = [];
+  let currentGroupNum: number | null | undefined = undefined;
+
+  effectiveStages.forEach(stage => {
+    const entry = customEntries.find(e => e.id === stage.id);
+    const groupNum = entry?.parallelGroup ?? null;
+
+    if (groupNum !== null && groupNum === currentGroupNum) {
+      groups[groups.length - 1].push(stage);
+    } else {
+      groups.push([stage]);
+      currentGroupNum = groupNum;
+    }
+  });
+
+  return groups;
+}
+
 async function sendStageNotifications(
   projectId: string,
   projectName: string,
@@ -82,7 +122,6 @@ async function sendStageNotifications(
 ) {
   if (!teamMembers.length) return;
 
-  // Resolve team member profile IDs from full names
   const { data: profiles } = await supabase
     .from('profiles')
     .select('id, full_name')
@@ -93,7 +132,6 @@ async function sendStageNotifications(
 
   const recipientIds = profiles.map((p: any) => p.id);
 
-  // Fire email + enhanced in-app notification via edge function
   supabase.functions.invoke('dispatch-notification', {
     body: {
       event_type: 'project_stage_advanced',
@@ -113,7 +151,6 @@ async function sendStageNotifications(
     },
   }).catch(() => {});
 
-  // Also insert in-app notifications directly (fast path, no email wait)
   const notifications = profiles.map((p: any) => ({
     recipient_id: p.id,
     user_id: p.id,
@@ -133,6 +170,8 @@ async function sendStageNotifications(
   await supabase.from('notifications').insert(notifications);
 }
 
+// ── Hook ───────────────────────────────────────────────────────────────────
+
 export function useProjectFlow(project: Project): UseProjectFlowReturn {
   const { currentUser } = useUser();
   const { hasAnyRole } = useAuthorization();
@@ -141,8 +180,7 @@ export function useProjectFlow(project: Project): UseProjectFlowReturn {
   const defaultFlow = getProjectFlow(project.projectType);
   const allDefaultStages = defaultFlow.stages;
 
-  // Build effective stage list: apply custom ordering/skips if present
-  const customEntries: CustomStageEntry[] = project.customFlowStages ?? [];
+  const customEntries: CustomStageEntry[] = (project.customFlowStages as CustomStageEntry[]) ?? [];
   const hasCustom = customEntries.length > 0;
 
   const effectiveStages: FlowStage[] = hasCustom
@@ -153,7 +191,6 @@ export function useProjectFlow(project: Project): UseProjectFlowReturn {
         .map(x => x.stage)
     : allDefaultStages;
 
-  // Include all stages in flowDef (for the editing UI), active = non-skipped
   const skippedIds = new Set(customEntries.filter(e => e.skipped).map(e => e.id));
 
   const historyQuery = useQuery({
@@ -163,13 +200,23 @@ export function useProjectFlow(project: Project): UseProjectFlowReturn {
   });
 
   const stageHistory = historyQuery.data ?? [];
+  const completedStageIds = new Set(stageHistory.map(h => h.stageId));
 
-  // Current stage index in the ACTIVE (non-skipped) list
+  // Build parallel groups
+  const groups = buildGroups(effectiveStages, customEntries);
+
+  // Find which group is currently active
   const currentStageId = project.currentFlowStage ?? effectiveStages[0]?.id;
-  const currentStageIndex = effectiveStages.findIndex(s => s.id === currentStageId);
-  const resolvedIndex = currentStageIndex >= 0 ? currentStageIndex : 0;
-  const currentStage = effectiveStages[resolvedIndex] ?? null;
-  const isLastStage = resolvedIndex >= effectiveStages.length - 1;
+  const currentGroupIdx = Math.max(
+    0,
+    groups.findIndex(g => g.some(s => s.id === currentStageId)),
+  );
+  const currentGroupSafe = groups[currentGroupIdx] ?? [];
+  const currentStages = currentGroupSafe;
+  const currentStage = currentGroupSafe[0] ?? null;
+  // Legacy index: position of currentStage in effectiveStages
+  const currentStageIndex = currentStage ? effectiveStages.findIndex(s => s.id === currentStage.id) : 0;
+  const isLastGroup = currentGroupIdx >= groups.length - 1;
 
   // Permissions
   const isPrivilegedRole = hasAnyRole(['super_admin', 'admin', 'fom']);
@@ -177,70 +224,75 @@ export function useProjectFlow(project: Project): UseProjectFlowReturn {
     !!currentUser?.id &&
     !!project.team?.projectManager &&
     project.team.projectManager === currentUser.fullName;
-  const canAdvance = (isPrivilegedRole || isProjectManager) && !isLastStage;
+  const canAdvance = (isPrivilegedRole || isProjectManager) && !isLastGroup;
   const canEditFlow = isPrivilegedRole || isProjectManager;
 
-  // Helper: given a stageId from allDefaultStages, return its status
+  const isStageCompleted = useCallback(
+    (stageId: string) => completedStageIds.has(stageId),
+    [completedStageIds],
+  );
+
   const getStageStatus = useCallback(
     (stageId: string): 'completed' | 'current' | 'skipped' | 'upcoming' => {
       if (skippedIds.has(stageId)) return 'skipped';
-      const activeIdx = effectiveStages.findIndex(s => s.id === stageId);
-      if (activeIdx < 0) return 'upcoming';
-      if (activeIdx < resolvedIndex) return 'completed';
-      if (activeIdx === resolvedIndex) return 'current';
+      if (completedStageIds.has(stageId)) return 'completed';
+      if (currentStages.some(s => s.id === stageId)) return 'current';
       return 'upcoming';
     },
-    [effectiveStages, resolvedIndex, skippedIds],
+    [currentStages, completedStageIds, skippedIds],
   );
 
-  // Advance to next active stage
-  const advanceMutation = useMutation({
-    mutationFn: async (notes: string) => {
+  // Complete a single stage (handles parallel groups)
+  const completeStageMutation = useMutation({
+    mutationFn: async ({ stageId, notes }: { stageId: string; notes: string }) => {
       if (!currentUser?.id) throw new Error('Not authenticated');
-      if (!canAdvance) throw new Error('You do not have permission to advance this project stage');
-      if (isLastStage) throw new Error('Already at the final stage');
+      if (!canAdvance) throw new Error('You do not have permission');
 
-      const nextIndex = resolvedIndex + 1;
-      const nextStage = effectiveStages[nextIndex];
-      if (!nextStage) throw new Error('No next stage found');
+      const stageToComplete = effectiveStages.find(s => s.id === stageId);
+      if (!stageToComplete) throw new Error('Stage not found');
 
-      // Insert log entry recording the stage being COMPLETED (current stage),
-      // so each completed stage node can show who advanced it and when.
-      const completedStage = effectiveStages[resolvedIndex];
+      // Mark this stage as complete in the log
       const { error: logError } = await supabase.from('project_flow_log').insert({
         project_id: project.id,
-        stage_id: completedStage.id,
-        stage_label: completedStage.label,
+        stage_id: stageToComplete.id,
+        stage_label: stageToComplete.label,
         advanced_by: currentUser.id,
         notes: notes || null,
       });
       if (logError) throw new Error(logError.message);
 
-      // Update project record via RPC (bypasses PostgREST schema cache)
-      const { error: updateError } = await supabase
-        .rpc('update_project_flow_stage', {
+      // Check if ALL stages in the current group are now complete
+      const nowCompletedIds = new Set([...completedStageIds, stageId]);
+      const allGroupDone = currentGroupSafe.every(s => nowCompletedIds.has(s.id));
+
+      if (allGroupDone && !isLastGroup) {
+        // Advance to the first stage of the next group
+        const nextGroup = groups[currentGroupIdx + 1];
+        const nextStage = nextGroup?.[0];
+        if (!nextStage) return;
+
+        const { error: updateError } = await supabase.rpc('update_project_flow_stage', {
           p_id: project.id,
           p_stage: nextStage.id,
           p_custom_stages: project.customFlowStages ?? null,
         });
-      if (updateError) throw new Error(updateError.message);
+        if (updateError) throw new Error(updateError.message);
 
-      // Send notifications to all team members (fire and forget)
-      const teamNames = [
-        project.team?.projectManager,
-        ...(project.team?.members ?? []),
-        ...(project.team?.teamComposition?.map(m => m.name) ?? []),
-      ].filter((n): n is string => !!n && n !== currentUser.fullName);
+        const teamNames = [
+          project.team?.projectManager,
+          ...(project.team?.members ?? []),
+          ...(project.team?.teamComposition?.map(m => m.name) ?? []),
+        ].filter((n): n is string => !!n && n !== currentUser.fullName);
 
-      const uniqueTeamNames = [...new Set(teamNames)];
-      sendStageNotifications(
-        project.id,
-        project.name,
-        nextStage.label,
-        uniqueTeamNames,
-        currentUser.fullName ?? 'A team member',
-        currentUser.id,
-      ).catch(() => {});
+        sendStageNotifications(
+          project.id,
+          project.name,
+          nextStage.label,
+          [...new Set(teamNames)],
+          currentUser.fullName ?? 'A team member',
+          currentUser.id,
+        ).catch(() => {});
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['project_flow_log', project.id] });
@@ -248,7 +300,7 @@ export function useProjectFlow(project: Project): UseProjectFlowReturn {
     },
   });
 
-  // Save custom stage order / skip flags
+  // Save custom stage config
   const customMutation = useMutation({
     mutationFn: async (customStages: CustomStageEntry[]) => {
       if (!canEditFlow) throw new Error('Permission denied');
@@ -261,11 +313,20 @@ export function useProjectFlow(project: Project): UseProjectFlowReturn {
     },
   });
 
+  const completeStage = useCallback(
+    async (stageId: string, notes: string) => {
+      await completeStageMutation.mutateAsync({ stageId, notes });
+    },
+    [completeStageMutation],
+  );
+
+  // Backward compat: complete the primary current stage
   const advanceStage = useCallback(
     async (notes: string) => {
-      await advanceMutation.mutateAsync(notes);
+      if (!currentStage) throw new Error('No active stage');
+      await completeStageMutation.mutateAsync({ stageId: currentStage.id, notes });
     },
-    [advanceMutation],
+    [completeStageMutation, currentStage],
   );
 
   const updateCustomStages = useCallback(
@@ -278,17 +339,23 @@ export function useProjectFlow(project: Project): UseProjectFlowReturn {
   return {
     flowDef: allDefaultStages,
     activeStages: effectiveStages,
+    groups,
+    currentStages,
     currentStage,
-    currentStageIndex: resolvedIndex,
+    currentStageIndex,
+    currentGroupIdx,
     stageHistory,
-    isLastStage,
+    isLastGroup,
+    isLastStage: isLastGroup,
     canAdvance,
     canEditFlow,
     isLoading: historyQuery.isLoading,
-    isAdvancing: advanceMutation.isPending,
+    isAdvancing: completeStageMutation.isPending,
     isSavingCustom: customMutation.isPending,
+    completeStage,
     advanceStage,
     updateCustomStages,
     getStageStatus,
+    isStageCompleted,
   };
 }
