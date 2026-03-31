@@ -3,7 +3,7 @@ import {
   DollarSign, Wallet, BarChart, Calendar, Settings,
   Archive, FolderOpen, CheckCircle, Banknote, CreditCard,
   TrendingUp, MapPin, Sparkles, Bell, Search, User,
-  Moon, Sun, LogOut, BarChart3
+  Moon, Sun, LogOut, BarChart3, CheckSquare
 } from 'lucide-react';
 import { AppRole } from '@/types';
 
@@ -41,6 +41,15 @@ export const navigationConfig: NavigationGroup[] = [
         category: 'primary',
         priority: 100,
         description: 'Main dashboard overview'
+      },
+      {
+        id: 'my-tasks',
+        icon: CheckSquare,
+        label: 'My Tasks',
+        path: '/my-tasks',
+        category: 'primary',
+        priority: 98,
+        description: 'Personal workspace — assigned project tasks and daily to-dos'
       },
       {
         id: 'field-team',

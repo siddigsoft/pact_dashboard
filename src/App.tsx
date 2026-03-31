@@ -124,6 +124,7 @@ const IncidentReports = lazy(() => import('./pages/IncidentReports'));
 const EquipmentPage = lazy(() => import('./pages/Equipment'));
 const MonitoringForm = lazy(() => import('./pages/MonitoringForm'));
 const Helpline = lazy(() => import('./pages/Helpline'));
+const MyTasksPage = lazy(() => import('./pages/MyTasks'));
 
 // Components (keep these eagerly loaded as they're used immediately)
 import MainLayout from './components/MainLayout';
@@ -272,6 +273,7 @@ const AppRoutes = () => {
         <Route path="/financial-operations" element={<FinancialOperations />} />
         <Route path="/data-visibility" element={<DataVisibility />} />
         <Route path="/chat" element={<Chat />} />
+        <Route path="/my-tasks" element={<MyTasksPage />} />
         <Route path="/projects" element={<Projects />} />
         <Route path="/projects/analytics" element={<ProjectAnalytics />} />
         <Route path="/projects/create" element={<CreateProject />} />
