@@ -217,7 +217,14 @@ function DeptFormDialog({
     }
   };
 
-  const availableParents = allDepts.filter(d => d.id !== existing?.id);
+  // Exclude self and all descendants to prevent hierarchy cycles
+  const getDescendantIds = (id: string): Set<string> => {
+    const result = new Set<string>([id]);
+    allDepts.forEach(d => { if (d.parent_department_id === id) getDescendantIds(d.id).forEach(x => result.add(x)); });
+    return result;
+  };
+  const excludedIds = existing ? getDescendantIds(existing.id) : new Set<string>();
+  const availableParents = allDepts.filter(d => !excludedIds.has(d.id));
 
   return (
     <Dialog open={open} onOpenChange={v => { if (!v) onClose(); }}>
