@@ -20,6 +20,9 @@ export interface FlowLogEntry {
 export interface CustomStageEntry {
   id: string;
   skipped?: boolean;
+  customLabel?: string;
+  customDescription?: string;
+  customOutputs?: string[];
 }
 
 export interface UseProjectFlowReturn {

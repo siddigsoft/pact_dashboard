@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   CheckCircle2,
@@ -23,6 +23,12 @@ import {
   Layers,
   CheckSquare,
   GripVertical,
+  Download,
+  FileDown,
+  Plus,
+  X,
+  Pencil,
+  ChevronRight,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -36,36 +42,43 @@ import {
   DialogDescription,
   DialogFooter,
 } from '@/components/ui/dialog';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
+import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { format, formatDistanceToNow } from 'date-fns';
 import type { UseProjectFlowReturn, CustomStageEntry } from '@/hooks/useProjectFlow';
 import type { FlowStage } from '@/config/projectFlows';
+import { StageAssignees } from './StageAssignees';
+import { StageChecklist } from './StageChecklist';
+import { StageAttachments } from './StageAttachments';
+import { exportFlowPDF, exportFlowDocx } from './flowExport';
+import { useStageAssignees, useStageChecklist, useStageAttachments } from '@/hooks/useStageData';
 
 interface Props {
   flow: UseProjectFlowReturn;
   projectName: string;
   projectType: string;
+  projectCode?: string;
+  projectId: string;
+  currentUserId?: string;
   allDefaultStages: FlowStage[];
+  customFlowStages?: CustomStageEntry[];
 }
 
 function formatTimestamp(iso: string) {
-  try {
-    return format(new Date(iso), 'dd MMM yyyy, HH:mm');
-  } catch {
-    return iso;
-  }
+  try { return format(new Date(iso), 'dd MMM yyyy, HH:mm'); } catch { return iso; }
 }
-
 function timeAgo(iso: string) {
-  try {
-    return formatDistanceToNow(new Date(iso), { addSuffix: true });
-  } catch {
-    return '';
-  }
+  try { return formatDistanceToNow(new Date(iso), { addSuffix: true }); } catch { return ''; }
 }
 
 const STATUS_CFG = {
@@ -107,22 +120,372 @@ const STATUS_CFG = {
   },
 };
 
-export function FlowTab({ flow, projectName, projectType, allDefaultStages }: Props) {
+// ── Export helpers ─────────────────────────────────────────────────────────
+
+function ExportButton({
+  projectId, projectName, projectType, projectCode, flow, allDefaultStages, customEntries,
+}: {
+  projectId: string; projectName: string; projectType: string; projectCode?: string;
+  flow: UseProjectFlowReturn; allDefaultStages: FlowStage[]; customEntries: CustomStageEntry[];
+}) {
+  const { toast } = useToast();
+  const [exporting, setExporting] = useState<'pdf' | 'docx' | null>(null);
+
+  // Gather per-stage data at export time by calling a simple query
+  const doExport = async (type: 'pdf' | 'docx') => {
+    setExporting(type);
+    try {
+      const { supabase } = await import('@/integrations/supabase/client');
+      const stageIds = allDefaultStages.map(s => s.id);
+      const [assigneesRes, checklistRes, attachmentsRes] = await Promise.all([
+        supabase.from('project_stage_assignees').select('stage_id, profiles:user_id(full_name, role)').eq('project_id', projectId),
+        supabase.from('project_stage_checklist').select('stage_id, item_text, completed').eq('project_id', projectId),
+        supabase.from('project_stage_attachments').select('stage_id, file_name, file_url, file_type, file_size').eq('project_id', projectId),
+      ]);
+
+      const extras: Record<string, any> = {};
+      stageIds.forEach(sid => {
+        extras[sid] = {
+          assignees: (assigneesRes.data ?? []).filter((r: any) => r.stage_id === sid).map((r: any) => ({
+            id: sid + r.profiles?.full_name, userId: '', fullName: r.profiles?.full_name ?? '', role: r.profiles?.role ?? '', avatarUrl: null, assignedAt: '',
+          })),
+          checklist: (checklistRes.data ?? []).filter((r: any) => r.stage_id === sid).map((r: any) => ({
+            id: sid, itemText: r.item_text, completed: r.completed, completedBy: null, completedAt: null, createdAt: '', sortOrder: 0,
+          })),
+          attachments: (attachmentsRes.data ?? []).filter((r: any) => r.stage_id === sid).map((r: any) => ({
+            id: sid, fileName: r.file_name, fileUrl: r.file_url, fileType: r.file_type, fileSize: r.file_size, uploadedByName: null, createdAt: '',
+          })),
+        };
+      });
+
+      const exportData = {
+        projectName, projectType, projectCode,
+        stages: allDefaultStages,
+        stageHistory: flow.stageHistory,
+        currentStageId: flow.currentStage?.id ?? null,
+        extras,
+        customEntries,
+      };
+
+      if (type === 'pdf') {
+        await exportFlowPDF(exportData);
+      } else {
+        await exportFlowDocx(exportData);
+      }
+      toast({ title: `${type.toUpperCase()} exported successfully` });
+    } catch (err: any) {
+      toast({ title: 'Export failed', description: err.message, variant: 'destructive' });
+    } finally {
+      setExporting(null);
+    }
+  };
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button size="sm" variant="outline" className="h-7 text-xs px-3 shrink-0" disabled={!!exporting} data-testid="button-export-flow">
+          {exporting ? <Loader2 className="h-3 w-3 mr-1.5 animate-spin" /> : <FileDown className="h-3 w-3 mr-1.5" />}
+          Export
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-44">
+        <DropdownMenuItem onClick={() => doExport('pdf')}>
+          <FileText className="h-3.5 w-3.5 mr-2 text-red-500" /> Export PDF
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => doExport('docx')}>
+          <FileText className="h-3.5 w-3.5 mr-2 text-blue-500" /> Export Word (.docx)
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+// ── Edit Flow Dialog ───────────────────────────────────────────────────────
+
+interface EditFlowDialogProps {
+  open: boolean;
+  onClose: () => void;
+  customEntries: CustomStageEntry[];
+  setCustomEntries: (entries: CustomStageEntry[]) => void;
+  allDefaultStages: FlowStage[];
+  projectName: string;
+  isSaving: boolean;
+  onSave: () => void;
+  onReset: () => void;
+  getStageStatus: (id: string) => 'completed' | 'current' | 'upcoming' | 'skipped';
+}
+
+function EditFlowDialog({
+  open, onClose, customEntries, setCustomEntries, allDefaultStages, projectName,
+  isSaving, onSave, onReset, getStageStatus,
+}: EditFlowDialogProps) {
+  const [expandedEditIds, setExpandedEditIds] = useState<Set<string>>(new Set());
+
+  const toggleEditExpand = (id: string) => {
+    setExpandedEditIds(prev => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  };
+
+  const updateEntry = (id: string, patch: Partial<CustomStageEntry>) => {
+    setCustomEntries(customEntries.map(e => (e.id === id ? { ...e, ...patch } : e)));
+  };
+
+  const moveEntry = (idx: number, direction: 'up' | 'down') => {
+    const next = [...customEntries];
+    const targetIdx = direction === 'up' ? idx - 1 : idx + 1;
+    if (targetIdx < 0 || targetIdx >= next.length) return;
+    [next[idx], next[targetIdx]] = [next[targetIdx], next[idx]];
+    setCustomEntries(next);
+  };
+
+  const toggleSkip = (id: string) => {
+    setCustomEntries(customEntries.map(e => (e.id === id ? { ...e, skipped: !e.skipped } : e)));
+  };
+
+  const addOutput = (id: string) => {
+    const entry = customEntries.find(e => e.id === id);
+    const outputs = entry?.customOutputs ?? [];
+    updateEntry(id, { customOutputs: [...outputs, ''] });
+  };
+
+  const updateOutput = (id: string, outputIdx: number, value: string) => {
+    const entry = customEntries.find(e => e.id === id);
+    const outputs = [...(entry?.customOutputs ?? [])];
+    outputs[outputIdx] = value;
+    updateEntry(id, { customOutputs: outputs });
+  };
+
+  const removeOutput = (id: string, outputIdx: number) => {
+    const entry = customEntries.find(e => e.id === id);
+    const outputs = (entry?.customOutputs ?? []).filter((_, i) => i !== outputIdx);
+    updateEntry(id, { customOutputs: outputs });
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onClose}>
+      <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Settings2 className="h-4 w-4 text-[#1D3461]" />
+            Edit Project Flow
+          </DialogTitle>
+          <DialogDescription>
+            Reorder, rename, or configure stages for <strong>{projectName}</strong>. Changes only affect this project.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="flex-1 overflow-y-auto space-y-2 py-2 pr-1">
+          {customEntries.map((entry, idx) => {
+            const stageDef = allDefaultStages.find(s => s.id === entry.id);
+            if (!stageDef) return null;
+            const isExpanded = expandedEditIds.has(entry.id);
+            const displayLabel = entry.customLabel || stageDef.label;
+            const status = getStageStatus(entry.id);
+
+            return (
+              <div
+                key={entry.id}
+                className={cn(
+                  'rounded-xl border transition-colors overflow-hidden',
+                  entry.skipped
+                    ? 'bg-slate-50 dark:bg-slate-800/30 border-dashed border-slate-200 dark:border-slate-700 opacity-70'
+                    : 'bg-white dark:bg-slate-900 border-border',
+                  isExpanded && 'border-[#1D3461]/30 shadow-sm',
+                )}
+              >
+                {/* Row header */}
+                <div className="flex items-center gap-2 p-3">
+                  {/* Stage number */}
+                  <div className="w-6 h-6 rounded-full bg-muted flex items-center justify-center flex-shrink-0">
+                    <span className="text-[10px] font-bold text-muted-foreground">{idx + 1}</span>
+                  </div>
+
+                  {/* Reorder buttons */}
+                  <div className="flex flex-col gap-0.5 flex-shrink-0">
+                    <Button variant="ghost" size="icon" className="h-5 w-5" disabled={idx === 0} onClick={() => moveEntry(idx, 'up')}>
+                      <ChevronUp className="h-3 w-3" />
+                    </Button>
+                    <Button variant="ghost" size="icon" className="h-5 w-5" disabled={idx === customEntries.length - 1} onClick={() => moveEntry(idx, 'down')}>
+                      <ChevronDown className="h-3 w-3" />
+                    </Button>
+                  </div>
+
+                  {/* Stage info */}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1.5">
+                      <p className={cn('text-sm font-medium truncate', entry.skipped && 'line-through text-muted-foreground')}>
+                        {displayLabel}
+                        {entry.customLabel && entry.customLabel !== stageDef.label && (
+                          <span className="ml-1.5 text-[10px] text-[#1D3461] font-normal not-italic">(custom)</span>
+                        )}
+                      </p>
+                    </div>
+                    <p className="text-xs text-muted-foreground truncate mt-0.5">
+                      {entry.customDescription || stageDef.description}
+                    </p>
+                  </div>
+
+                  {/* Status badge */}
+                  <span className={cn('text-[10px] px-1.5 py-0.5 rounded-full font-medium flex-shrink-0', STATUS_CFG[status].badge)}>
+                    {STATUS_CFG[status].label}
+                  </span>
+
+                  {/* Skip toggle */}
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    <Label htmlFor={`skip-${entry.id}`} className="text-xs text-muted-foreground cursor-pointer">Skip</Label>
+                    <Switch
+                      id={`skip-${entry.id}`}
+                      checked={entry.skipped ?? false}
+                      onCheckedChange={() => toggleSkip(entry.id)}
+                    />
+                  </div>
+
+                  {/* Expand detail edit */}
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7 flex-shrink-0"
+                    onClick={() => toggleEditExpand(entry.id)}
+                    title="Edit stage details"
+                  >
+                    <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
+                  </Button>
+                </div>
+
+                {/* Expanded detail editor */}
+                {isExpanded && (
+                  <div className="border-t border-border/60 px-4 pb-4 pt-3 space-y-3 bg-muted/20">
+                    {/* Custom label */}
+                    <div className="space-y-1">
+                      <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                        Stage Name (override)
+                      </Label>
+                      <Input
+                        placeholder={stageDef.label}
+                        value={entry.customLabel ?? ''}
+                        onChange={e => updateEntry(entry.id, { customLabel: e.target.value })}
+                        className="h-8 text-sm"
+                      />
+                      <p className="text-[10px] text-muted-foreground">Leave blank to use the default: "{stageDef.label}"</p>
+                    </div>
+
+                    {/* Custom description */}
+                    <div className="space-y-1">
+                      <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                        Description (override)
+                      </Label>
+                      <Textarea
+                        placeholder={stageDef.description ?? 'Stage description...'}
+                        value={entry.customDescription ?? ''}
+                        onChange={e => updateEntry(entry.id, { customDescription: e.target.value })}
+                        rows={2}
+                        className="text-sm resize-none"
+                      />
+                    </div>
+
+                    {/* Custom key outputs */}
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                          Custom Key Outputs
+                        </Label>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 text-xs px-2"
+                          onClick={() => addOutput(entry.id)}
+                        >
+                          <Plus className="h-3 w-3 mr-1" /> Add Output
+                        </Button>
+                      </div>
+
+                      {/* Default outputs (read-only preview) */}
+                      {stageDef.keyOutputs && stageDef.keyOutputs.length > 0 && (
+                        <div className="space-y-1">
+                          <p className="text-[10px] text-muted-foreground font-medium">Default outputs (always shown):</p>
+                          {stageDef.keyOutputs.map((o, i) => (
+                            <div key={i} className="flex items-center gap-2 text-xs text-muted-foreground">
+                              <CheckCircle2 className="h-3 w-3 text-muted-foreground/40 flex-shrink-0" />
+                              <span>{o}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Custom outputs (editable) */}
+                      {(entry.customOutputs ?? []).length > 0 && (
+                        <div className="space-y-1.5">
+                          {(entry.customOutputs ?? []).map((output, oIdx) => (
+                            <div key={oIdx} className="flex items-center gap-2">
+                              <span className="text-muted-foreground/40">+</span>
+                              <Input
+                                value={output}
+                                onChange={e => updateOutput(entry.id, oIdx, e.target.value)}
+                                placeholder="Custom output item..."
+                                className="h-7 text-xs flex-1"
+                              />
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                                onClick={() => removeOutput(entry.id, oIdx)}
+                              >
+                                <X className="h-3.5 w-3.5" />
+                              </Button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {(entry.customOutputs ?? []).length === 0 && (
+                        <p className="text-[10px] text-muted-foreground italic">No custom outputs added yet</p>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+
+        <Separator />
+
+        <DialogFooter className="flex-shrink-0 pt-3 gap-2">
+          <Button variant="ghost" size="sm" className="text-muted-foreground mr-auto text-xs" onClick={onReset} disabled={isSaving}>
+            <RotateCcw className="h-3.5 w-3.5 mr-1.5" /> Reset to Default
+          </Button>
+          <Button variant="outline" size="sm" onClick={onClose} disabled={isSaving}>Cancel</Button>
+          <Button
+            size="sm"
+            onClick={onSave}
+            disabled={isSaving}
+            className="bg-[#1D3461] hover:bg-[#0F2041] text-white"
+            data-testid="button-save-flow"
+          >
+            {isSaving ? <><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> Saving…</> : 'Save Flow'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ── Main component ─────────────────────────────────────────────────────────
+
+export function FlowTab({
+  flow, projectName, projectType, projectCode, projectId, currentUserId, allDefaultStages, customFlowStages,
+}: Props) {
   const { toast } = useToast();
   const navigate = useNavigate();
   const {
-    activeStages,
-    currentStage,
-    currentStageIndex,
-    stageHistory,
-    isLastStage,
-    canAdvance,
-    canEditFlow,
-    isAdvancing,
-    isSavingCustom,
-    advanceStage,
-    updateCustomStages,
-    getStageStatus,
+    activeStages, currentStage, currentStageIndex, stageHistory,
+    isLastStage, canAdvance, canEditFlow, isAdvancing, isSavingCustom,
+    advanceStage, updateCustomStages, getStageStatus,
   } = flow;
 
   const [editOpen, setEditOpen] = useState(false);
@@ -130,17 +493,21 @@ export function FlowTab({ flow, projectName, projectType, allDefaultStages }: Pr
   const [customEntries, setCustomEntries] = useState<CustomStageEntry[]>([]);
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
 
+  // Resolve effective custom entry per stage (for label overrides in main view)
+  const resolvedEntry = (stageId: string): CustomStageEntry | undefined =>
+    (customFlowStages ?? []).find(e => e.id === stageId);
+
   useEffect(() => {
     if (editOpen) {
       const initial = allDefaultStages.map(s => ({
         id: s.id,
         skipped: getStageStatus(s.id) === 'skipped',
+        ...(customFlowStages?.find(e => e.id === s.id) ?? {}),
       }));
       setCustomEntries(initial);
     }
   }, [editOpen]);
 
-  // Auto-expand current stage
   useEffect(() => {
     if (currentStage) {
       setExpandedIds(prev => new Set([...prev, currentStage.id]));
@@ -185,20 +552,6 @@ export function FlowTab({ flow, projectName, projectType, allDefaultStages }: Pr
     }
   };
 
-  const moveEntry = (idx: number, direction: 'up' | 'down') => {
-    const next = [...customEntries];
-    const targetIdx = direction === 'up' ? idx - 1 : idx + 1;
-    if (targetIdx < 0 || targetIdx >= next.length) return;
-    [next[idx], next[targetIdx]] = [next[targetIdx], next[idx]];
-    setCustomEntries(next);
-  };
-
-  const toggleSkip = (id: string) => {
-    setCustomEntries(prev =>
-      prev.map(e => (e.id === id ? { ...e, skipped: !e.skipped } : e)),
-    );
-  };
-
   const nextStage = !isLastStage ? activeStages[currentStageIndex + 1] : null;
   const pct = Math.round(((currentStageIndex + 1) / activeStages.length) * 100);
   const completedCount = allDefaultStages.filter(s => getStageStatus(s.id) === 'completed').length;
@@ -219,7 +572,6 @@ export function FlowTab({ flow, projectName, projectType, allDefaultStages }: Pr
             <p className="text-2xl font-bold text-slate-800 dark:text-slate-100">{allDefaultStages.length}</p>
           </CardContent>
         </Card>
-
         <Card className="border-0 shadow-sm bg-gradient-to-br from-emerald-50 to-white dark:from-emerald-900/20 dark:to-slate-800">
           <CardContent className="p-4">
             <div className="flex items-center gap-2 mb-1">
@@ -229,7 +581,6 @@ export function FlowTab({ flow, projectName, projectType, allDefaultStages }: Pr
             <p className="text-2xl font-bold text-emerald-700 dark:text-emerald-400">{completedCount}</p>
           </CardContent>
         </Card>
-
         <Card className="border-0 shadow-sm bg-gradient-to-br from-blue-50 to-white dark:from-blue-900/20 dark:to-slate-800">
           <CardContent className="p-4">
             <div className="flex items-center gap-2 mb-1">
@@ -237,11 +588,10 @@ export function FlowTab({ flow, projectName, projectType, allDefaultStages }: Pr
               <span className="text-xs text-muted-foreground font-medium">Active Stage</span>
             </div>
             <p className="text-sm font-bold text-[#1D3461] dark:text-blue-300 leading-tight line-clamp-2">
-              {currentStage?.label ?? '—'}
+              {currentStage ? (resolvedEntry(currentStage.id)?.customLabel || currentStage.label) : '—'}
             </p>
           </CardContent>
         </Card>
-
         <Card className="border-0 shadow-sm bg-gradient-to-br from-amber-50 to-white dark:from-amber-900/20 dark:to-slate-800">
           <CardContent className="p-4">
             <div className="flex items-center gap-2 mb-1">
@@ -266,22 +616,31 @@ export function FlowTab({ flow, projectName, projectType, allDefaultStages }: Pr
               </Badge>
             )}
             {skippedCount > 0 && (
-              <Badge variant="secondary" className="text-[10px] px-2 py-0.5">
-                {skippedCount} skipped
-              </Badge>
+              <Badge variant="secondary" className="text-[10px] px-2 py-0.5">{skippedCount} skipped</Badge>
             )}
           </div>
-          {canEditFlow && (
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => setEditOpen(true)}
-              className="h-7 text-xs px-3 shrink-0"
-              data-testid="button-edit-flow"
-            >
-              <Settings2 className="h-3 w-3 mr-1.5" /> Edit Flow
-            </Button>
-          )}
+          <div className="flex items-center gap-2">
+            <ExportButton
+              projectId={projectId}
+              projectName={projectName}
+              projectType={projectType}
+              projectCode={projectCode}
+              flow={flow}
+              allDefaultStages={allDefaultStages}
+              customEntries={customFlowStages ?? []}
+            />
+            {canEditFlow && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setEditOpen(true)}
+                className="h-7 text-xs px-3 shrink-0"
+                data-testid="button-edit-flow"
+              >
+                <Settings2 className="h-3 w-3 mr-1.5" /> Edit Flow
+              </Button>
+            )}
+          </div>
         </div>
 
         <div className="w-full rounded-full bg-muted h-2.5 overflow-hidden">
@@ -304,29 +663,30 @@ export function FlowTab({ flow, projectName, projectType, allDefaultStages }: Pr
           const historyEntry = stageHistory.filter(h => h.stageId === stage.id).at(-1);
           const isCurrent = status === 'current';
           const isExpanded = expandedIds.has(stage.id);
-          const hasDetails = (stage.keyOutputs?.length ?? 0) > 0 || !!stage.linkedModule || !!stage.description;
+          const entry = resolvedEntry(stage.id);
+          const displayLabel = entry?.customLabel || stage.label;
+          const displayDesc = entry?.customDescription || stage.description;
+          const allOutputs = [...(entry?.customOutputs ?? []), ...(stage.keyOutputs ?? [])];
+          const hasDetails = allOutputs.length > 0 || !!stage.linkedModule || !!displayDesc || isCurrent;
 
           return (
             <div
               key={stage.id}
               className={cn(
                 'rounded-xl border border-l-4 transition-all duration-200',
-                cfg.border,
-                cfg.ring,
-                cfg.bg,
+                cfg.border, cfg.ring, cfg.bg,
                 isCurrent && 'shadow-sm',
                 status === 'skipped' && 'opacity-60',
               )}
               data-testid={`flow-stage-${stage.id}`}
             >
-              {/* Card header row — always visible */}
+              {/* Card header row */}
               <button
                 type="button"
                 className="w-full text-left"
-                onClick={() => hasDetails || isCurrent ? toggleExpand(stage.id) : undefined}
+                onClick={() => hasDetails ? toggleExpand(stage.id) : undefined}
               >
                 <div className="flex items-center gap-3 px-4 py-3.5">
-                  {/* Status icon */}
                   <div
                     className={cn(
                       'h-8 w-8 rounded-full flex items-center justify-center flex-shrink-0 border-2 transition-all',
@@ -345,28 +705,19 @@ export function FlowTab({ flow, projectName, projectType, allDefaultStages }: Pr
                     )}
                   </div>
 
-                  {/* Stage name + meta */}
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span
-                        className={cn(
-                          'font-semibold text-sm leading-snug',
-                          status === 'skipped' && 'line-through text-muted-foreground',
-                          isCurrent && 'text-[#1D3461] dark:text-blue-200',
-                        )}
-                      >
-                        {stage.label}
+                      <span className={cn(
+                        'font-semibold text-sm leading-snug',
+                        status === 'skipped' && 'line-through text-muted-foreground',
+                        isCurrent && 'text-[#1D3461] dark:text-blue-200',
+                      )}>
+                        {displayLabel}
                       </span>
-                      <span
-                        className={cn(
-                          'text-[10px] font-medium px-1.5 py-0.5 rounded-full',
-                          cfg.badge,
-                        )}
-                      >
+                      <span className={cn('text-[10px] font-medium px-1.5 py-0.5 rounded-full', cfg.badge)}>
                         {cfg.label}
                       </span>
                     </div>
-
                     {historyEntry && (
                       <div className="flex items-center gap-2 mt-0.5 text-[11px] text-muted-foreground">
                         <Clock className="h-3 w-3 flex-shrink-0" />
@@ -380,20 +731,14 @@ export function FlowTab({ flow, projectName, projectType, allDefaultStages }: Pr
                         )}
                       </div>
                     )}
-
-                    {!historyEntry && stage.description && !isExpanded && (
-                      <p className="text-[11px] text-muted-foreground mt-0.5 truncate">
-                        {stage.description}
-                      </p>
+                    {!historyEntry && displayDesc && !isExpanded && (
+                      <p className="text-[11px] text-muted-foreground mt-0.5 truncate">{displayDesc}</p>
                     )}
                   </div>
 
-                  {/* Expand chevron */}
-                  {(hasDetails || isCurrent) && (
+                  {hasDetails && (
                     <div className="flex-shrink-0 text-muted-foreground/60">
-                      {isExpanded
-                        ? <CollapseIcon className="h-4 w-4" />
-                        : <ExpandIcon className="h-4 w-4" />}
+                      {isExpanded ? <CollapseIcon className="h-4 w-4" /> : <ExpandIcon className="h-4 w-4" />}
                     </div>
                   )}
                 </div>
@@ -401,35 +746,28 @@ export function FlowTab({ flow, projectName, projectType, allDefaultStages }: Pr
 
               {/* Expanded detail panel */}
               {isExpanded && (
-                <div className="px-4 pb-4 space-y-4 border-t border-border/50">
-                  {/* Full description */}
-                  {stage.description && (
-                    <p className="text-sm text-muted-foreground pt-3 leading-relaxed">
-                      {stage.description}
-                    </p>
+                <div className="px-4 pb-4 space-y-5 border-t border-border/50">
+                  {/* Description */}
+                  {displayDesc && (
+                    <p className="text-sm text-muted-foreground pt-3 leading-relaxed">{displayDesc}</p>
                   )}
 
-                  {/* Full history record */}
+                  {/* Completion record */}
                   {historyEntry && (
                     <div className="rounded-lg bg-muted/40 px-3 py-2.5 space-y-1.5">
-                      <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
-                        Completion Record
-                      </p>
+                      <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Completion Record</p>
                       <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
                         <span className="flex items-center gap-1">
-                          <Clock className="h-3 w-3" />
-                          {formatTimestamp(historyEntry.advancedAt)}
+                          <Clock className="h-3 w-3" />{formatTimestamp(historyEntry.advancedAt)}
                         </span>
                         {historyEntry.advancedByName && (
                           <span className="flex items-center gap-1">
-                            <User className="h-3 w-3" />
-                            {historyEntry.advancedByName}
+                            <User className="h-3 w-3" />{historyEntry.advancedByName}
                           </span>
                         )}
                         {historyEntry.notes && (
                           <span className="flex items-start gap-1">
-                            <FileText className="h-3 w-3 mt-0.5 flex-shrink-0" />
-                            {historyEntry.notes}
+                            <FileText className="h-3 w-3 mt-0.5 flex-shrink-0" />{historyEntry.notes}
                           </span>
                         )}
                       </div>
@@ -437,21 +775,15 @@ export function FlowTab({ flow, projectName, projectType, allDefaultStages }: Pr
                   )}
 
                   {/* Key outputs */}
-                  {stage.keyOutputs && stage.keyOutputs.length > 0 && (
+                  {allOutputs.length > 0 && (
                     <div>
                       <div className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
-                        <ListChecks className="h-3.5 w-3.5" />
-                        Key Outputs
+                        <ListChecks className="h-3.5 w-3.5" /> Key Outputs
                       </div>
                       <ul className="space-y-1.5">
-                        {stage.keyOutputs.map((output, oIdx) => (
+                        {allOutputs.map((output, oIdx) => (
                           <li key={oIdx} className="flex items-start gap-2 text-sm text-muted-foreground">
-                            <CheckCircle2
-                              className={cn(
-                                'h-3.5 w-3.5 flex-shrink-0 mt-0.5',
-                                status === 'completed' ? 'text-emerald-500' : 'text-muted-foreground/30',
-                              )}
-                            />
+                            <CheckCircle2 className={cn('h-3.5 w-3.5 flex-shrink-0 mt-0.5', status === 'completed' ? 'text-emerald-500' : 'text-muted-foreground/30')} />
                             <span>{output}</span>
                           </li>
                         ))}
@@ -462,9 +794,7 @@ export function FlowTab({ flow, projectName, projectType, allDefaultStages }: Pr
                   {/* Linked module button */}
                   {stage.linkedModule && (
                     <Button
-                      variant="outline"
-                      size="sm"
-                      className="h-8 text-xs"
+                      variant="outline" size="sm" className="h-8 text-xs"
                       onClick={() => navigate(stage.linkedModule!)}
                       data-testid={`button-goto-module-${stage.id}`}
                     >
@@ -473,16 +803,43 @@ export function FlowTab({ flow, projectName, projectType, allDefaultStages }: Pr
                     </Button>
                   )}
 
+                  {/* ── Per-stage data sections ── */}
+                  <div className="grid gap-4 pt-1">
+                    <div className="rounded-lg border bg-muted/20 p-3">
+                      <StageAssignees
+                        projectId={projectId}
+                        stageId={stage.id}
+                        currentUserId={currentUserId}
+                        canEdit={canEditFlow}
+                      />
+                    </div>
+                    <div className="rounded-lg border bg-muted/20 p-3">
+                      <StageChecklist
+                        projectId={projectId}
+                        stageId={stage.id}
+                        currentUserId={currentUserId}
+                        canEdit={status !== 'upcoming'}
+                      />
+                    </div>
+                    <div className="rounded-lg border bg-muted/20 p-3">
+                      <StageAttachments
+                        projectId={projectId}
+                        stageId={stage.id}
+                        currentUserId={currentUserId}
+                        canEdit={status !== 'upcoming'}
+                      />
+                    </div>
+                  </div>
+
                   {/* ── Advance controls (current stage only) ── */}
                   {isCurrent && canAdvance && nextStage && (
                     <div className="rounded-xl border border-[#1D3461]/20 bg-[#0F2041]/5 dark:bg-[#1D3461]/10 p-4 space-y-3">
                       <div className="flex items-center gap-2">
                         <ArrowRight className="h-4 w-4 text-[#1D3461]" />
                         <p className="text-sm font-semibold text-[#1D3461] dark:text-blue-200">
-                          Advance to: <span className="font-bold">{nextStage.label}</span>
+                          Advance to: <span className="font-bold">{resolvedEntry(nextStage.id)?.customLabel || nextStage.label}</span>
                         </p>
                       </div>
-
                       <div className="space-y-1.5">
                         <Label htmlFor={`advance-notes-${stage.id}`} className="text-xs font-medium text-muted-foreground">
                           Transition notes (optional)
@@ -497,7 +854,6 @@ export function FlowTab({ flow, projectName, projectType, allDefaultStages }: Pr
                           data-testid="input-advance-notes"
                         />
                       </div>
-
                       <div className="flex items-center gap-3">
                         <Button
                           size="sm"
@@ -507,24 +863,18 @@ export function FlowTab({ flow, projectName, projectType, allDefaultStages }: Pr
                           data-testid="button-confirm-advance"
                         >
                           {isAdvancing ? (
-                            <>
-                              <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> Advancing…
-                            </>
+                            <><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> Advancing…</>
                           ) : (
-                            <>
-                              <CheckCircle2 className="h-3.5 w-3.5 mr-1.5" /> Mark Complete & Advance
-                            </>
+                            <><CheckCircle2 className="h-3.5 w-3.5 mr-1.5" /> Mark Complete & Advance</>
                           )}
                         </Button>
                         <p className="text-[11px] text-muted-foreground flex items-center gap-1">
-                          <AlertCircle className="h-3 w-3 flex-shrink-0" />
-                          Team will be notified
+                          <AlertCircle className="h-3 w-3 flex-shrink-0" /> Team will be notified
                         </p>
                       </div>
                     </div>
                   )}
 
-                  {/* Final stage message */}
                   {isCurrent && isLastStage && (
                     <div className="flex items-center gap-2 rounded-lg bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 px-4 py-3">
                       <CheckCircle2 className="h-4 w-4 text-emerald-600 flex-shrink-0" />
@@ -541,126 +891,18 @@ export function FlowTab({ flow, projectName, projectType, allDefaultStages }: Pr
       </div>
 
       {/* ── Edit Flow Dialog ────────────────────────────────────── */}
-      <Dialog open={editOpen} onOpenChange={setEditOpen}>
-        <DialogContent className="max-w-lg max-h-[85vh] flex flex-col">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Settings2 className="h-4 w-4 text-[#1D3461]" />
-              Edit Project Flow
-            </DialogTitle>
-            <DialogDescription>
-              Reorder or skip stages for <strong>{projectName}</strong>. Changes only affect this project.
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="flex-1 overflow-y-auto space-y-2 py-2 pr-1">
-            {customEntries.map((entry, idx) => {
-              const stageDef = allDefaultStages.find(s => s.id === entry.id);
-              if (!stageDef) return null;
-              return (
-                <div
-                  key={entry.id}
-                  className={cn(
-                    'flex items-center gap-2 rounded-xl border p-3 transition-colors',
-                    entry.skipped
-                      ? 'bg-slate-50 dark:bg-slate-800/30 border-dashed border-slate-200 dark:border-slate-700 opacity-60'
-                      : 'bg-white dark:bg-slate-900 border-border hover:border-[#1D3461]/30',
-                  )}
-                >
-                  {/* Stage number */}
-                  <div className="w-6 h-6 rounded-full bg-muted flex items-center justify-center flex-shrink-0">
-                    <span className="text-[10px] font-bold text-muted-foreground">{idx + 1}</span>
-                  </div>
-
-                  {/* Reorder buttons */}
-                  <div className="flex flex-col gap-0.5 flex-shrink-0">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-5 w-5 text-muted-foreground hover:text-foreground"
-                      disabled={idx === 0}
-                      onClick={() => moveEntry(idx, 'up')}
-                      data-testid={`button-move-up-${entry.id}`}
-                    >
-                      <ChevronUp className="h-3 w-3" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-5 w-5 text-muted-foreground hover:text-foreground"
-                      disabled={idx === customEntries.length - 1}
-                      onClick={() => moveEntry(idx, 'down')}
-                      data-testid={`button-move-down-${entry.id}`}
-                    >
-                      <ChevronDown className="h-3 w-3" />
-                    </Button>
-                  </div>
-
-                  {/* Stage info */}
-                  <div className="flex-1 min-w-0">
-                    <p
-                      className={cn(
-                        'text-sm font-medium',
-                        entry.skipped && 'line-through text-muted-foreground',
-                      )}
-                    >
-                      {stageDef.label}
-                    </p>
-                    {stageDef.description && (
-                      <p className="text-xs text-muted-foreground truncate mt-0.5">
-                        {stageDef.description}
-                      </p>
-                    )}
-                  </div>
-
-                  {/* Skip toggle */}
-                  <div className="flex items-center gap-2 flex-shrink-0">
-                    <Label htmlFor={`skip-${entry.id}`} className="text-xs text-muted-foreground cursor-pointer">
-                      Skip
-                    </Label>
-                    <Switch
-                      id={`skip-${entry.id}`}
-                      checked={entry.skipped ?? false}
-                      onCheckedChange={() => toggleSkip(entry.id)}
-                      data-testid={`switch-skip-${entry.id}`}
-                    />
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-
-          <Separator />
-
-          <DialogFooter className="flex-shrink-0 pt-3 gap-2">
-            <Button
-              variant="ghost"
-              size="sm"
-              className="text-muted-foreground mr-auto text-xs"
-              onClick={handleResetCustom}
-              disabled={isSavingCustom}
-            >
-              <RotateCcw className="h-3.5 w-3.5 mr-1.5" /> Reset to Default
-            </Button>
-            <Button variant="outline" size="sm" onClick={() => setEditOpen(false)} disabled={isSavingCustom}>
-              Cancel
-            </Button>
-            <Button
-              size="sm"
-              onClick={handleSaveCustom}
-              disabled={isSavingCustom}
-              className="bg-[#1D3461] hover:bg-[#0F2041] text-white"
-              data-testid="button-save-flow"
-            >
-              {isSavingCustom ? (
-                <><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> Saving…</>
-              ) : (
-                'Save Flow'
-              )}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <EditFlowDialog
+        open={editOpen}
+        onClose={() => setEditOpen(false)}
+        customEntries={customEntries}
+        setCustomEntries={setCustomEntries}
+        allDefaultStages={allDefaultStages}
+        projectName={projectName}
+        isSaving={isSavingCustom}
+        onSave={handleSaveCustom}
+        onReset={handleResetCustom}
+        getStageStatus={getStageStatus}
+      />
     </div>
   );
 }

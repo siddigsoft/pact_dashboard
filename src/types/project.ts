@@ -63,7 +63,7 @@ export interface Project {
   startDate: string;
   endDate: string;
   currentFlowStage?: string;
-  customFlowStages?: Array<{ id: string; skipped?: boolean }> | null;
+  customFlowStages?: Array<{ id: string; skipped?: boolean; customLabel?: string; customDescription?: string; customOutputs?: string[] }> | null;
   budget?: {
     total: number;
     currency: string;
