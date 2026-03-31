@@ -81,8 +81,8 @@ export function useProjectTasks(projectId: string) {
           id, project_id, title, description, priority, status,
           assigned_to, due_date, state_name, locality_name,
           stage_id, notes, created_by, created_at, updated_at,
-          assignee:assigned_to(full_name, role),
-          creator:created_by(full_name)
+          assignee:profiles!assigned_to(full_name, role),
+          creator:profiles!created_by(full_name)
         `)
         .eq('project_id', projectId)
         .order('created_at', { ascending: false });

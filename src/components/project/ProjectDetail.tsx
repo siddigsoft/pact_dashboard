@@ -765,7 +765,8 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
 
       {/* Project content */}
       <Tabs defaultValue="overview" value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="grid grid-cols-7 w-full md:w-[820px]">
+        <div className="overflow-x-auto pb-1 -mx-1 px-1">
+        <TabsList className="grid grid-cols-7 w-[700px] sm:w-[760px] md:w-[820px]">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="activities">Activities</TabsTrigger>
           <TabsTrigger value="team">Team</TabsTrigger>
@@ -778,7 +779,8 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
             <CheckSquare className="h-3.5 w-3.5 mr-1" />Tasks
           </TabsTrigger>
         </TabsList>
-        
+        </div>
+
         <TabsContent value="overview" className="space-y-4 mt-4">
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
             {/* Left column: Details + Timeline */}

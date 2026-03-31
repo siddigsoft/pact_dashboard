@@ -402,7 +402,7 @@ export function GanttView({
                         style={{ left: `${depLeft.toFixed(2)}%`, width: `${width.toFixed(2)}%`, zIndex: 5 }}
                       >
                         <div className="h-px w-full border-t-2 border-dashed border-orange-400/60" />
-                        <div className="w-0 h-0 flex-shrink-0 border-t-4 border-b-4 border-l-6 border-transparent border-l-orange-400/60" style={{ borderLeftWidth: 6 }} />
+                        <div className="w-0 h-0 flex-shrink-0 border-t-4 border-b-4 border-l-[6px] border-transparent border-l-orange-400/60" />
                       </div>
                     );
                   })}
