@@ -18,9 +18,14 @@ import {
 import {
   Building2, Plus, Pencil, Trash2, ChevronRight, ChevronDown,
   Users, Search, UserCheck, AlertTriangle, Loader2, GitBranch,
-  ArrowLeft, Network, Shield,
+  ArrowLeft, Network, Shield, BarChart3, PieChart as PieIcon,
+  TrendingUp, Award, UserX, CheckCircle2,
 } from "lucide-react";
-import { PageInfoBanner } from "@/components/financial/PageInfoBanner";
+import {
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartTooltip,
+  ResponsiveContainer, PieChart, Pie, Cell, Legend,
+  RadialBarChart, RadialBar,
+} from "recharts";
 
 /* ─── Types ──────────────────────────────────────── */
 interface Department {
@@ -697,6 +702,232 @@ function OrgChartTab({ profiles, departments }: { profiles: Profile[]; departmen
   );
 }
 
+/* ─── Overview / Analytics Tab ──────────────────── */
+function OverviewTab({ departments, profiles }: { departments: Department[]; profiles: Profile[] }) {
+  const flat = flattenTree(buildTree(departments));
+  const assigned = profiles.filter(p => p.department_id).length;
+  const unassigned = profiles.length - assigned;
+  const managed = departments.filter(d => d.manager_user_id).length;
+  const unmanaged = departments.length - managed;
+  const avgTeam = departments.length ? (assigned / departments.length).toFixed(1) : "0";
+
+  // Staff per department (top 12)
+  const staffPerDept = flat
+    .map(d => ({
+      name: d.name.length > 18 ? d.name.slice(0, 16) + "…" : d.name,
+      members: profiles.filter(p => p.department_id === d.id).length,
+      color: d.color ?? "#1D3461",
+    }))
+    .filter(d => d.members > 0)
+    .sort((a, b) => b.members - a.members)
+    .slice(0, 12);
+
+  // Role distribution
+  const roleCounts: Record<string, number> = {};
+  profiles.forEach(p => {
+    const r = (p.role || "Unknown").replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+    roleCounts[r] = (roleCounts[r] || 0) + 1;
+  });
+  const roleData = Object.entries(roleCounts)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 8)
+    .map(([name, value], i) => ({ name, value, fill: LEVEL_PALETTE[i % LEVEL_PALETTE.length].solid }));
+
+  // Assignment donut
+  const assignDonut = [
+    { name: "Assigned", value: assigned, fill: "#059669" },
+    { name: "Unassigned", value: unassigned, fill: "#F59E0B" },
+  ];
+
+  // Management coverage radial
+  const managedPct = departments.length ? Math.round((managed / departments.length) * 100) : 0;
+
+  const STATS = [
+    { label: "Total Departments", value: departments.length, icon: Building2, color: "#0F2041", light: "#E8ECF3" },
+    { label: "Total Staff", value: profiles.length, icon: Users, color: "#2563EB", light: "#DBEAFE" },
+    { label: "Assigned Staff", value: assigned, icon: CheckCircle2, color: "#059669", light: "#D1FAE5" },
+    { label: "Unassigned", value: unassigned, icon: UserX, color: "#D97706", light: "#FEF3C7" },
+    { label: "With Manager", value: managed, icon: Award, color: "#7C3AED", light: "#EDE9FE" },
+    { label: "Avg Team Size", value: avgTeam, icon: TrendingUp, color: "#0891B2", light: "#CFFAFE" },
+  ];
+
+  return (
+    <div className="space-y-6">
+      {/* KPI Row */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+        {STATS.map(s => (
+          <div
+            key={s.label}
+            className="rounded-xl p-4 flex flex-col gap-2 border shadow-sm"
+            style={{ background: s.light, borderColor: s.color + "30" }}
+          >
+            <div className="flex items-center justify-between">
+              <div className="p-1.5 rounded-lg" style={{ background: s.color + "20" }}>
+                <s.icon className="h-4 w-4" style={{ color: s.color }} />
+              </div>
+            </div>
+            <p className="text-2xl font-extrabold" style={{ color: s.color }}>{s.value}</p>
+            <p className="text-[10px] font-medium text-muted-foreground leading-tight">{s.label}</p>
+          </div>
+        ))}
+      </div>
+
+      {/* Charts Row 1 */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        {/* Staff per Dept Bar Chart */}
+        <Card className="lg:col-span-2 shadow-sm">
+          <CardHeader className="pb-2 pt-4 px-5">
+            <CardTitle className="text-sm font-semibold flex items-center gap-2">
+              <BarChart3 className="h-4 w-4 text-[#2563EB]" />
+              Staff per Department
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="px-2 pb-4">
+            {staffPerDept.length === 0 ? (
+              <div className="h-48 flex items-center justify-center text-muted-foreground text-sm">
+                No department members yet
+              </div>
+            ) : (
+              <ResponsiveContainer width="100%" height={220}>
+                <BarChart data={staffPerDept} margin={{ top: 4, right: 16, left: -10, bottom: 40 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                  <XAxis
+                    dataKey="name"
+                    tick={{ fontSize: 10 }}
+                    angle={-35}
+                    textAnchor="end"
+                    interval={0}
+                  />
+                  <YAxis tick={{ fontSize: 10 }} allowDecimals={false} />
+                  <RechartTooltip
+                    formatter={(v: number) => [v, "Members"]}
+                    contentStyle={{ fontSize: 12, borderRadius: 8 }}
+                  />
+                  <Bar dataKey="members" radius={[4, 4, 0, 0]}>
+                    {staffPerDept.map((entry, i) => (
+                      <Cell key={i} fill={entry.color} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Assignment Donut */}
+        <Card className="shadow-sm">
+          <CardHeader className="pb-2 pt-4 px-5">
+            <CardTitle className="text-sm font-semibold flex items-center gap-2">
+              <PieIcon className="h-4 w-4 text-[#059669]" />
+              Staff Assignment
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="px-2 pb-4 flex flex-col items-center">
+            <ResponsiveContainer width="100%" height={160}>
+              <PieChart>
+                <Pie
+                  data={assignDonut}
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={45}
+                  outerRadius={70}
+                  paddingAngle={3}
+                  dataKey="value"
+                >
+                  {assignDonut.map((entry, i) => (
+                    <Cell key={i} fill={entry.fill} />
+                  ))}
+                </Pie>
+                <RechartTooltip formatter={(v: number) => [v, "People"]} contentStyle={{ fontSize: 11, borderRadius: 8 }} />
+              </PieChart>
+            </ResponsiveContainer>
+            <div className="flex gap-4 justify-center mt-1">
+              {assignDonut.map(d => (
+                <div key={d.name} className="flex items-center gap-1.5 text-xs">
+                  <span className="w-2.5 h-2.5 rounded-full inline-block" style={{ background: d.fill }} />
+                  <span className="font-medium">{d.name}</span>
+                  <span className="text-muted-foreground">({d.value})</span>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Charts Row 2 */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        {/* Role Distribution */}
+        <Card className="lg:col-span-2 shadow-sm">
+          <CardHeader className="pb-2 pt-4 px-5">
+            <CardTitle className="text-sm font-semibold flex items-center gap-2">
+              <PieIcon className="h-4 w-4 text-[#7C3AED]" />
+              Role Distribution
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="px-3 pb-4">
+            {roleData.length === 0 ? (
+              <div className="h-48 flex items-center justify-center text-muted-foreground text-sm">No staff data</div>
+            ) : (
+              <ResponsiveContainer width="100%" height={220}>
+                <BarChart data={roleData} layout="vertical" margin={{ top: 4, right: 30, left: 10, bottom: 4 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" horizontal={false} />
+                  <XAxis type="number" tick={{ fontSize: 10 }} allowDecimals={false} />
+                  <YAxis type="category" dataKey="name" tick={{ fontSize: 10 }} width={110} />
+                  <RechartTooltip formatter={(v: number) => [v, "People"]} contentStyle={{ fontSize: 12, borderRadius: 8 }} />
+                  <Bar dataKey="value" radius={[0, 4, 4, 0]}>
+                    {roleData.map((entry, i) => (
+                      <Cell key={i} fill={entry.fill} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Management Coverage Radial */}
+        <Card className="shadow-sm">
+          <CardHeader className="pb-2 pt-4 px-5">
+            <CardTitle className="text-sm font-semibold flex items-center gap-2">
+              <Award className="h-4 w-4 text-[#7C3AED]" />
+              Management Coverage
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="px-2 pb-4 flex flex-col items-center">
+            <div className="relative">
+              <ResponsiveContainer width={170} height={170}>
+                <RadialBarChart
+                  cx="50%" cy="50%"
+                  innerRadius={52} outerRadius={78}
+                  startAngle={90} endAngle={-270}
+                  data={[{ value: managedPct, fill: "#7C3AED" }, { value: 100 - managedPct, fill: "#EDE9FE" }]}
+                  barSize={18}
+                >
+                  <RadialBar dataKey="value" cornerRadius={8} />
+                </RadialBarChart>
+              </ResponsiveContainer>
+              <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                <span className="text-2xl font-extrabold text-[#7C3AED]">{managedPct}%</span>
+                <span className="text-[10px] text-muted-foreground">managed</span>
+              </div>
+            </div>
+            <div className="flex gap-4 justify-center mt-2 text-xs">
+              <div className="flex items-center gap-1.5">
+                <span className="w-2.5 h-2.5 rounded-full bg-[#7C3AED] inline-block" />
+                <span className="font-medium">{managed} with manager</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="w-2.5 h-2.5 rounded-full bg-[#EDE9FE] border border-[#7C3AED]/30 inline-block" />
+                <span className="font-medium">{unmanaged} without</span>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  );
+}
+
 /* ─── Department Card ────────────────────────────── */
 function DeptCard({
   dept, allProfiles, allDepts, depth, canManage, canMoveEmployees,
@@ -924,53 +1155,66 @@ export default function Departments() {
   }
 
   return (
-    <div className="flex flex-col min-h-full p-4 sm:p-6 gap-6">
-      <div className="flex items-center gap-3 flex-wrap">
-        <Button variant="ghost" size="icon" className="h-9 w-9 shrink-0" onClick={() => navigate(-1)} data-testid="button-back">
-          <ArrowLeft className="h-5 w-5" />
-        </Button>
-        <div className="flex-1 min-w-0">
-          <h1 className="text-xl sm:text-2xl font-bold text-foreground flex items-center gap-2">
-            <Building2 className="h-6 w-6 text-primary shrink-0" />
-            Departments
-          </h1>
-          <p className="text-sm text-muted-foreground mt-0.5">Manage your organisation's departments and employee assignments</p>
-        </div>
-        {canManage && (
-          <Button onClick={() => { setEditTarget(null); setFormOpen(true); }} data-testid="button-new-dept">
-            <Plus className="h-4 w-4 mr-2" />
-            New Department
-          </Button>
-        )}
-      </div>
+    <div className="flex flex-col min-h-full gap-0">
 
-      <PageInfoBanner
-        title="Departments & Org Structure"
-        description="Create departments, assign managers and employees, and move staff between teams. Department managers receive email and in-app notifications when appointed. Use the Org Chart tab to view reporting chains."
-        icon={<Building2 className="h-5 w-5" />}
-      />
+      {/* ── Gradient Hero Header ── */}
+      <div
+        className="relative overflow-hidden px-4 sm:px-8 pt-6 pb-8"
+        style={{ background: "linear-gradient(135deg, #0F2041 0%, #1D3461 55%, #2563EB 100%)" }}
+      >
+        {/* Decorative circles */}
+        <div className="absolute top-0 right-0 w-64 h-64 rounded-full opacity-10" style={{ background: "#fff", transform: "translate(30%, -40%)" }} />
+        <div className="absolute bottom-0 left-16 w-40 h-40 rounded-full opacity-5" style={{ background: "#fff", transform: "translateY(50%)" }} />
 
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        {[
-          { label: "Total Departments", value: departments.length, icon: Building2 },
-          { label: "Total Staff", value: profiles.length, icon: Users },
-          { label: "Unassigned Staff", value: unassignedCount, icon: AlertTriangle },
-          { label: "Sub-departments", value: departments.filter(d => d.parent_department_id).length, icon: GitBranch },
-        ].map(s => (
-          <Card key={s.label} className="shadow-sm">
-            <CardContent className="p-4 flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-primary/10"><s.icon className="h-4 w-4 text-primary" /></div>
-              <div>
-                <p className="text-xs text-muted-foreground">{s.label}</p>
-                <p className="text-xl font-bold">{s.value}</p>
+        <div className="relative flex items-start justify-between gap-4 flex-wrap">
+          <div className="flex items-center gap-3">
+            <Button variant="ghost" size="icon" className="h-9 w-9 shrink-0 text-white/70 hover:text-white hover:bg-white/10" onClick={() => navigate(-1)} data-testid="button-back">
+              <ArrowLeft className="h-5 w-5" />
+            </Button>
+            <div>
+              <div className="flex items-center gap-2">
+                <div className="p-2 rounded-xl bg-white/10">
+                  <Building2 className="h-5 w-5 text-white" />
+                </div>
+                <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">Departments</h1>
               </div>
-            </CardContent>
-          </Card>
-        ))}
+              <p className="text-sm text-blue-200 mt-1 ml-11">Organisation structure, teams & reporting</p>
+            </div>
+          </div>
+          {canManage && (
+            <Button
+              onClick={() => { setEditTarget(null); setFormOpen(true); }}
+              className="bg-white text-[#1D3461] hover:bg-blue-50 font-semibold shadow-lg"
+              data-testid="button-new-dept"
+            >
+              <Plus className="h-4 w-4 mr-2" />
+              New Department
+            </Button>
+          )}
+        </div>
+
+        {/* Quick stat pills in header */}
+        <div className="relative flex flex-wrap gap-3 mt-6 ml-11">
+          {[
+            { label: "Departments", value: departments.length, color: "bg-white/15" },
+            { label: "Total Staff", value: profiles.length, color: "bg-white/15" },
+            { label: "Unassigned", value: unassignedCount, color: unassignedCount > 0 ? "bg-amber-400/25" : "bg-white/15" },
+            { label: "Sub-depts", value: departments.filter(d => d.parent_department_id).length, color: "bg-white/15" },
+          ].map(s => (
+            <div key={s.label} className={`${s.color} rounded-xl px-4 py-2 text-white`}>
+              <p className="text-xl font-extrabold leading-none">{s.value}</p>
+              <p className="text-[10px] text-blue-200 mt-0.5">{s.label}</p>
+            </div>
+          ))}
+        </div>
       </div>
 
-      <Tabs defaultValue="departments" className="w-full">
-        <TabsList className="h-auto p-1 bg-muted/40 rounded-xl mb-4">
+      <div className="p-4 sm:p-6 flex flex-col gap-6">
+      <Tabs defaultValue="overview" className="w-full">
+        <TabsList className="h-auto p-1 bg-muted/40 rounded-xl mb-4 flex-wrap">
+          <TabsTrigger value="overview" className="flex items-center gap-1.5 py-2 px-4 rounded-lg text-sm data-[state=active]:bg-background data-[state=active]:shadow-sm" data-testid="tab-overview">
+            <BarChart3 className="h-4 w-4" /> Overview
+          </TabsTrigger>
           <TabsTrigger value="departments" className="flex items-center gap-1.5 py-2 px-4 rounded-lg text-sm data-[state=active]:bg-background data-[state=active]:shadow-sm" data-testid="tab-departments">
             <Building2 className="h-4 w-4" /> Departments
           </TabsTrigger>
@@ -978,6 +1222,10 @@ export default function Departments() {
             <Network className="h-4 w-4" /> Org Chart
           </TabsTrigger>
         </TabsList>
+
+        <TabsContent value="overview">
+          <OverviewTab departments={departments} profiles={profiles} />
+        </TabsContent>
 
         <TabsContent value="departments">
           <div className="space-y-4">
@@ -1068,6 +1316,7 @@ export default function Departments() {
           <OrgChartTab profiles={profiles} departments={departments} />
         </TabsContent>
       </Tabs>
+      </div>{/* end p-4/p-6 wrapper */}
 
       {/* Dialogs: only render if user can manage */}
       {canManage && (
