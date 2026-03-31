@@ -423,7 +423,9 @@ const AuthForm = ({ mode }: AuthFormProps) => {
             return;
           }
 
-          const success = await login(email, password);
+          // Session is already established above via signInWithPassword.
+          // Only hydrate app user state here to avoid duplicate login attempts.
+          const success = await hydrateCurrentUser();
           if (success) {
             toast({
               title: t('notifications.auth.loginSuccess'),
@@ -438,6 +440,12 @@ const AuthForm = ({ mode }: AuthFormProps) => {
             } catch {
               navigate('/dashboard');
             }
+          } else {
+            toast({
+              title: "Login failed",
+              description: "Failed to load your profile. Please try again.",
+              variant: "destructive",
+            });
           }
         }
       }
