@@ -615,9 +615,10 @@ export default function Departments() {
   const { toast } = useToast();
 
   // super_admin (all variants) can create/edit/delete departments AND move employees
-  const canManage = isSuperAdmin || ["super_admin", "superadmin", "superAdmin"].includes(currentUser?.role ?? "");
+  const roleNorm = (currentUser?.role ?? "").toLowerCase().replace(/[_\s]/g, "");
+  const canManage = isSuperAdmin || roleNorm === "superadmin";
   // admin (and super_admin) can move employees between departments
-  const canMoveEmployees = canManage || currentUser?.role === "admin";
+  const canMoveEmployees = canManage || roleNorm === "admin";
 
   // Only admin+ may access this page; non-admins see an access-denied screen
   const canAccess = canMoveEmployees;
