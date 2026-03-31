@@ -568,7 +568,8 @@ function PayrollPanel() {
       theme: 'grid',
     });
     doc.save(`payroll-${fromDate}-to-${toDate}.pdf`);
-    toast({ title: 'PDF exported' });
+    toast({ title: 'PDF exported — sending payroll summaries to members…' });
+    notifyDeptMembers();
   };
 
   const exportExcel = () => {
@@ -581,7 +582,8 @@ function PayrollPanel() {
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Payroll');
     XLSX.writeFile(wb, `payroll-${fromDate}-to-${toDate}.xlsx`);
-    toast({ title: 'Excel exported' });
+    toast({ title: 'Excel exported — sending payroll summaries to members…' });
+    notifyDeptMembers();
   };
 
   const notifyDeptMembers = async () => {

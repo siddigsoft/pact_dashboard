@@ -11,7 +11,7 @@ import {
   Search, PlayCircle, Sparkles, LayoutGrid, LayoutList,
   Users, Trophy, Zap, TrendingUp, Target, ChevronDown,
   ChevronUp, Eye, EyeOff, Award, Lightbulb, BookOpen,
-  GanttChartSquare, HelpCircle, Info, Building2, ListChecks,
+  GanttChartSquare, HelpCircle, Info, Building2, ListChecks, DollarSign,
 } from 'lucide-react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -1635,6 +1635,7 @@ export default function MyTasks() {
   const { toast } = useToast();
   const { currentUser } = useUser();
   const { hasAnyRole } = useAuthorization();
+  const navigate = useNavigate();
   const userId = currentUser?.id;
   const isAdmin = hasAnyRole(['super_admin', 'admin']);
 
@@ -1748,7 +1749,22 @@ export default function MyTasks() {
         },
       );
       if (status === 'done') {
-        toast({ title: task?.completionRewardAmount ? `✓ Task completed! Reward credited to your wallet.` : '✓ Task completed!' });
+        if (task?.completionRewardAmount) {
+          // Fetch updated wallet balance to show in confirmation
+          const { data: wallet } = await supabase
+            .from('wallets')
+            .select('total_earned, currency')
+            .eq('user_id', currentUser?.id)
+            .maybeSingle();
+          const currency = (wallet?.currency as string) ?? task.completionRewardCurrency ?? 'USD';
+          const balance = wallet ? `${currency} ${Number(wallet.total_earned).toFixed(2)}` : null;
+          toast({
+            title: '✓ Task completed! Reward credited.',
+            description: balance ? `Wallet balance: ${balance}` : undefined,
+          });
+        } else {
+          toast({ title: '✓ Task completed!' });
+        }
       }
     } catch {
       toast({ title: 'Failed to update', variant: 'destructive' });
@@ -2097,6 +2113,15 @@ export default function MyTasks() {
             </span>
           </button>
           {showTeam && <TeamSnapshot />}
+          <button
+            type="button"
+            onClick={() => navigate('/task-admin')}
+            className="flex items-center gap-1.5 text-xs text-[#1D3461] hover:underline font-medium mt-1"
+            data-testid="link-task-admin"
+          >
+            <DollarSign className="h-3.5 w-3.5" />
+            Open Task Admin (Templates · Payroll · Overview)
+          </button>
         </div>
       )}
 

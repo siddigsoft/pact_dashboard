@@ -424,8 +424,16 @@ export function usePersonalTasks(userId: string | undefined) {
       if (assignedTo !== task.userId && data?.id) {
         try {
           await sendTaskNotification({ userId: assignedTo, taskId: data.id, title: task.title, priority: p, event: 'assigned' });
-          // Use the per-assignee email if supplied (dept bulk assign), otherwise fall back to creator email
-          const emailToNotify = task.assignedToEmail ?? task.userEmail ?? null;
+          // Resolve assignee email: use explicitly supplied email, or look up from profiles
+          let emailToNotify = task.assignedToEmail ?? null;
+          if (!emailToNotify) {
+            const { data: prof } = await supabase
+              .from('profiles')
+              .select('email')
+              .eq('id', assignedTo)
+              .maybeSingle();
+            emailToNotify = (prof?.email as string) ?? null;
+          }
           if (emailToNotify) {
             await sendTaskEmail({
               email: emailToNotify,
@@ -478,9 +486,24 @@ export function usePersonalTasks(userId: string | undefined) {
       const { error } = await supabase.from('personal_tasks').update(patch).eq('id', id);
       if (error) throw error;
 
-      if (updates.status === 'done' && _prevStatus && _prevStatus !== 'done' && _userId && updates.title) {
-        const priority = _taskPriority ?? 'medium';
-        await sendTaskNotification({ userId: _userId, taskId: id, title: updates.title, priority, event: 'completed' });
+      if (updates.status === 'done' && _prevStatus && _prevStatus !== 'done' && _userId) {
+        // Fetch the task row to get title/priority when not supplied by caller (e.g. subtask toggle)
+        let effectiveTitle = updates.title;
+        let effectivePriority = _taskPriority ?? updates.priority ?? 'medium';
+        if (!effectiveTitle) {
+          const { data: row } = await supabase
+            .from('personal_tasks')
+            .select('title, priority')
+            .eq('id', id)
+            .maybeSingle();
+          if (row) {
+            effectiveTitle = row.title as string;
+            if (!_taskPriority) effectivePriority = (row.priority as PersonalTaskPriority) ?? 'medium';
+          }
+        }
+        if (!effectiveTitle) effectiveTitle = 'Task';
+        const priority = effectivePriority as PersonalTaskPriority;
+        await sendTaskNotification({ userId: _userId, taskId: id, title: effectiveTitle, priority, event: 'completed' });
 
         // Credit wallet server-side (reads reward from DB row, idempotent)
         await creditWalletForTask({
