@@ -46,6 +46,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 import { useNavigate } from 'react-router-dom';
+import { ConnectedPagesBar } from '@/components/ui/connected-pages-bar';
 import { cn } from '@/lib/utils';
 import { useUser } from '@/context/user/UserContext';
 import {
@@ -1921,6 +1922,9 @@ export default function MyTasks() {
           </Button>
         </div>
       </div>
+
+      {/* Quick Navigation */}
+      <ConnectedPagesBar exclude="my-tasks" />
 
       {/* ── Stat cards ── */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">

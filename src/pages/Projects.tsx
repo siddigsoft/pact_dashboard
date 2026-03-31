@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { GradientStatCard } from '@/components/ui/gradient-stat-card';
 import ProjectList from '@/components/project/ProjectList';
 import { useProjectContext } from '@/context/project/ProjectContext';
+import { ConnectedPagesBar } from '@/components/ui/connected-pages-bar';
 
 const ProjectsPage = () => {
   const navigate = useNavigate();
@@ -49,6 +50,9 @@ const ProjectsPage = () => {
           Create Project
         </Button>
       </div>
+
+      {/* Quick Navigation */}
+      <ConnectedPagesBar exclude="projects" />
 
       {/* Condensed Statistics Grid */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5">

@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react';
+import { ConnectedPagesBar } from '@/components/ui/connected-pages-bar';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Plus, Trash2, Edit2, Loader2, ChevronDown, ChevronUp,
@@ -744,10 +745,13 @@ export default function TaskAdmin() {
           <ListTodo className="h-5 w-5 text-white" />
         </div>
         <div>
-          <h1 className="text-xl font-bold text-[#0F2041] dark:text-white">Task Administration</h1>
+          <h1 className="text-xl font-bold text-[#0F2041] dark:text-white">Task Administration & Payroll</h1>
           <p className="text-sm text-muted-foreground">Manage recurring task templates, view department task health, and calculate payroll</p>
         </div>
       </div>
+
+      {/* Quick Navigation */}
+      <ConnectedPagesBar exclude="task-admin" />
 
       <Tabs defaultValue="overview">
         <TabsList className="h-9 text-xs">
