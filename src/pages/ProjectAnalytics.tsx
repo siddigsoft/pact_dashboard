@@ -47,7 +47,7 @@ import {
 } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { PROJECT_TYPE_OPTIONS, getProjectFlow } from '@/config/projectFlows';
+import { getProjectFlow } from '@/config/projectFlows';
 import { normaliseProjectType } from '@/types/project';
 
 const STALL_THRESHOLD_DAYS = 14;
@@ -86,7 +86,7 @@ interface FlowLogRow {
 }
 
 interface QueryFilters {
-  projectType: string;
+  projectId: string;
   pmFilter: string;
   startFrom: string;
   startTo: string;
@@ -106,8 +106,8 @@ async function fetchAnalyticsData(filters: QueryFilters): Promise<AnalyticsData>
 
   // Apply filters client-side
   let projects = (allProjects ?? []) as ProjectRow[];
-  if (filters.projectType !== 'all') {
-    projects = projects.filter(p => p.project_type === filters.projectType);
+  if (filters.projectId !== 'all') {
+    projects = projects.filter(p => p.id === filters.projectId);
   }
   if (filters.pmFilter !== 'all') {
     projects = projects.filter(p => (p.team as any)?.projectManager === filters.pmFilter);
@@ -165,15 +165,27 @@ type SortDir = 'asc' | 'desc';
 export default function ProjectAnalytics() {
   const navigate = useNavigate();
 
-  const [typeFilter, setTypeFilter] = useState('all');
+  const [projectIdFilter, setProjectIdFilter] = useState('all');
   const [pmFilter, setPmFilter] = useState('all');
   const [startFrom, setStartFrom] = useState('');
   const [startTo, setStartTo] = useState('');
   const [stallSort, setStallSort] = useState<{ field: SortField; dir: SortDir }>({ field: 'daysSince', dir: 'desc' });
 
+  const { data: allProjectNames } = useQuery({
+    queryKey: ['project_names_list'],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('projects')
+        .select('id, name, project_code')
+        .order('name', { ascending: true });
+      return (data ?? []) as { id: string; name: string; project_code: string }[];
+    },
+    staleTime: 120_000,
+  });
+
   const { data, isLoading } = useQuery({
-    queryKey: ['project_analytics', typeFilter, pmFilter, startFrom, startTo],
-    queryFn: () => fetchAnalyticsData({ projectType: typeFilter, pmFilter, startFrom, startTo }),
+    queryKey: ['project_analytics', projectIdFilter, pmFilter, startFrom, startTo],
+    queryFn: () => fetchAnalyticsData({ projectId: projectIdFilter, pmFilter, startFrom, startTo }),
     staleTime: 60_000,
   });
 
@@ -355,7 +367,7 @@ export default function ProjectAnalytics() {
     );
   }
 
-  const hasFilters = typeFilter !== 'all' || pmFilter !== 'all' || !!startFrom || !!startTo;
+  const hasFilters = projectIdFilter !== 'all' || pmFilter !== 'all' || !!startFrom || !!startTo;
 
   return (
     <div className="min-h-screen bg-background p-3 md:p-4 space-y-4">
@@ -393,15 +405,17 @@ export default function ProjectAnalytics() {
         <CardContent className="px-4 pb-4">
           <div className="flex flex-wrap gap-3 items-end">
             <div className="space-y-1">
-              <Label className="text-xs">Project Type</Label>
-              <Select value={typeFilter} onValueChange={setTypeFilter}>
-                <SelectTrigger className="h-8 w-[180px] text-xs" data-testid="select-type-filter">
-                  <SelectValue />
+              <Label className="text-xs">Project List</Label>
+              <Select value={projectIdFilter} onValueChange={setProjectIdFilter}>
+                <SelectTrigger className="h-8 w-[220px] text-xs" data-testid="select-project-filter">
+                  <SelectValue placeholder="All Projects" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All Types</SelectItem>
-                  {PROJECT_TYPE_OPTIONS.map(o => (
-                    <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                  <SelectItem value="all">All Projects</SelectItem>
+                  {(allProjectNames ?? []).map(p => (
+                    <SelectItem key={p.id} value={p.id}>
+                      {p.project_code ? `[${p.project_code}] ${p.name}` : p.name}
+                    </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
