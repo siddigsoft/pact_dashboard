@@ -4,6 +4,15 @@ const STATIC_CACHE = 'pact-static-v3';
 const API_CACHE = 'pact-api-v3';
 const DYNAMIC_CACHE = 'pact-dynamic-v2';
 
+const SW_DEBUG_HOSTS = ['localhost', '127.0.0.1'];
+const SW_DEBUG = SW_DEBUG_HOSTS.includes(self.location.hostname) || self.location.hostname.endsWith('.local');
+if (!SW_DEBUG) {
+  self.console.log = () => {};
+  self.console.info = () => {};
+  self.console.warn = () => {};
+  self.console.error = () => {};
+}
+
 // Keep HTML out of the pre-cache so we always fetch the latest shell.
 // Hashed assets remain cached safely; HTML will be network-first.
 const STATIC_ASSETS = [
