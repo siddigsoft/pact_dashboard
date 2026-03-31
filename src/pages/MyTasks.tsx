@@ -5,6 +5,7 @@ import {
   Calendar, Clock, AlertTriangle, CheckCircle2, Circle,
   FolderOpen, User, ChevronRight, RefreshCw, Loader2,
   Filter, X, ListTodo, Inbox, Star, BarChart2, ArrowRight,
+  Search, PlayCircle,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -31,7 +32,7 @@ import { useNavigate } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import { useUser } from '@/context/user/UserContext';
 import {
-  usePersonalTasks, useAssignedProjectTasks,
+  usePersonalTasks, useAssignedProjectTasks, useUpdateProjectTaskStatus,
   type PersonalTask, type PersonalTaskPriority, type PersonalTaskStatus, type CreatePersonalTask,
 } from '@/hooks/usePersonalTasks';
 
@@ -272,36 +273,60 @@ function PersonalTaskCard({ task, onStatusChange, onEdit, onDelete }: PersonalTa
 
 // ── Assigned Project Task Card ──────────────────────────────────────────────
 
-function ProjectTaskCard({ task }: { task: any }) {
+interface ProjectTaskCardProps {
+  task: any;
+  onStatusChange: (id: string, status: string) => void;
+  isUpdating: boolean;
+}
+
+function ProjectTaskCard({ task, onStatusChange, isUpdating }: ProjectTaskCardProps) {
   const navigate = useNavigate();
   const overdue = isOverdue(task.dueDate, task.status);
   const isDone = task.status === 'done';
+  const isInProgress = task.status === 'inprogress';
   const pCfg = PRIORITY_CFG[task.priority as PersonalTaskPriority] ?? PRIORITY_CFG.medium;
 
-  const borderColor = task.status === 'done' ? 'border-l-emerald-500'
-    : task.status === 'inprogress' ? 'border-l-[#1D3461]'
+  const borderColor = isDone ? 'border-l-emerald-500'
+    : isInProgress ? 'border-l-[#1D3461]'
     : overdue ? 'border-l-red-500'
     : 'border-l-slate-300';
 
   return (
     <div
       className={cn(
-        'group flex items-start gap-3 px-3 py-2.5 rounded-lg border border-l-4 bg-card hover:shadow-sm transition-all cursor-pointer',
+        'group flex items-start gap-3 px-3 py-2.5 rounded-lg border border-l-4 bg-card hover:shadow-sm transition-all',
         borderColor,
         isDone && 'opacity-60',
       )}
-      onClick={() => navigate(`/projects/${task.projectId}`)}
       data-testid={`project-task-card-${task.id}`}
     >
-      <div className={cn(
-        'mt-0.5 h-4 w-4 rounded-full border-2 flex items-center justify-center flex-shrink-0',
-        isDone ? 'border-emerald-500 bg-emerald-500' : task.status === 'inprogress' ? 'border-[#1D3461] bg-[#1D3461]/10' : 'border-muted-foreground/40',
-      )}>
-        {isDone && <CheckCircle2 className="h-2.5 w-2.5 text-white" />}
-        {task.status === 'inprogress' && <div className="h-1.5 w-1.5 rounded-full bg-[#1D3461]" />}
-      </div>
+      {/* Status toggle circle */}
+      <button
+        type="button"
+        disabled={isUpdating}
+        className={cn(
+          'mt-0.5 h-5 w-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-all hover:scale-110',
+          isDone ? 'border-emerald-500 bg-emerald-500'
+            : isInProgress ? 'border-[#1D3461] bg-[#1D3461]/10'
+            : 'border-muted-foreground/40 hover:border-emerald-500 hover:bg-emerald-50',
+        )}
+        onClick={() => onStatusChange(task.id, isDone ? 'todo' : 'done')}
+        title={isDone ? 'Click to reopen' : 'Click to mark as done'}
+        data-testid={`project-task-toggle-${task.id}`}
+      >
+        {isDone
+          ? <CheckCircle2 className="h-3 w-3 text-white" />
+          : isInProgress
+          ? <div className="h-2 w-2 rounded-full bg-[#1D3461]" />
+          : <CheckCircle2 className="h-3 w-3 text-emerald-500 opacity-0 group-hover:opacity-60 transition-opacity" />
+        }
+      </button>
 
-      <div className="flex-1 min-w-0">
+      {/* Content — clicking navigates to project field tasks */}
+      <div
+        className="flex-1 min-w-0 cursor-pointer"
+        onClick={() => navigate(`/projects/${task.projectId}?tab=field_tasks`)}
+      >
         <p className={cn('text-sm font-medium leading-snug', isDone && 'line-through text-muted-foreground')}>
           {task.title}
         </p>
@@ -325,7 +350,38 @@ function ProjectTaskCard({ task }: { task: any }) {
         </div>
       </div>
 
-      <ChevronRight className="h-4 w-4 text-muted-foreground/40 group-hover:text-muted-foreground transition-colors flex-shrink-0 mt-0.5" />
+      {/* Inline status actions (hover) */}
+      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
+        {!isDone && !isInProgress && (
+          <button
+            type="button"
+            onClick={() => onStatusChange(task.id, 'inprogress')}
+            className="text-[10px] font-medium text-[#1D3461] bg-blue-50 hover:bg-blue-100 border border-blue-200 px-2 py-0.5 rounded-full flex items-center gap-1"
+            title="Mark as In Progress"
+            data-testid={`project-task-inprogress-${task.id}`}
+          >
+            <PlayCircle className="h-3 w-3" /> Start
+          </button>
+        )}
+        {!isDone && (
+          <button
+            type="button"
+            onClick={() => onStatusChange(task.id, 'done')}
+            className="text-[10px] font-medium text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-2 py-0.5 rounded-full flex items-center gap-1"
+            data-testid={`project-task-done-${task.id}`}
+          >
+            <CheckCircle2 className="h-3 w-3" /> Done
+          </button>
+        )}
+        <button
+          type="button"
+          onClick={() => navigate(`/projects/${task.projectId}?tab=field_tasks`)}
+          className="text-[10px] text-muted-foreground hover:text-[#1D3461] p-0.5"
+          title="Open in project"
+        >
+          <ChevronRight className="h-4 w-4" />
+        </button>
+      </div>
     </div>
   );
 }
@@ -441,13 +497,15 @@ export default function MyTasks() {
 
   const { tasks: personalTasks, isLoading: loadingPersonal, createTask, updateTask, deleteTask, isCreating, isUpdating } = usePersonalTasks(userId);
   const { data: projectTasks = [], isLoading: loadingProject, refetch: refetchProject } = useAssignedProjectTasks(userId);
+  const updateProjectTaskStatus = useUpdateProjectTaskStatus();
 
   const [filter, setFilter] = useState<FilterType>('all');
+  const [searchQuery, setSearchQuery] = useState('');
   const [editingTask, setEditingTask] = useState<PersonalTask | null>(null);
 
   const today = format(new Date(), 'EEEE, d MMMM yyyy');
 
-  // Stats
+  // Stats (computed before search filter so counts stay accurate)
   const stats = useMemo(() => {
     const allActive = [...personalTasks, ...projectTasks];
     const dueToday = allActive.filter(t => t.dueDate && isToday(parseISO(t.dueDate)) && t.status !== 'done' && t.status !== 'cancelled').length;
@@ -457,15 +515,21 @@ export default function MyTasks() {
     return { dueToday, dueWeek, overdue, done };
   }, [personalTasks, projectTasks]);
 
-  // Filtered lists
+  const q = searchQuery.toLowerCase().trim();
+
+  // Filtered lists (filter + search)
   const filteredPersonal = useMemo(() =>
-    personalTasks.filter(t => matchFilter(t.dueDate, t.status, filter)),
-    [personalTasks, filter],
+    personalTasks
+      .filter(t => matchFilter(t.dueDate, t.status, filter))
+      .filter(t => !q || t.title.toLowerCase().includes(q) || (t.description ?? '').toLowerCase().includes(q) || (t.category ?? '').toLowerCase().includes(q)),
+    [personalTasks, filter, q],
   );
 
   const filteredProject = useMemo(() =>
-    projectTasks.filter((t: any) => matchFilter(t.dueDate, t.status, filter)),
-    [projectTasks, filter],
+    projectTasks
+      .filter((t: any) => matchFilter(t.dueDate, t.status, filter))
+      .filter((t: any) => !q || t.title.toLowerCase().includes(q) || (t.description ?? '').toLowerCase().includes(q) || t.projectName.toLowerCase().includes(q)),
+    [projectTasks, filter, q],
   );
 
   const handleQuickAdd = async (title: string, priority: PersonalTaskPriority, dueDate: string) => {
@@ -484,6 +548,16 @@ export default function MyTasks() {
       if (status === 'done') toast({ title: '✓ Task completed!' });
     } catch {
       toast({ title: 'Failed to update', variant: 'destructive' });
+    }
+  };
+
+  const handleProjectTaskStatusChange = async (id: string, status: string) => {
+    try {
+      await updateProjectTaskStatus.mutateAsync({ id, status });
+      if (status === 'done') toast({ title: '✓ Project task marked done!' });
+      else if (status === 'inprogress') toast({ title: 'Task started' });
+    } catch {
+      toast({ title: 'Failed to update project task', variant: 'destructive' });
     }
   };
 
@@ -557,6 +631,27 @@ export default function MyTasks() {
         ))}
       </div>
 
+      {/* ── Search ── */}
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+        <Input
+          placeholder="Search tasks by title, project, or category…"
+          value={searchQuery}
+          onChange={e => setSearchQuery(e.target.value)}
+          className="pl-9 h-9 text-sm bg-muted/40 border-muted"
+          data-testid="input-search-tasks"
+        />
+        {searchQuery && (
+          <button
+            type="button"
+            onClick={() => setSearchQuery('')}
+            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        )}
+      </div>
+
       {/* ── Quick Add ── */}
       <QuickAddBar onAdd={handleQuickAdd} isCreating={isCreating} />
 
@@ -621,7 +716,12 @@ export default function MyTasks() {
         ) : (
           <div className="space-y-1.5">
             {filteredProject.map((task: any) => (
-              <ProjectTaskCard key={task.id} task={task} />
+              <ProjectTaskCard
+                  key={task.id}
+                  task={task}
+                  onStatusChange={handleProjectTaskStatusChange}
+                  isUpdating={updateProjectTaskStatus.isPending}
+                />
             ))}
           </div>
         )}

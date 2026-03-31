@@ -216,6 +216,20 @@ export function usePersonalTasks(userId: string | undefined) {
   };
 }
 
+export function useUpdateProjectTaskStatus() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, status }: { id: string; status: string }) => {
+      const { error } = await supabase
+        .from('project_field_tasks')
+        .update({ status, updated_at: new Date().toISOString() })
+        .eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['assigned_project_tasks'] }),
+  });
+}
+
 export function useAssignedProjectTasks(userId: string | undefined) {
   return useQuery({
     queryKey: ['assigned_project_tasks', userId],

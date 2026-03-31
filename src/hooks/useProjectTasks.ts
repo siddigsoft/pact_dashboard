@@ -69,7 +69,7 @@ async function notifyAssignee(
     message_en: `${assignedByName} assigned you to field task "${taskTitle}" in "${projectName}"`,
     message_ar: `قام ${assignedByName} بتعيينك في المهمة الميدانية "${taskTitle}" في "${projectName}"`,
     priority: 'normal',
-    action_url: `/projects/${projectId}`,
+    action_url: `/projects/${projectId}?tab=field_tasks`,
     entity_id: projectId,
     entity_type: 'project',
     event_type: 'project_field_task_assigned',
