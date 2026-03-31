@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAppContext } from "@/context/AppContext";
 import { DataFreshnessBadge } from "@/components/realtime";
+import { CurrencySwitcher } from "@/components/currency/CurrencySwitcher";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { getLatestExchangeRate, convertSdgToUsd, formatUsd } from "@/utils/exchange-rate-service";
 import { FinancialDashboard } from "@/components/FinancialDashboard";
@@ -847,7 +848,10 @@ const Finance: React.FC = () => {
               Track site visit finances, manage budgets, and view financial reports
             </p>
           </div>
-          <DataFreshnessBadge />
+          <div className="flex items-center gap-2">
+            <CurrencySwitcher mode="split" />
+            <DataFreshnessBadge />
+          </div>
         </div>
       </div>
 

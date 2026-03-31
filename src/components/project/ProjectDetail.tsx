@@ -42,6 +42,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useBudget } from '@/context/budget/BudgetContext';
 import { ProjectBudgetCard } from '@/components/budget/BudgetCard';
 import { EditProjectBudgetDialog } from '@/components/budget/EditProjectBudgetDialog';
+import { CurrencySwitcher } from '@/components/currency/CurrencySwitcher';
 import { useUser } from '@/context/user/UserContext';
 import { useAuthorization } from '@/hooks/use-authorization';
 import ProjectCommentsPanel from './ProjectCommentsPanel';
@@ -132,8 +133,9 @@ const getBudgetSummary = (budget: any) => {
   })();
 
   const currency = budget.currency || 'SDG';
+  const expenseCurrency = budget.expenseCurrency || budget.currency || 'SDG';
 
-  return { total, allocated, remaining, currency };
+  return { total, allocated, remaining, currency, expenseCurrency };
 };
 
 interface EntityChip {
@@ -568,6 +570,12 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
                     })}`}
                   </span>
                 )}
+                {budgetSummary && budgetSummary.expenseCurrency && budgetSummary.expenseCurrency !== budgetSummary.currency && (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-rose-500/10 text-rose-700 dark:text-rose-300 px-2 py-0.5 text-xs font-medium">
+                    <TrendingUp className="h-3 w-3" />
+                    Expenses: {budgetSummary.expenseCurrency}
+                  </span>
+                )}
               </div>
               <div className="flex items-center flex-wrap gap-3 text-sm text-muted-foreground">
                 <span className="flex items-center gap-1">
@@ -665,6 +673,9 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
 
             {/* Right: Actions */}
             <div className="flex flex-wrap gap-2">
+              {/* Currency display preference */}
+              <CurrencySwitcher mode="split" />
+
               {/* PDF Export */}
               <Button
                 variant="outline"

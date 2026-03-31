@@ -37,6 +37,7 @@ import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/toast';
 import { ActivityManager } from '@/components/project/activity/ActivityManager';
 import { countries, getRegionsByCountry, getStatesByRegion, getLocalitiesByState } from '@/data/countryData';
+import { SUPPORTED_CURRENCIES } from '@/utils/currencyUtils';
 import { GlobeIcon, MapPinIcon } from 'lucide-react';
 import { TeamCompositionManager } from '@/components/project/team/TeamCompositionManager';
 import { sudanStates, SudanState } from '@/data/sudanStates';
@@ -71,6 +72,7 @@ const createFormSchema = (isEditing: boolean) => z.object({
   }),
   budgetTotal: z.coerce.number().min(0).optional(),
   budgetCurrency: z.string(),
+  budgetExpenseCurrency: z.string(),
   country: z.string({
     required_error: 'Country is required',
   }),
@@ -181,6 +183,7 @@ const ProjectForm: React.FC<ProjectFormProps> = ({
       endDate: initialData?.endDate ? new Date(initialData.endDate) : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
       budgetTotal: initialData?.budget?.total || 0,
       budgetCurrency: initialData?.budget?.currency || 'USD',
+      budgetExpenseCurrency: (initialData?.budget as any)?.expenseCurrency || initialData?.budget?.currency || 'SDG',
       projectManager: initialData?.team?.projectManager || '',
       country: initialData?.location?.country || '',
       region: initialData?.location?.region || '',
@@ -215,6 +218,7 @@ const ProjectForm: React.FC<ProjectFormProps> = ({
           ? {
               total: values.budgetTotal,
               currency: values.budgetCurrency,
+              expenseCurrency: values.budgetExpenseCurrency,
               allocated: isEditing && initialData?.budget ? initialData.budget.allocated : 0,
               remaining: isEditing && initialData?.budget 
                 ? values.budgetTotal - initialData.budget.allocated
@@ -276,6 +280,7 @@ const ProjectForm: React.FC<ProjectFormProps> = ({
       const country = countries.find(c => c.code === watchCountry);
       if (country) {
         form.setValue('budgetCurrency', country.currency.code);
+        form.setValue('budgetExpenseCurrency', country.currency.code);
       }
     }
   }, [watchCountry, selectedCountry, form]);
@@ -651,24 +656,55 @@ const ProjectForm: React.FC<ProjectFormProps> = ({
                 name="budgetCurrency"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Currency</FormLabel>
+                    <FormLabel>Income / Budget Currency</FormLabel>
                     <Select 
                       onValueChange={field.onChange} 
                       defaultValue={field.value}
                     >
                       <FormControl>
-                        <SelectTrigger>
+                        <SelectTrigger data-testid="select-income-currency-form">
                           <SelectValue placeholder="Select currency" />
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        {countries.map((country) => (
-                          <SelectItem key={country.currency.code} value={country.currency.code}>
-                            {country.currency.code} - {country.currency.name}
+                        {SUPPORTED_CURRENCIES.map((c) => (
+                          <SelectItem key={c.code} value={c.code}>
+                            {c.flag} {c.code} – {c.name}
                           </SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="budgetExpenseCurrency"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Expense Currency</FormLabel>
+                    <Select 
+                      onValueChange={field.onChange} 
+                      defaultValue={field.value}
+                    >
+                      <FormControl>
+                        <SelectTrigger data-testid="select-expense-currency-form">
+                          <SelectValue placeholder="Select expense currency" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {SUPPORTED_CURRENCIES.map((c) => (
+                          <SelectItem key={c.code} value={c.code}>
+                            {c.flag} {c.code} – {c.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Currency used when submitting operational costs and expenses against this project.
+                    </p>
                     <FormMessage />
                   </FormItem>
                 )}
