@@ -1683,6 +1683,40 @@ export default function MyTasks() {
     setShowInsightsRaw(v);
   };
   const [showTeam, setShowTeam] = useState(true);
+  const [showDeptOverview, setShowDeptOverview] = useState(false);
+
+  // Dept overview query (admin only)
+  const { data: deptOverviewStats = [], isLoading: deptOverviewLoading, refetch: refetchDeptOverview } = useQuery({
+    queryKey: ['task_overview_by_dept_mytasks'],
+    queryFn: async () => {
+      const [deptRes, taskRes] = await Promise.all([
+        supabase.from('departments').select('id, name').order('name'),
+        supabase.from('personal_tasks')
+          .select('target_department_id, status, due_date')
+          .not('target_department_id', 'is', null),
+      ]);
+      const depts = (deptRes.data ?? []) as { id: string; name: string }[];
+      const tasks = (taskRes.data ?? []) as { target_department_id: string; status: string; due_date: string | null }[];
+      const now = new Date();
+      return depts.map(dept => {
+        const dTasks = tasks.filter(t => t.target_department_id === dept.id);
+        const overdue = dTasks.filter(t => {
+          if (!t.due_date || t.status === 'done' || t.status === 'cancelled') return false;
+          return new Date(t.due_date) < now;
+        }).length;
+        return {
+          deptId: dept.id,
+          deptName: dept.name,
+          total: dTasks.length,
+          inprogress: dTasks.filter(t => t.status === 'inprogress').length,
+          done: dTasks.filter(t => t.status === 'done').length,
+          overdue,
+        };
+      }).filter(d => d.total > 0);
+    },
+    enabled: isAdmin,
+    staleTime: 60_000,
+  });
 
   const today = format(new Date(), 'EEEE, d MMMM yyyy');
 
@@ -1810,8 +1844,31 @@ export default function MyTasks() {
 
   const handleEditSave = async (id: string, updates: Partial<CreatePersonalTask>) => {
     try {
-      await updateTask(id, updates);
-      toast({ title: 'Task updated' });
+      // Find the current task to pass prevStatus so completion-reward logic fires correctly
+      const currentTask = personalTasks.find(t => t.id === id) ?? allPersonalTasks.find(t => t.id === id);
+      const result = await updateTask(
+        id,
+        updates,
+        currentTask?.status,
+        {
+          userId: currentUser?.id,
+          userEmail: currentUser?.email,
+          taskPriority: currentTask?.priority,
+        },
+      );
+      // Show appropriate toast based on whether reward was credited
+      if (updates.status === 'done' && currentTask?.status !== 'done') {
+        const hasReward = !!(currentTask?.completionRewardAmount && currentTask.completionRewardAmount > 0);
+        if (hasReward && result?.creditOk) {
+          toast({ title: '✓ Task completed! Reward credited.' });
+        } else if (hasReward && !result?.creditOk) {
+          toast({ title: '✓ Task completed.', description: 'Reward credit could not be processed.', variant: 'destructive' });
+        } else {
+          toast({ title: '✓ Task completed!' });
+        }
+      } else {
+        toast({ title: 'Task updated' });
+      }
     } catch {
       toast({ title: 'Failed to update', variant: 'destructive' });
     }
@@ -2118,6 +2175,7 @@ export default function MyTasks() {
       {/* ── Team Task Health (admin only) ── */}
       {isAdmin && (
         <div className="space-y-2">
+          {/* ── Team Task Health ── */}
           <button
             type="button"
             onClick={() => setShowTeam(v => !v)}
@@ -2131,6 +2189,61 @@ export default function MyTasks() {
             </span>
           </button>
           {showTeam && <TeamSnapshot />}
+
+          {/* ── Department Task Overview (collapsible, admin only) ── */}
+          <button
+            type="button"
+            onClick={() => { setShowDeptOverview(v => !v); if (!showDeptOverview) refetchDeptOverview(); }}
+            className="flex items-center gap-2 text-sm font-semibold text-foreground w-full group mt-2"
+            data-testid="button-toggle-dept-overview"
+          >
+            <Building2 className="h-4 w-4 text-[#1D3461]" />
+            Task Overview by Department
+            <Badge variant="secondary" className="text-[10px] px-1.5 py-0">Admin View</Badge>
+            <span className="ml-auto text-muted-foreground group-hover:text-foreground">
+              {showDeptOverview ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+            </span>
+          </button>
+          {showDeptOverview && (
+            <div className="rounded-xl border border-border/60 bg-background p-3 space-y-2">
+              {deptOverviewLoading ? (
+                <div className="flex items-center gap-2 py-2 text-sm text-muted-foreground">
+                  <Loader2 className="h-4 w-4 animate-spin" /> Loading…
+                </div>
+              ) : deptOverviewStats.length === 0 ? (
+                <p className="text-sm text-muted-foreground py-2">No department tasks found. Assign tasks to departments using the New Task dialog.</p>
+              ) : (
+                <div className="space-y-2.5">
+                  {deptOverviewStats.map(s => {
+                    const pct = s.total > 0 ? Math.round((s.done / s.total) * 100) : 0;
+                    return (
+                      <div key={s.deptId} className="rounded-lg border bg-muted/20 p-2.5">
+                        <div className="flex items-center justify-between mb-1.5">
+                          <div className="flex items-center gap-2">
+                            <Building2 className="h-3 w-3 text-[#1D3461]" />
+                            <span className="text-xs font-medium">{s.deptName}</span>
+                            {s.overdue > 0 && (
+                              <Badge className="text-[9px] px-1.5 py-0 bg-red-100 text-red-700">{s.overdue} overdue</Badge>
+                            )}
+                          </div>
+                          <span className="text-[10px] font-bold text-muted-foreground">{s.done}/{s.total} done</span>
+                        </div>
+                        <Progress value={pct} className="h-1.5 mb-1.5" />
+                        <div className="flex items-center gap-3 text-[10px] text-muted-foreground flex-wrap">
+                          <span className="flex items-center gap-0.5"><Circle className="h-2.5 w-2.5 text-slate-400" />{s.total - s.done - s.inprogress} todo</span>
+                          <span className="flex items-center gap-0.5"><Circle className="h-2.5 w-2.5 text-[#1D3461]" />{s.inprogress} in progress</span>
+                          <span className="flex items-center gap-0.5"><CheckCircle2 className="h-2.5 w-2.5 text-emerald-600" />{s.done} done</span>
+                          {s.overdue > 0 && <span className="flex items-center gap-0.5 text-red-600"><AlertTriangle className="h-2.5 w-2.5" />{s.overdue} overdue</span>}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ── Link to full Task Admin page (Templates · Payroll) ── */}
           <button
             type="button"
             onClick={() => navigate('/task-admin')}
@@ -2138,7 +2251,7 @@ export default function MyTasks() {
             data-testid="link-task-admin"
           >
             <DollarSign className="h-3.5 w-3.5" />
-            Open Task Admin (Templates · Payroll · Overview)
+            Open Task Admin (Templates · Payroll)
           </button>
         </div>
       )}
