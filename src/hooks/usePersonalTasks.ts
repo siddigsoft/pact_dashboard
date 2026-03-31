@@ -25,6 +25,7 @@ export interface PersonalTask {
   targetDepartmentId: string | null;
   completionRewardAmount: number | null;
   completionRewardCurrency: string;
+  rewardSetBy: string | null;
   recurrence: string;
   templateId: string | null;
   dailyTaskDate: string | null;
@@ -88,6 +89,7 @@ function mapRow(r: Record<string, unknown>): PersonalTask {
     targetDepartmentId: (r.target_department_id as string) ?? null,
     completionRewardAmount: (r.completion_reward_amount as number) ?? null,
     completionRewardCurrency: (r.completion_reward_currency as string) ?? 'USD',
+    rewardSetBy: (r.reward_set_by as string) ?? null,
     recurrence: (r.recurrence as string) ?? 'none',
     templateId: (r.template_id as string) ?? null,
     dailyTaskDate: (r.daily_task_date as string) ?? null,

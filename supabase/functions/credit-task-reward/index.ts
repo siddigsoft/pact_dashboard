@@ -64,7 +64,7 @@ serve(async (req: Request) => {
   // Fetch task — verify it is assigned to the calling user and is done
   const { data: task, error: taskErr } = await sb
     .from('personal_tasks')
-    .select('id, title, completion_reward_amount, completion_reward_currency, assigned_to, status, priority')
+    .select('id, title, completion_reward_amount, completion_reward_currency, assigned_to, status, priority, reward_set_by')
     .eq('id', taskId)
     .maybeSingle()
 
@@ -87,6 +87,15 @@ serve(async (req: Request) => {
   if (task.status !== 'done') {
     return new Response(JSON.stringify({ ok: false, skipped: 'not_done' }), {
       status: 200,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    })
+  }
+
+  // Verify reward was admin-authorized: reward_set_by must be populated
+  // (the DB trigger ensures only admins can write this field)
+  if (!task.reward_set_by) {
+    return new Response(JSON.stringify({ ok: false, error: 'Reward not admin-authorized' }), {
+      status: 403,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     })
   }
