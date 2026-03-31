@@ -39,6 +39,14 @@ import {
   Percent,
   UserPlus,
   ClipboardList,
+  Building2,
+  Map,
+  ClipboardCheck,
+  DollarSign,
+  Receipt,
+  FolderOpen,
+  Landmark,
+  Wallet,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -66,7 +74,7 @@ import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { format, formatDistanceToNow, parseISO, isBefore } from 'date-fns';
 import type { UseProjectFlowReturn, CustomStageEntry } from '@/hooks/useProjectFlow';
-import type { FlowStage } from '@/config/projectFlows';
+import type { FlowStage, StageActionIcon } from '@/config/projectFlows';
 import { StageAssignees } from './StageAssignees';
 import { StageChecklist } from './StageChecklist';
 import { StageAttachments } from './StageAttachments';
@@ -770,7 +778,7 @@ export function FlowTab({
             const displayLabel = entry?.customLabel || stage.label;
             const displayDesc = entry?.customDescription || stage.description;
             const allOutputs = [...(entry?.customOutputs ?? []), ...(stage.keyOutputs ?? [])];
-            const hasDetails = allOutputs.length > 0 || !!stage.linkedModule || !!displayDesc || isCurrent;
+            const hasDetails = allOutputs.length > 0 || !!stage.linkedModule || !!(stage.linkedActions?.length) || !!displayDesc || isCurrent;
 
             // Parallel info
             const stageGroup = groups.find(g => g.some(s => s.id === stage.id));
@@ -1010,11 +1018,23 @@ export function FlowTab({
                       </div>
                     )}
 
-                    {/* Linked module */}
-                    {stage.linkedModule && (
-                      <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => navigate(stage.linkedModule!)} data-testid={`button-goto-module-${stage.id}`}>
-                        <ExternalLink className="h-3.5 w-3.5 mr-1.5" />
-                        Go to {({
+                    {/* Linked actions — multi-button per stage */}
+                    {(() => {
+                      const ICON_MAP: Record<StageActionIcon, React.ReactNode> = {
+                        hub:      <Building2 className="h-3.5 w-3.5 mr-1.5 flex-shrink-0" />,
+                        'hub-map':<Map className="h-3.5 w-3.5 mr-1.5 flex-shrink-0" />,
+                        mmp:      <FileText className="h-3.5 w-3.5 mr-1.5 flex-shrink-0" />,
+                        visits:   <ClipboardCheck className="h-3.5 w-3.5 mr-1.5 flex-shrink-0" />,
+                        reports:  <BarChart2 className="h-3.5 w-3.5 mr-1.5 flex-shrink-0" />,
+                        budget:   <DollarSign className="h-3.5 w-3.5 mr-1.5 flex-shrink-0" />,
+                        costs:    <Receipt className="h-3.5 w-3.5 mr-1.5 flex-shrink-0" />,
+                        docs:     <FolderOpen className="h-3.5 w-3.5 mr-1.5 flex-shrink-0" />,
+                        staff:    <Users className="h-3.5 w-3.5 mr-1.5 flex-shrink-0" />,
+                        finance:  <Landmark className="h-3.5 w-3.5 mr-1.5 flex-shrink-0" />,
+                        wallet:   <Wallet className="h-3.5 w-3.5 mr-1.5 flex-shrink-0" />,
+                      };
+                      const actions = stage.linkedActions ?? (stage.linkedModule ? [{
+                        label: ({
                           '/mmp-management': 'MMP Management',
                           '/hub-operations': 'Hub Operations',
                           '/site-visits': 'Site Visits',
@@ -1022,9 +1042,33 @@ export function FlowTab({
                           '/projects': 'Projects',
                           '/finance': 'Finance',
                           '/wallet': 'Wallet',
-                        } as Record<string, string>)[stage.linkedModule] ?? stage.linkedModule.replace(/^\//, '').replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}
-                      </Button>
-                    )}
+                          '/budget': 'Budget',
+                          '/documents': 'Documents',
+                          '/staff-directory': 'Staff Directory',
+                          '/hub-management': 'Hub Management',
+                        } as Record<string, string>)[stage.linkedModule] ?? stage.linkedModule.replace(/^\//, '').replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
+                        route: stage.linkedModule,
+                        icon: 'visits' as StageActionIcon,
+                      }] : []);
+                      if (actions.length === 0) return null;
+                      return (
+                        <div className="flex flex-wrap gap-1.5">
+                          {actions.map((action, idx) => (
+                            <Button
+                              key={idx}
+                              variant="outline"
+                              size="sm"
+                              className="h-8 text-xs"
+                              onClick={() => navigate(action.route)}
+                              data-testid={`button-goto-action-${stage.id}-${idx}`}
+                            >
+                              {ICON_MAP[action.icon as StageActionIcon] ?? <ExternalLink className="h-3.5 w-3.5 mr-1.5" />}
+                              {action.label}
+                            </Button>
+                          ))}
+                        </div>
+                      );
+                    })()}
 
                     {/* Per-stage data: Assignees, Checklist, Attachments */}
                     <div className="grid gap-3 pt-1">
