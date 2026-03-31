@@ -379,7 +379,146 @@ function MoveEmployeeDialog({
   );
 }
 
-/* ─── Org Chart Node ─────────────────────────────── */
+/* ─── Level palette ──────────────────────────────── */
+const LEVEL_PALETTE = [
+  { solid: "#0F2041", light: "#E8ECF3", label: "Level 1" },
+  { solid: "#1D3461", light: "#E8EEF8", label: "Level 2" },
+  { solid: "#2563EB", light: "#DBEAFE", label: "Level 3" },
+  { solid: "#7C3AED", light: "#EDE9FE", label: "Level 4" },
+  { solid: "#059669", light: "#D1FAE5", label: "Level 5" },
+  { solid: "#D97706", light: "#FEF3C7", label: "Level 6" },
+  { solid: "#BE185D", light: "#FCE7F3", label: "Level 7" },
+];
+function levelPalette(depth: number) {
+  return LEVEL_PALETTE[Math.min(depth, LEVEL_PALETTE.length - 1)];
+}
+
+/* ─── Department Org Node ────────────────────────── */
+function DeptOrgNode({
+  dept, allProfiles, depth, navigate,
+}: {
+  dept: Department;
+  allProfiles: Profile[];
+  depth: number;
+  navigate: ReturnType<typeof useNavigate>;
+}) {
+  const [expanded, setExpanded] = useState(depth < 2);
+  const children = dept.children ?? [];
+  const members = allProfiles.filter(p => p.department_id === dept.id);
+  const palette = levelPalette(depth);
+  const accentColor = dept.color ?? palette.solid;
+
+  return (
+    <div className={depth > 0 ? "relative mt-3 ml-6 pl-4" : "mt-3"}>
+      {/* Vertical connector line */}
+      {depth > 0 && (
+        <span
+          className="absolute left-0 top-0 bottom-0 w-px"
+          style={{ background: accentColor + "55", left: "0px" }}
+        />
+      )}
+      {/* Horizontal connector */}
+      {depth > 0 && (
+        <span
+          className="absolute top-5 left-0 h-px w-4"
+          style={{ background: accentColor + "55" }}
+        />
+      )}
+
+      {/* Node card */}
+      <div
+        className="rounded-xl border-2 shadow-sm overflow-hidden transition-shadow hover:shadow-md"
+        style={{ borderColor: accentColor }}
+        data-testid={`deptnode-${dept.id}`}
+      >
+        {/* Coloured header band */}
+        <div
+          className="flex items-center justify-between gap-2 px-3 py-2"
+          style={{ background: accentColor, color: "#fff" }}
+        >
+          <div className="flex items-center gap-2 min-w-0">
+            <Building2 className="h-3.5 w-3.5 shrink-0 opacity-80" />
+            <span className="text-sm font-bold truncate">{dept.name}</span>
+            <span
+              className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full shrink-0"
+              style={{ background: "rgba(255,255,255,0.25)", color: "#fff" }}
+            >
+              {palette.label}
+            </span>
+          </div>
+          {children.length > 0 && (
+            <button
+              onClick={() => setExpanded(e => !e)}
+              className="shrink-0 opacity-80 hover:opacity-100 transition-opacity"
+              data-testid={`button-expand-deptnode-${dept.id}`}
+            >
+              {expanded
+                ? <ChevronDown className="h-4 w-4" />
+                : <ChevronRight className="h-4 w-4" />}
+            </button>
+          )}
+        </div>
+
+        {/* Body */}
+        <div className="px-3 py-2 flex flex-wrap items-center gap-3" style={{ background: palette.light + "cc" }}>
+          {/* Manager */}
+          <div className="flex items-center gap-1 min-w-0">
+            <UserCheck className="h-3 w-3 text-muted-foreground shrink-0" />
+            <span className="text-[11px] text-muted-foreground truncate">
+              {dept.manager?.full_name || dept.manager?.email || <em>No manager</em>}
+            </span>
+          </div>
+
+          {/* Members badge */}
+          <span
+            className="flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full"
+            style={{ background: accentColor + "20", color: accentColor }}
+          >
+            <Users className="h-2.5 w-2.5" />
+            {members.length} {members.length === 1 ? "member" : "members"}
+          </span>
+
+          {/* Sub-depts badge */}
+          {children.length > 0 && (
+            <span
+              className="flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full"
+              style={{ background: accentColor + "15", color: accentColor }}
+            >
+              <GitBranch className="h-2.5 w-2.5" />
+              {children.length} sub-dept{children.length > 1 ? "s" : ""}
+            </span>
+          )}
+
+          {/* Dept description */}
+          {dept.description && (
+            <span className="text-[10px] text-muted-foreground italic truncate max-w-xs">{dept.description}</span>
+          )}
+
+          {/* Navigate to detail */}
+          <button
+            className="ml-auto text-[10px] flex items-center gap-0.5 hover:underline"
+            style={{ color: accentColor }}
+            onClick={() => navigate(`/departments`)}
+            data-testid={`button-dept-link-${dept.id}`}
+          >
+            View <ChevronRight className="h-3 w-3" />
+          </button>
+        </div>
+      </div>
+
+      {/* Children */}
+      {expanded && children.length > 0 && (
+        <div className="relative">
+          {children.map(child => (
+            <DeptOrgNode key={child.id} dept={child} allProfiles={allProfiles} depth={depth + 1} navigate={navigate} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ─── Reporting Chain Node (unchanged) ──────────── */
 function OrgNode({
   profile, allProfiles, depth, navigate,
 }: {
@@ -442,21 +581,60 @@ function OrgNode({
 /* ─── Org Chart Tab ──────────────────────────────── */
 function OrgChartTab({ profiles, departments }: { profiles: Profile[]; departments: Department[] }) {
   const navigate = useNavigate();
+  const [mode, setMode] = useState<"dept" | "reporting">("dept");
   const [deptFilter, setDeptFilter] = useState<string>("all");
 
+  const tree = buildTree(departments);
+
+  // Department tree: filter to a branch if selected
+  const treeToShow = deptFilter === "all"
+    ? tree
+    : (() => {
+        function findBranch(nodes: Department[]): Department | null {
+          for (const n of nodes) {
+            if (n.id === deptFilter) return n;
+            const found = findBranch(n.children ?? []);
+            if (found) return found;
+          }
+          return null;
+        }
+        const branch = findBranch(tree);
+        return branch ? [branch] : tree;
+      })();
+
+  // Reporting chain filter
   const filteredProfiles = deptFilter === "all" ? profiles : profiles.filter(p => p.department_id === deptFilter);
   const filteredIds = new Set(filteredProfiles.map(p => p.id));
   const roots = filteredProfiles.filter(p => !p.reports_to || !filteredIds.has(p.reports_to));
 
+  const totalDepts = departments.length;
+  const topLevel = tree.length;
+
   return (
     <div className="space-y-4">
+      {/* Toolbar */}
       <div className="flex items-center gap-3 flex-wrap">
-        <div className="flex items-center gap-1.5 text-sm font-medium">
-          <Network className="h-4 w-4 text-primary" />
-          Reporting Chain Org Chart
+        <div className="flex rounded-lg border overflow-hidden text-xs font-medium">
+          <button
+            onClick={() => setMode("dept")}
+            className={`px-3 py-1.5 flex items-center gap-1.5 transition-colors ${mode === "dept" ? "bg-[#1D3461] text-white" : "hover:bg-muted/60"}`}
+            data-testid="toggle-dept-tree"
+          >
+            <Building2 className="h-3.5 w-3.5" />
+            Department Tree
+          </button>
+          <button
+            onClick={() => setMode("reporting")}
+            className={`px-3 py-1.5 flex items-center gap-1.5 transition-colors ${mode === "reporting" ? "bg-[#1D3461] text-white" : "hover:bg-muted/60"}`}
+            data-testid="toggle-reporting-chain"
+          >
+            <Network className="h-3.5 w-3.5" />
+            Reporting Chain
+          </button>
         </div>
+
         <Select value={deptFilter} onValueChange={setDeptFilter}>
-          <SelectTrigger className="w-48 h-9" data-testid="select-orgchart-dept">
+          <SelectTrigger className="w-52 h-9" data-testid="select-orgchart-dept">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -464,21 +642,56 @@ function OrgChartTab({ profiles, departments }: { profiles: Profile[]; departmen
             {departments.map(d => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)}
           </SelectContent>
         </Select>
+
         <p className="text-xs text-muted-foreground ml-auto">
-          {filteredProfiles.length} people · {roots.length} top-level
+          {mode === "dept"
+            ? `${totalDepts} dept${totalDepts !== 1 ? "s" : ""} · ${topLevel} top-level`
+            : `${filteredProfiles.length} people · ${roots.length} top-level`}
         </p>
       </div>
 
-      {roots.length === 0 ? (
-        <div className="text-center py-10 text-muted-foreground text-sm">
-          No reporting relationships configured yet. Set "Reports To" in each employee's profile to build the chart.
-        </div>
-      ) : (
-        <div className="bg-muted/10 rounded-xl border p-4">
-          {roots.map(r => (
-            <OrgNode key={r.id} profile={r} allProfiles={filteredProfiles} depth={0} navigate={navigate} />
+      {/* Level colour legend */}
+      {mode === "dept" && departments.length > 0 && (
+        <div className="flex flex-wrap gap-2 items-center">
+          <span className="text-[10px] text-muted-foreground font-medium uppercase tracking-wide">Levels:</span>
+          {LEVEL_PALETTE.slice(0, Math.max(1, Math.min(7, topLevel + 2))).map((p, i) => (
+            <span key={i} className="flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full" style={{ background: p.light, color: p.solid }}>
+              <span className="w-2 h-2 rounded-full inline-block" style={{ background: p.solid }} />
+              {p.label}
+            </span>
           ))}
         </div>
+      )}
+
+      {/* Content */}
+      {mode === "dept" ? (
+        departments.length === 0 ? (
+          <div className="text-center py-16 text-muted-foreground text-sm border-2 border-dashed rounded-xl">
+            <Building2 className="h-10 w-10 mx-auto mb-3 opacity-30" />
+            <p className="font-medium">No departments yet</p>
+            <p className="text-xs mt-1">Create departments using the "Departments" tab, then come back to see the org chart.</p>
+          </div>
+        ) : (
+          <div className="bg-muted/10 rounded-xl border p-4 overflow-x-auto">
+            {treeToShow.map(dept => (
+              <DeptOrgNode key={dept.id} dept={dept} allProfiles={profiles} depth={0} navigate={navigate} />
+            ))}
+          </div>
+        )
+      ) : (
+        roots.length === 0 ? (
+          <div className="text-center py-16 text-muted-foreground text-sm border-2 border-dashed rounded-xl">
+            <Network className="h-10 w-10 mx-auto mb-3 opacity-30" />
+            <p className="font-medium">No reporting relationships configured</p>
+            <p className="text-xs mt-1">Set "Reports To" in each employee's profile to build the reporting chain.</p>
+          </div>
+        ) : (
+          <div className="bg-muted/10 rounded-xl border p-4">
+            {roots.map(r => (
+              <OrgNode key={r.id} profile={r} allProfiles={filteredProfiles} depth={0} navigate={navigate} />
+            ))}
+          </div>
+        )
       )}
     </div>
   );
